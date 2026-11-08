@@ -109,6 +109,7 @@ function Bar({
   initial = 'home',
   badges = {library: 3},
   keeps = [],
+  disabled = [],
   onChange,
 }: {
   sections?: Section[];
@@ -116,6 +117,8 @@ function Bar({
   badges?: Record<string, string | number>;
   /** Tabs the app declines to switch to (it keeps the selection). */
   keeps?: string[];
+  /** Tabs the app has disabled. */
+  disabled?: string[];
   /** Also told of every choice. */
   onChange?: (value: string) => void;
 }) {
@@ -144,6 +147,7 @@ function Bar({
             icon={<Icon icon={section.icon} size="lg" />}
             selectedIcon={<Icon icon={section.selectedIcon} size="lg" />}
             badge={badges[section.value]}
+            aria-disabled={disabled.includes(section.value) || undefined}
           />
         ))}
       </TabBar>
@@ -279,6 +283,16 @@ export const FiveTabs: Story = {
   render: () => (
     <Bar sections={[...SECTIONS.slice(0, 2), INBOX, ...SECTIONS.slice(2)]} />
   ),
+};
+
+/** Browse is disabled: dimmed, skipped by the arrow keys, and never chosen. */
+export const DisabledTab: Story = {
+  render: () => <Bar disabled={['browse']} />,
+};
+
+/** No tab selected, Browse disabled: a held finger paints only enabled tabs. */
+export const DisabledTabNoSelection: Story = {
+  render: () => <Bar initial="none" disabled={['browse']} />,
 };
 
 /** Three tabs: the capsule narrows to its natural width and centres. */

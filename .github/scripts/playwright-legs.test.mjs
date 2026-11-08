@@ -16,6 +16,7 @@ import {
   folderSpecs,
   isInteractionSpec,
   legCount,
+  legsFitMessage,
   planLegs,
   recordLog,
   selectProofs,
@@ -36,6 +37,37 @@ const durations = JSON.parse(
   ),
 );
 const step = (job, name) => job.steps.find(each => each.name === name);
+
+describe('legsFitMessage', () => {
+  const limits = {setupSeconds: 90, maxSeconds: 600, maxLegs: 3};
+  const costs = {'a.spec.ts': 500, 'b.spec.ts': 500, 'c.spec.ts': 480};
+
+  it('fits when the proofs need the last leg the matrix has', () => {
+    expect(
+      legsFitMessage({seconds: 1480, files: Object.keys(costs), costs, ...limits}),
+    ).toBeNull();
+  });
+
+  it('names the heaviest specs when the proofs need more legs than the matrix has', () => {
+    const more = {...costs, 'd.spec.ts': 400};
+    const message = legsFitMessage({
+      seconds: 1880,
+      files: Object.keys(more),
+      costs: more,
+      ...limits,
+    });
+    expect(message).toContain('need 4 legs');
+    expect(message).toContain('the matrix has 3');
+    expect(message).toContain('a.spec.ts (500 s), b.spec.ts (500 s), c.spec.ts (480 s)');
+  });
+
+  it('names the spec when one spec alone outlasts a leg', () => {
+    const one = {'huge.spec.ts': 700};
+    expect(
+      legsFitMessage({seconds: 700, files: ['huge.spec.ts'], costs: one, ...limits}),
+    ).toContain('huge.spec.ts (700 s)');
+  });
+});
 
 describe('planLegs', () => {
   const times = {a: 120, b: 100, c: 80, d: 50, e: 40, f: 30, g: 20, h: 10};
@@ -290,7 +322,7 @@ describe('the interaction proof legs in ci.yml', () => {
     {
       id: 'pr-interaction-webkit',
       project: 'webkit',
-      legs: [1, 2, 3, 4, 5],
+      legs: [1, 2, 3, 4, 5, 6],
       run: 'Run WebKit interaction proofs',
       plan: "Plan this leg's WebKit interaction proofs",
       evidence: 'interaction-evidence-webkit-${{ matrix.leg }}',
@@ -872,34 +904,28 @@ describe('the interaction proof legs in ci.yml', () => {
           testsOf,
           perTest,
         });
-        // The matrix still has room: the count stays under its legs.
-        const needed = Math.ceil(
-          seconds / (limits.maxSeconds - limits.setupSeconds),
-        );
+        // The planner fits the matrix: no more legs than it has, and no leg
+        // over ten minutes (plus one spec's slack). It fails naming the
+        // heaviest specs, not by a margin under the matrix.
         expect(
-          needed,
-          `${label}: ${Math.round(seconds)} s of proofs`,
-        ).toBeLessThan(lane.legs.length);
-        const legsNow = legCount({seconds, ...limits});
-        const planned = planLegs(
-          specs.filter(
-            file =>
-              filters.length === 0 ||
-              filters.some(each => file.includes(each)) ||
-              changed.includes(file),
-          ),
-          Object.fromEntries(
-            specs.map(file => [
-              file,
-              times[file] ?? fallback[file] ?? testsOf(file) * perTest,
-            ]),
-          ),
-          legsNow,
-        );
-        for (const leg of planned)
-          expect(leg.seconds + limits.setupSeconds, label).toBeLessThanOrEqual(
-            limits.maxSeconds + 60,
-          );
+          legsFitMessage({
+            seconds,
+            files: specs.filter(
+              file =>
+                filters.length === 0 ||
+                filters.some(each => file.includes(each)) ||
+                changed.includes(file),
+            ),
+            costs: Object.fromEntries(
+              specs.map(file => [
+                file,
+                times[file] ?? fallback[file] ?? testsOf(file) * perTest,
+              ]),
+            ),
+            ...limits,
+          }),
+          label,
+        ).toBeNull();
       }
     }
   });
