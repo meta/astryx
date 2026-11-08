@@ -95,6 +95,7 @@ describe('WebKit interaction proof routing', () => {
       'admission',
       'heavy-ci',
       'build-storybook',
+      'interaction-legs',
     ]);
   });
 
@@ -126,6 +127,7 @@ describe('WebKit interaction proof routing', () => {
       "Require this pull request's Storybook build",
       'Skip the WebKit proofs outside their scope',
       'Leave the proofs to the other legs',
+      'Require a leg for every share',
     ]);
     // Every step after the leg count also waits for this leg to have a share.
     const counted = webkit.steps.indexOf(
@@ -135,15 +137,24 @@ describe('WebKit interaction proof routing', () => {
     for (const [index, candidate] of webkit.steps.entries()) {
       if (index < 2 || guards.has(candidate.name)) continue;
       const gate = index <= counted ? applies : `${applies} && ${share}`;
-      // A leg whose plan holds no spec file runs no proofs.
-      expect(candidate.if, candidate.name ?? candidate.uses).toMatch(
-        new RegExp(
-          `^((always|failure)\\(\\) && )?${gate.replace(/[.()|]/g, '\\$&')}( && steps\\.plan\\.outputs\\.files != '0')?$`,
-        ),
-      );
+      // Only the hint and the evidence upload run after a failed step, and
+      // only the proofs and the hint wait for a plan with a spec file in it.
+      const planned = "steps.plan.outputs.files != '0'";
+      let expected = gate;
+      if (candidate.name === 'Run WebKit interaction proofs')
+        expected = `${gate} && ${planned}`;
+      if (candidate.name === 'Explain a failure on an older head')
+        expected = `failure() && ${gate} && steps.plan.outcome == 'success' && ${planned}`;
+      if (candidate.name === 'Upload WebKit interaction evidence')
+        expected = `always() && ${gate}`;
+      expect(candidate.if, candidate.name ?? candidate.uses).toBe(expected);
     }
     expect(step(webkit, 'Leave the proofs to the other legs').if).toBe(
       `${applies} && steps.legs.outputs.runs != 'true'`,
+    );
+    // A leg whose own count needs more legs than started fails.
+    expect(step(webkit, 'Require a leg for every share').if).toBe(
+      "steps.scope.outputs.applies == 'true' && fromJSON(steps.legs.outputs.count || '0') > strategy.job-total",
     );
   });
 
@@ -286,12 +297,15 @@ describe('WebKit interaction proof routing', () => {
     expect(run).not.toContain('CarouselPaging');
     // A component's own code runs that folder's interaction specs, and no
     // shared proof.
-    expect(proofs(['packages/core/src/Carousel/useCarouselPaging.ts'])).toEqual(
-      [
-        'packages/core/src/Carousel/__tests__/Carousel.interaction.browser.spec.ts',
-        'packages/core/src/Carousel/__tests__/CarouselSnapPagingEdges.interaction.browser.spec.ts',
-      ],
+    // The folder's specs come from the tree, not a list here, so a new
+    // Carousel spec needs no edit to this test.
+    const carousel = listedSpecs.filter(file =>
+      file.startsWith('packages/core/src/Carousel/'),
     );
+    expect(carousel.length).toBeGreaterThan(0);
+    expect(
+      proofs(['packages/core/src/Carousel/useCarouselPaging.ts']).sort(),
+    ).toEqual(carousel.sort());
     for (const component of ['DateInput', 'TabList', 'TreeList', 'SideNav']) {
       expect(run).not.toContain(component);
     }

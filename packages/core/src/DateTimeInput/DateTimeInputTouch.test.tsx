@@ -28,7 +28,14 @@ import {
 import {Profiler, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {readFileSync} from 'node:fs';
-import {render, screen, fireEvent, within} from '@testing-library/react';
+import {
+  act,
+  render,
+  screen,
+  fireEvent,
+  within,
+  waitFor,
+} from '@testing-library/react';
 import {getOnlyButton} from '../__tests__/fastRoleQueries';
 import {InternationalizationProvider} from '../i18n';
 import {DateTimeInput as CoreDateTimeInput} from './DateTimeInput';
@@ -544,6 +551,126 @@ describe('DateTimeInput touch surface', () => {
     expect(timeField()).toHaveValue('');
   });
 
+  it('under a finger: moves the chosen date with the month wheel, keeping the day and the time', () => {
+    // UIDatePicker's wheels, under a finger (this file's coarse pointer).
+    const onChange = vi.fn();
+    withMonthLayout(() => {
+      render(
+        <DateTimeInput
+          label="Meeting"
+          value={'2026-03-21T09:30' as ISODateTimeString}
+          min={'2026-01-01T00:00' as ISODateTimeString}
+          max={'2026-12-31T23:59' as ISODateTimeString}
+          onChange={onChange}
+        />,
+      );
+      openDateSheet();
+      fireEvent.click(
+        screen.getByRole('button', {name: /Choose month and year/}),
+      );
+      fireEvent.click(
+        within(screen.getByRole('listbox', {name: 'Month'})).getByText('May'),
+      );
+      expect(onChange).toHaveBeenLastCalledWith('2026-05-21T09:30');
+    });
+  });
+
+  it('under a finger: a date the month wheel moves runs changeAction after onChange, shows at once, and is busy until it settles (family:input-fields FR6)', async () => {
+    const calls: string[] = [];
+    let resolve: () => void = () => {};
+    const changeAction = vi.fn(async (value: string | undefined) => {
+      calls.push(`changeAction ${value}`);
+      return new Promise<void>(done => {
+        resolve = done;
+      });
+    });
+    withMonthLayout(() => {
+      render(
+        <DateTimeInput
+          label="Meeting"
+          value={'2026-03-21T09:30' as ISODateTimeString}
+          min={'2026-01-01T00:00' as ISODateTimeString}
+          max={'2026-12-31T23:59' as ISODateTimeString}
+          onChange={value => calls.push(`onChange ${value}`)}
+          changeAction={changeAction}
+        />,
+      );
+      openDateSheet();
+      fireEvent.click(
+        screen.getByRole('button', {name: /Choose month and year/}),
+      );
+      fireEvent.click(
+        within(screen.getByRole('listbox', {name: 'Month'})).getByText('May'),
+      );
+    });
+    await waitFor(() => {
+      expect(calls).toEqual([
+        'onChange 2026-05-21T09:30',
+        'changeAction 2026-05-21T09:30',
+      ]);
+    });
+    // Optimistic: the moved date shows while the Action is pending, though
+    // the controlled value is still March 21.
+    expect(dateField()).toHaveValue('May 21, 2026');
+    expect(document.querySelector('[aria-busy="true"]')).not.toBeNull();
+    await act(async () => {
+      resolve();
+    });
+    await waitFor(() => {
+      expect(document.querySelector('[aria-busy="true"]')).toBeNull();
+    });
+  });
+
+  it('under a finger: opening the month/year wheels on a date outside the range changes nothing', () => {
+    const onChange = vi.fn();
+    withMonthLayout(() => {
+      render(
+        <DateTimeInput
+          label="Meeting"
+          value={'2025-12-15T09:30' as ISODateTimeString}
+          min={'2026-01-01T00:00' as ISODateTimeString}
+          max={'2026-12-31T23:59' as ISODateTimeString}
+          onChange={onChange}
+        />,
+      );
+      openDateSheet();
+      fireEvent.click(
+        screen.getByRole('button', {name: /Choose month and year/}),
+      );
+    });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('under a finger: keeps a date a custom constraint refuses, while the calendar moves', () => {
+    const onChange = vi.fn();
+    withMonthLayout(() => {
+      render(
+        <DateTimeInput
+          label="Meeting"
+          value={'2026-03-21T09:30' as ISODateTimeString}
+          min={'2026-01-01T00:00' as ISODateTimeString}
+          max={'2026-12-31T23:59' as ISODateTimeString}
+          // May 21, 2026 is refused; the wheels must not choose it.
+          dateConstraints={[
+            date => !(date.getMonth() === 4 && date.getDate() === 21),
+          ]}
+          onChange={onChange}
+        />,
+      );
+      openDateSheet();
+      fireEvent.click(
+        screen.getByRole('button', {name: /Choose month and year/}),
+      );
+      fireEvent.click(
+        within(screen.getByRole('listbox', {name: 'Month'})).getByText('May'),
+      );
+      expect(onChange).not.toHaveBeenCalled();
+      expect(
+        screen.getByRole('button', {name: /Choose month and year/}),
+      ).toHaveTextContent('May 2026');
+    });
+  });
+
   it('commits 12-hour wheel changes against the controlled date', () => {
     const onChange = vi.fn();
     render(
@@ -752,7 +879,7 @@ describe('DateTimeInput touch surface', () => {
       openDateSheet();
       const saveDateButton = getOnlyButton('Save date');
 
-      expect(saveDateButton).toBeDisabled();
+      expect(saveDateButton).toHaveAttribute('aria-disabled', 'true');
       fireEvent.click(saveDateButton);
       expect(screen.getByRole('radio', {name: 'Date'})).toHaveAttribute(
         'aria-checked',
@@ -768,11 +895,11 @@ describe('DateTimeInput touch surface', () => {
       render(<ControlledDateTimeInput />);
       openDateSheet();
       const saveDateButton = getOnlyButton('Save date');
-      expect(saveDateButton).toBeDisabled();
+      expect(saveDateButton).toHaveAttribute('aria-disabled', 'true');
 
       fireEvent.click(getOnlyButton('Saturday, March 21, 2026'));
       expect(dateField()).toHaveValue('March 21, 2026');
-      expect(saveDateButton).not.toBeDisabled();
+      expect(saveDateButton).not.toHaveAttribute('aria-disabled');
 
       fireEvent.click(saveDateButton);
       expect(dateField()).toHaveAttribute('aria-expanded', 'false');
@@ -795,11 +922,11 @@ describe('DateTimeInput touch surface', () => {
       );
       openDateSheet();
       const saveDateButton = getOnlyButton('Save date');
-      expect(saveDateButton).not.toBeDisabled();
+      expect(saveDateButton).not.toHaveAttribute('aria-disabled');
 
       fireEvent.click(getOnlyButton('Reset'));
       expect(dateField()).toHaveValue('');
-      expect(saveDateButton).toBeDisabled();
+      expect(saveDateButton).toHaveAttribute('aria-disabled', 'true');
 
       fireEvent.click(saveDateButton);
       expect(screen.getByRole('radio', {name: 'Date'})).toHaveAttribute(

@@ -205,7 +205,7 @@ describe('Toast responsive layout', () => {
     expect(getComputedStyle(endArea).height).toBe(
       'calc(var(--text-body-size) * var(--text-body-leading))',
     );
-    expect(getComputedStyle(actionControl).height).toBe(
+    expect(getComputedStyle(actionControl).minHeight).toBe(
       'var(--size-element-lg)',
     );
     expect(getComputedStyle(dismissControl).height).toBe(

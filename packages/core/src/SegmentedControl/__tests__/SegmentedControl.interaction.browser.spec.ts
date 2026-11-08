@@ -44,12 +44,14 @@ import {
   readLongTasks,
   releaseAnimations,
   springStep,
+  startBusyControl,
   startScreencast,
   thawPage,
   thawTimers,
   timeline,
   touchDriver,
   traceRendering,
+  trackControl,
   trackMarker,
   tap as touchTap,
   drag as touchDrag,
@@ -699,24 +701,23 @@ test('a second tap mid-flight retargets from what is on screen, keeping its velo
 test('a change mid-flight paints no press over the lens on the segment it leaves', async ({
   page,
 }) => {
+  await installPageFreeze(page);
   const control = await openControl(page);
+  await installTimerGate(page);
+  // The scene freezes in the tap's own task. The tap's fade on Table then
+  // holds at its start, however late the test process reads it.
+  await freezePageOn(page, 'touchend');
   await control.tapSegment('table');
   // The app changes the selection while the lens is still on its way and the
   // tap on Table still fades. A second touch would end that fade itself.
-  const paint = await control.group.evaluate(async group => {
-    const segment = (value: string): HTMLElement => {
-      const element = group.querySelector<HTMLElement>(
-        `[data-value="${value}"]`,
-      );
-      if (element == null) {
-        throw new Error(`no segment ${value}`);
-      }
-      return element;
-    };
-    segment('list').click();
-    // The layout effect that retargets has run once the frame is drawn.
-    await new Promise(resolve => requestAnimationFrame(resolve));
-    const table = segment('table');
+  await control.segment('list').evaluate(list => {
+    (list as HTMLElement).click();
+  });
+  const paint = await control.group.evaluate(group => {
+    const table = group.querySelector<HTMLElement>('[data-value="table"]');
+    if (table == null) {
+      throw new Error('no segment table');
+    }
     const style = getComputedStyle(table);
     return {
       press: table.getAttribute('data-astryx-press'),
@@ -725,6 +726,7 @@ test('a change mid-flight paints no press over the lens on the segment it leaves
       lensVisible: getComputedStyle(group, '::before').visibility === 'visible',
     };
   });
+  await thawPage(page);
   await expect(control.segment('list')).toHaveAttribute('aria-checked', 'true');
   expect(paint.press, 'the tap on Table is still fading').not.toBeNull();
   expect(paint.lensVisible).toBe(true);
@@ -1373,30 +1375,51 @@ test('the slide keeps advancing every frame while the main thread is blocked', a
     'screencast frame evidence is Chromium-only in Playwright (WebKit is recorded on the iOS simulator)',
   );
   const control = await openControl(page);
+  // The lens has no element to carry the harness's marker chip, so the test
+  // paints the lens itself in the marker colour before the tap. The tap
+  // writes the lens's own colour, and an important rule keeps the marker's.
+  await control.group.evaluate((group, rgb) => {
+    const rule = document.createElement('style');
+    rule.textContent = `[data-lens-marker] { --_segmented-lens-background-color: rgb(${rgb.join(', ')}) !important; --_segmented-lens-background-image: none !important; }`;
+    document.head.append(rule);
+    group.setAttribute('data-lens-marker', '');
+  }, MARKER_RGB);
+  // The harness's busy-window control: a box the compositor moves along the
+  // top edge, in the same screencast. The slide is judged against what the
+  // compositor presented, not against a frame rate.
+  const busyControl = await startBusyControl(page);
   const cast = await startScreencast(page);
-  const watch = await watchAnimations(control.group);
+  // Armed before the tap, the page blocks itself once the slide has run
+  // 16 ms, on the compositor. Armed after it, the round trips would start the
+  // block later the busier the machine is, after the slide had settled.
+  const blocking = blockMainThread(page, 500, {
+    during: control.group,
+    minProgressMs: 16,
+  });
   await control.tapSegment('table');
-  // Running and composited before the block.
-  const [slide] = await waitForLens(control, {minProgressMs: 16, watch});
-  // The lens has no element to carry the harness's marker chip: paint the
-  // lens itself in the marker colour for the frames to find it.
-  await paintLensMarker(control);
-  const block = await blockMainThread(page, 500);
+  const block = await blocking;
   await page.waitForTimeout(250);
   const castFrames = await cast.stop();
+  await busyControl.remove();
   const tracked = await trackMarker(page, castFrames);
-  const proof = busyWindowProof(
-    tracked,
-    {from: block.from, to: Math.min(block.to, slide.to)},
-    {axis: 'x', settledWithin: 1},
+  const controlFrames = await trackControl(
+    page,
+    castFrames.filter(f => f.t >= block.from - 300 && f.t <= block.to + 100),
   );
+  // Judged until the lens is within 1 px of where it rests, its last frame.
+  // The slide moves on every frame the control moves on, and it stalls no
+  // longer than the control.
+  const proof = busyWindowProof(tracked, block, {
+    axis: 'x',
+    settledWithin: 1,
+    control: controlFrames,
+  });
   await writeEvidence(
     'busy-main-thread/segmented-slide',
     {
       [`${testInfo.project.name}.json`]: JSON.stringify(
         {
           block,
-          slide,
           proof,
           frames: tracked.map(f => ({
             t: +(f.t - block.from).toFixed(1),
@@ -1413,14 +1436,13 @@ test('the slide keeps advancing every frame while the main thread is blocked', a
     name: 'segmented-slide-busy-main-thread',
     zero: block.from,
     from: block.from - 40,
-    to: Math.min(block.to, slide.to) + 40,
+    to: proof.judged.to + 40,
     columns: 8,
     cellScale: 0.35,
     data: t => ({x: tracked.find(f => f.t === t)?.box?.x ?? -1}),
   });
-  await film.write(testInfo, {block, slide});
-  expect(proof.frames).toBeGreaterThanOrEqual(proof.expectedFrames - 2);
-  expect(proof.changed).toBeGreaterThanOrEqual(proof.frames - 3);
+  await film.write(testInfo, {block, judged: proof.judged});
+  expect(proof.verdict.failures, proof.summary).toEqual([]);
 });
 
 test('the slide does no Layout or Paint per frame', async ({

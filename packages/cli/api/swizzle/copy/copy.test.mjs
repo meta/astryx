@@ -34,6 +34,79 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.
 const OUT = 'tmp-swizzle-copy-test';
 const SLOW = 30_000;
 
+describe('swizzle.copy — destination symlinks (spec:AST-017 FR1, FR5)', () => {
+  let fixture;
+  afterEach(() => {
+    if (fixture) fs.rmSync(fixture, {recursive: true, force: true});
+  });
+
+  it.each([
+    ['out', false],
+    ['out/Table', false],
+    ['out/Table/plugins', false],
+    ['out/Table/plugins/nested.ts', false],
+    ['out/Table/plugins/nested.ts', true],
+  ])('refuses %s (dangling: %s) linked outside the project before writing, with or without overwrite', async (linkPath, dangling) => {
+    fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-swizzle-symlink-'));
+    const cwd = path.join(fixture, 'project');
+    const source = path.join(cwd, 'node_modules/@astryxdesign/core/src/Table');
+    fs.mkdirSync(path.join(source, 'plugins'), {recursive: true});
+    // Table imports the nested file, so the copy writes it too.
+    fs.writeFileSync(
+      path.join(source, 'Table.tsx'),
+      "import {nested} from './plugins/nested';\nexport const Table = nested;",
+    );
+    fs.writeFileSync(path.join(source, 'plugins/nested.ts'), 'export const nested = 1;');
+    fs.writeFileSync(path.join(cwd, 'package.json'), '{"name":"consumer"}');
+    fs.writeFileSync(
+      path.join(cwd, 'node_modules/@astryxdesign/core/package.json'),
+      '{"name":"@astryxdesign/core","version":"0.0.0"}',
+    );
+    const outside = path.join(fixture, 'outside');
+    fs.mkdirSync(outside);
+    const target = linkPath.endsWith('.ts') ? path.join(outside, 'target.ts') : outside;
+    if (target !== outside && !dangling) fs.writeFileSync(target, '// consumer edit');
+    const link = path.join(cwd, linkPath);
+    fs.mkdirSync(path.dirname(link), {recursive: true});
+    fs.symlinkSync(target, link);
+
+    for (const overwrite of [false, true]) {
+      await expect(swizzle('Table', {cwd, output: './out', overwrite})).rejects.toMatchObject({
+        code: 'ERR_PATH_TRAVERSAL',
+      });
+      expect(fs.existsSync(path.join(cwd, 'out/Table/Table.tsx'))).toBe(false);
+      expect(fs.readdirSync(outside)).toEqual(target !== outside && !dangling ? ['target.ts'] : []);
+      if (target !== outside && !dangling) expect(fs.readFileSync(target, 'utf8')).toBe('// consumer edit');
+    }
+  });
+
+  it('writes through a folder linked elsewhere inside the project, nested folders included', async () => {
+    fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-swizzle-symlink-'));
+    const source = path.join(fixture, 'node_modules/@astryxdesign/core/src/Table');
+    fs.mkdirSync(path.join(source, 'plugins'), {recursive: true});
+    // Table imports the nested file, so the copy writes it too.
+    fs.writeFileSync(
+      path.join(source, 'Table.tsx'),
+      "import {nested} from './plugins/nested';\nexport const Table = nested;",
+    );
+    fs.writeFileSync(path.join(source, 'plugins/nested.ts'), 'export const nested = 1;');
+    fs.writeFileSync(path.join(fixture, 'package.json'), '{"name":"consumer"}');
+    fs.writeFileSync(
+      path.join(fixture, 'node_modules/@astryxdesign/core/package.json'),
+      '{"name":"@astryxdesign/core","version":"0.0.0"}',
+    );
+    // `components` -> `src/components`, a common project layout.
+    fs.mkdirSync(path.join(fixture, 'src/components'), {recursive: true});
+    fs.symlinkSync(path.join(fixture, 'src/components'), path.join(fixture, 'components'));
+
+    const r = await swizzle('Table', {cwd: fixture, output: './components'});
+    expect(r.data.files).toEqual(['Table.tsx', 'plugins/nested.ts']);
+    expect(
+      fs.readFileSync(path.join(fixture, 'src/components/Table/plugins/nested.ts'), 'utf8'),
+    ).toBe('export const nested = 1;');
+  });
+});
+
 describe('swizzle.copy — path safety', () => {
   afterEach(() => {
     fs.rmSync(path.join(REPO, OUT), {recursive: true, force: true});
@@ -546,6 +619,51 @@ describe('swizzle.copy — helpers an earlier swizzle wrote (spec:AST-110 FR2)',
     },
     SLOW,
   );
+});
+
+describe('swizzle.copy — the npm packages a copy imports (spec:AST-110 FR1)', () => {
+  /** @type {string} */
+  let project;
+  beforeEach(() => {
+    project = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-swizzle-deps-'));
+    fs.writeFileSync(path.join(project, 'package.json'), JSON.stringify({name: 'consumer', version: '1.0.0'}));
+    const core = path.join(project, 'node_modules/@astryxdesign/core');
+    fs.mkdirSync(path.join(core, 'src/Chart'), {recursive: true});
+    fs.writeFileSync(
+      path.join(core, 'package.json'),
+      JSON.stringify({
+        name: '@astryxdesign/core',
+        version: '1.0.0',
+        dependencies: {'d3-scale': '^4.0.2'},
+        peerDependencies: {react: '^19.0.0'},
+      }),
+    );
+    fs.writeFileSync(path.join(core, 'src/Chart/index.ts'), "export {Chart} from './Chart';\n");
+    fs.writeFileSync(
+      path.join(core, 'src/Chart/Chart.tsx'),
+      [
+        "import {scaleLinear} from 'd3-scale';",
+        "import type {ReactNode} from 'react';",
+        "import {readFileSync} from 'node:fs';",
+        "import {join} from 'path';",
+        "import {undeclared} from '@acme/undeclared/sub';",
+        'export const Chart = (): ReactNode => [scaleLinear, readFileSync, join, undeclared] && null;',
+        '',
+      ].join('\n'),
+    );
+  });
+  afterEach(() => {
+    fs.rmSync(project, {recursive: true, force: true});
+  });
+
+  it('reports each package with the range the owner declares, and never Node built-ins', async () => {
+    const r = await swizzle('Chart', {cwd: project});
+    expect(r.data.dependencies).toEqual({
+      '@acme/undeclared': '*',
+      'd3-scale': '^4.0.2',
+      react: '^19.0.0',
+    });
+  });
 });
 
 describe('swizzle.copy — a name the package exports only as a type (spec:AST-110 FR1)', () => {

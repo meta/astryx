@@ -120,7 +120,7 @@ describe('Tooltip', () => {
   });
 
   describe('content taller than the room above and below (spec:AST-059 FR4)', () => {
-    it('carries the anchor-clear fallback list, so it never settles over its trigger', async () => {
+    it('carries its one combined fallback list from the start, so it never settles over its trigger', async () => {
       render(
         <Tooltip content="Tall tooltip" isDefaultOpen placement="below">
           <button type="button">Trigger</button>
@@ -131,13 +131,8 @@ describe('Tooltip', () => {
         expect(el).not.toBeNull();
         return el;
       });
-      expect(tooltip.style.positionTryFallbacks).toMatch(
-        /^var\(--_astryx-layer-try-fallbacks, /,
-      );
-      expect(
-        tooltip.style.getPropertyValue('--_astryx-layer-clear-fallbacks'),
-      ).toBe(
-        '--astryx-layer-beside-end, --astryx-layer-beside-start, flip-block, --astryx-layer-fit-below, --astryx-layer-fit-above',
+      expect(tooltip.style.positionTryFallbacks).toBe(
+        'flip-block, --astryx-layer-beside-end, --astryx-layer-beside-start, --astryx-layer-fit-below, --astryx-layer-fit-above',
       );
     });
   });
