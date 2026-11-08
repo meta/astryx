@@ -9,7 +9,7 @@
  * @position Internal to Core; not exported from the Token entry point
  */
 
-import {createContext} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 
 /**
  * Names for a Token whose visible text runs past its label. PowerSearch
@@ -24,5 +24,9 @@ export interface TokenNaming {
   removeName?: string;
 }
 
-export const TokenNamingContext = createContext<TokenNaming | null>(null);
+export const TokenNamingContext = createSharedContext<TokenNaming | null>(
+  'TokenNamingContext',
+  1,
+  null,
+);
 TokenNamingContext.displayName = 'TokenNamingContext';

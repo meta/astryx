@@ -44,7 +44,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Build the page with Astryx components as usual, then render it. The page module needs a default export; it renders on your machine with the React and Astryx packages your project installed.',
+          text: 'Build the page with Astryx components as usual, then render it. The page module needs a default export; it renders on your machine with the React and Astryx packages your project installed. Outside a project (no Astryx Core or CLI installed or declared for the folder), it renders with the Astryx, React and StyleX that the CLI itself runs with, so a single page file renders anywhere, a React app included.',
         },
         {
           type: 'code',
@@ -57,7 +57,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'What it cannot keep: anything that needs a browser while running. State, effects, click handlers and data loaded after the first paint are gone, and a chart sized by its container is empty, so give charts a fixed size. Read browser-only values such as window inside an effect, or the render stops with ERR_RENDER_BROWSER_API.',
+          text: 'What it cannot keep: anything that needs a browser while running. State, effects, click handlers and data loaded after the first paint are gone. Charts made with recharts are the exception: the render draws each chart and ResponsiveContainer a module of the page (not an installed package) imports from recharts by name (`import {LineChart} from \'recharts\'`), inside the page, so a custom tick, label or shape sees the page\'s React context. A chart sized by its container scales to the width the page gives it, and its legend stays out of the picture: a horizontal legend takes its own row under it (above it when the legend asks for the top), and a vertical legend on one side sits beside it, on that side; in a chart of fixed size, a legend keeps the place its props give it. Charts show the data and props of the page\'s first render, before its effects run: when the page cannot be drawn again without a browser, or its effects change its charts or re-render the component that makes them, each chart is drawn by itself and its parts see React context defaults. A value a chart\'s parts read from a React context that an effect changes may still show its later value. A `chart-size` warning counts the charts the render cannot draw (one used through `import * as R`, say), and says when charts were drawn by themselves. Read browser-only values such as window inside an effect, or the render stops with ERR_RENDER_BROWSER_API.',
         },
       ],
     },

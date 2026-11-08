@@ -51,6 +51,7 @@ import {isImeKeyEvent} from '../utils/ime';
 import {TypeaheadItem} from './TypeaheadItem';
 import {Icon} from '../Icon';
 import {Spinner} from '../Spinner';
+import {SpinnerOwnerContext} from '../Spinner/SpinnerOwnerContext';
 import {
   borderVars,
   colorVars,
@@ -1775,11 +1776,14 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       />
       {isLoading && busyLane == null && (
         <span {...stylex.props(styles.loadingStatus)}>
-          <Spinner
-            size="sm"
-            aria-label={t('@astryx.typeahead.loading')}
-            role="img"
-          />
+          {/* Named, never live: the typeahead announces its search. */}
+          <SpinnerOwnerContext value={true}>
+            <Spinner
+              size="sm"
+              aria-label={t('@astryx.typeahead.loading')}
+              role="img"
+            />
+          </SpinnerOwnerContext>
         </span>
       )}
       {popover.render(

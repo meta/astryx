@@ -297,6 +297,23 @@ fades in, with Prefer Cross-Fade Transitions on or off.
 | M-CM5 | Commit haptic stand-in          | An Android device: `navigator.vibrate` patterns against the platform's HapticFeedbackConstants for the context-click moment | the pattern that matches; not a UIKit parity value (as M-G18)                                                                                                                             | H      |
 | M-CM6 | Press thresholds                | Probe app: repeated long presses at random vsync phases                                                                     | from touch receipt and from the HID timestamp, the tick before and the tick at the press observer's began and at the click commit; the intersection pins the 150 ms and 400 ms thresholds | C      |
 
+## Popovers (UIPopoverPresentationController)
+
+Values the popover reads from its own table (`uikit/popover.ts`). Its growth
+and shrink play the theme's duration and easing tokens, not UIKit's springs.
+The table keeps how long UIKit's springs take, as references: the growth comes
+within 2% of its end in 206 ms and plays `--duration-medium-min`, the nearest
+step in the Storybook theme (225 ms); the shrink takes 249 ms and plays the
+exit every overlay shares.
+
+Done (iOS 26.2 simulator, Oct 23 2026; in the popover's table): the scale and
+length a popover below its source grows from, how long its growth and shrink
+take, and Reduce Motion, with the `.none` adaptation on iPhone.
+
+| ID    | Scene                                                                                                                                    | Gesture                     | Extract                                                                                                                      | Method |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------ |
+| M-PO1 | a popover above its source, one to its left and one to its right; a source near a screen edge so the arrow sits off the popover's centre | present, then a tap outside | which edge stays in place, which length grows from 100 pt, and the point the scale grows out of when the arrow is off centre | A, C   |
+
 ## Picker (UIPickerView)
 
 Values the Wheel reads from its own table (`uikit/picker.ts`).
@@ -325,3 +342,21 @@ display-link and feedback hooks; real HID touches.
 | ID    | Scene                  | Gesture                                                                                                                                                 | Extract                                                                                                                                 | Method |
 | ----- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------ |
 | M-MN2 | button on a plain view | hold until the menu is open, then lift still; move 8 pt down, 8 pt right, 12 pt down, (7, 7), (8, 8) and lift; move 6 pt before the open and 6 pt after | row picked or not; handoff and list-selection recognizer states; highlighted row per frame: threshold, metric, where it is counted from | C      |
+
+## Zoom media (UIScrollView zooming, Photos)
+
+Values Lightbox's zoom stage reads (`uikit/zoomMedia.ts`). Done (UIKit lab and
+Photos, iOS 26.2 simulator, Oct 23 2026; tagged `measured:`): the overshoot
+past the limits, the absence of scale momentum and of a two-finger-tap action,
+the content point under the centroid staying put, Photos' aspect-fill double
+tap and its maximum zoom on 3000 × 2000 and 2000 × 3000 photos, and the 40 pt
+gap between Photos' pages. M-ZM2 confirms that maximum on two other sizes. A
+zoomed pan flicked into an edge coasts and bounces like any scroll view
+(`scroll.*`). UIKit settles a zoom on an eased curve whose length grows with
+the zoom ratio (100 ms plus 300 ms per unit of its log, at most 400 ms).
+Lightbox's zoom settles on `springs.settle` instead, since its main
+interaction is a gesture (`spec:AST-094` FR45).
+
+| ID    | What         | App and gesture                                                      | Extract                                                                   | Method |
+| ----- | ------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------ |
+| M-ZM2 | Maximum zoom | Photos: pinch a 4032 × 3024 and a 1200 × 800 photo as far as it goes | the zoom it settles on against the photo's pixel size and the fitted size | B, C   |

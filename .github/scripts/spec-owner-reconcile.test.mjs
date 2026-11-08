@@ -1471,6 +1471,27 @@ describe('spec owner workflow reconciliation', () => {
       );
     });
 
+    it("accepts a DESIGNOWNER author's own /approve-spec on a design record", async () => {
+      const harness = createDesignHarness();
+
+      await run(harness, context({runId: 100n, author: 'ernestt'}));
+      expect(latestReviewGate(harness.state).state).toBe('pending');
+
+      await commentRun(
+        harness,
+        ownerComment(
+          `/approve-spec ${head}`,
+          '2026-08-30T10:05:00Z',
+          'ernestt',
+        ),
+        101n,
+      );
+      expect(latestReviewGate(harness.state)).toMatchObject({
+        state: 'success',
+        description: expect.stringContaining('Spec approved by @ernestt'),
+      });
+    });
+
     it.each([
       ['a commit that changes no spec text', 'currentRecord', 'review'],
       ['the draft-to-current flip', 'draftRecord', 'command'],

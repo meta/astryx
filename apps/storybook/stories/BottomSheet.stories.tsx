@@ -927,8 +927,8 @@ export const NestedPopover: Story = {
 };
 
 /**
- * A no-scrim sheet with a `data-autofocus` field: focus on open follows the
- * native host, which lands on the panel; the field is not focused.
+ * A no-scrim sheet with a `data-autofocus` field: the field is focused when
+ * the sheet opens, in every browser.
  */
 export const NoScrimAutofocus: Story = {
   name: 'No scrim with a data-autofocus field',
@@ -963,7 +963,7 @@ export const NoScrimAutofocus: Story = {
 
 /**
  * A modal sheet with a `data-autofocus` field (a TextInput with hasAutoFocus):
- * what focus lands on when the sheet opens.
+ * the field is focused when the sheet opens, in every browser.
  */
 export const ModalAutofocus: Story = {
   name: 'Modal with a data-autofocus field',
@@ -1038,7 +1038,8 @@ export const ExitFocusControlRemoved: Story = {
 
 /**
  * Browser fixture: Done closes the sheet, and 100 ms into the exit the Done
- * control is disabled. The sheet goes inert and hidden as focus leaves it.
+ * control is disabled. Focus stays on Done and returns to "Open sheet" when
+ * the sheet closes (FR9).
  */
 export const ExitFocusControlDisabled: Story = {
   tags: ['!autodocs'],

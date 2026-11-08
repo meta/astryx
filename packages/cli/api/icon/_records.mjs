@@ -15,6 +15,7 @@ import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
 export {
+  answeringMatches,
   iconRecord,
   importLine,
   leadingReading,
