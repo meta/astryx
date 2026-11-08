@@ -79,9 +79,13 @@ Consumer migration instructions belong in consumer docs and release notes.
 The shipped Lightbox does not yet meet every requirement below. Each gap names
 the requirement it misses and the person it affects.
 
-- **Touch presentation (FR7–FR10, FR12).** On a touch screen there is no swipe
-  paging, drag or pinch to close, tap to hide the controls, or thumbnail
-  transition.
+- **Touch presentation (FR8–FR10, FR12).** On a touch screen there is no drag
+  or pinch to close, tap to hide the controls, or thumbnail transition.
+- **Paging motion roles (FR5).** The page settle plays the pager's own UIKit
+  values, which the motion role table does not list as roles.
+- **Video controls (FR7).** A video's native controls are taken as a 48 px
+  band at its bottom edge, since browsers expose no control geometry; a
+  browser that places controls elsewhere pages from them.
 - **Tab containment (FR4).** Tab from the viewer's last control can move focus
   to the browser's own interface.
 - **Zoom reset key (AR3).** `0` does not return a zoomed photo to its fitted
@@ -98,6 +102,9 @@ the requirement it misses and the person it affects.
 - **Double-click listener (FR14).** A mouse's or a pen's double-click reaches
   the zoom through the stage's own `dblclick` listener, since only the browser
   knows the system's double-click speed.
+- **Press tracker (FR14).** The viewer's own `pointerdown` handler records
+  each press's pointer type and point, which the browser's `dblclick` and
+  `click` do not carry, and clears the flag a drag leaves for its click.
 - **Touch exit (FR16).** On a touch screen the viewer disappears at once when
   it closes.
 
