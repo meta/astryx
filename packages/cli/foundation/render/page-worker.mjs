@@ -29,6 +29,7 @@ import {pathToFileURL} from 'node:url';
 import {format} from 'node:util';
 import {parentPort, workerData} from 'node:worker_threads';
 import {transformSync} from '@babel/core';
+import {matchPath, readPathsIn, resolvePath} from './ts-paths.mjs';
 import {createJiti} from 'jiti';
 import {assetDataUri, isAssetPath} from './assets.mjs';
 import {SINGLE_COPY, isServedPackage, packageOf} from './served-packages.mjs';
@@ -355,6 +356,39 @@ async function drawCharts(markup, Page) {
 }
 
 /**
+ * Babel plugin: a bare import that a path alias places loads from that file,
+ * as in TypeScript, before any installed copy. An import the aliases do not
+ * place is left alone, so an installed package loads. It runs on the page's
+ * own files, before {@link pagePlugin}, and on every module the page loads
+ * from outside them and outside `node_modules` (a sibling package's source,
+ * say).
+ */
+function aliasPlugin() {
+  return () => {
+    /** @param {any} node a string literal to point at the file an alias places */
+    const point = node => {
+      if (node?.type !== 'StringLiteral') return;
+      const file = resolvePath(PATHS, node.value);
+      if (file) node.value = file;
+    };
+    return {
+      visitor: {
+        'ImportDeclaration|ExportNamedDeclaration|ExportAllDeclaration'(/** @type {any} */ p) {
+          point(p.node.source);
+        },
+        CallExpression(/** @type {any} */ p) {
+          const callee = p.node.callee;
+          if (callee?.type === 'Import' || (callee?.type === 'Identifier' && callee.name === 'require')) point(p.node.arguments?.[0]);
+        },
+        ImportExpression(/** @type {any} */ p) {
+          point(p.node.source);
+        },
+      },
+    };
+  };
+}
+
+/**
  * Babel plugin: replace asset imports with data: URIs and stylesheet imports
  * with nothing (their CSS is inlined into the page), and record static text
  * children of capitalized JSX elements.
@@ -397,6 +431,23 @@ function pagePlugin(filename) {
           skippedCss.push(bare);
           p.remove();
           return;
+        }
+        if (/\.css$/i.test(bare) && bare === raw && namesAlias(raw)) {
+          // An aliased stylesheet with no target falls back to a package, as in
+          // TypeScript; when there is none either, the alias is wrong.
+          let found = true;
+          try {
+            createRequire(filename).resolve(raw);
+          } catch {
+            found = false;
+          }
+          if (!found) {
+            const err = new Error(
+              `${path.basename(filename)} imports ${spec} through a path alias that does not lead to a file.`,
+            );
+            /** @type {any} */ (err).renderCode = 'ERR_FILE_NOT_FOUND';
+            throw err;
+          }
         }
         if (/\.css$/i.test(bare)) {
           if (bare.startsWith('.') || path.isAbsolute(bare)) {
@@ -522,60 +573,33 @@ function pagePlugin(filename) {
 }
 
 /**
- * Path aliases from the project's tsconfig.json or jsconfig.json
- * (`compilerOptions.paths`), as jiti aliases: `"@/*": ["./src/*"]` becomes
- * `{"@/": "<root>/src/"}`.
- * @returns {Record<string, string>}
+ * The project's path aliases (`compilerOptions.paths` in tsconfig.json or
+ * jsconfig.json), matched by TypeScript's rules (see ts-paths.mjs).
  */
-function projectAliases() {
-  /** @type {Record<string, string>} */
-  const alias = {};
-  for (const name of ['tsconfig.json', 'jsconfig.json']) {
-    const file = path.join(root, name);
-    if (!fs.existsSync(file)) continue;
-    /** @type {any} */
-    let config;
-    try {
-      // Allow the comments and trailing commas these files often carry.
-      const text = fs
-        .readFileSync(file, 'utf8')
-        .replace(/("(?:[^"\\]|\\.)*")|\/\/[^\n]*|\/\*[\s\S]*?\*\//g, (_, str) => str ?? '')
-        .replace(/,(\s*[}\]])/g, '$1');
-      config = JSON.parse(text);
-    } catch {
-      continue;
-    }
-    const options = config?.compilerOptions ?? {};
-    const baseDir = path.resolve(root, typeof options.baseUrl === 'string' ? options.baseUrl : '.');
-    for (const [key, targets] of Object.entries(options.paths ?? {})) {
-      const target = Array.isArray(targets) ? targets[0] : undefined;
-      if (typeof target !== 'string') continue;
-      if (key.endsWith('/*') && target.endsWith('/*')) {
-        alias[key.slice(0, -1)] = `${path.resolve(baseDir, target.slice(0, -2))}/`;
-      } else if (!key.includes('*') && !target.includes('*')) {
-        alias[key] = path.resolve(baseDir, target);
-      }
-    }
-    break;
-  }
-  return alias;
-}
-
-const ALIASES = projectAliases();
+const PATHS = readPathsIn(root) ?? [];
 
 /** @param {string} spec whether a specifier goes through a project alias */
-const isAliased = spec =>
-  Object.keys(ALIASES).some(key => (key.endsWith('/') ? spec.startsWith(key) : spec === key));
+const isAliased = spec => resolvePath(PATHS, spec) !== null;
 
-/** @param {string} spec a specifier through a project alias, as an absolute path */
-const resolveAlias = spec => {
-  for (const [key, target] of Object.entries(ALIASES)) {
-    if (key.endsWith('/') ? spec.startsWith(key) : spec === key) {
-      return key.endsWith('/') ? target + spec.slice(key.length) : target;
-    }
-  }
-  return spec;
+/**
+ * Whether a specifier that resolves to no file was meant for an alias: it
+ * matches a key with a literal prefix. A catch-all key (`"*"`) matches every
+ * package name too, so an import it cannot place is a package that is not
+ * installed.
+ * @param {string} spec
+ */
+const namesAlias = spec => {
+  const match = matchPath(PATHS, spec);
+  return match !== null && match.pattern.prefix !== '';
 };
+
+/**
+ * A specifier through a project alias, as the absolute path of the first
+ * target that exists; the specifier itself when none does, so it resolves as
+ * a package.
+ * @param {string} spec
+ */
+const resolveAlias = spec => resolvePath(PATHS, spec) ?? spec;
 
 /** Packages the page took from the package set, by name: their folders. */
 /** @type {Map<string, string>} */
@@ -599,6 +623,7 @@ function packageDirOf(file, name) {
 }
 
 const moduleApi = /** @type {any} */ (Module);
+
 
 /** A module at the served Core's folder: what resolves as the Core would. */
 const servedParent = served ? new moduleApi(path.join(served.dir, 'package.json')) : null;
@@ -675,7 +700,7 @@ const jiti = createJiti(entry, {
   extensions: ['.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.mts', '.cts', '.json'],
   moduleCache: true,
   interopDefault: true,
-  alias: {...SINGLE_COPY_ALIASES, ...ALIASES},
+  alias: SINGLE_COPY_ALIASES,
   jsx: {runtime: 'automatic'},
   transform(opts) {
     const filename = opts.filename ?? '';
@@ -695,6 +720,7 @@ const jiti = createJiti(entry, {
         generatorOpts: {retainLines: true},
         compact: false,
         plugins: [
+          aliasPlugin(),
           pagePlugin(filename),
           ...(source.includes('stylex')
             ? [
@@ -713,6 +739,31 @@ const jiti = createJiti(entry, {
       });
       const rules = /** @type {any} */ (result?.metadata)?.stylex;
       if (Array.isArray(rules)) stylexRules.push(...rules);
+      source = result?.code ?? source;
+    } else if (
+      PATHS.length > 0 &&
+      filename &&
+      !filename.includes(NODE_MODULES) &&
+      /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)
+    ) {
+      const ts = /\.(tsx?|mts|cts)$/.test(filename);
+      const result = transformSync(source, {
+        filename,
+        babelrc: false,
+        configFile: false,
+        sourceType: 'unambiguous',
+        // The options jiti compiles these files with: JSX only in .jsx and
+        // .tsx files (so `<string>value` stays a type assertion), and legacy
+        // decorators.
+        parserOpts: {
+          plugins: /** @type {import('@babel/core').ParserOptions['plugins']} */ (
+            ts ? [...(/\.[cm]?tsx$/.test(filename) ? ['jsx'] : []), 'typescript', 'decorators-legacy'] : ['jsx']
+          ),
+        },
+        generatorOpts: {retainLines: true},
+        compact: false,
+        plugins: [aliasPlugin()],
+      });
       source = result?.code ?? source;
     }
     return {code: plain.transform({...opts, source, babel: {...opts.babel, compact: false}})};
@@ -743,7 +794,7 @@ function classify(e) {
   const missing =
     /Cannot find (?:module|package) ['"]([^'"]+)['"]/.exec(message) ??
     /Failed to resolve import ['"]([^'"]+)['"]/.exec(message);
-  if (missing && (isAliased(missing[1]) || /^[@~#]\/|^#/.test(missing[1]))) {
+  if (missing && (namesAlias(missing[1]) || /^[@~#]\/|^#/.test(missing[1]))) {
     return fail(
       'ERR_FILE_NOT_FOUND',
       `The page imports ${missing[1]} through a path alias that does not lead to a file. Check \`compilerOptions.paths\` in the project's tsconfig.json, or import it by a relative path.`,
