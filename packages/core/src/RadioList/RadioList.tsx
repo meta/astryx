@@ -94,7 +94,11 @@ export interface RadioListFormContextValue {
 }
 
 export const RadioListFormContext =
-  createContext<RadioListFormContextValue | null>(null);
+  createLayerScopedContext<RadioListFormContextValue | null>(
+    'RadioListFormContext',
+    1,
+    null,
+  );
 RadioListFormContext.displayName = 'RadioListFormContext';
 
 /** Whether a radio refuses selection: `aria-disabled` or native `disabled`. */
