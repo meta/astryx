@@ -29,6 +29,7 @@ import {
   installPressFeedback,
   PRESSABLE_ATTRIBUTE,
   PRESSED_ATTRIBUTE,
+  pressFadeMs,
 } from './pressFeedback';
 import {
   isTrackedByGroup,
@@ -53,6 +54,7 @@ function press(
   x: number,
   y: number,
   pointerType = 'touch',
+  timeStamp?: number,
 ): void {
   const event = new Event(type, {bubbles: true, cancelable: true});
   Object.assign(event, {
@@ -62,6 +64,9 @@ function press(
     pointerId: 1,
     pointerType,
   });
+  if (timeStamp != null) {
+    Object.defineProperty(event, 'timeStamp', {value: timeStamp});
+  }
   element.dispatchEvent(event);
 }
 
@@ -547,6 +552,64 @@ describe('a finger waits only inside a scroller (spec:AST-094 FR11)', () => {
     expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
   });
 
+  it("counts the content-touch delay from the touch's own timestamp, so a listener that runs late still paints on time", () => {
+    const control = pressable('button');
+    scroller.appendChild(control);
+    // The page has run a while, so the touch's time is past zero.
+    vi.advanceTimersByTime(1000);
+    // A busy main thread runs the listener 60 ms after the touch.
+    press(control, 'pointerdown', 10, 10, 'touch', performance.now() - 60);
+    vi.advanceTimersByTime(PRESS_ONSET_MS - 60 - 1);
+    expect(control.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('paints at once when the listener runs later than the content-touch delay', () => {
+    const control = pressable('button');
+    scroller.appendChild(control);
+    vi.advanceTimersByTime(1000);
+    press(
+      control,
+      'pointerdown',
+      10,
+      10,
+      'touch',
+      performance.now() - PRESS_ONSET_MS - 40,
+    );
+    vi.advanceTimersByTime(0);
+    expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('waits the whole delay for a touch with no time, a time ahead of now, or an epoch time taken now', () => {
+    vi.advanceTimersByTime(1000);
+    const stamps = [() => 0, () => performance.now() + 500, () => Date.now()];
+    for (const stamp of stamps) {
+      const control = pressable('button');
+      scroller.appendChild(control);
+      press(control, 'pointerdown', 10, 10, 'touch', stamp());
+      vi.advanceTimersByTime(PRESS_ONSET_MS - 1);
+      expect(control.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+      vi.advanceTimersByTime(1);
+      expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+      press(control, 'pointerup', 10, 10, 'touch');
+      vi.advanceTimersByTime(PRESS_FADE_MS * 2);
+      control.remove();
+    }
+  });
+
+  it("keeps an epoch stamp's age, as the long-press hold does", () => {
+    const control = pressable('button');
+    scroller.appendChild(control);
+    vi.advanceTimersByTime(1000);
+    // jsdom stamps an event with Date.now(); this touch is 60 ms old.
+    press(control, 'pointerdown', 10, 10, 'touch', Date.now() - 60);
+    vi.advanceTimersByTime(PRESS_ONSET_MS - 60 - 1);
+    expect(control.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
   it('is cancelled by travel past the slop, with no fade', () => {
     const control = pressable('button');
     document.body.appendChild(control);
@@ -632,6 +695,34 @@ describe('a finger waits only inside a scroller (spec:AST-094 FR11)', () => {
 describe('the release clock without a theme', () => {
   it("is the exit duration token's default, 175 ms (spec:AST-094 FR5)", () => {
     expect(PRESS_FADE_MS).toBe(175);
+  });
+});
+
+describe('the release clock on the pressed element', () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
+  /** An element with `tokens` set on it, in the document. */
+  function pressed(tokens: Record<string, string> = {}): HTMLElement {
+    const element = document.createElement('div');
+    for (const [name, value] of Object.entries(tokens)) {
+      element.style.setProperty(name, value);
+    }
+    document.body.appendChild(element);
+    return element;
+  }
+
+  it('reads --duration-exit where the element is, a zero included', () => {
+    expect(pressFadeMs(pressed({'--duration-exit': '250ms'}))).toBe(250);
+    expect(pressFadeMs(pressed({'--duration-exit': '0ms'}))).toBe(0);
+  });
+
+  it("gives the token's default for no value or a value that is not a time", () => {
+    expect(pressFadeMs(pressed())).toBe(PRESS_FADE_MS);
+    expect(pressFadeMs(pressed({'--duration-exit': 'fast'}))).toBe(
+      PRESS_FADE_MS,
+    );
   });
 });
 

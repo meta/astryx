@@ -487,7 +487,7 @@ describe('TransferListSelector', () => {
     });
     expect(cancel).toBeEnabled();
     expect(fieldset).not.toContainElement(cancel);
-    expect(apply).toBeDisabled();
+    expect(apply).toHaveAttribute('aria-disabled', 'true');
     expect(
       screen.getByRole('combobox', {name: 'Visible fields'}),
     ).toHaveAttribute('aria-disabled', 'true');
@@ -515,7 +515,7 @@ describe('TransferListSelector', () => {
     ).toBeEnabled();
     expect(
       within(dialog).getByRole('button', {name: 'Apply', hidden: true}),
-    ).toBeDisabled();
+    ).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('keeps focus on the activated row control while a change is pending', async () => {

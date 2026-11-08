@@ -357,31 +357,45 @@ test.afterEach(async ({page}, testInfo) => {
  * the input, so it holds the motion at its first frame. A long input can
  * outlast the hold's own 5 s. The driver paces its events on the wall clock,
  * and on a loaded runner they play much longer than scripted. Then the hold
- * is armed again for what is left of 5 s from the input's end.
+ * is armed again for what is left of 5 s from the input's end. `property` is
+ * the track's judged motion: `translate`, or `opacity` for a cross-fade.
  */
 async function playHeld(
   page: Page,
   track: Locator,
   driver: TouchDriver,
   script: TouchScript,
+  property: 'translate' | 'opacity' = 'translate',
 ): Promise<ArmedHold> {
-  const first = await armHold(page, track);
+  const judges = {target: track, property};
+  const first = await armHold(page, track, {judges});
   const caught = first.held().then(
     held => ({held}),
-    () => null,
+    (error: unknown) => ({error}),
   );
   await driver.play(script);
   const inputEnd = Date.now();
   return {
     held: async () => {
       const outcome = await caught;
-      if (outcome != null) {
+      if ('held' in outcome) {
         return outcome.held;
       }
+      // Only a hold that ran out of time is armed again. A hold that took
+      // the wrong motion fails with its own error.
+      const timedOut = (error: unknown) =>
+        String(error).includes('no animation under the scope ran');
+      if (!timedOut(outcome.error)) {
+        throw outcome.error;
+      }
       const again = await armHold(page, track, {
+        judges,
         timeout: Math.max(0, inputEnd + 5_000 - Date.now()),
       });
-      return again.held().catch(() => {
+      return again.held().catch((error: unknown) => {
+        if (!timedOut(error)) {
+          throw error;
+        }
         throw new Error(
           'no motion under the track started within 5 s of the input ending',
         );
@@ -390,9 +404,19 @@ async function playHeld(
   };
 }
 
-/** Calls `goTo(index)` with the motion it starts held at its first frame. */
-const goToHeld = async (page: Page, track: Locator, index: number) => {
-  const hold = await armHold(page, track);
+/**
+ * Calls `goTo(index)` with the motion it starts held at its first frame.
+ * `property` is the track's judged motion, as for `playHeld`.
+ */
+const goToHeld = async (
+  page: Page,
+  track: Locator,
+  index: number,
+  property: 'translate' | 'opacity' = 'translate',
+) => {
+  const hold = await armHold(page, track, {
+    judges: {target: track, property},
+  });
   await page.evaluate(next => {
     window.armFrames();
     window.pager.goTo(next);
@@ -922,7 +946,7 @@ test('under Reduce Motion the settle and goTo do not travel: an opacity cross-fa
     {x: 320, y: 200},
     {velocity: {x: -1500, y: 0}, durationMs: 80},
   );
-  const hold = await playHeld(page, track, driver, throwScript);
+  const hold = await playHeld(page, track, driver, throwScript, 'opacity');
   crossFadesOnly(await hold.held());
   await releaseAnimations(page);
   await expect
@@ -930,7 +954,7 @@ test('under Reduce Motion the settle and goTo do not travel: an opacity cross-fa
     .toBe(false);
   expect(await page.evaluate(() => window.pager.index)).toBe(2);
   // goTo cross-fades too.
-  crossFadesOnly(await goToHeld(page, track, 4));
+  crossFadesOnly(await goToHeld(page, track, 4, 'opacity'));
   await releaseAnimations(page);
   await expect
     .poll(async () => page.evaluate(() => window.pager.isSettling))
@@ -1162,11 +1186,11 @@ test('a settle keeps advancing every frame through an 800 ms main-thread block',
   expect(proof.verdict.failures, proof.summary).toEqual([]);
   // Each run's own block has to show the settle at a new position.
   proof.runs.forEach((run, i) => {
-    const read = run.control;
+    const read = run?.control;
     const settleFrames = (read?.movedWith ?? 0) - (read?.belowStep ?? 0);
     expect(
       settleFrames,
-      `run ${i + 1}: the settle showed a new position on ${settleFrames} frames in its block. ${run.summary}`,
+      `run ${i + 1}: the settle showed a new position on ${settleFrames} frames in its block. ${run?.summary ?? proof.late[i]?.message}`,
     ).toBeGreaterThanOrEqual(1);
   });
 });

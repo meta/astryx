@@ -10,9 +10,10 @@
  *   exports the exit hold (`holdLayoutExit`, `releaseLayoutExit`), the
  *   in-place swap (`holdLayoutSwap`, `playLayoutSwap`), the edge reveal's
  *   two-state form (`holdLayoutEdge`, `playLayoutEdge`), `playLayoutFrames`
- *   and `applyLayoutChangeTransition`. It is the one module that produces the
- *   size-change glide and the edge reveal `spec:AST-105` defines
- *   (`architecture:react-component-runtime` INV12)
+ *   and `applyLayoutChangeTransition`. It exports `glideOf` and the glide
+ *   landings (`landLayoutGlide`, `landLayoutGlideSideways`) too. It is the one
+ *   module that produces the size-change glide and the edge reveal
+ *   `spec:AST-105` defines (`architecture:react-component-runtime` INV12)
  * @position Motion foundation, internal to core. A handle comes from the
  *   public `useAnimatedLayout` hook; a component that takes it reports its
  *   size changes through this module.
@@ -81,6 +82,7 @@
  */
 
 import {LATE_START_MS} from './frameBlock';
+import {sharedKey} from '../utils/sharedRealm';
 import {
   inertCopy,
   isCopyable,
@@ -721,15 +723,26 @@ export function glideOf(element: Element): Animation | null {
 // Handles
 // ---------------------------------------------------------------------------
 
-const AREA = Symbol('astryx.animatedLayout.area');
+// A registered key, so a swizzled copy of this module reads a package handle.
+const AREA = sharedKey('animated-layout/area', 1);
 
 /**
- * The opaque handle `useAnimatedLayout` returns (`spec:AST-105` FR1): no
- * public members. A component that receives it reports its size changes to
- * the handle's container, the area the glide stays inside.
+ * The opaque handle `useAnimatedLayout` returns. A component that receives it
+ * reports its size changes to the handle's container, the area the glide
+ * stays inside.
  */
 export interface AnimatedLayout {
-  readonly [AREA]: () => Element | null;
+  /**
+   * A brand that is never present, so the handle types of the package and a
+   * swizzled copy match.
+   */
+  readonly '@astryxdesign/core/animated-layout/v1'?: never;
+}
+
+/** The container a handle reads, or null for a value that is not a handle. */
+function readArea(handle: AnimatedLayout): Element | null {
+  const read = (handle as {readonly [AREA]?: unknown})[AREA];
+  return typeof read === 'function' ? (read as () => Element | null)() : null;
 }
 
 /** A handle over `area` (the container element, read when a change runs). */
@@ -737,13 +750,11 @@ export function createAnimatedLayout(
   area: () => Element | null,
 ): AnimatedLayout {
   // Not enumerable and frozen: the handle shows no fields to a caller.
-  return Object.freeze(
-    Object.defineProperty({}, AREA, {value: area}),
-  ) as AnimatedLayout;
+  return Object.freeze(Object.defineProperty({}, AREA, {value: area}));
 }
 
 function areaOf(handle: AnimatedLayout, element: Element): Element | null {
-  const area = handle[AREA]();
+  const area = readArea(handle);
   return area != null && area !== element && area.contains(element)
     ? area
     : null;
@@ -2981,7 +2992,7 @@ export function playLayoutFrames(
   handle: AnimatedLayout | null | undefined,
   parts: LayoutSwapMotion['incoming'],
 ): () => void {
-  const area = handle?.[AREA]() ?? null;
+  const area = handle == null ? null : readArea(handle);
   const motion = area == null ? null : layoutMotion(area);
   if (area == null || motion == null || motion.kind === 'instant') {
     return () => {};
@@ -3344,11 +3355,55 @@ const HOLD_PROPERTIES = {
 } as const;
 
 /**
+ * The inside of an element as it was laid out: its padding along an axis, its
+ * overflow and its scroll offset. A size change can change them in the same
+ * commit, as a LayoutPanel at width 0 drops its padding and stops scrolling.
+ */
+interface LaidOutInside {
+  /** Its padding at the axis's start and end. */
+  readonly gutters: readonly [string, string];
+  /** Its overflow across and down. */
+  readonly overflow: readonly [string, string];
+  /** Its scroll offset across and down. */
+  readonly scroll: readonly [number, number];
+}
+
+function insideOf(
+  element: HTMLElement,
+  axis: 'inline' | 'block',
+): LaidOutInside {
+  const style = getComputedStyle(element);
+  return {
+    gutters: [
+      style.getPropertyValue(`padding-${axis}-start`),
+      style.getPropertyValue(`padding-${axis}-end`),
+    ],
+    overflow: [
+      style.getPropertyValue('overflow-x'),
+      style.getPropertyValue('overflow-y'),
+    ],
+    scroll: [element.scrollLeft, element.scrollTop],
+  };
+}
+
+function restoreScroll(element: HTMLElement, inside: LaidOutInside): void {
+  const [across, down] = inside.scroll;
+  if (element.scrollLeft !== across) {
+    element.scrollLeft = across;
+  }
+  if (element.scrollTop !== down) {
+    element.scrollTop = down;
+  }
+}
+
+/**
  * Holds `element` at `extent` own px along `edge`'s axis while it conceals to
  * `keep`, freeing the difference by the margin on that edge's side, so what
- * lies beyond the edge stays where the new size puts it. Returns what puts
- * back every value it set, or null when no margin frees it (the content on
- * that side did not stay put), having set nothing.
+ * lies beyond the edge stays where the new size puts it. Its padding,
+ * overflow and scroll offset stay as `inside` measured them, so nothing in it
+ * moves while it is clipped. Returns what puts back every value it set.
+ * When no margin frees it, as the content on that side did not stay put, it
+ * sets nothing and returns null.
  */
 function holdExtent(
   element: HTMLElement,
@@ -3356,10 +3411,21 @@ function holdExtent(
   edge: LayoutEdge,
   extent: number,
   keep: number,
+  inside: LaidOutInside,
 ): (() => void) | null {
   const axis = edge.startsWith('inline') ? 'inline' : 'block';
   const margin = `margin-${edge}`;
-  const properties = [...HOLD_PROPERTIES[axis], margin];
+  const insideProperties = [
+    [`padding-${axis}-start`, inside.gutters[0]],
+    [`padding-${axis}-end`, inside.gutters[1]],
+    ['overflow-x', inside.overflow[0]],
+    ['overflow-y', inside.overflow[1]],
+  ] as const;
+  const properties = [
+    ...HOLD_PROPERTIES[axis],
+    margin,
+    ...insideProperties.map(([property]) => property),
+  ];
   const prior = properties.map(
     property =>
       [
@@ -3390,6 +3456,11 @@ function holdExtent(
   element.style.setProperty('flex-basis', 'auto', 'important');
   element.style.setProperty('flex-grow', '0', 'important');
   element.style.setProperty('flex-shrink', '0', 'important');
+  for (const [property, value] of insideProperties) {
+    if (value !== '') {
+      element.style.setProperty(property, value, 'important');
+    }
+  }
   element.style.setProperty(margin, `${keep - extent}px`, 'important');
   if (beyond != null && before != null) {
     // One correction from the measured result (a gap, the element's own
@@ -3415,6 +3486,7 @@ function holdExtent(
       return null;
     }
   }
+  restoreScroll(element, inside);
   return restore;
 }
 
@@ -3428,7 +3500,9 @@ function holdExtent(
  * the extent the element showed. A smaller one conceals: the element is held
  * at the extent it was laid out at, the difference freed by the margin on
  * that edge's side so the content beyond it stays where the new size puts it,
- * and clipped down to its new extent; the hold goes when the motion ends. The
+ * and clipped down to its new extent; the hold goes when the motion ends.
+ * Its padding, overflow and scroll offset stay as laid out while it is held,
+ * so nothing inside it jumps when the new size changes them. The
  * moving edge rides the glide of the content on that side, frame by frame,
  * and a change made while it runs starts from the extent it shows. It slides:
  * nothing fades. Under Reduce Motion with a coarse primary pointer a reveal
@@ -3445,7 +3519,13 @@ export function reportLayoutEdge(
    * What the element showed, its laid-out extent and its box, before the
    * change.
    */
-  let measured: {shown: number; box: number; rect: DOMRect} | null = null;
+  let measured: {
+    shown: number;
+    box: number;
+    rect: DOMRect;
+    inside: LaidOutInside;
+  } | null = null;
+  const axis = edge.startsWith('inline') ? 'inline' : 'block';
   const release = (element: HTMLElement | null) => {
     if (element == null) {
       return;
@@ -3461,12 +3541,15 @@ export function reportLayoutEdge(
         const running = resizeReveals.get(element);
         const elapsed = Number(running?.animation?.currentTime);
         const rect = element.getBoundingClientRect();
+        // A running conceal holds the inside as it was laid out.
+        const inside = insideOf(element, axis);
         measured =
           running == null
             ? {
                 shown: extentOf(element, edge),
                 box: extentOf(element, edge),
                 rect,
+                inside,
               }
             : {
                 shown: running.shownAt(
@@ -3474,6 +3557,7 @@ export function reportLayoutEdge(
                 ),
                 box: running.box,
                 rect,
+                inside,
               };
         running?.release();
       }
@@ -3487,6 +3571,8 @@ export function reportLayoutEdge(
       if (handle == null || element == null || before == null) {
         return;
       }
+      // A conceal released to reverse can drop the scroll offset.
+      restoreScroll(element, before.inside);
       const area = areaOf(handle, element);
       if (area == null) {
         return;
@@ -3527,7 +3613,7 @@ export function reportLayoutEdge(
       // the one it was laid out at, held while it runs.
       const box = isConceal ? Math.max(before.box, before.shown) : after;
       const restore = isConceal
-        ? holdExtent(element, area, edge, box, after)
+        ? holdExtent(element, area, edge, box, after, before.inside)
         : () => {};
       if (restore == null) {
         return;
@@ -3634,6 +3720,46 @@ export function landLayoutGlide(element: Element): void {
     glides.delete(element);
     glide.animation.cancel();
   }
+}
+
+/**
+ * Lands the sideways part of `element`'s running glide at once and keeps its
+ * vertical move. It changes the glide's frames, and what a later change
+ * carries from it, together. It is for an adopter that moves the element's
+ * own sideways translation onto its children between the two reads. A list
+ * row that a swipe left open is one.
+ */
+export function landLayoutGlideSideways(element: Element): void {
+  const glide = glides.get(element);
+  const effect = glide?.animation.effect as KeyframeEffect | null | undefined;
+  if (
+    glide == null ||
+    effect == null ||
+    typeof effect.setKeyframes !== 'function'
+  ) {
+    return;
+  }
+  effect.setKeyframes(
+    effect.getKeyframes().map(({computedOffset: _, translate, ...frame}) => {
+      const [, y = '0px'] = String(translate ?? '').split(/\s+/);
+      return {...frame, translate: `0px ${y}`};
+    }),
+  );
+  const vertical: Glide = {
+    animation: glide.animation,
+    offsetAt: t => ({x: 0, y: glide.offsetAt(t).y}),
+    get durationMs() {
+      return glide.durationMs;
+    },
+    shownBefore: {x: 0, y: glide.shownBefore.y},
+    scale: glide.scale,
+  };
+  glides.set(element, vertical);
+  glide.animation.addEventListener?.('finish', () => {
+    if (glides.get(element) === vertical) {
+      glides.delete(element);
+    }
+  });
 }
 
 /**
