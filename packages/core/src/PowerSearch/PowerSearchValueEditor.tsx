@@ -812,11 +812,7 @@ function DateRangeEditor({
     return (
       // A disabled editor takes no input: the calendar has no disabled state.
       <div inert={isDisabled === true}>
-        <Calendar
-          mode="range"
-          value={currentValue}
-          onChange={handleChange}
-        />
+        <Calendar mode="range" value={currentValue} onChange={handleChange} />
       </div>
     );
   }
