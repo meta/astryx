@@ -59,6 +59,6 @@ export function proveSlice(index, count) {
       } finally {
         fs.rmSync(project, {recursive: true, force: true});
       }
-    }, 1_800_000);
+    }, 600_000);
   });
 }

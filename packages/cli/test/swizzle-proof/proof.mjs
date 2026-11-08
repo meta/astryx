@@ -16,7 +16,10 @@ import {createRequire} from 'node:module';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 
-import {moduleExportOrigins} from '../../foundation/discovery/module-exports.mjs';
+import {
+  moduleExportOrigins,
+  resolveLocalModule,
+} from '../../foundation/discovery/module-exports.mjs';
 import {sourceExportTarget} from '../../foundation/discovery/package-exports.mjs';
 
 export const REPO = path.resolve(
@@ -41,7 +44,7 @@ const TOOLCHAIN = [
 ];
 /** A dependency whose change can change every copy's build. */
 const TOOLCHAIN_DEPENDENCY =
-  /(?:^|[\s'"/])(?:vite|@vitejs\/plugin-react|@stylexjs\/[\w-]+|typescript|react|react-dom|@babel\/[\w-]+|@types\/react(?:-dom)?)@/;
+  /(?:^|[\s'"/])(?:vite|@vitejs\/plugin-react|@stylexjs\/[\w-]+|typescript|react|react-dom|@babel\/[\w-]+|@types\/react(?:-dom)?)(?:@|['"]\s*:)/;
 
 /**
  * The CLI modules `astryx swizzle` runs: the swizzle API and every module it
@@ -312,16 +315,49 @@ function componentSourceDir(t, copy, src) {
 }
 
 /**
+ * A module and every module it imports by relative path, transitively: what
+ * the copy's bundle runs when it imports one of the module's names.
+ * @param {string} file
+ * @param {Map<string, Set<string>>} closures cache, by module
+ */
+function localClosure(file, closures) {
+  const cached = closures.get(file);
+  if (cached) return cached;
+  /** @type {Set<string>} */
+  const seen = new Set();
+  const queue = [file];
+  while (queue.length > 0) {
+    const next = queue.shift();
+    if (seen.has(next)) continue;
+    seen.add(next);
+    let code;
+    try {
+      code = fs.readFileSync(next, 'utf8');
+    } catch {
+      continue;
+    }
+    for (const [, spec] of code.matchAll(
+      /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)['"](\.[^'"]+)['"]/g,
+    )) {
+      const resolved = resolveLocalModule(spec, next);
+      if (resolved && !seen.has(resolved)) queue.push(resolved);
+    }
+  }
+  closures.set(file, seen);
+  return seen;
+}
+
+/**
  * The source files a copy depends on: each module it carries, the entry
  * module of each package export it imports from, and the module that
- * defines each public name it imports. Null when the copy's component folder
+ * defines each public name it imports with every module that one imports. Null when the copy's component folder
  * matches no single source folder.
  * @param {{name: string, pkg: string}} t
  * @param {{outBase: string, files: string[]}} copy
  * @param {Map<string, {dir: string, manifest: any}>} packages
  * @param {Map<string, Map<string, {file: string}>>} memo
  */
-function sourcesOf(t, copy, packages, memo) {
+export function sourcesOf(t, copy, packages, memo, closures = new Map()) {
   const srcOf = name => path.join(packages.get(name).dir, 'src');
   const own = t.pkg.replace('@astryxdesign/', '');
   const componentSource = componentSourceDir(t, copy, srcOf(t.pkg));
@@ -381,7 +417,8 @@ function sourcesOf(t, copy, packages, memo) {
           .replace(/^type\s+/, '')
           .split(/\s+as\s+/)[0];
         if (!imported) continue;
-        sources.add(memo.get(target).get(imported)?.file ?? target);
+        const origin = memo.get(target).get(imported)?.file ?? target;
+        for (const file of localClosure(origin, closures)) sources.add(file);
       }
     }
   }
@@ -389,21 +426,27 @@ function sourcesOf(t, copy, packages, memo) {
 }
 
 /**
- * Which targets a run proves: none, the affected ones, or all. A pull request
- * whose change git cannot read proves every target (fail closed). A run
- * outside a pull request diffs its commit against its parent; when that
- * parent cannot be read it proves none, since the release check proves every
- * target.
- * @param {{changed: string[]|null, toolchain: string|undefined, relevant: string[], event: string|undefined, all?: boolean}} change
+ * Which targets a run proves: none, the affected ones, or all. When git
+ * cannot read the change, a checkout without a parent commit proves none
+ * (there is no base to diff), and any other run proves every target (fail
+ * closed).
+ * @param {{changed: string[]|null, toolchain: string|undefined, relevant: string[], hasParent: boolean, all?: boolean}} change
  * @returns {{mode: 'none'|'affected'|'all', reason: string}}
  */
-export function proofScope({changed, toolchain, relevant, event, all = false}) {
+export function proofScope({
+  changed,
+  toolchain,
+  relevant,
+  hasParent,
+  all = false,
+}) {
   if (all) return {mode: 'all', reason: 'every target was asked for'};
   if (changed == null) {
-    if (event && event !== 'pull_request') {
+    if (!hasParent) {
       return {
         mode: 'none',
-        reason: `this ${event} run cannot read its parent commit; pull requests and the release check prove every copy`,
+        reason:
+          'the checkout has no parent commit to diff against, so no target runs',
       };
     }
     return {
@@ -420,6 +463,19 @@ export function proofScope({changed, toolchain, relevant, event, all = false}) {
     };
   }
   return {mode: 'affected', reason: ''};
+}
+
+/** Whether the checkout holds the parent of its commit. */
+function hasParentCommit() {
+  try {
+    execFileSync('git', ['rev-parse', '--verify', '--quiet', 'HEAD^1'], {
+      cwd: REPO,
+      stdio: 'ignore',
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -450,7 +506,7 @@ export async function runSlice({
     changed,
     toolchain,
     relevant,
-    event: process.env.GITHUB_EVENT_NAME,
+    hasParent: hasParentCommit(),
     all,
   });
   if (scope.mode === 'none') {
@@ -484,12 +540,19 @@ export async function runSlice({
   if (!reason) {
     const packages = workspacePackages();
     const memo = new Map();
+    const closures = new Map();
     const changedFiles = new Set(relevant.map(file => path.join(REPO, file)));
     const affectStart = Date.now();
     affected = slice.filter(t => {
       // A target that did not eject is proven, so its failure shows.
       if (!ejected.has(t.key)) return true;
-      const sources = sourcesOf(t, ejected.get(t.key), packages, memo);
+      const sources = sourcesOf(
+        t,
+        ejected.get(t.key),
+        packages,
+        memo,
+        closures,
+      );
       if (sources == null) return true;
       for (const file of sources) {
         // A source that does not exist means the mapping is wrong: prove it.
