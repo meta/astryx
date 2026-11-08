@@ -16,7 +16,12 @@
  * runs straight into whatever is under it.
  */
 
-import {expect, test, type Locator, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -179,8 +184,8 @@ test('a fullscreen Dialog has no edge to draw and fits the viewport', async ({
   const surface = page.locator('dialog.astryx-dialog[open]').first();
   await surface.waitFor({state: 'visible'});
   await expectNoEdge(surface, 'fullscreen Dialog');
-  const fits = await page.evaluate(() => {
-    const box = document.querySelector('dialog[open]')!.getBoundingClientRect();
+  const fits = await surface.evaluate(dialog => {
+    const box = dialog.getBoundingClientRect();
     return (
       box.width <= window.innerWidth &&
       document.documentElement.scrollWidth <= window.innerWidth

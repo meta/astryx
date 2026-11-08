@@ -298,31 +298,6 @@ const elevationStyles = stylex.create({
 });
 
 /**
- * A solid variant's edge in forced colors. These variants separate themselves
- * from the page with a fill alone and have no border; forced colors discards
- * the fill, which would leave plain text with no perceivable boundary
- * (WCAG 1.4.11). `ButtonText` is the platform's own button edge. The edge
- * exists only in forced colors, so nothing changes anywhere else. `ghost` is
- * flat by design and keeps none.
- */
-const forcedColorsEdge = stylex.create({
-  edge: {
-    borderWidth: {
-      default: 0,
-      '@media (forced-colors: active)': '1px',
-    },
-    borderStyle: {
-      default: 'none',
-      '@media (forced-colors: active)': 'solid',
-    },
-    borderColor: {
-      default: null,
-      '@media (forced-colors: active)': 'ButtonText',
-    },
-  },
-});
-
-/**
  * Variant styles using backgroundImage for layered colors
  * Pseudo-classes are nested within properties per StyleX recommendation
  * Overlay is stacked on top of base color using multiple linear-gradients
@@ -344,11 +319,10 @@ const variants = stylex.create({
   destructive: {
     backgroundColor: colorVars['--color-error'],
     color: colorVars['--color-on-error'],
-    // Forced colors replace the fill with ButtonFace; a border keeps the
-    // destructive fill's shape visible (architecture:theme-tokens INV11). A
-    // border, not an outline, leaves the shared focus ring intact.
-    borderWidth: {default: 0, '@media (forced-colors: active)': '1px'},
-    borderStyle: {default: 'none', '@media (forced-colors: active)': 'solid'},
+    // Forced colors replace the fill with ButtonFace; the solid-variant edge
+    // (`forcedColorsEdge`) keeps the destructive fill's shape visible
+    // (architecture:theme-tokens INV11), in this color. A border, not an
+    // outline, leaves the shared focus ring intact.
     borderColor: {
       default: null,
       '@media (forced-colors: active)': 'CanvasText',
@@ -657,6 +631,86 @@ const groupStyles = stylex.create({
 });
 
 /**
+ * A solid variant's edge in forced colors. These variants separate themselves
+ * from the page with a fill alone and have no border; forced colors discards
+ * the fill, which would leave plain text with no perceivable boundary
+ * (WCAG 1.4.11). `ButtonText` is the platform's own button edge. `ghost` is
+ * flat by design and keeps none.
+ *
+ * Each value is `null` outside forced colors, so no declaration exists there.
+ * A grouped button gets only the longhands its group does not own: the group's
+ * dividers stay where they are under both StyleX style resolutions, and the
+ * group's first and last buttons close its outer edge.
+ */
+const FORCED_COLORS = '@media (forced-colors: active)';
+
+const forcedColorsEdge = stylex.create({
+  standalone: {
+    borderWidth: {default: null, [FORCED_COLORS]: '1px'},
+    borderStyle: {default: null, [FORCED_COLORS]: 'solid'},
+    borderColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
+  },
+  groupHorizontal: {
+    borderBlockStartWidth: {default: null, [FORCED_COLORS]: '1px'},
+    borderBlockStartStyle: {default: null, [FORCED_COLORS]: 'solid'},
+    borderBlockStartColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
+    borderBlockEndWidth: {default: null, [FORCED_COLORS]: '1px'},
+    borderBlockEndStyle: {default: null, [FORCED_COLORS]: 'solid'},
+    borderBlockEndColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
+    // Repeats the group's divider and gives the first button a leading edge.
+    borderInlineStartWidth: {
+      default: borderVars['--border-width'],
+      ':first-child': {default: 0, [FORCED_COLORS]: '1px'},
+    },
+    borderInlineStartStyle: {
+      default: 'solid',
+      ':first-child': {default: 'none', [FORCED_COLORS]: 'solid'},
+    },
+    borderInlineEndWidth: {
+      default: null,
+      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: '1px'},
+    },
+    borderInlineEndStyle: {
+      default: null,
+      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'solid'},
+    },
+    borderInlineEndColor: {
+      default: null,
+      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'ButtonText'},
+    },
+  },
+  groupVertical: {
+    borderInlineStartWidth: {default: null, [FORCED_COLORS]: '1px'},
+    borderInlineStartStyle: {default: null, [FORCED_COLORS]: 'solid'},
+    borderInlineStartColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
+    borderInlineEndWidth: {default: null, [FORCED_COLORS]: '1px'},
+    borderInlineEndStyle: {default: null, [FORCED_COLORS]: 'solid'},
+    borderInlineEndColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
+    // Repeats the group's divider and gives the first button a leading edge.
+    borderBlockStartWidth: {
+      default: borderVars['--border-width'],
+      ':first-child': {default: 0, [FORCED_COLORS]: '1px'},
+    },
+    borderBlockStartStyle: {
+      default: 'solid',
+      ':first-child': {default: 'none', [FORCED_COLORS]: 'solid'},
+    },
+    borderBlockEndWidth: {
+      default: null,
+      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: '1px'},
+    },
+    borderBlockEndStyle: {
+      default: null,
+      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'solid'},
+    },
+    borderBlockEndColor: {
+      default: null,
+      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'ButtonText'},
+    },
+  },
+});
+
+/**
  * Whether `node` adds nothing to a content name: nothing renders, or an Icon
  * with no label. Any other node can add text.
  */
@@ -727,6 +781,10 @@ export function Button({
   const t = useComponentTranslator();
   const size = useSize(sizeProp, 'md');
   const buttonGroup = useButtonGroup();
+  const isSolidVariant =
+    variant === 'primary' ||
+    variant === 'secondary' ||
+    variant === 'destructive';
   // A tracking group's tracker paints this button's pointer press. A menu
   // trigger is not tracked: it keeps its own press and opening.
   const groupPointers = use(PressGroupContext);
@@ -884,11 +942,13 @@ export function Button({
     // AFTER the shared focus outline: the outline supplies width/style/offset
     // for every variant, and `destructive` re-colors just the ring to match
     // its own surface. Ordering is the mechanism — StyleX is last-wins.
+    isSolidVariant &&
+      (buttonGroup == null
+        ? forcedColorsEdge.standalone
+        : buttonGroup.orientation === 'horizontal'
+          ? forcedColorsEdge.groupHorizontal
+          : forcedColorsEdge.groupVertical),
     variants[variant],
-    (variant === 'primary' ||
-      variant === 'secondary' ||
-      variant === 'destructive') &&
-      forcedColorsEdge.edge,
     xstyle,
   );
 
