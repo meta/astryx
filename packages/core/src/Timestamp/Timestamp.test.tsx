@@ -1011,6 +1011,37 @@ describe('Timestamp', () => {
       });
     });
 
+    it('names no card after an open card is removed and a new one attaches', async () => {
+      const view = (hasTooltip: boolean) => (
+        <>
+          <Timestamp
+            value="2026-02-19T17:00:00Z"
+            format="date_time"
+            tooltipEntries={[{}]}
+            hasTooltip={hasTooltip}
+            data-testid="ts"
+          />
+          <button type="button">Elsewhere</button>
+        </>
+      );
+      const {rerender} = render(view(true));
+      const time = screen.getByTestId('ts');
+      act(() => time.focus());
+      const card = await screen.findByRole('dialog', {hidden: true});
+      await waitFor(() => {
+        expect(time).toHaveAttribute('aria-controls', card.id);
+      });
+
+      // The open card unmounts without a hide. Focus then moves on, and a new
+      // card attaches closed.
+      rerender(view(false));
+      act(() => screen.getByRole('button', {name: 'Elsewhere'}).focus());
+      rerender(view(true));
+      await act(async () => {});
+      expect(time).toHaveAttribute('tabindex', '0');
+      expect(time).not.toHaveAttribute('aria-controls');
+    });
+
     it('keeps the default hover-card row in the viewer zone with timezoneID set', async () => {
       const user = userEvent.setup();
       const originalTZ = process.env.TZ;

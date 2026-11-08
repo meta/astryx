@@ -426,11 +426,6 @@ export function Timestamp({
     !isValidDate,
   );
 
-  // Placed after all hooks so the hook order stays stable across renders.
-  if (!isValidDate) {
-    return null;
-  }
-
   // An empty array is not a second way to spell "off" — `hasTooltip` stays the
   // only on/off axis — so normalize it away before anything reads it.
   const entries =
@@ -443,7 +438,20 @@ export function Timestamp({
   // `format` silently suppress another prop's output, so entry presence opens
   // it too. With no entries this reduces to the original condition exactly.
   const showTooltip =
-    hasTooltip && (isRelativeFormat(effectiveFormat) || entries !== undefined);
+    isValidDate &&
+    hasTooltip &&
+    (isRelativeFormat(effectiveFormat) || entries !== undefined);
+
+  // A card that unmounts while open never reports its hide. Without a card,
+  // forget its id, so the time names no element that is gone.
+  if (!showTooltip && openCardId !== null) {
+    setOpenCardId(null);
+  }
+
+  // Placed after all hooks so the hook order stays stable across renders.
+  if (!isValidDate) {
+    return null;
+  }
 
   // The rows the hover card renders: the configured entries, or the single
   // default absolute line shown when none are set. Either way the surface is
