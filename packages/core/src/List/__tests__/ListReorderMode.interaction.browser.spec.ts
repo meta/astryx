@@ -15,7 +15,8 @@
  *   enters the same mode with the focus on the handle. Under a finger, taps
  *   alone reorder: the handle, the moves, then Done. A drag leaves the mode
  *   off. Each of the hint's buttons is a 44 px target centered on what it
- *   shows, and none covers its neighbour
+ *   shows, and none covers its neighbour. A key move measures the rows in
+ *   one pass, before their glides start
  * @position Interaction evidence for List/listReorderEngine.tsx (reorder
  *   mode and its hint) and List/ListReorderHandle.tsx
  */
@@ -31,10 +32,12 @@ import {
   openStory,
   tap,
   touchDriver,
+  waitForRest,
   withStorybook,
   type Point,
 } from '@astryxdesign/interaction-harness';
 import {reorder} from '../../motion/uikit/reorder';
+import {describePasses, forcedPassesDuring, passesUnder} from './forcedPasses';
 
 const storybook = withStorybook(test);
 
@@ -351,6 +354,125 @@ test.describe('with a finger', () => {
     test.skip(!touch, 'the touch hint runs on a touch screen');
     await expect(handle(page, 'Inbox')).toBeVisible();
   }
+
+  test('a key move measures the rows in one pass, before their glides start', async ({
+    page,
+    browser,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'the layout trace is Chromium CDP');
+    await open(page);
+    await expect(page.locator(ROW)).toHaveCount(ROWS.length);
+    await handle(page, 'Inbox').focus();
+    await page.keyboard.press('Space');
+    await expect(handle(page, 'Inbox')).toHaveAttribute('aria-pressed', 'true');
+    const move = async (key: string, order: ReadonlyArray<string>) =>
+      forcedPassesDuring(browser, page, async () => {
+        await page.keyboard.press(key);
+        await expect.poll(async () => labels(page)).toEqual(order);
+        // The commit's glides start before the next frame.
+        await page.evaluate(
+          async () =>
+            new Promise(resolve => {
+              requestAnimationFrame(() => requestAnimationFrame(resolve));
+            }),
+        );
+      });
+    // The first move: Inbox and Sent glide for the first time.
+    const first = await move('ArrowDown', [
+      'Sent',
+      'Inbox',
+      'Drafts',
+      'Archive',
+      'Spam',
+      'Trash',
+    ]);
+    expect(first.events.has('keydown')).toBe(true);
+    expect(first.rounds).toBeGreaterThan(0);
+    // The reorder's own reads, in the key's move and in its commit, are one
+    // measurement pass at most. The shared animator reads a row's will-change
+    // on its first glide, a cost of its own. Two rows glide here for the first
+    // time, so it adds two passes at most.
+    const moves = passesUnder(first.passes, ['step', 'commit']);
+    const animators = moves.filter(pass =>
+      pass.sources[0]?.includes('animator'),
+    );
+    const firstReport = describePasses(first.passes);
+    expect(moves.length - animators.length, firstReport).toBeLessThanOrEqual(1);
+    expect(animators.length, firstReport).toBeLessThanOrEqual(2);
+    // Once the glides end, a move back over the same rows counts every read.
+    await waitForRest(row(page, 'Inbox'));
+    await waitForRest(row(page, 'Sent'));
+    // The animator lets each row's layer go once its glide has lingered, and
+    // then reads the stylesheet's will-change in a zero-delay task. A move
+    // before that read would make it itself, so the case waits for both.
+    await expect
+      .poll(
+        async () =>
+          page
+            .locator(ROW)
+            .evaluateAll(rows =>
+              rows.every(
+                element =>
+                  !(element as HTMLElement).style.willChange.includes(
+                    'translate',
+                  ),
+              ),
+            ),
+        {message: 'the animator lets the gliding rows go', timeout: 5000},
+      )
+      .toBe(true);
+    await page.evaluate(
+      async () =>
+        new Promise(resolve => {
+          setTimeout(resolve, 0);
+        }),
+    );
+    const back = await move('ArrowUp', ROWS);
+    expect(back.events.has('keydown')).toBe(true);
+    expect(back.rounds).toBeGreaterThan(0);
+    expect(
+      passesUnder(back.passes, ['step', 'commit']).length,
+      describePasses(back.passes),
+    ).toBeLessThanOrEqual(1);
+  });
+
+  test("a key move at the screen's bottom edge brings the row's new place into view", async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), 'core-list--reorder-long-list');
+    const touch = await page.evaluate(
+      () => matchMedia('(pointer: coarse)').matches,
+    );
+    test.skip(!touch, 'the rows slide where the primary pointer is coarse');
+    await expect(page.locator(ROW)).toHaveCount(30);
+    const moved = handle(page, 'Item 20');
+    const row = moved.locator('xpath=ancestor::li[1]');
+    // The row's bottom sits on the screen's bottom edge, the page scrolled.
+    await row.evaluate(element => {
+      element.scrollIntoView({block: 'end'});
+    });
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+    await moved.focus();
+    await page.keyboard.press('Space');
+    await expect(moved).toHaveAttribute('aria-pressed', 'true');
+    expect((await labels(page)).indexOf('Item 20')).toBe(19);
+    await page.keyboard.press('ArrowDown');
+    // The row moves one place down, glides there, then rests.
+    await expect
+      .poll(async () => (await labels(page)).indexOf('Item 20'), {
+        message: 'Item 20 moves one place down',
+        timeout: 5000,
+      })
+      .toBe(20);
+    await waitForRest(row);
+    const box = await row.boundingBox();
+    const height = page.viewportSize()?.height ?? 0;
+    expect(box).not.toBeNull();
+    expect(Math.round((box?.y ?? 0) + (box?.height ?? 0))).toBeLessThanOrEqual(
+      height,
+    );
+  });
 
   test("taps alone reorder: the handle turns on reorder mode, the hint's moves move the row, and Done ends the mode", async ({
     page,
