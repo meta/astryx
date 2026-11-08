@@ -343,7 +343,7 @@ test('every page keeps a two-line caption band, so the photo keeps its box', asy
   await expect(more).toHaveCount(0);
 });
 
-test('the caption is body Text on the media surface: its lines start at one edge, and "more" is a ghost Button that ends the last', async ({
+test('the caption is body Text on the media surface: its lines start at one edge, and "more" is a link in its type that ends the last line', async ({
   page,
 }) => {
   const g = await openGallery(page, {
@@ -382,6 +382,7 @@ test('the caption is body Text on the media surface: its lines start at one edge
       right: box.right - parseFloat(getComputedStyle(text).paddingRight),
       bottom: box.bottom,
       lineHeight: parseFloat(getComputedStyle(text).lineHeight),
+      fontSize: getComputedStyle(text).fontSize,
       isText: text.classList.contains('astryx-text'),
       type: text.getAttribute('data-type'),
       isOnMedia: text.closest('[data-astryx-media="dark"]') != null,
@@ -396,13 +397,27 @@ test('the caption is body Text on the media surface: its lines start at one edge
   const [first = Number.NaN, second = Number.NaN] = caption?.lines ?? [];
   expect(Math.abs(second - first)).toBeLessThan(1);
   const more = g.dialog.getByRole('button', {name: 'more'});
-  await expect(more).toHaveClass(/astryx-button/);
-  await expect(more).toHaveAttribute('data-variant', 'ghost');
+  // Link's button form: a native button in the caption's own type.
+  await expect(more).toHaveClass(/astryx-link/);
+  await expect(more).toHaveAttribute('type', 'button');
+  const moreType = await more.evaluate(el => ({
+    fontSize: getComputedStyle(el).fontSize,
+    lineHeight: parseFloat(getComputedStyle(el).lineHeight),
+    underline: getComputedStyle(el).textDecorationLine,
+  }));
+  // Underlined, so it reads as a link beside the caption's own text.
+  expect(moreType.underline).toBe('underline');
+  expect(moreType.fontSize).toBe(caption?.fontSize);
+  expect(moreType.lineHeight).toBeCloseTo(caption?.lineHeight ?? 0, 1);
   const m = await more.boundingBox();
   expect(m).not.toBeNull();
-  // It ends the last line: inside the text's end, centred on that line.
+  // It ends the last line: inside the text's end, one line tall, centred on
+  // that line.
   expect((m?.x ?? 0) + (m?.width ?? 0)).toBeLessThanOrEqual(
     (caption?.right ?? 0) + 0.5,
+  );
+  expect(Math.abs((m?.height ?? 0) - (caption?.lineHeight ?? 0))).toBeLessThan(
+    1,
   );
   expect(
     Math.abs(

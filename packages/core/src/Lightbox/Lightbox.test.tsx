@@ -2674,10 +2674,11 @@ describe("Lightbox gallery caption's toggle", () => {
     ];
     const shapeOf = (element: Element): string =>
       `${element.tagName}(${[...element.children].map(shapeOf).join(',')})`;
+    // The caption's own Text, not the toggle's label inside it.
     const captionShapes = () =>
-      [
-        ...document.querySelectorAll('[data-lightbox-caption] .astryx-text'),
-      ].map(shapeOf);
+      [...document.querySelectorAll('[data-lightbox-caption] .astryx-text')]
+        .filter(text => text.closest('button') == null)
+        .map(shapeOf);
     const fits = render(
       <Lightbox
         isOpen={true}

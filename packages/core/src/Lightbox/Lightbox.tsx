@@ -103,7 +103,7 @@ import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {MediaTheme} from '../theme/MediaTheme';
 import {Text} from '../Text/Text';
 import {useHeldTruncation} from '../Text/useTruncation';
-import {Button} from '../Button/Button';
+import {Link} from '../Link/Link';
 
 registerEnglishFallback(english);
 /**
@@ -437,20 +437,18 @@ const styles = stylex.create({
     blockSize: '1lh',
     marginInlineStart: spacingVars['--spacing-1'],
   }),
-  // The caption's Button over its place: the caption's last line, inside the
-  // Text's inline padding. It is one caption line tall, so its fill stays on
-  // its own line. Under a coarse pointer, the shared hit area writes how far
-  // the toggle may grow toward 44 px on each side, short of any neighbour.
-  // This layer takes taps out to there, except upward into the line above.
-  // Its sides are physical, as the page's rects.
+  // The caption's link over its place: the caption's last line, inside the
+  // Text's inline padding. It takes the caption's font and line height, so
+  // it sits on that line as its text does. Under a coarse pointer, the shared
+  // hit area writes how far the toggle may grow toward 44 px on each side,
+  // short of any neighbour. This layer takes taps out to there, except upward
+  // into the line above. Its sides are physical, as the page's rects.
   // SYNC: `caption`'s paddingInline.
   // SYNC: /packages/core/src/utils/hitArea.ts (HIT_INSET_PROPERTIES)
   captionToggle: {
     position: 'absolute',
     insetInlineEnd: spacingVars['--spacing-3'],
     insetBlockEnd: 0,
-    blockSize: '1lh',
-    paddingBlock: 0,
     '::after': {
       content: '""',
       position: 'absolute',
@@ -2012,20 +2010,14 @@ export function Lightbox({
                                         // until the caption needs it. So a
                                         // measurement only shows or hides it,
                                         // and adds no element.
-                                        <Button
+                                        <Link
                                           ref={captionToggleRef}
                                           hidden={!hasCaptionToggle}
-                                          variant="ghost"
-                                          size="sm"
-                                          label={
-                                            isCaptionOpen
-                                              ? t(
-                                                  '@astryx.lightbox.captionLess',
-                                                )
-                                              : t(
-                                                  '@astryx.lightbox.captionMore',
-                                                )
-                                          }
+                                          type="inherit"
+                                          // On the media surface a link's
+                                          // colour is close to the caption's.
+                                          // The underline sets it apart.
+                                          hasUnderline
                                           aria-expanded={isCaptionOpen}
                                           aria-controls={fullCaptionId}
                                           onClick={() =>
@@ -2037,8 +2029,11 @@ export function Lightbox({
                                             styles.captionToggle,
                                             !hasCaptionToggle &&
                                               styles.captionToggleHidden,
-                                          ]}
-                                        />
+                                          ]}>
+                                          {isCaptionOpen
+                                            ? t('@astryx.lightbox.captionLess')
+                                            : t('@astryx.lightbox.captionMore')}
+                                        </Link>
                                       )}
                                     </div>
                                   </div>
