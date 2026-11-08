@@ -2,7 +2,7 @@
 
 /**
  * @file menuItemRoles.ts
- * @output Shared menu-item role set + focus selector + keyboard activation.
+ * @output Shared menu-item role set, row selectors, and keyboard activation.
  * @position Internal; used by DropdownMenu and ContextMenu so their
  *   roving-focus, typeahead, and Enter/Space activation stay in sync.
  *
@@ -17,8 +17,18 @@ export const MENU_ITEM_ROLES: ReadonlySet<string> = new Set([
   'menuitemcheckbox',
 ]);
 
+/** The rows a press can act on: enabled rows only. */
 export const MENU_ITEM_SELECTOR: string = [...MENU_ITEM_ROLES]
   .map(role => `[role="${role}"]:not([aria-disabled="true"])`)
+  .join(',');
+
+/**
+ * Every row, disabled rows included. The arrow keys, Home, End and type-ahead
+ * visit a disabled row, so a keyboard user finds it and its reason; the row
+ * stays inert.
+ */
+export const MENU_ROW_SELECTOR: string = [...MENU_ITEM_ROLES]
+  .map(role => `[role="${role}"]`)
   .join(',');
 
 /**
@@ -72,4 +82,15 @@ export function activateMenuItem(
       altKey: key.altKey,
     }),
   );
+}
+
+/**
+ * A disabled row's `onMouseDown`. The row takes focus from the keys
+ * (`tabindex="-1"`), so a mouse press would otherwise focus it and light it.
+ * Cancelling the press's default keeps focus where it is.
+ */
+export function keepDisabledRowUnfocused(event: {
+  preventDefault(): void;
+}): void {
+  event.preventDefault();
 }

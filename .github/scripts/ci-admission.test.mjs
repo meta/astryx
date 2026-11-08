@@ -11,8 +11,10 @@
  *   keeps the per-author limits
  */
 
+import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import {createRequire} from 'node:module';
+import os from 'node:os';
 import path from 'node:path';
 
 import {afterEach, describe, expect, it, vi} from 'vitest';
@@ -27,13 +29,22 @@ const action = read('.github/actions/ci-admission/action.yml');
 const ci = read('.github/workflows/ci.yml');
 const main = read('.github/workflows/deploy.yml');
 const script = action.runs.steps[0].with.script;
+// The count each look runs, shared with the tools that grant CI capacity.
+const COUNT_MODULE = path.join(root, '.github/actions/ci-admission/count.mjs');
+const counter = fs.readFileSync(COUNT_MODULE, 'utf8');
+// Loaded once: under fake timers a fresh import inside the script would
+// resolve after the timers have run.
+const preloaded = {
+  'node:url': await import('node:url'),
+  count: await import(COUNT_MODULE),
+};
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
 const STEP = 'Wait for room under the CI ceiling';
-const CEILING = Number(/const CI_CEILING = (\d+);/.exec(script)[1]);
+const CEILING = Number(/const CI_CEILING = (\d+);/.exec(counter)[1]);
 const needsOf = job => [job.needs ?? []].flat();
 const stepOf = job => job.steps.find(step => step.name === STEP);
 const estimateOf = workflow =>
-  new RegExp(`'\\.github/workflows/${workflow}': [^\\n]*`).exec(script)[0];
+  new RegExp(`'\\.github/workflows/${workflow}': [^\\n]*`).exec(counter)[0];
 
 /** Legs a job runs for an event: its matrix size, or one. */
 function legs(job, event = 'workflow_dispatch') {
@@ -63,7 +74,9 @@ describe('where runs wait', () => {
     }
     expect(stepOf(room).with.phase).toBe('room');
     expect(stepOf(room).id).toBe('room');
-    expect(wait.with.phase).toBe('rest');
+    expect(wait.with.phase).toBe(
+      "${{ needs.room.outputs.attempt == github.run_attempt && 'rest' || 'whole' }}",
+    );
     expect(needsOf(admission)).toEqual(['room']);
     expect(room.permissions).toEqual({actions: 'read', contents: 'read'});
     // The rest of the wait carries on from where room left off.
@@ -197,7 +210,9 @@ describe('where runs wait', () => {
       guarded.push(id);
     }
     expect(guarded.sort()).toEqual([
+      'a11y-dependent-audits-plan',
       'docsite-build',
+      'pr-a11y-dependent-audits',
       'pr-component-a11y-contracts',
       'pr-interaction',
       'pr-interaction-webkit',
@@ -205,6 +220,23 @@ describe('where runs wait', () => {
       'pr-visual',
       'typecheck',
     ]);
+  });
+
+  it('makes a re-run of the failed jobs wait again after a stop for no room', () => {
+    const room = ci.jobs.room;
+    // A stop for no room fails room itself, so a re-run of the failed jobs
+    // repeats room's look instead of reusing its earlier result.
+    const stop = room.steps.at(-1);
+    expect(stop.name).toBe('Stop when CI is full');
+    expect(stop.if).toBe("steps.room.outputs.full == 'true'");
+    expect(stop.run).toContain('CI is full: re-run all jobs or push later.');
+    expect(stop.run.trim().endsWith('exit 1')).toBe(true);
+    // A re-run of admission alone carries on no earlier attempt's clock: it
+    // waits for the whole run from its own start.
+    expect(room.outputs.attempt).toBe('${{ github.run_attempt }}');
+    expect(wait.with.phase).toBe(
+      "${{ needs.room.outputs.attempt == github.run_attempt && 'rest' || 'whole' }}",
+    );
   });
 
   it('skips only with every other job, and never fails, so every job and required check decides as before', () => {
@@ -261,8 +293,11 @@ describe('where runs wait', () => {
         name: 'Stop when CI is full at the longest wait',
       }),
     ]);
+    // Room's only other steps: its checkout, and its stop when it found no
+    // room (above).
     expect(ci.jobs.room.steps.filter(step => step.name !== STEP)).toEqual([
       expect.objectContaining({uses: 'actions/checkout@v7'}),
+      expect.objectContaining({name: 'Stop when CI is full'}),
     ]);
   });
 
@@ -503,6 +538,26 @@ describe('peaks', () => {
   });
 });
 
+describe('the shared count', () => {
+  it("is loaded from the action's own folder, which its checkout holds", () => {
+    // A wrong path would start every run without waiting: each admission
+    // step continues on error.
+    expect(action.runs.steps[0].env.COUNT_MODULE).toBe(
+      '${{ github.action_path }}/count.mjs',
+    );
+    expect(script).toContain('pathToFileURL(process.env.COUNT_MODULE).href');
+    expect(fs.existsSync(COUNT_MODULE)).toBe(true);
+    for (const job of [ci.jobs.room, ci.jobs.admission]) {
+      const checkout = job.steps.find(step =>
+        String(step.uses ?? '').startsWith('actions/checkout'),
+      );
+      expect(checkout.with['sparse-checkout']).toBe(
+        '.github/actions/ci-admission',
+      );
+    }
+  });
+});
+
 describe('ci admission', () => {
   afterEach(() => vi.useRealTimers());
   afterEach(() => vi.restoreAllMocks());
@@ -644,6 +699,7 @@ describe('ci admission', () => {
             },
     };
     Object.assign(process.env, {
+      COUNT_MODULE,
       PEAK: String(peak),
       MAIN: String(isMain),
       LABEL_LEGS: '{"ci:run-visual": 6}',
@@ -655,10 +711,16 @@ describe('ci admission', () => {
       LOOKS: looked,
       NEXT: next,
     });
-    const done = new AsyncFunction('github', 'context', 'core', script)(
-      github,
-      context,
-      core,
+    // The script loads the shared count with `import()`, which a function
+    // built here cannot call; the test passes it in.
+    const done = new AsyncFunction(
+      'github',
+      'context',
+      'core',
+      'importModule',
+      script.replaceAll('await import(', 'await importModule('),
+    )(github, context, core, async specifier =>
+      specifier === 'node:url' ? preloaded['node:url'] : preloaded.count,
     );
     // Observed here; `await done` below still rethrows a failure.
     done.catch(() => {});
@@ -666,6 +728,65 @@ describe('ci admission', () => {
     await done;
     return {...logs, looks, calls, lookTimes, outputs};
   }
+
+  it('agrees with a capacity tool on a full queue: the same count, and no room for either', async () => {
+    // Six pull-request runs at 12 live jobs, one waiting, and small
+    // workflows: 72 + 1 + 18 = 91 other jobs, no room for a run of 16.
+    const active = [...prs(6, 12), waitingRun(40), ...slims(3)];
+    // The tool's reading: the shared count as a command, through a stub `gh`
+    // that answers from the same runs.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-agree-'));
+    try {
+      const fixture = {
+        'repos/o/r/actions/runs?status=in_progress': {
+          workflow_runs: active.map(({jobs, ...run}) => run),
+        },
+        'repos/o/r/actions/runs?status=queued': {workflow_runs: []},
+        ...Object.fromEntries(
+          active.map(run => [
+            `repos/o/r/actions/runs/${run.id}/jobs`,
+            {jobs: run.jobs ?? []},
+          ]),
+        ),
+      };
+      fs.writeFileSync(path.join(dir, 'fixture.json'), JSON.stringify(fixture));
+      fs.writeFileSync(
+        path.join(dir, 'gh'),
+        [
+          `#!${process.execPath}`,
+          "const fixture = require(require('path').join(__dirname, 'fixture.json'));",
+          'const route = process.argv[3];',
+          'const key = Object.keys(fixture).sort((a, b) => b.length - a.length).find(prefix => route.startsWith(prefix));',
+          'if (key == null) process.exit(1);',
+          'process.stdout.write(JSON.stringify(fixture[key]));',
+          '',
+        ].join('\n'),
+        {mode: 0o755},
+      );
+      const tool = spawnSync(
+        process.execPath,
+        [COUNT_MODULE, '--repo', 'o/r', '--peak', '16'],
+        {
+          encoding: 'utf8',
+          env: {...process.env, PATH: `${dir}:${process.env.PATH}`},
+        },
+      );
+      expect(tool.status, tool.stderr).toBe(0);
+      const reading = JSON.parse(tool.stdout);
+      // Admission's first look on the same runs.
+      const result = await admit({active, peak: 16, maxWait: 12, maxLooks: 2});
+      const look = result.info.find(line =>
+        line.startsWith('Waiting for room: about '),
+      );
+      expect(look).toBeDefined();
+      const admissionOthers = Number(/about (\d+) other jobs/.exec(look)[1]);
+      expect(reading.others).toBe(admissionOthers);
+      expect(reading.fits).toBe(false);
+      expect(admissionOthers + 16).toBeGreaterThan(CEILING);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
 
   it("admits at once at today's load: 56 live jobs and many pull-request runs waiting", async () => {
     // 2026-11-01 ~01:50Z: 56 jobs ran, a dozen of them the waiting jobs of

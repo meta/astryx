@@ -161,17 +161,46 @@ const nodesByTree = new WeakMap();
  * @returns {readonly any[]}
  */
 function nodesOfType(node, type) {
+  return cachedNodes(node, `all\0${type}`, () =>
+    collectNodesOfType(node, type, []),
+  );
+}
+
+/**
+ * The module declarations of `type` at a program's top level, in source
+ * order: a library file is read without a walk of every function in it. A
+ * declaration nested in a namespace is not one of them. Only the readers of
+ * icon-set libraries use this: the parse-failure and re-export checks,
+ * {@link moduleExportOrigin} and the readers built on it, and
+ * {@link followedExportNames}. {@link bindingOrigin}, and so
+ * {@link aliasedOrigin}, {@link elementPropOrigins} and
+ * {@link moduleExportOrigins}, read with {@link nodesOfType}, as do the
+ * other readers.
+ * @param {any} program
+ * @param {string} type
+ * @returns {readonly any[]}
+ */
+function moduleDeclarations(program, type) {
+  return cachedNodes(program, `top\0${type}`, () => topLevel(program, type));
+}
+
+/**
+ * @param {any} node
+ * @param {string} key
+ * @param {() => readonly any[]} find
+ * @returns {readonly any[]}
+ */
+function cachedNodes(node, key, find) {
   if (node == null || typeof node !== 'object') return [];
   let byType = nodesByTree.get(node);
   if (!byType) {
     byType = new Map();
     nodesByTree.set(node, byType);
   }
-  let found = byType.get(type);
-  if (!found) {
-    found = collectNodesOfType(node, type, []);
-    byType.set(type, found);
-  }
+  const cached = byType.get(key);
+  if (cached) return cached;
+  const found = find();
+  byType.set(key, found);
   return found;
 }
 
@@ -315,7 +344,7 @@ export function moduleParseFailure(file) {
       };
     }
     for (const type of ['ExportNamedDeclaration', 'ExportAllDeclaration']) {
-      for (const node of nodesOfType(ast.program, type)) {
+      for (const node of moduleDeclarations(ast.program, type)) {
         const specifier = node.source?.value;
         if (typeof specifier !== 'string' || !specifier.startsWith('.')) {
           continue;
@@ -344,7 +373,7 @@ export function unfollowedReexports(file) {
   /** @type {Set<string>} */
   const missing = new Set();
   for (const type of ['ExportNamedDeclaration', 'ExportAllDeclaration']) {
-    for (const node of nodesOfType(ast.program, type)) {
+    for (const node of moduleDeclarations(ast.program, type)) {
       const specifier = node.source?.value;
       if (typeof specifier !== 'string' || node.exportKind === 'type') continue;
       if (!resolveModuleOrPackage(specifier, file)) missing.add(specifier);
@@ -608,11 +637,12 @@ export function moduleExportNames(file) {
 
 /**
  * Every export of a module with where it is declared, in one pass: the same
- * answers as {@link moduleExportOrigin} for each name, read once per module.
+ * answers as the whole-tree {@link exportOrigin} for each name, read once per
+ * module.
  * Pass one `memo` to calls that read the same package, so a module behind
  * many barrels is read once; a memo keeps value and type reads apart, and
  * nothing is kept between memos. One difference follows ESM where
- * {@link moduleExportOrigin} does not: a name re-exported by name from a
+ * {@link exportOrigin} does not: a name re-exported by name from a
  * module that cannot be followed is absent, never filled from `export *`.
  * @param {string} file
  * @param {{types?: boolean, memo?: Map<string, Map<string, {file: string, name: string}>>}} [options]
@@ -677,7 +707,12 @@ function exportOriginsOf(file, read) {
     for (const node of declarations) {
       for (const name of declaredNames(node.declaration, types)) {
         named.add(name);
-        if (!origins.has(name)) origins.set(name, {file, name});
+        if (!origins.has(name)) {
+          origins.set(
+            name,
+            declaredOrigin(ast, file, node.declaration, name, types),
+          );
+        }
       }
     }
     for (const [exportName, entries] of specifiers) {
@@ -697,7 +732,7 @@ function exportOriginsOf(file, read) {
             origin =
               result.origins.get(local) ??
               (result.low < Infinity
-                ? moduleExportOrigin(target, local, new Set(), {types})
+                ? exportOrigin(target, local, new Set(), nodesOfType, types)
                 : null);
           }
         } else {
@@ -1087,23 +1122,34 @@ export function staticExportObject(file, exportNames) {
 /**
  * A module's runtime named exports, indexed once per parsed tree: the
  * export declarations that declare something, and each export specifier by
- * the name it exports, in source order.
- * @type {WeakMap<object, {declarations: any[], specifiers: Map<string, Array<{node: any, specifier: any}>>}>}
+ * the name it exports, in source order. Each reader of export declarations
+ * has its own index, since the readers can find different declarations.
+ * @type {WeakMap<object, Map<Function, {declarations: any[], specifiers: Map<string, Array<{node: any, specifier: any}>>}>>}
  */
 const namedExportIndexes = new WeakMap();
 /** The same index with type-only exports included. */
 const typedExportIndexes = new WeakMap();
 
-/** @param {any} program @param {boolean} [types] include type-only exports */
-function namedExportIndex(program, types = false) {
+/**
+ * @param {any} program
+ * @param {boolean} [types] include type-only exports
+ * @param {(node: any, type: string) => readonly any[]} [read] how the
+ *   module's export declarations are read
+ */
+function namedExportIndex(program, types = false, read = nodesOfType) {
   const indexes = types ? typedExportIndexes : namedExportIndexes;
-  const cached = indexes.get(program);
+  let byReader = indexes.get(program);
+  if (!byReader) {
+    byReader = new Map();
+    indexes.set(program, byReader);
+  }
+  const cached = byReader.get(read);
   if (cached) return cached;
   /** @type {any[]} */
   const declarations = [];
   /** @type {Map<string, Array<{node: any, specifier: any}>>} */
   const specifiers = new Map();
-  for (const node of nodesOfType(program, 'ExportNamedDeclaration')) {
+  for (const node of read(program, 'ExportNamedDeclaration')) {
     if (node.exportKind === 'type' && !types) continue;
     if (node.declaration) declarations.push(node);
     for (const specifier of node.specifiers ?? []) {
@@ -1120,7 +1166,7 @@ function namedExportIndex(program, types = false) {
     }
   }
   const index = {declarations, specifiers};
-  indexes.set(program, index);
+  byReader.set(read, index);
   return index;
 }
 
@@ -1142,6 +1188,21 @@ export function moduleExportOrigin(
   seen = new Set(),
   {types = false} = {},
 ) {
+  return exportOrigin(file, exportName, seen, moduleDeclarations, types);
+}
+
+/**
+ * {@link moduleExportOrigin} with the reader of a module's export
+ * declarations: {@link moduleDeclarations} for icon-set libraries, or
+ * {@link nodesOfType} for every other caller.
+ * @param {string} file
+ * @param {string} exportName
+ * @param {Set<string>} seen
+ * @param {(node: any, type: string) => readonly any[]} read
+ * @param {boolean} [types] also follow type-only exports and declarations
+ * @returns {{file: string, name: string} | null}
+ */
+function exportOrigin(file, exportName, seen, read, types = false) {
   const identity = `${file}\0${exportName}`;
   if (seen.has(identity)) return null;
   seen.add(identity);
@@ -1152,10 +1213,18 @@ export function moduleExportOrigin(
   } catch {
     return null;
   }
-  const {declarations, specifiers} = namedExportIndex(ast.program, types);
+  const {declarations, specifiers} = namedExportIndex(ast.program, types, read);
   for (const node of declarations) {
     if (declarationExports(node.declaration, exportName, types)) {
-      return {file, name: exportName};
+      return declaredOrigin(
+        ast,
+        file,
+        node.declaration,
+        exportName,
+        types,
+        seen,
+        read,
+      );
     }
   }
   for (const {node, specifier} of specifiers.get(exportName) ?? []) {
@@ -1163,28 +1232,28 @@ export function moduleExportOrigin(
     if (node.source) {
       const target = resolveModuleOrPackage(node.source.value, file);
       const origin = target
-        ? moduleExportOrigin(target, local, seen, {types})
+        ? exportOrigin(target, local, seen, read, types)
         : null;
       if (origin) return origin;
       continue;
     }
-    return bindingOrigin(ast, file, local, seen, types);
+    return bindingOrigin(ast, file, local, seen, types, read);
   }
   if (exportName === 'default') {
-    for (const node of nodesOfType(ast.program, 'ExportDefaultDeclaration')) {
+    for (const node of read(ast.program, 'ExportDefaultDeclaration')) {
       const declaration = node.declaration;
       if (!types && !runtimeDefault(declaration)) continue;
       if (declaration.type === 'Identifier') {
-        return bindingOrigin(ast, file, declaration.name, seen, types);
+        return bindingOrigin(ast, file, declaration.name, seen, types, read);
       }
       return {file, name: 'default'};
     }
   }
-  for (const node of nodesOfType(ast.program, 'ExportAllDeclaration')) {
+  for (const node of read(ast.program, 'ExportAllDeclaration')) {
     if ((node.exportKind === 'type' && !types) || node.exported) continue;
     const target = resolveModuleOrPackage(node.source?.value, file);
     const origin = target
-      ? moduleExportOrigin(target, exportName, seen, {types})
+      ? exportOrigin(target, exportName, seen, read, types)
       : null;
     if (origin) return origin;
   }
@@ -1240,7 +1309,10 @@ function originGapReason(file, exportName, seen = new Set()) {
   }
   /** @type {string | null} */
   let local = null;
-  for (const node of nodesOfType(ast.program, 'ExportNamedDeclaration')) {
+  for (const node of moduleDeclarations(
+    ast.program,
+    'ExportNamedDeclaration',
+  )) {
     for (const specifier of node.specifiers ?? []) {
       const exported = specifier.exported?.name ?? specifier.exported?.value;
       if (exported !== exportName) continue;
@@ -1261,7 +1333,10 @@ function originGapReason(file, exportName, seen = new Set()) {
     }
   }
   if (exportName === 'default') {
-    for (const node of nodesOfType(ast.program, 'ExportDefaultDeclaration')) {
+    for (const node of moduleDeclarations(
+      ast.program,
+      'ExportDefaultDeclaration',
+    )) {
       if (node.declaration?.type === 'Identifier') {
         local = node.declaration.name;
       }
@@ -1269,7 +1344,10 @@ function originGapReason(file, exportName, seen = new Set()) {
   }
   if (!local) {
     // Bound behind `export *`: the module it comes from says why.
-    for (const node of nodesOfType(ast.program, 'ExportAllDeclaration')) {
+    for (const node of moduleDeclarations(
+      ast.program,
+      'ExportAllDeclaration',
+    )) {
       if (node.exportKind === 'type' || node.exported) continue;
       const target = resolveModuleOrPackage(node.source?.value, file);
       if (
@@ -1330,7 +1408,10 @@ export function followedExportNames(
   }
   /** @type {Set<string>} */
   const names = new Set();
-  for (const node of nodesOfType(ast.program, 'ExportNamedDeclaration')) {
+  for (const node of moduleDeclarations(
+    ast.program,
+    'ExportNamedDeclaration',
+  )) {
     if (node.exportKind === 'type' && !types) continue;
     const declaration = node.declaration;
     if (declaration && (declaration.declare !== true || types)) {
@@ -1360,7 +1441,7 @@ export function followedExportNames(
       }
     }
   }
-  for (const node of nodesOfType(ast.program, 'ExportAllDeclaration')) {
+  for (const node of moduleDeclarations(ast.program, 'ExportAllDeclaration')) {
     if ((node.exportKind === 'type' && !types) || node.exported) continue;
     const target = resolveModuleOrPackage(node.source?.value, file);
     if (target) {
@@ -1422,7 +1503,7 @@ export function exportValueKind(file, exportName) {
     return 'unknown';
   };
   if (origin.name === 'default') {
-    const [node] = nodesOfType(ast.program, 'ExportDefaultDeclaration');
+    const [node] = moduleDeclarations(ast.program, 'ExportDefaultDeclaration');
     return node ? kindOf(node.declaration) : 'unknown';
   }
   for (const statement of ast.program.body) {
@@ -1479,7 +1560,7 @@ export function exportScalarType(file, exportName) {
     return null;
   };
   if (origin.name === 'default') {
-    const [node] = nodesOfType(ast.program, 'ExportDefaultDeclaration');
+    const [node] = moduleDeclarations(ast.program, 'ExportDefaultDeclaration');
     return node ? typeOf(node.declaration) : null;
   }
   for (const statement of ast.program.body) {
@@ -1623,6 +1704,48 @@ export function elementPropOrigins(file, {sources, name, prop, unwrap}) {
 }
 
 /**
+ * Where a declared export is defined. An `export const X = Y` whose value is
+ * another binding is that binding, so an alias of an imported value has the
+ * imported value's origin.
+ * @param {any} ast
+ * @param {string} file
+ * @param {any} declaration
+ * @param {string} name
+ * @param {boolean} types
+ * @param {Set<string>} [seen]
+ * @param {(node: any, type: string) => readonly any[]} [read]
+ * @returns {{file: string, name: string}}
+ */
+function declaredOrigin(
+  ast,
+  file,
+  declaration,
+  name,
+  types,
+  seen = new Set(),
+  read = nodesOfType,
+) {
+  if (
+    declaration?.type === 'VariableDeclaration' &&
+    declaration.kind === 'const'
+  ) {
+    for (const declarator of declaration.declarations) {
+      if (
+        declarator.id?.type === 'Identifier' &&
+        declarator.id.name === name &&
+        declarator.init?.type === 'Identifier'
+      ) {
+        const init = declarator.init.name;
+        return (
+          bindingOrigin(ast, file, init, seen, types, read) ?? {file, name}
+        );
+      }
+    }
+  }
+  return {file, name};
+}
+
+/**
  * Where a top-level binding of a parsed module comes from: an import from a
  * local module is followed to its origin; anything else is declared here.
  * @param {any} ast
@@ -1630,9 +1753,18 @@ export function elementPropOrigins(file, {sources, name, prop, unwrap}) {
  * @param {string} local
  * @param {Set<string>} seen
  * @param {boolean} [types] also follow `import type`
+ * @param {(node: any, type: string) => readonly any[]} [read] how an
+ *   imported module's export declarations are read
  * @returns {{file: string, name: string} | null}
  */
-function bindingOrigin(ast, file, local, seen, types = false) {
+function bindingOrigin(
+  ast,
+  file,
+  local,
+  seen,
+  types = false,
+  read = nodesOfType,
+) {
   for (const node of ast.program.body) {
     if (
       node.type !== 'ImportDeclaration' ||
@@ -1646,9 +1778,7 @@ function bindingOrigin(ast, file, local, seen, types = false) {
       const imported =
         specifier.imported?.name ?? specifier.imported?.value ?? local;
       const target = resolveModuleOrPackage(node.source.value, file);
-      return target
-        ? moduleExportOrigin(target, imported, seen, {types})
-        : null;
+      return target ? exportOrigin(target, imported, seen, read, types) : null;
     }
   }
   return {file, name: local};

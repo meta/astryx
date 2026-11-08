@@ -19,11 +19,22 @@ import {
 import {
   animationStoryboard,
   armHold,
+  blockMainThread,
+  BUSY_PROOF_LOOKAROUND_MS,
+  busyWindowProof,
+  CONTROL_RGB,
   drag,
+  FRAME_STARVATION_MS,
+  FrameStarvationError,
+  MARKER_RGB,
   releaseAnimations,
   openStory,
+  startBusyControl,
+  startScreencast,
   touchDriver,
   touchStoryboard,
+  trackMarkers,
+  waitForRest,
   withStorybook,
 } from '@astryxdesign/interaction-harness';
 
@@ -33,6 +44,47 @@ const storybook = withStorybook(test);
 const PITCH = 17.67;
 /** A full-size dot's scale: the 9.67 px indicator on its 10 px box. */
 const DOT_SCALE = 0.967;
+/**
+ * Frames of the slide the busy proof must judge inside its block. The slide
+ * is a 190 ms spring that shows about five frames of travel there.
+ */
+const MIN_JUDGED_FRAMES = 4;
+/** UIPageControl's interaction delay, ms. */
+const HOLD_MS = 155;
+/** One frame at 60 Hz, ms. */
+const FRAME_MS = 1000 / 60;
+/** WebKit's page clocks keep whole milliseconds. */
+const CLOCK_SLOP_MS = 2;
+
+/** A timer the page ran, on the page's clock. */
+interface TimerTask {
+  id: number;
+  delay: number;
+  due: number;
+  ranAt: number | null;
+  scheduledAt: number;
+  /** The timer task that set it, if any. */
+  parentId: number | null;
+}
+
+/** What the held-finger proof records on the page, on the page's clock. */
+interface HeldClock {
+  /** The landing's pointer and touch event timeStamps. */
+  landings: number[];
+  /** When the page dispatched the landing, on the same clock. */
+  dispatchedAt: number;
+  /** The timer task that runs now. */
+  task: TimerTask | null;
+  timers: TimerTask[];
+  frames: number[];
+  flip: {
+    at: number;
+    task: TimerTask | null;
+    /** The pointer or touch event being dispatched at the commit, if any. */
+    input: {type: string; timeStamp: number} | null;
+    fadedAt: number | null;
+  } | null;
+}
 
 /**
  * Opens a PageControl story. The phone projects have a coarse primary
@@ -70,6 +122,17 @@ const valueNow = async (slider: Locator) =>
   Number(await slider.getAttribute('aria-valuenow'));
 
 /** Logs every page change with its time (performance.now()) from now on. */
+/**
+ * The time per page across a jog's held window, first step to last. A busy
+ * page can show one step late and the next at once. That skews a median of
+ * the gaps, not the rate.
+ */
+function msPerPage(window: ReadonlyArray<{t: number; page: number}>) {
+  const first = window[0];
+  const last = window[window.length - 1];
+  return (last.t - first.t) / Math.abs(last.page - first.page);
+}
+
 async function logPages(slider: Locator) {
   await slider.evaluate(el => {
     const log: Array<{t: number; page: number}> = [];
@@ -250,12 +313,9 @@ test('past the edge of a windowed control the page keeps stepping, faster the fu
   );
   const log = await pages();
   const held = log.filter(e => e.t >= log[0].t + 400);
-  const intervals = held.slice(1).map((e, i) => e.t - held[i].t);
-  const median = intervals.sort((a, b) => a - b)[
-    Math.floor(intervals.length / 2)
-  ];
-  expect(median).toBeGreaterThan(110);
-  expect(median).toBeLessThan(190);
+  const nearStep = msPerPage(held);
+  expect(nearStep).toBeGreaterThan(110);
+  expect(nearStep).toBeLessThan(190);
   expect(log[log.length - 1].page).toBeGreaterThan(30);
   // Far past (100 px): 15 pages a second.
   const far = await logPages(slider);
@@ -268,12 +328,9 @@ test('past the edge of a windowed control the page keeps stepping, faster the fu
     ),
   );
   const fast = (await far()).filter((e, i, all) => e.t >= all[0].t + 300);
-  const fastIntervals = fast.slice(1).map((e, i) => e.t - fast[i].t);
-  const fastMedian = fastIntervals.sort((a, b) => a - b)[
-    Math.floor(fastIntervals.length / 2)
-  ];
-  expect(fastMedian).toBeGreaterThan(50);
-  expect(fastMedian).toBeLessThan(85);
+  const farStep = msPerPage(fast);
+  expect(farStep).toBeGreaterThan(50);
+  expect(farStep).toBeLessThan(85);
 });
 
 test('a held finger shows the platter, the pressed overlay, and dims the other indicators after 155 ms; the touched indicator does not transform', async ({
@@ -293,18 +350,100 @@ test('a held finger shows the platter, the pressed overlay, and dims the other i
     other: number;
     touchedScale: string;
   }> = [];
-  // Each read is dated on the page's clock from the moment the finger landed.
-  // The 155 ms runs on that clock. On a loaded runner, the driver plays the
-  // moves later than scripted, so a scripted time would date a late read
-  // early.
+  // The held look comes from the hold's own timer, not from elapsed time. The
+  // page records its timer tasks, its frames and the commit that shows the
+  // look, all on its own clock.
   await slider.evaluate(el => {
-    el.addEventListener(
-      'touchstart',
-      () => {
-        (window as unknown as {landedAt: number}).landedAt = performance.now();
-      },
-      {capture: true, once: true},
-    );
+    const clock: HeldClock = {
+      landings: [],
+      dispatchedAt: 0,
+      task: null,
+      timers: [],
+      frames: [],
+      flip: null,
+    };
+    (window as unknown as {heldClock: HeldClock}).heldClock = clock;
+    // Posted as a timer task starts, this message runs as a later task. It
+    // marks the end of that timer task.
+    const taskEnd = new MessageChannel();
+    taskEnd.port1.onmessage = event => {
+      if (clock.task?.id === event.data) {
+        clock.task = null;
+      }
+    };
+    let ids = 0;
+    const setTimer = window.setTimeout.bind(window);
+    window.setTimeout = ((
+      handler: (...args: unknown[]) => void,
+      delay?: number,
+      ...args: unknown[]
+    ) => {
+      const scheduledAt = performance.now();
+      const task: TimerTask = {
+        id: (ids += 1),
+        delay: Number(delay) || 0,
+        due: scheduledAt + (Number(delay) || 0),
+        ranAt: null,
+        scheduledAt,
+        parentId: clock.task?.id ?? null,
+      };
+      clock.timers.push(task);
+      return setTimer(() => {
+        task.ranAt = performance.now();
+        clock.task = task;
+        taskEnd.port2.postMessage(task.id);
+        handler(...args);
+      }, delay);
+    }) as typeof window.setTimeout;
+    for (const type of ['pointerdown', 'touchstart']) {
+      el.addEventListener(
+        type,
+        event => {
+          clock.landings.push(event.timeStamp);
+          clock.dispatchedAt = Math.max(clock.dispatchedAt, performance.now());
+        },
+        {capture: true, once: true},
+      );
+    }
+    const frame = () => {
+      clock.frames.push(performance.now());
+      if (clock.frames.length < 600) {
+        requestAnimationFrame(frame);
+      }
+    };
+    requestAnimationFrame(frame);
+    new MutationObserver(() => {
+      if (clock.flip == null && el.hasAttribute('data-interacting')) {
+        const event = (window as unknown as {event?: Event}).event;
+        const flip: NonNullable<HeldClock['flip']> = {
+          at: performance.now(),
+          task: clock.task,
+          input:
+            event != null && /^(pointer|touch)/.test(event.type)
+              ? {type: event.type, timeStamp: event.timeStamp}
+              : null,
+          fadedAt: null,
+        };
+        clock.flip = flip;
+        // The platter fades in over its own short transition from here.
+        const fade = el
+          .getAnimations({subtree: true})
+          .find(
+            a =>
+              (a.effect as KeyframeEffect | null)?.pseudoElement === '::before',
+          );
+        if (fade == null) {
+          flip.fadedAt = flip.at;
+        } else {
+          fade.finished.then(
+            () => {
+              flip.fadedAt = performance.now();
+            },
+            () => {},
+          );
+        }
+      }
+    }).observe(el, {attributes: true, attributeFilter: ['data-interacting']});
   });
   const read = async () => {
     const state = await slider.evaluate(el => {
@@ -313,9 +452,7 @@ test('a held finger shows the platter, the pressed overlay, and dims the other i
       const other = el.querySelector('[data-page="0"]') as HTMLElement;
       const touched = el.querySelector('[data-page="3"]') as HTMLElement;
       return {
-        t:
-          performance.now() -
-          (window as unknown as {landedAt: number}).landedAt,
+        t: performance.now(),
         interacting: el.hasAttribute('data-interacting'),
         platter: Number(platter.opacity),
         other: Number(other.style.opacity),
@@ -334,13 +471,104 @@ test('a held finger shows the platter, the pressed overlay, and dims the other i
       },
     },
   );
-  const early = states.filter(s => s.t < 100);
-  const late = states.filter(s => s.t > 260);
-  expect(early.length).toBeGreaterThan(0);
-  expect(early.every(s => !s.interacting && s.other === 0.48)).toBe(true);
-  expect(late.length).toBeGreaterThan(0);
-  expect(late.every(s => s.interacting && s.other === 0.25)).toBe(true);
-  expect(late.every(s => s.platter > 0.9)).toBe(true);
+  const clock = await page.evaluate(
+    () => (window as unknown as {heldClock: HeldClock}).heldClock,
+  );
+  const flip = clock.flip;
+  if (flip == null) {
+    throw new Error('The held look never showed.');
+  }
+  // The hold begins where the gesture arena learns its deadline has passed.
+  // That is the hold timer's own task, or the one 0 ms task the arena sets
+  // after the deadline when that timer ran late. It is also any input dated
+  // after the deadline that the page dispatches first. The look commits there.
+  const task = flip.task;
+  const parent = clock.timers.find(timer => timer.id === task?.parentId);
+  // The deadline is 155 ms after the landing, as the gesture arena dates it.
+  // The arena's clock never runs back, so a busy page that dispatches the
+  // landing late can date it as late as that dispatch.
+  const earliest = Math.min(...clock.landings) + HOLD_MS;
+  const latest = Math.max(clock.dispatchedAt, ...clock.landings) + HOLD_MS;
+  const holdTimer =
+    task != null &&
+    task.delay === 0 &&
+    parent != null &&
+    task.scheduledAt >= earliest
+      ? parent
+      : task;
+  const isHoldTimer =
+    holdTimer != null &&
+    holdTimer.due >= earliest - CLOCK_SLOP_MS &&
+    holdTimer.due <= latest + CLOCK_SLOP_MS;
+  const isLateInput =
+    !isHoldTimer &&
+    flip.input != null &&
+    flip.input.timeStamp >= earliest - CLOCK_SLOP_MS;
+  expect(
+    isHoldTimer || isLateInput,
+    `the held look commits where the hold begins: landing ${JSON.stringify(clock.landings)}, dispatched at ${clock.dispatchedAt}, commit task ${JSON.stringify(task)}, its parent ${JSON.stringify(parent ?? null)}, input ${JSON.stringify(flip.input)}`,
+  ).toBe(true);
+  // The product sets the deadline. When the page acts on it is the page's. A
+  // hold more than a frame late passes only inside a page stall at least that
+  // long. A stall past the harness's starvation bound fails by name.
+  const due = isHoldTimer ? holdTimer.due : earliest;
+  const ranAt = isHoldTimer
+    ? (holdTimer.ranAt ?? Number.POSITIVE_INFINITY)
+    : flip.at;
+  const timerLateMs = ranAt - due;
+  if (timerLateMs > FRAME_MS) {
+    const after = Math.min(...clock.frames.filter(at => at >= ranAt));
+    const marks = [
+      Math.max(...clock.frames.filter(at => at <= due)),
+      ...clock.frames.filter(at => at > due && at < ranAt),
+      Number.isFinite(after) ? after : ranAt,
+    ];
+    const stallMs = Math.max(...marks.slice(1).map((at, i) => at - marks[i]));
+    if (stallMs > FRAME_STARVATION_MS) {
+      throw new FrameStarvationError({
+        during: `the hold began ${Math.round(timerLateMs)} ms past due`,
+        frames: marks.length - 2,
+        min: 1,
+        longestGapMs: Math.round(stallMs),
+      });
+    }
+    expect(
+      timerLateMs,
+      `the hold began ${Math.round(timerLateMs)} ms past due, in a page stall of ${Math.round(stallMs)} ms`,
+    ).toBeLessThanOrEqual(stallMs);
+  }
+  const before = states.filter(s => s.t < flip.at);
+  const after = states.filter(s => s.t > flip.at);
+  expect(before.length).toBeGreaterThan(0);
+  expect(before.every(s => !s.interacting && s.other === 0.48)).toBe(true);
+  expect(after.length).toBeGreaterThan(0);
+  expect(after.every(s => s.interacting && s.other === 0.25)).toBe(true);
+  // Reads after the platter's own short fade has finished show it.
+  const fadedAt = flip.fadedAt ?? Number.POSITIVE_INFINITY;
+  const shown = states.filter(s => s.t > fadedAt);
+  if (shown.length === 0) {
+    // No read came after the fade ended. Only a stall over the harness's
+    // starvation bound explains that; otherwise the fade itself ran late.
+    const lastRead = states[states.length - 1].t;
+    const marks = [
+      flip.at,
+      ...clock.frames.filter(at => at > flip.at && at < lastRead),
+      lastRead,
+    ];
+    const stallMs = Math.max(...marks.slice(1).map((at, i) => at - marks[i]));
+    if (stallMs > FRAME_STARVATION_MS) {
+      throw new FrameStarvationError({
+        during: 'the platter faded in',
+        frames: marks.length - 2,
+        min: 1,
+        longestGapMs: Math.round(stallMs),
+      });
+    }
+    throw new Error(
+      `The platter's fade ended ${Math.round(fadedAt - flip.at)} ms after the look showed, past the last read at ${Math.round(lastRead - flip.at)} ms.`,
+    );
+  }
+  expect(shown.every(s => s.platter > 0.9)).toBe(true);
   // The platter is the held look: the system pressed overlay, resolved as any
   // element resolves it here.
   const colors = await slider.evaluate(el => {
@@ -628,31 +856,58 @@ test('when the window jumps, a dot that mounts starts at its size in the old win
     }, index);
   // Page 46 (index 45) is outside the window, so it is not rendered yet.
   expect(await scaleOf(45)).toBeNull();
-  // The first frame after the change: before the slide starts.
+  // Read at the commit that mounts it: the size its slide starts from, and
+  // that slide's start. Neither moves with a late frame or a long task.
   await slider.evaluate(el => {
-    el.addEventListener(
-      'keydown',
-      () => {
-        requestAnimationFrame(() => {
-          const dot = el.querySelector<HTMLElement>('[data-page="45"]');
-          (window as unknown as {mounted?: number | null}).mounted =
-            dot == null ? null : Number.parseFloat(getComputedStyle(dot).scale);
-        });
-      },
-      {capture: true, once: true},
-    );
+    const strip = el.children[0] as HTMLElement;
+    const slideOf = (target: HTMLElement) =>
+      target
+        .getAnimations()
+        .reduce<Animation | null>(
+          (last, a) =>
+            last == null || Number(a.startTime) >= Number(last.startTime)
+              ? a
+              : last,
+          null,
+        );
+    const observer = new MutationObserver(() => {
+      const dot = el.querySelector<HTMLElement>('[data-page="45"]');
+      if (dot == null) {
+        return;
+      }
+      observer.disconnect();
+      (
+        window as unknown as {
+          mounted?: {scale: number; growsAt: number; slidesAt: number};
+        }
+      ).mounted = {
+        scale: Number.parseFloat(
+          String(
+            (slideOf(dot)?.effect as KeyframeEffect | null)?.getKeyframes()[0]
+              ?.scale,
+          ),
+        ),
+        growsAt: Number(slideOf(dot)?.startTime),
+        slidesAt: Number(slideOf(strip)?.startTime),
+      };
+    });
+    observer.observe(el, {childList: true, subtree: true});
   });
   await slider.focus();
   await page.keyboard.press('End');
   await expect.poll(async () => valueNow(slider)).toBe(50);
-  // It mounted at its old-window size, 0, and grows to full size.
-  await expect
-    .poll(async () =>
-      page.evaluate(
-        () => (window as unknown as {mounted?: number | null}).mounted,
-      ),
-    )
-    .toBe(0);
+  // It mounted at its old-window size, 0, and grows with the slide's start.
+  const mounted = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          mounted?: {scale: number; growsAt: number; slidesAt: number};
+        }
+      ).mounted,
+  );
+  expect(mounted?.scale).toBe(0);
+  expect(Number.isFinite(mounted?.slidesAt)).toBe(true);
+  expect(mounted?.growsAt).toBe(mounted?.slidesAt);
   await expect.poll(async () => scaleOf(45)).toBeCloseTo(DOT_SCALE, 3);
 });
 
@@ -672,18 +927,64 @@ test('a windowed control slides one slot 50 ms after the change, on a critically
   await slider.evaluate(el => {
     const strip = el.children[0] as HTMLElement;
     const trace: Array<{t: number; x: number; page: number}> = [];
-    const w = window as unknown as {slide: typeof trace; changedAt?: number};
+    const w = window as unknown as {
+      slide: typeof trace;
+      changedAt?: number;
+      liftTask?: boolean;
+      slideCurve?: {
+        start: number;
+        commitAt: number;
+        duration: number;
+        xs: number[][];
+        inLiftTask: boolean;
+      };
+    };
     w.slide = trace;
     const start = performance.now();
+    // The slide's own animation, read at the change's commit. Its start and
+    // its curve sit on the document timeline, which a late frame cannot move.
+    const observer = new MutationObserver(() => {
+      const animation = strip.getAnimations().at(-1);
+      if (animation == null) {
+        return;
+      }
+      observer.disconnect();
+      const effect = animation.effect as KeyframeEffect;
+      w.slideCurve = {
+        inLiftTask: w.liftTask === true,
+        commitAt: performance.now() - start,
+        start: Number(animation.startTime) - start,
+        duration: Number(effect.getComputedTiming().duration),
+        xs: effect
+          .getKeyframes()
+          .map(k => [
+            Number(k.computedOffset),
+            Number.parseFloat(String(k.translate)),
+          ]),
+      };
+    });
+    observer.observe(el, {
+      attributes: true,
+      attributeFilter: ['aria-valuenow'],
+    });
     // The change is dated when the lift that makes it begins, at its first
     // event: the pointer's, then the touch's. The page commits the change in
     // that task. The first frame that shows it and the end of the task both
     // come late on a loaded runner, so neither dates it.
+    const liftEnd = new MessageChannel();
+    liftEnd.port1.onmessage = () => {
+      w.liftTask = false;
+    };
     for (const type of ['pointerup', 'touchend']) {
       addEventListener(
         type,
         () => {
-          w.changedAt ??= performance.now() - start;
+          if (w.changedAt == null) {
+            w.changedAt = performance.now() - start;
+            // This message runs as a later task, which ends the lift's task.
+            w.liftTask = true;
+            liftEnd.port2.postMessage(null);
+          }
         },
         {capture: true, once: true},
       );
@@ -714,25 +1015,52 @@ test('a windowed control slides one slot 50 ms after the change, on a critically
       ),
     )
     .toBe(true);
-  const {trace, changedAt} = await slider.evaluate(() => {
+  const {trace, changedAt, curve} = await slider.evaluate(() => {
     const w = window as unknown as {
       slide: Array<{t: number; x: number; page: number}>;
       changedAt?: number;
+      slideCurve?: {
+        start: number;
+        commitAt: number;
+        duration: number;
+        xs: number[][];
+        inLiftTask: boolean;
+      };
     };
-    return {trace: w.slide, changedAt: w.changedAt ?? NaN};
+    return {
+      trace: w.slide,
+      changedAt: w.changedAt ?? NaN,
+      curve: w.slideCurve,
+    };
   });
-  const moving = trace.filter(s => Math.abs(s.x + 18 * PITCH) > 0.2);
-  const startedAt = moving[0]?.t ?? NaN;
+  if (curve == null) {
+    throw new Error('The change started no slide on the strip.');
+  }
+  expect(curve.inLiftTask, "the change commits in the lift's own task").toBe(
+    true,
+  );
+  const startedAt = curve.start;
   expect(startedAt - changedAt).toBeGreaterThan(30);
+  // The slide starts 50 ms after the commit in the lift's own task. A lift
+  // task longer than the harness's starvation bound means a busy page.
+  const liftTaskMs = curve.commitAt - changedAt;
+  if (startedAt - changedAt >= 120 && liftTaskMs > FRAME_STARVATION_MS) {
+    throw new FrameStarvationError({
+      during: `the lift's task ran ${Math.round(liftTaskMs)} ms to its commit`,
+      frames: 0,
+      min: 1,
+      longestGapMs: Math.round(liftTaskMs),
+    });
+  }
   expect(startedAt - changedAt).toBeLessThan(120);
   // Monotonic to the next slot, settled within ~0.35 s of starting.
   const xs = trace.filter(s => s.t >= startedAt).map(s => s.x);
   for (let i = 1; i < xs.length; i++) {
     expect(xs[i]).toBeLessThanOrEqual(xs[i - 1] + 0.01);
   }
-  const settled = trace.find(s => Math.abs(s.x + 19 * PITCH) < 0.3);
+  const settled = curve.xs.find(([, x]) => Math.abs(x + 19 * PITCH) < 0.3);
   expect(settled).toBeDefined();
-  expect((settled?.t ?? Infinity) - startedAt).toBeLessThan(350);
+  expect((settled?.[0] ?? Infinity) * curve.duration).toBeLessThan(350);
   // Page 27 (index 26) grows from its 7.33 px edge size to full: 9.67 px, a
   // 10 px box at scale 0.967.
   expect(
@@ -921,35 +1249,66 @@ test('busy main thread: a window slide finishes on time through a 600 ms block',
     "WebKit's screencast clock is not the page's (harness README); the simulator clip covers it",
   );
   const {slider, driver} = await open(page, 'lab-pagecontrol--many-pages');
+  const strip = slider.locator(':scope > *').first();
+  // A chip on the strip between two dots, above them: the window shows it
+  // before and after the slide, and no dot's scale reaches it. The strip's
+  // translate makes it the chip's containing block, so the chip moves with it.
+  await strip.evaluate(
+    (el, {left, rgb}) => {
+      const chip = document.createElement('div');
+      chip.setAttribute('data-harness-marker-chip', '');
+      chip.style.cssText = `position:absolute;left:${left}px;top:0;width:12px;height:6px;background:rgb(${rgb.join(',')})`;
+      el.append(chip);
+    },
+    {left: 23.5 * PITCH - 6, rgb: MARKER_RGB},
+  );
+  // Before the slide, so the control is on the compositor first.
+  await startBusyControl(page);
+  const cast = await startScreencast(page);
+  // The page blocks once the old dot's fade has run a frame, just before the
+  // slide starts on its own start time. A round trip from here would start
+  // the block later in the slide, or after it.
+  const blocking = blockMainThread(page, 600, {during: strip});
   const current = await indicatorCenter(slider, 25);
   await driver.tap({x: current.x + 12, y: current.y});
-  await expect
-    .poll(async () =>
-      slider.evaluate(
-        el => (el.children[0] as HTMLElement).getAnimations().length,
-      ),
-    )
-    .toBeGreaterThan(0);
-  // Block the main thread once the slide is on the timeline (it starts 50 ms
-  // after the change), for longer than the slide lasts.
-  const afterBlock = await slider.evaluate(el => {
-    const strip = el.children[0] as HTMLElement;
-    const end = performance.now() + 600;
-    while (performance.now() < end) {
-      // busy
-    }
-    return {
-      x: Number.parseFloat(getComputedStyle(strip).translate),
-      running: strip
-        .getAnimations()
-        .filter(
-          a => a.playState === 'running' && Number(a.currentTime ?? 0) < 400,
-        ).length,
-    };
+  const busy = await blocking;
+  await waitForRest(strip);
+  // Where the slide ends, read from the page once it rests.
+  const settledAt = await strip.evaluate(el => {
+    const chip = el.querySelector('[data-harness-marker-chip]') as Element;
+    return chip.getBoundingClientRect().x;
   });
-  // The compositor carried the slide to the next slot during the block.
-  expect(afterBlock.x).toBeCloseTo(-19 * PITCH, 0);
-  expect(afterBlock.running).toBe(0);
+  const frames = await cast.stop();
+  // Only the frames the proof reads are decoded, each once for both colors.
+  const [tracked, control] = await trackMarkers(
+    page,
+    frames.filter(f => f.t <= busy.to + BUSY_PROOF_LOOKAROUND_MS),
+    {colors: [MARKER_RGB, CONTROL_RGB]},
+  );
+  const proof = busyWindowProof(tracked, busy, {
+    axis: 'x',
+    settledWithinSteps: 2,
+    settledAt,
+    minJudgedFrames: MIN_JUDGED_FRAMES,
+    control,
+  });
+  // The compositor carried the slide to the next slot during the block. It
+  // moved on every frame, and a frame inside the block shows it at rest.
+  expect(proof.verdict.failures, proof.summary).toEqual([]);
+  expect(proof.monotonic, proof.summary).toBe(true);
+  const atRest = tracked.find(
+    f =>
+      f.box != null &&
+      f.t >= busy.from &&
+      f.t <= busy.to &&
+      Math.abs(f.box.x - settledAt) <= 1,
+  );
+  expect(atRest, proof.summary).toBeDefined();
+  expect(
+    await strip.evaluate(el =>
+      Number.parseFloat(getComputedStyle(el).translate),
+    ),
+  ).toBeCloseTo(-19 * PITCH, 0);
 });
 
 test('on an Android phone (no -webkit-touch-callout) a finger scrubs: one touch model, no platform idiom', async ({

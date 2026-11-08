@@ -48,6 +48,7 @@ export {
 } from './theme/theme.mjs';
 export {hook} from './hook/hook.mjs';
 export {search} from './search/search.mjs';
+export {exportSearchIndex, rankSearchIndex} from './search/search-index.mjs';
 export {build} from './build/build.mjs';
 export {swizzle} from './swizzle/swizzle.mjs';
 export {gapReport} from './gap-report/gap-report.mjs';
