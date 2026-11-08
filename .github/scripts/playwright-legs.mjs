@@ -79,7 +79,7 @@ export function legsFitMessage({
   maxLegs,
   slackSeconds = 60,
 }) {
-  const needed = Math.ceil(seconds / (maxSeconds - setupSeconds));
+  const needed = legsNeeded({seconds, setupSeconds, maxSeconds});
   const legs = legCount({seconds, setupSeconds, maxSeconds, maxLegs});
   const planned = planLegs(files, costs, legs);
   const longest = Math.max(0, ...planned.map(leg => leg.seconds));
@@ -215,6 +215,14 @@ function meanTestSeconds(texts, project, strip) {
 }
 
 /**
+ * The legs whose share of the proofs, each beside its setup, fits
+ * `maxSeconds`, with no ceiling.
+ */
+export function legsNeeded({seconds, setupSeconds, maxSeconds}) {
+  return Math.ceil(seconds / (maxSeconds - setupSeconds));
+}
+
+/**
  * The fewest legs, at most `maxLegs`, in which each leg's setup and share of
  * the proofs fits `maxSeconds`. One leg while the whole estimate fits.
  */
@@ -225,7 +233,7 @@ export function legCount({seconds, setupSeconds, maxSeconds, maxLegs}) {
     throw new Error(
       'a leg needs more time than its setup, and one leg at least',
     );
-  const needed = Math.ceil(seconds / (maxSeconds - setupSeconds));
+  const needed = legsNeeded({seconds, setupSeconds, maxSeconds});
   return Math.min(maxLegs, Math.max(1, needed));
 }
 
