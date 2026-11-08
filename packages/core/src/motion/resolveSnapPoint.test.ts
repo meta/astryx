@@ -86,6 +86,38 @@ describe('resolveSnapPoint', () => {
     ).toBe(1);
   });
 
+  it('with flickPastProjection, takes a flick to the first snap point at or past its projection', () => {
+    const past = (position: number, velocity: number) =>
+      resolveSnapPoint({
+        ...SHEET,
+        points: [0, 200, 400],
+        position,
+        velocity,
+        flickPastProjection: true,
+      }).index;
+    // Projected 210: past 200, so on to 400.
+    expect(past(60, 1500)).toBe(2);
+    // Projected 180: short of 200, so the next snap point, 200.
+    expect(past(60, 1200)).toBe(1);
+    // Projected exactly onto 200: it lands there.
+    expect(past(80, 1200)).toBe(1);
+    // Projected past the last snap point: the last.
+    expect(past(60, 5000)).toBe(2);
+    // Moving down the axis: projected 190 from 340, past 200, so on to 0.
+    expect(past(340, -1500)).toBe(0);
+    // A slow release keeps the nearest snap point to its projection.
+    expect(past(60, 800)).toBe(1);
+    // Without the option, the projection's nearest snap point stays (200).
+    expect(
+      resolveSnapPoint({
+        ...SHEET,
+        points: [0, 200, 400],
+        position: 60,
+        velocity: 1500,
+      }).index,
+    ).toBe(1);
+  });
+
   it('counts a snap point within the tolerance as reached, so a flick goes on to the one after it', () => {
     expect(
       resolveSnapPoint({

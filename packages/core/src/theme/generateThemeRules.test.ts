@@ -6,6 +6,7 @@
  * correct, consistently ordered CSS for both runtime and build paths.
  */
 
+import {PRESS_BELIEVED_SELECTOR} from '../privateAttributes/press';
 import {describe, it, expect, vi} from 'vitest';
 import {
   defineTheme,
@@ -180,6 +181,73 @@ describe('generateThemeRules', () => {
     );
     expect(buttonRule).toBeDefined();
     expect(buttonRule).toContain('light-dark(rgba(5, 54, 89, 0.1)');
+  });
+
+  // A themed press follows the touch press model: `:active` stays for a fine
+  // pointer, and under a coarse pointer the press controller's attribute
+  // takes its place, so a finger paints the theme's press only when the
+  // press is believed, never on the touch or through a scroll.
+  it('emits a themed :active as the press model does: :active for a fine pointer, the press attribute under a coarse one', () => {
+    const pressTheme = defineTheme({
+      name: 'press-dual',
+      components: {
+        button: {
+          base: {
+            ':active': {backgroundColor: 'rebeccapurple'},
+          },
+        },
+      },
+    });
+    const css = generateThemeRules(pressTheme).join('\n');
+    const fine = css.match(
+      /@media not all and \(pointer: coarse\) \{\s*([^{]+)\{([^}]*)\}/,
+    );
+    expect(fine?.[1]).toContain('.astryx-button:active');
+    expect(fine?.[2]).toContain('background-color: rebeccapurple');
+    const coarse = css.match(
+      /@media \(pointer: coarse\) \{\s*([^{]+)\{([^}]*)\}/,
+    );
+    expect(coarse?.[1]).toContain(`.astryx-button${PRESS_BELIEVED_SELECTOR}`);
+    expect(coarse?.[1]).not.toContain(':active');
+    expect(coarse?.[2]).toContain('background-color: rebeccapurple');
+    // No bare :active rule a finger would match on the touch.
+    const outsideFineArm = css.replace(
+      /@media not all and \(pointer: coarse\) \{[^{}]*\{[^}]*\}\s*\}/g,
+      '',
+    );
+    expect(outsideFineArm).not.toContain('.astryx-button:active');
+  });
+
+  // The press controller marks Switch's row, which wraps the themed
+  // `astryx-switch`, so the coarse arm reaches a mark around the element.
+  it('reaches a press marked on a wrapper or inside the themed element under a coarse pointer', () => {
+    const pressTheme = defineTheme({
+      name: 'press-dual-switch',
+      components: {
+        switch: {base: {':active': {backgroundColor: 'rebeccapurple'}}},
+      },
+    });
+    const css = generateThemeRules(pressTheme).join('\n');
+    const coarse = css.match(
+      /@media \(pointer: coarse\) \{\s*([^{]+)\{([^}]*)\}/,
+    );
+    expect(coarse?.[1]).toContain(`.astryx-switch${PRESS_BELIEVED_SELECTOR}`);
+  });
+
+  it('keeps the rest of a selector around a themed :active in both arms', () => {
+    const pressTheme = defineTheme({
+      name: 'press-dual-compound',
+      components: {
+        button: {
+          'variant:primary': {
+            ':active:not(:focus-visible)': {color: 'white'},
+          },
+        },
+      },
+    });
+    const css = generateThemeRules(pressTheme).join('\n');
+    expect(css).toContain(':active:not(:focus-visible)');
+    expect(css).toContain(`${PRESS_BELIEVED_SELECTOR}:not(:focus-visible)`);
   });
 
   it('applies pseudo-class suffixes to the canonical selector', () => {
@@ -991,18 +1059,20 @@ describe('derived var expansion', () => {
     expect(spaciousRule).toContain('--_item-inset-inline: var(--spacing-4)');
   });
 
-  it('emits internal vars for chat composer', () => {
+  it('emits internal vars for the chat-composer target', () => {
     const theme = defineTheme({
-      name: 'test-derived-chat',
+      name: 'test-derived-chat-composer',
       components: {
-        chat: {
+        'chat-composer': {
           base: {borderRadius: '24px', padding: '12px'},
         },
       },
     });
     const rules = generateThemeRules(theme);
-    const rule = rules.find(r => r.includes('.astryx-chat'));
+    const rule = rules.find(r => r.includes('.astryx-chat-composer'));
     expect(rule).toBeDefined();
+    expect(rule).toMatch(/^\s*border-radius: 24px;/m);
+    expect(rule).toMatch(/^\s*padding: 12px;/m);
     expect(rule).toContain('--_chat-composer-radius: 24px');
     expect(rule).toContain('--_chat-composer-padding: 12px');
   });

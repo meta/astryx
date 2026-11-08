@@ -106,7 +106,12 @@ import type {
   PowerSearchBottomSheetProps,
   PowerSearchSheetEditors,
 } from './PowerSearchBottomSheet';
-import {formatTokenValueText} from './formatTokenValue';
+import {
+  formatTokenLabel,
+  formatTokenText,
+  formatTokenValueText,
+  tokenTextKeepsParts,
+} from './formatTokenValue';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
@@ -713,9 +718,11 @@ export function PowerSearch({
     (filter: PowerSearchFilter) => {
       const field = config.getField(filter.field);
       const operator = config.getOperator(filter.field, filter.operator);
-      const fieldLabel = field?.label ?? '';
+      // A field the config no longer has shows its key, so the token keeps
+      // a visible text and a name.
+      const fieldLabel = field?.label ?? filter.field;
       const operatorLabel = operator ? resolveOperatorLabel(operator, t) : '';
-      const label = `${fieldLabel}: ${operatorLabel}`.trim();
+      const label = formatTokenLabel(t, fieldLabel, operatorLabel);
       const value = operator
         ? formatTokenValueText(
             operator.value,
@@ -731,7 +738,11 @@ export function PowerSearch({
             timezoneID,
           )
         : null;
-      return {label, value, full: value != null ? `${label} ${value}` : label};
+      return {
+        label,
+        value,
+        full: value != null ? formatTokenText(t, label, value) : label,
+      };
     },
     [config, maxTokenLength, t, locale, timezoneID, calendar],
   );
@@ -783,6 +794,9 @@ export function PowerSearch({
       editedBuiltInFilter != null
         ? tokenText(editedBuiltInFilter).full
         : undefined,
+    // The entrance runs on the surface: an anchored layer lays out again on
+    // each frame its own style animates.
+    xstyle: layerAnimations.below,
   });
 
   // A presentation swap removes the focused control, so the other
@@ -874,7 +888,11 @@ export function PowerSearch({
       const field = config.getField(filter.field);
       const operator = config.getOperator(filter.field, filter.operator);
       const resolvedOp = operator ? resolveOperatorLabel(operator, t) : '';
-      const operatorLabel = resolvedOp ? `: ${resolvedOp}` : '';
+      const label = formatTokenLabel(
+        t,
+        field?.label ?? filter.field,
+        resolvedOp,
+      );
       const valueStr = operator
         ? formatFilterValue(
             config,
@@ -889,8 +907,8 @@ export function PowerSearch({
         : '';
 
       const displayLabel = valueStr
-        ? `${field?.label ?? filter.field}${operatorLabel} ${valueStr}`
-        : `${field?.label ?? filter.field}${operatorLabel}`;
+        ? formatTokenText(t, label, valueStr)
+        : label;
 
       return {
         id: `filter-${index}-${filter.field}-${filter.operator}`,
@@ -1118,12 +1136,20 @@ export function PowerSearch({
       const text =
         filter != null
           ? tokenText(filter)
-          : {label: `${fieldLabel}: ${operatorLabel}`.trim(), value: null};
-      const tokenLabel = text.label;
+          : {
+              label: formatTokenLabel(t, fieldLabel, operatorLabel),
+              value: null,
+            };
       const fullText =
-        text.value != null ? `${text.label} ${text.value}` : text.label;
+        text.value != null
+          ? formatTokenText(t, text.label, text.value)
+          : text.label;
+      // The pill shows the text that names it. A locale that writes the full
+      // text in another shape than "label value" gets it as one text.
+      const showsParts = text.value == null || tokenTextKeepsParts(t);
+      const tokenLabel = showsParts ? text.label : fullText;
       const valueContent =
-        text.value != null ? (
+        showsParts && text.value != null ? (
           <PowerSearchTokenValue text={text.value} />
         ) : undefined;
 
@@ -1508,6 +1534,7 @@ export function PowerSearch({
             aria-disabled={isDisabled ? true : undefined}
             {...stylex.props(
               inputWrapperStyles.base,
+              inputWrapperStyles.textField,
               sheetTriggerStyles.wrapper,
               filters.length > 0 && sheetTriggerStyles.wrapperWithTokens,
               sheetTriggerSizeStyles[size],
@@ -1656,7 +1683,7 @@ export function PowerSearch({
         placement: 'below',
         alignment: 'start',
         offset: spacingVars['--spacing-1'],
-        xstyle: [popoverLayerStyles.layer, layerAnimations.below],
+        xstyle: popoverLayerStyles.layer,
       })}
     </>
   );

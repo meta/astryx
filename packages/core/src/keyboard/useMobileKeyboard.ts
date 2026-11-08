@@ -17,9 +17,16 @@ import {useCallback, useEffect, useRef, useState, type RefObject} from 'react';
 import {flushSync} from 'react-dom';
 import {useAttachment} from '../hooks/useAttachment';
 import {useMediaQuery} from '../hooks/useMediaQuery';
-import {animatorFor, type Animator} from '../motion/animator';
+import {
+  animatorFor,
+  type Animator,
+  type MotionHandle,
+} from '../motion/animator';
+import {KEYBOARD_SPRING} from '../motion/uikit/springs';
+import {deepActiveElement} from '../utils/flatTree';
 import {subscribeInput} from '../utils/inputStream';
 import {layoutViewportHeight} from '../utils/layoutViewport';
+import {isDocument, isNode} from '../utils/nodeType';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {TOUCH_QUERY} from '../utils/touchPresentation';
 import {
@@ -27,14 +34,27 @@ import {
   findTextEntryControl,
   getKeyboardHeight,
   isKeyboardMeasurable,
-  isNodeTarget,
   isTextEntryControl,
   refuseFocusReveal,
   subscribeKeyboardHeight,
   watchRevealPan,
 } from './keyboardHeight';
-import {getKeyboardLayoutGuide, keyboardProfileOf} from './keyboardLayoutGuide';
+import {
+  bringsUpKeyboard,
+  getKeyboardLayoutGuide,
+  hidesField,
+  keyboardProfileOf,
+} from './keyboardLayoutGuide';
 import type {KeyboardTransition} from './keyboardModel';
+import {
+  FIELD_OFFSET,
+  drawnOffsetOf,
+  followKeyboard,
+  keepFieldAboveKeyboard,
+  registerKeyboardTarget,
+  type KeyboardMove,
+} from './keyboardTarget';
+import {distanceIntoBand} from './revealBand';
 import {rideKeyboard} from './rideKeyboard';
 
 // Chrome on Android pans the page itself if the keyboard still covers the
@@ -47,10 +67,13 @@ const FIELD_CLEARANCE_AT_REPORT = 4;
 /** How a target keeps a focused field above the on-screen keyboard. */
 export interface MobileKeyboardOptions {
   /**
-   * How the target moves the field: `'ride'` reveals it with the scroller
-   * and rides the scroller's content on the keyboard's slide.
+   * How the target moves the field. `'ride'` moves the target with the
+   * keyboard; with `inset`, it reveals the field with the scroller and rides
+   * the scroller's content instead. `'reveal'` scrolls the field into place
+   * in the target, a scroller. Without `move`, the target is a field itself,
+   * which decides where it is when it gains focus.
    */
-  move: 'ride';
+  move?: KeyboardMove;
   /**
    * Reserves the keyboard's inset at the end of the target's scroll area,
    * the first element inside it that `useScrollableArea` marks with
@@ -58,15 +81,15 @@ export interface MobileKeyboardOptions {
    */
   inset?: boolean;
   /** The gap kept between the focused field and the keyboard, CSS px. */
-  offset: number;
+  offset?: number;
   /** Whether the target follows the keyboard at all. */
-  isEnabled: boolean;
+  isEnabled?: boolean;
   /** Whether the target is at its full height, where it reveals fields. */
-  isExpanded: boolean;
+  isExpanded?: boolean;
   /** Whether the target is open. Focus that leaves for nothing parks on it. */
-  isOpen: boolean;
+  isOpen?: boolean;
   /** Whether the page's own scroll is locked under the target. */
-  isPageScrollLocked: boolean;
+  isPageScrollLocked?: boolean;
 }
 
 /** What useMobileKeyboard returns. */
@@ -118,6 +141,14 @@ function isVisualViewportRecovered(): boolean {
   return getKeyboardHeight(window) <= 0.5;
 }
 
+// Whether the focused control may keep the keyboard up, read inside open
+// shadow roots. A frame or a custom element can hold a field the page cannot
+// see. An open shadow host that has focus itself also counts.
+function mayKeepKeyboard(): boolean {
+  const target = deepActiveElement(document);
+  return target != null && (bringsUpKeyboard(target) || hidesField(target));
+}
+
 /**
  * Keeps a focused field in `targetRef`'s element above the on-screen
  * keyboard (see README.md). A sheet passes its panel, and the hook reserves
@@ -133,13 +164,14 @@ function isVisualViewportRecovered(): boolean {
 export function useMobileKeyboard(
   targetRef: RefObject<HTMLElement | null>,
   {
+    move,
     inset: reservesInset = false,
-    offset,
-    isEnabled,
-    isExpanded,
-    isOpen,
-    isPageScrollLocked,
-  }: MobileKeyboardOptions,
+    offset = FIELD_OFFSET,
+    isEnabled = true,
+    isExpanded = true,
+    isOpen = true,
+    isPageScrollLocked = false,
+  }: MobileKeyboardOptions = {},
 ): MobileKeyboard {
   // The inset the keyboard takes at the end of the body's content, CSS px.
   // The target lays it out after its content box's children, through a
@@ -192,6 +224,20 @@ export function useMobileKeyboard(
     }
   }, [dismiss, isEnabled, isOpen]);
 
+  // A docked target, a scroller or a field, which moves no inset.
+  useAttachment(
+    targetRef,
+    target => {
+      if (!isEnabled || reservesInset || !isTouch) {
+        return () => {};
+      }
+      return move == null
+        ? keepFieldAboveKeyboard(target, {offset})
+        : followKeyboard(target, {move, offset});
+    },
+    `${isEnabled}|${move}|${reservesInset}|${offset}|${isTouch}`,
+  );
+
   useAttachment(
     targetRef,
     sheet => {
@@ -199,6 +245,8 @@ export function useMobileKeyboard(
       if (!isEnabled || !reservesInset || body == null) {
         return () => {};
       }
+      // A field inside the sheet moves nothing itself.
+      const unregister = registerKeyboardTarget(sheet);
 
       let keyboardGeometry: KeyboardGeometry | null = null;
       // Where a smooth reveal under way is taking the body's scrollTop.
@@ -231,11 +279,7 @@ export function useMobileKeyboard(
       // frame.
       const rideOffset = () => {
         const content = body.firstElementChild;
-        if (!(content instanceof HTMLElement)) {
-          return 0;
-        }
-        const translate = getComputedStyle(content).translate;
-        return parseFloat(translate.split(' ')[1] ?? '') || 0;
+        return content instanceof HTMLElement ? drawnOffsetOf(content) : 0;
       };
       // The keyboard's show the guide plays on its slide right now, if any. At
       // a report, a show whose slide has ended counts too. A busy page can read
@@ -251,8 +295,13 @@ export function useMobileKeyboard(
           ? transition
           : null;
       };
-      // A hide the hook holds the inset through (see holdInsetThrough).
-      let heldHide: {readonly release: () => void} | null = null;
+      // A hide the hook holds the inset through (see holdInsetThrough and
+      // holdThroughUnguidedHide). `onReveal` answers whether a reveal during
+      // the hold goes on.
+      let heldHide: {
+        readonly release: () => void;
+        readonly onReveal?: () => boolean;
+      } | null = null;
       let documentScrollAtKeyboard: {x: number; y: number} | null = null;
       // The keyboard's top and the body's scroll when the keyboard came up. A
       // keyboard that closes puts the body back at that scroll.
@@ -380,9 +429,6 @@ export function useMobileKeyboard(
           measuredBodyRect.bottom,
           obstructionTop - clearance,
         );
-        if (safeBottom <= safeTop) {
-          return;
-        }
 
         // Where the control will be once a smooth reveal under way lands. If
         // that lands the control, a second scroll would overshoot in Firefox.
@@ -392,9 +438,15 @@ export function useMobileKeyboard(
         const pending = smoothDistanceLeft() + rideOffset();
         const controlBottom = measuredControlRect.bottom - pending;
         const controlTop = measuredControlRect.top - pending;
-        if (controlBottom > safeBottom) {
+        const distance = distanceIntoBand(
+          controlTop,
+          controlBottom,
+          safeTop,
+          safeBottom,
+        );
+        if (distance > 0) {
           scrollBodyBy(
-            controlBottom - safeBottom,
+            distance,
             smoothly,
             ride,
             Math.max(
@@ -402,8 +454,8 @@ export function useMobileKeyboard(
               obstructionTop - safeBottom - FIELD_CLEARANCE_AT_REPORT,
             ),
           );
-        } else if (controlTop < safeTop) {
-          scrollBodyBy(controlTop - safeTop, smoothly, ride);
+        } else if (distance < 0) {
+          scrollBodyBy(distance, smoothly, ride);
         }
       };
 
@@ -456,7 +508,7 @@ export function useMobileKeyboard(
 
       const revealFocusedControl = (atReport = false) => {
         // Through a hide the sheet rides, its layout holds until the end.
-        if (heldHide != null) {
+        if (heldHide != null && heldHide.onReveal?.() !== true) {
           return;
         }
         const obstructionTop = getObstructionTop();
@@ -473,15 +525,30 @@ export function useMobileKeyboard(
         // restored body, because it may not be the field that opened the
         // keyboard.
         if (hasKeyboardLayoutRef.current && isVisualViewportRecovered()) {
+          const settle = keepDrawnPlace();
           clearKeyboardLayout();
           if (isExpandedRef.current && focusedControl != null) {
             scrollControlIntoSafeArea(focusedControl, false);
           }
+          settle();
           return;
         }
         if (!isExpandedRef.current || focusedControl == null) {
           if (retainKeyboardLayoutRef.current && keyboardGeometry) {
+            const settle = keepDrawnPlace();
             applyKeyboardGeometry(keyboardGeometry);
+            settle();
+            // Focus left for a control that brings up no keyboard, inside an
+            // open shadow root too, so the keyboard goes down now. A select's
+            // picker takes the keyboard's place instead. A frame or a custom
+            // element can hold a field the page cannot see, which keeps it up.
+            if (
+              isExpandedRef.current &&
+              hasKeyboardLayoutRef.current &&
+              !mayKeepKeyboard()
+            ) {
+              holdThroughUnguidedHide();
+            }
             return;
           }
           clearKeyboardLayout();
@@ -580,11 +647,113 @@ export function useMobileKeyboard(
         return resting;
       };
 
+      // Without the guide, as in iOS Safari and Firefox for Android, nothing
+      // publishes the keyboard's slide down. iOS Safari sends one report once
+      // the keyboard is gone, about half a second after a blur. Under a coarse
+      // primary pointer, the content then moves on UIKit's keyboard spring,
+      // never at once.
+      const unguidedAnimator = (): Animator | null => {
+        const content = body.firstElementChild;
+        return ownsFocusTransitions &&
+          guide == null &&
+          content instanceof HTMLElement
+          ? animatorFor(content)
+          : null;
+      };
+      const rideKeyboardSpring = (
+        animator: Animator,
+        y: number,
+      ): MotionHandle => {
+        return animator.animate({y}, {spring: KEYBOARD_SPRING});
+      };
+      // Keeps the content drawn where it is across a change of the body's
+      // scroll, then rides it to its new place on the keyboard's spring. A
+      // report of the keyboard gone, with no ride under way, moves the content
+      // this way.
+      const keepDrawnPlace = (): (() => void) => {
+        const animator = unguidedAnimator();
+        if (animator == null) {
+          return () => {};
+        }
+        const drawnBefore = animator.get('y') - body.scrollTop;
+        return () => {
+          const y = drawnBefore + body.scrollTop;
+          if (Math.abs(y - animator.get('y')) < 0.5) {
+            return;
+          }
+          animator.set({y});
+          void rideKeyboardSpring(animator, 0);
+        };
+      };
+
+      // A field that loses focus to nothing takes the keyboard down. Without
+      // the guide, the content rides down to its resting scroll from the blur.
+      // It rides on the keyboard's spring, as the keyboard does. The inset and
+      // the scroll stay meanwhile. Once the keyboard is gone (its report), the
+      // inset drops and the scroll goes back with the translate in one commit.
+      // So nothing moves then. A ride not yet landed goes on from there at the
+      // same speed. A control that takes focus first and brings up a keyboard
+      // or a picker keeps that space covered, so the content rides back up. A
+      // field inside an open shadow root does too, and so can a frame or a
+      // custom element, whose field the page cannot see.
+      const holdThroughUnguidedHide = () => {
+        const animator = unguidedAnimator();
+        if (animator == null || heldHide != null) {
+          return;
+        }
+        const drop = body.scrollTop - restingScrollTop();
+        if (drop === 0) {
+          return;
+        }
+        const hold = {
+          release: () => {
+            if (heldHide === hold) {
+              heldHide = null;
+            }
+          },
+          onReveal: () => {
+            const active = document.activeElement;
+            if (
+              active instanceof HTMLElement &&
+              body.contains(active) &&
+              mayKeepKeyboard()
+            ) {
+              hold.release();
+              void rideKeyboardSpring(animator, 0);
+              return true;
+            }
+            if (isVisualViewportRecovered()) {
+              hold.release();
+              const y = animator.get('y');
+              const velocity = animator.getVelocity('y');
+              const scrollBefore = body.scrollTop;
+              clearKeyboardLayout();
+              // The scroll's drop moved the layout down by `shift`.
+              const shift = scrollBefore - body.scrollTop;
+              if (Math.abs(y - shift) < 0.5) {
+                animator.set({y: 0});
+              } else {
+                animator.set({y: y - shift});
+                void animator.animate(
+                  {y: 0},
+                  {spring: KEYBOARD_SPRING, velocity: {y: velocity}},
+                );
+              }
+            }
+            return false;
+          },
+        };
+        heldHide = hold;
+        void rideKeyboardSpring(animator, drop);
+      };
+
       // Through a hide on the keyboard's slide, the inset stays, so nothing
       // drops while the keyboard still covers the sheet's bottom. The content
       // rides down on the hide's curve by the scroll the body drops at rest. At
       // rest, the inset drops, the scroll goes back, and the translate clears in
-      // one commit.
+      // one commit. A busy page reads Chrome's report of the keyboard gone
+      // after the slide. Until then the content stays where the slide leaves
+      // it, and the report commits.
       const holdInsetThrough = (transition: KeyboardTransition) => {
         heldHide?.release();
         const animator = contentAnimator();
@@ -594,6 +763,11 @@ export function useMobileKeyboard(
             ? rideKeyboard(animator, {y: drop}, transition)
             : null;
         let timer: ReturnType<typeof setTimeout> | undefined;
+        let landed = false;
+        const commit = () => {
+          revealFocusedControl();
+          animator?.set({y: 0});
+        };
         const hold = {
           release: () => {
             clearTimeout(timer);
@@ -601,21 +775,31 @@ export function useMobileKeyboard(
               heldHide = null;
             }
           },
+          onReveal: () => {
+            if (landed && isVisualViewportRecovered()) {
+              hold.release();
+              commit();
+            }
+            return false;
+          },
         };
         heldHide = hold;
-        const commit = () => {
+        const land = () => {
           if (heldHide !== hold) {
             return;
           }
-          heldHide = null;
-          revealFocusedControl();
-          animator?.set({y: 0});
+          landed = true;
+          if (hasKeyboardLayoutRef.current && !isVisualViewportRecovered()) {
+            return;
+          }
+          hold.release();
+          commit();
         };
         if (handle == null) {
           const end = transition.start + (transition.curve?.durationMs ?? 0);
-          timer = setTimeout(commit, Math.max(0, end - performance.now()));
+          timer = setTimeout(land, Math.max(0, end - performance.now()));
         } else {
-          void handle.finished.then(commit);
+          void handle.finished.then(land);
         }
       };
       const unsubscribeGuide = guide?.subscribe(transition => {
@@ -824,7 +1008,7 @@ export function useMobileKeyboard(
       // the page's own scroll moves the document.
       const stopDocumentScroll = subscribeInput(window, 'scroll', event => {
         const target = event.target;
-        if (!isNodeTarget(target) || (target as Node).nodeType === 9) {
+        if (!isNode(target) || isDocument(target)) {
           handleDocumentScroll();
         }
       });
@@ -840,12 +1024,13 @@ export function useMobileKeyboard(
       scheduleReveal();
 
       return () => {
+        unregister();
         cancelAnimationFrame(animationFrame);
         stopClaiming?.();
         unsubscribe();
         unsubscribeGuide?.();
         heldHide?.release();
-        contentAnimator()?.set({y: 0});
+        (contentAnimator() ?? unguidedAnimator())?.set({y: 0});
         revealPan?.stop();
         body.removeEventListener('focusin', handleFocusIn);
         body.removeEventListener('focusout', handleFocusOut);

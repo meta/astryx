@@ -6,9 +6,11 @@
  * @file ListItem.tsx
  * @input Uses React, ReactNode, StyleXStyles, theme tokens and the List row
  *   edge treatment. It also uses the touch hit area (utils/touchHitArea.ts and
- *   its layer) and CheckboxInput. It reads the marker or task checkbox a
- *   ListMarkerScope sets, for Markdown's nested lists and the task items of mixed
- *   lists. It also reads Item's private exact-marker formatting scope for numbered
+ *   its layer), the travelling marker of an update's slide
+ *   (List/listLayoutUpdates.ts) and CheckboxInput. It reads the marker or task
+ *   checkbox a ListMarkerScope sets, for Markdown's nested lists and the task
+ *   items of mixed lists. It also reads Item's private exact-marker formatting
+ *   scope for numbered
  *   rows. Number markers stay on one line in the List's shared column,
  *   keeping every sibling's text and nested list on the same start line;
  *   they end on one line too, right-aligned with tabular figures, and hang
@@ -42,14 +44,18 @@ import type {BaseProps} from '../BaseProps';
 import {ListContext, type ListMarker} from './ListContext';
 import {CheckboxInput} from '../CheckboxInput/CheckboxInput';
 import {mergeProps} from '../utils/mergeProps';
+import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
 import {Item, servesSwipeActions} from '../Item/Item';
 import {ItemListRowContext} from '../Item/ItemListRowContext';
 import {ItemMarkerColumnsContext} from '../Item/ItemMarkerColumnsContext';
 import type {ItemAlign, ItemSwipeActions, ItemSwipeBehavior} from '../Item';
 import {themeProps} from '../utils/themeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {isReportedRow, keepPresentation} from './listLayoutUpdates';
+import {itemKeyProps} from '../privateAttributes/itemKey.stylex';
+import {travellingStyles} from '../privateAttributes/travelling.stylex';
 import {useTouchHitArea} from '../utils/touchHitArea';
-import {touchHitAreaStyles} from '../utils/touchHitArea.stylex';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 
 // =============================================================================
 // Types
@@ -141,6 +147,14 @@ export interface ListItemProps extends BaseProps<HTMLLIElement> {
   isSelected?: boolean;
 
   /**
+   * The row's item key, a string or a number from the data, in the shape
+   * Table's `idKey` returns. It is the row's identity for the list's
+   * `animatedLayout`. A row without one changes at once. It is separate from
+   * React's `key`, which stays React's own.
+   */
+  itemKey?: string | number;
+
+  /**
    * Swipe actions for touch, passed through to `Item` unchanged: the verbs a
    * sideways drag uncovers on each side. See `Item.swipeActions`; `List`
    * clips the rows in the inline axis for them.
@@ -166,6 +180,10 @@ const styles = stylex.create({
       '@supports (grid-template-columns: subgrid)': 'grid',
     },
     gridTemplateColumns: 'subgrid',
+    gridColumn: '1 / -1',
+  },
+  // A numbered row outside the shared columns still spans the List's grid.
+  spanNumberColumns: {
     gridColumn: '1 / -1',
   },
   withCounter: {
@@ -211,13 +229,6 @@ const styles = stylex.create({
       zIndex: {default: null, '@media (pointer: coarse)': 1},
     },
   },
-  // A swipeable row is a stacking context at rest, since Item translates its
-  // swipe root. So its band's own z-index orders only inside it. Under a
-  // finger the row itself rises above the rows after it, whose boxes its band
-  // reaches into. The list isolates, so the row stays below a sticky header.
-  swipeRaised: {
-    zIndex: {default: null, '@media (pointer: coarse)': 1},
-  },
   withDivider: {
     borderBlockEndWidth: borderVars['--border-width'],
     borderBlockEndStyle: 'solid',
@@ -230,7 +241,7 @@ const styles = stylex.create({
       borderBlockEndWidth: 0,
     },
     // The touch hit layer's band starts past the divider, the edge of the box
-    // its insets are measured from (utils/touchHitArea.stylex.ts). The width
+    // its insets are measured from (internal/touchHitArea.stylex.ts). The width
     // sits on the layer itself, so content inside the row never inherits it.
     '::after': {
       '--_hit-border-bottom': {
@@ -374,6 +385,25 @@ const embeddedStyles = stylex.create({
 // =============================================================================
 
 /**
+ * The row's callback ref for the Web Animations on its parts, such as a
+ * swipe's travel on the compositor. A detached row loses them. So when React
+ * detaches a row in an animating list, the row records what they present. It
+ * is still in the document then, so a removal's collapse shows the row as it
+ * was on screen. Only a row its list reported for the commit can exit. So
+ * when StrictMode replays the detach of a new row, it records nothing.
+ */
+function keepPresentationOnDetach(row: HTMLLIElement | null) {
+  if (row == null) {
+    return undefined;
+  }
+  return () => {
+    if (isReportedRow(row)) {
+      keepPresentation(row);
+    }
+  };
+}
+
+/**
  * A list item component for use within List.
  *
  * Renders structured content with label, description, start/end content areas.
@@ -399,6 +429,7 @@ export function ListItem({
   rel,
   isDisabled = false,
   isSelected = false,
+  itemKey,
   align,
   xstyle,
   className,
@@ -415,7 +446,7 @@ export function ListItem({
   const isTouchTarget =
     (onClick != null || href != null || interactiveRef != null) && !isDisabled;
   const hitAreaRef = useTouchHitArea(isTouchTarget);
-  const mergedRef = useMergedRefs(ref, hitAreaRef);
+  const mergedRef = useMergedRefs(ref, hitAreaRef, keepPresentationOnDetach);
   // A row that Item serves swipe actions on is a stacking context at rest. So
   // its band's own z-index orders only inside it, and under a finger the row
   // raises itself. Its root is its `<li>`, never a link.
@@ -442,6 +473,8 @@ export function ListItem({
   const task = markerKind == null ? undefined : ctx?.task;
 
   const hasMarkerGutter = ctx?.hasMarkerGutter === true;
+  const usesNumberColumns =
+    listStyle === 'decimal' && ctx?.isOutsideNumberColumns !== true;
   const marker = useMemo(
     () =>
       task != null ? (
@@ -500,13 +533,18 @@ export function ListItem({
       density={density}
       xstyle={
         [
-          listStyle === 'decimal' && styles.numberColumns,
+          usesNumberColumns && styles.numberColumns,
+          listStyle === 'decimal' &&
+            !usesNumberColumns &&
+            styles.spanNumberColumns,
           hasMarkers && styles.withCounter,
+          travellingStyles.row,
           hasDividers && styles.withDivider,
           hasDividers && embeddedStyles.noRadius,
+          hasDividers && isTouchTarget && rowPressLayerStyles.overDividers,
           isTouchTarget && touchHitAreaStyles.layer,
           isTouchTarget && isInList && styles.bandRaised,
-          isRaisedSwipeRow && styles.swipeRaised,
+          isRaisedSwipeRow && travellingStyles.raisedSwipeRow,
           edge === 'flush' && styles.edgeFlush,
           edge === 'outset' && styles.edgeOutset,
           edge === 'bleed' && styles.edgeBleed,
@@ -514,13 +552,14 @@ export function ListItem({
         ] as StyleXStyles
       }
       {...mergeProps(themeProps('list-item'), {className, style})}
+      {...itemKeyProps(itemKey)}
       {...restProps}
     />
   );
   const row = <ItemListRowContext value>{item}</ItemListRowContext>;
   // Only numbered rows contribute two cells to List's shared counter grid.
   // Passing the marker identity keeps this request off unrelated Items in slots.
-  return listStyle === 'decimal' ? (
+  return usesNumberColumns ? (
     <ItemMarkerColumnsContext value={marker}>{row}</ItemMarkerColumnsContext>
   ) : (
     row

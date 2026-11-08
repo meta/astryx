@@ -55,12 +55,11 @@ export function separatorAttributes(
   return {
     'aria-orientation':
       state.direction === 'horizontal' ? 'vertical' : 'horizontal',
+    // The value stays within aria-valuemin and aria-valuemax.
     'aria-valuenow':
       value == null
         ? undefined
-        : value.isCollapsed
-          ? Math.max(value.size, value.minPx)
-          : value.size,
+        : Math.min(Math.max(value.size, value.minPx), value.maxPx ?? Infinity),
     'aria-valuemin': value?.minPx,
     'aria-valuemax':
       value?.maxPx != null && Number.isFinite(value.maxPx)

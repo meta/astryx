@@ -399,6 +399,92 @@ describe('watchHitArea', () => {
     stop();
   });
 
+  it('matches the page against its selector once, and again only after a mutation can change what it matches', () => {
+    const control = byId('switch');
+    place(control, rect(100, 100, 24, 24));
+    place(byId('link'), rect(132, 100, 60, 24));
+    place(byId('other'), rect(400, 400, 24, 24));
+    const queries = vi.spyOn(document, 'querySelectorAll');
+    const heard: HitInsets[] = [];
+    const stop = watchHitArea(control, insets => heard.push(insets));
+    show(control);
+    flush();
+    expect(queries).toHaveBeenCalledTimes(1);
+    expect(heard).toEqual([{top: 10, right: 4, bottom: 10, left: 10}]);
+
+    // A later pass reads every rect again, but finds the elements kept.
+    place(byId('link'), rect(140, 100, 60, 24));
+    log.length = 0;
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(queries).toHaveBeenCalledTimes(1);
+    expect(log).toContain('read link');
+    expect(heard.at(-1)).toEqual({top: 10, right: 8, bottom: 10, left: 10});
+
+    // A neighbour added in the same task as the pass counts in it.
+    const above = document.createElement('button');
+    above.id = 'above';
+    document.body.append(above);
+    place(above, rect(100, 80, 24, 12));
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(queries).toHaveBeenCalledTimes(2);
+    expect(heard.at(-1)).toEqual({top: 4, right: 8, bottom: 10, left: 10});
+
+    // An attribute the selector reads makes an element a neighbour.
+    const below = document.createElement('span');
+    below.id = 'below';
+    document.body.append(below);
+    place(below, rect(100, 130, 24, 12));
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(heard.at(-1)).toEqual({top: 4, right: 8, bottom: 10, left: 10});
+    below.setAttribute('role', 'button');
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(heard.at(-1)).toEqual({top: 4, right: 8, bottom: 3, left: 10});
+
+    // A neighbour removed stops counting.
+    above.remove();
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(heard.at(-1)).toEqual({top: 10, right: 8, bottom: 3, left: 10});
+    stop();
+  });
+
+  it('counts a control watched after the last pass by its own box, not by a part inside it', () => {
+    // A group whose box reaches nearer the control than the input inside it.
+    const group = document.createElement('div');
+    const input = document.createElement('input');
+    group.append(input);
+    document.body.append(group);
+    place(group, rect(100, 60, 24, 30));
+    place(input, rect(100, 20, 24, 10));
+    const control = byId('switch');
+    place(control, rect(100, 100, 24, 24));
+    place(byId('link'), rect(132, 100, 60, 24));
+    place(byId('other'), rect(400, 400, 24, 24));
+    const heard: HitInsets[] = [];
+    const stop = watchHitArea(control, insets => heard.push(insets));
+    show(control);
+    flush();
+    // The input is too far away to stop the control's growth.
+    expect(heard.at(-1)).toEqual({top: 10, right: 4, bottom: 10, left: 10});
+    // The group starts a watch. No element changes, but its box, not its
+    // input, is now the neighbour.
+    const stopGroup = watchHitArea(group, () => {});
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(heard.at(-1)).toEqual({top: 5, right: 4, bottom: 10, left: 10});
+    // The group stops its watch: its input, too far away, is the neighbour
+    // again.
+    stopGroup();
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(heard.at(-1)).toEqual({top: 10, right: 4, bottom: 10, left: 10});
+    stop();
+  });
+
   it('measures nothing off screen', () => {
     const control = byId('switch');
     place(control, rect(100, 100, 24, 24));
@@ -795,6 +881,64 @@ describe('watchHitArea', () => {
       onDocument.mock.calls.filter(([type]) => type === 'pointerdown'),
     ).toHaveLength(1);
     stops.forEach(stop => stop());
+  });
+
+  it('observes the page for its interactive elements only while the pointer is coarse and a watch is live (spec:AST-094 FR24)', () => {
+    const Native = globalThis.MutationObserver;
+    let pageObservers = 0;
+    vi.stubGlobal(
+      'MutationObserver',
+      class extends Native {
+        private isOnPage = false;
+        override observe(target: Node, options?: MutationObserverInit) {
+          if (target === document && !this.isOnPage) {
+            this.isOnPage = true;
+            pageObservers += 1;
+          }
+          super.observe(target, options);
+        }
+        override disconnect() {
+          if (this.isOnPage) {
+            this.isOnPage = false;
+            pageObservers -= 1;
+          }
+          super.disconnect();
+        }
+      },
+    );
+    const control = byId('switch');
+    const other = byId('other');
+    place(control, rect(100, 100, 24, 24));
+    place(other, rect(400, 400, 24, 24));
+    place(byId('link'), rect(132, 100, 60, 24));
+    // Under a fine pointer: none.
+    coarse = false;
+    const stops = [control, other].map(element =>
+      watchHitArea(element, () => {}),
+    );
+    show(control, other);
+    flush();
+    expect(pageObservers).toBe(0);
+    // Coarse, with two watches: one.
+    coarse = true;
+    pointerListeners.forEach(listener => listener());
+    show(control, other);
+    flush();
+    expect(pageObservers).toBe(1);
+    // The pointer turns fine: released.
+    coarse = false;
+    pointerListeners.forEach(listener => listener());
+    expect(pageObservers).toBe(0);
+    // Coarse again, then the last watch stops: released.
+    coarse = true;
+    pointerListeners.forEach(listener => listener());
+    show(control, other);
+    flush();
+    expect(pageObservers).toBe(1);
+    stops[0]();
+    expect(pageObservers).toBe(1);
+    stops[1]();
+    expect(pageObservers).toBe(0);
   });
 
   it('removes its document listener when the last watch stops (spec:AST-094 FR24)', () => {
