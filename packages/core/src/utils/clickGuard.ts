@@ -41,6 +41,7 @@
 
 import {isHapticSwitch} from '../privateAttributes/hapticSwitch.stylex';
 import {subscribeInput} from './inputStream';
+import {realmValue, sharedKey} from './sharedRealm';
 
 /**
  * How long after a release the browser's click is still swallowed, in ms.
@@ -77,10 +78,17 @@ interface Guard {
   timer: ReturnType<typeof setTimeout> | null;
 }
 
-const guards = new Map<Document, Guard>();
-/** The click listeners that stay, by window: the menu press model's. */
-const stayingClickListeners = new WeakMap<Window, () => void>();
-let unguardedDepth = 0;
+/**
+ * The click guard's state, registered, so a swizzled copy guards the same
+ * clicks as the package.
+ */
+const guardState = realmValue(sharedKey('click-guard', 1), () => ({
+  guards: new Map<Document, Guard>(),
+  /** The click listeners that stay, by window: the menu press model's. */
+  stayingClickListeners: new WeakMap<Window, () => void>(),
+  unguardedDepth: 0,
+}));
+const {guards, stayingClickListeners} = guardState;
 
 /** Listen for the next click on `view`'s capture phase; returns the stop. */
 function listenForClicks(view: Window): () => void {
@@ -183,11 +191,11 @@ export function isClickGuardArmed(doc: Document): boolean {
  * retargeted click).
  */
 export function withoutClickGuard<T>(dispatch: () => T): T {
-  unguardedDepth++;
+  guardState.unguardedDepth++;
   try {
     return dispatch();
   } finally {
-    unguardedDepth--;
+    guardState.unguardedDepth--;
   }
 }
 
@@ -215,7 +223,7 @@ function swallowLateMouse(event: MouseEvent): void {
 }
 
 function isExempt(event: MouseEvent): boolean {
-  if (event.detail === 0 || unguardedDepth > 0) {
+  if (event.detail === 0 || guardState.unguardedDepth > 0) {
     return true;
   }
   return isHapticSwitch(event.target);

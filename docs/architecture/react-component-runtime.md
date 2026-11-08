@@ -253,7 +253,9 @@ those contracts.
   side nav collapse or expand (`component:AppShell` FR17, `component:SideNav`
   FR6), each making its copy through the swap. A resize controller also holds
   its own handle for a LayoutPanel's collapse and open, with no copy
-  (`component:Resizable` FR8). The module may also play
+  (`component:Resizable` FR8). Under a coarse pointer, a TreeList with no handle
+  from the app holds its own for its own expand and collapse, with no copy
+  (`component:TreeList` FR8). The module may also play
   caller-supplied frames on elements the page already renders, on the one
   shared motion, with no copy, releasing them when the motion ends; AppShell's
   content surface uses this to cover an expand's gap when its old wrap is not
