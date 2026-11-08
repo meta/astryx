@@ -1325,6 +1325,7 @@ export function TouchDateField({
         }),
         stylex.props(
           inputWrapperStyles.base,
+          inputWrapperStyles.textField,
           sizeStyles[size],
           styles.wrapper,
           // Disabled paint belongs to the disabled state only; a busy field

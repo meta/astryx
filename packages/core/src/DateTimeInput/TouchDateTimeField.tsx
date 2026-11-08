@@ -1297,6 +1297,7 @@ export function TouchDateTimeField({
             }),
             stylex.props(
               inputWrapperStyles.base,
+              inputWrapperStyles.textField,
               sizeStyles[size],
               styles.touchDateWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
@@ -1388,6 +1389,7 @@ export function TouchDateTimeField({
             }),
             stylex.props(
               inputWrapperStyles.base,
+              inputWrapperStyles.textField,
               sizeStyles[size],
               styles.touchTimeWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
