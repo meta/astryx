@@ -289,6 +289,11 @@ export const docs = {
           "The toolbar's glyphs are themeable. Each control resolves its icon from the core icon registry under a stable richtext:* key (see RICHTEXT_ICON_KEYS), falling back to a bundled inline SVG. A theme restyles any glyph without forking the toolbar by naming its key: defineTheme({icons: {'richtext:bold': <MyBoldIcon />}}). Undo and redo mirror under right-to-left direction, whichever glyph draws them.",
       },
       {
+        guidance: true,
+        description:
+          "To switch between reading (Markdown or RichTextView) and editing the same document in place, give the editor's field its inset and border outside the reading width, so every paragraph keeps its line count across the switch. Define the frame with stylex.create, for example const inPlace = stylex.create({editorFrame: {marginInline: `calc(-1 * (${spacingVars['--spacing-2']} + ${borderVars['--border-width']}))`}}), with spacingVars and borderVars from @astryxdesign/core/theme/tokens.stylex, and pass xstyle={inPlace.editorFrame} to the RichTextEditor. The recipe assumes no status: a status icon reserves another spacing-6 at the inline end. The field then extends past the column on both sides; leave room for it in the surrounding padding. A standalone editor in a form keeps its default width, so its border lines up with the fields around it.",
+      },
+      {
         guidance: false,
         description:
           'Use for single-line input or plain text; use TextInput or TextArea for those.',
