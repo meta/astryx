@@ -521,6 +521,34 @@ describe('LineClamp', () => {
       expect(rects.mock.contexts).not.toContain(link);
     });
 
+    it('leaves the controls of a popover inside the clamp alone', () => {
+      const {rerender} = render(
+        <LineClamp maxLines={2} data-testid="clamp">
+          Some text
+          <div popover="manual">
+            <button type="button">Delete</button>
+          </div>
+        </LineClamp>,
+      );
+      const container = screen.getByTestId('clamp');
+      const button = screen.getByText('Delete');
+      mockRects(
+        new Map([
+          [container, {top: 0, bottom: 40}],
+          [button, {top: 60, bottom: 76}], // in the top layer, below the edge
+        ]),
+      );
+      rerender(
+        <LineClamp maxLines={2} data-testid="clamp">
+          Some text
+          <div popover="manual">
+            <button type="button">Delete</button>
+          </div>
+        </LineClamp>,
+      );
+      expect(button).not.toHaveAttribute('inert');
+    });
+
     it('hides a descendant a child re-enables past the fold after mount', async () => {
       // Only the late link is placed past the fold; everything else sits
       // above it. Enabling it changes an attribute only: no text change, no

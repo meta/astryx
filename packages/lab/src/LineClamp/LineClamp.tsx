@@ -72,7 +72,12 @@ const ROOT_ATTRIBUTE = 'data-line-clamp-root';
  * clamp's box in mind, not the inner one's.
  */
 function isOwnedBy(container: HTMLElement, el: Element): boolean {
-  return el.parentElement?.closest(`[${ROOT_ATTRIBUTE}]`) === container;
+  // A popover or dialog renders in the top layer, which the clamp does not
+  // clip, so ownership stops at that layer boundary.
+  return (
+    el.parentElement?.closest(`[${ROOT_ATTRIBUTE}], [popover], dialog`) ===
+    container
+  );
 }
 
 /**
