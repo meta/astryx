@@ -365,7 +365,7 @@ describe("the release a paced play's page reads, as Core's velocity tracker read
 });
 
 describe('touchArrivalsFrom', () => {
-  it('gives each step one arrival: a move at its pointer event, a touch-down and a lift at their touch events, and the latest handling', () => {
+  it('gives each step one arrival: a move and a lift at their pointer events, a touch-down at its touch event, and the latest handling', () => {
     expect(
       touchArrivalsFrom({
         eventTypes: [
@@ -383,14 +383,26 @@ describe('touchArrivalsFrom', () => {
     ).toEqual([
       {stamp: 24, firstStamp: 23, handledAt: 24},
       {stamp: 39, firstStamp: 39, handledAt: 100},
-      {stamp: 140, firstStamp: 116, handledAt: 140},
+      {stamp: 116, firstStamp: 116, handledAt: 140},
     ]);
   });
 
-  it("reads a lift at its touchend, which the page's pointerup listener held: the page's rest", () => {
+  it('reads a lift with no pointer event at its touchend', () => {
+    expect(
+      touchArrivalsFrom({
+        eventTypes: ['touchstart', 'touchmove', 'touchend'],
+        pointerTypes: ['', '', ''],
+        stamps: [24, 39, 140],
+        handledAt: [24, 39, 140],
+      }).at(-1),
+    ).toEqual({stamp: 140, firstStamp: 140, handledAt: 140});
+  });
+
+  it("reads a lift at its pointerup, as the gesture host does: a pointerup listener that holds the touchend is not the page's rest", () => {
     // How WebKit recorded a Carousel flick on a loaded runner. The pointerup
     // came 4 ms after the last move. Its listeners finished 49 ms later, when
-    // WebKit stamped the touchend, and the gesture host reads the lift there.
+    // WebKit stamped the touchend. The gesture host reads the lift at the
+    // pointerup, paired with the moves.
     const record = {
       eventTypes: [
         'pointerdown',
@@ -417,14 +429,11 @@ describe('touchArrivalsFrom', () => {
     };
     const arrivals = touchArrivalsFrom(record);
     expect(arrivals.at(-1)).toEqual({
-      stamp: 3347,
+      stamp: 3298,
       firstStamp: 3298,
       handledAt: 3355,
     });
-    const fault = touchPacingFault(FLICK, arrivals);
-    expect(fault?.kind).toBe('rest');
-    // The lift's own pointerup listener held its touchend 49 ms.
-    expect(fault?.heldByPage).toEqual({gapMs: 53, handlingMs: 49});
+    expect(touchPacingFault(FLICK, arrivals)).toBeNull();
   });
 
   it("leaves a mouse's pointer event out of a touch step", () => {

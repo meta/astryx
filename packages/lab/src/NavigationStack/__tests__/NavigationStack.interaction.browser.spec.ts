@@ -943,10 +943,25 @@ test('a fast swipe that rests before the lift springs back: a still finger never
   expect(Math.abs(await translateX(top))).toBeLessThan(0.5);
 });
 
-test('a flick from near the edge finishes the pop', async ({page}) => {
+/**
+ * A flick from near the leading edge. Given `busyLiftMs`, a page pointerup
+ * listener works that long, as a busy app's: WebKit stamps the lift's
+ * touchend after it. The pop must finish.
+ */
+async function flickFromTheEdge(page: Page, busyLiftMs?: number) {
   const {driver, left, topTitle} = await openStack(page, 'pushed', {
     standalone: true,
   });
+  if (busyLiftMs != null) {
+    await page.evaluate(spin => {
+      addEventListener('pointerup', () => {
+        const end = performance.now() + spin;
+        while (performance.now() < end) {
+          // The listener's own work.
+        }
+      });
+    }, busyLiftMs);
+  }
   // ~60 px of travel at ~1200 px/s: p + 0.35·v is well past half.
   const script = flick({x: left + 6, y: 400}, {velocity: {x: 1200, y: 0}});
   const run = await armInputRun(page, TOUCH_INPUT_TYPES);
@@ -981,6 +996,16 @@ test('a flick from near the edge finishes the pop', async ({page}) => {
     }
     throw error;
   }
+}
+
+test('a flick from near the edge finishes the pop', async ({page}) => {
+  await flickFromTheEdge(page);
+});
+
+test('a flick from near the edge finishes the pop when a page pointerup listener holds its lift', async ({
+  page,
+}) => {
+  await flickFromTheEdge(page, 50);
 });
 
 test('in a browser tab the leading screen edge stays the browser’s', async ({

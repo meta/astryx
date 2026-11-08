@@ -365,6 +365,35 @@ test.describe('touch input', () => {
     );
   });
 
+  test('a lift whose page pointerup listener holds its touchend reads at the pointerup, as the gesture host does: the paced flick passes', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'webkit',
+      'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
+    );
+    // The lift's pointerup listener holds the main thread 50 ms, as a busy
+    // app's can. WebKit stamps the touchend after it, but the gesture host
+    // reads the lift at the pointerup, paired with the moves.
+    await page.route('http://pointerup-stalling-page.test/', route =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>addEventListener("pointerup",()=>{const end=performance.now()+50;while(performance.now()<end){}});</script>',
+      }),
+    );
+    await page.goto('http://pointerup-stalling-page.test/');
+    const driver = await touchDriver(page);
+    const played = await driver.play(
+      flick(
+        {x: 200, y: 400},
+        {velocity: {x: 0, y: -1500}, durationMs: 80, hz: 120},
+      ),
+      {pacing: 'spacing'},
+    );
+    expect(played.at(-1)?.release).toBeDefined();
+  });
+
   test("a page whose touch listener holds its main thread changes a paced flick's release itself: TouchPageStallError, never the runner's", async ({
     page,
     browserName,
@@ -402,14 +431,14 @@ test.describe('touch input', () => {
 
   /**
    * A flick up a page that takes every touch, its lift right after its last
-   * move. The page logs each move at its pointer event and the lift at its
-   * touch event, where Core's gesture host reads them.
+   * move. The page logs each move and the lift at its pointer event, where
+   * Core's gesture host and the play read them.
    */
   async function liftStallPage(page: Page) {
     await page.route('http://lift-stall.test/', route =>
       route.fulfill({
         contentType: 'text/html',
-        body: '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>window.touches=[];for(const type of ["pointermove","touchend"])addEventListener(type,e=>touches.push([type,e.timeStamp]),{passive:true})</script>',
+        body: '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>window.touches=[];for(const type of ["pointermove","pointerup"])addEventListener(type,e=>touches.push([type,e.timeStamp]),{passive:true})</script>',
       }),
     );
     await page.goto('http://lift-stall.test/');
@@ -430,7 +459,7 @@ test.describe('touch input', () => {
     const pageLiftGap = () =>
       page.evaluate(() => {
         const {touches} = window as unknown as {touches: [string, number][]};
-        const lift = touches.findIndex(([type]) => type === 'touchend');
+        const lift = touches.findIndex(([type]) => type === 'pointerup');
         return touches[lift][1] - touches[lift - 1][1];
       });
     return {driver: await touchDriver(page), script, slowRead, pageLiftGap};
