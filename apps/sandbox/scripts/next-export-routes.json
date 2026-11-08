@@ -815,6 +815,7 @@
     "/templates/useOutlineFromMarkdownHookUsage/",
     "/templates/useOverflowHookUsage/",
     "/templates/useOverlayHookUsage/",
+    "/templates/usePowerSearchConfigHookUsage/",
     "/templates/usePressFeedbackHookUsage/",
     "/templates/useScrollLockHookUsage/",
     "/templates/useScrollOverflowHookUsage/",
