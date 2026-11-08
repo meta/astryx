@@ -9,11 +9,13 @@
  * SYNC: When Collapsible.tsx or CollapsibleGroup.tsx changes, update tests
  */
 
+import {memo, use} from 'react';
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Collapsible} from './Collapsible';
 import {CollapsibleGroup} from './CollapsibleGroup';
+import {CollapsibleGroupContext} from './CollapsibleGroupContext';
 
 // =============================================================================
 // Collapsible — standalone behavior
@@ -241,6 +243,29 @@ describe('CollapsibleGroup', () => {
       );
       expect(screen.getByText('Content A')).not.toBeVisible();
       expect(screen.getByText('Content B')).toBeVisible();
+    });
+
+    it('preserves the context value on an unchanged controlled-string rerender', () => {
+      const renderProbe = vi.fn();
+      const Probe = memo(function Probe() {
+        use(CollapsibleGroupContext);
+        renderProbe();
+        return null;
+      });
+
+      const {rerender} = render(
+        <CollapsibleGroup type="single" value="a">
+          <Probe />
+        </CollapsibleGroup>,
+      );
+      expect(renderProbe).toHaveBeenCalledTimes(1);
+
+      rerender(
+        <CollapsibleGroup type="single" value="a">
+          <Probe />
+        </CollapsibleGroup>,
+      );
+      expect(renderProbe).toHaveBeenCalledTimes(1);
     });
   });
 

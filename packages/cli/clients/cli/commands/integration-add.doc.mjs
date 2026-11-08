@@ -57,6 +57,12 @@ export const doc = {
         "Namespace of this package to place the doc in, as a guide in its `guides` slot; writes the namespace doc when it is missing, and declares the CLI that reads it as an optional `@astryxdesign/cli` peer. Only valid for doc, and not with --replaces or --extends",
     },
     {
+      flag: '--from <theme>',
+      param: 'options.from',
+      description:
+        'Existing theme slug to fork as a starting point instead of a blank scaffold; the new theme copies the base and has no link back, and package.json `dependencies` gains the npm packages the copied files import (other than Core and React). Only valid for theme',
+    },
+    {
       flag: '--to <version>',
       param: 'options.to',
       description:
@@ -102,7 +108,12 @@ export const doc = {
       cli: "astryx integration add agent-doc 'Run acme verify before finishing.'",
     },
     {label: 'Add a source theme', cli: 'astryx integration add theme ocean'},
+    {
+      label: 'Fork an existing theme',
+      cli: 'astryx integration add theme ocean --from neutral',
+    },
   ],
+  outsideProject: 'refuse',
   exitCodes: [
     {code: 0, when: 'the contribution is written or the dry run succeeds'},
     {
@@ -111,4 +122,10 @@ export const doc = {
     },
   ],
   related: ['integration verify', 'doctor integration validate', 'theme add'],
+  notes: [
+    {
+      type: 'prose',
+      text: "In global mode: outside a package, integration add writes nothing and stops with `ERR_FILE_NOT_FOUND`: \"No package.json found. Run this command inside an integration package.\" In a project, the project's version of Astryx runs it, whichever astryx command you start. See {@link namespace:global} and {@link generic:global-integrations}.",
+    },
+  ],
 };

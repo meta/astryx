@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/themes/generate-a-palette`:
+ * @file `astryx docs authoring/building-blocks/themes/generate-a-palette`:
  * turn a few seed colors into a full light and dark color palette.
  */
 
@@ -21,7 +21,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'A theme needs dozens of related colors — shades of each brand color for backgrounds, borders, text, and states, in both light and dark mode. A palette is that full set of shades. Rather than hand-pick every one, you name a few seed colors and generate the rest, so the shades stay consistent and keep enough contrast to read.',
+          text: 'A theme needs dozens of related colors — shades of each brand color for backgrounds, borders, text, and states, in both light and dark mode. A palette is that full set of shades. Rather than hand-pick every one, you name a few seed colors and generate the rest, so the shades stay consistent.',
         },
         {
           type: 'prose',
@@ -40,9 +40,9 @@ export const docs = {
           type: 'code',
           lang: 'bash',
           code: `# Print the palette without writing files
-npx astryx theme palette generate themes/ocean/palette.config.json
+{@command theme palette generate themes/ocean/palette.config.json}
 # Write the palette and its receipt
-npx astryx theme palette generate themes/ocean/palette.config.json \\
+astryx theme palette generate themes/ocean/palette.config.json \\
   --out themes/ocean/tokens/ocean.palette.ts`,
         },
         {
@@ -50,7 +50,9 @@ npx astryx theme palette generate themes/ocean/palette.config.json \\
           lang: 'text',
           code: `[ok] Wrote themes/ocean/tokens/ocean.palette.ts
 
-[ok] Wrote themes/ocean/tokens/ocean.palette.receipt.json`,
+[ok] Wrote themes/ocean/tokens/ocean.palette.receipt.json
+
+Review and edit the candidate before adopting it as theme-owned palette data.`,
         },
         {
           type: 'prose',
@@ -58,7 +60,7 @@ npx astryx theme palette generate themes/ocean/palette.config.json \\
         },
         {
           type: 'prose',
-          text: 'Add `--preview <file>.html` to also get a web page showing every shade, so you can eyeball the palette in a browser. Write it outside `themes/` so it does not ship in your package. The full list of config fields and options is in {@link command:theme palette generate}.',
+          text: 'Add `--preview <file>.html` to also get a web page showing every shade, so you can eyeball the palette in a browser. Write it outside `themes/` so it does not ship in your package. Every option is in {@link command:theme palette generate}, and the config it reads is described in {@link function:generateTonalPalette}.',
         },
       ],
     },

@@ -50,6 +50,10 @@ export const TEMPLATE_COMPONENTS: Record<
     () =>
       import('../../../../packages/cli/assets/templates/pages/contact-form/page'),
   ),
+  'course-detail': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/course-detail/page'),
+  ),
   dashboard: lazy(
     () =>
       import('../../../../packages/cli/assets/templates/pages/dashboard/page'),
@@ -198,9 +202,17 @@ export const TEMPLATE_COMPONENTS: Record<
   table: lazy(
     () => import('../../../../packages/cli/assets/templates/pages/table/page'),
   ),
+  'table-comparison': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/table-comparison/page'),
+  ),
   'table-filter': lazy(
     () =>
       import('../../../../packages/cli/assets/templates/pages/table-filter/page'),
+  ),
+  'table-collapsible': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/table-collapsible/page'),
   ),
   'table-grouped': lazy(
     () =>

@@ -15,7 +15,11 @@ export {hasActiveFocusTrapEscape, useFocusTrap} from './useFocusTrap';
 export type {UseFocusTrapOptions, UseFocusTrapReturn} from './useFocusTrap';
 
 export {useAnnounce} from './useAnnounce';
-export type {AnnounceFn, AnnouncePoliteness} from './useAnnounce';
+export type {
+  AnnounceFn,
+  AnnouncePoliteness,
+  UseAnnounceOptions,
+} from './useAnnounce';
 
 export {useClipboard} from './useClipboard';
 export type {UseClipboardOptions, UseClipboardReturn} from './useClipboard';
@@ -86,6 +90,12 @@ export type {
 
 export {useScrollLock} from './useScrollLock';
 
+export {useAnimatedLayout} from './useAnimatedLayout';
+export type {
+  AnimatedLayout,
+  UseAnimatedLayoutOptions,
+} from './useAnimatedLayout';
+
 export {useEntryAnimation} from './useEntryAnimation';
 export type {EntryAnimationPreset} from './useEntryAnimation';
 
@@ -100,6 +110,8 @@ export type {ImageSampleRegion, UseImageModeOptions} from './useImageMode';
 export {
   useClickableContainer,
   INTERACTIVE_SELECTORS,
+  hasInteractiveAncestor,
+  hasTextSelection,
 } from './useClickableContainer';
 export type {
   UseClickableContainerOptions,
@@ -121,8 +133,19 @@ export type {
   UseInteractiveRoleOptions,
 } from './useInteractiveRole';
 
+export {useAnimator} from './useAnimator';
+
+export {useDragToSnapPoints} from './useDragToSnapPoints';
+export type {UseDragToSnapPointsResult} from './useDragToSnapPoints';
+export type {
+  DragToSnapPoints,
+  DragToSnapPointsOptions,
+} from '../dragToSnapPoints/createDragToSnapPoints';
+
 export {useLongPress} from './useLongPress';
 export type {UseLongPressOptions, UseLongPressHandlers} from './useLongPress';
+
+export {usePressFeedback} from './usePressFeedback';
 
 export {useDevWarning} from './useDevWarning';
 export {useIndicatorFocusRing} from './useIndicatorFocusRing';
@@ -134,3 +157,11 @@ export type {
   ContainerRevealOptions,
   ContentRevealOptions,
 } from './useContainerReveal';
+
+export {usePanGesture} from './usePanGesture';
+export type {
+  PanGesture,
+  PanGestureEvent,
+  PanGestureOptions,
+  PanGestureState,
+} from '../gestures/createPanGesture';

@@ -62,6 +62,36 @@ export const docs = {
         },
       ],
     },
+    {
+      name: 'ref',
+      type: 'React.Ref<HTMLElement>',
+      description:
+        'Ref forwarded to the group wrapper when hasDividers renders one.',
+    },
+    {
+      name: 'xstyle',
+      type: 'StyleXStyles',
+      description:
+        'StyleX styles for the group wrapper when hasDividers renders one. Must be a stylex.create() value.',
+    },
+    {
+      name: 'className',
+      type: 'string',
+      description:
+        'CSS class name for the group wrapper when hasDividers renders one. Prefer xstyle for styling.',
+    },
+    {
+      name: 'style',
+      type: 'CSSProperties',
+      description:
+        'Inline styles for the group wrapper when hasDividers renders one. Prefer xstyle for StyleX-optimized styling.',
+    },
+    {
+      name: 'data-testid',
+      type: 'string',
+      description:
+        'Test selector forwarded to the group wrapper when hasDividers renders one.',
+    },
   ],
 };
 

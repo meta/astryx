@@ -7,7 +7,7 @@
     "generate": "node scripts/check-workspace-build.mjs && pnpm build:theme && node scripts/generate-data.mjs && node scripts/generate-scope.mjs && node scripts/generate-playground-types.mjs && node scripts/copy-vendor.mjs",
     "dev": "pnpm generate && node ../../scripts/generate-i18n-runtime.mjs --watch -- pnpm --parallel --filter @astryxdesign/core --filter @astryxdesign/docsite dev:i18n",
     "dev:i18n": "next dev --webpack",
-    "build": "pnpm generate && next build --webpack && node scripts/check-template-gallery-bundle.mjs",
+    "build": "pnpm generate && next build --webpack && node scripts/check-template-gallery-bundle.mjs && node scripts/check-function-size.mjs",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

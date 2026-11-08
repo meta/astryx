@@ -53,6 +53,7 @@
 import {isJsonMode, jsonError as _jsonError, humanWarn} from '../../../foundation/response/json.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {setOutcome} from '../../../foundation/debug/index.mjs';
+import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
 
 /**
  * Suggestion object — matches the shape used by API errors and the JSON
@@ -122,7 +123,9 @@ export function cliError(message, options = {}) {
   if (suggestions?.length) {
     console.error('');
     for (const s of suggestions) {
-      const tag = s.reason ? `  ${s.name}  (${s.reason})` : `  ${s.name}`;
+      // A suggested command stays bare in JSON and is prefixed here.
+      const name = /^astryx(\s|$)/.test(s.name) ? formatCliCommand(s.name) : s.name;
+      const tag = s.reason ? `  ${name}  (${s.reason})` : `  ${name}`;
       console.error(tag);
     }
   }
@@ -133,6 +136,25 @@ export function cliError(message, options = {}) {
     process.exitCode = exitCode;
   }
   return /** @type {never} */ (undefined);
+}
+
+/**
+ * Reject a positional argument the user typed as `""`.
+ *
+ * @param {string} name the argument as the help spells it, without brackets
+ * @param {unknown} value what Commander passed
+ * @param {string} command the command as a user types it, e.g. `astryx template`
+ * @returns {void} returns only when the argument is not an empty string
+ */
+export function rejectEmptyArgument(name, value, command) {
+  if (typeof value !== 'string' || value.length > 0) return;
+  cliError(
+    `Argument <${name}> is an empty string. ` +
+      'An empty argument is not the same as an omitted one, and ignoring it ' +
+      'would silently discard the rest of the command: pass a value, or leave ' +
+      `<${name}> out of \`${command}\` entirely.`,
+    {code: ERROR_CODES.ERR_INVALID_ARGUMENT},
+  );
 }
 
 /**

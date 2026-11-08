@@ -55,7 +55,8 @@ export const doc = {
     {
       name: 'audience',
       type: "'public' | 'internal'",
-      description: "Bundle audience. Defaults to 'public'.",
+      description:
+        "Reserved: bundle audience. Nothing reads it yet: a namespace that sets 'internal' still shows in `astryx docs`.",
       default: "'public'",
     },
     {
@@ -67,7 +68,7 @@ export const doc = {
       name: 'slots',
       type: 'Record<string, NamespaceSlot>',
       description:
-        'Named placement and collection targets. Each slot declares a title and accepted doc kinds; configured providers require an explicit extension slot.',
+        "Named placement and collection targets. Each slot declares a title and the doc kinds it accepts. `accepts.providers` is not read yet: only docs of the namespace's own package can be placed in a slot.",
       required: true,
     },
     {
@@ -77,10 +78,17 @@ export const doc = {
         'Provider-local rules that adopt otherwise-unplaced docs from a logical discovery group. They never scan a folder.',
     },
     {
+      name: 'adopts[].source.packages',
+      type: "'all'",
+      stability: 'experimental',
+      description:
+        "Experimental: may change or be removed in a patch release. `'all'` adopts the group from every package, not only the namespace's own, and is read only on the CLI's own namespaces that are marked `stability: 'experimental'`.",
+    },
+    {
       name: 'blocks',
       type: '(ReferenceContentBlock | GraphContentBlock)[]',
       description:
-        'Ordered layout content for the namespace page. Graph-only workflow, collection, and reference blocks are available here without widening the stable ReferenceContentBlock union used by existing topic renderers. Not rendered yet: `astryx docs <route>` lists every slot and its children in order.',
+        'Ordered layout content for the namespace page. Graph-only workflow, collection, and reference blocks are available here without widening the stable ReferenceContentBlock union used by existing topic renderers. `astryx docs <route>` prints the prose, heading, code, table, and list blocks above the slots, and `--json` returns every block with its links resolved. A collection block is not rendered yet, and `astryx doctor` warns on one.',
     },
   ],
   examples: [
@@ -100,7 +108,7 @@ export const docs = {
     },
   },
   adopts: [{
-    source: {group: 'cli-commands', kinds: ['command']},
+    source: {group: 'cli/commands', kinds: ['command']},
     into: 'reference',
   }],
 };`,
@@ -109,11 +117,11 @@ export const docs = {
   notes: [
     {
       type: 'prose',
-      text: "The docs tree reads namespace docs from the CLI and from every configured integration. An integration's namespace doc is a top-level level of the tree, and its guides name it with `placement`; a doc can be placed only in a namespace of its own package. When two packages claim one route, the CLI's own docs win, then integrations in configured order, and `astryx doctor` names the loser.",
+      text: "The docs tree reads namespace docs from the CLI and from every configured integration. An integration's namespace doc without a `placement` is a top-level level of the tree, and its guides name it with `placement`; a doc can be placed only in a namespace of its own package. When two packages claim one route, the CLI's own docs win, then integrations in configured order, and `astryx doctor` names the loser.",
     },
     {
       type: 'prose',
-      text: 'Child docs request one canonical home with placement. Collections store and render stable references to those docs; they never create a second identity or parent.',
+      text: 'Child docs request one canonical home with placement. A collection block refers to those docs by stable reference and never creates a second identity or parent. It is not rendered yet: `astryx doctor` warns on one.',
     },
     {
       type: 'list',

@@ -1,34 +1,32 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Patch-versus-minor admission for Changesets.
+ * @file Release-version admission for a release branch.
  *
- * Implements `spec:AST-017` FR46-FR50. The publishable packages are a `fixed`
- * group, so one `[breaking]` Changeset moves every package to a new minor.
- * This gate makes that deliberate:
+ * Implements `spec:AST-017` FR46-FR50. Main's package.json carries the next
+ * planned version for the fixed package group, and a release branch releases
+ * exactly that version:
  *
- *   main targets a PATCH by default        -> incompatible work is refused
- *   an owner SCHEDULES a minor first       -> incompatible work may land
+ *   main            declares the next version; publishes canaries only
+ *   release branch  admits pending Changesets against that declared version
  *
- * The schedule is one small file, `.release/target.json`, carrying a version
- * and a day and nothing else. Pending Changesets never set the mode: the entry
- * being judged cannot be its own authorization.
+ * The declared version must be the patch or minor successor of the latest
+ * stable release, and that choice is the release tier. Incompatible Changesets
+ * are admissible only in a minor release. A Changeset never moves the version:
+ * the owner sets it on main before the cut.
  *
- * This answers patch-versus-minor and nothing else. Deprecation lifecycle,
- * cleanup ids, release planning, and ordinary review live where they already
- * live and are not enforced here.
+ * This answers one question — does this release admit these Changesets — and
+ * nothing else. Deprecation lifecycle, cleanup ids, release planning, and
+ * ordinary review live where they already live and are not enforced here.
+ * Pull-request CI on main does not run it.
  *
- * @input  fixed groups, package versions, parsed Changesets, optional target
- * @output {mode, problems} — problems empty means admissible
- * @position scripts/ — consumed by check-changesets.mjs
+ * @input  fixed groups, package versions, parsed Changesets, latest stable tag
+ * @output {declared, latestStable, tier, problems} — problems empty means admissible
+ * @position scripts/ — consumed by release-branch tooling under scripts/release
  */
 
-/** Where an owner schedules the next minor, when one is scheduled. */
-export const TARGET_FILE = '.release/target.json';
-
 const STABLE_VERSION = /^(\d+)\.(\d+)\.(\d+)$/;
-const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
-const TARGET_KEYS = ['version', 'scheduledFor'];
+const STABLE_TAG = /^v(\d+\.\d+\.\d+)$/;
 
 /**
  * Is this Changeset incompatible?
@@ -59,31 +57,48 @@ export function patchSuccessor(base) {
 }
 
 /**
- * Is this a day that exists? `Date.parse` silently rolls an impossible date
- * forward — `2026-02-30` becomes March 2 — so compare the round trip instead
- * of trusting the parse to fail.
+ * Order two MAJOR.MINOR.PATCH versions.
  *
- * @param {string} day  already matched against YYYY-MM-DD
- * @returns {boolean}
+ * @param {string} a
+ * @param {string} b
+ * @returns {number} negative, zero, or positive
  */
-function isRealDay(day) {
-  const parsed = new Date(`${day}T00:00:00Z`);
-  return (
-    !Number.isNaN(parsed.getTime()) &&
-    parsed.toISOString().slice(0, 10) === day
-  );
+export function compareVersions(a, b) {
+  const pa = STABLE_VERSION.exec(a);
+  const pb = STABLE_VERSION.exec(b);
+  if (!pa || !pb) throw new Error(`cannot compare "${a}" with "${b}"`);
+  for (let i = 1; i <= 3; i += 1) {
+    const delta = Number(pa[i]) - Number(pb[i]);
+    if (delta !== 0) return delta;
+  }
+  return 0;
 }
 
 /**
- * The version the published packages share. The fixed group publishes as one
- * version, so a group whose members disagree has no base, and a prerelease or
- * canary identifier is publication metadata rather than a base.
+ * The newest stable release among `vX.Y.Z` tags. Prerelease and canary tags
+ * are publication metadata and never a release base.
+ *
+ * @param {string[]} tags
+ * @returns {string|null}
+ */
+export function latestStableVersion(tags) {
+  const versions = (tags || [])
+    .map(tag => STABLE_TAG.exec(tag.trim())?.[1])
+    .filter(Boolean);
+  if (versions.length === 0) return null;
+  return versions.sort(compareVersions).at(-1);
+}
+
+/**
+ * The version main declares for the fixed group. The group publishes as one
+ * version, so members that disagree declare nothing, and a prerelease or
+ * canary identifier is never a declared release version.
  *
  * @param {string[][]} fixedGroups
  * @param {Map<string,string>} versionByName
- * @returns {{base: string|null, problems: string[]}}
+ * @returns {{declared: string|null, problems: string[]}}
  */
-export function deriveBase(fixedGroups, versionByName) {
+export function declaredVersion(fixedGroups, versionByName) {
   const problems = [];
   const seen = new Map();
 
@@ -93,7 +108,7 @@ export function deriveBase(fixedGroups, versionByName) {
       if (version === undefined) continue;
       if (!STABLE_VERSION.test(version)) {
         problems.push(
-          `${name}: version "${version}" is not MAJOR.MINOR.PATCH. A prerelease or canary identifier is never the published version this gate reads.`,
+          `${name}: version "${version}" is not MAJOR.MINOR.PATCH. A prerelease or canary identifier is never a declared release version.`,
         );
         continue;
       }
@@ -104,153 +119,100 @@ export function deriveBase(fixedGroups, versionByName) {
 
   if (seen.size > 1) {
     const spread = [...seen.entries()]
-      .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+      .sort((a, b) => compareVersions(a[0], b[0]))
       .map(([version, names]) => `${version} (${names.join(', ')})`)
       .join('; ');
     problems.push(
-      `the published packages do not share one version: ${spread}. They publish together, so there is nothing to check a scheduled minor against.`,
+      `the fixed package group does not declare one version: ${spread}. The group releases together, so it must carry one version.`,
     );
   }
+  if (seen.size === 0 && problems.length === 0) {
+    problems.push('the fixed package group declares no version.');
+  }
 
-  if (problems.length) return {base: null, problems};
-  return {base: seen.size === 1 ? [...seen.keys()][0] : null, problems};
+  if (problems.length) return {declared: null, problems};
+  return {declared: [...seen.keys()][0], problems};
 }
 
 /**
- * FR47/FR49 — read the owner's schedule.
- *
- * Returns `minor` only for a statement that can be read with certainty and
- * still applies. Anything else leaves main on its patch default and says why,
- * rather than inheriting a mode from an input nobody can trust.
+ * FR47/FR49 — which tier the declared version is.
  *
  * @param {object} input
- * @param {unknown} input.target  parsed .release/target.json, or null when absent
- * @param {string|null} input.base
- * @param {string} input.today  YYYY-MM-DD
- * @returns {{mode: 'patch'|'minor', scheduled: object|null, problems: string[]}}
+ * @param {string|null} input.declared
+ * @param {string|null} input.latestStable
+ * @returns {{tier: 'patch'|'minor'|null, problems: string[]}}
  */
-export function readSchedule({target, base, today}) {
-  if (target === null || target === undefined) {
-    return {mode: 'patch', scheduled: null, problems: []};
+export function releaseTier({declared, latestStable}) {
+  if (!declared) return {tier: null, problems: []};
+  if (!latestStable) {
+    return {
+      tier: null,
+      problems: [
+        `no stable vX.Y.Z release tag is available, so the declared ${declared} cannot be placed in a tier.`,
+      ],
+    };
   }
-
-  const problems = [];
-  const deny = reason => {
-    problems.push(`${TARGET_FILE}: ${reason}`);
-    return {mode: 'patch', scheduled: null, problems};
-  };
-
-  if (typeof target !== 'object' || Array.isArray(target)) {
-    return deny('must be a JSON object with exactly "version" and "scheduledFor".');
+  if (declared === patchSuccessor(latestStable)) {
+    return {tier: 'patch', problems: []};
   }
-
-  const keys = Object.keys(target).sort();
-  if (keys.join(',') !== TARGET_KEYS.slice().sort().join(',')) {
-    return deny(
-      `must carry exactly "version" and "scheduledFor" — found ${keys.length ? keys.map(k => `"${k}"`).join(', ') : 'nothing'}. This file schedules a minor; it records nothing else.`,
-    );
+  if (declared === minorSuccessor(latestStable)) {
+    return {tier: 'minor', problems: []};
   }
-
-  if (typeof target.version !== 'string' || !STABLE_VERSION.test(target.version)) {
-    return deny(`"version" must be a MAJOR.MINOR.PATCH version.`);
-  }
-  if (
-    typeof target.scheduledFor !== 'string' ||
-    !ISO_DAY.test(target.scheduledFor) ||
-    !isRealDay(target.scheduledFor)
-  ) {
-    return deny(`"scheduledFor" must be a real YYYY-MM-DD day.`);
-  }
-
-  if (!base) {
-    return deny(
-      `cannot be checked, because the published packages do not share one version.`,
-    );
-  }
-
-  const expected = minorSuccessor(base);
-  if (target.version !== expected) {
-    return deny(
-      `schedules ${target.version}, but the published packages are at ${base}, whose next minor is ${expected}. The schedule and the repository disagree.`,
-    );
-  }
-
-  if (target.scheduledFor < today) {
-    return deny(
-      `was scheduled for ${target.scheduledFor}, which has passed. Cut the minor or remove this file; an expired schedule does not keep admitting breaking changes.`,
-    );
-  }
-
-  return {mode: 'minor', scheduled: {...target}, problems};
+  const problem =
+    compareVersions(declared, latestStable) <= 0
+      ? `main declares ${declared}, which is not newer than the latest stable release ${latestStable}. A release owner bumps main to the next planned version (${patchSuccessor(latestStable)} or ${minorSuccessor(latestStable)}) before the cut.`
+      : `main declares ${declared}, but the latest stable release is ${latestStable}; the next release is ${patchSuccessor(latestStable)} or ${minorSuccessor(latestStable)}.`;
+  return {tier: null, problems: [problem]};
 }
 
 /**
- * FR50 — the refusal. Names what main is targeting and both ways forward,
+ * FR48/FR50 — the refusal. Names the declared release and both ways forward,
  * and names no particular version, surface, or contributor as a special case:
  * every value is read from the tree being checked.
  *
  * @param {string} file
- * @param {string|null} base
+ * @param {string} declared
+ * @param {string} latestStable
  * @returns {string}
  */
-function refuse(file, base) {
-  const patch = patchSuccessor(base);
-  const minor = minorSuccessor(base);
-  const heading = patch
-    ? `${file}: this entry is incompatible, and main is targeting ${patch} — a patch.`
-    : `${file}: this entry is incompatible, and main is targeting a patch.`;
-
+function refuse(file, declared, latestStable) {
+  const minor = minorSuccessor(latestStable);
   return (
-    `${heading}\n` +
-    `      The published packages release together, so admitting it would move all of\n` +
-    `      them${minor ? ` to ${minor}` : ' to a new minor'}.\n` +
+    `${file}: this entry is incompatible, and this release is ${declared} — a patch of ${latestStable}.\n` +
+    `      Incompatible work ships only in a minor release.\n` +
     `      Either keep the release patch-compatible: leave the released surface working\n` +
     `      and deprecate it instead (AST-017 FR28) — ship the replacement, keep old usage\n` +
-    `      equivalent, and take the patch bump; the removal lands once a minor is\n` +
-    `      scheduled.\n` +
-    `      Or schedule that minor first (AST-017 FR47): a release owner adds\n` +
-    `      ${TARGET_FILE} with the target version and the day it is scheduled for.`
+    `      equivalent, and let the removal ship in a minor release.\n` +
+    `      Or plan the minor (AST-017 FR47): a release owner bumps main's fixed-group\n` +
+    `      version to ${minor} before the next cut.`
   );
 }
 
 /**
- * FR46-FR50 — decide what this tree admits.
+ * FR46-FR50 — decide what this release admits.
  *
  * @param {object} input
  * @param {string[][]} input.fixedGroups
  * @param {Map<string,string>} input.versionByName
  * @param {Array<{file: string, category: string|null, releases: Record<string,string>}>} input.entries
- * @param {unknown} [input.target]  parsed schedule, or null when absent
- * @param {string} input.today  YYYY-MM-DD
- * @returns {{base: string|null, mode: 'patch'|'minor', scheduled: object|null, problems: string[]}}
+ * @param {string|null} input.latestStable  newest stable release version
+ * @returns {{declared: string|null, latestStable: string|null, tier: 'patch'|'minor'|null, problems: string[]}}
  */
 export function checkAdmission({
   fixedGroups,
   versionByName,
   entries,
-  target = null,
-  today,
+  latestStable,
 }) {
-  const incompatible = (entries || []).filter(isIncompatible);
-  const {base, problems: baseProblems} = deriveBase(fixedGroups, versionByName);
+  const {declared, problems} = declaredVersion(fixedGroups, versionByName);
+  const tier = releaseTier({declared, latestStable});
+  problems.push(...tier.problems);
 
-  // The base matters only when there is a schedule to check it against or
-  // incompatible work to judge. Staying quiet otherwise keeps this gate to the
-  // one question it answers.
-  const problems =
-    target !== null || incompatible.length > 0 ? [...baseProblems] : [];
-
-  const schedule = readSchedule({target, base, today});
-  problems.push(...schedule.problems);
-
-  if (schedule.mode === 'patch') {
-    for (const entry of incompatible) problems.push(refuse(entry.file, base));
+  if (tier.tier === 'patch') {
+    for (const entry of (entries || []).filter(isIncompatible)) {
+      problems.push(refuse(entry.file, declared, latestStable));
+    }
   }
 
-  return {base, mode: schedule.mode, scheduled: schedule.scheduled, problems};
-}
-
-/** Today in UTC, as the YYYY-MM-DD the schedule is compared against. */
-export function utcToday(now = new Date()) {
-  return now.toISOString().slice(0, 10);
+  return {declared, latestStable, tier: tier.tier, problems};
 }

@@ -1,6 +1,7 @@
 {
   "apiVersion": 1,
   "type": "docs.detail",
+  "package": "@acme/kit",
   "data": {
     "name": "acme-guide",
     "description": "How zorblax cards fit together.",
@@ -8,17 +9,20 @@
     "title": "Acme guide",
     "sections": [
       {
+        "id": "start",
         "title": "Start",
+        "package": "@acme/kit",
         "content": [
           {
             "type": "prose",
             "text": "Install the kit."
           }
-        ],
-        "id": "start"
+        ]
       },
       {
+        "id": "colors",
         "title": "Colors",
+        "package": "@acme/kit",
         "content": [
           {
             "type": "prose",
@@ -28,13 +32,19 @@
             "type": "prose",
             "text": "[token-ref: unknown topic \"no-such-topic\"]"
           }
-        ],
-        "id": "colors"
+        ]
       }
     ],
     "links": {
-      "up": "astryx docs unorganized",
+      "up": "astryx docs guides",
       "previous": "astryx docs working-with-ai"
+    }
+  },
+  "meta": {
+    "answeredBy": {
+      "cli": "<cli version>",
+      "core": "<cli version>",
+      "copy": "project"
     }
   }
 }

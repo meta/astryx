@@ -10,11 +10,13 @@
 import {describe, expectTypeOf, it} from 'vitest';
 import {
   createIncrementalState,
+  decodeMarkdownCharacterReferences,
   parseInline,
   parseMarkdown,
   parseMarkdownIncremental,
   visitMarkdownNodes,
 } from './index';
+import {decodeMarkdownCharacterReferences as decodeFromParser} from './parser/index';
 import {
   createMarkdownFenceTransform,
   createMarkdownHeadingLinks,
@@ -22,6 +24,7 @@ import {
   createMarkdownTextTransform,
   isMarkdownExtensionNode,
   markdownSoftBreaksPlugin,
+  markdownSourceLinesPlugin,
 } from './plugins';
 import type {
   MarkdownExtensionNode,
@@ -91,6 +94,15 @@ function legacyBlockText(node: BlockNode): string {
       return assertNever(node);
   }
 }
+
+describe('decodeMarkdownCharacterReferences entry points (spec:AST-061 DEC-5)', () => {
+  it('is the same function from the Markdown entry and the parser subpath', () => {
+    expectTypeOf(decodeMarkdownCharacterReferences).toEqualTypeOf<
+      (text: string) => string
+    >();
+    expectTypeOf(decodeFromParser).toEqualTypeOf<(text: string) => string>();
+  });
+});
 
 describe('Markdown public parser types', () => {
   it('keeps default and legacy parser calls on the legacy unions', () => {
@@ -214,6 +226,9 @@ describe('Markdown public parser types', () => {
     expectTypeOf(visitMarkdownNodes).toBeFunction();
     expectTypeOf(createMarkdownTextTransform).toBeFunction();
     expectTypeOf(markdownSoftBreaksPlugin).toEqualTypeOf<
+      MarkdownPluginEntry<never>
+    >();
+    expectTypeOf(markdownSourceLinesPlugin).toEqualTypeOf<
       MarkdownPluginEntry<never>
     >();
     expectTypeOf(isMarkdownExtensionNode).toBeFunction();

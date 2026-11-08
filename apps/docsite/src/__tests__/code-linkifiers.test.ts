@@ -16,6 +16,8 @@ describe('doc topic linkifier', () => {
     ['astryx docs tokens', '/docs/tokens'],
     ['astryx docs styling-libraries', '/docs/styling-libraries'],
     ['npx astryx docs icons', '/docs/icons'],
+    ['npx @astryxdesign/cli docs icons', '/docs/icons'],
+    ['npx @astryxdesign/cli@0.7.2 docs global', '/docs/global'],
     ['  astryx docs theme  ', '/docs/theme'],
     // The docs index, for a bare command.
     ['astryx docs', '/docs'],

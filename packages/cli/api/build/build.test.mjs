@@ -8,7 +8,7 @@ import {describe, it, expect, vi} from 'vitest';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {build} from './build.mjs';
-import {search} from '../search/search.mjs';
+import {search, searchedComponents} from '../search/search.mjs';
 
 // api/build/ -> up 3 = packages/cli, up 4 = repo root (has packages/core).
 const REPO = path.resolve(
@@ -152,6 +152,16 @@ describe('build API', () => {
   });
 });
 
+describe('build kit — reuses the components its search gathered', () => {
+  it('keeps them beside the search response, out of its JSON', async () => {
+    const all = await search('date picker', {cwd: REPO});
+    expect(searchedComponents(all)?.map(c => c.name)).toContain('DateRangeInput');
+    expect(JSON.stringify(all)).not.toContain('"keywords"');
+    const pagesOnly = await search('date picker', {cwd: REPO, type: 'template'});
+    expect(searchedComponents(pagesOnly)).toBeNull();
+  }, 60_000);
+});
+
 describe('build kit — coverage gates the pages group', () => {
   it('does not call a one-word coincidence a direct match', async () => {
     // A page's keywords include every component its source renders, so any
@@ -259,7 +269,7 @@ describe('build kit — a thin kit says what to try next', () => {
     // A skeleton is a 35-line excerpt: a reader who studies it and composes
     // the rest loses the spacing the template exists to carry. A loose match
     // is still the best start there is, so `start` scaffolds it.
-    const r = await build('executive summary', {cwd: REPO});
+    const r = await build('weekly business review with targets', {cwd: REPO});
     expect(r.type).toBe('build.kit');
     if (r.type !== 'build.kit') return;
     expect(r.data.directMatch).toBe(false);
@@ -357,9 +367,35 @@ describe('build kit — every page starts from a template', () => {
     const placed = await build('an empty state for a settings page', {cwd: REPO});
     if (placed.type !== 'build.kit') throw new Error(placed.type);
     expect(placed.data.start).toMatchObject({name: 'settings', basis: 'closest'});
+    expect(placed.data.start?.reason).toMatch(/part of a page, so it starts from the page it names/);
     const loose = await build('a date range picker', {cwd: REPO});
     if (loose.type !== 'build.kit') throw new Error(loose.type);
     expect(loose.data.start).toMatchObject({name: 'shell-top-nav', basis: 'fallback'});
+    expect(loose.data.start?.reason).toMatch(/part of a page and names no page, so it starts from the app shell/);
+  });
+
+  it('starts a change to an existing page from the app shell', async () => {
+    // The page is the builder's to keep; no template scaffolds it.
+    const r = await build('add a sort toggle to the existing reports dashboard', {cwd: REPO});
+    if (r.type !== 'build.kit') throw new Error(r.type);
+    expect(r.data.start).toMatchObject({name: 'shell-top-nav', basis: 'fallback'});
+    expect(r.data.start?.reason).toMatch(/changes a page you already have, so keep it/);
+    expect(r.data.start?.reason).not.toMatch(/too little of the idea fits/);
+    // A direct match the response reports is still named.
+    if (r.data.directMatch) expect(r.data.start?.reason).toContain(`\`${r.data.pages[0].name}\``);
+  });
+
+  it('does not call a new page that mentions something existing a change', async () => {
+    for (const idea of [
+      'a new dashboard inspired by the existing one',
+      'a new dashboard based on the existing dashboard',
+      'clone the existing dashboard as a new page',
+    ]) {
+      const r = await build(idea, {cwd: REPO});
+      if (r.type !== 'build.kit') throw new Error(r.type);
+      expect(r.data.start?.name).toBe('dashboard');
+      expect(r.data.start?.reason).not.toMatch(/already have/);
+    }
   });
 
   it('names a direct match the ranker outweighed in the reason', async () => {
@@ -439,6 +475,79 @@ describe('build kit — every page starts from a template', () => {
     if (r.type !== 'build.kit') return;
     expect(r.data.start?.name).toBe('shell-top-nav');
     expect(r.data.pages.map(p => p.name)).not.toContain('side-gallery');
+  });
+
+  it('names a direct match the start does not use, and calls the start direct only when it is', async () => {
+    for (const idea of ['a login form', 'a docs site for our API', 'contact form']) {
+      const r = await build(idea, {cwd: REPO});
+      if (r.type !== 'build.kit') throw new Error(r.type);
+      expect(r.data.directMatch).toBe(true);
+      const match = r.data.pages[0].name;
+      if (r.data.start?.name === match) {
+        expect(r.data.start?.basis).toBe('direct');
+      } else {
+        expect(['closest', 'fallback']).toContain(r.data.start?.basis);
+        expect(r.data.start?.reason).toContain(`\`${match}\``);
+      }
+    }
+  });
+
+  it('keeps a template search matched directly rather than the app shell', async () => {
+    for (const [idea, name] of [
+      ['a login screen', 'login'],
+      ['a checkout wizard', 'checkout-wizard'],
+    ]) {
+      const r = await build(idea, {cwd: REPO});
+      if (r.type !== 'build.kit') throw new Error(r.type);
+      expect(r.data.directMatch).toBe(true);
+      expect(r.data.start?.name).toBe(name);
+    }
+  });
+
+  it('lets the weights choose another template over a direct match', async () => {
+    const r = await build('a login form', {cwd: REPO});
+    if (r.type !== 'build.kit') throw new Error(r.type);
+    expect(r.data.directMatch).toBe(true);
+    const match = r.data.pages[0].name;
+    expect(r.data.start?.name).not.toBe('shell-top-nav');
+    expect(r.data.start?.name).not.toBe(match);
+    expect(r.data.start?.reason).toContain(`\`${match}\``);
+  });
+
+  it('starts a part that names no page from the app shell', async () => {
+    for (const idea of ['a kanban card', 'a date range picker']) {
+      const r = await build(idea, {cwd: REPO});
+      if (r.type !== 'build.kit') throw new Error(r.type);
+      expect(r.data.start).toMatchObject({name: 'shell-top-nav', basis: 'fallback'});
+      expect(r.data.start?.reason).toMatch(/part of a page/);
+    }
+  });
+
+  it('does not keep a loose match over the app shell', async () => {
+    // Search matches no template directly, so the ranker's closest page does
+    // not override the shell the weights choose.
+    const r = await build('quarterly business review', {cwd: REPO});
+    if (r.type !== 'build.kit') throw new Error(r.type);
+    expect(r.data.directMatch).toBe(false);
+    expect(r.data.start).toMatchObject({name: 'shell-top-nav', basis: 'fallback'});
+    expect(r.data.start?.reason).toMatch(/closest/);
+  });
+
+  it('starts a new page with no matching template from the app shell', async () => {
+    const r = await build('a new page', {cwd: REPO});
+    if (r.type !== 'build.kit') throw new Error(r.type);
+    expect(r.data.start?.name).toBe('shell-top-nav');
+  });
+
+  it('starts a page the words describe from its template', async () => {
+    for (const [idea, name] of [
+      ['a weekly report of sales by region', 'dashboard-scorecard'],
+      ['a pricing page with three plans and a comparison table', 'table-comparison'],
+    ]) {
+      const r = await build(idea, {cwd: REPO});
+      if (r.type !== 'build.kit') throw new Error(r.type);
+      expect(r.data.start?.name).toBe(name);
+    }
   });
 
   it('starts a component in a container from a template with that frame', async () => {

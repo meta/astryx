@@ -1,6 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {afterEach, beforeEach, describe, expect, it} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {integrationPackCheck} from './pack-check.mjs';
@@ -26,6 +27,10 @@ function writeThemePackage(scripts) {
         files: ['astryx.integration.mjs', 'themes'],
         peerDependencies: {'@astryxdesign/cli': '>=0.7.0'},
         peerDependenciesMeta: {'@astryxdesign/cli': {optional: true}},
+        exports: {
+          './themes/ocean': './themes/ocean/ocean.js',
+          './themes/ocean.css': './themes/ocean/ocean.css',
+        },
         scripts,
       },
       null,
@@ -48,6 +53,21 @@ function writeThemePackage(scripts) {
 export default {type: 'theme', name: 'ocean', displayName: 'Ocean', description: 'Ocean theme.', maintained: true};
 `,
   );
+  const built = spawnSync(
+    process.execPath,
+    [
+      path.join(process.cwd(), 'packages/cli/clients/cli/bin/astryx.mjs'),
+      'theme',
+      'build',
+      'themes/ocean/oceanTheme.ts',
+    ],
+    {cwd: tmpDir, encoding: 'utf-8', timeout: 30_000},
+  );
+  if (built.status !== 0) {
+    throw new Error(
+      `Could not build the theme fixture: ${built.stderr || built.stdout}`,
+    );
+  }
 }
 
 describe('integrationPackCheck with lifecycle script output', () => {
@@ -91,8 +111,7 @@ describe('integrationPackCheck with lifecycle script output', () => {
 
   it('keeps a failing lifecycle script output in the pack_failed issue', async () => {
     writeThemePackage({
-      prepack:
-        'node -e "console.error(\'prepack exploded\'); process.exit(3)"',
+      prepack: 'node -e "console.error(\'prepack exploded\'); process.exit(3)"',
     });
 
     const result = await integrationPackCheck({cwd: tmpDir});
@@ -104,4 +123,27 @@ describe('integrationPackCheck with lifecycle script output', () => {
     expect(failure?.message).toContain('npm pack failed (exit 3)');
     expect(failure?.message).toContain('prepack exploded');
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'packs with npm itself when an earlier npm on the PATH refuses every command',
+    async () => {
+      writeThemePackage({});
+      const refusing = path.join(tmpDir, '.refusing-bin');
+      fs.mkdirSync(refusing);
+      fs.writeFileSync(
+        path.join(refusing, 'npm'),
+        "#!/bin/sh\necho 'npm commands are not allowed on this machine'\nexit 1\n",
+        {mode: 0o755},
+      );
+      vi.stubEnv('PATH', `${refusing}${path.delimiter}${process.env.PATH}`);
+      try {
+        const result = await integrationPackCheck({cwd: tmpDir});
+
+        expect(result.data.issues).toEqual([]);
+        expect(result.data.packable).toBe(true);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
 });

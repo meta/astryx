@@ -50,7 +50,7 @@ describe('Listbox migration inventory', () => {
       })),
     );
 
-    expect(LISTBOX_KNOWN_FAILURES).toHaveLength(1);
+    expect(LISTBOX_KNOWN_FAILURES).toHaveLength(0);
     for (const record of LISTBOX_KNOWN_FAILURES) {
       expect(
         parts.filter(

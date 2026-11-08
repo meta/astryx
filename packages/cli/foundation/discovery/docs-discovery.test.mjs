@@ -65,7 +65,7 @@ describe('discoverBuiltinTopics', () => {
   it("finds the CLI's own topics and not their localization overlays", () => {
     const topics = discoverBuiltinTopics();
     expect(Object.keys(topics).length).toBeGreaterThan(0);
-    expect(topics.tokens).toMatch(/assets[/\\]docs[/\\]tokens\.doc\.mjs$/);
+    expect(topics.color).toMatch(/assets[/\\]docs[/\\]color\.doc\.mjs$/);
     for (const name of Object.keys(topics)) {
       expect(name).not.toMatch(/\.(zh|dense)$/);
     }

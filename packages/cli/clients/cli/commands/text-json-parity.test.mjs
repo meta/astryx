@@ -29,11 +29,24 @@ import {describe, it, expect, beforeAll, afterAll} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import * as crypto from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {writeIconPackage} from '../../../test-utils/icon-set-fixture.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '../../../../..');
+
+/**
+ * Response types whose text output is the artifact's source, printed byte for
+ * byte so it can be piped (spec cli-surface INV28). Their JSON still names the
+ * package; their text does not.
+ */
+const VERBATIM_TYPES = new Set([
+  'component.detail.source',
+  'component.detail.showcase',
+  'template.show',
+]);
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -331,6 +344,11 @@ const CASES = [
     skipFieldChecks: true,
   },
   {
+    name: 'integration check',
+    args: ['integration', 'check'],
+    skipFieldChecks: true,
+  },
+  {
     name: 'doctor integration components',
     args: ['doctor', 'integration', 'components'],
     skipFieldChecks: true,
@@ -383,23 +401,78 @@ const CASES = [
     args: ['integration', 'pack', '--check'],
     skipFieldChecks: true,
   },
-  // ── Layout command: remove these cases when the layout command is deleted ──
   {
-    name: 'layout check',
-    args: ['layout', 'check', 'Button'],
-    skipFieldChecks: true,
+    name: 'experimental icon',
+    args: ['experimental', 'icon', 'remove'],
+    cwd: '__TMP__',
+    // A project with the synthetic icon set installed.
+    setup: dir => {
+      writeIconPackage(path.join(dir, 'node_modules', '@acme', 'glyphs'));
+      fs.writeFileSync(
+        path.join(dir, 'package.json'),
+        JSON.stringify({name: 'app', dependencies: {'@acme/glyphs': '1.0.0'}}),
+      );
+    },
+    jsonFieldAllowlist: [
+      'matchCount — stated in section heading "Icons for ... (N)"',
+      'query — stated in section heading',
+      'module — part of the import line',
+      'export — part of the import line',
+      'score — the reason states the tier',
+    ],
   },
   {
-    name: 'layout expand',
-    args: ['layout', 'expand', 'Button'],
-    skipFieldChecks: true,
+    name: 'experimental render',
+    args: ['experimental', 'render', 'page.jsx'],
+    cwd: '__TMP__',
+    // A page with no imports, in a folder that can resolve React and Core, so
+    // the page gets Core's stylesheets in every runner.
+    setup: dir => {
+      fs.mkdirSync(path.join(dir, 'node_modules', '@astryxdesign'), {
+        recursive: true,
+      });
+      for (const pkg of ['react', 'react-dom']) {
+        fs.symlinkSync(
+          path.join(REPO_ROOT, 'node_modules', pkg),
+          path.join(dir, 'node_modules', pkg),
+        );
+      }
+      fs.symlinkSync(
+        path.join(REPO_ROOT, 'packages', 'core'),
+        path.join(dir, 'node_modules', '@astryxdesign', 'core'),
+      );
+      fs.writeFileSync(
+        path.join(dir, 'page.jsx'),
+        'export default function Page() { return <h1>Hello</h1>; }\n',
+      );
+    },
+    jsonFieldAllowlist: ['warnings — listed under Warnings when present'],
   },
   {
-    name: 'layout grammar',
-    args: ['layout', 'grammar'],
-    skipFieldChecks: true,
+    // The --reverse projection (same command, same folder as the case above).
+    name: 'experimental render',
+    args: ['experimental', 'render', '--reverse', 'carried.html', '--out', 'back.tsx', '--overwrite'],
+    cwd: '__TMP__',
+    // A rendered file that carries its page.
+    setup: dir => {
+      const source = Buffer.from('export default function Page() { return <h1>Hello</h1>; }\n');
+      const json = JSON.stringify({
+        version: 1,
+        entry: 'page.jsx',
+        files: [
+          {
+            path: 'page.jsx',
+            sha256: crypto.createHash('sha256').update(source).digest('hex'),
+            base64: source.toString('base64'),
+          },
+        ],
+      });
+      fs.writeFileSync(
+        path.join(dir, 'carried.html'),
+        `<!doctype html><html><body><h1 class="astryx-heading">Hello</h1><script type="application/x-astryx-source">${json}</script></body></html>`,
+      );
+    },
   },
-  // ── End layout cases ──
   {
     name: 'manifest',
     args: ['manifest'],
@@ -436,6 +509,54 @@ const CASES = [
     name: 'theme add',
     args: ['theme', 'add', '--list'],
     // Themes are rendered as list items, not records.
+    skipFieldChecks: true,
+  },
+  {
+    name: 'theme remove',
+    args: ['theme', 'remove', 'does-not-exist'],
+    errorExpected: true,
+    skipFieldChecks: true,
+  },
+  {
+    name: 'experimental icon use',
+    args: ['experimental', 'icon', 'use', 'does-not-exist'],
+    errorExpected: true,
+    skipFieldChecks: true,
+  },
+  {
+    name: 'experimental icon map',
+    args: ['experimental', 'icon', 'map', 'close', 'x'],
+    errorExpected: true,
+    skipFieldChecks: true,
+  },
+  {
+    name: 'experimental icon new-set',
+    args: ['experimental', 'icon', 'new-set', 'Not-Kebab'],
+    errorExpected: true,
+    skipFieldChecks: true,
+  },
+  {
+    name: 'experimental icon new-definition',
+    args: ['experimental', 'icon', 'new-definition', 'not-camel'],
+    errorExpected: true,
+    skipFieldChecks: true,
+  },
+  {
+    name: 'experimental icon add',
+    args: ['experimental', 'icon', 'add', 'XIcon', '--from', 'does-not-exist'],
+    errorExpected: true,
+    skipFieldChecks: true,
+  },
+  {
+    name: 'theme use',
+    args: ['theme', 'use', 'does-not-exist'],
+    errorExpected: true,
+    skipFieldChecks: true,
+  },
+  {
+    name: 'theme eject',
+    args: ['theme', 'eject', 'does-not-exist'],
+    errorExpected: true,
     skipFieldChecks: true,
   },
   {
@@ -561,6 +682,15 @@ describe('text-json-parity', () => {
         expect(run.textStatus).toBe(run.jsonStatus);
       });
 
+      // spec cli-surface INV28: text names the package the envelope names.
+      // Verbatim source output prints only the source, so a pipe gets the
+      // file byte for byte.
+      it('text names the package the JSON envelope names', () => {
+        if (run.json?.package === undefined) return;
+        if (VERBATIM_TYPES.has(run.json.type)) return;
+        expect(run.text).toContain(run.json.package);
+      });
+
       if (!tc.skipFieldChecks && !tc.errorExpected) {
         it('every text record key exists in the JSON data', () => {
           if (!run.json?.data) return;
@@ -569,6 +699,8 @@ describe('text-json-parity', () => {
           if (run.json.meta) {
             for (const k of jsonLeafKeys(run.json.meta)) jsonKeys.add(k);
           }
+          // The envelope's own `package` (spec cli-surface INV28) is JSON too.
+          if (run.json.package !== undefined) jsonKeys.add('package');
           const violations = [];
           for (const key of textKeys.keys()) {
             if (!jsonKeys.has(key)) {

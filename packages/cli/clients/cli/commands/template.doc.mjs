@@ -46,7 +46,7 @@ export const doc = {
       flag: '--list',
       param: 'options.list',
       description:
-        'List available templates (narrow with --type and --package) and do nothing else: <name>, <path>, --skeleton and --overwrite are ignored',
+        'List available templates (narrow with --type and --package) and do nothing else: <name>, <path>, --skeleton and --overwrite are refused',
     },
     {
       flag: '--type <type>',
@@ -65,13 +65,13 @@ export const doc = {
       param: 'options.skeleton',
       description:
         'Show layout skeleton with spatial annotations (padding, gap, nesting) instead of the source. Needs <name>. ' +
-        'It writes nothing, so <path> and --overwrite are ignored; --list and --cdn take precedence',
+        'It writes nothing, so <path> and --overwrite are refused with ERR_INVALID_ARGUMENT',
     },
     {
       flag: '--cdn [path]',
       param: 'options.cdn',
       description:
-        'Write the no-build-step CDN starter page and do nothing else: <name>, --list, --skeleton, --type and --package are ignored. ' +
+        'Write the no-build-step CDN starter page and do nothing else: <name>, --list, --skeleton, --type and --package are refused. ' +
         'The page goes to the --cdn value, else to <path>, else cdn.template.html, and that path is always the file itself. ' +
         'A value right after --cdn (anything not starting with -) is taken as that path',
     },
@@ -102,6 +102,7 @@ export const doc = {
       cli: 'astryx template --cdn public/demo.html',
     },
   ],
+  outsideProject: 'same',
   exitCodes: [
     {
       code: 0,
@@ -109,7 +110,7 @@ export const doc = {
     },
     {
       code: 1,
-      when: 'unknown or ambiguous template, no source, a path escape, or an existing target without --overwrite',
+      when: 'unknown or ambiguous template, no source, a path escape, an existing target without --overwrite, or --list with a type outside page or block or a package that provides no templates',
     },
   ],
   related: ['component', 'search', 'discover', 'init'],

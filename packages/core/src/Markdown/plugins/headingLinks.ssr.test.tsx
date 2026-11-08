@@ -22,7 +22,7 @@ afterEach(() => {
 });
 
 describe('Markdown heading links — SSR', () => {
-  it('keeps duplicate-copy namespaced ids stable across SSR and hydration', async () => {
+  it('keeps duplicate-copy ids and buttons stable across SSR and hydration', async () => {
     vi.resetModules();
     const duplicateCore = await import('./headingLinks');
     const articleAHeadingLinks = duplicateCore.createMarkdownHeadingLinks({
@@ -43,9 +43,9 @@ describe('Markdown heading links — SSR', () => {
     );
     const serverHTML = renderToString(tree);
     expect(serverHTML).toContain('id="article-a--overview"');
-    expect(serverHTML).toContain('id="article-a--details"');
     expect(serverHTML).toContain('id="article-b--overview"');
-    expect(serverHTML).toContain('id="article-b--details"');
+    expect(serverHTML).toContain('aria-label="Copy link to Details"');
+    expect(serverHTML).not.toContain('href="#article-');
 
     const container = document.createElement('div');
     container.innerHTML = serverHTML;

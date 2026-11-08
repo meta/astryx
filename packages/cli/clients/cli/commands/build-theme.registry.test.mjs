@@ -83,16 +83,6 @@ function renderedClassLiterals() {
         while ((sm = surfaceRe.exec(text)) !== null) {
           classes.add(sm[1]);
         }
-        // Renamed targets emit their old name too, via themeProps'
-        // `legacyNames`. Those classes are just as rendered as the primary
-        // one, so a doc entry for the old name is still backed by real output.
-        const legacyRe = /legacyNames:\s*\[([^\]]*)\]/g;
-        let lm;
-        while ((lm = legacyRe.exec(text)) !== null) {
-          for (const nm of lm[1].matchAll(/'([^']+)'/g)) {
-            classes.add(nm[1]);
-          }
-        }
       }
     }
   };
@@ -136,7 +126,10 @@ describe('theme build emits a live TextInput selector (#4109)', () => {
         `};\n`,
     );
 
-    const result = await runCli(['theme', 'build', themeFile, '-o', outFile]);
+    const result = await runCli(
+      ['theme', 'build', themeFile, '-o', outFile],
+      tmpDir,
+    );
     const css = fs.readFileSync(outFile, 'utf8');
 
     expect(result.status).toBe(0);
@@ -158,7 +151,7 @@ describe('theme build emits a live TextInput selector (#4109)', () => {
         `};\n`,
     );
 
-    await runCli(['theme', 'build', themeFile, '-o', outFile]);
+    await runCli(['theme', 'build', themeFile, '-o', outFile], tmpDir);
     const css = fs.readFileSync(outFile, 'utf8');
 
     expect(css).toContain('.astryx-text-input');

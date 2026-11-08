@@ -7,63 +7,174 @@
  *   typed doc such as `cli/api/functions/search`, plus {cwd}.
  * @output { type: 'docs.node', data: DocsNode } — the node's identity, title
  *   and summary, the namespaces above it, and either its slots with their
- *   children (a namespace) or its content (a typed doc). A namespace never
- *   lists its grandchildren, so a reader goes down one level at a time.
- *   Matches `astryx --json docs <route>`.
+ *   children (a namespace) or its content (a typed doc). By default a
+ *   namespace lists its children one level down; a depth read goes as far
+ *   down as asked, with each doc below as its identity (brief) or with its
+ *   text (compact, full). Matches `astryx --json docs <route> [--depth <n>]`.
  * @position Leaf under api/docs, beside the topic leaves. A guide the tree
  *   places is a topic: the detail leaf reads it by its route.
  */
 
+import {detailView} from '../../../foundation/doc-compiler/lenses.mjs';
 import {
+  childIdentity,
+  compileTopic,
+  guideEntry,
   nodeContent,
   placeLinks,
   resolveDocsArgument,
+  stabilityOf,
   unknownTopicError,
 } from '../_adapter.mjs';
 
 /**
  * @typedef {import('../../../foundation/doc-compiler/tree.mjs').DocsTree} DocsTree
  * @typedef {import('../../../foundation/doc-compiler/tree.mjs').TreeNode} TreeNode
+ * @typedef {import('../../../foundation/discovery/docs-discovery.mjs').DocsCatalog} DocsCatalog
  */
 
 /**
- * The docs.node view of one tree node.
- * @param {import('../../../foundation/discovery/docs-discovery.mjs').DocsCatalog} catalog
+ * How far a read goes below the node it names, and how much of each doc below
+ * it shows: `depth` levels (Infinity for every level), and `detail` brief (its
+ * identity), or compact or full (with its text: a namespace's intro, a guide's
+ * sections, a typed doc's content). `lang` selects the guides' language.
+ * @typedef {object} DepthRead
+ * @property {number} depth
+ * @property {'brief' | 'compact' | 'full'} detail
+ * @property {string | null} lang
+ */
+
+/**
+ * The docs.node view of one tree node. Without a depth read, a namespace lists
+ * its children one level down.
+ * @param {DocsCatalog} catalog
  * @param {DocsTree} tree
  * @param {TreeNode} node
+ * @param {DepthRead} [read] how far down to go, and how much of each doc below
  * @returns {Promise<import('../docs.type.mjs').DocsNode>}
  */
-export async function nodeView(catalog, tree, node) {
+export async function nodeView(catalog, tree, node, read) {
   const {content} = await nodeContent(catalog, tree, node);
-  return {
+  const slots = node.slots.filter(slot => slot.children.length > 0);
+  /** @type {import('../docs.type.mjs').DocsNode} */
+  const view = {
     id: node.id,
     route: node.route,
     kind: node.kind,
     package: node.provider,
     title: node.title,
     summary: node.summary,
+    ...stabilityOf(tree, node),
     breadcrumb: tree
       .ancestors(node)
       .map(ancestor => ({route: ancestor.route, title: ancestor.title})),
-    slots: node.slots
-      .filter(slot => slot.children.length > 0)
-      .map(slot => ({
-        name: slot.name,
-        title: slot.title,
-        children: slot.children.map(route => {
-          const child = /** @type {TreeNode} */ (tree.get(route));
-          return {
-            route: child.route,
-            name: child.route.slice(child.route.lastIndexOf('/') + 1),
-            kind: child.kind,
-            title: child.title,
-            summary: child.summary,
-          };
-        }),
-      })),
+    slots: !read
+      ? slots.map(slot => ({
+          name: slot.name,
+          title: slot.title,
+          children: slot.children.map(route =>
+            childIdentity(tree, /** @type {TreeNode} */ (tree.get(route))),
+          ),
+        }))
+      : read.depth >= 1
+        ? await slotsBelow(catalog, tree, slots, 1, read)
+        : [],
     content,
     links: nodeLinks(tree, node),
   };
+  if (read && read.depth < 1 && slots.length > 0) {
+    view.childCount = countChildren(slots);
+  }
+  return view;
+}
+
+/**
+ * @param {TreeNode['slots']} slots
+ * @returns {number}
+ */
+function countChildren(slots) {
+  return slots.reduce((count, slot) => count + slot.children.length, 0);
+}
+
+/**
+ * Slots read `level` levels below the named node: each child at the read's
+ * detail, and its own slots while the read goes deeper.
+ * @param {DocsCatalog} catalog
+ * @param {DocsTree} tree
+ * @param {TreeNode['slots']} slots
+ * @param {number} level
+ * @param {DepthRead} read
+ * @returns {Promise<import('../docs.type.mjs').DocsNodeSlot[]>}
+ */
+async function slotsBelow(catalog, tree, slots, level, read) {
+  return Promise.all(
+    slots.map(async slot => ({
+      name: slot.name,
+      title: slot.title,
+      children: await Promise.all(
+        slot.children.map(route =>
+          childBelow(
+            catalog,
+            tree,
+            /** @type {TreeNode} */ (tree.get(route)),
+            level,
+            read,
+          ),
+        ),
+      ),
+    })),
+  );
+}
+
+/**
+ * One child of a depth read. Where the read stops, a child with docs below it
+ * says how many, so a reader knows to go deeper.
+ * @param {DocsCatalog} catalog
+ * @param {DocsTree} tree
+ * @param {TreeNode} child
+ * @param {number} level
+ * @param {DepthRead} read
+ * @returns {Promise<import('../docs.type.mjs').DocsNodeChild>}
+ */
+async function childBelow(catalog, tree, child, level, read) {
+  const view = childIdentity(tree, child);
+  if (read.detail !== 'brief') {
+    Object.assign(view, await childText(catalog, tree, child, read.lang));
+  }
+  const slots = child.slots.filter(slot => slot.children.length > 0);
+  if (slots.length > 0) {
+    if (level < read.depth) {
+      view.slots = await slotsBelow(catalog, tree, slots, level + 1, read);
+    } else {
+      view.childCount = countChildren(slots);
+    }
+  }
+  return view;
+}
+
+/**
+ * A child's text: a guide's compiled sections, or the content of a namespace
+ * or typed doc.
+ * @param {DocsCatalog} catalog
+ * @param {DocsTree} tree
+ * @param {TreeNode} child
+ * @param {string | null} lang
+ * @returns {Promise<{content?: any[], sections?: any[]}>}
+ */
+async function childText(catalog, tree, child, lang) {
+  if (child.kind === 'generic') {
+    const entry = child.ref?.topicFile
+      ? guideEntry(child)
+      : child.ref?.flatTopic
+        ? catalog.resolve(child.ref.flatTopic)
+        : null;
+    if (!entry) return {};
+    return {
+      sections: detailView(await compileTopic(catalog, entry, lang)).sections,
+    };
+  }
+  const {content} = await nodeContent(catalog, tree, child);
+  return {content};
 }
 
 /**
@@ -187,6 +298,8 @@ export async function node(route, options = {}) {
     throw await unknownTopicError(route, found.catalog);
   return {
     type: 'docs.node',
+    // The docs tree names each node's npm package as its provider.
+    package: found.node.provider,
     data: await nodeView(found.catalog, found.tree, found.node),
   };
 }

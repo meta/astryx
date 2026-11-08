@@ -9,8 +9,8 @@
  *   1. Repo-wide changes / per-package changelogs — auto-detects which
  *      publishable packages your working tree touched and pre-selects them,
  *      so you don't hand-enumerate the frontmatter. Only genuinely-affected
- *      packages get the changelog entry; the `fixed` lockstep co-bumps the
- *      rest so versions stay aligned without polluting their changelogs.
+ *      packages get the changelog entry; the owner-declared `fixed` version
+ *      keeps the stable group aligned without polluting other changelogs.
  *   2. semver for 0.x — derives the bump from the category. A [breaking]
  *      change bumps the minor (0.x.y -> 0.(x+1).0, the breaking tier under
  *      caret ranges); every other category, including [experimental], bumps
@@ -20,9 +20,9 @@
  *      authoring time (defaulting to your `gh` / git identity) and writes them
  *      into the changeset body, where the custom changelog module reads them.
  *
- * Output is a normal `.changeset/<id>.md` — fully compatible with the stock
- * `changeset version`. The only convention is the body format, validated by
- * scripts/check-changesets.mjs.
+ * Output is a normal `.changeset/<id>.md`, compatible with the pinned
+ * Changesets parser and the custom declared-version `pnpm version-packages`
+ * step. The body convention is validated by scripts/check-changesets.mjs.
  *
  * Flags (all optional; missing values are prompted):
  *   --category <key>     breaking|experimental|component|feat|fix|perf|docs|chore

@@ -409,6 +409,66 @@ describe('Collapsible', () => {
       const item = screen.getByTestId('item');
       expect(item).not.toHaveAttribute('data-density');
     });
+
+    it('reflects the visual axes and states on their owning theme targets', () => {
+      render(
+        <>
+          <CollapsibleGroup
+            type="single"
+            hasDividers
+            density="compact"
+            chevronPosition="start"
+            defaultValue="open">
+            <Collapsible trigger="Open" value="open" data-testid="open-item">
+              Open body
+            </Collapsible>
+            <Collapsible
+              trigger="Disabled"
+              value="disabled"
+              isDisabled
+              data-testid="disabled-item">
+              Disabled body
+            </Collapsible>
+          </CollapsibleGroup>
+          <Collapsible
+            trigger="Standalone"
+            defaultIsOpen={false}
+            data-testid="standalone-item">
+            Standalone body
+          </Collapsible>
+        </>,
+      );
+
+      const openRoot = screen.getByTestId('open-item');
+      const openTrigger = within(openRoot).getByRole('button');
+      const openContent = contentFor(openTrigger);
+      expect(openRoot).toHaveAttribute('data-density', 'compact');
+      expect(openRoot).toHaveAttribute('data-divided', 'divided');
+      expect(openTrigger).toHaveAttribute('data-density', 'compact');
+      expect(openTrigger).toHaveAttribute('data-chevron-position', 'start');
+      expect(openTrigger).toHaveAttribute('data-open', 'open');
+      expect(openTrigger).not.toHaveAttribute('data-disabled');
+      expect(openContent).toHaveAttribute('data-density', 'compact');
+      expect(openContent).toHaveAttribute('data-open', 'open');
+
+      const disabledRoot = screen.getByTestId('disabled-item');
+      const disabledTrigger = within(disabledRoot).getByRole('button');
+      expect(disabledTrigger).toHaveAttribute('data-disabled', 'disabled');
+      expect(disabledTrigger).not.toHaveAttribute('data-open');
+      expect(contentFor(disabledTrigger)).not.toHaveAttribute('data-open');
+
+      const standaloneRoot = screen.getByTestId('standalone-item');
+      const standaloneTrigger = within(standaloneRoot).getByRole('button');
+      const standaloneContent = contentFor(standaloneTrigger);
+      expect(standaloneRoot).not.toHaveAttribute('data-density');
+      expect(standaloneRoot).not.toHaveAttribute('data-divided');
+      expect(standaloneTrigger).toHaveAttribute('data-chevron-position', 'end');
+      expect(standaloneTrigger).not.toHaveAttribute('data-density');
+      expect(standaloneTrigger).not.toHaveAttribute('data-open');
+      expect(standaloneTrigger).not.toHaveAttribute('data-disabled');
+      expect(standaloneContent).not.toHaveAttribute('data-density');
+      expect(standaloneContent).not.toHaveAttribute('data-open');
+    });
   });
 
   describe('chevron position', () => {
@@ -556,5 +616,54 @@ describe('pressed state', () => {
       </Collapsible>,
     );
     expect(hasPressedArm(screen.getByRole('button'))).toBe(false);
+  });
+});
+
+describe('Collapsible close focus (AR4)', () => {
+  function Example({isOpen}: {isOpen: boolean}) {
+    return (
+      <>
+        <Collapsible trigger="Details" isOpen={isOpen} onOpenChange={() => {}}>
+          <button type="button">Inside</button>
+        </Collapsible>
+        <button type="button">Elsewhere</button>
+      </>
+    );
+  }
+
+  it('moves focus inside the content to the trigger when it closes', () => {
+    const {rerender} = render(<Example isOpen />);
+    screen.getByRole('button', {name: 'Inside'}).focus();
+    rerender(<Example isOpen={false} />);
+    expect(screen.getByRole('button', {name: 'Details'})).toHaveFocus();
+  });
+
+  it('moves no focus that is outside the content', () => {
+    const {rerender} = render(<Example isOpen />);
+    const elsewhere = screen.getByRole('button', {name: 'Elsewhere'});
+    elsewhere.focus();
+    rerender(<Example isOpen={false} />);
+    expect(elsewhere).toHaveFocus();
+  });
+
+  it('keeps focus on the trigger when the trigger closes it', async () => {
+    const user = userEvent.setup();
+    render(
+      <Collapsible trigger="Details">
+        <button type="button">Inside</button>
+      </Collapsible>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Details'});
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveFocus();
+  });
+
+  it('moves no focus when it opens', () => {
+    const {rerender} = render(<Example isOpen={false} />);
+    const elsewhere = screen.getByRole('button', {name: 'Elsewhere'});
+    elsewhere.focus();
+    rerender(<Example isOpen />);
+    expect(elsewhere).toHaveFocus();
   });
 });

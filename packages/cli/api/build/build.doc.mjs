@@ -19,8 +19,8 @@ export const doc = {
     'The "build a page" entry point. Called with no query it returns the ' +
     'how-to-build-a-page playbook as data: the workflow steps with their ' +
     'commands, the on-system rules, and related lookups. Called with a query it names the page template to ' +
-    'START from (always one: the page template a ranker built for long descriptions puts first, else the app ' +
-    'shell) and the next two templates, ' +
+    'START from (always one: the page template a ranker built for long descriptions puts first; for a part ' +
+    'of a page, the page it names; else the app shell) and the next two templates, ' +
     'and the unified search grouped around it: the other close page templates, drop-in blocks, and ' +
     'idea-specific components/hooks, plus the always-on frame + foundation. A template carries the page ' +
     'frame and spacing, so the kit never recommends composing a page from components.',
@@ -44,7 +44,7 @@ export const doc = {
     },
     {
       name: 'options.type',
-      type: "'component' | 'hook' | 'doc' | 'template'",
+      type: "'component' | 'hook' | 'doc' | 'template' | 'theme'",
       description: 'Restrict the underlying search to a single domain.',
     },
     {
@@ -64,7 +64,7 @@ export const doc = {
     {
       type: 'build.kit',
       description:
-        "The page template to start from and the kit around it: the echoed query, hasResults/matchCount/directMatch fields, `start` (the template to scaffold, the `template <id> --type page <path>` command that selects it, whether the page ranker's pick is also search's direct match, the closest page, or the fallback app shell, and the ranker's next two `alternatives`), search's closest page templates (≤3), drop-in block patterns (≤5), idea-specific components/hooks (≤6), and the always-on frame + foundation component-name arrays. Carries `hint` only when the kit came back thin — what to try instead, so a caller does not read a near-empty kit as \"the package has nothing\".",
+        "The page template to start from and the kit around it: the echoed query, hasResults/matchCount/directMatch fields, `start` (the template to scaffold, the `template <id> --type page <path>` command that selects it, whether the page ranker's pick is also search's direct match, the closest page, or the fallback app shell, the ranker's next two `alternatives`, and optional `notes` — setup notes naming what the template needs that the project lacks, such as missing packages or a missing StyleX compiler), search's closest page templates (≤3), drop-in block patterns (≤5), idea-specific components/hooks (≤6), and the always-on frame + foundation component-name arrays. Carries `hint` only when the kit came back thin — what to try instead, so a caller does not read a near-empty kit as \"the package has nothing\".",
     },
   ],
   throws: [
@@ -75,6 +75,10 @@ export const doc = {
     {
       code: 'ERR_CORE_NOT_FOUND',
       when: 'a query is given and @astryxdesign/core cannot be found from cwd',
+    },
+    {
+      code: 'ERR_VERSIONS_UNAVAILABLE',
+      when: 'a query is given outside a project, or in a project with nothing installed, and the Core of the release that answers is not beside it or cached, and cannot be installed into the per-user cache (offline, a registry without it, or an unwritable cache)',
     },
   ],
   examples: [

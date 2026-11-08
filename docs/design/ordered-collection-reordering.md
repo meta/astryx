@@ -3,21 +3,34 @@ schema_version: 1
 template_version: 1
 kind: design
 id: design:ordered-collection-reordering
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
+approved_by: cixzhang
+approved_at: 2026-10-26
 owners: [ernestt, cixzhang]
 review_triggers: [visual, interaction, accessibility, motion]
-verified_by: []
+verified_by:
+  [packages/lab/src/__tests__/ReorderGripPinchZoom.a11y.chromium.spec.ts]
 architecture: [architecture:interaction-modality, architecture:theme-tokens]
 components: []
 families: []
-deciding_specs: []
+deciding_specs: [spec:AST-103]
 ---
 
 # Ordered collection reordering design specification
+
+<!-- path-applicability:v1 -->
+
+```json
+{
+  "paths": [
+    "packages/lab/src/reorderStyles.ts",
+    "packages/lab/src/ListInput/**",
+    "packages/lab/src/TransferList/**"
+  ]
+}
+```
 
 ## User intent
 
@@ -98,21 +111,35 @@ belong to component and family contracts.
 
 ## Visual references
 
-No normative assets are included in this seed draft. Pointer and keyboard
-sequences should be added under
-`docs/design/assets/ordered-collection-reordering/` before promotion.
+No normative assets are included. Pointer and keyboard sequences belong under
+`docs/design/assets/ordered-collection-reordering/`.
 
 ## Component contract links
 
-No component contract links are asserted in this seed draft. A collection
-component should link these requirements only after its input and accessibility
-contracts define reordering semantics.
+`spec:AST-103` applies this treatment to every reorderable collection, its
+keyboard reorder mode included (DR7).
+
+Implementation gap: Lab's ListInput and TransferList draw no insertion line
+when reordering by keyboard (DR7); ListInput's keyboard grab mode moves the
+rows before the commit (DR3); and both build their own drag preview
+(`architecture:component-style-authoring` INV7).
 
 ## Decision log
 
-No repository design decision has approved this record yet. The draft isolates
-the reordering treatment from the broader user-state vocabulary so its distinct
-interaction and accessibility requirements can be reviewed independently.
+### DEC-1 — Reordering follows this design, not a slide-aside
+
+**Reference:** `design:ordered-collection-reordering/DEC-1`
+**Decider:** `cixzhang`, `2026-10-26`
+
+While an item is dragged, the surrounding items stay where they are, the
+source stays in place and dimmed, a moving preview follows the pointer, and an
+accent insertion line between items marks where it will land; the items
+rearrange once, at the drop, and a cancel restores at once. Keyboard
+reordering shows the same insertion line. A drop marker, with motion only on
+the release, is more accurate for small drop targets than neighbors that move
+under the pointer.
+
+Rejected: neighbors sliding aside during the drag.
 
 ## Open questions
 

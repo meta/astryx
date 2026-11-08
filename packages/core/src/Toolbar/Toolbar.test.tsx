@@ -2,17 +2,24 @@
 
 /**
  * @file Toolbar.test.tsx
- * @input Uses vitest, @testing-library/react, Toolbar
- * @output Unit tests for Toolbar component
- * @position Testing; validates Toolbar implementation
+ * @input Uses vitest, @testing-library/react, user-event, Toolbar, MoreMenu
+ * @output Unit tests for Toolbar component and nested popover focus ownership
+ * @position Testing; validates Toolbar implementation and post-dismissal tab stops
  *
  * SYNC: When Toolbar component changes, update tests to match new behavior
  */
 
 import {describe, it, expect, vi} from 'vitest';
-import {render, screen} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import * as stylex from '@stylexjs/stylex';
 import {Toolbar} from './Toolbar';
+import {Button} from '../Button/Button';
+import {MoreMenu} from '../MoreMenu';
+import {
+  paddingBlockStyles,
+  paddingInlineStyles,
+} from '../Layout/padding.stylex';
 
 describe('Toolbar', () => {
   it('renders with toolbar role', () => {
@@ -134,19 +141,35 @@ describe('Toolbar', () => {
     );
   });
 
-  it('sets aria-orientation to vertical', () => {
-    render(<Toolbar label="Actions" orientation="vertical" />);
-    expect(screen.getByRole('toolbar')).toHaveAttribute(
-      'aria-orientation',
-      'vertical',
-    );
-  });
-
   it('reflects the size', () => {
     render(<Toolbar label="Actions" size="sm" />);
     const toolbar = screen.getByRole('toolbar');
     expect(toolbar).toHaveAttribute('data-size', 'sm');
   });
+
+  it.each([
+    ['sm', 2],
+    ['md', 2],
+  ] as const)(
+    'uses the %s block inset without overriding container inline padding',
+    (size, blockPadding) => {
+      const {container} = render(<Toolbar label="Actions" size={size} />);
+      const sectionInner = container.querySelector('.astryx-section');
+      const expectedBlockClasses = stylex
+        .props(paddingBlockStyles[blockPadding])
+        .className?.split(' ')
+        .filter(Boolean);
+      const compactInlineClasses = stylex
+        .props(paddingInlineStyles[1])
+        .className?.split(' ')
+        .filter(Boolean);
+
+      expect(sectionInner).toBeInTheDocument();
+      expect(expectedBlockClasses).not.toHaveLength(0);
+      expect(sectionInner).toHaveClass(...(expectedBlockClasses ?? []));
+      expect(sectionInner).not.toHaveClass(...(compactInlineClasses ?? []));
+    },
+  );
 
   it('defaults to md size', () => {
     render(<Toolbar label="Actions" />);
@@ -226,7 +249,7 @@ describe('Toolbar', () => {
       expect(clipsOverflow(slotOf('end'))).toBe(false);
     });
 
-    it('still lets the center slot shrink below its content width', () => {
+    it('sizes the center slot from its minimum width and wraps the row instead', () => {
       render(
         <Toolbar
           label="Actions"
@@ -235,9 +258,13 @@ describe('Toolbar', () => {
           endContent={<span data-testid="end">End</span>}
         />,
       );
-      // The `auto` track only shrinks for an item whose minimum width is zero.
-      // Dropping the clip must not turn a narrow toolbar into a wider one.
-      expect(parseFloat(getComputedStyle(slotOf('center')).minWidth)).toBe(0);
+      // The center lane claims its content's minimum width when the row
+      // decides where to wrap, so its text never spills over the lanes beside
+      // it; a row that does not fit wraps.
+      expect(getComputedStyle(slotOf('center')).flexBasis).toBe('min-content');
+      expect(getComputedStyle(screen.getByRole('toolbar')).flexWrap).toBe(
+        'wrap',
+      );
     });
   });
 
@@ -346,6 +373,198 @@ describe('Toolbar', () => {
     expect(buttons[0]).toHaveAttribute('tabindex', '0');
     expect(buttons[1]).toHaveAttribute('tabindex', '-1');
     expect(buttons[2]).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('stays a single tab stop when every control is a disabled Button', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <button type="button">before</button>
+        <Toolbar
+          label="Formatting"
+          startContent={
+            <>
+              <Button label="Bold" isDisabled />
+              <Button label="Italic" isDisabled />
+              <Button label="Underline" isDisabled />
+            </>
+          }
+        />
+        <button type="button">after</button>
+      </>,
+    );
+    const bold = screen.getByRole('button', {name: 'Bold'});
+    expect(screen.getByRole('button', {name: 'Italic'})).toHaveAttribute(
+      'tabindex',
+      '-1',
+    );
+    expect(screen.getByRole('button', {name: 'Underline'})).toHaveAttribute(
+      'tabindex',
+      '-1',
+    );
+
+    await user.tab();
+    await user.tab();
+    expect(bold).toHaveFocus();
+    expect(bold).toHaveAttribute('aria-disabled', 'true');
+    await user.tab();
+    expect(screen.getByRole('button', {name: 'after'})).toHaveFocus();
+  });
+
+  it('keeps a link member in the arrow order and off the tab order', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <Toolbar
+          label="Actions"
+          startContent={
+            <>
+              <button type="button">Cut</button>
+              <a href="https://example.com">Docs</a>
+              <button type="button">Paste</button>
+            </>
+          }
+        />
+        <button type="button">After</button>
+      </>,
+    );
+
+    const cut = screen.getByRole('button', {name: 'Cut'});
+    cut.focus();
+    await user.tab();
+    expect(screen.getByRole('button', {name: 'After'})).toHaveFocus();
+
+    cut.focus();
+    await user.keyboard('{ArrowRight}');
+    expect(screen.getByRole('link', {name: 'Docs'})).toHaveFocus();
+    await user.keyboard('{ArrowRight}');
+    expect(screen.getByRole('button', {name: 'Paste'})).toHaveFocus();
+  });
+
+  it('keeps its tab stop after outside dismissal of MoreMenu', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <button type="button">Before</button>
+        <Toolbar
+          label="Actions"
+          startContent={<button type="button">Copy</button>}
+          endContent={
+            <MoreMenu
+              label="More actions"
+              items={[{label: 'Duplicate'}, {label: 'Delete'}]}
+            />
+          }
+        />
+        <button type="button">After</button>
+      </>,
+    );
+
+    const trigger = screen.getByRole('button', {name: 'More actions'});
+    // Seed the trigger's tab stop with keyboard navigation so this tests
+    // boundary ownership independently of pointer-focus synchronization.
+    act(() => screen.getByRole('button', {name: 'Copy'}).focus());
+    await user.keyboard('{ArrowRight}');
+    expect(trigger).toHaveFocus();
+    await user.click(trigger);
+    await waitFor(() =>
+      expect(screen.getByRole('menu', {hidden: true})).toHaveFocus(),
+    );
+
+    const item = screen.getByRole('menuitem', {
+      name: 'Duplicate',
+      hidden: true,
+    });
+    act(() => item.focus());
+    expect(item).toHaveFocus();
+    expect(trigger.getAttribute('tabindex')).toBe('0');
+    expect(
+      screen.getByRole('button', {name: 'Copy'}).getAttribute('tabindex'),
+    ).toBe('-1');
+    expect(
+      screen.getByRole('menu', {hidden: true}).getAttribute('tabindex'),
+    ).not.toBe('0');
+
+    await user.click(screen.getByRole('button', {name: 'After'}));
+    // jsdom has no native light dismiss. Deliver the browser's close event
+    // after focus has moved outside, without restoring it to the trigger.
+    const popover = item.closest('[popover]');
+    fireEvent(
+      popover!,
+      Object.assign(new Event('toggle'), {newState: 'closed'}),
+    );
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'false'),
+    );
+    expect(screen.getByRole('button', {name: 'After'})).toHaveFocus();
+    await user.tab({shift: true});
+    expect(trigger).toHaveFocus();
+    await user.tab({shift: true});
+    expect(screen.getByRole('button', {name: 'Before'})).toHaveFocus();
+  });
+
+  it('leaves navigation inside an open MoreMenu to the menu', async () => {
+    const user = userEvent.setup();
+    render(
+      <Toolbar
+        label="Actions"
+        startContent={<button type="button">Copy</button>}
+        endContent={
+          <MoreMenu
+            label="More actions"
+            items={[{label: 'Duplicate'}, {label: 'Delete'}]}
+          />
+        }
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'More actions'});
+    act(() => screen.getByRole('button', {name: 'Copy'}).focus());
+    await user.keyboard('{ArrowRight}');
+    expect(trigger).toHaveFocus();
+    await user.click(trigger);
+    await waitFor(() =>
+      expect(screen.getByRole('menu', {hidden: true})).toHaveFocus(),
+    );
+
+    const first = screen.getByRole('menuitem', {
+      name: 'Duplicate',
+      hidden: true,
+    });
+    const last = screen.getByRole('menuitem', {name: 'Delete', hidden: true});
+    act(() => first.focus());
+    await user.keyboard('{ArrowLeft}');
+    expect(first).toHaveFocus();
+    await user.keyboard('{ArrowRight}');
+    expect(first).toHaveFocus();
+
+    await user.keyboard('{ArrowDown}');
+    expect(last).toHaveFocus();
+
+    expect(trigger).toHaveAttribute('tabindex', '0');
+  });
+
+  it('keeps its own arrow navigation when rendered inside a popover', async () => {
+    const user = userEvent.setup();
+    render(
+      <div popover="manual">
+        <Toolbar
+          label="Actions"
+          startContent={
+            <>
+              <button type="button">Copy</button>
+              <button type="button">Paste</button>
+            </>
+          }
+        />
+      </div>,
+    );
+    // jsdom does not open native popovers; the ancestor still tests ownership.
+    const copy = screen.getByRole('button', {name: 'Copy', hidden: true});
+    const paste = screen.getByRole('button', {name: 'Paste', hidden: true});
+    act(() => copy.focus());
+    await user.keyboard('{ArrowRight}');
+    expect(paste).toHaveFocus();
+    expect(paste.getAttribute('tabindex')).toBe('0');
   });
 
   it('does not steal caret keys from a text input mid-line (navigation-4)', async () => {

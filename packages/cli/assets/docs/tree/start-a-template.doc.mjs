@@ -1,9 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/templates/start-a-template`: what a
- * template is, why an integration shares one, whether it is a page or a
- * block, and how to add one.
+ * @file `astryx docs authoring/building-blocks/templates/start-a-template`:
+ * what a template is, why an integration shares one, whether it is a page or
+ * a block, and how to add one.
  */
 
 /** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */
@@ -38,8 +38,8 @@ export const docs = {
           type: 'code',
           lang: 'bash',
           code: `# How an app finds a template and copies it
-npx astryx template --list
-npx astryx template acme-dashboard src/app/dashboard`,
+{@command template --list}
+{@command template acme-dashboard src/app/dashboard}`,
         },
       ],
     },
@@ -83,7 +83,7 @@ npx astryx template acme-dashboard src/app/dashboard`,
       content: [
         {
           type: 'prose',
-          text: 'Choose a stable lowercase kebab-case id, such as `acme-dashboard`. The id becomes the source and doc file name, the package export, and the value apps pass to `astryx template`. To change a label, edit the doc ({@link generic:template-doc-overview}); never rename the id.',
+          text: 'Choose a stable lowercase kebab-case id, such as `acme-dashboard`. The id becomes the source and doc file name, the package export, and the value apps pass to `{@command template}`. To change a label, edit the doc ({@link generic:template-doc-overview}); never rename the id.',
         },
         {
           type: 'list',
@@ -97,7 +97,7 @@ npx astryx template acme-dashboard src/app/dashboard`,
         {
           type: 'code',
           lang: 'bash',
-          code: '# See the Core ids\nnpx astryx --json template --list --package @astryxdesign/core',
+          code: '# See the Core ids\nastryx --json template --list --package @astryxdesign/core',
         },
       ],
     },
@@ -112,8 +112,8 @@ npx astryx template acme-dashboard src/app/dashboard`,
         {
           type: 'code',
           lang: 'bash',
-          code: `npx astryx integration add template acme-dashboard
-npx astryx integration add template acme-stat-card --type block`,
+          code: `{@command integration add template acme-dashboard}
+{@command integration add template acme-stat-card --type block}`,
         },
         {
           type: 'code',
@@ -136,6 +136,16 @@ Declare template root ./templates in astryx.integration.mjs.
         {
           type: 'prose',
           text: 'It never overwrites an existing source or doc file. Add `--dry-run` to see every planned write first.',
+        },
+      ],
+    },
+    {
+      id: 'global-mode',
+      title: 'In global mode',
+      content: [
+        {
+          type: 'prose',
+          text: 'In global mode: when users install your package for their computer, beside the global CLI, your templates show up in folders outside any project; inside a project, only if the project installs your package. See {@link namespace:global} and {@link generic:global-integrations}.',
         },
       ],
     },

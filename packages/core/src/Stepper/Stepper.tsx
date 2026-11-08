@@ -23,14 +23,7 @@
  * - /packages/cli/assets/templates/blocks/components/Stepper/ (showcase blocks)
  */
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
+import {useCallback, useMemo, useRef, useState, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 
 import {spacingVars} from '../theme/tokens.stylex';
@@ -41,7 +34,6 @@ import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils';
 import {Icon} from '../Icon';
 import {IconButton} from '../IconButton';
-import {useTranslator} from '../i18n';
 import {
   StepperContext,
   StepperInternalContext,
@@ -51,6 +43,17 @@ import {
   type StepperInternalContextValue,
   type StepperRegistrationOptions,
 } from './StepperContext';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Stepper/Stepper.generated';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
+
+registerEnglishFallback(english);
 
 /**
  * Default width below which a step can no longer hold its own label. Under
@@ -246,7 +249,7 @@ export function Stepper({
   ref,
   ...rest
 }: StepperProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.stepper.label');
   const minimumStepWidth =
     horizontalOptions?.minimumStepWidth ?? DEFAULT_MIN_STEP_WIDTH;
@@ -354,32 +357,22 @@ export function Stepper({
   // still owns the ref and DOM pass-throughs and fills that frame, so its width
   // is the effective component width to observe.
   const [rootWidth, setRootWidth] = useState(0);
-  const stopObservingRootRef = useRef<(() => void) | null>(null);
   const attachRoot = useCallback(
     (el: HTMLOListElement | null) => {
-      stopObservingRootRef.current?.();
-      stopObservingRootRef.current = null;
-      if (el && isHorizontal) {
-        // observeResize calls back once, synchronously, as it subscribes. That
-        // is what keeps the collapse off the screen: a ref callback runs during
-        // commit, so the width lands and the re-render happens before the
-        // browser has painted the uncollapsed stepper it would otherwise show
-        // first.
-        stopObservingRootRef.current = observeResize(el, entry =>
-          setRootWidth(entry.target.clientWidth),
-        );
+      if (el == null || !isHorizontal) {
+        return;
       }
+      // observeResize calls back once, synchronously, as it subscribes. That
+      // is what keeps the collapse off the screen: a ref callback runs during
+      // commit, so the width lands and the re-render happens before the
+      // browser has painted the uncollapsed stepper it would otherwise show
+      // first. React calls the returned unsubscribe when the list detaches or
+      // when the orientation changes.
+      return observeResize(el, entry => setRootWidth(entry.target.clientWidth));
     },
     [isHorizontal],
   );
   const rootRef = useMergedRefs(ref, attachRoot);
-  useEffect(
-    () => () => {
-      stopObservingRootRef.current?.();
-      stopObservingRootRef.current = null;
-    },
-    [],
-  );
 
   // Width is measured rather than asked of a container query because the
   // answer changes what is *rendered*, not just how it looks: the labels and

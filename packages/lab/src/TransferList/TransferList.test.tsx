@@ -131,6 +131,36 @@ afterEach(() => {
 });
 
 describe('TransferList', () => {
+  it('disables every control while keeping them focusable, without option-specific messages', () => {
+    const onChange = vi.fn();
+    render(
+      <TransferList
+        label="Columns"
+        options={LOCKED_OPTIONS}
+        value={['name', 'owner']}
+        onChange={onChange}
+        hasSearch
+        isDisabled
+      />,
+    );
+    const remove = screen.getByRole('button', {name: 'Remove Name'});
+    expect(remove).toHaveAttribute('aria-disabled', 'true');
+    expect(remove).not.toHaveAttribute('disabled');
+    remove.focus();
+    expect(remove).toHaveFocus();
+    fireEvent.click(remove);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole('button', {name: 'Remove Owner'}),
+    ).not.toHaveAccessibleDescription(
+      'Owner is required and fixed in position.',
+    );
+    expect(screen.getByRole('searchbox')).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  });
+
   describe('semantics and content', () => {
     it('renders a labelled pair of semantic lists without listbox roles', () => {
       render(
@@ -534,6 +564,42 @@ describe('TransferList', () => {
       expect(screen.getByTestId('popover-host')).toContainElement(layer);
     });
 
+    it('cancels a pointer reorder when a second pointer lands, as a pinch does', () => {
+      const onValueChange = vi.fn();
+      const {container} = render(
+        <ControlledTransferList
+          initialValue={['name', 'owner', 'status']}
+          onValueChange={onValueChange}
+        />,
+      );
+      const rows = [
+        ...container.querySelectorAll<HTMLElement>('[data-transfer-list-row]'),
+      ];
+      mockRowBounds(rows);
+      const handle = screen.getByRole('button', {name: 'Reorder Name'});
+
+      fireEvent.pointerDown(handle, {
+        button: 0,
+        pointerId: 7,
+        clientX: 300,
+        clientY: 10,
+      });
+      fireEvent.pointerMove(handle, {pointerId: 7, clientX: 300, clientY: 34});
+      expect(
+        container.querySelector('[data-transfer-list-reorder-source]'),
+      ).toBeInTheDocument();
+
+      // The second finger of a pinch lands elsewhere on the page.
+      fireEvent.pointerDown(document.body, {pointerId: 8, clientX: 600});
+      expect(
+        container.querySelector('[data-transfer-list-reorder-source]'),
+      ).not.toBeInTheDocument();
+
+      fireEvent.pointerMove(handle, {pointerId: 7, clientX: 300, clientY: 140});
+      fireEvent.pointerUp(handle, {pointerId: 7, clientX: 300, clientY: 140});
+      expect(onValueChange).not.toHaveBeenCalled();
+    });
+
     it('keeps rows stationary, locks X, follows pointer Y, and commits once', () => {
       const onValueChange = vi.fn();
       const {container} = render(
@@ -857,6 +923,33 @@ describe('TransferList', () => {
         'status',
       ]);
       expect(handle).toHaveFocus();
+    });
+
+    it('ends a grab without any change when the list becomes disabled mid-reorder', async () => {
+      const user = userEvent.setup();
+      const onValueChange = vi.fn();
+      const {rerender} = render(
+        <ControlledTransferList
+          initialValue={['name', 'owner', 'status']}
+          onValueChange={onValueChange}
+        />,
+      );
+
+      const handle = screen.getByRole('button', {name: 'Reorder Owner'});
+      handle.focus();
+      await user.keyboard('{Enter}{ArrowDown}');
+      expect(onValueChange).toHaveBeenCalledTimes(1);
+
+      rerender(
+        <ControlledTransferList
+          initialValue={['name', 'owner', 'status']}
+          onValueChange={onValueChange}
+          isDisabled
+        />,
+      );
+      expect(handle).toHaveAttribute('aria-pressed', 'false');
+      await user.keyboard('{Escape}');
+      expect(onValueChange).toHaveBeenCalledTimes(1);
     });
 
     it('does not allow a value to cross a reorder-disabled value', async () => {

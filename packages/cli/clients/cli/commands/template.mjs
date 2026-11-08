@@ -5,8 +5,8 @@
  */
 
 import {jsonOut} from '../../../foundation/response/json.mjs';
-import {emit, section, text, records, code} from '../formatters/index.mjs';
-import {cliError} from '../lib/cli-error.mjs';
+import {emit, section, text, records, code, record} from '../formatters/index.mjs';
+import {cliError, rejectEmptyArgument} from '../lib/cli-error.mjs';
 import {template as templateApi} from '../../../api/template/template.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
 import {warnOnIntegrationIssues} from '../../../foundation/integrations/integration-warnings.mjs';
@@ -31,6 +31,52 @@ export {discoverTemplates, listTemplates} from '../../../api/template/template.m
  *   import('../../../api/template/template.type.mjs').TemplateCdnResponse
  * )} TemplateResponse
  */
+
+/**
+ * The line saying how many docs-only demo content elements became a
+ * placeholder, in the copied file when one is named.
+ * @param {number} count
+ * @param {string} [file]
+ * @returns {string}
+ */
+function demoContentNote(count, file) {
+  return (
+    `Replaced ${count} Astryx demo content element${count === 1 ? '' : 's'}${file ? ` in ${file}` : ''} ` +
+    'with a <Text>Card content</Text> placeholder. Put your own content there.'
+  );
+}
+
+/**
+ * The icon report as text lines (AST-084 FR10): one line per mapped or kept
+ * icon, or one line saying why nothing was mapped. Nothing when the project
+ * has no icon set at all (no report: icon sets are experimental).
+ * @param {import('../../../api/template/template.type.mjs').TemplateIconsReport | undefined} icons
+ * @returns {string[]}
+ */
+function iconLines(icons) {
+  if (icons == null) return [];
+  if (icons.status !== 'selected') {
+    return icons.status === 'none'
+      ? []
+      : [`icons: unchanged (${icons.status}): ${icons.reason}`];
+  }
+  return [
+    ...icons.mapped.map(
+      each =>
+        `icons: mapped ${each.source.export} (${each.source.module}) -> ${each.target.export} (${each.target.module}) by ${each.by}` +
+        (each.dropped && each.dropped.length > 0
+          ? `; dropped ${each.dropped.join(', ')} (size comes from CSS)`
+          : ''),
+    ),
+    ...icons.kept.map(
+      each =>
+        `icons: kept ${each.export}${each.module == null ? '' : ` (${each.module})`}: ${each.reason}` +
+        (each.suggestion
+          ? `; likely match: ${each.suggestion.export} (${each.suggestion.module})`
+          : ''),
+    ),
+  ];
+}
 
 /**
  * What the run answered with. Listing and printing a template are lookups;
@@ -66,6 +112,12 @@ export function registerTemplate(program) {
        * @param {{list?: boolean, type?: string, package?: string, skeleton?: boolean, cdn?: boolean | string, overwrite?: boolean}} options
        */
       async (name, targetPath, options) => {
+      const usesName = !options.cdn && !options.list;
+      const usesPath = options.cdn
+        ? typeof options.cdn !== 'string'
+        : !options.list && !options.skeleton;
+      if (usesName) rejectEmptyArgument('name', name, 'astryx template');
+      if (usesPath) rejectEmptyArgument('path', targetPath, 'astryx template');
       const json = program.opts().json || false;
       const run = getCliInvocation();
 
@@ -111,6 +163,52 @@ export function registerTemplate(program) {
         case 'template.list': {
           const pages = result.data.filter(t => t.type === 'page');
           const blocks = result.data.filter(t => t.type === 'block');
+
+          // Bare `template` (no --list, no name) shows a grouped summary so a
+          // no-context agent or terminal doesn't receive 150 KB of catalog. The
+          // full catalog stays reachable via `template --list`.
+          if (!options.list && !name) {
+            /** @param {import('../../../api/template/template.type.mjs').TemplateListEntry[]} items */
+            const grouped = items => {
+              /** @type {Map<string, string[]>} */
+              const groups = new Map();
+              for (const t of items) {
+                const cat = t.category || 'Other';
+                const list = groups.get(cat);
+                if (list) {
+                  list.push(t.id);
+                } else {
+                  groups.set(cat, [t.id]);
+                }
+              }
+              /** @type {string[]} */
+              const lines = [];
+              for (const [cat, ids] of groups) {
+                lines.push(`${cat}: ${ids.join(', ')}`);
+              }
+              return lines.join('\n');
+            };
+            emit(
+              pages.length > 0 && section(`Page Templates (${pages.length})`),
+              pages.length > 0 && text(grouped(pages)),
+              blocks.length > 0 && section(`Block Templates (${blocks.length})`),
+              blocks.length > 0 && text(grouped(blocks)),
+              section('Usage'),
+              text(
+                [
+                  `${run} template <id>                  Show full source`,
+                  `${run} template <id> [target-path]     Scaffold page or block`,
+                  `${run} template <id> --skeleton        Layout reference`,
+                  `${run} template --list                 Full catalog with descriptions`,
+                  `${run} template --list --type block    List only blocks`,
+                  `${run} template --list --package <pkg> List from one package`,
+                  `${run} template --cdn                 CDN starter page, no build step`,
+                ].join('\n'),
+              ),
+            );
+            break;
+          }
+
           // Project each entry to its JSON-mirroring fields; the WIP marker is
           // folded into `name` (as before) and the package is shown only when it
           // isn't the built-in core package.
@@ -146,6 +244,7 @@ export function registerTemplate(program) {
         case 'template.skeleton': {
           const {template: tName, description, components, skeleton} = result.data;
           emit(
+            record({package: result.package}),
             text(
               `# ${tName}${description ? ' — ' + description : ''}\n` +
                 `# Components: ${components.join(', ')}`,
@@ -156,16 +255,51 @@ export function registerTemplate(program) {
         }
 
         case 'template.show': {
-          // Source must survive piping byte-for-byte.
-          emit(code(result.data.source));
+          // Source must survive piping byte-for-byte, so the package it comes
+          // from (cli-surface INV28) and the note about replaced demo media go
+          // to stderr, the note in the copy receipt's words. (Text mode only:
+          // --json returned above with both in the envelope.)
+          const {source, demoMediaReplaced, demoContentReplaced, icons} =
+            result.data;
+          console.error(`package: ${result.package}`);
+          emit(code(source));
+          if (demoMediaReplaced > 0) {
+            console.error(
+              `Replaced ${demoMediaReplaced} Astryx demo media reference${demoMediaReplaced === 1 ? '' : 's'}: ` +
+                'images now show a neutral placeholder and videos have an empty source. Supply your own media there.',
+            );
+          }
+          if (demoContentReplaced > 0) {
+            console.error(demoContentNote(demoContentReplaced));
+          }
+          // The icon report goes to stderr too, so stdout stays the source.
+          for (const line of iconLines(icons)) console.error(line);
           break;
         }
 
         case 'template.copy': {
+          const {
+            outputDir,
+            fileName,
+            demoMediaReplaced,
+            demoContentReplaced,
+            notes,
+            icons,
+          } = result.data;
+          const file = `${outputDir}/${fileName}`;
+          const iconText = iconLines(icons);
           emit(
-            text(
-              `Copied template to ${result.data.outputDir}/${result.data.fileName}`,
-            ),
+            text(`Copied template to ${file}`),
+            record({package: result.package}),
+            demoMediaReplaced > 0 &&
+              text(
+                `Replaced ${demoMediaReplaced} Astryx demo media reference${demoMediaReplaced === 1 ? '' : 's'} in ${file}: ` +
+                  'images now show a neutral placeholder and videos have an empty source. Supply your own media there.',
+              ),
+            demoContentReplaced > 0 &&
+              text(demoContentNote(demoContentReplaced, file)),
+            ...notes.map(/** @param {string} note */ note => text(note)),
+            iconText.length > 0 && text(iconText.join('\n')),
           );
           break;
         }

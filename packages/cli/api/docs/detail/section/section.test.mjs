@@ -16,7 +16,7 @@ const SLOW = 30_000;
 
 describe('docs.detail.section leaf', () => {
   it('resolves a named section (case-insensitive) into a docs.detail.section envelope', async () => {
-    const res = await section('tokens', 'spacing');
+    const res = await section('tokens/tokens-spacing', 'spacing');
     expect(res.type).toBe('docs.detail.section');
     expect(res.data.title.toLowerCase()).toContain('spacing');
   }, SLOW);
@@ -24,7 +24,7 @@ describe('docs.detail.section leaf', () => {
   it('throws ERR_UNKNOWN_SECTION for an unknown section', async () => {
     let err;
     try {
-      await section('tokens', 'zzzznope');
+      await section('tokens/tokens-spacing', 'zzzznope');
     } catch (e) {
       err = e;
     }
@@ -44,10 +44,10 @@ describe('docs.detail.section leaf', () => {
   }, SLOW);
 
   it('does not return the first section for an empty section name', async () => {
-    await expect(section('tokens', '')).rejects.toMatchObject({
+    await expect(section('tokens/tokens-spacing', '')).rejects.toMatchObject({
       code: 'ERR_UNKNOWN_SECTION',
     });
-    await expect(section('tokens', '   ')).rejects.toMatchObject({
+    await expect(section('tokens/tokens-spacing', '   ')).rejects.toMatchObject({
       code: 'ERR_UNKNOWN_SECTION',
     });
   }, SLOW);

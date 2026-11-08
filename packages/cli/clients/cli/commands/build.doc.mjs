@@ -26,8 +26,9 @@ export const doc = {
     {
       flag: '--type <domain>',
       param: 'options.type',
-      choices: ['component', 'hook', 'template'],
-      description: 'Filter the kit to one domain (component|hook|template)',
+      choices: ['component', 'hook', 'doc', 'template', 'theme'],
+      description:
+        'Filter the kit to one domain (component|hook|doc|template|theme); doc and theme give an empty kit',
     },
     {
       flag: '--limit <n>',
@@ -47,11 +48,12 @@ export const doc = {
       cli: 'astryx build "analytics dashboard" --json',
     },
   ],
+  outsideProject: 'same',
   exitCodes: [
     {code: 0, when: 'success (including zero matches)'},
     {
       code: 1,
-      when: 'invalid --type, a non-positive --limit, or a query when @astryxdesign/core cannot be found (the playbook needs no core)',
+      when: 'invalid --type, a --limit that is not a positive integer, or a query when @astryxdesign/core cannot be found (the playbook needs no core)',
     },
   ],
   related: ['search', 'template', 'component', 'hook', 'init'],

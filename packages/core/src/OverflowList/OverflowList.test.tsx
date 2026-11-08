@@ -105,9 +105,12 @@ const indicator =
     </span>
   );
 
-/** Notify the shared observer that an element's size changed. */
-function triggerResize(target: Element): void {
-  act(() => {
+/**
+ * Notify the shared observer that an element's size changed. The list
+ * measures again in a microtask before paint, so this awaits it.
+ */
+async function triggerResize(target: Element): Promise<void> {
+  await act(async () => {
     for (const observer of resizeObservers) {
       observer.trigger(target);
     }
@@ -630,7 +633,7 @@ describe('OverflowList', () => {
       expect(indicesOf(onOverflowChange)).toEqual([1, 2]);
     });
 
-    it('reports an empty set again once the container fits everything', () => {
+    it('reports an empty set again once the container fits everything', async () => {
       const onOverflowChange = vi.fn();
       const items = [
         <button type="button" data-w="40" key="a">
@@ -663,7 +666,7 @@ describe('OverflowList', () => {
           {items}
         </OverflowList>,
       );
-      triggerResize(visibleContainer());
+      await triggerResize(visibleContainer());
       expect(onOverflowChange).toHaveBeenCalledTimes(2);
       expect(indicesOf(onOverflowChange)).toEqual([]);
     });
@@ -800,7 +803,7 @@ describe('OverflowList', () => {
       expect(indicesOf(onOverflowChange)).toEqual([2]);
     });
 
-    it('re-measures same-count content changes with stable keys', () => {
+    it('re-measures same-count content changes with stable keys', async () => {
       const onOverflowChange = vi.fn();
       const renderItems = (
         items: {key: string; label: string; width: number}[],
@@ -840,7 +843,7 @@ describe('OverflowList', () => {
           ])}
         </OverflowList>,
       );
-      triggerResize(measureContainer());
+      await triggerResize(measureContainer());
 
       expect(onOverflowChange).toHaveBeenCalledTimes(1);
       expect(indicesOf(onOverflowChange)).toEqual([2, 3]);
@@ -892,7 +895,7 @@ describe('OverflowList', () => {
       expect(indicesOf(onOverflowChange)).toEqual([2, 3, 4]);
     });
 
-    it('uses a replacement callback only for the next set change', () => {
+    it('uses a replacement callback only for the next set change', async () => {
       const first = vi.fn();
       const second = vi.fn();
       const items = [
@@ -934,7 +937,7 @@ describe('OverflowList', () => {
           {items}
         </OverflowList>,
       );
-      triggerResize(visibleContainer());
+      await triggerResize(visibleContainer());
       expect(first).toHaveBeenCalledTimes(1);
       expect(second).toHaveBeenCalledTimes(1);
       expect(indicesOf(second)).toEqual([]);
@@ -972,7 +975,7 @@ describe('OverflowList', () => {
       expect(screen.getByTestId('hidden-count')).toHaveTextContent('1');
     });
 
-    it('does not report after unmount', () => {
+    it('does not report after unmount', async () => {
       const onOverflowChange = vi.fn();
       const {unmount} = render(
         <OverflowList
@@ -993,8 +996,8 @@ describe('OverflowList', () => {
       expect(onOverflowChange).toHaveBeenCalledTimes(1);
 
       unmount();
-      triggerResize(container);
-      triggerResize(measure);
+      await triggerResize(container);
+      await triggerResize(measure);
       expect(onOverflowChange).toHaveBeenCalledTimes(1);
     });
 

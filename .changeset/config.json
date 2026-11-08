@@ -7,6 +7,7 @@
       "@astryxdesign/build",
       "@astryxdesign/cli",
       "@astryxdesign/core",
+      "@astryxdesign/richtext",
       "@astryxdesign/theme-butter",
       "@astryxdesign/theme-chocolate",
       "@astryxdesign/theme-gothic",

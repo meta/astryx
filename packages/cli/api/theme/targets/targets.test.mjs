@@ -19,7 +19,6 @@ describe('themeTargets (api/theme/targets)', () => {
     const allowedKeys = new Set([
       'className',
       'component',
-      'deprecatedFor',
       'key',
       'props',
       'states',
@@ -35,9 +34,6 @@ describe('themeTargets (api/theme/targets)', () => {
       expect(Object.keys(target).filter(key => !allowedKeys.has(key))).toEqual(
         [],
       );
-      if (target.deprecatedFor !== undefined) {
-        expect(target.deprecatedFor).toEqual(expect.any(String));
-      }
     }
   }, 60_000);
 

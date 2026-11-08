@@ -114,39 +114,54 @@ describe('reference doc overlays (#2182)', () => {
 
 describe('the reported defect: docs tokens --dense (#2182)', () => {
   it('does not print the colour table under the Spacing heading', async () => {
-    const result = await docs('tokens', null, {dense: true});
-    const spacing = result.data.sections.find(s => /spacing/i.test(s.title));
-    expect(spacing, 'tokens docs should have a spacing section').toBeTruthy();
-
-    const text = JSON.stringify(spacing);
-    expect(
-      text.includes('--color-'),
-      `The "${spacing.title}" section of \`docs tokens --dense\` contains ` +
-        `colour tokens. An agent reading this learns that spacing tokens are ` +
-        `named --color-*.`,
-    ).toBe(false);
-    expect(text).toContain('--spacing-');
+    // The spacing table lives in its own guide; the spacing topic shows it
+    // through a token reference to the tokens namespace. Both, read dense.
+    for (const topic of ['tokens/tokens-spacing', 'spacing']) {
+      const result = await docs(topic, null, {dense: true});
+      const spacing = result.data.sections.find(s =>
+        JSON.stringify(s).includes('--spacing-'),
+      );
+      expect(spacing, `${topic} --dense should show the spacing table`).toBeTruthy();
+      const text = JSON.stringify(spacing);
+      expect(
+        text.includes('--color-'),
+        `The "${spacing.title}" section of \`docs ${topic} --dense\` contains ` +
+          `colour tokens. An agent reading this learns that spacing tokens are ` +
+          `named --color-*.`,
+      ).toBe(false);
+    }
   });
 
   it('keeps every base section reachable, even without an overlay entry', async () => {
-    // The tokens overlay compresses only 6 of 13 sections. The other 7 must
-    // still render (in English), not vanish or absorb a neighbour's title.
-    const full = await docs('tokens', null, {});
-    const dense = await docs('tokens', null, {dense: true});
-    expect(dense.data.sections.length).toBe(full.data.sections.length);
+    // The tokens overlays compress 5 of 15 category tables. Read through the
+    // namespace, the other 10 must still render (in English), not vanish or
+    // absorb a neighbour's title.
+    const full = await docs('tokens', null, {depth: 'all', detail: 'full'});
+    const dense = await docs('tokens', null, {depth: 'all', detail: 'full', dense: true});
+    const titles = read =>
+      read.data.slots.flatMap(slot =>
+        slot.children.flatMap(child => (child.sections ?? []).map(s => s.title)),
+      );
+    expect(titles(dense).length).toBe(titles(full).length);
+    expect(titles(dense)).toContain('Color');
+    expect(titles(dense)).toContain('Font Size Tokens');
   });
 
-  it('does not lose the Extending a Theme section from docs theme --dense', async () => {
+  it('does not lose a section from docs theme --dense', async () => {
+    const full = await docs('theme');
     const dense = await docs('theme', null, {dense: true});
     const titles = dense.data.sections.map(s => s.title);
-    expect(titles).toContain('Extending a Theme');
+    // The dense overlay keeps every base section.
+    expect(titles.length).toBe(full.data.sections.length);
   });
 
-  it('does not emit a duplicate useTheme heading in docs theme --dense', async () => {
+  it('does not emit a duplicate heading in docs theme --dense', async () => {
     const dense = await docs('theme', null, {dense: true});
     const titles = dense.data.sections.map(s => s.title.toLowerCase());
-    const useTheme = titles.filter(t => t.includes('usetheme'));
-    expect(useTheme.length).toBe(1);
+    const counts = new Map();
+    for (const t of titles) counts.set(t, (counts.get(t) ?? 0) + 1);
+    const dupes = [...counts.entries()].filter(([, c]) => c > 1);
+    expect(dupes).toEqual([]);
   });
 
   it('does not leak English headings into docs theme --zh', async () => {
@@ -154,6 +169,21 @@ describe('the reported defect: docs tokens --dense (#2182)', () => {
     const titles = zh.data.sections.map(s => s.title);
     // Every section the overlay translates must appear once, in Chinese only.
     expect(titles).not.toContain('Dark mode');
-    expect(titles).toContain('亮/暗模式');
+    expect(titles).toContain('深色模式');
+  });
+
+  it('teaches committed palette references in every theme-doc variant', async () => {
+    for (const options of [{}, {dense: true}, {zh: true}]) {
+      const result = await docs('theme', null, options);
+      const rendered = JSON.stringify(result.data.sections);
+      // The command, as `{@command …}` or bare `astryx …`: both print it.
+      expect(rendered).toContain(
+        'theme palette generate palette.config.json --out palette.generated.ts',
+      );
+      expect(rendered).toContain(
+        "import {palette} from './palette.generated';",
+      );
+      expect(rendered).toContain('palette.neutral.light[100]');
+    }
   });
 });

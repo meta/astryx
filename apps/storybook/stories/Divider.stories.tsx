@@ -109,9 +109,7 @@ export const FullBleed: Story = {
         <Card>
           <VStack gap={3}>
             <Text type="label">Normal divider</Text>
-            <Text type="body">
-              The divider respects container padding.
-            </Text>
+            <Text type="body">The divider respects container padding.</Text>
             <Divider />
             <Text type="body">Content below the divider.</Text>
           </VStack>
@@ -119,9 +117,7 @@ export const FullBleed: Story = {
         <Card>
           <VStack gap={3}>
             <Text type="label">Full bleed divider</Text>
-            <Text type="body">
-              The divider extends to container edges.
-            </Text>
+            <Text type="body">The divider extends to container edges.</Text>
             <Divider isFullBleed />
             <Text type="body">Content below the divider.</Text>
           </VStack>
@@ -183,6 +179,28 @@ export const InCard: Story = {
           </Text>
         </VStack>
       </Card>
+    </Section>
+  ),
+};
+
+export const NumericLabel: Story = {
+  render: () => (
+    <Section variant="muted">
+      <div {...stylex.props(styles.storyWrapper)}>
+        <Card>
+          <VStack gap={3}>
+            <Text type="supporting">Horizontal numeric label</Text>
+            <Divider label={0} />
+          </VStack>
+        </Card>
+        <Card height={200}>
+          <HStack gap={4} xstyle={styles.fullHeight}>
+            <Text type="body">Start</Text>
+            <Divider orientation="vertical" label={0} />
+            <Text type="body">End</Text>
+          </HStack>
+        </Card>
+      </div>
     </Section>
   ),
 };

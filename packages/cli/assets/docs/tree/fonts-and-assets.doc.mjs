@@ -1,8 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/themes/fonts-and-assets`:
- * name a theme's fonts, and have the app load them (Astryx never loads a font).
+ * @file `astryx docs authoring/building-blocks/themes/fonts-and-assets`:
+ * ship a theme's optional font loader beside its built module and CSS.
  */
 
 /** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */
@@ -10,10 +10,10 @@ export const docs = {
   type: 'generic',
   name: 'fonts-and-assets',
   placement: {parent: 'namespace:themes', slot: 'guides', order: 35},
-  title: 'Fonts',
+  title: 'Fonts and assets',
   category: 'guide',
   description:
-    'Name your theme\'s fonts in its tokens, then have the app load them — Astryx never loads a font file.',
+    'Name the fonts in the theme, then export an optional font stylesheet that `theme add` imports with the built theme.',
   sections: [
     {
       id: 'name-the-font',
@@ -38,33 +38,38 @@ export const oceanTheme = defineTheme({
         },
         {
           type: 'prose',
-          text: 'The full type scale and font roles are in {@link generic:theme}.',
+          text: 'The full type scale and font roles are in {@link generic:author-a-theme}.',
         },
       ],
     },
     {
-      id: 'load-the-font-in-the-app',
-      title: 'Load the font in the app',
+      id: 'ship-the-font-loader',
+      title: 'Ship the font loader',
       content: [
         {
           type: 'prose',
-          text: 'Naming a family does not load it — Astryx never downloads a font file. The app that uses your theme loads the font itself, so your job is to tell your users which families and weights to load, in your theme\'s docs ({@link generic:document-the-theme}). An app loads a font one of two ways:',
+          text: 'Naming a family does not load it. When the theme uses non-system fonts, add `<slug>.fonts.css` beside the built module and production CSS, then export it as `./themes/<slug>.fonts.css`. `theme add` imports that stylesheet with the built theme.',
         },
         {
-          type: 'list',
-          style: 'unordered',
-          items: [
-            'Link a hosted stylesheet in the app\'s `<head>` — for example a Google Fonts `<link>` covering every weight the UI uses.',
-            'Self-host: serve the font files and add an `@font-face` for each weight and style to the app\'s global CSS.',
-          ],
+          type: 'code',
+          lang: 'json',
+          code: `"exports": {
+  "./themes/ocean": "./themes/ocean/ocean.js",
+  "./themes/ocean.css": "./themes/ocean/ocean.css",
+  "./themes/ocean.fonts.css": "./themes/ocean/ocean.fonts.css"
+}`,
+        },
+        {
+          type: 'prose',
+          text: 'The stylesheet can contain self-hosted `@font-face` rules or import a hosted stylesheet. A hosted `@import` is simple, but it delays loading compared with a preconnected `<link>`; choose that trade-off deliberately. Doctor warns when it cannot prove the loader — a hosted `@import`, or no font stylesheet while the app loads the family itself — but the warning does not fail the app.',
         },
         {
           type: 'code',
           lang: 'css',
-          code: `/* In the app's global CSS, when self-hosting */
+          code: `/* themes/ocean/ocean.fonts.css */
 @font-face {
   font-family: 'Acme Sans';
-  src: url('/fonts/acme-sans.woff2') format('woff2');
+  src: url('./fonts/acme-sans.woff2') format('woff2');
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
@@ -75,10 +80,10 @@ export const oceanTheme = defineTheme({
           type: 'list',
           style: 'unordered',
           items: [
-            'Load every weight and style the theme uses. Do not let the browser synthesize bold or italic — include the italic face, with the same `unicode-range`s as the roman.',
-            'Set a `unicode-range` per face so the browser downloads only the subsets it needs.',
-            'Use `font-display: swap` unless a measured need justifies another value.',
-            'Serve WOFF2; add another format only when a target browser needs it.',
+            'Load every weight and style the theme uses. Do not let the browser synthesize bold or italic.',
+            'Include self-hosted font files and their licenses in the packed package.',
+            'Keep CSS and font assets side-effectful so a bundler does not remove the loader.',
+            'Run `integration verify`; it fails when an exported font stylesheet cannot resolve, but it does not check the font files the stylesheet names.',
           ],
         },
       ],
@@ -89,7 +94,7 @@ export const oceanTheme = defineTheme({
       content: [
         {
           type: 'prose',
-          text: 'Before publishing, install the package in a clean app, apply the theme, load the fonts, and open it in a browser. The source and the applied result are not the same thing until you look.',
+          text: 'Before publishing, run `integration verify`. Then install the package in a clean app, run `theme add`, apply the generated theme, and open it in a browser. The source, packed exports, and applied result form one chain; check the last step too.',
         },
         {
           type: 'list',

@@ -12,9 +12,11 @@
  *   2. Every changeset body must carry a recognized [category] tag.
  *   3. Every changeset body must credit at least one @contributor.
  *   4. Frontmatter packages must be real, publishable, non-ignored packages.
- *   5. Patch-versus-minor admission (spec:AST-017 FR46-FR50): main targets a
- *      patch by default, so incompatible work is refused until an owner
- *      schedules a minor in `.release/target.json`. See release-admission.mjs.
+ *
+ * It also enforces the declared-tier admission gate on main (spec:AST-017
+ * FR46/FR48): while 0.x, a pending [breaking] Changeset is admissible only
+ * when the fixed group already declares the minor successor. The Changeset
+ * never promotes a patch plan into a minor.
  *
  * Exits 1 with a readable report on any violation. config.json and README.md
  * are skipped.
@@ -25,25 +27,21 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
 import {expandWorkspaceDirs} from './lib/workspace-globs.mjs';
-import {
-  checkAdmission,
-  utcToday,
-  TARGET_FILE,
-} from './release-admission.mjs';
 
 const require = createRequire(import.meta.url);
 const {parseEntry} = require('./changeset-entry-format.cjs');
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const CS_DIR = path.join(ROOT, '.changeset');
 
-function readConfig() {
-  return JSON.parse(fs.readFileSync(path.join(CS_DIR, 'config.json'), 'utf8'));
+function readConfig(root) {
+  return JSON.parse(
+    fs.readFileSync(path.join(root, '.changeset', 'config.json'), 'utf8'),
+  );
 }
 
-function discoverPackages() {
+function discoverPackages(root) {
   const pkgs = [];
-  for (const dir of expandWorkspaceDirs(ROOT)) {
+  for (const dir of expandWorkspaceDirs(root)) {
     const pj = path.join(dir, 'package.json');
     if (!fs.existsSync(pj)) continue;
     const p = JSON.parse(fs.readFileSync(pj, 'utf8'));
@@ -70,37 +68,16 @@ function isChangesetFile(name) {
 }
 
 /**
- * Read the owner's minor schedule, when one is set. Absent is the ordinary
- * case and means main is on its patch default. Present but unreadable is an
- * untrustworthy input, so it is reported and main stays on the default.
- *
- * @param {string} root
- * @returns {{target: unknown|null, problems: string[]}}
- */
-function readSchedule(root) {
-  const file = path.join(root, TARGET_FILE);
-  if (!fs.existsSync(file)) return {target: null, problems: []};
-  try {
-    return {target: JSON.parse(fs.readFileSync(file, 'utf8')), problems: []};
-  } catch (err) {
-    return {
-      target: null,
-      problems: [`${TARGET_FILE}: is not valid JSON (${err.message}).`],
-    };
-  }
-}
-
-/**
  * Validate one changeset's contents against the conventions. Pure and
  * side-effect-free so it can be unit-tested without the filesystem.
  *
  * @param {string} file       display name (for messages)
  * @param {string} contents   raw changeset markdown
- * @param {object} ctx        {pre1, pubNames:Set, allNames:Set}
+ * @param {object} ctx        {pre1, pubNames:Set, allNames:Set, declaredTier, declaredVersion}
  * @returns {string[]}        list of human-readable problems (empty = valid)
  */
 function validateChangeset(file, contents, ctx) {
-  const {pre1, pubNames, allNames} = ctx;
+  const {pre1, pubNames, allNames, declaredTier, declaredVersion} = ctx;
   const problems = [];
 
   const fm = parseFrontmatter(contents);
@@ -115,6 +92,28 @@ function validateChangeset(file, contents, ctx) {
   // [category] — [breaking] -> minor, everything else -> patch.
   const parsed = parseEntry(fm.summary);
   const expected = parsed.category === 'breaking' ? 'minor' : 'patch';
+  if (pre1 && parsed.category === 'breaking' && declaredTier === 'patch')
+    problems.push(
+      `${file}: [breaking] cannot merge while main declares patch ${declaredVersion}. ` +
+        'Plan the minor first, or keep the change compatible through deprecation.',
+    );
+  // Fail closed: a breaking entry is admitted only once the fixed group
+  // declares one plain x.y.0. Split versions or a prerelease declare no tier.
+  // Only a repository check carries `declaredTier`; a caller validating one
+  // entry without a declaration is not making an admission decision.
+  if (
+    pre1 &&
+    parsed.category === 'breaking' &&
+    'declaredTier' in ctx &&
+    declaredTier == null
+  )
+    problems.push(
+      `${file}: [breaking] cannot merge until the fixed group declares one plain minor version` +
+        (declaredVersion
+          ? ` (found ${declaredVersion})`
+          : ' (the fixed packages disagree)') +
+        '. Plan the minor first, or keep the change compatible through deprecation.',
+    );
 
   for (const [name, type] of Object.entries(fm.releases)) {
     if (!allNames.has(name)) {
@@ -165,50 +164,60 @@ function validateChangeset(file, contents, ctx) {
   return problems;
 }
 
-function main() {
-  const config = readConfig();
-  const pkgs = discoverPackages();
+/**
+ * Validate every pending Changeset at `root`. Reads the fixed group's declaration
+ * so a patch plan cannot admit [breaking] work.
+ *
+ * @param {string} root
+ * @returns {{files: string[], problems: string[], pre1: boolean, declaredVersion: string|null, declaredTier: string|null}}
+ */
+function checkRepository(root) {
+  const config = readConfig(root);
+  const pkgs = discoverPackages(root);
   const pub = pkgs.filter(
     p => !p.private && !(config.ignore || []).includes(p.name),
   );
+  const pre1 = pub.every(p => /^0\./.test(String(p.version || '0')));
+  const fixedNames = new Set((config.fixed ?? []).flat());
+  const declaredVersions = new Set(
+    pub.filter(pkg => fixedNames.has(pkg.name)).map(pkg => pkg.version),
+  );
+  const declaredVersion =
+    declaredVersions.size === 1 ? [...declaredVersions][0] : null;
+  const declaredMatch = /^(\d+)\.(\d+)\.(\d+)$/.exec(declaredVersion ?? '');
+  const declaredTier =
+    pre1 && declaredMatch
+      ? Number(declaredMatch[3]) === 0
+        ? 'minor'
+        : 'patch'
+      : null;
   const ctx = {
     pubNames: new Set(pub.map(p => p.name)),
     allNames: new Set(pkgs.map(p => p.name)),
-    pre1: pub.every(p => /^0\./.test(String(p.version || '0'))),
+    pre1,
+    declaredTier,
+    declaredVersion,
   };
 
-  const files = fs.readdirSync(CS_DIR).filter(isChangesetFile);
+  const dir = path.join(root, '.changeset');
+  const files = fs.readdirSync(dir).filter(isChangesetFile);
   const problems = [];
-  const entries = [];
   for (const f of files) {
-    const contents = fs.readFileSync(path.join(CS_DIR, f), 'utf8');
+    const contents = fs.readFileSync(path.join(dir, f), 'utf8');
     problems.push(...validateChangeset(f, contents, ctx));
-
-    // What the admission gate reads. A changeset whose frontmatter does not
-    // parse is already reported above; it contributes nothing here rather
-    // than a guessed category or bump.
-    const fm = parseFrontmatter(contents);
-    if (fm) {
-      entries.push({
-        file: f,
-        category: parseEntry(fm.summary).category,
-        releases: fm.releases,
-      });
-    }
   }
+  return {
+    files,
+    problems,
+    pre1: ctx.pre1,
+    declaredVersion,
+    declaredTier,
+  };
+}
 
-  const {target, problems: scheduleReadProblems} = readSchedule(ROOT);
-  problems.push(...scheduleReadProblems);
-
-  const admission = checkAdmission({
-    fixedGroups: config.fixed || [],
-    versionByName: new Map(pub.map(p => [p.name, p.version])),
-    entries,
-    target,
-    today: utcToday(),
-  });
-  problems.push(...admission.problems);
-
+function main() {
+  const {files, problems, pre1, declaredVersion, declaredTier} =
+    checkRepository(ROOT);
   if (problems.length) {
     console.error(
       `\n✗ check:changesets found ${problems.length} problem(s):\n`,
@@ -218,14 +227,11 @@ function main() {
     process.exit(1);
   }
 
-  const mode =
-    admission.mode === 'minor'
-      ? ` — main targets ${admission.scheduled.version}, a minor scheduled for ${admission.scheduled.scheduledFor}`
-      : admission.base
-        ? ` — main targets a patch (published at ${admission.base})`
-        : '';
   console.log(
-    `✓ check:changesets — ${files.length} changeset(s) valid${ctx.pre1 ? ' (0.x: [breaking] -> minor, [experimental] and other categories -> patch)' : ''}${mode}`,
+    `✓ check:changesets — ${files.length} changeset(s) valid${pre1 ? ' (0.x: [breaking] -> minor, [experimental] and other categories -> patch)' : ''}` +
+      (declaredTier
+        ? `; main declares ${declaredVersion} (${declaredTier} plan)`
+        : ''),
   );
 }
 
@@ -234,4 +240,4 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   main();
 }
 
-export {validateChangeset, parseFrontmatter};
+export {checkRepository, validateChangeset, parseFrontmatter};

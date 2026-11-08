@@ -25,6 +25,8 @@ export interface MarkdownHeadingProjection {
   readonly ids: ReadonlyMap<Heading, string>;
   /** Plain-text labels for generated headings. */
   readonly labels: ReadonlyMap<Heading, string>;
+  /** Canonical permalink URL copied by the first-party module, absent by default. */
+  readonly permalinkUrls: ReadonlyMap<Heading, string>;
   /** Root headings only, preserving the released Outline scope. */
   readonly outline: ReadonlyArray<OutlineItem>;
 }
@@ -66,5 +68,5 @@ export function projectMarkdownHeadings(
     return {id, label, level: heading.depth};
   });
 
-  return {ids, labels, outline};
+  return {ids, labels, permalinkUrls: new Map(), outline};
 }

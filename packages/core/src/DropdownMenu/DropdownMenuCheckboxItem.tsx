@@ -4,7 +4,7 @@
 
 /**
  * @file DropdownMenuCheckboxItem.tsx
- * @input React, stylex, Item + CheckboxInput + DropdownMenu context + tokens from core
+ * @input React, stylex, Item + Indicator registry + DropdownMenu context + tokens from core
  * @output DropdownMenuCheckboxItem — a standalone checkable menu item.
  * @position Sub-component; used inside DropdownMenu.
  *
@@ -26,16 +26,24 @@
  * mobile.
  */
 
-import {useCallback, type PointerEvent, type ReactNode} from 'react';
+import {
+  useCallback,
+  type MouseEvent,
+  type PointerEvent,
+  type ReactNode,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {renderIconSlot, type IconType} from '../Icon';
 import {useIndicator} from '../Indicator';
 import {Item} from '../Item';
 import {useDropdownMenuContext} from './DropdownMenuContext';
+import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {menuPressLitRowStyle} from '../privateAttributes/menuPressLit.stylex';
 import {focusMenuItemOnHover} from './menuItemHover';
-import {colorVars, spacingVars} from '../theme/tokens.stylex';
-import {mergeProps, themeProps} from '../utils';
+import {colorVars, focusVars, spacingVars} from '../theme/tokens.stylex';
+import {composeEventHandlers, mergeProps, themeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
+import {keepDisabledRowUnfocused} from './menuItemRoles';
 
 const styles = stylex.create({
   root: {
@@ -44,13 +52,18 @@ const styles = stylex.create({
     color: colorVars['--color-text-primary'],
     backgroundColor: {
       default: 'transparent',
-      ':focus': colorVars['--color-overlay-hover'],
+      // menuPressLitRowStyle sets the variable on the row a held finger or pen
+      // lights.
+      ':focus': `var(--_menu-row-focus-paint, ${colorVars['--color-overlay-hover']})`,
     },
     cursor: {
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
-    outline: 'none',
+    // Rows show focus with a translucent overlay, which forced colors replace
+    // with the page color. The standard focus ring (focusOutlineStyles), drawn
+    // inside the row by its own width, marks the focused row in every mode.
+    outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
   },
   disabled: {
     opacity: 0.5,
@@ -58,8 +71,8 @@ const styles = stylex.create({
   },
   // Rendered in Item's `marker` slot as a raw flex child, so `order` moves it
   // relative to the label within the row. On touch it moves to the inline-end.
-  // `aria-hidden` + `inert` + pointer-events:none keep the composed CheckboxInput
-  // decorative: it adds no accessible name, and clicks fall through to the row,
+  // `aria-hidden` + `inert` + pointer-events:none keep the composed checkbox
+  // indicator decorative: it adds no accessible name, and clicks fall through to the row,
   // which owns the role and activation.
   // Placement of the marker within the row. The indicator draws its own box
   // (size, fill, border) — these are only the rules the MENU owns: where the
@@ -93,7 +106,7 @@ export interface DropdownMenuCheckboxItemProps extends Omit<
   description?: ReactNode;
   /**
    * Icon to display before the label. Accepts a semantic icon name (see
-   * `npx astryx docs icons`) or a rendered node.
+   * `astryx docs icons`) or a rendered node.
    */
   icon?: ReactNode | IconType;
   /**
@@ -105,9 +118,10 @@ export interface DropdownMenuCheckboxItemProps extends Omit<
    */
   onChange?: (checked: boolean) => void;
   /**
-   * Whether the item is disabled. Disabled items stay focusable (via
-   * `aria-disabled`) so they remain discoverable by keyboard and assistive
-   * technology, but activation is blocked.
+   * Whether the item is disabled. A disabled item stays in the accessibility
+   * tree as disabled (`aria-disabled`), and the arrow keys and typeahead reach
+   * it so keyboard users find it. The pointer highlight skips it, and
+   * activation is blocked.
    * @default false
    */
   isDisabled?: boolean;
@@ -132,6 +146,9 @@ export interface DropdownMenuCheckboxItemProps extends Omit<
  *
  * Must be used inside a DropdownMenu. Toggles an independent boolean; for a
  * one-of-N choice use DropdownMenuRadioGroup + DropdownMenuRadioItem instead.
+ * Consumer click and pointer-move handlers compose after the row's own
+ * activation and hover-focus behavior; disabled activation stops before the
+ * consumer click handler.
  *
  * @example
  * ```
@@ -157,6 +174,8 @@ export function DropdownMenuCheckboxItem({
   xstyle,
   className,
   style,
+  onClick,
+  onPointerMove,
   ...rest
 }: DropdownMenuCheckboxItemProps) {
   const ctx = useDropdownMenuContext();
@@ -164,15 +183,20 @@ export function DropdownMenuCheckboxItem({
   const controlSize = menuSize === 'sm' ? 'sm' : 'md';
   const CheckboxControl = useIndicator('checkbox');
 
-  const handleClick = useCallback(() => {
-    if (isDisabled) {
-      return;
-    }
-    onChange?.(!value);
-    if (hasCloseOnSelect) {
-      ctx?.closeMenu();
-    }
-  }, [isDisabled, onChange, value, hasCloseOnSelect, ctx]);
+  const handleClick = useCallback(
+    (event: MouseEvent) => {
+      if (isDisabled) {
+        event.preventDefault();
+        return;
+      }
+      onChange?.(!value);
+      if (hasCloseOnSelect) {
+        ctx?.closeMenu();
+      }
+      onClick?.(event as MouseEvent<HTMLElement>);
+    },
+    [isDisabled, onChange, value, hasCloseOnSelect, ctx, onClick],
+  );
 
   const handlePointerMove = useCallback(
     (e: PointerEvent<HTMLElement>) => focusMenuItemOnHover(e, isDisabled),
@@ -182,14 +206,18 @@ export function DropdownMenuCheckboxItem({
   return (
     <Item
       {...rest}
+      onMouseDown={composeEventHandlers(
+        rest.onMouseDown,
+        isDisabled ? keepDisabledRowUnfocused : undefined,
+      )}
       role="menuitemcheckbox"
       aria-checked={value}
-      tabIndex={isDisabled ? undefined : -1}
-      onPointerMove={handlePointerMove}
+      tabIndex={-1}
+      onPointerMove={composeEventHandlers(handlePointerMove, onPointerMove)}
       marker={
         // No wrapper, and no menu-specific theme target: the shared
-        // `astryx-checkbox` target is already on this element (main reached
-        // the menu checkbox through it too), so the menu adds only its own
+        // `astryx-checkbox-indicator` target is already on this element (main
+        // reached the menu checkbox through it too), so the menu adds only its own
         // placement rules. A wrapper here would have duplicated the
         // indicator's control size and moved nothing themeable.
         <CheckboxControl
@@ -209,7 +237,13 @@ export function DropdownMenuCheckboxItem({
       endContent={endContent}
       onClick={handleClick}
       isDisabled={isDisabled}
-      xstyle={[styles.root, isDisabled && styles.disabled, xstyle]}
+      xstyle={[
+        focusOutlineStyles.focusVisible,
+        styles.root,
+        menuPressLitRowStyle,
+        isDisabled && styles.disabled,
+        xstyle,
+      ]}
       {...mergeProps(themeProps('dropdown-menu-item', {size: menuSize}), {
         className,
         style,

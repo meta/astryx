@@ -8,11 +8,30 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {expandWorkspaceDirs} from '../lib/workspace-globs.mjs';
 
-function sha256(file) {
-  return crypto
-    .createHash('sha256')
-    .update(fs.readFileSync(file))
-    .digest('hex');
+function sha256(contents) {
+  return crypto.createHash('sha256').update(contents).digest('hex');
+}
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) return value.map(canonicalJson);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map(key => [key, canonicalJson(value[key])]),
+    );
+  }
+  return value;
+}
+
+function comparableContents(file, relative) {
+  const contents = fs.readFileSync(file);
+  if (relative !== 'package.json') return contents;
+
+  // pnpm resolves workspace dependencies concurrently, so packed JSON object
+  // insertion order can vary. Object keys are unordered; values and array order
+  // remain exact, while every other package file stays byte-for-byte strict.
+  return Buffer.from(JSON.stringify(canonicalJson(JSON.parse(contents))));
 }
 
 function files(root, directory = root, result = new Map()) {
@@ -20,10 +39,8 @@ function files(root, directory = root, result = new Map()) {
     const absolute = path.join(directory, entry.name);
     if (entry.isDirectory()) files(root, absolute, result);
     else if (entry.isFile()) {
-      result.set(
-        path.relative(root, absolute).split(path.sep).join('/'),
-        sha256(absolute),
-      );
+      const relative = path.relative(root, absolute).split(path.sep).join('/');
+      result.set(relative, sha256(comparableContents(absolute, relative)));
     }
   }
   return result;

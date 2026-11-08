@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/versioning`: version an integration
+ * @file `astryx docs authoring/ship/versioning`: version an integration
  * package, know which changes break apps, declare peer ranges, keep apps on
  * older CLIs working, and match codemod folders to versions.
  */
@@ -28,7 +28,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: '# 1.0.0 -> 2.0.0: a breaking change\nnpm version major\n# 1.0.0 -> 1.1.0: a new feature\nnpm version minor\n# 1.0.0 -> 1.0.1: a fix\nnpm version patch',
+          code: '# 1.0.0 -> 2.0.0: a breaking change\n{@pm-only npm "npm, which every Node install carries, sets the version" version major}\n# 1.0.0 -> 1.1.0: a new feature\n{@pm-only npm "npm, which every Node install carries, sets the version" version minor}\n# 1.0.0 -> 1.0.1: a fix\n{@pm-only npm "npm, which every Node install carries, sets the version" version patch}',
         },
         {
           type: 'list',
@@ -54,13 +54,13 @@ export const docs = {
           rows: [
             [
               'A component name, such as `AcmeCarousel`',
-              'Imports, and `npx astryx component AcmeCarousel`',
+              'Imports, and `{@command component AcmeCarousel}`',
             ],
             [
               'A template id, such as `acme-dashboard`',
-              '`npx astryx template acme-dashboard`',
+              '`{@command template acme-dashboard}`',
             ],
-            ['A theme slug, such as `ocean`', '`npx astryx theme add ocean`'],
+            ['A theme slug, such as `ocean`', '`{@command theme add ocean}`'],
             [
               'A topic name or route, such as `acme/deploying`',
               'Reads of the old name, and links to it from other docs',
@@ -106,19 +106,23 @@ export const docs = {
             ],
             [
               '`@astryxdesign/cli`',
-              'You ship a docs section, a placed guide, a template that sets `replaces`, a doc section with an `id`, or a theme',
-              '`>=0.7.0`, optional in `peerDependenciesMeta`',
+              'You ship a docs section, a placed guide, a template that sets `replaces` or `keywords`, a component that sets `replaces`, a doc section with an `id`, or a theme',
+              '`>=0.6.6` when you ship a template that sets `keywords`, `>=0.6.7` when a component sets `replaces`, otherwise `>=0.6.4`. Optional in `peerDependenciesMeta`',
             ],
           ],
         },
         {
           type: 'code',
           lang: 'json',
-          code: '{\n  "peerDependencies": {\n    "@astryxdesign/core": "^0.6.0",\n    "@astryxdesign/cli": ">=0.7.0"\n  },\n  "peerDependenciesMeta": {\n    "@astryxdesign/cli": {"optional": true}\n  }\n}',
+          code: '{\n  "peerDependencies": {\n    "@astryxdesign/core": "^0.6.0",\n    "@astryxdesign/cli": ">=0.6.4"\n  },\n  "peerDependenciesMeta": {\n    "@astryxdesign/cli": {"optional": true}\n  }\n}',
         },
         {
           type: 'prose',
-          text: '`integration verify` fails a package that needs the CLI peer and lacks it, or whose range admits a stable CLI before 0.7.0. `integration add doc --parent` and `integration add theme` write the peer for you.',
+          text: '`integration verify` fails a package that needs the CLI peer and lacks it, or whose range admits a stable CLI too old for what it ships. `integration add doc --parent` and `integration add theme` write the peer for you.',
+        },
+        {
+          type: 'prose',
+          text: "When the CLI is outside that range, `doctor integration validate` and `integration check` list a `cli_peer_version` note naming your package. A note fails nothing, `--strict` included, and `integration verify` does not report it. Below the range the note gives the commands that install a newer Core and CLI together, as dev dependencies in your own package folder, and then run `upgrade --apply`. Above it, in an app the note asks for a release of your package that supports that CLI, and in your own package folder it asks you to test your package with that CLI and widen the range.",
         },
       ],
     },
@@ -136,14 +140,16 @@ export const docs = {
           items: [
             'An unknown field in `astryx.integration.mjs` is ignored with an `unknown_manifest_key` warning, and the rest of the manifest still loads.',
             'A named export that the CLI does not know is ignored with no warning, so `debug` and `gapReport` are safe to add.',
-            'A stable CLI before 0.7.0 prints each `{@link ...}` as written.',
-            'A stable CLI before 0.7.0 cannot read a docs section, a section `id`, a template that sets `replaces`, or a theme folder that `integration add theme` writes. It can then hide every doc topic your package ships.',
-            'Stable 0.6.3 still loads your components, but 0.6.0 cannot read the component docs that `integration add component` writes: `component AcmeCarousel` fails there.',
+            'Published 0.6.3 and earlier print each `{@link ...}` as written.',
+            'Published 0.6.3 and earlier reject a template that sets `replaces` or `keywords`, drop that template, and hide every doc topic your package ships. Published 0.6.4 and 0.6.5 still drop a template that sets `keywords`.',
+            'Published 0.6.3 and earlier cannot read a docs section, a section `id`, or a theme folder that `integration add theme` writes. They can then hide every doc topic your package ships.',
+            'Published 0.6.2 and 0.6.3 still load your components, but published 0.6.0 and 0.6.1 cannot read the component docs that `integration add component` writes: `component AcmeCarousel` fails there.',
+            'An app on an older CLI lists a component whose doc names another export of its file under the file name, and lists no family members, so `component AcmeCarousel` fails there.',
           ],
         },
         {
           type: 'prose',
-          text: '`integration verify` requires the CLI peer for a docs section, a placed guide, a template `replaces`, a doc section with an `id`, and a theme. A stable CLI before 0.7.0 cannot read any of them, and when it hides your topics, `docs` gives no warning.',
+          text: '`integration verify` requires the CLI peer for a docs section, a placed guide, a template `replaces` or `keywords`, a doc section with an `id`, and a theme. A CLI too old for one of them cannot read it, and when it hides your topics, `docs` gives no warning.',
         },
       ],
     },

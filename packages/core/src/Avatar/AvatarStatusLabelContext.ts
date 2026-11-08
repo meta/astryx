@@ -4,7 +4,7 @@
 
 /**
  * @file AvatarStatusLabelContext.ts
- * @input Uses React createContext, RefObject
+ * @input Uses createSharedContext, RefObject
  * @output Exports AvatarStatusLabelContext, AvatarStatusLabelTarget
  * @position Internal context; provided by Avatar, consumed by AvatarStatusDot
  *
@@ -12,7 +12,8 @@
  * - /packages/core/src/Avatar/Avatar.doc.mjs
  */
 
-import {createContext, type RefObject} from 'react';
+import type {RefObject} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 
 /**
  * The box a status element writes its label into.
@@ -43,5 +44,9 @@ export interface AvatarStatusLabelTarget {
  * Avatar, where a standalone dot names itself and has nobody to report to.
  */
 export const AvatarStatusLabelContext =
-  createContext<RefObject<AvatarStatusLabelTarget> | null>(null);
+  createSharedContext<RefObject<AvatarStatusLabelTarget> | null>(
+    'AvatarStatusLabelContext',
+    1,
+    null,
+  );
 AvatarStatusLabelContext.displayName = 'AvatarStatusLabelContext';

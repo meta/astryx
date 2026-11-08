@@ -98,6 +98,72 @@ describe('integrationAddComponent name collisions', () => {
     expect(snapshot()).toEqual(before);
   });
 
+  it('adds a name a family doc lists but the module it imports does not export', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      `${JSON.stringify({name: '@acme/widgets', version: '1.0.0', files: ['dist'], exports: {'./tabs': './components/tabs/index.ts'}}, null, 2)}\n`,
+    );
+    const tabs = path.join(tmpDir, 'components', 'tabs');
+    fs.mkdirSync(tabs, {recursive: true});
+    fs.writeFileSync(
+      path.join(tabs, 'AcmeTabs.doc.mjs'),
+      "export default {type: 'component', name: 'AcmeTabs', import: '@acme/widgets/tabs', description: 'x', components: [{name: 'AcmeTabExtra', description: 'x'}]};\n",
+    );
+    fs.writeFileSync(
+      path.join(tabs, 'AcmeTabs.tsx'),
+      'export function AcmeTabs() { return null; }\nexport function AcmeTabExtra() { return null; }\n',
+    );
+    fs.writeFileSync(
+      path.join(tabs, 'index.ts'),
+      "export {AcmeTabs} from './AcmeTabs';\n",
+    );
+
+    const result = await integrationAdd('component', 'AcmeTabExtra', {
+      cwd: tmpDir,
+      dryRun: true,
+    });
+    expect(result.data.files).toContain('components/AcmeTabExtra.doc.mjs');
+  });
+
+  it('refuses a member a family exports through built output', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      `${JSON.stringify({name: '@acme/widgets', version: '1.0.0', files: ['dist'], exports: {'./tabs': './dist/tabs/index.js'}}, null, 2)}\n`,
+    );
+    const tabs = path.join(tmpDir, 'components', 'tabs');
+    fs.mkdirSync(tabs, {recursive: true});
+    fs.writeFileSync(
+      path.join(tabs, 'AcmeTabs.doc.mjs'),
+      "export default {type: 'component', name: 'AcmeTabs', import: '@acme/widgets/tabs', description: 'x', components: [{name: 'AcmeTab', description: 'x'}]};\n",
+    );
+    fs.writeFileSync(
+      path.join(tabs, 'AcmeTabs.tsx'),
+      'export function AcmeTabs() { return null; }\n',
+    );
+    fs.writeFileSync(
+      path.join(tabs, 'AcmeTab.tsx'),
+      'export function AcmeTab() { return null; }\n',
+    );
+    const dist = path.join(tmpDir, 'dist', 'tabs');
+    fs.mkdirSync(dist, {recursive: true});
+    fs.writeFileSync(
+      path.join(dist, 'index.js'),
+      "export {AcmeTabs} from './tabs.js';\nexport {AcmeTab} from './tab.js';\n",
+    );
+    fs.writeFileSync(
+      path.join(dist, 'tabs.js'),
+      'export function AcmeTabs() { return null; }\n',
+    );
+    fs.writeFileSync(
+      path.join(dist, 'tab.js'),
+      'export function AcmeTab() { return null; }\n',
+    );
+
+    await expect(
+      integrationAdd('component', 'AcmeTab', {cwd: tmpDir, dryRun: true}),
+    ).rejects.toThrow('Refusing to add component "AcmeTab"');
+  });
+
   it('still adds a component whose name is free', async () => {
     writeAuthoredComponent('components/AcmeWidget/AcmeWidget.doc.mjs');
 

@@ -2,13 +2,15 @@
 
 /**
  * @file The page ranker behind `build`'s START: which page template an idea
- * should start from.
+ * should start from, and whether the idea asks for a page at all.
  *
- * @input A free-text idea and the project's ready page templates (id, display
- *   name, description, `Family - Variant` category), all read from each
- *   template's own descriptor.
+ * @input A free-text idea, the project's ready page templates (id, display
+ *   name, description, keywords, `Family - Variant` category) and its
+ *   components (name, keywords), all read from each item's own descriptor.
  * @output Every template, ranked, with the query terms it matched and whether
- *   the idea names its family; `pickStart` turns that into a template or null.
+ *   the idea names its family; `ideaKind`, whether the idea asks for a page, a
+ *   part of one, or a change to a page the builder has; `pickStart` turns both
+ *   into a template or null.
  * @position Beside kit.mjs (api/build/kit/). Search ranks components, docs,
  *   blocks and pages against short lookups; this ranks only page templates,
  *   against the long descriptions builders actually write ("ops dashboard with
@@ -36,234 +38,92 @@
  *   next one counts half, unless the template names the same pair
  *   ("executive summary").
  * - The family base. A template whose id is its family's name (`dashboard`,
- *   `settings`) is that family's default; it wins when no variant's own words
- *   outweigh it.
- *
- * Family words come from the templates' own ids — a word in the ids of two or
- * more templates of one family, plus the family's name when a template carries
- * it — never from a list kept here or from synonyms, so an integration's
- * templates join the vocabulary by being named like their family, and "a
- * landing page" is not a hero because "landing" is a synonym of "hero".
+ *   `settings`) is that family's default. A variant displaces it only with two
+ *   matched terms of its own ("a small comparison note" does not make a
+ *   dashboard the comparison dashboard), and a base too weak to start on its
+ *   own displaces no variant ("a funnel for a dashboard" is the funnel) —
+ *   unless the idea names its family in the head, which is start evidence on
+ *   its own ("saml login" stays the login page).
  */
 
-import {stem, STOPWORDS, SYNONYMS} from '../../search/search.mjs';
+import {
+  HEAD_END,
+  SHELL_FAMILY,
+  terms,
+  modifiersOf,
+  pairsOf,
+  containersOf,
+  normalized,
+  SYNONYMS_OF,
+  familyWordsOf,
+} from './words.mjs';
+
+/**
+ * @typedef {import('./words.mjs').PageTemplate} PageTemplate
+ * @typedef {import('./words.mjs').RankedPage} RankedPage
+ * @typedef {import('./words.mjs').IdeaKind} IdeaKind
+ */
 
 /**
  * How much a term counts by where the template names it. The id and category
- * are the author's own label for what the page is; the description's last
- * sentence lists the ideas it serves; its body describes the layout.
+ * are the author's own label for what the page is; its keywords name the ideas
+ * it serves; its description describes the layout.
  */
 const FIELD_WEIGHT = {
   id: 3,
   variant: 3,
   family: 2,
   display: 2,
-  intent: 2,
-  body: 1,
+  keywords: 2,
+  description: 1,
 };
-/** A synonym hit counts at this share of a direct hit. */
+
+/**
+ * A synonym hit counts half a direct hit: a synonym says the idea is near the
+ * page, not that it names it.
+ */
 const SYNONYM_SHARE = 0.5;
-/** A container word ("in a modal") counts this many times over. */
+
+/**
+ * A container word ("in a modal") counts double: it names the page's frame,
+ * which is what a template is.
+ */
 const CONTAINER = 2;
-/** A word that only modifies another ("product" in "product response"). */
+
+/**
+ * A word that only modifies another ("product" in "product response") counts
+ * half: it describes its head, not the page.
+ */
 const MODIFIER = 0.5;
-/** Added when the idea's head names the template's family. */
+
+/**
+ * Added when the idea's head names the template's family: more than any one
+ * word scores (an id word only one template carries is worth about ten), so the
+ * head's family outranks a rarer word among the parts.
+ */
 const HEAD_FAMILY = 12;
-/** Added when the family is named anywhere else in the idea. */
+
+/**
+ * Added when the family is named anywhere else in the idea: about a description
+ * word, enough to settle a near tie.
+ */
 const BODY_FAMILY = 2;
-/** Added to a family's base template when the idea names that family. */
+
+/**
+ * Added to a family's base template when the idea names that family: settles a
+ * near tie toward the family's default page.
+ */
 const FAMILY_BASE = 2;
+
 /**
  * The least a start must score, and the evidence it needs: two matched terms,
  * or the idea naming its family. One rare word alone is how a tic-tac-toe game
- * board became a kanban board.
+ * board became a kanban board, and it is also too little for a variant to
+ * displace its family's base template.
  */
 const START_SCORE = 10;
+
 const START_TERMS = 2;
-
-/**
- * Words search drops that name layout: "side navigation", "side by side".
- */
-const LAYOUT_WORDS = new Set(['side']);
-
-/** Filler that search keeps but that says nothing about a page's layout. */
-const FILLER = new Set([
-  'per',
-  'each',
-  'every',
-  'using',
-  'via',
-  'into',
-  'onto',
-  'about',
-  'above',
-  'below',
-  'across',
-  'within',
-  'without',
-  'between',
-  'plus',
-  'also',
-  'then',
-  'them',
-  'they',
-  'which',
-  'while',
-  'when',
-  'all',
-  'any',
-  'new',
-  'use',
-  'used',
-  'show',
-  'shows',
-  'showing',
-  'display',
-  'displays',
-  'displaying',
-]);
-
-/**
- * Where an idea's head ends: its first clause, before the parts it lists.
- */
-const HEAD_END =
-  /:|,|;|\(|\s[-\u2013\u2014]\s|\b(?:with|showing|listing|for|that|where|plus|including|containing|featuring|which|to|from|of)\b/i;
-
-/**
- * Frames a page can live in, above whatever is underneath. A container phrase
- * counts only when it names one of these.
- */
-const OVERLAY_FRAMES = new Set([
-  'modal',
-  'dialog',
-  'drawer',
-  'sheet',
-  'popup',
-  'overlay',
-]);
-
-/** A container phrase: "in a modal", "inside the side panel". */
-const CONTAINER_PHRASE =
-  /\b(?:in|inside|within)\s+(?:a|an|the)\s+([a-z-]+)(?:\s+([a-z-]+))?/gi;
-
-/**
- * Where a phrase ends, for finding the word that heads it: punctuation and
- * the words that join phrases.
- */
-const PHRASE_END =
-  /[^a-z0-9\s-]+|\s(?:and|or|with|for|of|to|in|on|at|by|from|the|a|an|plus)\s/;
-
-/** @param {string} t */
-const isContentWord = t =>
-  t.length >= 2 &&
-  (LAYOUT_WORDS.has(t) || (!STOPWORDS.has(t) && !FILLER.has(t)));
-
-/**
- * Content terms of a text: lowercase alphanumeric words, stopwords and filler
- * removed, stemmed.
- * @param {string} text
- * @returns {string[]}
- */
-function terms(text) {
-  return (
-    String(text)
-      .toLowerCase()
-      .match(/[a-z0-9]+/g) ?? []
-  )
-    .filter(isContentWord)
-    .map(stem);
-}
-
-/**
- * The terms of an idea that only ever modify another word, each with the words
- * it modifies: in each phrase the last content word is its head, and the ones
- * before it describe the next.
- * @param {string} query
- * @returns {Map<string, Set<string>>}
- */
-function modifiersOf(query) {
-  const heads = new Set();
-  /** @type {Map<string, Set<string>>} */
-  const modifiers = new Map();
-  for (const phrase of String(query).toLowerCase().split(PHRASE_END)) {
-    const words = terms(phrase);
-    words.forEach((w, i) => {
-      if (i === words.length - 1) heads.add(w);
-      else modifiers.set(w, (modifiers.get(w) ?? new Set()).add(words[i + 1]));
-    });
-  }
-  for (const h of heads) modifiers.delete(h);
-  return modifiers;
-}
-
-/**
- * Adjacent term pairs a text names, "a b", for telling a template that names
- * a whole compound ("executive summary") from one that names only its parts.
- * @param {string[]} texts
- * @returns {Set<string>}
- */
-function pairsOf(texts) {
-  const pairs = new Set();
-  for (const text of texts) {
-    for (const phrase of String(text).toLowerCase().split(PHRASE_END)) {
-      const words = terms(phrase);
-      for (let i = 1; i < words.length; i++)
-        pairs.add(`${words[i - 1]} ${words[i]}`);
-    }
-  }
-  return pairs;
-}
-
-/**
- * The terms of an idea that name its frame: "modal" in "in a modal". A card, a
- * table or an existing page after "in a" is where a part goes, not a frame.
- * @param {string} query
- * @returns {Set<string>}
- */
-function containersOf(query) {
-  const found = new Set();
-  for (const m of String(query).matchAll(CONTAINER_PHRASE)) {
-    for (const t of terms(`${m[1]} ${m[2] ?? ''}`)) {
-      if (OVERLAY_FRAMES.has(t)) found.add(t);
-    }
-  }
-  return found;
-}
-
-/** @param {string} text */
-const normalized = text =>
-  (
-    String(text)
-      .toLowerCase()
-      .match(/[a-z0-9]+/g) ?? []
-  ).join(' ');
-
-/** Stemmed synonym lookup built from search's vocabulary, both directions. */
-const SYNONYMS_OF = (() => {
-  /** @type {Map<string, Set<string>>} */
-  const index = new Map();
-  /** @param {string} a @param {string} b */
-  const add = (a, b) => {
-    const set = index.get(a) ?? new Set();
-    set.add(b);
-    index.set(a, set);
-  };
-  for (const [key, values] of Object.entries(SYNONYMS)) {
-    const k = stem(key);
-    for (const value of values) {
-      const v = stem(value);
-      add(k, v);
-      add(v, k);
-      for (const other of values) if (other !== value) add(v, stem(other));
-    }
-  }
-  return index;
-})();
-
-/**
- * @typedef {import('../_adapter.mjs').PageTemplate} PageTemplate
- * @typedef {{name: string, score: number, hits: number, familyNamed: boolean, containerMatched: boolean}} RankedPage
- */
 
 /**
  * Rank page templates against an idea, best first. Ties go to the template
@@ -276,20 +136,15 @@ const SYNONYMS_OF = (() => {
 export function rankPages(query, pages) {
   const docs = pages.map(page => {
     const [family = '', ...variantParts] = page.category.split(' - ');
-    const sentences = page.description.trim().split(/(?<=[.!?])\s+/);
-    const intent = sentences.length > 1 ? sentences[sentences.length - 1] : '';
-    const body =
-      sentences.length > 1
-        ? sentences.slice(0, -1).join(' ')
-        : page.description;
     /** @type {Record<keyof typeof FIELD_WEIGHT, string>} */
     const fields = {
       id: page.name.replace(/-/g, ' '),
       variant: variantParts.join(' - '),
       family,
       display: page.displayName,
-      intent,
-      body,
+      // Each keyword is its own phrase: a pair never spans two of them.
+      keywords: (page.keywords ?? []).join(', '),
+      description: page.description,
     };
     /** @type {Map<string, number>} */
     const bag = new Map();
@@ -320,26 +175,7 @@ export function rankPages(query, pages) {
     return d ? Math.log(1 + (n - d + 0.5) / (d + 0.5)) : 0;
   };
 
-  // Family words, from the templates' own ids.
-  /** @type {Map<string, Map<string, number>>} */
-  const idWords = new Map();
-  for (const {page, family} of docs) {
-    const counts = idWords.get(family) ?? new Map();
-    for (const w of new Set(page.name.split('-'))) {
-      if (w.length >= 3) counts.set(stem(w), (counts.get(stem(w)) ?? 0) + 1);
-    }
-    idWords.set(family, counts);
-  }
-  /** @type {Map<string, string>} */
-  const familyOfWord = new Map();
-  for (const [family, counts] of idWords) {
-    const heads = [...counts].filter(([, c]) => c >= 2).map(([w]) => w);
-    const name = normalized(family).split(' ').pop() ?? '';
-    if (name.length >= 3 && counts.has(stem(name))) heads.push(stem(name));
-    for (const head of heads) {
-      if (!familyOfWord.has(head)) familyOfWord.set(head, family);
-    }
-  }
+  const familyOfWord = familyWordsOf(pages);
   /** @param {string[]} ts */
   const familiesIn = ts =>
     new Set(ts.filter(t => familyOfWord.has(t)).map(t => familyOfWord.get(t)));
@@ -352,11 +188,13 @@ export function rankPages(query, pages) {
   const modifiers = modifiersOf(query);
   const containers = containersOf(query);
 
-  return docs
+  const ranked = docs
     .map(({page, family, bag, pairs}) => {
       let score = 0;
       let hits = 0;
       let containerMatched = false;
+      /** @type {Set<string>} */
+      const matched = new Set();
       for (const t of queryTerms) {
         // A modifier is discounted where the template names it outright; a
         // synonym hit is already discounted by SYNONYM_SHARE.
@@ -378,16 +216,27 @@ export function rankPages(query, pages) {
         if (value > 0) {
           score += value;
           hits++;
+          matched.add(t);
           if (containers.has(t)) containerMatched = true;
         }
       }
       const familyNamed = namedFamilies.has(family);
-      if (headFamilies.has(family)) score += HEAD_FAMILY;
+      const headNamed = headFamilies.has(family);
+      if (headNamed) score += HEAD_FAMILY;
       else if (familyNamed) score += BODY_FAMILY;
-      if (familyNamed && normalized(page.name) === normalized(family)) {
-        score += FAMILY_BASE;
-      }
-      return {name: page.name, score, hits, familyNamed, containerMatched};
+      const base = normalized(page.name) === normalized(family);
+      if (familyNamed && base) score += FAMILY_BASE;
+      return {
+        name: page.name,
+        score,
+        hits,
+        familyNamed,
+        headNamed,
+        containerMatched,
+        family,
+        base,
+        matched,
+      };
     })
     .sort(
       (a, b) =>
@@ -395,6 +244,38 @@ export function rankPages(query, pages) {
         a.name.split('-').length - b.name.split('-').length ||
         a.name.localeCompare(b.name),
     );
+  return baseFirst(ranked);
+}
+
+/**
+ * Put a named family's base template ahead of the variant that outranks it,
+ * unless the variant matched START_TERMS terms the base did not, or the base
+ * cannot start on its own: too little score, or too few matched terms. The
+ * head names the exception: a family word in the idea's head is start
+ * evidence on its own — the same evidence pickStart accepts in place of a
+ * second term — so a head-named one-term base can still take the lead ("saml
+ * login" is the login page, not the SSO flow). A base whose family the idea
+ * names only elsewhere still needs a second term: score alone drifts upward
+ * as the catalog grows (idf rises with page count) and would eventually let a
+ * one-term base displace its variant, while hits do not drift.
+ * @param {RankedPage[]} ranked
+ * @returns {RankedPage[]}
+ */
+function baseFirst(ranked) {
+  const top = ranked[0];
+  if (!top || top.base || !top.familyNamed) return ranked;
+  const base = ranked.find(r => r.base && r.family === top.family);
+  if (
+    !base ||
+    base.score < START_SCORE ||
+    (base.hits < START_TERMS && !base.headNamed)
+  ) {
+    return ranked;
+  }
+  const own = [...top.matched].filter(t => !base.matched.has(t)).length;
+  return own >= START_TERMS
+    ? ranked
+    : [base, ...ranked.filter(r => r !== base)];
 }
 
 /**
@@ -416,14 +297,27 @@ export function pickAlternatives(ranked, startName, count = 2) {
 }
 
 /**
- * The template to start from, or null when the best one has too little
- * evidence to lead and the page should start from the app shell. Evidence is
- * two matched terms, the idea naming the template's family, or its container.
+ * The template to start from, or null for the kit's neutral app shell. A page
+ * needs evidence to lead: two matched terms, the idea naming the template's
+ * family, or its container. A part starts from the base template of the family
+ * the idea places it in, else from the app shell (spec:AST-048/FR3); an edit of
+ * a page the builder already has starts from the app shell (FR9). Either way,
+ * the app shell is the shell template the idea describes when one leads.
  *
  * @param {RankedPage[]} ranked
+ * @param {IdeaKind} [kind]
  * @returns {RankedPage | null}
  */
-export function pickStart(ranked) {
+export function pickStart(ranked, kind = 'page') {
+  if (kind !== 'page') {
+    const host = kind === 'part' && ranked.find(r => r.base && r.familyNamed);
+    if (host) return host;
+    // Otherwise the app shell (FR2): the shell template the idea describes
+    // when one leads ("a frame with sidebar navigation"), else none, for the
+    // kit's neutral fallback.
+    const lead = pickStart(ranked);
+    return lead?.family === SHELL_FAMILY ? lead : null;
+  }
   const top = ranked[0];
   if (!top || top.score < START_SCORE) return null;
   return top.hits >= START_TERMS || top.familyNamed || top.containerMatched

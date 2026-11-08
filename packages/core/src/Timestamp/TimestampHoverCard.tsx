@@ -4,7 +4,8 @@
 
 /**
  * @file TimestampHoverCard.tsx
- * @input Uses React, useHoverCard, a stable time ref, IconButton, Icon, formatted lines
+ * @input Uses React, useHoverCard, a stable time ref, IconButton, the theme's
+ *   `timestamp-copy` icon slot, formatted lines
  * @output Default-exports the lazily-loaded copyable hover card for Timestamp
  * @position Split out of Timestamp so the overlay (HoverCard) and the copy
  *   affordance's Icon/IconButton load only when a card is actually shown — the
@@ -14,8 +15,10 @@
  *   columns — label, value, and a trailing action column for copy buttons —
  *   so the buttons align down a single column no matter how wide each value
  *   is. The action column is only added when at least one row is copyable, so
- *   a fully read-only card carries no dangling gutter. Label-less cards drop
- *   the label column and stack to whatever columns remain.
+ *   a fully read-only card carries no dangling gutter. A copy button sits
+ *   inside its row's value, which spans the value and action columns through
+ *   a subgrid. A row without a label is named by its zone's long name, which
+ *   is visually hidden. A card with no labels drops the label column.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Timestamp/Timestamp.tsx (the persistent trigger and lazy attachment)
@@ -28,11 +31,11 @@ import {useCallback, useRef} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {useHoverCard} from '../HoverCard/useHoverCard';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
-import {IconButton} from '../IconButton';
-import {Icon} from '../Icon';
+import {IconButton} from '../IconButton/IconButton';
+import {ComponentIcon} from '../Icon/ComponentIcon';
 import {useClipboard} from '../hooks/useClipboard';
-import {useTranslator} from '../i18n';
 import {themeProps} from '../utils/themeProps';
+import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 import {
   colorVars,
   spacingVars,
@@ -40,6 +43,13 @@ import {
   fontWeightVars,
 } from '../theme/tokens.stylex';
 import type {TimestampTooltipLine} from './tooltipEntries';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Timestamp/TimestampHoverCard.generated';
+
+registerEnglishFallback(english);
 
 const styles = stylex.create({
   // The card is a definition list laid out as a grid so cells align into
@@ -81,6 +91,19 @@ const styles = stylex.create({
     padding: 0,
     whiteSpace: 'nowrap',
   },
+  // A value carrying the action cell spans the value and action columns and
+  // shares the card's tracks, so the copy buttons still align.
+  // Without subgrid, a flex row keeps the button at the row's end.
+  valueCells: {
+    gridColumn: 'span 2',
+    display: {
+      default: 'flex',
+      '@supports (grid-template-columns: subgrid)': 'grid',
+    },
+    justifyContent: 'space-between',
+    gridTemplateColumns: 'subgrid',
+    alignItems: 'center',
+  },
   // The trailing action cell holds the copy button (or nothing, on a
   // read-only row). It lives in its own grid column so buttons align.
   action: {
@@ -118,7 +141,7 @@ const COPY_FEEDBACK_MS = 1500;
  * of this machinery.
  */
 function CopyButton({value}: {value: string}) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const {copy, isCopied: copied} = useClipboard({
     announce: t('@astryx.timestamp.copied'),
     resetAfterMs: COPY_FEEDBACK_MS,
@@ -132,7 +155,14 @@ function CopyButton({value}: {value: string}) {
     <IconButton
       variant="ghost"
       size="sm"
-      icon={<Icon icon={copied ? 'check' : 'copy'} size="sm" color="inherit" />}
+      icon={
+        <ComponentIcon
+          slot="timestamp-copy"
+          state={{copied}}
+          fallback={{icon: copied ? 'check' : 'copy', size: 'sm'}}
+          color="inherit"
+        />
+      }
       // Visible hover/focus hint via Button's built-in tooltip: 'Copy',
       // flipping to 'Copied' after a successful copy in step with the icon.
       // The full 'Copy <value>' string stays the aria-label for assistive tech.
@@ -166,17 +196,28 @@ function EntryRow({
   hasLabelColumn: boolean;
   hasActionColumn: boolean;
 }) {
+  // A description list holds only name-value groups, so the action cell lives
+  // inside the value. A row without a label is named by its zone, out of
+  // sight, so the card looks the same.
+  const hasLabel = line.label != null && line.label !== '';
+  const hiddenName = <VisuallyHidden>{line.zoneName}</VisuallyHidden>;
   return (
     <div {...stylex.props(styles.row)}>
-      {hasLabelColumn && (
-        <dt {...stylex.props(styles.label)}>{line.label ?? ''}</dt>
+      {hasLabelColumn ? (
+        <dt {...stylex.props(styles.label)}>
+          {hasLabel ? line.label : hiddenName}
+        </dt>
+      ) : (
+        <VisuallyHidden as="dt">{line.zoneName}</VisuallyHidden>
       )}
-      <dd {...stylex.props(styles.value)}>{line.value}</dd>
-      {hasActionColumn && (
-        <div {...stylex.props(styles.action)}>
-          {line.isCopyable && <CopyButton value={line.value} />}
-        </div>
-      )}
+      <dd {...stylex.props(styles.value, hasActionColumn && styles.valueCells)}>
+        {hasActionColumn ? <span>{line.value}</span> : line.value}
+        {hasActionColumn && (
+          <span {...stylex.props(styles.action)}>
+            {line.isCopyable && <CopyButton value={line.value} />}
+          </span>
+        )}
+      </dd>
     </div>
   );
 }

@@ -21,7 +21,10 @@ export const doc = {
     "Use 'Button', 'widgets/Button', '@acme/widgets/Button', or " +
     "'@acme/widgets@1.2.3/Button'. A version applies to the package and must match the " +
     'installed version. Boolean flags narrow every resolved component to just its props, ' +
-    'source, showcase, or example blocks.',
+    'source, showcase, or example blocks. An integration component that replaces a Core ' +
+    'component (its doc sets replaces, and its package declares the CLI range that turns ' +
+    'replacement on) answers to the Core name in detail, batch, and list views; use ' +
+    '--package @astryxdesign/core for the original.',
   fn: 'component',
   args: [
     {
@@ -69,7 +72,7 @@ export const doc = {
       flag: '--package <name>',
       param: 'options.package',
       description:
-        'Scope lookup to an external package (e.g. @acme/xds-widgets)',
+        'Scope lookup to an external package (e.g. @acme/xds-widgets). Use @astryxdesign/core to select an original replaced by an integration component.',
     },
   ],
   examples: [
@@ -82,7 +85,12 @@ export const doc = {
       label: 'Props table as JSON',
       cli: 'astryx component Button --props --json',
     },
+    {
+      label: 'Select a replaced Core original',
+      cli: 'astryx component SideNav --package @astryxdesign/core',
+    },
   ],
+  outsideProject: 'same',
   exitCodes: [
     {code: 0, when: 'success'},
     {

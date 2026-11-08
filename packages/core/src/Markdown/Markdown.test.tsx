@@ -1,5 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/**
+ * @file Markdown.test.tsx
+ * @input Markdown renderer, supported blocks and source-line plugin
+ * @output Semantic, flat-task identity and nested flow-task regressions
+ * @position Core Markdown unit tests
+ */
+
 import {
   describe,
   it,
@@ -13,7 +20,12 @@ import {render, screen, fireEvent} from '@testing-library/react';
 import type {ComponentProps, ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Markdown} from './Markdown';
-import type {MarkdownComponents, MarkdownInlinePlugin} from './Markdown';
+import {markdownSourceLinesPlugin} from './plugins';
+import type {
+  MarkdownComponents,
+  MarkdownInlinePlugin,
+  MarkdownSourceLines,
+} from './Markdown';
 import type {ParseOptions} from './index';
 import {stubMatchMedia} from '../__tests__/stubMatchMedia';
 import {parseOutlineFromMarkdown} from '../Outline/parseOutlineFromMarkdown';
@@ -322,11 +334,79 @@ describe('Markdown', () => {
     expect(pre).toBeInTheDocument();
   });
 
+  it('renders a diff-<lang> fence as a diff over that language, and diff over plaintext', () => {
+    const {container, rerender} = render(
+      <Markdown>{'```diff-js\n-const x = 1;\n+const x = 2;\n```'}</Markdown>,
+    );
+    expect(container.querySelector('[data-diff="removed"]')).not.toBeNull();
+    expect(container.querySelector('[data-diff="added"]')).not.toBeNull();
+    // `const` keeps its js highlighting past the glyph.
+    expect(
+      container.querySelector('[data-diff="added"] .astryx-token-keyword'),
+    ).not.toBeNull();
+    rerender(<Markdown>{'```diff\n-old\n+new\n```'}</Markdown>);
+    expect(container.querySelectorAll('[data-diff]')).toHaveLength(2);
+    expect(container.querySelector('.astryx-token-keyword')).toBeNull();
+    rerender(<Markdown>{'```js\n-const x = 1;\n```'}</Markdown>);
+    expect(container.querySelector('[data-diff]')).toBeNull();
+  });
+
+  it('hands a custom code renderer the leading word as today and nothing new', () => {
+    type CodeProps = {code: string; language?: string};
+    const seen: CodeProps[] = [];
+    const Code = (props: CodeProps) => {
+      seen.push(props);
+      return <pre data-testid="custom">{props.code}</pre>;
+    };
+    render(
+      <Markdown components={{code: Code}}>
+        {
+          '```diff-tsx\n-a\n+b\n```\n\n```diff\n-a\n```\n\n```tsx\nconst x = 1;\n```'
+        }
+      </Markdown>,
+    );
+    // The leading word characters, as today: a diff-tsx fence is `diff`.
+    expect(seen.map(p => p.language)).toEqual(['diff', 'diff', 'tsx']);
+    for (const props of seen) {
+      expect(Object.keys(props).sort()).toEqual(['code', 'language']);
+    }
+  });
+
   it('renders links with correct href', () => {
     render(<Markdown>{'[click](https://example.com)'}</Markdown>);
     const link = screen.getByText('click');
     expect(link.tagName).toBe('A');
     expect(link.getAttribute('href')).toBe('https://example.com');
+  });
+
+  it('links to the destination, not the destination plus its title', () => {
+    render(
+      <Markdown>
+        {'[notes](https://example.com/notes "Release notes")'}
+      </Markdown>,
+    );
+    expect(screen.getByText('notes').getAttribute('href')).toBe(
+      'https://example.com/notes',
+    );
+  });
+
+  it('shows character references as the characters they name', () => {
+    const {container} = render(
+      <Markdown>{'Fish &amp; chips &copy; 2026 and `&amp;` in code'}</Markdown>,
+    );
+    expect(container.textContent).toContain('Fish & chips \u00a9 2026');
+    expect(container.querySelector('code')?.textContent).toBe('&amp;');
+  });
+
+  it('names an image with decoded alt text', () => {
+    render(
+      <Markdown>
+        {'![Fish &amp; chips \\*fresh\\*](https://example.com/fish.png)'}
+      </Markdown>,
+    );
+    expect(
+      screen.getByRole('img', {name: 'Fish & chips *fresh*'}),
+    ).toBeInTheDocument();
   });
 
   it('adds target="_blank" to external links', () => {
@@ -459,6 +539,102 @@ describe('Markdown', () => {
     expect(checkboxes).toHaveLength(2);
     expect((checkboxes[0] as HTMLInputElement).checked).toBe(true);
     expect((checkboxes[1] as HTMLInputElement).checked).toBe(false);
+    // Preserve the released flat pure-task grouping/naming path.
+    expect(document.querySelector('.astryx-checkbox-list')).not.toBeNull();
+    expect(screen.getByRole('group')).toHaveAttribute('aria-labelledby');
+  });
+
+  it('keeps nested pure-task rows on the static marker path with source lines', () => {
+    render(
+      <Markdown plugins={[markdownSourceLinesPlugin]}>
+        {
+          '- [ ] Outer task\n  - [x] Inner task\n\n    388. Counter\n    389. Sibling'
+        }
+      </Markdown>,
+    );
+    expect(document.querySelector('.astryx-checkbox-list')).toBeNull();
+    const checkboxes = screen.getAllByRole<HTMLInputElement>('checkbox');
+    expect(checkboxes.map(input => input.checked)).toEqual([false, true]);
+    for (const input of checkboxes) {
+      expect(input).toHaveAttribute('aria-readonly', 'true');
+    }
+    expect(
+      Array.from(document.querySelectorAll('li'), item =>
+        item.getAttribute('data-source-line'),
+      ),
+    ).toEqual(['1', '2', '4', '5']);
+  });
+
+  it('uses the static task marker path for lists nested through a blockquote', () => {
+    render(
+      <Markdown>
+        {'- [ ] Outer task\n\n  > 388. Quoted counter\n  > 389. Quoted sibling'}
+      </Markdown>,
+    );
+    expect(document.querySelector('.astryx-checkbox-list')).toBeNull();
+    expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+    expect(screen.getByRole('checkbox')).toHaveAttribute(
+      'aria-readonly',
+      'true',
+    );
+    expect(document.querySelector('blockquote ol')).toHaveAttribute(
+      'start',
+      '388',
+    );
+  });
+
+  it('keeps each task item checked or open in a list that mixes task and plain items (FR23)', () => {
+    render(
+      <Markdown>
+        {'- [x] Done **task**\n- Plain item\n- [ ] Open task\n'}
+      </Markdown>,
+    );
+    // One list, in document order.
+    expect(document.querySelectorAll('ul, ol')).toHaveLength(1);
+    const items = [...document.querySelectorAll('li')];
+    expect(items.map(item => item.textContent)).toEqual([
+      expect.stringContaining('Done task'),
+      'Plain item',
+      expect.stringContaining('Open task'),
+    ]);
+    const checkbox = (item: Element | undefined) =>
+      item?.querySelector<HTMLInputElement>('input[type="checkbox"]') ?? null;
+    // Each task item shows its own read-only checkbox, named by its text.
+    expect(checkbox(items[0])?.checked).toBe(true);
+    expect(checkbox(items[2])?.checked).toBe(false);
+    expect(screen.getByRole('checkbox', {name: 'Done task'})).toBe(
+      checkbox(items[0]),
+    );
+    expect(screen.getByRole('checkbox', {name: 'Open task'})).toBe(
+      checkbox(items[2]),
+    );
+    for (const input of [checkbox(items[0]), checkbox(items[2])]) {
+      expect(input?.getAttribute('aria-readonly')).toBe('true');
+    }
+    // A plain item keeps its marker and has no checkbox.
+    expect(checkbox(items[1])).toBeNull();
+  });
+
+  it('keeps task state in mixed ordered and nested lists', () => {
+    render(
+      <Markdown>
+        {
+          '1. [ ] First step\n2. Second step\n   - [x] Nested done\n   - Nested plain\n'
+        }
+      </Markdown>,
+    );
+    expect(
+      document.querySelector('ol')?.querySelectorAll(':scope > li'),
+    ).toHaveLength(2);
+    expect(
+      screen.getByRole<HTMLInputElement>('checkbox', {name: 'First step'})
+        .checked,
+    ).toBe(false);
+    expect(
+      screen.getByRole<HTMLInputElement>('checkbox', {name: 'Nested done'})
+        .checked,
+    ).toBe(true);
+    expect(document.querySelectorAll('input[type="checkbox"]')).toHaveLength(2);
   });
 
   it('renders tables', () => {
@@ -893,6 +1069,7 @@ describe('Markdown', () => {
     expectTypeOf<MathRendererProps>().toEqualTypeOf<{
       value: string;
       display: 'inline' | 'block';
+      sourceLines?: MarkdownSourceLines;
     }>();
     expectTypeOf<ParseOptions>().toMatchTypeOf<{math?: boolean}>();
   });

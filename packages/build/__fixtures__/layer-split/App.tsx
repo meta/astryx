@@ -9,13 +9,13 @@
  * overrides on the same element, so the built stylesheet answers which layer
  * wins rather than only which rules were emitted.
  *
- * The `data-*` swatches read `--color-data-*` custom properties, whose defaults
- * are declared once at `:root`. Each one is a different cascade question: does
- * the default reach an element, does a theme's override beat it, and does a
- * nested theme inherit that override instead of shadowing it.
+ * The `data-*` swatches use the public StyleX data variables. Importing that
+ * group emits the canonical defaults in `astryx-base`; the fixture then asks
+ * whether a theme override wins and whether a nested theme inherits it.
  */
 
 import * as stylex from '@stylexjs/stylex';
+import {dataVars} from '@astryxdesign/core/theme/dataTokens.stylex';
 import {Button} from '@astryxdesign/core/Button';
 import {Theme} from '@astryxdesign/core/theme';
 import {nestedTheme, nestedDarkTheme} from './theme';
@@ -55,35 +55,35 @@ export function App() {
       />
       <span
         id="data-default"
-        style={{color: 'var(--color-data-categorical-orange)'}}>
+        style={{color: dataVars['--color-data-categorical-orange']}}>
         default
       </span>
       <span
         id="data-override"
-        style={{color: 'var(--color-data-categorical-blue)'}}>
+        style={{color: dataVars['--color-data-categorical-blue']}}>
         overridden
       </span>
       <Theme theme={nestedTheme}>
         <span
           id="data-nested"
-          style={{color: 'var(--color-data-categorical-blue)'}}>
+          style={{color: dataVars['--color-data-categorical-blue']}}>
           nested, inherited
         </span>
         <span
           id="data-nested-default"
-          style={{color: 'var(--color-data-categorical-orange)'}}>
+          style={{color: dataVars['--color-data-categorical-orange']}}>
           nested, default
         </span>
       </Theme>
       <Theme theme={nestedDarkTheme} mode="dark">
         <span
           id="data-dark"
-          style={{color: 'var(--color-data-categorical-blue)'}}>
+          style={{color: dataVars['--color-data-categorical-blue']}}>
           dark, inherited
         </span>
         <span
           id="data-dark-default"
-          style={{color: 'var(--color-data-neutral)'}}>
+          style={{color: dataVars['--color-data-neutral']}}>
           dark, default
         </span>
       </Theme>

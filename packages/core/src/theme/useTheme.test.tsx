@@ -7,6 +7,7 @@ import {Theme} from './Theme';
 import {defineTheme} from './defineTheme';
 import {resetThemes} from './themeRegistry';
 import {useTheme} from './useTheme';
+import {useMediaQuery} from '../hooks/useMediaQuery';
 import {resolveThemeTokens} from './tokens';
 
 // Mock useMediaQuery — default to light mode
@@ -42,7 +43,7 @@ describe('useTheme', () => {
     expect(result.current.name).toBe('default');
     // Should resolve default light-dark() tokens for light mode (useMediaQuery mocked to false = light)
     expect(result.current.token('--color-text-primary')).toBe('#0A1317');
-    expect(result.current.token('--spacing-1')).toBe('4px');
+    expect(result.current.token('--spacing-1')).toBe('0.25rem');
     expect(result.current.mode).toBe('light');
   });
 
@@ -78,8 +79,8 @@ describe('useTheme', () => {
     const {result} = renderHook(() => useTheme(), {
       wrapper: ({children}) => wrapper({children, mode: 'light'}),
     });
-    // --spacing-1 is not overridden — should be the default '4px'
-    expect(result.current.token('--spacing-1')).toBe('4px');
+    // --spacing-1 is not overridden — should be the default '0.25rem'
+    expect(result.current.token('--spacing-1')).toBe('0.25rem');
     expect(result.current.token('--border-width')).toBe('1px');
   });
 
@@ -132,6 +133,32 @@ describe('useTheme', () => {
     expect(result.current.mode).toBe('dark');
   });
 
+  describe('modes outside light|dark|system', () => {
+    // A persisted preference read back untyped can hand Theme a stale
+    // string. It resolves like system, through the OS preference, never
+    // as the string itself.
+    afterEach(() => {
+      vi.mocked(useMediaQuery).mockReturnValue(false);
+    });
+
+    it.each([
+      ['banana', false, 'light'],
+      ['DARK', false, 'light'],
+      ['', false, 'light'],
+      ['banana', true, 'dark'],
+    ] as const)(
+      'resolves "%s" like system (prefersDark=%s -> %s)',
+      (value, prefersDark, expected) => {
+        vi.mocked(useMediaQuery).mockReturnValue(prefersDark);
+        const {result} = renderHook(() => useTheme(), {
+          wrapper: ({children}) =>
+            wrapper({children, mode: value as 'light' | 'dark' | 'system'}),
+        });
+        expect(result.current.mode).toBe(expected);
+      },
+    );
+  });
+
   it('provides a tokens map with all resolved values', () => {
     const {result} = renderHook(() => useTheme(), {
       wrapper: ({children}) => wrapper({children, mode: 'light'}),
@@ -139,7 +166,7 @@ describe('useTheme', () => {
     const tokens = result.current.tokens;
     expect(tokens['--color-accent']).toBe('#AA0000');
     expect(tokens['--spacing-4']).toBe('20px');
-    expect(tokens['--spacing-1']).toBe('4px');
+    expect(tokens['--spacing-1']).toBe('0.25rem');
   });
 
   it('uses the same token resolution as resolveThemeTokens', () => {

@@ -15,6 +15,8 @@ import {assertPublicArtifactSafe} from '../src/public-artifact.mjs';
 import {analyzeSetupIntegrity} from './setup-integrity.mjs';
 // @ts-expect-error -- setup-workspace.mjs intentionally has no declaration output.
 import {manifestDifferences, treeManifest} from './setup-workspace.mjs';
+// @ts-expect-error -- linkDirectory.mjs intentionally has no declaration output.
+import {linkDirectory} from './linkDirectory.mjs';
 import {
   passesAcceptance,
   scoreArm,
@@ -137,14 +139,9 @@ function preparePair(fixture: string) {
   const arm = path.join(root, 'arm');
   for (const destination of [baseline, arm]) {
     copyFixture(fixture, destination);
-    run(
-      'cp',
-      [
-        '-al',
-        path.join(deps, 'node_modules'),
-        path.join(destination, 'node_modules'),
-      ],
-      root,
+    linkDirectory(
+      path.join(deps, 'node_modules'),
+      path.join(destination, 'node_modules'),
     );
   }
 

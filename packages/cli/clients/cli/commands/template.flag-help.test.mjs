@@ -56,12 +56,12 @@ async function templateJson(args) {
 }
 
 describe('astryx template flag precedence', () => {
-  it('--list: help says <name>, <path>, --skeleton and --overwrite are ignored, and they are', async () => {
+  it('--list: help says <name>, <path>, --skeleton and --overwrite are refused, and they are', async () => {
     const help = (await templateOptions())['--list'];
     for (const ignored of ['<name>', '<path>', '--skeleton', '--overwrite']) {
       expect(help).toContain(ignored);
     }
-    expect(help).toMatch(/are ignored/);
+    expect(help).toMatch(/are refused/);
 
     const {status, envelope} = await templateJson([
       'dashboard',
@@ -70,21 +70,24 @@ describe('astryx template flag precedence', () => {
       '--skeleton',
       '--overwrite',
     ]);
-    expect(status).toBe(0);
-    expect(envelope.type).toBe('template.list');
-    expect(written()).toEqual([]);
+    expect(status).toBe(1);
+    expect(envelope.code).toBe('ERR_INVALID_ARGUMENT');
   }, SLOW);
 
   it('--skeleton: help says it needs <name> and writes nothing, and it does', async () => {
     const help = (await templateOptions())['--skeleton'];
     expect(help).toMatch(/Needs <name>/);
-    expect(help).toMatch(/writes nothing, so <path> and --overwrite are ignored/);
-    expect(help).toMatch(/--list and --cdn take precedence/);
+    expect(help).toMatch(/writes nothing, so <path> and --overwrite are refused/);
+    // --list and --cdn are now refused, not precedence
 
-    const shown = await templateJson(['dashboard', './src/page.tsx', '--skeleton', '--overwrite']);
+    const shown = await templateJson(['dashboard', '--skeleton']);
     expect(shown.status).toBe(0);
     expect(shown.envelope.type).toBe('template.skeleton');
     expect(written()).toEqual([]);
+
+    const refused = await templateJson(['dashboard', './src/page.tsx', '--skeleton', '--overwrite']);
+    expect(refused.status).toBe(1);
+    expect(refused.envelope.code).toBe('ERR_INVALID_ARGUMENT');
 
     const nameless = await templateJson(['--skeleton']);
     expect(nameless.status).toBe(1);
@@ -101,11 +104,15 @@ describe('astryx template flag precedence', () => {
     expect(help).toMatch(/value right after --cdn/);
 
     const everything = await templateJson(['dashboard', '--list', '--skeleton', '--type', 'bogus', '--cdn']);
-    expect(everything.envelope.type).toBe('template.cdn');
-    expect(everything.envelope.data.path).toBe('cdn.template.html');
+    expect(everything.status).toBe(1);
+    expect(everything.envelope.code).toBe('ERR_INVALID_ARGUMENT');
+
+    const bare = await templateJson(['--cdn']);
+    expect(bare.envelope.type).toBe('template.cdn');
+    expect(bare.envelope.data.path).toBe('cdn.template.html');
 
     // A bare --cdn writes to <path>, and a path with no extension is still the file.
-    const positional = await templateJson(['dashboard', 'demo', '--cdn']);
+    const positional = await templateJson(['--cdn', 'demo']);
     expect(positional.envelope.data.path).toBe('demo');
     expect(fs.statSync(path.join(tmpDir, 'demo')).isFile()).toBe(true);
 

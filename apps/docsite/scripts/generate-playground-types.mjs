@@ -3,7 +3,7 @@
 
 /**
  * Generates a JSON bundle of @astryxdesign/core, React, StyleX, icon,
- * Recharts, and canary integration-package declarations for the playground's
+ * Recharts, and integration-package declarations for the playground's
  * Monaco editor.
  * Output: public/playground-types.json
  *
@@ -24,9 +24,8 @@ import {
 import {createRequire} from 'node:module';
 import {join, dirname, relative} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import docsiteConfig from '../astryx.config.mjs';
 import {getTarget} from './resolve-content-root.mjs';
-import {integrationPackagesForTarget} from '../src/lib/integrationTargets.mjs';
+import {readAdmittedIntegrationPackages} from '../src/lib/integrationTargets.mjs';
 
 // Resolves from this script, so docsite's own dependencies are found wherever
 // the installer put them. Throws if one is missing, rather than emitting a
@@ -310,15 +309,19 @@ function buildThemeTypes() {
   return files;
 }
 
-// Integration packages the canary preview scope exposes (the same shared gate
-// generate-scope.mjs uses, so production declares none). Declared as shorthand
-// ambient modules: imports resolve, typed as `any`, so the editor shows no
-// unresolved-module error on code that renders. Like the theme packages, their
-// dist is not built in CI's docsite-test job, so real declarations are left
-// for a follow-up.
+// Integration packages the preview scope exposes: the list generate-data.mjs
+// admitted for this target (every configured integration on canary; on latest
+// the ones that are stable releases), the same list generate-scope.mjs maps.
+// Declared as shorthand ambient modules: imports resolve, typed as `any`, so
+// the editor shows no unresolved-module error on code that renders. Like the
+// theme packages, their dist is not built in CI's docsite-test job, so real
+// declarations are left for a follow-up.
 function buildIntegrationTypes() {
   const files = {};
-  for (const pkg of integrationPackagesForTarget(getTarget(), docsiteConfig)) {
+  for (const pkg of readAdmittedIntegrationPackages(
+    join(root, 'src/generated'),
+    getTarget(),
+  )) {
     files[pkg] = {'index.d.ts': `declare module '${pkg}';\n`};
   }
   return files;

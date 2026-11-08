@@ -306,7 +306,7 @@ export function sectionSummary(section, max = SECTION_SUMMARY_MAX) {
  * The index a topic-only read returns: what the topic is, and one entry per
  * section with the key to read it by.
  * @param {{name: string, title: string, description: string, sections: any[]}} doc
- * @returns {Omit<import('../../api/docs/docs.type.mjs').DocsIndex, 'links'>}
+ * @returns {Omit<import('../../api/docs/docs.type.mjs').DocsIndex, 'links' | 'sections'> & {sections: import('../../api/docs/docs.type.mjs').DocsIndexEntry[]}}
  */
 export function buildDocsIndexData(doc) {
   return {

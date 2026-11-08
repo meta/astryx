@@ -11,6 +11,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {runCli} from '../../../test-utils/run-cli.mjs';
 import {doc as buildDoc} from './build.doc.mjs';
+import {linkThisCliAsProjectCli} from '../../../test-utils/release-fixtures.mjs';
 
 const SLOW = 30_000;
 
@@ -20,6 +21,9 @@ let tmpDir;
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-build-no-core-'));
   fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({name: 'consumer'}));
+  // A project whose own CLI answers and that installs no Core: outside a
+  // project a copy answers from the Core it carries instead (AST-081 FR3).
+  linkThisCliAsProjectCli(tmpDir);
 });
 
 afterEach(() => {

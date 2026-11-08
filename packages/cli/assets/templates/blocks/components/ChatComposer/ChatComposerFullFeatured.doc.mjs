@@ -9,5 +9,21 @@ export const doc = {
   description: 'Chat composer with all slots populated: collapsible attachment drawer, header actions, context progress bar, footer dropdown menus, and mic button. Shows the maximum composer configuration.',
   isReady: true,
   aspectRatio: 4 / 3,
-  componentsUsed: ['ChatComposer', 'Token', 'Button', 'DropdownMenu', 'Icon', 'ProgressBar', 'Layout', 'Text'],
+  componentsUsed: [
+    'ChatComposer',
+    'Token',
+    'Button',
+    'DropdownMenu',
+    'Icon',
+    'ProgressBar',
+    'Layout',
+    'Text',
+  ],
+  icons: {
+    AtSymbolIcon: 'mention',
+    Cog6ToothIcon: 'settings',
+    MicrophoneIcon: 'microphone',
+    PaperClipIcon: 'attach',
+    SparklesIcon: 'sparkles',
+  },
 };

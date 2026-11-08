@@ -10,4 +10,10 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['Token', 'Icon', 'Layout', 'Text'],
+  icons: {
+    ShieldCheckIcon: 'shield',
+    StarIcon: 'star',
+    TagIcon: 'tag',
+    UserIcon: 'user',
+  },
 };

@@ -223,7 +223,7 @@ describe('component() — integration ownership via config', () => {
       caught = e;
     }
     expect(caught).toBeTruthy();
-    expect(caught.code).toBe('ERR_UNKNOWN_COMPONENT');
+    expect(caught.code).toBe('ERR_AMBIGUOUS_COMPONENT');
     const pkgs = (caught.suggestions ?? []).map(s => s.name);
     expect(pkgs).toContain(CORE_PACKAGE);
     expect(pkgs).toContain(INTEGRATION_NAME);
@@ -288,7 +288,7 @@ describe('component() — integration ownership via config', () => {
     expect(result.data.results[1]).toMatchObject({
       selector: 'AppShell',
       status: 'ambiguous',
-      code: 'ERR_UNKNOWN_COMPONENT',
+      code: 'ERR_AMBIGUOUS_COMPONENT',
     });
     expect(result.data.results[1].candidates).toEqual(
       expect.arrayContaining([

@@ -78,6 +78,12 @@ export const doc = {
       type: 'string',
       description: 'Exact target semver (e.g. 1.2.0). Required for codemod and only valid there.',
     },
+    {
+      name: 'options.from',
+      type: 'string',
+      description:
+        'Slug of an existing theme to fork as the starting point. Only valid for theme.',
+    },
   ],
   returns: [
     {

@@ -37,7 +37,9 @@ const styles = stylex.create({
   },
   token: {
     display: 'inline-flex',
-    verticalAlign: 'middle',
+    alignItems: 'center',
+    height: '1lh',
+    verticalAlign: 'top',
   },
 });
 

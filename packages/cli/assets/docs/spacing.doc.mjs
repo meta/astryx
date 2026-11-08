@@ -18,7 +18,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'The design system uses a 4px base-unit spacing scale. Component gap props accept step values that map to these tokens. The scale provides fine-grained control at the small end (2px, 4px, 6px) and consistent rhythm at larger sizes (multiples of 4px).',
+          text: 'The design system uses a 4px base-unit spacing scale, written in rem so gaps and padding grow with the reader\'s browser font size the way text does: each step is 0.25rem, which is 4px at the default 16px root. Component gap props accept step values that map to these tokens. The scale provides fine-grained control at the small end (2px, 4px, 6px) and consistent rhythm at larger sizes (multiples of 4px).',
         },
       ],
     },
@@ -28,7 +28,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Fifteen spacing tokens, from 0px to 48px.',
+          text: 'Fifteen spacing tokens, from 0 to 3rem (0px to 48px at the default 16px root).',
         },
         {
           type: 'token-ref',

@@ -25,15 +25,17 @@ export const doc = {
     'ones the project\'s configured integrations contribute, including any ' +
     'topic an integration replaces or extends, so it depends on the cwd. ' +
     'A route opens a node of the docs tree instead: a namespace such as ' +
-    "`cli/api` returns its children one level down, a typed doc such as " +
+    '`cli/api` returns its children one level down (`depth` reads as many ' +
+    'levels as asked, and `detail` how much of each doc below), a typed doc such as ' +
     "`cli/api/functions/search` returns its content, and a guide the tree " +
-    'places (`cli/integrations/quick-start`) reads like any topic. ' +
+    'places (`authoring/quick-start`) reads like any topic. ' +
     'Every read but the list carries `links`, the commands that move from it: ' +
     '`up` to the level it sits in, `previous` and `next` to its neighbors, and, ' +
     'for a typed doc, `related` to the docs it names (its command or function, ' +
     'and its related docs); `previous` and `next` ' +
     'to the section or node before and after it. ' +
-    'Overlay options select localized or dense variants.',
+    'Overlay options select localized or dense variants.' +
+    " In global mode: with `cwd` outside a project, doc topics from integrations installed next to this CLI package globally are listed too; inside a project, only the project's own integrations count. See {@link namespace:global} and {@link generic:computer-integrations}.",
   importPath: '@astryxdesign/cli/api',
   signature:
     'docs(topic?: string, section?: string, options?: DocsOptions): Promise<DocsListResponse | DocsIndexResponse | DocsDetailResponse | DocsDetailSectionResponse | DocsNodeResponse>',
@@ -52,7 +54,7 @@ export const doc = {
       name: 'topic',
       type: 'string',
       description:
-        "Doc topic to load (e.g. 'principles'), or a docs-tree route (e.g. 'cli/api/functions/search'). Omit to list all topics.",
+        "Doc topic to load (e.g. 'principles'), a docs-tree route (e.g. 'cli/api/functions/search'), or the name of one node of the docs tree: its own name (e.g. 'tokens-color'), or its route without the prefix its name repeats (e.g. 'tokens/color'), where exactly one node answers to it. Omit to list all topics.",
     },
     {
       name: 'section',
@@ -83,6 +85,18 @@ export const doc = {
         "Return the topic's section index (each section's key, title, and summary), even for a topic with one section.",
     },
     {
+      name: 'options.depth',
+      type: "number | 'all'",
+      description:
+        "How many levels below a docs-tree namespace to read: 0 for the namespace alone, 1 for its children (the default), 'all' for every level. Where a read stops, a child with docs below it carries childCount. A doc with nothing below it reads the same at any depth. On the topic list, where each namespace otherwise lists alone, it names the docs below each one, as deep as asked; without it the list is unchanged.",
+    },
+    {
+      name: 'options.detail',
+      type: "'brief' | 'compact' | 'full'",
+      description:
+        "How much of each doc below the named one a depth read returns: brief (the default) is its identity; compact and full add its text (a guide's sections, a namespace's or typed doc's content). Given alone, it reads one level down. The topic list names each doc below a namespace by its identity whatever the detail.",
+    },
+    {
       name: 'options.cwd',
       type: 'string',
       description:
@@ -93,7 +107,7 @@ export const doc = {
     {
       type: 'docs.list',
       description:
-        "Every reference-doc topic in read order, as DocsListEntry[] ({topic, description, package, replaces?}), each readable with docs(topic). meta.namespaces lists the docs tree's top-level namespaces ({topic, description, package}), and meta.notLoaded each package whose docs did not load ({package, message}).",
+        "Every reference-doc topic in read order, as DocsListEntry[] ({topic, description, package, replaces?, replacedPackage?}), each readable with docs(topic). meta.namespaces lists the docs tree's top-level namespaces ({topic, description, package}); with depth, each also carries children, the docs below it as a namespace read names them ({topic, description, route, name, package, kind, title, summary, replaces?, replacedPackage?, stability?}), nested the same way to the depth asked for, and childCount where the depth stops on a doc with docs below it. meta.notLoaded names each package whose docs did not load ({package, message}).",
     },
     {
       type: 'docs.detail',
@@ -108,22 +122,30 @@ export const doc = {
     {
       type: 'docs.detail.section',
       description:
-        'One ReferenceSection of the topic, found by key or title, with token-ref and reference blocks inlined.',
+        'One ReferenceSection of the topic, found by key or title, with token-ref and reference blocks inlined. Asked of a docs-tree namespace, it is the section read of the one guide below the namespace that has the section.',
     },
     {
       type: 'docs.node',
       description:
-        "A namespace or typed doc in the docs tree, read by its route: {id, route, kind, package, title, summary, breadcrumb, slots, content}. A namespace lists each slot's children one level down; a typed doc carries its content.",
+        "A namespace or typed doc in the docs tree, read by its route: {id, route, kind, package, title, summary, breadcrumb, slots, content}. A namespace lists each slot's children one level down, or as deep as depth asks, each child carrying its own slots, childCount where the read stops, and its text at compact or full detail; a typed doc carries its content.",
     },
   ],
   throws: [
     {
+      code: 'ERR_INVALID_ARGUMENT',
+      when: "depth is not a whole number of levels or 'all'",
+    },
+    {
+      code: 'ERR_INVALID_DETAIL',
+      when: 'detail is not brief, compact, or full',
+    },
+    {
       code: 'ERR_UNKNOWN_TOPIC',
-      when: 'the topic is not a string, or matches no topic and no docs-tree route',
+      when: 'the topic is not a string, or matches no topic, no docs-tree route, and no one node of the docs tree by its own name or by its route without the prefix its name repeats; a name more than one node answers to opens none of them, and the suggestions list them',
     },
     {
       code: 'ERR_UNKNOWN_SECTION',
-      when: 'a section is requested but is empty, matches no section, matches more than one, or is asked of a docs-tree namespace or typed doc, which have no sections',
+      when: 'a section is requested but is empty, matches no section, or matches more than one; asked of a docs-tree namespace, when no guide below it or more than one has the section (suggestions name those guides); or asked of a typed doc, which has no sections',
     },
   ],
   examples: [
@@ -134,12 +156,20 @@ export const doc = {
       code: "await docs('principles', undefined, {index: true});",
     },
     {label: 'A docs-tree namespace', code: "await docs('cli/api');"},
+    {
+      label: 'Every doc below a namespace, one entry each',
+      code: "await docs('cli', undefined, {depth: 'all'});",
+    },
+    {
+      label: 'A namespace and everything below it, in full',
+      code: "await docs('authoring', undefined, {depth: 'all', detail: 'full'});",
+    },
     {label: 'One API function', code: "await docs('cli/api/functions/search');"},
     {
       label: 'A whole guide from the docs tree',
-      code: "await docs('cli/integrations/quick-start');",
+      code: "await docs('authoring/quick-start');",
     },
-    {label: 'One section by key', code: "await docs('tokens', 'spacing');"},
+    {label: 'One section by key', code: "await docs('spacing', 'scale');"},
   ],
   command: 'docs',
   related: ['search', 'component', 'hook', 'template'],

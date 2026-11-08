@@ -18,7 +18,7 @@ export const doc = {
     'functions. A hook (HookDoc) is the hook-flavored view of this same kind; FunctionDoc ' +
     'adds the fields an API function needs (a {type, data} return envelope, thrown error ' +
     'codes, the wrapping CLI command). The CLI binding itself lives in a separate CommandDoc.',
-  appliesTo: 'api/<name>/<name>.doc.mjs',
+  appliesTo: 'api/<dir>/<name>.doc.mjs',
   fields: [
     {
       name: 'type',
@@ -41,7 +41,7 @@ export const doc = {
       name: 'kind',
       type: "'hook' | 'api'",
       description:
-        'Which flavor; drives docsite sectioning; inferred from importPath if omitted.',
+        "Which flavor. Nothing reads it today: no reader sections docs by it or infers it from `importPath`. The CLI's API function docs set 'api'.",
     },
     {
       name: 'summary',
@@ -57,12 +57,13 @@ export const doc = {
       name: 'namespace',
       type: 'string',
       description:
-        "Optional in the type, but every doc the CLI ships declares it. The group that reads this doc. The CLI's API functions use 'cli/api', which the docs tree adopts by kind: each is the leaf `cli/api/functions/<name>`. Every function doc the CLI ships declares one, and `astryx doctor` fails on one that is missing or that nothing reads.",
+        "Optional in the type, but every doc the CLI ships declares it. The group that reads this doc. The CLI's API functions use 'cli/api', which the docs tree adopts by kind: each is the leaf `cli/api/functions/<name>`, the name in kebab case (`themeUse` is `theme-use`). Every function doc the CLI ships declares one, and `astryx doctor` fails on one that is missing or that nothing reads.",
     },
     {
       name: 'aliases',
       type: 'string[]',
-      description: 'Alternate slugs that also resolve to this doc.',
+      description:
+        'Reserved: other names for this doc. Nothing reads it today, so they do not resolve to it.',
     },
     {
       name: 'keywords',
@@ -231,11 +232,11 @@ export const doc = {
   displayName: 'search()',
   namespace: 'cli/api',
   importPath: '@astryxdesign/cli/api',
-  summary: 'Find components, hooks, docs, and templates by term.',
+  summary: 'Find components, hooks, docs, templates, and themes by term.',
   signature: 'search(query, options?): Promise<SearchResponse>',
   params: [
     {name: 'query', type: 'string', description: 'The search term.', required: true},
-    {name: 'options.type', type: "'component' | 'hook' | 'doc' | 'template'", description: 'Restrict results to one domain.'},
+    {name: 'options.type', type: "'component' | 'hook' | 'doc' | 'template' | 'theme'", description: 'Restrict results to one domain.'},
   ],
   returns: [
     {type: 'search', description: 'Envelope with the query and ranked results[].'},
@@ -253,11 +254,11 @@ export const doc = {
   notes: [
     {
       type: 'prose',
-      text: 'When it loads, a stamped function doc may leave out `displayName`, and its `usage` is not checked. Write to the type anyway; it is the contract.',
+      text: '`parseDoc` accepts a stamped function doc without `displayName` and does not check its `usage`, and the CLI reads its own function docs without checking them. Write to the type anyway; it is the contract.',
     },
     {
       type: 'prose',
-      text: "The `type` discriminant is 'function' for both flavors. Set `kind: 'hook'` or `kind: 'api'` to drive docsite sectioning; it is inferred from `importPath` when omitted.",
+      text: "The `type` discriminant is 'function' for both flavors. `kind: 'hook'` or `kind: 'api'` names the flavor; nothing reads it today.",
     },
     {
       type: 'prose',

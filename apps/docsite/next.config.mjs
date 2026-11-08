@@ -1,15 +1,17 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Configure the docsite's routes, response headers, and theme resolution.
+ * @file Configure docsite routes, response headers, theme resolution, and build
+ *   memory.
  * @input Next.js build configuration, the early playground cookie guard, and
  *   staged preview-only static exports.
  * @output Docsite routes plus Storybook and Sandbox at /storybook/ and /sandbox/.
- *   Client main-app chunks start with the preview's cookie compatibility guard.
+ *   Client main-app chunks start with the preview's cookie compatibility guard;
+ *   large Webpack builds run with isolated, memory-optimized compilation.
  * @position Next.js configuration for the existing Vercel docsite deployment.
  */
 
-import {readFileSync, readdirSync} from 'node:fs';
+import {existsSync, readFileSync, readdirSync} from 'node:fs';
 import {resolve} from 'node:path';
 
 const playgroundCookieCompatibility = readFileSync(
@@ -20,6 +22,17 @@ const playgroundCookieCompatibility = readFileSync(
   'utf8',
 );
 
+// Slugs that are not pages of their own (generate-data.mjs): a guide under a
+// docs-tree namespace opens at its section on the namespace's full page, and
+// a flat topic merged into another page opens there.
+const docRedirectsPath = resolve(
+  import.meta.dirname,
+  'src/generated/docRedirects.json',
+);
+const docRedirects = existsSync(docRedirectsPath)
+  ? JSON.parse(readFileSync(docRedirectsPath, 'utf8'))
+  : {};
+
 const stagesStaticApps =
   process.env.VERCEL_ENV === 'preview' ||
   process.env.VERCEL_ENV === 'production';
@@ -27,6 +40,41 @@ const stagesStaticApps =
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   cacheComponents: true,
+  // The custom Webpack hook below disables Next's default build worker. The
+  // canary docsite compiles the live workspace, so keep that compilation in a
+  // separate process and use Next's low-risk peak-memory optimization.
+  experimental: {
+    webpackBuildWorker: true,
+    webpackMemoryOptimizations: true,
+  },
+  // The search API (app/api/search) runs `astryx search` itself. The CLI stays
+  // an external module (see webpack below), so its code and dependencies are
+  // traced as installed; these are the files it reads from disk at run time:
+  // its docs and templates, and each documented package's docs and sources.
+  outputFileTracingIncludes: {
+    '/api/search': [
+      './astryx.config.mjs',
+      '../../packages/cli/package.json',
+      '../../packages/cli/{api,assets,authoring,clients,foundation,host}/**/*',
+      '../../packages/core/package.json',
+      '../../packages/core/src/**/*',
+      // Integrations resolve through the site's node_modules, so they are
+      // traced at that path.
+      './node_modules/@astryxdesign/{lab,charts,richtext,vega}/{package.json,astryx.integration.mjs}',
+      './node_modules/@astryxdesign/{lab,charts,richtext,vega}/{src,blocks,docs,dist}/**/*',
+    ],
+  },
+  // Packages the CLI imports for other commands but a search never loads
+  // (bundlers, compilers, browsers, test runners), and built output it never
+  // reads. Leaving them out keeps the search function small; the parity test
+  // and a traced-files-only build hold it to `astryx search`.
+  outputFileTracingExcludes: {
+    '/api/search': [
+      '../../node_modules/.pnpm/{esbuild,@esbuild+*,typescript,playwright,playwright-core,vite,rolldown,@rolldown+*,flow-parser,esprima,tsx,vitest,@vitest+*,chai,@testing-library+*}@*/**',
+      '../../packages/*/dist/**',
+      './src/**',
+    ],
+  },
   // Sandbox exports trailing-slash directories; Next's automatic slash
   // redirect runs before rewrites. Vercel deployments preserve those URLs;
   // local builds keep the docsite's existing canonical redirects.
@@ -53,21 +101,18 @@ const nextConfig = {
       ],
     };
   },
-  // The CLI's integration guide became short guides under cli/integrations,
-  // each with its own page (/docs/cli-integrations-<name>). The old guide
-  // pages redirect to where their content now starts.
+  // Slugs that are not pages of their own redirect to where their text is
+  // shown (docRedirects, from generate-data.mjs): each guide of a docs-tree
+  // namespace to its section on the namespace's page, including the CLI's
+  // integration guides on the CLI Integrations and Writing docs pages.
   async redirects() {
     return [
-      {
-        source: '/docs/cli-integrations',
-        destination: '/docs/cli-integrations-overview',
-        permanent: true,
-      },
-      {
-        source: '/docs/cli-writing-docs',
-        destination: '/docs/cli-integrations-docs-add-a-topic',
-        permanent: true,
-      },
+      // Temporary: a later site version may give these guides pages again.
+      ...Object.entries(docRedirects).map(([slug, destination]) => ({
+        source: `/docs/${slug}`,
+        destination,
+        permanent: false,
+      })),
     ];
   },
   // The playground preview evaluates user-authored code, so it is the one
@@ -112,6 +157,14 @@ const nextConfig = {
     ];
   },
   webpack: (config, {isServer, webpack}) => {
+    // The search API loads the CLI as installed, never bundled: the CLI reads
+    // its docs, templates and the installed packages from disk.
+    if (isServer) {
+      config.externals = [
+        ...[config.externals ?? []].flat(),
+        {'@astryxdesign/cli/api': 'module @astryxdesign/cli/api'},
+      ];
+    }
     // Webpack's CSS @import resolver doesn't follow package.json "exports".
     // Map each theme's /theme.css subpath to the actual dist file.
     const themesDir = resolve(import.meta.dirname, '../../packages/themes');

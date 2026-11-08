@@ -2,13 +2,14 @@
 
 /**
  * @file headingLinks.ts
- * @input Transformed Markdown headings plus an optional caller namespace
- * @output First-party heading-links plugin and its deterministic identity projection
+ * @input Transformed Markdown headings plus optional namespace and URL base
+ * @output First-party heading-links plugin and its deterministic projection
  * @position Public server-safe module built on the canonical Markdown plugin protocol
  */
 
 import {markdownAstText, visitMarkdownNodes} from '../ast';
 import type {MarkdownAstHeading, MarkdownAstRoot} from '../ast';
+import {sanitizeMarkdownLinkUrl} from '../url';
 import {
   createMarkdownPlugin,
   getMarkdownPluginDefinition,
@@ -31,13 +32,17 @@ export interface MarkdownHeadingLinksOptions {
    * namespace. Omit it to keep unprefixed fragments for a single document.
    */
   readonly headingIdPrefix?: string;
+  /**
+   * Optional caller-owned URL before the generated `#fragment`. Omit it to copy
+   * an absolute URL for the current document. Any existing fragment is replaced.
+   */
+  readonly permalinkBaseUrl?: string;
 }
 
 interface PortableMarkdownHeadingLinksConfig {
   readonly kind: typeof PORTABLE_CONFIG_KIND;
   readonly apiVersion: 1;
   readonly headingIdPrefix?: string;
-  /** Reserved for the separately reviewed renderer layer. */
   readonly permalinkBaseUrl: string;
 }
 
@@ -45,6 +50,7 @@ interface PortableMarkdownHeadingLinksConfig {
 export interface MarkdownHeadingLinksProjection {
   readonly ids: ReadonlyMap<Heading, string>;
   readonly labels: ReadonlyMap<Heading, string>;
+  readonly permalinkUrls: ReadonlyMap<Heading, string>;
 }
 
 const identityTransform = markMarkdownTransformTrusted(root => root);
@@ -53,13 +59,21 @@ function fail(message: string): never {
   throw new TypeError(`Markdown heading links: ${message}`);
 }
 
+// Built at runtime, not written as a literal: for targets without property
+// escapes, or when no browserslist is set, Babel's
+// transform-unicode-property-regex rewrites a `\p{…}` literal, and the copy
+// bundled with Next.js lacks the Unicode data it needs, so a source build fails
+// with "Unknown property". A literal is safe once Next's bundled Babel ships
+// that data.
+const NON_SLUG_CHARACTERS = new RegExp('[^\\p{Letter}\\p{Number}]+', 'gu');
+
 function headingSlug(value: string): string {
   return value
     .normalize('NFKC')
     .trim()
     .toLowerCase()
     .replace(/['"]/gu, '')
-    .replace(/[^\p{Letter}\p{Number}]+/gu, '-')
+    .replace(NON_SLUG_CHARACTERS, '-')
     .replace(/^-+|-+$/gu, '');
 }
 
@@ -81,13 +95,25 @@ function uniqueHeadingSlug(
 
 function createPortableConfig(
   headingIdPrefix: string | undefined,
+  permalinkBaseUrl: string,
 ): PortableMarkdownHeadingLinksConfig {
   return Object.freeze({
     kind: PORTABLE_CONFIG_KIND,
     apiVersion: 1 as const,
     headingIdPrefix,
-    permalinkBaseUrl: '',
+    permalinkBaseUrl,
   });
+}
+
+const PERMALINK_VALIDATION_BASE = 'https://astryx.invalid/';
+
+function isParsablePermalinkBaseUrl(url: string): boolean {
+  try {
+    new URL(url, PERMALINK_VALIDATION_BASE);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function readPortableConfig(
@@ -111,7 +137,12 @@ function readPortableConfig(
     config.apiVersion !== 1 ||
     (config.headingIdPrefix !== undefined &&
       typeof config.headingIdPrefix !== 'string') ||
-    typeof config.permalinkBaseUrl !== 'string'
+    typeof config.permalinkBaseUrl !== 'string' ||
+    config.permalinkBaseUrl.includes('#') ||
+    !isParsablePermalinkBaseUrl(config.permalinkBaseUrl) ||
+    (config.permalinkBaseUrl !== '' &&
+      sanitizeMarkdownLinkUrl(config.permalinkBaseUrl) !==
+        config.permalinkBaseUrl)
   ) {
     return undefined;
   }
@@ -119,9 +150,10 @@ function readPortableConfig(
 }
 
 /**
- * Create the opt-in plugin that gives every rendered h1–h6 a stable identity.
- * The entry is safe to share between Markdown and Markdown-derived Outline,
- * including consumers loaded from another compatible Core package copy.
+ * Create the opt-in plugin that gives every rendered h1–h6 a stable identity
+ * and an inline sibling copy button for each built-in heading. The entry is safe
+ * to share between Markdown and Markdown-derived Outline, including compatible
+ * Core package copies.
  */
 export function createMarkdownHeadingLinks(
   options: MarkdownHeadingLinksOptions = {},
@@ -132,6 +164,23 @@ export function createMarkdownHeadingLinks(
   ) {
     fail('headingIdPrefix must be a string');
   }
+  if (
+    options.permalinkBaseUrl !== undefined &&
+    typeof options.permalinkBaseUrl !== 'string'
+  ) {
+    fail('permalinkBaseUrl must be a string');
+  }
+
+  const rawBaseUrl = options.permalinkBaseUrl ?? '';
+  const sanitizedBaseUrl =
+    rawBaseUrl === '' ? '' : sanitizeMarkdownLinkUrl(rawBaseUrl);
+  if (
+    sanitizedBaseUrl == null ||
+    !isParsablePermalinkBaseUrl(sanitizedBaseUrl)
+  ) {
+    fail('permalinkBaseUrl must be a safe, parseable navigation URL');
+  }
+  const permalinkBaseUrl = sanitizedBaseUrl.replace(/#.*$/u, '');
 
   const definition = {
     name: PLUGIN_NAME,
@@ -141,7 +190,7 @@ export function createMarkdownHeadingLinks(
   Object.defineProperty(definition, portableConfigKey, {
     configurable: false,
     enumerable: false,
-    value: createPortableConfig(options.headingIdPrefix),
+    value: createPortableConfig(options.headingIdPrefix, permalinkBaseUrl),
     writable: false,
   });
   return createMarkdownPlugin(definition);
@@ -174,6 +223,7 @@ export function projectMarkdownHeadingLinks(
 
   const ids = new Map<Heading, string>();
   const labels = new Map<Heading, string>();
+  const permalinkUrls = new Map<Heading, string>();
   const counts = new Map<string, number>();
 
   visitMarkdownNodes(root, 'heading', heading => {
@@ -187,7 +237,8 @@ export function projectMarkdownHeadingLinks(
         : slug;
     ids.set(heading, id);
     labels.set(heading, label);
+    permalinkUrls.set(heading, `${config.permalinkBaseUrl}#${id}`);
   });
 
-  return {ids, labels};
+  return {ids, labels, permalinkUrls};
 }

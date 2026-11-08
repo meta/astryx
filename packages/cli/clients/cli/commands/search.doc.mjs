@@ -13,11 +13,11 @@ export const doc = {
   name: 'search',
   displayName: 'astryx search',
   namespace: 'cli/commands',
-  summary: 'Search components, hooks, docs, and templates in one ranked list',
+  summary: 'Search components, hooks, docs, templates, and themes in one ranked list',
   description:
     'Terminal front-end to search(): prints one ranked, greppable list across ' +
     'every content domain, each row carrying a follow-up command to act on it. ' +
-    'Outside an app, where @astryxdesign/core is not installed, it searches the docs.',
+    'Outside an app, where @astryxdesign/core is not installed, it searches the docs and themes.',
   fn: 'search',
   // Every word after `search` is the query: `astryx search dark mode` searches
   // for "dark mode", with no quotes needed.
@@ -26,8 +26,8 @@ export const doc = {
     {
       flag: '--type <domain>',
       param: 'options.type',
-      choices: ['component', 'hook', 'doc', 'template'],
-      description: 'Filter to one domain (component|hook|doc|template)',
+      choices: ['component', 'hook', 'doc', 'template', 'theme'],
+      description: 'Filter to one domain (component|hook|doc|template|theme)',
     },
     {
       flag: '--limit <n>',
@@ -49,7 +49,9 @@ export const doc = {
       label: 'Filter + JSON',
       cli: 'astryx search "data table" --type template --json',
     },
+    {label: 'Themes you can add', cli: 'astryx search warm --type theme'},
   ],
+  outsideProject: 'same',
   exitCodes: [
     {code: 0, when: 'success (including zero matches)'},
     {

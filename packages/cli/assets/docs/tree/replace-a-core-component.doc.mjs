@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/components/replace-a-core-component`:
+ * @file `astryx docs authoring/building-blocks/components/replace-a-core-component`:
  * intentionally make an integration component the default for a Core identity.
  */
 
@@ -29,7 +29,7 @@ export const docs = {
           style: 'unordered',
           items: [
             'Your component intentionally serves the same role as one specific Core component.',
-            'Every app that loads the integration should get your component from unqualified component detail, lists, search, swizzle, and issue routing.',
+            'Every app that loads the integration should get your component from unqualified component detail, `component --list`, search, `swizzle <Name>`, and issue routing.',
             'You have tested both the replacement and explicit access to the original Core component.',
           ],
         },
@@ -65,18 +65,33 @@ export default {
 };`,
         },
         {
-          type: 'reference',
-          target: 'schema:component-doc',
-          projection: {fields: ['replaces']},
-          presentation: 'full',
+          type: 'prose',
+          text: 'Every field is in {@link schema:component-doc}.',
+        },
+        {
+          type: 'prose',
+          text: 'The replacement turns on only when your package declares the first CLI release that applies it. Add this to its `package.json`:',
+        },
+        {
+          type: 'code',
+          lang: 'json',
+          label: 'package.json',
+          code: `{
+  "peerDependencies": {"@astryxdesign/cli": ">=0.6.7"},
+  "peerDependenciesMeta": {"@astryxdesign/cli": {"optional": true}}
+}`,
         },
         {
           type: 'list',
           style: 'unordered',
           items: [
+            'Any `@astryxdesign/cli` range that starts at that release or later turns it on, including the `>=0.7.0` that `integration add doc --parent` wrote in published 0.6.4 and 0.6.5, and `integration add theme` in published 0.6.5.',
+            'Without such a range, the component keeps its own name, the Core component stays selected (a component named like its target stays ambiguous by that bare name, as before), and `doctor integration components` warns with the range to add. Apps that load such a package see no change.',
             '`replaces` names the Core `ComponentDoc` identity, not its display label, import path, or a standalone hook.',
             'Your component may keep a distinct name or use the same name as the target. A distinct name remains directly addressable on older CLIs that ignore `replaces`.',
-            '`--package @astryxdesign/core` always selects the original Core component.',
+            '`--package @astryxdesign/core` always selects the original Core component, and `--package` with your package selects your component by either name.',
+            'Replacing `SideNav` replaces only that name. `SideNavItem` and the other SideNav parts stay Core components; document any parts your package provides under their own names.',
+            '`swizzle --list` lists Core components, including the one you replace. `swizzle SideNav` copies your component, and `swizzle SideNav --package @astryxdesign/core` copies the original.',
           ],
         },
       ],
@@ -88,15 +103,25 @@ export default {
         {
           type: 'code',
           lang: 'bash',
-          code: 'npx astryx doctor integration components\nnpx astryx component SideNav\nnpx astryx component AcmeSideNav\nnpx astryx component SideNav --package @astryxdesign/core',
+          code: '{@command doctor integration components}\n{@command component SideNav}\n{@command component AcmeSideNav}\n{@command component SideNav --package @astryxdesign/core}',
         },
         {
           type: 'list',
           style: 'unordered',
           items: [
-            'A missing target, invalid value, second replacement for one target in the same package, or a replacement named after a different Core component is an error.',
-            'When several integrations replace one target, explicit configuration beats the automatic pick. Among explicitly configured integrations, the later package wins and Doctor warns.',
+            'Once the package declares the range, a missing target, invalid value, second replacement for one target in the same package, or a replacement named after a different Core component is an error. Without the range, `doctor integration components` reports each of these as a warning.',
+            'When several integrations replace one target, explicit configuration beats the automatic pick. Among explicitly configured integrations, the later package wins and Doctor warns. Among autolinked integrations alone, the dependency listed later in `package.json` wins and Doctor warns.',
           ],
+        },
+      ],
+    },
+    {
+      id: 'global-mode',
+      title: 'In global mode',
+      content: [
+        {
+          type: 'prose',
+          text: 'In global mode: a replacement from a package installed for the computer applies in folders outside any project; inside a project, only replacements from packages the project installs apply. See {@link namespace:global} and {@link generic:global-integrations}.',
         },
       ],
     },

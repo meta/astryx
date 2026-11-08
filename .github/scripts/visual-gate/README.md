@@ -1,7 +1,12 @@
 # Storybook visual regression
 
 Every visual-regression test uses the shared Storybook framework and
-`.github/workflows/ci.yml` → `pr-visual` (**Stable visual regression**).
+`.github/workflows/ci.yml` → `pr-visual` (**Stable visual regression**). It runs
+in `release-check`, which `main-heavy-lanes.yml` dispatches after merges to
+`main` (a burst is checked once, at its newest commit) and the release gate dispatches before a cut. A pull request runs its full
+check only with the `ci:run-visual` label; without it, `pr-visual` runs its
+default touched check, which compares only the touched Core components that
+have an accepted baseline shot and never widens (AST-030 FR12, DEC-7).
 [AST-030 FR12](../../../docs/specs/AST-030/spec.md) owns this requirement.
 Add coverage to that owner, not to a new component, package, theme, scheduled,
 post-CI, or post-merge workflow.
@@ -10,8 +15,9 @@ post-CI, or post-merge workflow.
 
 Dispatch **CI** from `main` with `operation=release-check`. The event SHA is
 immutable for the run; the request and final `release-check` join reject a
-non-main ref or a SHA that is no longer current main. After main advances, dispatch
-again rather than reusing an earlier green run.
+non-main ref or a SHA that is not an ancestor of current main. Later fast-forward
+commits do not invalidate an earlier green run; a rewrite or divergence that
+removes the checked SHA requires a new dispatch.
 
 The existing Storybook build feeds the same **Stable visual regression**
 (`pr-visual`), `pr-a11y`, and `pr-rtl` owners. Release scope is the closed full
@@ -23,22 +29,25 @@ cancelled, and skipped work is not release evidence.
 This changes when and where release evidence runs, not finding policy: visual
 `changed` still requires review, a11y fails on new baseline violations, and RTL
 findings remain soft while report completeness is mandatory. The dispatch does
-not capture baseline candidates, promote baselines, publish previews, or replace
-PR checks. It runs only on request, not every push. `visual-release-report` holds
+not capture baseline candidates, promote baselines, or publish previews. `visual-release-report` holds
 the visual evidence for that exact run/attempt.
 
-PR accessibility is intentionally smaller: explicit changed-component axe scope
-(including grouped-folder owners), plus the fast modal-close, theme-var, and
-story-play guards. Empty/shared scope never falls back to all stories, and
+PR accessibility is intentionally smaller. With `ci:run-a11y` it runs an
+explicit changed-component axe scope (including grouped-folder owners), plus
+the fast modal-close, theme-var, and story-play guards. Without the label, the
+default touched-components check audits only the touched components' stories,
+without the guards, and runs up to four browser accessibility spec files the
+pull request adds or modifies (scoped and `always` specs; `audit` and
+`release-only` specs wait). Empty/shared scope never falls back to all stories, and
 missing or approximate analysis fails rather than granting an empty scope.
 The full axe roster, whole-repository accessibility spec-test contracts and their
-pixel/evidence uploads, and Probe reach sweep run only during `release-check`.
+pixel/evidence uploads run only during `release-check`.
 
 Release callers must bind the CI run/attempt and all three job outcomes to its
-exact main SHA, and recheck main immediately before release mutation. The public
-[Release Process](https://github.com/facebook/astryx/wiki/Release-Process) needs a
-separate follow-up to replace constituent-PR-only gating with this dispatch; this
-CI capability does not update release automation.
+exact main SHA, and confirm that SHA remains an ancestor of current main before
+release mutation. The public
+[Release Process](https://github.com/meta/astryx/wiki/Release-Process) uses
+the same checked-SHA boundary; later fast-forward commits are next-release input.
 
 ## Coverage and results
 
@@ -70,17 +79,17 @@ keys requires explicit full-plan baseline maintenance.
 - `skipped`: no comparison was performed; the reason is explicit. It does not
   imply a separate workflow covered the change.
 
-The `visual-pr-report` artifact belongs to the exact CI run and attempt.
+The `visual-pr-report` artifact belongs to the exact CI run. A rerun of only
+the failed jobs keeps the artifacts of the jobs that passed, so the report can
+come from an earlier attempt of that run, never a later one.
 `pr-comment.yml` only publishes its report: it checks identity, bounds JSON and
 image sizes, re-encodes PNGs, and renders escaped HTML from default-branch code.
 It does not execute artifact HTML, run a browser, compare pixels again, change
-a baseline, or create another visual status.
+a baseline, or create another visual status. Its only status is `PR Comment` on
+the pull request head, which says whether a report step failed.
 
-Deployment previews, `a11y-weekly.yml`, `rtl-weekly.yml`, and
-`vibe-screenshots.yml` remain separate because they do not run visual regression.
-The baseline-free `gate.mjs reach` diagnostic lives with the existing `pr-a11y`
-browser checks; it tests whether Probe overrides reach their targets, not whether
-screenshots match a golden image.
+Deployment previews and `vibe-screenshots.yml` remain separate because they do
+not run visual regression.
 
 ## Explicit baseline maintenance
 

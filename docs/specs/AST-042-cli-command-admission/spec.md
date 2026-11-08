@@ -18,6 +18,14 @@ affects_consumer_docs: []
 
 # CLI command admission and programmatic parity system spec
 
+<!-- path-applicability:v1 -->
+
+```json
+{
+  "paths": ["packages/cli/clients/cli/**", "packages/cli/api/**"]
+}
+```
+
 ## Intent
 
 Agents learn the Astryx CLI from its help, its manifest, and their own notes, and
@@ -113,7 +121,9 @@ function, and the vocabulary that human-readable output may use.
 - **FR6 — Moving surface is an admission.** Renaming a command, moving behavior
   into a new command, or promoting a subcommand to a top-level command is an
   admission at the new tier and MUST pass that tier's test. Removal and renaming
-  also follow `spec:AST-017` FR1–FR8.
+  also follow `spec:AST-017` FR1–FR8 and FR31: a removal lands in a declared minor
+  with its `[breaking]` Changeset, and when the next release is a patch the command is
+  deprecated first (FR28).
 - **FR7 — Exact-lookup admission classifies batching first.** Before code is written,
   every new command or subcommand with an exact selector position MUST classify that
   position against `spec:AST-053` FR11 E1-E5. An eligible surface MUST use AST-053's
@@ -235,6 +245,38 @@ Rejected: letting each eligible command remain single-only or hide batching behi
 option, which gives equivalent read-only lookups different automation contracts; and
 requiring a new system record for every subcommand exclusion, which defeats the tiered
 bar.
+
+## Deprecation and cleanup descriptions
+
+These tables describe deprecations and removals for readers; the gate for a removal
+is the declared minor and its `[breaking]` Changeset (`spec:AST-017` FR31).
+
+### DEP-0006 — Deprecate the `astryx layout` command group
+
+| Field            | Value                                                                                                                                                                                                                                                          |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id               | `DEP-0006`                                                                                                                                                                                                                                                     |
+| cleanup          | `CLN-0006`                                                                                                                                                                                                                                                     |
+| package          | `@astryxdesign/cli`                                                                                                                                                                                                                                            |
+| surface          | CLI command group: `astryx layout` (`expand`, `check`, `grammar`), its three JSON response types (`layout.expand`, `layout.check`, `layout.grammar`), and the programmatic API exports `layoutExpand`, `layoutCheck`, `layoutGrammar` from `@astryxdesign/cli` |
+| old contract     | Compressed XLE/XLO expressions parsed, validated, and expanded into XDS TSX; expression validation with canonical-surface echo; grammar cheatsheet with alias table                                                                                            |
+| replacement      | `astryx build` chooses the closest template to start from. `astryx template <name> <path>` scaffolds it. `astryx docs layout` teaches the layout principles (scaffold, structure, spacing, breakpoints).                                                       |
+| warning          | Human mode: one stderr line per invocation naming DEP-0006 and the replacement commands. JSON mode: `meta.deprecations` array in the response envelope, each entry `{id, replacements}`, matching the documented envelope schema.                              |
+| migration        | Non-mechanical. The XLE/XLO expression language has no source-level equivalent in the replacement commands. Use `astryx build` to find the right template, `astryx template <name>` to scaffold it, and edit the scaffolded code directly.                     |
+| codemod          | None — vacuous: expressions are ad-hoc input, not persisted source that a codemod can rewrite.                                                                                                                                                                 |
+| downstream       | Maintained agent-docs teach `build` as the front door. The layout guide (`astryx docs layout`) is unaffected.                                                                                                                                                  |
+| direct authority | `spec:AST-042` (CLI command admission and programmatic parity)                                                                                                                                                                                                 |
+| state            | `deprecated`                                                                                                                                                                                                                                                   |
+
+### CLN-0006 — Remove the `astryx layout` command group
+
+| Field     | Value                                                                                                                                                            |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id        | `CLN-0006`                                                                                                                                                       |
+| lifecycle | `DEP-0006`                                                                                                                                                       |
+| delta     | Remove command registration, API exports (`layoutExpand`, `layoutCheck`, `layoutGrammar`), CLI bindings, command docs, tests, and the `layout.*` response types. |
+| rollback  | Re-register the command group with the same API, response types, and tests from the final-patch baseline.                                                        |
+| state     | `pending` — lands in the declared minor with its `[breaking]` Changeset                                                                                          |
 
 ## Open questions
 

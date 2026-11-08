@@ -564,7 +564,7 @@ export default function MotionBugsPage() {
       <DemoCard
         title="The drawer exit, cut short"
         question="Slide 410ms, unmount at 250ms. Drag either slider: at what point does an exit stop being an exit?"
-        badges={<Badge variant="success" label="Resolved in Lab" />}>
+        badges={<Badge variant="success" label="Resolved before Core" />}>
         <DemoBody>
           <Text type="supporting">
             <strong>This was the lab failure.</strong> The former implementation
@@ -574,12 +574,12 @@ export default function MotionBugsPage() {
             slide never rendered.
           </Text>
           <Text type="supporting" color="secondary">
-            Lab Drawer now waits for the actual transform transition and uses a
+            Drawer now waits for the actual transform transition and uses a
             computed-duration backstop in{' '}
-            <code>lab/Drawer/useDrawerDialogPresence.ts</code>. Theme motion can
-            no longer desynchronize the visual exit from native-host release;
-            the sliders below preserve the original failure as an interactive
-            explanation of why the fix matters.
+            <code>core/Drawer/useDrawerDialogPresence.ts</code>. Theme motion
+            can no longer desynchronize the visual exit from native-host
+            release; the sliders below preserve the original failure as an
+            interactive explanation of why the fix matters.
           </Text>
         </DemoBody>
         <DemoBody>

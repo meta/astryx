@@ -3,12 +3,12 @@ schema_version: 4
 template_version: 1
 kind: system-spec
 id: spec:AST-058
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
-phase: proposed
+approved_by: cixzhang
+approved_at: 2026-10-03
+phase: accepted
 owners: [cixzhang]
 affects_architecture:
   [architecture:public-component-api, architecture:interaction-modality]
@@ -173,6 +173,10 @@ Read from `packages/core/src` at this record's base commit.
 | the panel's role            | `listbox` → `grid`                                                                      | A listbox until a declared option carries an action; a grid from then on while the component stays mounted (FR2, DEC-5). Advertised through `aria-haspopup`.         | listbox | `spec:AST-058` | proposed  |
 | a row                       | `row` with exactly two `gridcell`s                                                      | The option — everything it renders today — then its action. System-minted rows have an empty action cell.                                                            | —       | `spec:AST-058` | proposed  |
 | reaching an action          | pointer, touch, inline-end arrow + Enter, screen reader through `aria-activedescendant` | Every supported modality; never hover, swipe, or Tab alone.                                                                                                          | —       | `spec:AST-058` | proposed  |
+
+The action cell is a part named in each adopter's option anatomy: a rendered
+content slot the caller fills with a component
+(`architecture:public-component-api` INV18).
 
 Not public: the row and cell markup, how the active descendant is tracked,
 how the action column is sized, and which hook walks the grid.

@@ -41,7 +41,7 @@ export const doc = {
     {
       type: 'integration.template-conflicts',
       description:
-        'The integration identity, structural issues, and every Core template-id conflict with a package-qualified command.',
+        '`validated` (false when no integration manifest was found, so nothing was inspected and the empty conflict list carries no information), the integration identity, structural issues, and every Core template-id conflict with a package-qualified command.',
     },
   ],
   examples: [

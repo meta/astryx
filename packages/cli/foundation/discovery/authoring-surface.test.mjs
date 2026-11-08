@@ -86,7 +86,7 @@ describe('the public authoring surface of this repo', () => {
   it(
     'audits clean: every exported type has a readable doc and every self-doc documents one',
     async () => {
-      const index = await docs('authoring', undefined, {index: true});
+      const index = await docs('authoring/field-reference', undefined, {index: true});
       const topicKeys = new Set(
         index.data.sections.map((/** @type {any} */ s) => s.id),
       );

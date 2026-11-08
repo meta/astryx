@@ -92,6 +92,15 @@ body:has([data-home-page]) #astryx-app-shell-main {
   padding-top: 0;
 }
 
+/* The docs sidebar must clear the whole header even before hydration, including
+   on a reload with restored scroll. DocsShell seeds this docsite-owned variable
+   before paint; the existing header observer keeps it current afterwards. Do not
+   read or write AppShell's private measurement property, or affect preview shells. */
+.astryx-docs-shell :has(> .astryx-app-shell-sidenav):where(:not(.astryx-app-shell .astryx-app-shell *)) {
+  top: var(--appshell-header-height);
+  height: calc(100dvh - var(--appshell-header-height));
+}
+
 /* The docs/components sidebar is a desktop affordance. AppShell renders it
    server-side (desktop HTML), so below the mobile breakpoint we hide it with
    pure CSS — it never paints on a phone, no JS flip. The :where(:not(...))
@@ -208,12 +217,10 @@ body[data-hero-dark] [data-home-page] .astryx-pagination-dot:focus-visible {
    home-page nav rules above (transparent nav / frosted bar) target every
    `.astryx-top-nav` on the page and leak into this embedded preview, leaving
    its nav transparent so a mismatched band shows through. Pin the embedded
-   preview's nav (and its header wrapper) to the themed body color so it reads
+   preview's nav to the themed body color so it reads
    as one continuous surface. !important + the data-attribute scope beat the
    home-page overrides without affecting the real top nav. */
-[data-themes-card-preview] .astryx-top-nav,
-[data-themes-card-preview] .astryx-layout-header,
-[data-themes-card-preview] :has(> .astryx-layout-header) {
+[data-themes-card-preview] .astryx-top-nav {
   background: var(--color-background-body) !important;
   backdrop-filter: none !important;
 }

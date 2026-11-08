@@ -4,7 +4,7 @@
 
 /**
  * @file CheckboxList.tsx
- * @input Uses React, useId, useOptimistic, useTransition, Field, List, CheckboxListContext
+ * @input Uses React, useId, useOptimistic, useTransition, Field, List, CheckboxListContext, requiredGroup
  * @output Exports CheckboxList component, CheckboxListProps
  * @position Core implementation; consumed by index.ts, tested by CheckboxList.test.tsx
  *
@@ -24,27 +24,34 @@ import {
   useTransition,
   type ReactNode,
 } from 'react';
-import type {BaseProps} from '../BaseProps';
+import {
+  type FieldInputBaseProps,
+  useFieldInputStyling,
+} from '../Field/fieldParts';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {SizeValue} from '../utils/types';
 import {Field} from '../Field/Field';
 import type {InputStatus} from '../Field/types';
 import {List} from '../List/List';
 import type {ListDensity} from '../List/ListContext';
 import {useTooltip} from '../Tooltip';
+import * as stylex from '@stylexjs/stylex';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
+import {joinAriaIDs} from '../utils/inputAria';
 import {
   CheckboxListContext,
   type CheckboxListContextValue,
 } from './CheckboxListContext';
+import {createRequiredGroup} from './requiredGroup';
 
 const EMPTY_ARRAY: string[] = [];
 
 export interface CheckboxListProps extends Omit<
-  BaseProps<HTMLDivElement>,
+  FieldInputBaseProps<HTMLDivElement>,
   'onChange'
 > {
-  /** Ref forwarded to the root element */
+  /** Ref forwarded to the `role="group"` element. */
   ref?: React.Ref<HTMLDivElement>;
   /**
    * Label text for the checkbox group (always rendered for accessibility).
@@ -59,6 +66,24 @@ export interface CheckboxListProps extends Omit<
    * Description text displayed below the label.
    */
   description?: string;
+  /**
+   * Whether the group is optional. Shows the optional indicator after the
+   * group label, unless a surrounding `FormLayout` already makes fields
+   * optional by default.
+   * @default false
+   */
+  isOptional?: boolean;
+  /**
+   * Whether the group needs at least one checked box. Shows the required
+   * indicator after the group label by the same rules as every input field.
+   * While no box is checked, the browser blocks submit and moves focus to
+   * the first box that is neither disabled nor read-only. A disabled or
+   * read-only group requires nothing. Show your own error text through
+   * `status`.
+   * Mutually exclusive with isOptional.
+   * @default false
+   */
+  isRequired?: boolean;
   /**
    * Status indicator for the checkbox group.
    * When set with a message, displays a colored message box below the group.
@@ -147,6 +172,8 @@ export function CheckboxList({
   label,
   isLabelHidden = false,
   description,
+  isOptional = false,
+  isRequired = false,
   status,
   value,
   onChange,
@@ -159,16 +186,37 @@ export function CheckboxList({
   children,
   ref,
   width,
-  xstyle,
-  className,
-  style,
-  'data-testid': dataTestId,
-  ...rest
+  containerXstyle,
+  containerClassName,
+  containerStyle,
+  controlXstyle,
+  controlClassName,
+  controlStyle,
+  'aria-labelledby': ariaLabelledByProp,
+  'aria-describedby': ariaDescribedByProp,
+  ...restProps
 }: CheckboxListProps) {
+  const {rest, container} = useFieldInputStyling('CheckboxList', restProps, {
+    containerXstyle,
+    containerClassName,
+    containerStyle,
+  });
   const inputID = useId();
   const labelID = useId();
   const descriptionID = useId();
   const statusMessageID = useId();
+
+  const requiredGroup = useMemo(
+    () => (isRequired ? createRequiredGroup() : undefined),
+    [isRequired],
+  );
+  const observeRequiredGroup = useCallback(
+    (container: HTMLDivElement | null) =>
+      container != null && requiredGroup != null
+        ? requiredGroup.observe(container)
+        : undefined,
+    [requiredGroup],
+  );
 
   const [, startTransition] = useTransition();
   const isCollectionMode = value !== undefined;
@@ -187,7 +235,9 @@ export function CheckboxList({
   // Disabled-reason tooltip. Applies to the whole-group disabled state. Disabled
   // controls swallow pointer events, so the tooltip listeners attach to the
   // group container and the checkboxes stay perceivable via aria-disabled
-  // instead of the disabled attribute. Toggling is blocked in the item.
+  // instead of the disabled attribute. Toggling is blocked in the item. The
+  // reason describes the group and each checkbox (see
+  // CheckboxListContextValue.disabledMessageID).
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
@@ -225,8 +275,13 @@ export function CheckboxList({
       onChange: isCollectionMode ? handleChange : undefined,
       isDisabled,
       hasDisabledMessage: showsDisabledMessage,
+      disabledMessageID: showsDisabledMessage
+        ? disabledMessageTooltip.describedBy
+        : undefined,
       isReadOnly,
+      isInvalid: status?.type === 'error',
       loadingValues,
+      requiredGroup,
     }),
     [
       isCollectionMode,
@@ -234,22 +289,24 @@ export function CheckboxList({
       handleChange,
       isDisabled,
       showsDisabledMessage,
+      disabledMessageTooltip.describedBy,
       isReadOnly,
+      status?.type,
       loadingValues,
+      requiredGroup,
     ],
   );
 
   return (
     <Field
-      {...rest}
-      ref={ref}
-      data-testid={dataTestId}
       label={label}
       isLabelHidden={isLabelHidden}
       description={description}
       inputID={inputID}
       labelID={labelID}
       isGroupLabel
+      isOptional={isOptional}
+      isRequired={isRequired}
       descriptionID={description ? descriptionID : undefined}
       isDisabled={isDisabled}
       status={
@@ -263,20 +320,36 @@ export function CheckboxList({
       }
       statusVariant="detached"
       width={width}
-      xstyle={xstyle}
-      {...mergeProps(themeProps('checkbox-list'), {className, style})}>
+      xstyle={container.xstyle}
+      {...mergeProps(themeProps('checkbox-list'), {
+        className: container.className,
+        style: container.style,
+      })}>
       <CheckboxListContext value={contextValue}>
         <div
-          ref={el => {
-            // Anchor + hover/focus listeners for the disabled-message tooltip.
-            // Handlers are gated internally by isEnabled, so attaching
-            // unconditionally is safe.
-            disabledMessageTooltip.ref(el);
-          }}
+          {...rest}
+          // The disabled-message tooltip anchors here; its handlers are gated
+          // internally by isEnabled, so attaching unconditionally is safe.
+          ref={useMergedRefs(
+            ref,
+            disabledMessageTooltip.ref,
+            observeRequiredGroup,
+          )}
+          {...mergeProps(
+            stylex.props(controlXstyle),
+            controlClassName,
+            controlStyle,
+          )}
           role="group"
-          aria-labelledby={labelID}
+          // Screen readers announce the whole group as unavailable. Its dimmed
+          // label then labels a disabled control. An enabled list keeps a
+          // caller's own value.
+          aria-disabled={isDisabled || rest['aria-disabled']}
+          // A caller aria-labelledby names the group together with its label.
+          aria-labelledby={joinAriaIDs(labelID, ariaLabelledByProp)}
           aria-describedby={
             [
+              ariaDescribedByProp,
               description ? descriptionID : null,
               status?.message ? statusMessageID : null,
               showsDisabledMessage ? disabledMessageTooltip.describedBy : null,

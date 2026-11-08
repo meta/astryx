@@ -1,9 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/docs/sections-and-placement`: give an
- * integration package its own section in the docs tree, place guides in it,
- * and fix a placement that fails.
+ * @file `astryx docs authoring/building-blocks/docs/sections-and-placement`:
+ * give an integration package its own section in the docs tree, place guides
+ * in it, and fix a placement that fails.
  */
 
 /** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */
@@ -26,7 +26,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'npx astryx integration add doc deploying --parent acme\n# Open your section\nnpx astryx docs acme',
+          code: '{@command integration add doc deploying --parent acme}\n# Open your section\n{@command docs acme}',
         },
         {
           type: 'code',
@@ -40,7 +40,7 @@ export const docs = {
           items: [
             'Edit its `title` and `summary`: readers see them in the docs list and at the top of your section.',
             "The guide, `docs/deploying.doc.mjs`, gets `placement: {parent: 'namespace:acme', slot: 'guides'}`. Later runs with `--parent acme` reuse the namespace doc.",
-            '`package.json` gets the optional peer `"@astryxdesign/cli": ">=0.7.0"`, because an older CLI does not read sections; see {@link generic:versioning}.',
+            '`package.json` gets the optional peer `"@astryxdesign/cli": ">=0.6.4"`, because an older CLI does not read sections; see {@link generic:versioning}.',
           ],
         },
       ],
@@ -62,16 +62,14 @@ export const docs = {
           type: 'list',
           style: 'unordered',
           items: [
-            "`parent` is `namespace:<name>`, a namespace that your own package ships. You cannot place a doc in the CLI's sections or in another package's.",
-            "`slot` is a slot that the namespace declares for the doc's kind. You can leave it out when the namespace has only one slot.",
-            '`order` is an integer that sorts the guides in the slot and sets their Previous and Next moves. Guides without one come last, by name.',
+            'Every field is in {@link schema:authored-doc-graph-fields}.',
             'A placed guide opens only by its route, `acme/deploying`. Its bare name no longer opens it.',
           ],
         },
         {
           type: 'code',
           lang: 'bash',
-          code: 'npx astryx docs acme/deploying',
+          code: '{@command docs acme/deploying}',
         },
       ],
     },
@@ -86,7 +84,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'npx astryx doctor integration docs',
+          code: '{@command doctor integration docs}',
         },
         {
           type: 'code',
@@ -97,8 +95,8 @@ export const docs = {
           type: 'list',
           style: 'unordered',
           items: [
-            'A `parent` that your package does not ship, such as `namespace:cli`, "names no namespace".',
-            'A `slot` that the namespace does not declare "is not a slot of namespace"; the message lists the slots it does declare.',
+            'A `parent` your package does not ship, such as `namespace:cli`, "names no namespace".',
+            'A `slot` the namespace does not declare "is not a slot of namespace"; the message lists the declared slots.',
             'The check exits 1; see {@link generic:check-your-docs}.',
           ],
         },

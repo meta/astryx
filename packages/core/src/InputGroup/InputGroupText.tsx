@@ -10,6 +10,7 @@
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/InputGroup/InputGroup.doc.mjs
+ * - /packages/core/src/InputGroup/InputGroupText.doc.mjs
  * - /packages/core/src/InputGroup/index.ts
  * - /packages/cli/assets/templates/blocks/components/InputGroup/
  */
@@ -27,6 +28,7 @@ import {
 } from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
+import {inputGroupItemProps} from './groupStyles';
 
 const styles = stylex.create({
   text: {
@@ -80,7 +82,7 @@ export interface InputGroupTextProps extends BaseProps<HTMLDivElement> {
  *
  * @example
  * ```
- * <InputGroup label="URL">
+ * <InputGroup label="Website">
  *   <InputGroupText>https://</InputGroupText>
  *   <TextInput label="URL" isLabelHidden value={url} onChange={setUrl} />
  * </InputGroup>
@@ -98,6 +100,7 @@ export function InputGroupText({
     <div
       ref={ref}
       {...rest}
+      {...inputGroupItemProps}
       {...mergeProps(
         themeProps('input-group-text'),
         stylex.props(styles.text, xstyle),

@@ -5,7 +5,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import jscodeshift from 'jscodeshift';
-import {stripTemplateAssetRefs} from './template-adapter.mjs';
+import {replaceDemoMedia, stripTemplateAssetRefs} from './template-adapter.mjs';
 
 const PLACEHOLDER = stripTemplateAssetRefs("'/template-assets/x.png'").slice(
   1,
@@ -209,6 +209,42 @@ describe('stripTemplateAssetRefs fixture references', () => {
     expect(() => stripTemplateAssetRefs(source)).toThrow(
       new RegExp(`/template-assets/hero\\.png .*${use}`, 'u'),
     );
+  });
+});
+
+describe('replaceDemoMedia', () => {
+  it('counts a reference once, however many fixture paths its URL carries', () => {
+    const source =
+      "const hero = '/template-assets/a.png?f=/template-assets/b.png';";
+    expect(replaceDemoMedia(source)).toEqual({
+      source: stripTemplateAssetRefs(source),
+      demoMediaReplaced: 1,
+    });
+  });
+
+  it('counts a poster and a video as two references', () => {
+    const source =
+      '<video poster="/template-assets/poster.jpg" src="/template-assets/clip.mp4" />';
+    const result = replaceDemoMedia(source);
+    expect(result).toEqual({
+      source: stripTemplateAssetRefs(source),
+      demoMediaReplaced: 2,
+    });
+    expect(result.source).not.toContain('/template-assets/');
+  });
+
+  it.each([
+    [
+      'a prose mention',
+      '<p>Demo media lives under /template-assets/ in the docsite.</p>',
+    ],
+    [
+      'a third-party URL',
+      "const u = 'https://example.com/template-assets/a.png';",
+    ],
+    ['source with no fixture', 'const x = 1;'],
+  ])('counts nothing for %s it leaves as written', (_label, source) => {
+    expect(replaceDemoMedia(source)).toEqual({source, demoMediaReplaced: 0});
   });
 });
 

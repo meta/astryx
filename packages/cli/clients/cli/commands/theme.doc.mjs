@@ -1,10 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file CommandDoc for the `astryx theme` command group. A parent group with no
- * behavior of its own; it dispatches to the build/add/list subcommands, which
- * carry the actual args, flags, and wrapped functions.
- * @position packages/cli/clients/cli/commands — command documentation
+ * @file CommandDoc for the `astryx theme` command group. It is a real group,
+ * not a compatibility alias. Its subcommands own the work.
  */
 
 /** @type {import('@astryxdesign/cli/authoring').CommandDoc} */
@@ -13,18 +11,25 @@ export const doc = {
   name: 'theme',
   displayName: 'astryx theme',
   namespace: 'cli/commands',
-  summary:
-    'Create and build themes: add a shipped one, compile to CSS, or list what a theme can override',
+  summary: 'Add, switch, build, and author themes',
   description:
-    'The theme command group. Running astryx theme with no subcommand prints the ' +
-    'subcommand list; the work happens in the subcommands: compile a theme (build), ' +
-    'scaffold one into your project (add), start a custom one from the annotated template (template), ' +
-    'list the bundled and installed integration themes (list), generate a palette candidate (palette), or list the ' +
-    'component theming targets a theme can override (targets).',
-  subcommands: ['build', 'add', 'list', 'template', 'palette', 'targets'],
+    'The theme command group. Add built themes to an app, choose its default, remove them, list available and added themes, or eject source to make a local fork. The authoring commands build themes, generate palettes, write the annotated template, and list component theme targets.',
+  subcommands: [
+    'build',
+    'list',
+    'add',
+    'remove',
+    'use',
+    'eject',
+    'template',
+    'palette',
+    'targets',
+  ],
   examples: [
-    {label: 'List available themes', cli: 'astryx theme list'},
-    {label: 'Scaffold a theme', cli: 'astryx theme add matcha'},
+    {label: 'List available and added themes', cli: 'astryx theme list'},
+    {label: 'Import a theme into the app', cli: 'astryx theme add ocean'},
+    {label: 'Choose the default', cli: 'astryx theme use ocean'},
+    {label: 'Fork source to customize', cli: 'astryx theme eject ocean'},
     {
       label: 'Generate a palette candidate',
       cli: 'astryx theme palette generate palette.config.json',
@@ -32,8 +37,8 @@ export const doc = {
     {label: 'See what a theme can override', cli: 'astryx theme targets'},
   ],
   exitCodes: [
-    {code: 0, when: 'success (help shown, or a subcommand succeeded)'},
-    {code: 1, when: 'an unknown subcommand'},
+    {code: 0, when: 'help is shown or a subcommand succeeds'},
+    {code: 1, when: 'an unknown subcommand or a subcommand failure'},
   ],
   related: ['init'],
 };

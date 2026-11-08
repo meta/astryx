@@ -42,10 +42,12 @@
  * @property {string} name Template id, as `astryx template <name>` takes it.
  * @property {string} displayName Human-facing template name.
  * @property {string} description What the page is: its layout and the ideas it serves.
+ * @property {string} package The npm package that owns this template.
  * @property {string} command The scaffold command that selects exactly this template, `astryx template <id> --type page <path>`: `<id>` is the Core id an integration replacement stands in for, else the template's own id, `<path>` is a placeholder for the file or folder to write the template to, and the `astryx` prefix is for the caller to replace with its own invocation.
  * @property {'direct' | 'closest' | 'fallback'} basis Why this template. The page ranker picks every start: it weighs each matched word by how rare it is among page templates, favors the family the idea's head names and the container it names ("in a modal"), and discounts words that only modify another. `direct` when its pick is also search's direct match (`directMatch`); `closest` when it is not; `fallback` when no template has the evidence to lead and the page starts from the app shell.
  * @property {string} reason One sentence saying the same as `basis`, for a reader.
  * @property {BuildAlternative[]} alternatives The ranker's next closest page templates (≤2), for when the start's layout is wrong.
+ * @property {string[]} [notes] Setup notes: what the template needs that the project lacks (missing packages, missing StyleX compiler). Present only when the start template imports packages the project does not have or needs a StyleX compiler the project has not configured.
  */
 
 /**
@@ -55,6 +57,7 @@
  * @property {string} name Template id, as `astryx template <name>` takes it.
  * @property {string} displayName Human-facing template name.
  * @property {string} description What the page is: its layout and the ideas it serves.
+ * @property {string} package The npm package that owns this template.
  * @property {string} command The scaffold command, in the same form as the start's.
  */
 
@@ -74,7 +77,7 @@
  * @property {boolean} data.directMatch True when the top page template is a confident direct match.
  * @property {BuildStart | null} data.start The page template to start from: the ranker's pick, else the app shell. Null only when the kit is narrowed to components or hooks (`type`), or when the project has no page template to offer.
  * @property {import('../search/search.type.mjs').SearchResultEntry[]} data.pages Closest page templates by search (≤3). Each entry's `command` carries `--skeleton` when `directMatch` is false, so it previews the layout; `start.command` is the scaffold.
- * @property {import('../search/search.type.mjs').SearchResultEntry[]} data.blocks Drop-in block patterns covering parts of the idea (≤5).
+ * @property {import('../search/search.type.mjs').SearchResultEntry[]} data.blocks Drop-in block patterns covering parts of the idea (≤5), best first. A block search returned keeps search's score and reason; any other block carries the block picker's relative score (100 for its best candidate, never below 1) and reason, so the two kinds of score are not comparable.
  * @property {import('../search/search.type.mjs').SearchResultEntry[]} data.domain Idea-specific components/hooks (≤6), excluding frame/foundation.
  * @property {string[]} data.frame Always-on page-shell component names. Every page template already uses them.
  * @property {string[]} data.foundation Always-on layout/typography/action component names. Every page template already uses them.

@@ -15,6 +15,10 @@
  * creating an invisible button (keyboard access is provided by the parent menu).
  * With an `href` the root is a real anchor carrying the role.
  *
+ * Host attributes and DOM handlers the caller passes (aria-*, data-*, id, drag
+ * and drop, …) reach that row root; the row's own role, tab stop and hover
+ * focus are set after them, so a caller cannot overwrite them.
+ *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/DropdownMenu/DropdownMenu.doc.mjs
  * - /packages/core/src/DropdownMenu/DropdownMenuItem.doc.mjs
@@ -39,13 +43,17 @@ import {
   spacingVars,
   typographyVars,
   typeScaleVars,
+  focusVars,
 } from '../theme/tokens.stylex';
-import {mergeProps} from '../utils';
+import {composeEventHandlers, mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {useDropdownMenuContext} from './DropdownMenuContext';
+import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {menuPressLitRowStyle} from '../privateAttributes/menuPressLit.stylex';
 import {focusMenuItemOnHover} from './menuItemHover';
-import {isModifiedClick} from './menuItemRoles';
+import {isModifiedClick, keepDisabledRowUnfocused} from './menuItemRoles';
 import {themeProps} from '../utils/themeProps';
+import {usePressFeedback} from '../hooks/usePressFeedback';
 
 const menuItemStyles = stylex.create({
   root: {
@@ -59,14 +67,16 @@ const menuItemStyles = stylex.create({
     color: colorVars['--color-text-primary'],
     backgroundColor: {
       default: 'transparent',
-      ':focus': colorVars['--color-overlay-hover'],
+      // menuPressLitRowStyle sets the variable on the row a held finger or pen
+      // lights.
+      ':focus': `var(--_menu-row-focus-paint, ${colorVars['--color-overlay-hover']})`,
       // The pressed look only where hover exists. Under a finger the row a
       // press BEGAN on would otherwise stay painted while the highlight (focus)
-      // moves to the row under the finger — two rows lit.
+      // moves to the row under the finger — two rows lit. A held finger or pen
+      // sets the variable on the menu. Then only the lit row keeps the look.
       '@media (hover: hover)': {
         default: null,
-        ':active:where(:not(:disabled,[aria-disabled="true"]))':
-          colorVars['--color-overlay-pressed'],
+        ':active:where(:not(:disabled,[aria-disabled="true"]))': `var(--_menu-row-active-paint, ${colorVars['--color-overlay-pressed']})`,
       },
     },
     borderWidth: 0,
@@ -76,7 +86,10 @@ const menuItemStyles = stylex.create({
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
     textAlign: 'start',
-    outline: 'none',
+    // Rows show focus with a translucent overlay, which forced colors replace
+    // with the page color. The standard focus ring (focusOutlineStyles), drawn
+    // inside the row by its own width, marks the focused row in every mode.
+    outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
   },
   disabled: {
     opacity: 0.5,
@@ -85,11 +98,11 @@ const menuItemStyles = stylex.create({
   destructive: {
     // Only recolor the text/icon; the hover / focus background stays the shared
     // neutral overlay from `root` so the hover state matches every other menu
-    // item. The root color covers the label/description via the Item custom
-    // properties (and any bare text). Semantic error tokens keep it theme-aware.
-    color: colorVars['--color-error'],
-    '--_item-label-color': colorVars['--color-error'],
-    '--_item-description-color': colorVars['--color-error'],
+    // item. The semantic status foreground covers the label, description, icon,
+    // and any bare text on a plain surface.
+    color: colorVars['--color-text-error'],
+    '--_item-label-color': colorVars['--color-text-error'],
+    '--_item-description-color': colorVars['--color-text-error'],
   },
 });
 
@@ -104,9 +117,9 @@ const itemSizeStyles = stylex.create({
   lg: {},
 });
 
-export interface DropdownMenuItemProps extends Pick<
+export interface DropdownMenuItemProps extends Omit<
   BaseProps,
-  'xstyle' | 'className' | 'style'
+  'role' | 'tabIndex'
 > {
   /** Icon to display before the label. */
   icon?: ReactNode | IconType;
@@ -191,9 +204,16 @@ export function DropdownMenuItem({
   className,
   style,
   ref,
+  onPointerMove,
+  onAuxClick,
+  ...rest
 }: DropdownMenuItemProps) {
   const ctx = useDropdownMenuContext();
   const menuSize = ctx?.menuSize ?? 'md';
+  // Item marks itself as a pressable surface too; naming the row here as well
+  // keeps this file's own press arms (above) verifiably reachable by the
+  // touch press controller (pressableCoverage.test.ts).
+  const pressable = usePressFeedback();
 
   const handleClick = useCallback(
     (event: MouseEvent) => {
@@ -249,6 +269,11 @@ export function DropdownMenuItem({
 
   return (
     <Item
+      {...rest}
+      onMouseDown={composeEventHandlers(
+        rest.onMouseDown,
+        isDisabled ? keepDisabledRowUnfocused : undefined,
+      )}
       ref={ref}
       // A row that navigates IS the link: its root is the application's
       // anchor, so a modified click, a middle click, copying the address and
@@ -256,8 +281,10 @@ export function DropdownMenuItem({
       // address keeps the default root.
       as={href != null ? LinkComponent : undefined}
       role="menuitem"
-      tabIndex={isDisabled ? undefined : -1}
-      onPointerMove={handlePointerMove}
+      tabIndex={-1}
+      // The row's own handling runs first, then the caller's.
+      onPointerMove={composeEventHandlers(handlePointerMove, onPointerMove)}
+      {...pressable}
       startContent={
         icon
           ? renderIconSlot(icon, {
@@ -270,13 +297,20 @@ export function DropdownMenuItem({
       description={description}
       endContent={endContent}
       onClick={handleClick}
-      onAuxClick={handleAuxClick}
+      onAuxClick={composeEventHandlers(handleAuxClick, onAuxClick)}
       href={href}
       target={target}
       rel={rel}
+      // A menu row is never a draggable link. Under a mouse, the browser's
+      // native link drag starts a few pixels into a press and cancels the
+      // pointer stream (`pointercancel`), so the press model could not let
+      // the row under the release act.
+      draggable={href != null ? false : undefined}
       isDisabled={isDisabled}
       xstyle={[
+        focusOutlineStyles.focusVisible,
         menuItemStyles.root,
+        menuPressLitRowStyle,
         itemSizeStyles[menuSize],
         isDestructive && menuItemStyles.destructive,
         isDisabled && menuItemStyles.disabled,

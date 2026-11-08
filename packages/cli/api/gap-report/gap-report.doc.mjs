@@ -15,9 +15,12 @@ export const doc = {
   summary:
     'Report a missing or hard-to-use design-system capability to the package that owns it.',
   description:
+    'Routes the report to the package that owns the gap: options.package when given, else the integration whose component replaces the named Core component, else the one package that provides the component, else Core. ' +
     'Sends a gap report to every configured handler: the project config handler first, then each integration handler in config order. ' +
     'Each handler has 30 s to finish, and its output goes to stderr. Public handlers run only with confirmPublic; internal handlers always run. ' +
     "With no handler, it files a GitHub issue for the owning package only with confirmPublic (without it nothing is sent), or returns the package's issues URL when that is not on GitHub. " +
+    "With options.to, the report goes only to that integration's issues URL instead, under the same confirmPublic rule. " +
+    'When loaded integrations name their own issues URLs, the response lists every destination with a line telling an agent to ask the person where to file; pass their choice as options.to, never a package the agent picked itself. ' +
     'The report records whether an agent or a person ran it, and the response lists each handler outcome in order.',
   importPath: '@astryxdesign/cli/api',
   signature:
@@ -60,20 +63,26 @@ export const doc = {
       name: 'options.package',
       type: 'string',
       description:
-        'Package that owns the gap: @astryxdesign/core, or a loaded integration by package name or config entry. Overrides automatic owner routing; required when more than one package provides the component.',
+        'Package that owns the gap: @astryxdesign/core, or a loaded integration by package name or config entry. Overrides automatic owner routing, which picks the integration whose component replaces the named Core component, else the one package that provides it, else Core; required when more than one package provides the component.',
     },
     {
       name: 'options.confirmPublic',
       type: 'boolean',
       description:
-        'Allow public delivery: public handlers run, and with no handler a GitHub issue is filed through the gh CLI.',
+        'Allow public delivery: public handlers run, and a GitHub issues URL gets an issue filed through the gh CLI.',
       default: 'false',
+    },
+    {
+      name: 'options.to',
+      type: 'string',
+      description:
+        'A destination the person chose: a loaded integration whose manifest names an issues URL. The report goes only to that issues URL; handlers do not run.',
     },
     {
       name: 'options.listCategories',
       type: 'boolean',
       description:
-        'Return categories without resolving a route or writing; the component and every other option are ignored.',
+        'Return categories, and the destinations in meta when there is more than one, without resolving a route or writing; the component and every other option are refused with ERR_INVALID_ARGUMENT.',
       default: 'false',
     },
     {
@@ -114,7 +123,7 @@ export const doc = {
     },
     {
       code: 'ERR_UNKNOWN_PACKAGE',
-      when: 'the explicitly selected package is not loaded',
+      when: 'the explicitly selected package is not loaded, or options.to names no destination (the error lists the destinations)',
     },
     {
       code: 'ERR_NOT_FOUND',

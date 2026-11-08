@@ -4,9 +4,9 @@
  * @file search command — unified ranked search with a stable result summary.
  *
  * One "I'm looking for X" entry point spanning components, hooks, docs topics,
- * and templates (page + block). Results are ranked by relevance and tagged
- * with their domain, with a follow-up command so the user knows what to run
- * next.
+ * templates (page + block), and themes. Results are ranked by relevance and
+ * tagged with their domain, with a follow-up command so the user knows what to
+ * run next.
  *
  * The command surface (description, args, flags) is sourced from the colocated
  * `search.doc.mjs` CommandDoc via `defineCommand`; this file supplies only the
@@ -27,12 +27,11 @@ import {
 } from '../../../foundation/env/package-manager.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
 import {resultSetOf} from '../../../foundation/debug/index.mjs';
-import {emit, section, text, records} from '../formatters/index.mjs';
+import {emit, formatDeprecation, section, text, records} from '../formatters/index.mjs';
 import {cliError} from '../lib/cli-error.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {search as searchApi} from '../../../api/search/search.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
-import {findCoreDir} from '../../../foundation/fs/paths.mjs';
 import {warnOnIntegrationIssues} from '../../../foundation/integrations/integration-warnings.mjs';
 import {doc as searchCommand} from './search.doc.mjs';
 import {doc as searchFn} from '../../../api/search/search.doc.mjs';
@@ -104,16 +103,22 @@ export function registerSearch(program) {
       // ── Text output ──────────────────────────────────────────────
       const run = getCliInvocation();
       const {query: q, matchCount, results} = result.data;
-      // Outside an app an open search covers the docs alone. Say so, so a
-      // docs-only list does not read as "Astryx has no such component".
-      const note =
-        !options.type && !findCoreDir(process.cwd())
-          ? [
-              text(
-                '@astryxdesign/core is not installed here, so only the docs were searched.',
-              ),
-            ]
-          : [];
+      // When Core could not be had, an open search covers the rest alone. Say
+      // so, on standard error and in the output, so the list does not read as
+      // "Astryx has no such component".
+      const partial = result.meta?.partial;
+      if (partial) {
+        console.error(
+          `astryx: components, hooks, and templates were not searched: ${partial.reason}`,
+        );
+      }
+      const note = partial
+        ? [
+            text(
+              'Components, hooks, and templates need @astryxdesign/core, which could not be found (see the line above), so only the docs and themes were searched.',
+            ),
+          ]
+        : [];
 
       // No matches is a valid, successful outcome — clean message, exit 0.
       if (results.length === 0) {
@@ -123,6 +128,7 @@ export function registerSearch(program) {
           text(
             `Try a broader term, or browse: ${run} ${note.length > 0 ? 'docs' : 'component --list'}`,
           ),
+          ...discoverHint(run, q, options.type),
         );
         return answered;
       }
@@ -139,6 +145,7 @@ export function registerSearch(program) {
             'title',
             'displayName',
             'kind',
+            'deprecated',
             'score',
             'reason',
             'import',
@@ -154,6 +161,7 @@ export function registerSearch(program) {
             'title',
             'displayName',
             'kind',
+            'deprecated',
             'import',
             'description',
             'command',
@@ -171,13 +179,40 @@ export function registerSearch(program) {
         ),
         records(results, {
           fields,
-          format: {command: formatCliCommand, parent: formatCliCommand},
+          format: {
+            command: formatCliCommand,
+            parent: formatCliCommand,
+            deprecated: formatDeprecation,
+          },
         }),
         ...note,
+        ...discoverHint(run, q, options.type),
       );
       return answered;
     },
   });
+}
+
+/**
+ * Search reads only what is installed. Point at `discover` for the packages
+ * that could add more, except for hooks, which no integration adds.
+ * @param {string} run - The caller's CLI invocation prefix.
+ * @param {string} query
+ * @param {string | undefined} type
+ */
+function discoverHint(run, query, type) {
+  if (type === 'hook') return [];
+  return [
+    text(`More in packages you could add: ${run} discover ${shellWord(query)}`),
+  ];
+}
+
+/**
+ * One shell word: the value itself when it is plain, else single-quoted.
+ * @param {string} value
+ */
+function shellWord(value) {
+  return /^[\w@./:-]+$/.test(value) ? value : `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 // Re-export the API for external consumers.

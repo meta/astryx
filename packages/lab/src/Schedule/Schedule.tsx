@@ -14,7 +14,7 @@
  * - /apps/storybook/stories/Schedule.stories.tsx
  */
 
-import {Suspense, useCallback, useMemo, useState} from 'react';
+import {Suspense, useCallback, useMemo, useRef, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '@astryxdesign/core';
 import {useLocale, type Locale} from '@astryxdesign/core/i18n';
@@ -23,6 +23,10 @@ import {eventOverlapsRange, getBrowserTimezoneID, sortEvents} from './dateMath';
 import {ScheduleContext} from './context';
 import {defaultSchedulePlugins} from './plugins';
 import {styles} from './shared';
+import {
+  TimeGridScrollMemoryContext,
+  type TimeGridScrollMemory,
+} from './timeGridScrollMemory';
 import {createZonedDateTime} from './zonedDateTime';
 import {themeProps} from '@astryxdesign/core/utils';
 import type {
@@ -271,6 +275,12 @@ export function Schedule({
   const onNextDate = useCallback(() => {
     shiftToRange(nextDateRange.range);
   }, [nextDateRange, shiftToRange]);
+  // Lives above the suspense boundary so the fallback's viewport and the
+  // loaded content's viewport share one scroll record per rendered range.
+  const timeGridScrollMemory = useRef<TimeGridScrollMemory>({
+    key: null,
+    offset: 0,
+  });
 
   return (
     <div
@@ -281,16 +291,34 @@ export function Schedule({
         className,
         style,
       )}>
-      <Suspense
-        fallback={
+      <TimeGridScrollMemoryContext.Provider value={timeGridScrollMemory}>
+        <Suspense
+          fallback={
+            <ScheduleViewContent
+              view={view}
+              eventSource={[]}
+              categories={categories}
+              date={zonedDateTime}
+              focusDate={focusZonedDateTime}
+              locale={locale}
+              isLoading
+              onPreviousDate={onPreviousDate}
+              previousDateLabel={previousDateRange.label}
+              onToday={onToday}
+              onNextDate={onNextDate}
+              nextDateLabel={nextDateRange.label}
+              plugins={plugins}
+              headingLevel={headingLevel}
+            />
+          }>
           <ScheduleViewContent
             view={view}
-            eventSource={[]}
+            eventSource={events}
             categories={categories}
             date={zonedDateTime}
             focusDate={focusZonedDateTime}
             locale={locale}
-            isLoading
+            isLoading={false}
             onPreviousDate={onPreviousDate}
             previousDateLabel={previousDateRange.label}
             onToday={onToday}
@@ -299,24 +327,8 @@ export function Schedule({
             plugins={plugins}
             headingLevel={headingLevel}
           />
-        }>
-        <ScheduleViewContent
-          view={view}
-          eventSource={events}
-          categories={categories}
-          date={zonedDateTime}
-          focusDate={focusZonedDateTime}
-          locale={locale}
-          isLoading={false}
-          onPreviousDate={onPreviousDate}
-          previousDateLabel={previousDateRange.label}
-          onToday={onToday}
-          onNextDate={onNextDate}
-          nextDateLabel={nextDateRange.label}
-          plugins={plugins}
-          headingLevel={headingLevel}
-        />
-      </Suspense>
+        </Suspense>
+      </TimeGridScrollMemoryContext.Provider>
     </div>
   );
 }

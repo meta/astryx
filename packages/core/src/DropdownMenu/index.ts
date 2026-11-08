@@ -39,6 +39,12 @@ export {
   type DropdownMenuDividerProps,
 } from './DropdownMenuDivider';
 
+// Group — the compound peer of the data API's `{type: 'section', title}`.
+export {
+  DropdownMenuGroup,
+  type DropdownMenuGroupProps,
+} from './DropdownMenuGroup';
+
 // Selectable items — checkbox (independent) and radio (single-select group).
 export {
   DropdownMenuCheckboxItem,

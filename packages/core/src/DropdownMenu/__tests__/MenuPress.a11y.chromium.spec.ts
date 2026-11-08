@@ -1,18 +1,26 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y release-only
 
 /**
  * @file MenuPress.a11y.chromium.spec.ts
  * @input Built DropdownMenu and Selector stories and real Chromium mouse,
  *   touch (CDP) and pen (CDP) input
  * @output Browser evidence for the menu press model: the row under the
- *   release acts once, the highlight follows the pointer, a release outside
+ *   release acts once (a link row included: no native link drag cancels a
+ *   mouse press), the highlight follows the pointer, a release outside
  *   closes under a mouse and not under a finger, a touch pan in an
- *   overflowing menu cancels the gesture, and a pen behaves like a finger
+ *   overflowing menu cancels the gesture, a pen behaves like a finger, and
+ *   Escape after a press-open returns focus to the trigger
  * @position Real-engine proof for module:DropdownMenu/useMenuPress — the
  *   paths jsdom cannot exercise (hit testing, touch synthesis, scrolling)
  */
 
-import {expect, test, type Page, type CDPSession} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Page,
+  type CDPSession,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -30,12 +38,32 @@ test.afterAll(async () => {
 });
 
 const MENU_STORY = 'core-dropdownmenu--default';
+const LINK_STORY = 'core-dropdownmenu--link-rows';
 const OVERFLOW_STORY = 'core-dropdownmenu--with-sections';
 const SELECTOR_STORY = 'core-selector--default';
 
 async function mount(page: Page, story: string) {
   await page.goto(`${storybook.origin}/iframe.html?id=${story}&viewMode=story`);
   await expect(page.locator('#storybook-root')).toBeVisible();
+}
+
+/**
+ * Waits until the open menu has finished entering. Under a finger, input that
+ * lands during the entrance is held, as UIMenu takes none until it is shown.
+ * The entrance runs on the surface, the layer's child.
+ */
+async function presented(page: Page) {
+  const layer = page.locator('[popover]:has([role="menu"])').first();
+  await expect
+    .poll(async () =>
+      layer.evaluate(
+        element =>
+          [element, element.firstElementChild]
+            .flatMap(node => node?.getAnimations() ?? [])
+            .filter(animation => animation.playState === 'running').length,
+      ),
+    )
+    .toBe(0);
 }
 
 /** The story items log `<label> clicked`; that line is the activation. */
@@ -191,6 +219,55 @@ test.describe('DropdownMenu press model (Chromium)', () => {
     await expect(menu).toBeHidden();
   });
 
+  test('mouse: a press dragged from one link row to another acts on the second; no link drag starts', async ({
+    page,
+  }) => {
+    // The story's Settings row logs this line from its onClick.
+    const acted: string[] = [];
+    page.on('console', message => {
+      if (message.text() === 'leaving for settings') {
+        acted.push(message.text());
+      }
+    });
+    await mount(page, LINK_STORY);
+    await page.evaluate(() => {
+      const probe = window as unknown as {linkDrags: number};
+      probe.linkDrags = 0;
+      document.addEventListener('dragstart', () => {
+        probe.linkDrags += 1;
+      });
+      // Keep the story in place: the test reads the row's act, not the
+      // navigation that follows it.
+      document.addEventListener('click', event => {
+        if (
+          event.target instanceof Element &&
+          event.target.closest('a[href]') != null
+        ) {
+          event.preventDefault();
+        }
+      });
+    });
+    await page.getByRole('button', {name: 'Places'}).click();
+    const menu = page.getByRole('menu');
+    await expect(menu).toBeVisible();
+
+    const profile = await center(page, 'menuitem', 'Profile');
+    const settings = await center(page, 'menuitem', 'Settings');
+    await page.mouse.move(profile.x, profile.y);
+    await page.mouse.down();
+    await page.mouse.move(settings.x, settings.y, {steps: 6});
+    expect(await activeRowName(page)).toBe('Settings');
+    await page.mouse.up();
+
+    await expect.poll(() => acted).toEqual(['leaving for settings']);
+    await expect(menu).toBeHidden();
+    expect(
+      await page.evaluate(
+        () => (window as unknown as {linkDrags: number}).linkDrags,
+      ),
+    ).toBe(0);
+  });
+
   test('mouse: a release outside the menu acts on nothing and closes it', async ({
     page,
   }) => {
@@ -206,6 +283,39 @@ test.describe('DropdownMenu press model (Chromium)', () => {
     expect(activations).toEqual([]);
   });
 
+  test('mouse: Escape after a press-open returns focus to the trigger, not to the control focused before the press', async ({
+    page,
+  }) => {
+    await mount(page, MENU_STORY);
+    // The control a user had focused before reaching for the menu — a field,
+    // a toolbar button. The story renders none, so one is added to the page.
+    await page.evaluate(() => {
+      const before = document.createElement('button');
+      before.id = 'focused-before-the-press';
+      before.textContent = 'Before';
+      document.body.prepend(before);
+      before.focus();
+    });
+    const before = page.locator('#focused-before-the-press');
+    await expect(before).toBeFocused();
+
+    const trigger = page.locator(TRIGGER);
+    const point = await center(page, TRIGGER);
+    await page.mouse.move(point.x, point.y);
+    await page.mouse.down();
+    const menu = page.getByRole('menu');
+    await expect(menu).toBeVisible();
+    await page.mouse.up();
+    // The opening release leaves the menu open with focus on the menu, where
+    // Escape is read.
+    await expect(menu).toBeFocused();
+
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+    await expect(trigger).toBeFocused();
+    await expect(before).not.toBeFocused();
+  });
+
   test('touch: a finger that lands on Edit and lifts on Delete acts on Delete, once; the highlight followed it', async ({
     page,
   }) => {
@@ -215,6 +325,7 @@ test.describe('DropdownMenu press model (Chromium)', () => {
     await touch.tap(cdp, await center(page, TRIGGER));
     const menu = page.getByRole('menu');
     await expect(menu).toBeVisible();
+    await presented(page);
 
     const edit = await center(page, 'menuitem', 'Edit');
     const del = await center(page, 'menuitem', 'Delete');
@@ -237,6 +348,7 @@ test.describe('DropdownMenu press model (Chromium)', () => {
     await mount(page, MENU_STORY);
     await touch.tap(cdp, await center(page, TRIGGER));
     await expect(page.getByRole('menu')).toBeVisible();
+    await presented(page);
     await touch.tap(cdp, await center(page, 'menuitem', 'Duplicate'));
     await page.waitForTimeout(500);
     expect(activations).toEqual(['Duplicate clicked']);
@@ -251,11 +363,28 @@ test.describe('DropdownMenu press model (Chromium)', () => {
     await touch.tap(cdp, await center(page, TRIGGER));
     const menu = page.getByRole('menu');
     await expect(menu).toBeVisible();
+    await presented(page);
     const edit = await center(page, 'menuitem', 'Edit');
     await touch.start(cdp, edit);
     await touch.slide(cdp, edit, {x: edit.x + 400, y: edit.y + 200});
     await touch.end(cdp);
     await page.waitForTimeout(300);
+    await expect(menu).toBeVisible();
+    expect(activations).toEqual([]);
+  });
+
+  test('touch: a menu a held finger opens stays open when that finger lifts on the trigger', async ({
+    page,
+  }) => {
+    const activations = collectActivations(page);
+    const cdp = await enableTouch(page);
+    await mount(page, MENU_STORY);
+    await touch.start(cdp, await center(page, TRIGGER));
+    const menu = page.getByRole('menu');
+    // The long-press delay opens the menu with the finger still down.
+    await expect(menu).toBeVisible();
+    await touch.end(cdp);
+    await page.waitForTimeout(400);
     await expect(menu).toBeVisible();
     expect(activations).toEqual([]);
   });
@@ -271,6 +400,7 @@ test.describe('DropdownMenu press model (Chromium)', () => {
     await touch.tap(cdp, await center(page, TRIGGER));
     const menu = page.getByRole('menu');
     await expect(menu).toBeVisible();
+    await presented(page);
     await expect
       .poll(async () =>
         menu.evaluate(el => el.scrollHeight > el.clientHeight + 1),
@@ -278,7 +408,7 @@ test.describe('DropdownMenu press model (Chromium)', () => {
       .toBe(true);
     await expect
       .poll(async () => menu.evaluate(el => getComputedStyle(el).touchAction))
-      .toBe('pan-y');
+      .toBe('pan-y pinch-zoom');
 
     const first = await center(page, 'menuitem', 'New File');
     const scrollBefore = await menu.evaluate(el => el.scrollTop);
@@ -293,7 +423,7 @@ test.describe('DropdownMenu press model (Chromium)', () => {
     await expect(menu).toBeVisible();
   });
 
-  test('touch: a menu whose rows fit declares touch-action none, so a slide stays a slide', async ({
+  test('touch: a menu whose rows fit declares touch-action pinch-zoom, so a slide stays a slide', async ({
     page,
   }) => {
     await enableTouch(page);
@@ -302,7 +432,7 @@ test.describe('DropdownMenu press model (Chromium)', () => {
     const menu = page.getByRole('menu');
     await expect
       .poll(async () => menu.evaluate(el => getComputedStyle(el).touchAction))
-      .toBe('none');
+      .toBe('pinch-zoom');
   });
 
   test('pen: a drag released over another row acts on it once; a release outside leaves the menu open', async ({
