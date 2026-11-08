@@ -529,6 +529,8 @@ export function createResizableAs(
   let pendingFlip: {toCollapsed: boolean; isPlayable: boolean} | null = null;
   let expectedFlip: boolean | null = null;
   let isPointerReopening = false;
+  // Whether a pointer drives the gesture under way; a key's step does not.
+  let isPointerGesture = false;
 
   const direction = (): ResizableDirection => opts.direction ?? 'horizontal';
   const collapsible = (): boolean => opts.collapsible ?? false;
@@ -998,6 +1000,7 @@ export function createResizableAs(
       isCarryingToSnap = false;
       // Only a pointer catches a slide or a spring-back; a key steps.
       const isPointer = regionSlot?.isPointerDragging() === true;
+      isPointerGesture = isPointer;
       const closing = derived.isCollapsed && isPointer ? closingShown() : 0;
       const slide = closingSlide;
       closingSlide = null;
@@ -1084,7 +1087,9 @@ export function createResizableAs(
         collapsible() &&
         !derived.isCollapsed &&
         Math.min(pointerSize, project(pointerSize, velocity)) < collapsedSize;
-      if (closes) {
+      if (closes && !isPointerGesture) {
+        closeOnStep();
+      } else if (closes) {
         closeOnRelease(velocity);
       } else if (isCarryingToSnap) {
         settleOnNearestSnap(velocity);
@@ -1339,6 +1344,21 @@ export function createResizableAs(
     }
     // The handle stays under the finger: the size is read from where it shows.
     return closingSlide.readShown?.() ?? closingSlide.fromSize * share;
+  }
+
+  /**
+   * A key step that ends under the collapsed size closes as `collapse()`
+   * does, on the theme's curve: no gesture releases it.
+   */
+  function closeOnStep(): void {
+    // An open restores the size the step started from.
+    if (sizeBeforeDrag != null) {
+      chosenSize = sizeBeforeDrag;
+    }
+    setCollapsed(true);
+    commit();
+    opts.onCollapseChange?.(true);
+    opts.onSizeChange?.(0);
   }
 
   /**

@@ -55,7 +55,7 @@ export function separatorAttributes(
   return {
     'aria-orientation':
       state.direction === 'horizontal' ? 'vertical' : 'horizontal',
-    // A pull past a limit shows a size beyond it; the value stays at the bound.
+    // The value stays within aria-valuemin and aria-valuemax.
     'aria-valuenow':
       value == null
         ? undefined

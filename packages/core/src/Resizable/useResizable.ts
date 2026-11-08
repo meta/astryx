@@ -69,7 +69,10 @@ export interface ResizableRegionSizing {
   defaultSize?: ResizableSize | SizeValue;
   /** Whether this region can collapse to 0. @default false */
   collapsible?: boolean;
-  /** Size in px at which dragging triggers collapse. @default 40 */
+  /**
+   * Size in px under which a lift or a key step collapses the region.
+   * @default 40
+   */
   collapsedSize?: number;
   /** Pixel values to snap to during resize. */
   snaps?: number[];
