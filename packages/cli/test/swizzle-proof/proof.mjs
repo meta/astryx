@@ -75,11 +75,16 @@ export function changedPaths(
   base = process.env.SWIZZLE_PROOF_BASE ?? 'HEAD^1',
 ) {
   try {
-    const out = execFileSync('git', ['diff', '--name-only', base], {
-      cwd: REPO,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    });
+    const head = process.env.SWIZZLE_PROOF_HEAD;
+    const out = execFileSync(
+      'git',
+      ['diff', '--name-only', base, ...(head ? [head] : [])],
+      {
+        cwd: REPO,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      },
+    );
     return out.split('\n').filter(Boolean);
   } catch {
     return null;
