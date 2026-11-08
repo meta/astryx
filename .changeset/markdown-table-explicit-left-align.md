@@ -4,8 +4,8 @@
 
 [fix] Markdown: a table column that declares `:---` says so
 
-`cellAlignStyles` had entries for `center` and `end` only, so a column written
-`| :--- |` got no style at all and rendered exactly like an undeclared one. It
+A column written `| :--- |` wrote no alignment on a cell that reads in its
+table's direction, so that cell rendered exactly like an undeclared one. It
 looks right in isolation, because a cell already starts at the inline start —
 but `text-align` inherits, so the column follows whatever the table is nested
 in. Rendered inside a centered block, a table whose first column explicitly

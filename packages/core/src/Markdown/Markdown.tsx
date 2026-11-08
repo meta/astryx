@@ -382,9 +382,6 @@ const dynamicStyles = stylex.create({
   }),
 });
 
-// A column that declares its alignment states it, including the one that lands
-// where an undeclared column happens to sit: `textAlign` inherits, so leaving
-// `:---` unstyled hands it to whatever the table is nested in.
 const cellAlignStyles = stylex.create({
   start: {textAlign: 'start'},
   center: {textAlign: 'center'},
@@ -1379,6 +1376,8 @@ function tableCellSideStyles(
     align === 'center' && cellAlignStyles.center,
     align === 'right' &&
       (isAgainstTable ? cellAlignStyles.start : cellAlignStyles.end),
+    // `text-align` inherits. A declared `:---` cell writes `start`, so it does
+    // not follow an ancestor's alignment.
     align === 'left' &&
       (isAgainstTable ? cellAlignStyles.end : cellAlignStyles.start),
     isAgainstTable && markdownTableCellStyles.ruleOnTableEnd,
