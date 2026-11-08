@@ -394,9 +394,8 @@ export const butterTheme = defineTheme({
       // Radius intentionally not pinned, so buttons keep core's
       // `var(--_button-radius, --radius-element)`: standalone buttons stay 8px,
       // while the chat composer (which sets --_button-radius) rounds them fully.
-      // Inline padding only: a labelled button's size is its minimum height,
-      // and block padding would add to it.
       base: {
+        paddingBlock: 'var(--spacing-3)',
         paddingInline: 'var(--spacing-4)',
       },
       'variant:secondary': SECONDARY_BUTTON,
