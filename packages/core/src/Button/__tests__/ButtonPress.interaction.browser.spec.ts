@@ -24,11 +24,13 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  armHold,
   flick,
   freezeTimers,
   holdThenDrag,
   installTimerGate,
   openStory,
+  releaseAnimations,
   tap,
   thawTimers,
   touchDriver,
@@ -296,6 +298,19 @@ test(
       width: box.width + 32,
       height: box.height + 32,
     };
+    // The release ends when its animation does, and on a busy machine it can
+    // end before the lift's photo. So the page holds the release itself as
+    // soon as it runs. The press runs one animation (the scale) and the
+    // release runs two (the scale back and the layer's fade), so the hold
+    // waits for two.
+    const hold = await armHold(page, opened.surface, {
+      count: 2,
+      judges: {
+        target: opened.surface,
+        property: 'opacity',
+        pseudoElement: '::before',
+      },
+    });
     const storyboard = await touchStoryboard(
       page,
       opened.driver,
@@ -309,8 +324,10 @@ test(
         columns: 3,
       },
     );
+    await hold.held();
     await freezeTimers(page);
     await storyboard.write(testInfo);
+    await releaseAnimations(page, {finish: true});
     await thawTimers(page);
     const states = storyboard.frames.map(f => f.data.state as string | null);
     // Before the touch, the touch itself (already highlighted), the lift.

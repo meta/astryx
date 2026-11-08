@@ -36,6 +36,7 @@
 
 import {parentAcrossShadow} from '../utils/flatTree';
 import {isElement} from '../utils/nodeType';
+import {realmValue, sharedKey} from '../utils/sharedRealm';
 
 /** How far an element is drawn from where the engine hit-tests it, CSS px. */
 export interface PresentedOffset {
@@ -60,16 +61,21 @@ export interface PresentedSource {
 
 const ZERO: PresentedOffset = {x: 0, y: 0};
 
-const sources = new Map<Element, PresentedSource>();
-const watchers = new Set<() => void>();
-// Inside batchPresented, a change waits for the batch's end.
-let batchDepth = 0;
-let isChanged = false;
+// Registered, so the gesture host hit-tests elements a swizzled copy moves
+// as it does the package's.
+const presented = realmValue(sharedKey('motion/presentation', 1), () => ({
+  sources: new Map<Element, PresentedSource>(),
+  watchers: new Set<() => void>(),
+  // Inside batchPresented, a change waits for the batch's end.
+  batchDepth: 0,
+  isChanged: false,
+}));
+const {sources, watchers} = presented;
 
 /** Tell every watcher the reported elements changed; one's throw stops none. */
 function notifyWatchers(): void {
-  if (batchDepth > 0) {
-    isChanged = true;
+  if (presented.batchDepth > 0) {
+    presented.isChanged = true;
     return;
   }
   for (const watcher of [...watchers]) {
@@ -89,13 +95,13 @@ function notifyWatchers(): void {
  * moves of one layout change cost one notice.
  */
 export function batchPresented(apply: () => void): void {
-  batchDepth += 1;
+  presented.batchDepth += 1;
   try {
     apply();
   } finally {
-    batchDepth -= 1;
-    if (batchDepth === 0 && isChanged) {
-      isChanged = false;
+    presented.batchDepth -= 1;
+    if (presented.batchDepth === 0 && presented.isChanged) {
+      presented.isChanged = false;
       notifyWatchers();
     }
   }

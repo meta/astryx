@@ -90,6 +90,8 @@ const styles = stylex.create({
     // explicit `padding` on this Layout overrides this on the same node.
     '--layout-padding-own-outer-x': 'initial',
     '--layout-padding-own-outer-y': 'initial',
+    '--_layout-flush-block-start': 'initial',
+    '--_layout-flush-block-end': 'initial',
   },
   fill: {
     // Add 2x container block padding to compensate for negative block margins
@@ -107,9 +109,9 @@ const styles = stylex.create({
     // LayoutFooter without one right after it, removes the matching inner
     // padding of LayoutContent (it reads these, falling back to its padding).
     // Sibling relations on this row only: a `:has()` on the layout followed
-    // by `*` restyles everything inside it on any change. Unset otherwise, so
-    // a nested Layout's content inherits an outer row's value, as the
-    // ancestor rule this replaces matched any enclosing layout.
+    // by `*` restyles everything inside it on any change. Unset otherwise:
+    // the inner stack clears both values, so a nested Layout does not take an
+    // outer row's collapse.
     '--_layout-flush-block-start': {
       default: null,
       [stylex.when.siblingBefore(':not([data-divider])', layoutHeaderMarker)]:
