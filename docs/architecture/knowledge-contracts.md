@@ -51,7 +51,8 @@ deciding_specs: []
       "DEC-12",
       "DEC-13",
       "DEC-15",
-      "INV28"
+      "INV28",
+      "INV31"
     ]
   }
 }
@@ -462,6 +463,24 @@ the rest:
     to web standards and platform references (W3C, WHATWG, MDN, TC39) and
     reserved example domains are not external links for this rule.
   - **a human owner** is `cixzhang` or a DESIGNOWNER, approving the exact head.
+
+### Approval lines
+
+- **INV31 — A record's approval lines are append-only.** A pull request that
+  changes or removes an existing decision's Decider line, or replaces a
+  record's `approved_by` with a different account, needs that original
+  decider's approval at its exact head; `cixzhang`'s own pull request counts as
+  hers. Adding a decision or an approver needs nothing extra (DEC-18). In this
+  rule:
+  - **the original decider** is the account the existing line names.
+  - **approval** is an approving review at the exact head, or a
+    `/approve-spec <full head SHA>` comment, from that account. Any decider
+    other than `cixzhang` approves the exact head, also on their own pull
+    request.
+  - **a change** is an edit to or removal of the line, a removed decision
+    included. A line that only moves, text added after an unchanged Decider
+    line, and a placeholder decider that a real decider replaces are not
+    changes.
 
 ## Path applicability
 
@@ -1316,6 +1335,18 @@ automation (INV30). Automated approval must not publish links an outside
 contributor added without a person checking them. Team-authored links follow
 the normal gates.
 
+### DEC-18 — A record's approval lines are append-only
+
+**Reference:** `architecture:knowledge-contracts/DEC-18`
+**Decider:** `cixzhang`, `2026-11-08`
+
+An existing decision's Decider line and a record's `approved_by` change only
+with the original decider's approval at the exact head (INV31). An approval line
+records who decided, so a rewrite without that person names someone who did not
+make the decision. Only `cixzhang`'s own pull request counts as approval of her
+own lines; every other decider approves the exact head. New decisions and added
+approvers follow the normal gates.
+
 ## Verification
 
 | Invariant                         | Evidence                                                                                                                                                                                                                 | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
@@ -1344,6 +1375,7 @@ the normal gates.
 | INV28, DEC-16        | `apps/docsite/src/lib/exampleCoverage.mjs` and `apps/docsite/src/__tests__/example-coverage.test.ts` (advisory: the report prints and never gates), plus review of each hook example against INV28's criteria                                                                                                                                                                                                                              | The report omits a public hook that has no hook doc or no conforming example block, or a missing or non-conforming hook example fails a merge or release                                                                                                                                                                                                                                                                           |
 | INV29                | Baselined lint over comments in package source (not built): record ids, pull request and issue numbers, date stamps, and long quote blocks fail in new comments, and existing sites are baselined. Review reports narration and file headers past about 12 lines as non-blocking findings. Cleanup lands in per-area pull requests with no behavior change, each with a `pnpm specs:for` comparison of every touched file before and after | A new comment cites a record, pull request, issue, or date, quotes a record, or narrates the code; a header grows past about 12 lines, with no lint failure or review finding; removing a comment drops a record or cited claim from a file's `pnpm specs:for` result because that comment was the file's only link to it; or cleanup removes or rewrites a directive a tool reads, such as a `@pr-a11y` line                      |
 | INV30, DEC-17        | Human-owner review of each new external URL in a pull request from an author outside the team, enforced by review and merge tooling outside the repository; no repository CI check (the INV30 enforcement gap below)                                                                                                                                                                                                                       | An outside pull request that adds an external URL under package docs or the docsite is approved or merged without a human owner's exact-head approval, or a team pull request that adds one is held for a human owner                                                                                                                                                                                                              |
+| INV31, DEC-18        | `scripts/check-knowledge.test.mjs` "approval line history"; `pnpm check:knowledge --base <base>` lists each changed approval line with its original decider; review and merge tooling outside the repository require that decider's exact-head approval (the INV31 enforcement gap below)                                                                                                                                                  | A pull request that changes or removes an existing Decider or `approved_by` line is approved or merged without the original decider's exact-head approval, or a pull request that only adds a decision or an approver is held                                                                                                                                                                                                      |
 | DEC-15               | `.github/scripts/knowledge-paths.test.mjs`, `.github/scripts/change-scope.test.mjs`, `scripts/check-knowledge.test.mjs`, `scripts/specs-for-file.test.mjs`, and `pnpm check:knowledge`                                                                                                                                                                                                                                                     | A component or module record outside `docs/specs/components/<ComponentRoot>/`, a `*.spec.md` left in a component package's source tree or beside a Swift view, a record matched to the wrong package when two share a root, a record whose component root no registered package's source tree has, a platform record whose id or `platform_of` does not match its path, or a platform record change that skips the spec-owner gate |
 
 Evidence placement is enforced by contributors and reviewers. The local
@@ -1383,3 +1415,8 @@ docs gap under INV28, tracked in the repository's issue queue.
 Current enforcement gap: no repository CI check detects a new external URL in a
 pull request from an author outside the team (INV30). Review and merge tooling
 outside the repository enforces this.
+
+Current enforcement gap: no repository check reads approvals (INV31).
+`pnpm check:knowledge --base <base>` reports each changed approval line as a
+warning and does not fail. Review and merge tooling outside the repository
+requires the original decider's approval.
