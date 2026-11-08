@@ -20,6 +20,7 @@ import {resolveOperatorLabel} from './resolveOperatorLabel';
 import {useInternalConfig} from './useInternalConfig';
 import type {PowerSearchTokenProps} from './types';
 import {useComponentTranslator} from '../i18n/useComponentTranslator';
+import {formatTokenLabel} from './formatTokenValue';
 
 const tokenValueStyles = stylex.create({
   value: {
@@ -52,10 +53,7 @@ export function PowerSearchToken({
 
   const fieldLabel = field.label;
   const resolvedOperatorLabel = resolveOperatorLabel(operator, t);
-  const operatorLabel = resolvedOperatorLabel
-    ? `: ${resolvedOperatorLabel}`
-    : '';
-  const tokenLabel = `${fieldLabel}${operatorLabel}`;
+  const tokenLabel = formatTokenLabel(t, fieldLabel, resolvedOperatorLabel);
 
   const adjustedMaxLength = Math.max(
     maxLength - fieldLabel.length - resolvedOperatorLabel.length,
