@@ -75,22 +75,19 @@ test('a pick in the second month of a hydrated two-month Calendar keeps both mon
 });
 
 for (const [name, story, opener] of [
-  [
-    'DateInput',
-    'core-calendarhydration--sheet-date-input',
-    '[role="combobox"]',
-  ],
+  ['DateInput', 'core-calendarhydration--sheet-date-input', {name: 'Due'}],
   [
     'DateTimeInput',
     'core-calendarhydration--sheet-date-time-input',
-    'input[inputmode="none"]',
+    // A DateTimeInput also has a "Starts time" combobox.
+    {name: 'Starts', exact: true},
   ],
 ] as const) {
   test(`a sheet ${name} from one date hydrates on the next date without an error, then opens on the browser’s today`, async ({
     page,
   }) => {
     const host = await serverThenHydrate(page, story);
-    await host.locator(opener).click();
+    await host.getByRole('combobox', opener).click();
     const sheet = page.locator('dialog[open]');
     await expect(
       sheet.getByRole('button', {name: 'December 2026', exact: false}).first(),

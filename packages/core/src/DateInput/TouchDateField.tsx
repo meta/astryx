@@ -708,14 +708,14 @@ export function TouchDateField({
   );
 
   // The reachable range. Explicit bounds win; otherwise the scroller reaches a
-  // century in each direction from wherever it opened. Anchored once, in a
-  // state initializer: recomputing it as the selection moves would shift every
-  // pane's scroll offset under the user mid-gesture.
+  // century in each direction from wherever it opened. It is anchored once:
+  // recomputing it as the selection moves would shift every pane's scroll
+  // offset under the user mid-gesture.
   // Indexes belong to the calendar, so DateInput remounts this surface when
   // the calendar changes.
-  // Without a value it opens on today's month. After hydration that month is
-  // stored in the first render that knows today, as Calendar does, so a
-  // render after midnight at a month end does not move the open sheet.
+  // Without a value, the sheet opens on today's month. A hydrated sheet stores
+  // that month in the first render that knows today. Then a later render after
+  // a month-end midnight does not move an open sheet.
   const [anchoredMonthIndex, setAnchoredMonthIndex] = useState<number | null>(
     () => {
       const opening =

@@ -613,9 +613,9 @@ export function TouchDateTimeField({
 
   // Indexes belong to the calendar, so DateTimeInput remounts this surface
   // when the calendar changes.
-  // Without a value it opens on today's month. After hydration that month is
-  // stored in the first render that knows today, as Calendar does, so a
-  // render after midnight at a month end does not move the open sheet.
+  // Without a value, the sheet opens on today's month. A hydrated sheet stores
+  // that month in the first render that knows today. Then a later render after
+  // a month-end midnight does not move an open sheet.
   const [anchoredMonthIndex, setAnchoredMonthIndex] = useState<number | null>(
     () => {
       const opening = selectedDate ?? today;
