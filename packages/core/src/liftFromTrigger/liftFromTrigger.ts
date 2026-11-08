@@ -4,70 +4,14 @@
 
 /**
  * @file liftFromTrigger.ts
- * @input An element to lift (the source) and, beside it, a surface that
- *   grows out of the press (a menu's popover); the caller's springs, scale
- *   rule and tint; the rect morph
- *   (motion/rectMorph.ts); the layer runtime's input hold, exit copy,
- *   viewport gutter and declared inset
- * @output Exports createLiftFromTrigger: lift a source out of the page above a tinted
- *   backdrop, grow a surface out of the press beside it, shrink the surface
- *   back into the press, and return the source to its place; and liftCopy:
- *   a copy of a source's picture in a viewer's host, for a zoom
+ * @input An element to lift (the source), a surface that grows out of the
+ *   press beside it, the caller's springs, scale rule, tint and attribute,
+ *   the rect morph, and the layer runtime's input hold, exit copy and inset
+ * @output createLiftFromTrigger, which lifts a source above a tinted
+ *   backdrop, grows and shrinks a surface at the press, and puts the source
+ *   back; and liftCopy, a copy of a source's picture for a zoom
  * @position The one lift-from-trigger presentation, internal to core and
- *   opt-in: only a surface that chooses it uses it (ContextMenu's touch
- *   invocation; a viewer's zoom from a thumbnail). Layer stays generic: the
- *   top layer, dismissal, the input hold and the shared exit copy are its;
- *   this module only uses them
- *
- * UIKit's context menu lifts the long-pressed view out of the page: it grows
- * on from the size the press gave it to its lifted size, a shadow rising
- * under it, above a backdrop that tints the page; the menu grows out of the
- * finger beside it, and when the menu closes it shrinks back into the finger
- * while the view returns to its place and the backdrop clears.
- *
- * Here the source itself lifts, not a copy: it becomes a manual popover in
- * the top layer, laid out at its own size where it stood, so no clipping,
- * transformed or stacking ancestor cuts or covers it, while one empty
- * placeholder holds its spot in the page, which does not move. What the
- * browser's popover style would change (border, padding, colors, overflow) is
- * kept as it was laid out, and the source takes no hits while lifted (a tap
- * on it is a tap on the backdrop). Inheritance follows the DOM, so the page's
- * theme still reaches it. The placeholder goes after the source, so the
- * source keeps its place among its siblings; in a list it is an `li` that
- * is not a list item, so the list stays valid and keeps its numbers. The tint is the `::backdrop` of
- * a lift layer at the end of the body that covers the viewport and takes the
- * page's touches (its color and the gutter's spacing resolved where the
- * source is); the shadow is a box in the layer that follows the source on a
- * rect morph of its own (an animated `::backdrop` of the source would
- * restyle and lay out the page on every frame). The layer also holds an empty box
- * at the lifted rect for a surface to be placed against: anchor positioning
- * follows transforms, so a box inside the source would move with it. Nothing
- * of the lift is in the DOM at rest; while lifted it adds four elements, the
- * layer, the shadow, the box and the placeholder
- * (`architecture:component-style-authoring` INV7, `spec:AST-017` FR60), and
- * its close plays on the layer runtime's one exit copy
- * (`placeLayerExitCopy`).
- *
- * A zoom from a thumbnail into a viewer lifts a copy instead
- * (`architecture:layer-runtime` INV15's clone): the copy has to show between
- * the viewer's backdrop and its photo, which a source in the top layer cannot
- * (it would cover the whole viewer, or sit under its backdrop). liftCopy puts
- * one copy of the source's picture in the viewer's host at the source's box,
- * inert and hidden from assistive technology, and hides the source where it
- * stands (it keeps its layout, so no placeholder); the viewer moves the copy
- * on the rect morph, which turns an interrupted motion around from the rect
- * on screen, and a drop shows the source again and takes the copy away.
- *
- * Every motion is `translate`, `scale` or `opacity` on the compositor
- * (spec:AST-094 FR5): the source and the surface on the rect morph, which
- * interrupts itself with the velocity on screen (FR6), the shadow on one of
- * its own along the same path; the tint as a spring-sampled Web Animation of
- * the layer's `::backdrop`. A tap or
- * a drag that lands while the lift and the surface grow reaches nothing
- * (the input hold, FR35); the close holds the layer until the source
- * is back, the surface's exit is done and every press on the layer has
- * lifted. Its timers and document listeners end with it (FR24). Reduce
- * Motion is the animator's (design:reduced-motion): opacity only.
+ *   opt-in. README.md says what a lift adds to the page and how it moves
  *
  * SYNC: When modified, update:
  * - /packages/core/src/liftFromTrigger/liftFromTrigger.test.ts
@@ -192,7 +136,8 @@ export interface LiftFromTrigger {
    * Grows `surface` (a popover laid out at rest, or an element inside one)
    * out of `press` (client px) into its box, or, without a press, fades it
    * in where it rests; and holds the lift until the lift and the surface
-   * settle (spec:AST-094 FR35). A no-op when nothing is lifted.
+   * settle, so a tap during the growth reaches nothing. A no-op when nothing
+   * is lifted.
    */
   presentSurface(
     surface: HTMLElement,
@@ -282,7 +227,7 @@ interface LiftState {
    * shadow reads the motion at the very moment the morph does.
    */
   readonly holdClock: (at: number | null) => void;
-  /** The layer's own waits and listeners, released with it (FR24). */
+  /** The layer's own waits and listeners, released with it. */
   readonly waits: AbortController;
   untilPointersLift: () => Promise<void>;
   tint: Animation | null;
@@ -851,8 +796,8 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     const radius = shapeRadius(source);
     const motion = resolvedMotion(source, options.motion);
     const reduced = reducedMotionFade(source);
-    // The tint, the shadow and the layer runtime's gutter (spec:AST-059,
-    // with the inset an app declares), resolved where the source is.
+    // The tint, the shadow and the layer runtime's gutter, with the inset an
+    // app declares, resolved where the source is.
     const probed = probe(source, {
       ...Object.fromEntries(
         Object.entries(layerInsetProperties(options.inset)).map(
@@ -1082,8 +1027,7 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     );
     current.untilPointersLift = watchPointers(current);
     // No touch reaches the layer, or anything under it, while the source
-    // grows (spec:AST-094 FR35); a surface extends the hold to its own
-    // growth.
+    // grows; a surface extends the hold to its own growth.
     current.releaseGrowHold = holdInput(layer, {
       scope: 'viewport',
       until: growing.finished,
@@ -1091,8 +1035,8 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     return {source: sourceRect, lifted, viewport, anchor};
   };
 
-  // The lift layer takes no touch until the lift and the surface settle
-  // (spec:AST-094 FR35). The hold's shield joins the top layer after the
+  // The lift layer takes no touch until the lift and the surface settle.
+  // The hold's shield joins the top layer after the
   // surface, so it covers it too; keys and assistive technology stay live.
   const holdWhileGrowing = (
     current: LiftState,
@@ -1402,9 +1346,8 @@ function pictureOf(source: HTMLElement): string {
 }
 
 /**
- * Lifts a copy of `source`'s picture into `host` for a zoom
- * (`architecture:layer-runtime` INV15's clone): one image laid out at the
- * source's box (aspect fill, its corners), inert and hidden from assistive
+ * Lifts a copy of `source`'s picture into `host` for a zoom, the lift's one
+ * transient copy: one image laid out at the source's box (aspect fill, its corners), inert and hidden from assistive
  * technology, while the source hides where it stands. The caller moves the
  * copy on the rect morph and drops it at the landing. Null, with nothing
  * changed, for a source that is not in the page or has no box.

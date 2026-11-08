@@ -4,19 +4,12 @@
  * @file liftFromTriggerGeometry.ts
  * @input A source's box, the viewport and the layer runtime's gutter, and
  *   the caller's scale rule and gap
- * @output Exports liftFromTriggerScale, liftFromTriggerRect and surfacePlacement: how far a
- *   lifted source grows, where it lands inside the gutter, and which side of
- *   it a surface (a menu) takes
- * @position The geometry of the lift presentation (liftFromTrigger.ts); internal to
- *   core
- *
- * A lifted source grows about its center by the caller's rule (UIKit's
- * preview platter: up to a factor, by a number of points on its larger
- * side, and never wider than the screen less the gutter), then moves inside
- * the layer runtime's viewport gutter (spec:AST-059) if it crosses it. A
- * surface sits a gap away: below the source when it fits above the bottom
- * gutter, else above; centered on the source, or flush with the edge the
- * source is held against.
+ * @output liftFromTriggerScale, liftFromTriggerRect and surfacePlacement:
+ *   how far a lifted source grows, where it lands inside the gutter, and
+ *   which side of it a surface (a menu) takes
+ * @position The geometry of the lift presentation (liftFromTrigger.ts);
+ *   internal to core. A source grows about its center by the caller's rule,
+ *   as UIKit's preview platter does, then moves inside the gutter
  *
  * SYNC: When modified, update /packages/core/src/liftFromTrigger/liftFromTriggerGeometry.test.ts
  */
@@ -25,7 +18,7 @@ import type {MorphRect} from '../motion/rectMorph';
 
 /**
  * The layer runtime's viewport gutter on each edge, CSS px
- * (Layer/layerViewportInset.stylex.ts, spec:AST-059): the spacing step or the
+ * (Layer/layerViewportInset.stylex.ts): the spacing step or the
  * edge's safe-area inset, whichever is larger, plus the inset an app declares
  * for a bar floating over that edge.
  */

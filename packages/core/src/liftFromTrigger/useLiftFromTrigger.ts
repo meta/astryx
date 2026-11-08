@@ -18,8 +18,7 @@ import {createLiftFromTrigger, type LiftFromTrigger} from './liftFromTrigger';
 
 /**
  * The component's lift. It stays the same object for the component's life;
- * an unmount ends whatever it has up and leaves the page as it was
- * (spec:AST-094 FR24).
+ * an unmount ends whatever it has up and leaves the page as it was.
  */
 export function useLiftFromTrigger(): LiftFromTrigger {
   const liftRef = useRef<LiftFromTrigger | null>(null);

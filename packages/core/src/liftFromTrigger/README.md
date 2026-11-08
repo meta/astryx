@@ -21,7 +21,10 @@ rule and gap are the caller's own.
 The trigger itself lifts, not a copy: it becomes a manual popover in the top
 layer, laid out at its own size where it stood, so no clipping, transformed
 or stacking ancestor cuts or covers it, and an empty placeholder after it
-holds its spot, so the page does not move. While lifted the page has four
+holds its spot, so the page does not move. In a list the placeholder is an
+`li` that is not a list item, so the list stays valid and keeps its numbers.
+The trigger takes no hits while lifted: a tap on it is a tap on the backdrop.
+While lifted the page has four
 elements more, whatever the trigger holds: the lift layer (its `::backdrop`
 is the tint); the shadow, a box in the layer that follows the trigger on a
 rect morph of its own (an animated `::backdrop` of the trigger would restyle
