@@ -148,9 +148,9 @@ Consumer props, content modes, and presentation policy remain documented in
   adds pointer listeners to the trigger's document (and shadow roots), plus a
   mousedown listener where a mouse or a pen closes it at the press, and
   removes them on close. The pointer menu observes its size and content to
-  decide whether it scrolls. With `presentation` omitted it subscribes to the
-  coarse-pointer query while mounted, and with `presentation="adaptive"` to
-  the compact-touch query. A menu never opened mounts no pointer menu surface, only its layer's
+  decide whether it scrolls. Unless `presentation="popover"`, it subscribes to
+  the coarse-pointer query while mounted, and with `presentation="adaptive"`
+  also to the compact query. A menu never opened mounts no pointer menu surface, only its layer's
   inert marker: the surface mounts at the first open and stays mounted after
   it, so a page with many context menus (a table with one per cell) carries no
   closed menu surfaces. A finger's hold mounts the surface, closed, at its
@@ -279,6 +279,11 @@ anchor is positioning infrastructure rather than consumer anatomy.
   lifted over a tinted page; a pen press outside closes it at the press. All
   are against `spec:AST-094` FR31, FR32, and FR33. A menu opened by mouse or
   keyboard already keeps its released appearance and motion.
+- **Touch-open focus indicator.** A touch open focuses the menu itself, and
+  the menu draws no focus outline in any color mode, forced colors included.
+  `architecture:interaction-modality` INV1 hides the focus indicator after
+  pointer input, and no record names an indicator for this menu under forced
+  colors.
 
 ## Decision log
 
