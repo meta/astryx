@@ -113,11 +113,19 @@ export function computeLayout({
   const isNumericX =
     xValues.length > 0 && xValues.every(v => typeof v === 'number');
 
+  // Strings that are not numbers are categories. Dates and numeric strings
+  // still place on a linear scale.
+  const isCategoricalX = xValues.some(
+    v => typeof v === 'string' && Number.isNaN(Number(v)),
+  );
+
   let xScale: ChartScale;
-  if (xDomain && isFiniteDomain(xDomain)) {
+  if (xDomain && isFiniteDomain(xDomain) && !isCategoricalX) {
     // Explicit domain is authoritative (no .nice()) — enables a stable
     // streaming window and a valid scale even when `data` is empty. Trusted
     // only when finite; a NaN/Infinity domain would collapse the scale.
+    // A linear scale cannot place category strings: bars then draw nothing,
+    // and other marks get no x position.
     xScale = scaleLinear().domain(xDomain).range([0, width]);
   } else if (isNumericX) {
     // NaN passes `typeof === 'number'`, so derive the extent defensively.

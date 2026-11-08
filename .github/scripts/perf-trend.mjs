@@ -5,7 +5,8 @@
  * @file The nightly perf trend: compare a run's scene medians with the last
  * seven days of main and keep the history.
  * @input `--results <dir>` (one `<scene>.json` per scene from
- *   apps/sandbox/perf/scenes.perf.spec.ts), `--history <file>` (the previous
+ *   apps/sandbox/perf/scenes.perf.spec.ts, and its `runner.json`: the
+ *   runner's CPU model and calibration score), `--history <file>` (the previous
  *   run's perf-history.json; may be missing), `--out <dir>`, and the run's
  *   `--sha`, `--run-id`, `--run-url`, `--event`, `--ref`, `--repository`,
  *   `--date` (ISO).
@@ -25,11 +26,20 @@
  * 2 ms) is not a regression. A metric with fewer than three runs in the window
  * has no baseline yet. Every metric is better when lower.
  *
- * A standard runner's speed swings by about a fifth from one machine to the
- * next, more than the threshold, so one run over it is only pending: the
- * regression is confirmed, and reported, when the metric was also over it on
- * the recorded run before (the previous night, or a re-run dispatched right
- * after). A run with any metric over the threshold is not a good run.
+ * Standard runners come with different CPU models, and a timing metric (long
+ * tasks, interaction latency) can double from one model to another on the
+ * same commit. So a timing metric is compared only with the runs recorded on
+ * the same CPU model. With fewer than three of those in the window it has no
+ * baseline: the report and the summary list it as such, so a CPU change never
+ * passes silently. Count metrics are compared with every
+ * recorded run in the window. Each run records its CPU model and a fixed
+ * calibration score; the score is kept for reference and gates nothing.
+ *
+ * On one CPU model a runner's speed still swings by about a fifth, more than
+ * the threshold, so one run over it is only pending: the regression is
+ * confirmed, and reported, when the metric was also over it on the recorded
+ * run before (the previous night, or a re-run dispatched right after). A run
+ * with any metric over the threshold is not a good run.
  *
  * SYNC: METRICS names the fields of SceneSample in apps/sandbox/perf/measure.ts.
  */
@@ -43,12 +53,25 @@ export const WINDOW_DAYS = 7;
 export const MIN_BASELINE_RUNS = 3;
 export const HISTORY_LIMIT = 120;
 
-/** metric → the smallest absolute worsening that can count, and its unit. */
+/**
+ * metric → the smallest absolute worsening that can count, its unit, and
+ * whether it is a timing metric (compared only on the same CPU model).
+ */
 export const METRICS = {
-  mountLongTaskMs: {floor: 20, unit: 'ms', label: 'Mount long tasks'},
+  mountLongTaskMs: {
+    floor: 20,
+    unit: 'ms',
+    label: 'Mount long tasks',
+    timing: true,
+  },
   mountLayouts: {floor: 2, unit: '', label: 'Mount layouts'},
   interactionLayouts: {floor: 2, unit: '', label: 'Interaction layouts'},
-  interactionMs: {floor: 16, unit: 'ms', label: 'Interaction latency'},
+  interactionMs: {
+    floor: 16,
+    unit: 'ms',
+    label: 'Interaction latency',
+    timing: true,
+  },
   heapDeltaKb: {floor: 256, unit: 'KB', label: 'Heap after unmount'},
   listenerDelta: {floor: 5, unit: '', label: 'Listeners after unmount'},
 };
@@ -72,17 +95,23 @@ export function isRecordable({event, ref, repository}) {
   );
 }
 
-/** scene → metric → {median, runs} over recorded runs in the window before `at`. */
-export function baselineMedians(history, at) {
+/**
+ * scene → metric → {median, runs} over recorded runs in the window before
+ * `at`. A timing metric counts only runs recorded on `cpu`; with no `cpu`, it
+ * counts none.
+ */
+export function baselineMedians(history, at, cpu = null) {
   const end = Date.parse(at);
   const start = end - WINDOW_DAYS * DAY_MS;
   const values = {};
   for (const run of history.runs) {
     const time = Date.parse(run.date);
     if (!(time >= start && time < end)) continue;
+    const sameCpu = cpu != null && run.runner?.cpu === cpu;
     for (const [scene, metrics] of Object.entries(run.scenes)) {
       for (const [metric, value] of Object.entries(metrics)) {
         if (typeof value !== 'number') continue;
+        if (METRICS[metric]?.timing && !sameCpu) continue;
         ((values[scene] ??= {})[metric] ??= []).push(value);
       }
     }
@@ -103,6 +132,22 @@ export function baselineMedians(history, at) {
 export function isRegression(metric, value, base) {
   const floor = METRICS[metric]?.floor ?? 0;
   return value > base * (1 + THRESHOLD) && value - base >= floor;
+}
+
+/**
+ * Every timing metric with no baseline on this run's CPU model: fewer than
+ * MIN_BASELINE_RUNS recorded runs on it in the window.
+ */
+export function findNoBaseline(scenes, baseline) {
+  const missing = [];
+  for (const [scene, metrics] of Object.entries(scenes)) {
+    for (const [metric, {timing}] of Object.entries(METRICS)) {
+      if (!timing || typeof metrics[metric] !== 'number') continue;
+      const runs = baseline[scene]?.[metric]?.runs ?? 0;
+      if (runs < MIN_BASELINE_RUNS) missing.push({scene, metric, runs});
+    }
+  }
+  return missing;
 }
 
 /** Every scene metric that regressed against its baseline. */
@@ -172,11 +217,28 @@ export function readHistory(file) {
   return history;
 }
 
+export const RUNNER_FILE = 'runner.json';
+
+/**
+ * The runner the scenes ran on: `{cpu, calibrationMs}`, or `{cpu: null}` when
+ * the driver wrote no runner file.
+ */
+export function readRunner(dir) {
+  const file = path.join(dir, RUNNER_FILE);
+  if (!fs.existsSync(file)) return {cpu: null, calibrationMs: null};
+  const runner = JSON.parse(fs.readFileSync(file, 'utf8'));
+  return {
+    cpu: typeof runner.cpu === 'string' && runner.cpu ? runner.cpu : null,
+    calibrationMs:
+      typeof runner.calibrationMs === 'number' ? runner.calibrationMs : null,
+  };
+}
+
 /** scene → metric → median, from the driver's result files. */
 export function readResults(dir) {
   const scenes = {};
   for (const name of fs.readdirSync(dir).sort()) {
-    if (!name.endsWith('.json')) continue;
+    if (!name.endsWith('.json') || name === RUNNER_FILE) continue;
     const result = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'));
     if (typeof result.scene !== 'string' || result.median == null) {
       throw new Error(`${name} is not a perf scene result`);
@@ -201,6 +263,8 @@ export function renderSummary({
   baseline,
   regressions,
   pending = [],
+  noBaseline = [],
+  runner = {cpu: null, calibrationMs: null},
   range,
   recorded = true,
 }) {
@@ -228,10 +292,20 @@ export function renderSummary({
           ? "Compared with `main`'s 7-day median: no metric is more than 10% worse. This run is not recorded."
           : `Compared with \`main\`'s 7-day median: **${over} metric(s) are more than 10% worse** (⚠️). This run is not recorded.`,
       ];
+  const missing = new Set(noBaseline.map(metricKey));
+  const cpu = runner.cpu ?? 'an unknown CPU';
   const lines = [
     '## Nightly perf scenes',
     '',
     ...headline,
+    ...(noBaseline.length === 0
+      ? []
+      : [
+          '',
+          `${noBaseline.length} timing metric(s) have no baseline on ${cpu} (fewer than ${MIN_BASELINE_RUNS} recorded runs on it in 7 days), so they are not compared (no baseline).`,
+        ]),
+    '',
+    `Runner: ${cpu}${runner.calibrationMs == null ? '' : `, calibration ${runner.calibrationMs} ms`}. Timing metrics compare with runs on the same CPU model.`,
     '',
     `| Scene | ${Object.values(METRICS)
       .map(m => m.label)
@@ -245,6 +319,7 @@ export function renderSummary({
       const base = baseline[scene]?.[metric];
       const key = metricKey({scene, metric});
       const mark = confirmed.has(key) ? ' ⚠️' : first.has(key) ? ' ⏳' : '';
+      if (missing.has(key)) return `${format(metric, value)} (no baseline)`;
       return base && base.runs >= MIN_BASELINE_RUNS
         ? `${format(metric, value)} (7d ${format(metric, base.median)})${mark}`
         : format(metric, value);
@@ -261,9 +336,15 @@ export function renderSummary({
 }
 
 /** Compares a run with the history; returns the report and the next history. */
-export function evaluateRun({scenes, history, run}) {
-  const baseline = baselineMedians(history, run.date);
+export function evaluateRun({
+  scenes,
+  history,
+  run,
+  runner = {cpu: null, calibrationMs: null},
+}) {
+  const baseline = baselineMedians(history, run.date, runner.cpu);
   const overThreshold = findRegressions(scenes, baseline);
+  const noBaseline = findNoBaseline(scenes, baseline);
   const {confirmed: regressions, pending} = confirmRegressions(
     overThreshold,
     history,
@@ -281,6 +362,8 @@ export function evaluateRun({scenes, history, run}) {
         date: run.date,
         good: overThreshold.length === 0,
         overThreshold: overThreshold.map(metricKey),
+        noBaseline: noBaseline.map(metricKey),
+        runner,
         scenes,
       })
     : history;
@@ -295,6 +378,8 @@ export function evaluateRun({scenes, history, run}) {
       range,
       regressions,
       pending,
+      noBaseline,
+      runner,
     },
     baseline,
     nextHistory,
@@ -309,13 +394,21 @@ export function evaluateRun({scenes, history, run}) {
  */
 export function runReport({resultsDir, historyFile, outDir, run}) {
   const scenes = readResults(resultsDir);
+  const runner = readRunner(resultsDir);
   const history = readHistory(historyFile);
-  const {report, baseline, nextHistory} = evaluateRun({scenes, history, run});
+  const {report, baseline, nextHistory} = evaluateRun({
+    scenes,
+    history,
+    run,
+    runner,
+  });
   const summary = renderSummary({
     scenes,
     baseline,
     regressions: report.regressions,
     pending: report.pending,
+    noBaseline: report.noBaseline,
+    runner,
     range: report.range,
     recorded: report.recorded,
   });

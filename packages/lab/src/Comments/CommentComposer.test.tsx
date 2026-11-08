@@ -106,7 +106,7 @@ describe('CommentComposer', () => {
       <CommentComposer value="" onChange={() => {}} onSubmit={onSubmit} />,
     );
     const post = screen.getByRole('button', {name: /send/i});
-    expect(post).toBeDisabled();
+    expect(post).toHaveAttribute('aria-disabled', 'true');
     rerender(
       <CommentComposer
         value="Looks good"
@@ -308,6 +308,60 @@ describe('CommentComposer', () => {
       await Promise.resolve();
     });
     expect(onUploadImages).not.toHaveBeenCalled();
+  });
+
+  it('refuses images pasted or dropped into the input while a post is in flight (AST-085 FR2)', async () => {
+    const onChange = vi.fn();
+    const onUploadImages = vi
+      .fn()
+      .mockResolvedValue([{url: 'https://example.com/a.png', alt: 'Chart'}]);
+    render(
+      <CommentComposer
+        value="Draft"
+        onChange={onChange}
+        onSubmit={() => {}}
+        onUploadImages={onUploadImages}
+        isSubmitting
+      />,
+    );
+    const textbox = screen.getByRole('textbox');
+    const file = new File(['png'], 'chart.png', {type: 'image/png'});
+    fireEvent.paste(textbox, {
+      clipboardData: {files: [file], getData: () => ''},
+    });
+    fireEvent.paste(textbox, {
+      clipboardData: {files: [file], getData: () => ''},
+    });
+    fireEvent.drop(textbox, {dataTransfer: {files: [file], types: ['Files']}});
+    await settle();
+    expect(onUploadImages).not.toHaveBeenCalled();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('starts no second upload from a paste while an upload is pending', async () => {
+    const onUploadImages = vi.fn(
+      () => new Promise<{url: string; alt: string}[]>(() => {}),
+    );
+    render(
+      <CommentComposer
+        value="Draft"
+        onChange={() => {}}
+        onSubmit={() => {}}
+        onUploadImages={onUploadImages}
+      />,
+    );
+    const textbox = screen.getByRole('textbox');
+    const file = new File(['png'], 'chart.png', {type: 'image/png'});
+    fireEvent.paste(textbox, {
+      clipboardData: {files: [file], getData: () => ''},
+    });
+    await settle();
+    fireEvent.paste(textbox, {
+      clipboardData: {files: [file], getData: () => ''},
+    });
+    fireEvent.drop(textbox, {dataTransfer: {files: [file], types: ['Files']}});
+    await settle();
+    expect(onUploadImages).toHaveBeenCalledTimes(1);
   });
 
   it('does not open the image chooser from the error banner while busy', async () => {

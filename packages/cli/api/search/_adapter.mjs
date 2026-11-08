@@ -43,10 +43,50 @@ export function requireSearchCoreDir(cwd) {
  * in the CLI's searches. A caller that runs its own operation shares it.
  *
  * @param {{cwd?: string, type?: string}} options
- * @returns {Promise<{all: Candidate[], components: Candidate[], searchedComponents: boolean, outside: boolean, coreSkipped: string | null}>}
+ * @returns {Promise<{all: Candidate[], components: Candidate[], searchedComponents: boolean, outside: boolean, coreSkipped: string | null, coreSkippedCode: string | null}>}
  */
 export function gatherCandidates(options) {
   return withListingCache(() => gatherDomains(options));
+}
+
+/**
+ * The Core a search of `type` reads, and the domains it gathers. `astryx docs`
+ * reads docs without @astryxdesign/core, and `astryx theme list` reads themes
+ * without it, so a docs or themes search never looks for Core. Every other
+ * domain reads Core: the project's, else the answering release's own,
+ * installed into the per-user cache on first need (spec AST-081 FR3). A Core
+ * domain asked for by name throws the lookup's coded error. An open search
+ * without Core gathers the docs and themes alone and records why in
+ * `coreSkipped`; it never fails silently.
+ * @param {string | undefined} type
+ * @param {(cwd: string) => string} lookup finds the Core folder, or throws
+ * @param {string} cwd
+ * @returns {{coreDir: string | null, coreSkipped: string | null, coreSkippedCode: string | null, wants: (domain: string) => boolean}}
+ */
+export function resolveSearchCore(type, lookup, cwd) {
+  const needsCore = !type || !CORELESS_DOMAINS.includes(type);
+  /** @type {string | null} */
+  let coreDir = null;
+  /** @type {string | null} */
+  let coreSkipped = null;
+  /** @type {string | null} */
+  let coreSkippedCode = null;
+  if (needsCore && type) {
+    coreDir = coreDirOrThrow(lookup, cwd);
+  } else if (needsCore) {
+    try {
+      coreDir = lookup(cwd);
+    } catch (error) {
+      coreSkipped = /** @type {Error} */ (error).message;
+      const code = /** @type {any} */ (error)?.code;
+      coreSkippedCode = typeof code === 'string' ? code : null;
+    }
+  }
+  /** @param {string} domain */
+  const wants = domain =>
+    (!type && (coreDir != null || CORELESS_DOMAINS.includes(domain))) ||
+    type === domain;
+  return {coreDir, coreSkipped, coreSkippedCode, wants};
 }
 
 /**
@@ -54,35 +94,11 @@ export function gatherCandidates(options) {
  */
 async function gatherDomains(options) {
   const {cwd = process.cwd(), type} = options;
-  // `astryx docs` reads docs without @astryxdesign/core, and `astryx theme
-  // list` reads themes without it (bundled themes need no project), so a
-  // search of either must too. Every other domain reads core: asked for by
-  // name, it is an error without core; an open search then covers the docs
-  // and themes alone.
-  const needsCore = !type || !CORELESS_DOMAINS.includes(type);
-  // A domain that reads Core gets it as `component` does: the project's, else
-  // the answering release's own, installed into the per-user cache on first
-  // need (spec AST-081 FR3). Asked for by name, a Core that cannot be had is
-  // the error; an open search answers from the rest and says what it skipped
-  // and why, never silently.
-  /** @type {string | null} */
-  let coreDir = null;
-  /** @type {string | null} */
-  let coreSkipped = null;
-  if (needsCore && type) {
-    coreDir = coreDirOrThrow(requireSearchCoreDir, cwd);
-  } else if (needsCore) {
-    try {
-      coreDir = requireSearchCoreDir(cwd);
-    } catch (error) {
-      coreSkipped = /** @type {Error} */ (error).message;
-    }
-  }
-
-  // Gather candidates from each requested domain in parallel.
-  /** @param {string} d */
-  const wants = d =>
-    (!type && (coreDir != null || CORELESS_DOMAINS.includes(d))) || type === d;
+  const {coreDir, coreSkipped, coreSkippedCode, wants} = resolveSearchCore(
+    type,
+    requireSearchCoreDir,
+    cwd,
+  );
   const [components, hooks, docTopics, templates, themes] = await Promise.all([
     wants('component')
       ? gatherComponents(/** @type {string} */ (coreDir), cwd)
@@ -103,6 +119,7 @@ async function gatherDomains(options) {
     searchedComponents: wants('component'),
     outside,
     coreSkipped,
+    coreSkippedCode,
   };
 }
 

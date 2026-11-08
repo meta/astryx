@@ -7,8 +7,12 @@
  * @output Checks the software keyboard's part of the viewport caps. The cap
  *   sits 10 px above the keyboard. It is written once a rising keyboard has
  *   arrived, and taken off as a falling one starts down. A keyboard already
- *   up at the open caps the layer before paint. The field stays in view. A
- *   layer clear of the keyboard, a bottom-held layer and a layer in another
+ *   up at the open caps the layer before paint. A layer the viewport fit
+ *   shifted over its trigger keeps that block-start edge through the cap.
+ *   The field stays in view,
+ *   unless a person touched the layer after the cap. A component's own
+ *   scroll keeps the reveal, and so does the next keyboard change. A layer
+ *   clear of the keyboard, a bottom-held layer and a layer in another
  *   positioning are left as they are. The positioning is read from the last
  *   commit. An entering layer is read without its entrance transform. The
  *   cap is held through a press until its click. The window listeners are
@@ -31,6 +35,7 @@ import type {BrowserClickWaitHandlers} from '../utils/browserClickWait';
 import type * as KeyboardHeightModule from '../keyboard/keyboardHeight';
 import {
   keyboardClearanceCap,
+  keyboardLiftStyle,
   LAYER_ANCHORED_ATTRIBUTE,
   LAYER_KEYBOARD_CAP_PROPERTY,
   LAYER_KEYBOARD_CLEARANCE_PX,
@@ -120,6 +125,7 @@ function Harness({
   layerKey = 'a',
   entering,
   shiftedTop,
+  ignoresLift = false,
   slidesAboveKeyboard = false,
 }: {
   isOpen?: boolean;
@@ -139,6 +145,8 @@ function Harness({
    * `box` and over its trigger; any shorter, it sits at `box`.
    */
   shiftedTop?: number;
+  /** Stays below its trigger whatever the lift's insets say. */
+  ignoresLift?: boolean;
   /**
    * Places itself by the keyboard inset, as Selector's overlay does: while an
    * inset is out, the layer ends above it.
@@ -146,7 +154,7 @@ function Harness({
   slidesAboveKeyboard?: boolean;
 }) {
   const layerRef = useRef<HTMLDivElement>(null);
-  const {cap, inset, followLayerElement} = useLayerKeyboardClearance(
+  const {cap, lift, inset, followLayerElement} = useLayerKeyboardClearance(
     isOpen,
     layerRef,
   );
@@ -171,6 +179,8 @@ function Harness({
           ? {}
           : {[LAYER_KEYBOARD_INSET_PROPERTY]: `${inset}px`}),
         ...(entering == null ? {} : {transform: `translateY(${entering}px)`}),
+        // As the runtime applies it: the insets move the layer's anchor area.
+        ...keyboardLiftStyle(lift),
       }}
       data-testid="layer"
       ref={el => {
@@ -200,7 +210,8 @@ function Harness({
               slidesAboveKeyboard && !Number.isNaN(keyboardInset)
                 ? Math.min(placed, VIEWPORT - keyboardInset - h)
                 : placed;
-            const top = (heldBottom ? box.bottom - h : start) + shift;
+            const lifted = ignoresLift ? 0 : liftOf(el);
+            const top = (heldBottom ? box.bottom - h : start) - lifted + shift;
             return {
               top,
               bottom: top + h,
@@ -263,10 +274,20 @@ function Harness({
             }
           }}
         />
+        <div data-testid="list" style={{overflowY: 'auto'}} />
       </div>
     </div>
   );
 }
+
+/** Runs the frame callbacks a test held, and the ones they ask for. */
+const runFrames = (frames: FrameRequestCallback[]) => {
+  act(() => {
+    while (frames.length > 0) {
+      frames.shift()?.(0);
+    }
+  });
+};
 
 /** Runs the timers a keyboard change scheduled, inside act: they re-render. */
 const advance = (ms: number) => {
@@ -279,6 +300,12 @@ const capOf = (container: HTMLElement) =>
   container
     .querySelector<HTMLElement>('[data-testid="layer"]')!
     .style.getPropertyValue(LAYER_KEYBOARD_CAP_PROPERTY);
+
+/** The lift the runtime applies, read back from the layer's insets. */
+function liftOf(layer: HTMLElement): number {
+  const end = parseFloat(layer.style.insetBlockEnd);
+  return Number.isNaN(end) ? 0 : end;
+}
 
 const insetOf = (container: HTMLElement) =>
   container
@@ -457,18 +484,19 @@ describe('useLayerKeyboardClearance', () => {
     );
   });
 
-  it('takes the cap off a layer that does not read the inset at once as the keyboard goes down, even where that moves it (spec:AST-059 FR10)', () => {
+  it('takes the cap off a layer that does not read the inset at once as the keyboard goes down, and its block-start stays (spec:AST-059 FR9, FR10)', () => {
     // At its full height the viewport fit places this layer over its
-    // trigger; capped, it sits below the trigger.
+    // trigger. Shorter, it would fit below the trigger, at 300.
     const {container} = render(
       <Harness box={{top: 300, bottom: 700}} shiftedTop={120} />,
     );
     guide.emit({kind: 'change', from: 0, to: COVER, animated: false});
-    expect(capOf(container)).not.toBe('');
+    expect(capOf(container)).toBe(`${VIEWPORT - COVER - 10 - 120}px`);
     const layer = screen.getByTestId('layer');
-    expect(layer.getBoundingClientRect().top).toBe(300);
+    expect(layer.getBoundingClientRect().top).toBe(120);
     guide.emit({kind: 'hide', from: COVER, to: 0});
     expect(capOf(container)).toBe('');
+    expect(liftOf(layer)).toBe(0);
     expect(layer.getBoundingClientRect().top).toBe(120);
   });
 
@@ -525,10 +553,32 @@ describe('useLayerKeyboardClearance', () => {
     expect(capOf(container)).toBe('');
   });
 
-  it('caps a layer the viewport fit pushed up over its trigger from where it starts once it is shorter', () => {
+  it('keeps the block-start edge of a layer the viewport fit pushed up over its trigger: shorter, it fits below the trigger, and the cap lifts it back (spec:AST-059 FR9)', () => {
     const {container} = render(<Harness shiftedTop={40} />);
     guide.emit({kind: 'change', from: 0, to: COVER, animated: false});
+    const layer = screen.getByTestId('layer');
+    expect(capOf(container)).toBe(`${VIEWPORT - COVER - 10 - 40}px`);
+    expect(liftOf(layer)).toBe(BOX.top - 40);
+    expect(layer.getBoundingClientRect().top).toBe(40);
+    expect(layer.getBoundingClientRect().bottom).toBe(VIEWPORT - COVER - 10);
+  });
+
+  it('keeps that block-start edge at the next keyboard change', () => {
+    const {container} = render(<Harness shiftedTop={40} />);
+    guide.emit({kind: 'change', from: 0, to: COVER, animated: false});
+    guide.emit({kind: 'change', from: COVER, to: COVER + 20, animated: false});
+    const layer = screen.getByTestId('layer');
+    expect(capOf(container)).toBe(`${VIEWPORT - COVER - 20 - 10 - 40}px`);
+    expect(layer.getBoundingClientRect().top).toBe(40);
+  });
+
+  it('caps a layer from below its trigger where the engine does not move it by the lift', () => {
+    const {container} = render(<Harness shiftedTop={40} ignoresLift />);
+    guide.emit({kind: 'change', from: 0, to: COVER, animated: false});
+    const layer = screen.getByTestId('layer');
     expect(capOf(container)).toBe(CAPPED);
+    expect(liftOf(layer)).toBe(0);
+    expect(layer.getBoundingClientRect().top).toBe(BOX.top);
   });
 
   it('reads a layer that is still entering without its entrance transform, in one read (spec:AST-059 FR8)', () => {
@@ -556,6 +606,78 @@ describe('useLayerKeyboardClearance', () => {
       '[data-testid="scroller"]',
     )!;
     // The box ends at 714 - 337 - 10 = 367; the field's bottom is at 444.
+    expect(scroller.scrollTop).toBe(444 - 367);
+  });
+
+  it.each([
+    ['a press', (element: Element) => fireEvent.pointerDown(element)],
+    ['a touch', (element: Element) => fireEvent.touchStart(element)],
+    ['a wheel turn', (element: Element) => fireEvent.wheel(element)],
+  ])(
+    'leaves the content where a person scrolled it after %s in the layer, before the field reveal runs',
+    (_, touch) => {
+      const frames: FrameRequestCallback[] = [];
+      vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+        frames.push(callback);
+        return frames.length;
+      });
+      const {container} = render(<Harness focusRow />);
+      guide.emit({kind: 'show', from: 0, to: COVER});
+      advance(timing.keyboardNotificationMs + 1);
+      const scroller = container.querySelector<HTMLElement>(
+        '[data-testid="scroller"]',
+      )!;
+      // The person's pan, between the cap and the reveal's frames. The
+      // browser takes the pan from the press.
+      touch(scroller);
+      fireEvent.pointerCancel(scroller);
+      scroller.scrollTop = 30;
+      runFrames(frames);
+      expect(scroller.scrollTop).toBe(30);
+    },
+  );
+
+  it('reveals the field again at the next keyboard change after a person scrolled', () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const {container} = render(<Harness focusRow />);
+    guide.emit({kind: 'show', from: 0, to: COVER});
+    advance(timing.keyboardNotificationMs + 1);
+    const scroller = container.querySelector<HTMLElement>(
+      '[data-testid="scroller"]',
+    )!;
+    fireEvent.pointerDown(scroller);
+    fireEvent.pointerCancel(scroller);
+    scroller.scrollTop = 30;
+    runFrames(frames);
+    expect(scroller.scrollTop).toBe(30);
+    // The keyboard grows by 20 px: a new cap, and the field is revealed.
+    guide.emit({kind: 'change', from: COVER, to: COVER + 20, animated: false});
+    runFrames(frames);
+    // The box now ends at 714 - 357 - 10 = 347. The stand-in field stays at
+    // 420 to 444 whatever the scroll, so the reveal adds 444 - 347.
+    expect(scroller.scrollTop).toBe(30 + 444 - 347);
+  });
+
+  it('still reveals the field after a component scrolls its own list in the layer', () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const {container} = render(<Harness focusRow />);
+    guide.emit({kind: 'show', from: 0, to: COVER});
+    advance(timing.keyboardNotificationMs + 1);
+    const list = container.querySelector<HTMLElement>('[data-testid="list"]')!;
+    list.scrollTop = 50;
+    fireEvent.scroll(list);
+    runFrames(frames);
+    const scroller = container.querySelector<HTMLElement>(
+      '[data-testid="scroller"]',
+    )!;
     expect(scroller.scrollTop).toBe(444 - 367);
   });
 
@@ -687,6 +809,7 @@ describe('useLayerKeyboardClearance', () => {
     advance(timing.keyboardNotificationMs + 1);
     // A shorter box would move its top down and still end under the keyboard.
     expect(capOf(container)).toBe('');
+    expect(liftOf(screen.getByTestId('layer'))).toBe(0);
   });
 
   it('keeps the cap through a press inside the layer until its click', () => {

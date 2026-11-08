@@ -56,6 +56,7 @@ import {
   reducedMotionMarkProps,
   setRootReducedMotionMark,
 } from '../privateAttributes/reducedMotion.stylex';
+import {createSharedContext} from '../utils/sharedContext';
 
 /**
  * Theme provider props
@@ -107,7 +108,11 @@ const wrapperStyles = stylex.create({
  * @internal Not exported from the theme barrel; useToast imports it from
  * './theme/Theme' directly.
  */
-export const ThemeNestingContext = React.createContext(false);
+export const ThemeNestingContext = createSharedContext(
+  'ThemeNestingContext',
+  1,
+  false,
+);
 ThemeNestingContext.displayName = 'ThemeNestingContext';
 
 // =============================================================================

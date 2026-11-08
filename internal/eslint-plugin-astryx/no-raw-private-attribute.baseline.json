@@ -7,10 +7,6 @@
   "packages/core/src/Chat/useChatDictation.ts": [
     "data-astryx-dictation-interim"
   ],
-  "packages/core/src/Chat/useChatStreamScroll.ts": [
-    "data-astryx-chat-following",
-    "data-astryx-chat-following-style"
-  ],
   "packages/core/src/Chat/useTriggerMenu.tsx": ["data-astryx-trigger-anchor"],
   "packages/core/src/CheckboxInput/CheckboxInput.tsx": [
     "data-astryx-press",
@@ -46,10 +42,6 @@
   "packages/core/src/InputGroup/groupStyles.ts": [
     "data-astryx-input-group-item",
     "data-astryx-input-group-item"
-  ],
-  "packages/core/src/Layer/layerSlideRules.ts": [
-    "data-astryx-clears-anchor",
-    "data-astryx-layer-scrolls"
   ],
   "packages/core/src/MultiSelector/MultiSelector.tsx": [
     "data-astryx-press",
