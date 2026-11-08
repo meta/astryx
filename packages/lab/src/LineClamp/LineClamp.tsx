@@ -127,19 +127,8 @@ function syncFocusableClipping(
     const isFocused =
       el.contains(document.activeElement) ||
       (focusTarget != null && el.contains(focusTarget));
-    // A `display: contents` element has no box of its own; its children are
-    // the candidates.
-    if (getComputedStyle(el).display === 'contents') {
-      continue;
-    }
-    // A candidate with no box at all (for example `hidden`) counts as
-    // clipped. A child can show it past the edge with no watched change, and
-    // the edge observer reports it only when it shows. A 0×0 box on a
-    // visible line still has a box, so it stays reachable.
-    const rect = el.getBoundingClientRect();
-    const hasNoBox =
-      el.getClientRects().length === 0 && rect.width === 0 && rect.height === 0;
-    const isClipped = !isFocused && (hasNoBox || rect.top >= containerBottom);
+    const isClipped =
+      !isFocused && el.getBoundingClientRect().top >= containerBottom;
     if (isClipped) {
       hideFromTabOrder(el);
     } else if (el.hasAttribute('data-line-clamp-hidden')) {
@@ -189,7 +178,18 @@ const MUTATION_OPTIONS: MutationObserverInit = {
   subtree: true,
   attributes: true,
   attributeOldValue: true,
-  attributeFilter: ['tabindex', 'disabled', 'href', 'inert', 'contenteditable'],
+  // `hidden`, `class` and `style` can show a focusable past the edge with no
+  // other change, so they run the pass too.
+  attributeFilter: [
+    'tabindex',
+    'disabled',
+    'href',
+    'inert',
+    'contenteditable',
+    'hidden',
+    'class',
+    'style',
+  ],
 };
 
 /**

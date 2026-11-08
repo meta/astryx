@@ -275,7 +275,7 @@ describe('LineClamp', () => {
       }
     });
 
-    it('keeps a focusable with no layout box inert, so showing it past the edge exposes nothing', () => {
+    it('hides a link a child shows past the edge by removing hidden', async () => {
       const {rerender} = render(
         <LineClamp maxLines={2} data-testid="clamp">
           Some text{' '}
@@ -288,7 +288,7 @@ describe('LineClamp', () => {
       const link = screen.getByText('Read more');
       const rectMap = new Map([
         [container, {top: 0, bottom: 40}],
-        [link, {top: 0, bottom: 0}], // `hidden`: no layout box
+        [link, {top: 20, bottom: 36}],
       ]);
       mockRects(rectMap);
       rerender(
@@ -299,13 +299,39 @@ describe('LineClamp', () => {
           </a>
         </LineClamp>,
       );
-      expect(link).toHaveAttribute('inert');
+      expect(link).not.toHaveAttribute('inert');
 
-      // A child shows it past the edge. `hidden` is not a watched
-      // attribute, so no pass runs, and the link must already be inert.
+      // A child shows it past the edge with no render.
       rectMap.set(link, {top: 40, bottom: 56});
       link.removeAttribute('hidden');
+      await waitFor(() => expect(link).toHaveAttribute('inert'));
+    });
+
+    it('releases a hidden link a class change turns into display: contents on a visible line', async () => {
+      const {rerender} = render(
+        <LineClamp maxLines={2} data-testid="clamp">
+          Some text <a href="/more">Read more</a>
+        </LineClamp>,
+      );
+      const container = screen.getByTestId('clamp');
+      const link = screen.getByText('Read more');
+      const rectMap = new Map([
+        [container, {top: 0, bottom: 40}],
+        [link, {top: 40, bottom: 56}],
+      ]);
+      mockRects(rectMap);
+      rerender(
+        <LineClamp maxLines={2} data-testid="clamp">
+          Some text <a href="/more">Read more</a>
+        </LineClamp>,
+      );
       expect(link).toHaveAttribute('inert');
+
+      // A class change makes it `display: contents` on the first line: it
+      // has no box of its own, so its rect is empty at the top.
+      rectMap.set(link, {top: 0, bottom: 0});
+      link.className = 'shown';
+      await waitFor(() => expect(link).not.toHaveAttribute('inert'));
     });
 
     it('keeps a 0×0 focusable on a visible line reachable', () => {
@@ -339,7 +365,7 @@ describe('LineClamp', () => {
       expect(box).not.toHaveAttribute('inert');
     });
 
-    it('leaves a display: contents focusable alone', () => {
+    it('leaves a display: contents focusable on a visible line reachable', () => {
       const {rerender} = render(
         <LineClamp maxLines={2} data-testid="clamp">
           Some text{' '}
