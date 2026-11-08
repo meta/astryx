@@ -37,7 +37,6 @@ export const doc = {
     CheckBadgeIcon: 'success',
     CheckIcon: 'check',
     ChevronDownIcon: 'chevronDown',
-    ChevronLeftIcon: 'chevronLeft',
     ChevronRightIcon: 'chevronRight',
     ClipboardDocumentCheckIcon: 'list',
     ClockIcon: 'clock',

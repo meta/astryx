@@ -19,7 +19,6 @@
 
 import React, {
   createContext,
-  useCallback,
   useContext,
   useEffect,
   useRef,
@@ -53,7 +52,6 @@ import {
   BarsArrowUpIcon,
   ChartBarIcon,
   CheckIcon,
-  ChevronLeftIcon,
   ChevronRightIcon,
   ClockIcon,
   CommandLineIcon,
@@ -117,8 +115,8 @@ type IconSvgElement = React.ComponentType<{
 
 /**
  * Render one stored icon. Same interface the design's HugeiconsIcon
- * wrapper exposed (icon, size, strokeWidth); the glyph itself is now a
- * heroicons component rendered directly.
+ * wrapper exposed (icon, size, strokeWidth); the glyph is a heroicons
+ * component rendered directly.
  */
 function HugeIcon({
   icon: Glyph,
@@ -231,9 +229,6 @@ const hoverStyles = `
 .cr7-menurow{display:flex;align-items:center;gap:8px;width:100%;height:36px;padding-inline:10px;border-radius:calc(var(--radius-container)*0.6);font-size:14px;color:var(--color-text-primary);text-align:start;cursor:pointer;background:transparent;border:none;transition:background-color var(--duration-fast) var(--ease-standard);}
 .cr7-menurow:hover{background:var(--color-background-wash);}
 .cr7-menurow:focus-visible{outline:var(--focus-outline-width) var(--focus-outline-style) var(--focus-outline-color);outline-offset:-2px;}
-/* The FAQ's open slab: three fifths of the chip's strength, mixed into the
-   card (the design's --color-tint). */
-.cr7-tintslab{background:light-dark(color-mix(in oklab,var(--color-accent) 18%,var(--color-background-card)),color-mix(in oklab,var(--color-accent) 7%,var(--color-background-card)));}
 /* The reviews, two abreast with rules between: in one column a rule under
    every review but the last; in two, a rule down the middle and one under
    every row but the last. */
@@ -2411,8 +2406,8 @@ function DetailsBlock() {
  *  course's cover art as the poster of its first free lesson, with the
  *  lesson named on a plate over it. A press anywhere opens the player on
  *  that lesson. The card must FILL the 4:3 box the AspectRatio holds open
- *  for it — the round-8 squeeze was the card sizing to its content inside
- *  that box (210px of 552), which left the art short and a hole below. */
+ *  for it: a card sized to its content inside that box leaves the art
+ *  short and a hole below the poster. */
 function Poster() {
   const preview = usePreview();
   const clip = CLIPS[0];
@@ -3164,7 +3159,7 @@ function Instructor() {
           <span
             style={{
               position: 'absolute',
-              right: -2,
+              insetInlineEnd: -2,
               bottom: -2,
               width: 24,
               height: 24,
