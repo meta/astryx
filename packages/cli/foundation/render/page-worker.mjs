@@ -348,18 +348,6 @@ function pagePlugin(filename) {
  */
 const PATHS = readPathsIn(root) ?? [];
 
-/**
- * The simple prefix aliases among them (`"@/*": ["./src/*"]`), as jiti
- * aliases, for modules the page's own files do not import directly.
- * @type {Record<string, string>}
- */
-const ALIASES = Object.fromEntries(
-  PATHS.filter(p => p.wildcard && p.suffix === '' && p.prefix.endsWith('/') && p.targets[0]?.endsWith(`${path.sep}*`)).map(p => [
-    p.prefix,
-    p.targets[0].slice(0, -1),
-  ]),
-);
-
 /** @param {string} spec whether a specifier goes through a project alias */
 const isAliased = spec => resolvePath(PATHS, spec) !== null;
 
@@ -405,6 +393,28 @@ function packageDirOf(file, name) {
 }
 
 const moduleApi = /** @type {any} */ (Module);
+
+/**
+ * A module the page loads from outside its own files (a sibling package's
+ * source, say) resolves a bare import the usual way first, then through the
+ * project's path aliases, from the first target that exists, as the page's
+ * own files do. So an installed package always loads, and an alias leads
+ * only to a file it places.
+ */
+function resolveThroughPaths() {
+  if (PATHS.length === 0) return;
+  const resolveFilename = moduleApi._resolveFilename;
+  moduleApi._resolveFilename = function (/** @type {string} */ request, /** @type {any[]} */ ...rest) {
+    try {
+      return resolveFilename.call(this, request, ...rest);
+    } catch (e) {
+      const file = /** @type {any} */ (e)?.code === 'MODULE_NOT_FOUND' ? resolvePath(PATHS, request) : null;
+      if (!file) throw e;
+      return file;
+    }
+  };
+}
+resolveThroughPaths();
 
 /** A module at the served Core's folder: what resolves as the Core would. */
 const servedParent = served ? new moduleApi(path.join(served.dir, 'package.json')) : null;
@@ -481,7 +491,7 @@ const jiti = createJiti(entry, {
   extensions: ['.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.mts', '.cts', '.json'],
   moduleCache: true,
   interopDefault: true,
-  alias: {...SINGLE_COPY_ALIASES, ...ALIASES},
+  alias: SINGLE_COPY_ALIASES,
   jsx: {runtime: 'automatic'},
   transform(opts) {
     const filename = opts.filename ?? '';

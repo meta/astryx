@@ -804,6 +804,45 @@ describe('render(): every write stays inside the current folder', () => {
     expect(back.data.files).not.toContain('lib/a/settings/index.ts');
   }, 60_000);
 
+  it('resolves path aliases in modules outside the project folder, through every key and target', async () => {
+    put(
+      'sib/app/tsconfig.json',
+      JSON.stringify({
+        compilerOptions: {
+          baseUrl: '.',
+          paths: {
+            '@scope/ui': ['../ui/src/index.tsx'],
+            '@scope/tokens': ['../tokens/src/index.ts'],
+            '@lib/*': ['../missing/*', '../lib/*'],
+          },
+        },
+      }),
+    );
+    put('sib/app/package.json', '{"name":"sib-app","private":true}');
+    put('sib/tokens/src/index.ts', "export const accent = 'token-accent';\n");
+    put('sib/lib/util.ts', "export const util = 'later-target-util';\n");
+    put(
+      'sib/ui/src/index.tsx',
+      "import {accent} from '@scope/tokens';\nimport {util} from '@lib/util';\nexport const Badge = () => <b>{accent} {util}</b>;\n",
+    );
+    put('sib/app/page.tsx', "import {Badge} from '@scope/ui';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    await render('sib/app/page.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'sib/app/page.html'), 'utf8');
+    expect(html).toContain('token-accent');
+    expect(html).toContain('later-target-util');
+  }, 60_000);
+
+  it('loads an installed package a prefix key names when the key places no file', async () => {
+    put('pkgpre/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'@scope/*': ['./src/*']}}}));
+    put('pkgpre/package.json', '{"name":"pkgpre","private":true}');
+    put('pkgpre/node_modules/@scope/realpkg/package.json', '{"name":"@scope/realpkg","main":"index.js"}');
+    put('pkgpre/node_modules/@scope/realpkg/index.js', "exports.real = 'installed-package';\n");
+    put('pkgpre/src/local.ts', "export {real} from '@scope/realpkg';\n");
+    put('pkgpre/page.tsx', "import {real} from '@scope/realpkg';\nimport {real as again} from './src/local';\nexport default function Page() { return <p>{real} {again}</p>; }\n");
+    await render('pkgpre/page.tsx', {cwd: dir});
+    expect(fs.readFileSync(path.join(dir, 'pkgpre/page.html'), 'utf8')).toContain('installed-package installed-package');
+  }, 60_000);
+
   it('gives back a nested aliased module under the target it was sent from', async () => {
     const paths = {compilerOptions: {baseUrl: '.', paths: {'@/*': ['./lib/missing/*', './lib/src/*']}}};
     put('nested/tsconfig.json', JSON.stringify(paths));
