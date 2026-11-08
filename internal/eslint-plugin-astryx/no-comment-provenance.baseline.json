@@ -809,12 +809,7 @@
     "architecture:theme-tokens",
     "spec quote"
   ],
-  "packages/core/src/RadioList/RadioListItem.tsx": [
-    "FR2",
-    "FR5",
-    "FR6",
-    "spec:AST-085"
-  ],
+  "packages/core/src/RadioList/RadioListItem.tsx": ["FR5", "FR6"],
   "packages/core/src/RadioList/RadioListReasonContext.ts": [
     "FR1",
     "FR5",
