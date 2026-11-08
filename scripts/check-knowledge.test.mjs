@@ -31,6 +31,7 @@ import {
   validatePathApplicability,
   validateReviewApplicability,
   validateSchemaEvolution,
+  findApprovalLineRewrites,
 } from './check-knowledge.mjs';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
@@ -847,6 +848,82 @@ describe('schema evolution', () => {
         new Map([['docs/schemas/knowledge/v1.json', 'changed']]),
       ).join('\n'),
     ).toMatch(/immutable.*append-only/s);
+  });
+});
+
+describe('approval line history', () => {
+  function record({approvedBy = 'owner-a', decisions = []} = {}) {
+    return {
+      path: 'docs/architecture/example.md',
+      content: [
+        '---',
+        'id: architecture:example',
+        'authority: current',
+        `approved_by: ${approvedBy}`,
+        '---',
+        '',
+        '## Deciding specs',
+        '',
+        ...decisions.flatMap(([id, decider]) => [
+          `### ${id} — A decision`,
+          '',
+          `**Decider:** ${decider}`,
+          '',
+          'The decision text.',
+          '',
+        ]),
+      ].join('\n'),
+    };
+  }
+  const base = record({
+    decisions: [['DEC-1', '`owner-a`, `2026-11-01`']],
+  });
+
+  it('reports a rewritten Decider and approved_by with the original decider', () => {
+    const head = record({
+      approvedBy: 'owner-b',
+      decisions: [['DEC-1', '`owner-b`, `2026-11-01`']],
+    });
+    expect(findApprovalLineRewrites([base], [head])).toEqual([
+      {
+        path: 'docs/architecture/example.md',
+        claim: 'approved_by',
+        from: 'owner-a',
+        to: 'owner-b',
+        decider: 'owner-a',
+      },
+      {
+        path: 'docs/architecture/example.md',
+        claim: 'DEC-1',
+        from: '`owner-a`, `2026-11-01`',
+        to: '`owner-b`, `2026-11-01`',
+        decider: 'owner-a',
+      },
+    ]);
+  });
+
+  it('reports a removed decision', () => {
+    expect(findApprovalLineRewrites([base], [record()])).toEqual([
+      expect.objectContaining({claim: 'DEC-1', to: null, decider: 'owner-a'}),
+    ]);
+  });
+
+  it('allows a new decision, an added approver, an amendment, and a filled placeholder', () => {
+    const pendingBase = record({
+      decisions: [
+        ['DEC-1', '`owner-a`, `2026-11-01`'],
+        ['DEC-2', '`owner-a`, `<pending>`'],
+      ],
+    });
+    const head = record({
+      approvedBy: '[owner-a, owner-b]',
+      decisions: [
+        ['DEC-2', '`owner-a`, `2026-11-08`'],
+        ['DEC-1', '`owner-a`, `2026-11-01`; amended `2026-11-08`'],
+        ['DEC-3', '`owner-b`, `2026-11-08`'],
+      ],
+    });
+    expect(findApprovalLineRewrites([pendingBase], [head])).toEqual([]);
   });
 });
 

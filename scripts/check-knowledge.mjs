@@ -841,6 +841,13 @@ export function readKnowledgeRecordsAtAuthority(
       `authority commit must equal the review head's origin/main merge base ${expectedBase}.`,
     );
   }
+  return {
+    records: readKnowledgeRecordsAtRevision(root, resolvedCommit),
+    authority: resolvedCommit,
+  };
+}
+
+function readKnowledgeRecordsAtRevision(root, revision) {
   const paths = execFileSync(
     'git',
     [
@@ -849,7 +856,7 @@ export function readKnowledgeRecordsAtAuthority(
       'ls-tree',
       '-r',
       '--name-only',
-      resolvedCommit,
+      revision,
       '--',
       'docs/architecture',
       'docs/design',
@@ -863,16 +870,100 @@ export function readKnowledgeRecordsAtAuthority(
     .filter(isKnowledgeRecordPath);
   const objects = readObjects(
     root,
-    paths.map(filePath => `${resolvedCommit}:${filePath}`),
+    paths.map(filePath => `${revision}:${filePath}`),
   );
-  const records = paths.map(filePath => {
-    const content = objects.get(`${resolvedCommit}:${filePath}`);
+  return paths.map(filePath => {
+    const content = objects.get(`${revision}:${filePath}`);
     if (!content) {
-      throw new Error(`cannot read ${filePath} at ${resolvedCommit}.`);
+      throw new Error(`cannot read ${filePath} at ${revision}.`);
     }
     return {path: filePath, content: content.toString('utf8')};
   });
-  return {records, authority: resolvedCommit};
+}
+
+const DECISION_HEADING = /^#{2,4} (DEC-[0-9]+[a-z]?)\b/;
+const ANY_HEADING = /^#{1,4} /;
+const DECIDER_LINE = /^\*\*Decider:?\*\*:?\s*(.*)$/;
+const PLACEHOLDER_DECIDER = /pending|<[^>]*>/i;
+
+function deciderLines(content) {
+  const deciders = new Map();
+  let decision = null;
+  for (const line of content.split(/\r?\n/)) {
+    const heading = line.match(DECISION_HEADING);
+    if (heading || ANY_HEADING.test(line)) decision = heading?.[1] ?? null;
+    const decider = decision && line.match(DECIDER_LINE);
+    if (decider && !deciders.has(decision)) {
+      deciders.set(decision, decider[1].replace(/\s+/g, ' ').trim());
+    }
+  }
+  return deciders;
+}
+
+function approvers(document) {
+  const value = document.frontmatter.get('approved_by');
+  if (value == null) return [];
+  return Array.isArray(value) ? value.map(String) : [String(value)];
+}
+
+function originalDecider(line) {
+  return line.split(',')[0].replace(/[`@]/g, '').replace(/\.$/, '').trim();
+}
+
+/**
+ * The approval lines a pull request changes or removes, with the account whose
+ * approval each change needs (INV31). Records pair by id, so a moved record or
+ * a moved line is not a change.
+ */
+export function findApprovalLineRewrites(baseRecords, currentRecords) {
+  const byId = records =>
+    new Map(
+      records.map(record => {
+        const document = parseKnowledgeDocument(record.content, record.path);
+        return [
+          document.frontmatter.get('id') ?? record.path,
+          {record, document},
+        ];
+      }),
+    );
+  const current = byId(currentRecords);
+  const changes = [];
+  for (const [id, base] of byId(baseRecords)) {
+    const head = current.get(id);
+    const headApprovers = head ? approvers(head.document) : [];
+    const path = head?.record.path ?? base.record.path;
+    const baseApprovers = approvers(base.document);
+    for (const login of baseApprovers) {
+      if (headApprovers.includes(login)) continue;
+      const from = baseApprovers.join(', ');
+      const to = headApprovers.join(', ') || null;
+      changes.push({path, claim: 'approved_by', from, to, decider: login});
+    }
+    const headDeciders = head ? deciderLines(head.record.content) : new Map();
+    for (const [decision, from] of deciderLines(base.record.content)) {
+      if (PLACEHOLDER_DECIDER.test(from)) continue;
+      const to = headDeciders.get(decision) ?? null;
+      if (to?.startsWith(from)) continue;
+      changes.push({
+        path,
+        claim: decision,
+        from,
+        to,
+        decider: originalDecider(from),
+      });
+    }
+  }
+  return changes;
+}
+
+function currentKnowledgeRecords(root, repositoryFiles) {
+  return repositoryFiles
+    .filter(isKnowledgeRecordPath)
+    .filter(filePath => fs.existsSync(path.join(root, filePath)))
+    .map(filePath => ({
+      path: filePath,
+      content: fs.readFileSync(path.join(root, filePath), 'utf8'),
+    }));
 }
 
 function immediateDirectories(directory) {
@@ -2477,6 +2568,18 @@ async function main() {
         currentSchemaFiles(DEFAULT_ROOT),
       ),
     );
+    const repositoryFiles = repositoryFileList(DEFAULT_ROOT);
+    const changes = repositoryFiles
+      ? findApprovalLineRewrites(
+          readKnowledgeRecordsAtRevision(DEFAULT_ROOT, baseRevision),
+          currentKnowledgeRecords(DEFAULT_ROOT, repositoryFiles),
+        )
+      : [];
+    for (const change of changes) {
+      console.warn(
+        `${change.path}: ${change.claim} changes from "${change.from}" to "${change.to ?? 'removed'}"; it needs ${change.decider}'s approval at the exact head (INV31).`,
+      );
+    }
   }
   if (problems.length) {
     console.error(`Knowledge validation failed (${problems.length}):\n`);
