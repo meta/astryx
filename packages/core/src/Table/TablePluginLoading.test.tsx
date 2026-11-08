@@ -1,6 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-import {useState} from 'react';
-import {render, screen, cleanup} from '@testing-library/react';
+import {act, render, screen, cleanup} from '@testing-library/react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {useTableInfiniteScroll} from './plugins/infiniteScroll/useTableInfiniteScroll';
 import type {TableColumn} from './types';
@@ -77,31 +76,24 @@ describe('Table plugin loading source', () => {
       getSnapshot: () => snapshot,
       getServerSnapshot: () => snapshot,
     };
-    function Host() {
-      const [, bump] = useState(0);
-      return (
-        <>
-          <button
-            type="button"
-            onClick={() => {
-              snapshot = {isLoading: false};
-              notify?.();
-              bump(n => n + 1);
-            }}>
-            Settle
-          </button>
-          <Table
-            data={[]}
-            columns={columns}
-            plugins={{load: {rowModel: 'flat', renderState: source}}}
-          />
-        </>
-      );
-    }
-    const {rerender} = render(<Host />);
+    // A stable plugin record: only the source's notification re-renders
+    // Table, so the test fails if Table does not subscribe.
+    const plugins = {load: {rowModel: 'flat' as const, renderState: source}};
+    render(
+      <>
+        <button
+          type="button"
+          onClick={() => {
+            snapshot = {isLoading: false};
+            notify?.();
+          }}>
+          Settle
+        </button>
+        <Table data={[]} columns={columns} plugins={plugins} />
+      </>,
+    );
     expect(screen.queryByText('No data')).not.toBeInTheDocument();
-    snapshot = {isLoading: false};
-    rerender(<Host />);
+    act(() => screen.getByRole('button', {name: 'Settle'}).click());
     expect(screen.getByText('No data')).toBeInTheDocument();
   });
 });

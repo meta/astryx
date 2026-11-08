@@ -30,11 +30,12 @@ import english from '../../../i18n/generated-english/Table/plugins/infiniteScrol
 registerEnglishFallback(english);
 import {spacingVars} from '../../../theme/tokens.stylex';
 import {
-  focusForLastInputTemporarily,
-  isFocusLost,
+  moveFocusLeftBehind,
   noteFocusWithin,
   type FocusWithin,
 } from '../../../utils/focusReturn';
+import {useFocusLeavingChange} from '../../../utils/useFocusLeavingChange';
+import {LayoutChangeSnapshot} from '../../../motion/LayoutChangeSnapshot';
 import {devWarn} from '../../../utils/devWarning';
 import {useInteractionModalityTracking} from '../../../utils/interactionModality';
 import type {TablePlugin, TableRenderContext} from '../../types';
@@ -111,7 +112,7 @@ function createRuntime(
     subscribe,
     getSurface: () => surface,
     diagnose(message: string) {
-      if (process.env.NODE_ENV === 'production' || warned.has(message)) {
+      if (warned.has(message)) {
         return;
       }
       warned.add(message);
@@ -200,9 +201,9 @@ function createRuntime(
       };
       runtime.request = request;
       runtime.version++;
-      // Release loading resources at latch acquisition, even when immediate
-      // fulfillment coalesces away a rendered busy phase. Preserve visibility
-      // until native reacquisition supplies the post-batch geometry.
+      // Stop observing when the latch is taken. A request that resolves at
+      // once may never render a busy state. Keep the last visibility until the
+      // next observer reports.
       runtime.stopObservation?.();
       wake();
       const settle = (isSuccessful: boolean) => {
@@ -276,7 +277,7 @@ function InfiniteScrollSurface({
   );
   const t = useComponentTranslator();
   useInteractionModalityTracking();
-  const focusNoteRef = useRef<FocusWithin | null>(null);
+  const surfaceRef = useRef<HTMLDivElement | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const resourcesRef = useRef({
     observer: null as IntersectionObserver | null,
@@ -284,7 +285,6 @@ function InfiniteScrollSurface({
     node: null as HTMLDivElement | null,
     isVisible: false,
     task: null as ReturnType<typeof setTimeout> | null,
-    releaseFocus: null as (() => void) | null,
     context: undefined as TableRenderContext | undefined,
     viewport: null as HTMLDivElement | null,
   });
@@ -297,30 +297,21 @@ function InfiniteScrollSurface({
     }
     state.task = null;
   }, []);
-  useLayoutEffect(() => {
-    // Return focus left behind by the exhausted command after its DOM removal.
-    if (view.hasMore || focusNoteRef.current == null) {
-      return;
-    }
-    const destination =
-      context.viewport.current ?? resourcesRef.current.viewport;
-    resourcesRef.current.releaseFocus?.();
-    resourcesRef.current.releaseFocus = null;
-    const note = focusNoteRef.current;
-    focusNoteRef.current = null;
-    // Move only focus the removal lost: a caller that already moved focus to
-    // a surviving control keeps it there.
-    if (
-      note != null &&
-      destination != null &&
-      isFocusLost(null, note.container.ownerDocument)
-    ) {
-      resourcesRef.current.releaseFocus = focusForLastInputTemporarily(
-        destination,
-        {preventScroll: true},
-      );
-    }
-  });
+  // When the last batch removes a focused Load more command, focus moves to
+  // the Table scroll region, without scrolling. Focus that a caller already
+  // moved elsewhere stays there.
+  const noteExhaustion = useFocusLeavingChange(
+    view.hasMore,
+    (hadMore: boolean) =>
+      hadMore ? noteFocusWithin(surfaceRef.current) : null,
+    (focus: FocusWithin) =>
+      moveFocusLeftBehind(
+        focus,
+        context.viewport.current ?? resourcesRef.current.viewport,
+        null,
+        {preventScroll: true, temporaryTabStop: true},
+      ),
+  );
   const setSentinel = useCallback(
     (node: HTMLDivElement | null) => {
       if (sentinelRef.current !== node) {
@@ -333,8 +324,8 @@ function InfiniteScrollSurface({
   );
 
   useEffect(() => {
-    // All parent refs have attached before acquiring native observation.
-    // Synchronize committed parent semantic context, not DOM-inferred mode.
+    // Sync the sentinel's IntersectionObserver with the committed loading
+    // state. Parent refs are attached by now.
     runtime.attach(context, disconnect);
     const state = resourcesRef.current;
     state.context = context;
@@ -420,35 +411,37 @@ function InfiniteScrollSurface({
   useLayoutEffect(
     () => () => {
       disconnect();
-      resourcesRef.current.releaseFocus?.();
       runtime.detach(resourcesRef.current.context, disconnect);
     },
     [disconnect, runtime],
   );
 
+  const snapshot = (
+    <LayoutChangeSnapshot
+      value={view.hasMore}
+      onBeforeChange={noteExhaustion}
+    />
+  );
   if (!view.hasMore || !isAdmitted(context)) {
-    return null;
+    return snapshot;
   }
   return (
-    <div {...stylex.props(styles.surface)}>
-      <div
-        ref={setSentinel}
-        {...stylex.props(styles.sentinel)}
-        aria-hidden="true"
-      />
-      <Button
-        onFocus={event => {
-          focusNoteRef.current = noteFocusWithin(event.currentTarget);
-        }}
-        onBlur={() => {
-          focusNoteRef.current = null;
-        }}
-        xstyle={styles.command}
-        label={t('@astryx.table.loadMore')}
-        isLoading={view.isLoading}
-        onClick={() => runtime.invoke(false)}
-      />
-    </div>
+    <>
+      {snapshot}
+      <div ref={surfaceRef} {...stylex.props(styles.surface)}>
+        <div
+          ref={setSentinel}
+          {...stylex.props(styles.sentinel)}
+          aria-hidden="true"
+        />
+        <Button
+          xstyle={styles.command}
+          label={t('@astryx.table.loadMore')}
+          isLoading={view.isLoading}
+          onClick={() => runtime.invoke(false)}
+        />
+      </div>
+    </>
   );
 }
 

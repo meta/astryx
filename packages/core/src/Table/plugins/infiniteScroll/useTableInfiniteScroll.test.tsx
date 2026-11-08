@@ -385,7 +385,7 @@ describe('useTableInfiniteScroll', () => {
   it.each([false, true])(
     'uses the shared focus-loss owner on command exhaustion (StrictMode=%s)',
     isStrict => {
-      const move = vi.spyOn(focusReturn, 'focusForLastInputTemporarily');
+      const move = vi.spyOn(focusReturn, 'moveFocusLeftBehind');
       const load = async () => Promise.resolve();
       const contents = (hasMore: boolean) => (
         <Example hasMore={hasMore} isLoading={false} onLoadMore={load} />
@@ -403,14 +403,20 @@ describe('useTableInfiniteScroll', () => {
       view.rerender(wrapped(false));
       expect(viewport).toHaveFocus();
       expect(move).toHaveBeenCalledTimes(1);
-      expect(move).toHaveBeenCalledWith(viewport, {preventScroll: true});
+      expect(move).toHaveBeenCalledWith(
+        expect.objectContaining({element: button}),
+        viewport,
+        null,
+        {preventScroll: true, temporaryTabStop: true},
+      );
       viewport.blur();
       expect(viewport).not.toHaveAttribute('tabindex');
     },
   );
   it('does not bypass a shared focus-loss decision that preserves the current focus', () => {
-    const isLost = vi.spyOn(focusReturn, 'isFocusLost').mockReturnValue(false);
-    const move = vi.spyOn(focusReturn, 'focusForLastInputTemporarily');
+    const move = vi
+      .spyOn(focusReturn, 'moveFocusLeftBehind')
+      .mockReturnValue(false);
     const load = async () => Promise.resolve();
     const view = render(<Example {...ready} onLoadMore={load} />);
     screen.getByRole('button', {name: 'Load more'}).focus();
@@ -418,8 +424,7 @@ describe('useTableInfiniteScroll', () => {
     view.rerender(
       <Example hasMore={false} isLoading={false} onLoadMore={load} />,
     );
-    expect(isLost).toHaveBeenCalledTimes(1);
-    expect(move).not.toHaveBeenCalled();
+    expect(move).toHaveBeenCalledTimes(1);
     expect(viewport).not.toHaveFocus();
     expect(viewport).not.toHaveAttribute('tabindex');
   });

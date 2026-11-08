@@ -7,11 +7,11 @@
  * @output Whether focus would be lost if a surface hid now; a focus move whose
  *   ring follows the last input; the focus return of a closed overlay, which
  *   never scrolls the page; and the one path that moves focus out of content a
- *   change removed or hid (`noteFocusWithin`, `moveFocusLeftBehind`); and a
- *   focus move that lends a temporary tab stop (`focusForLastInputTemporarily`).
+ *   change removed or hid (`noteFocusWithin`, `moveFocusLeftBehind`), which
+ *   can lend the target a temporary tab stop (`focusForLastInputTemporarily`).
  * @position Utility; used by overlays (BottomSheet, Dialog, DropdownMenu) that
  *   move focus programmatically, and by disclosures that hide focused
- *   content, and by the Table loading command. isFocusDetached lives in isFocusDetached.ts, so the utils entry,
+ *   content or remove a focused command. isFocusDetached lives in isFocusDetached.ts, so the utils entry,
  *   which exports only it, does not reach this module.
  */
 
@@ -64,12 +64,16 @@ export function noteFocusWithin(
  * browser is about to blur. Focus that survived the change, or that was never
  * inside, is not moved. The ring follows the last input, so the calling
  * component keeps modality tracking active
- * (`useInteractionModalityTracking()`). Returns whether focus moved. Internal.
+ * (`useInteractionModalityTracking()`). `options.preventScroll` keeps the page
+ * still, and `options.temporaryTabStop` lets a target with no tab stop take
+ * focus until it loses it (`focusForLastInputTemporarily`). Returns whether
+ * focus moved. Internal.
  */
 export function moveFocusLeftBehind(
   note: FocusWithin | null,
   target: HTMLElement | null | undefined,
   hidden: Element | null = null,
+  options?: {preventScroll?: boolean; temporaryTabStop?: boolean},
 ): boolean {
   if (
     note == null ||
@@ -78,7 +82,14 @@ export function moveFocusLeftBehind(
   ) {
     return false;
   }
-  focusForLastInput(target);
+  const focusOptions = options?.preventScroll
+    ? {preventScroll: true}
+    : undefined;
+  if (options?.temporaryTabStop) {
+    focusForLastInputTemporarily(target, focusOptions);
+  } else {
+    focusForLastInput(target, focusOptions);
+  }
   return true;
 }
 
