@@ -89,9 +89,11 @@ function dependencies(job, result = 'success') {
 
 describe('CI baseline maintenance routing', () => {
   it('has explicit capture/release dispatch without a new workflow or test owner', () => {
+    // webkit-weekly runs only the WebKit proofs (ci-webkit-weekly.test.mjs).
     expect(workflow.on.workflow_dispatch.inputs.operation.options).toEqual([
       'capture',
       'release-check',
+      'webkit-weekly',
     ]);
     expect(visual.name).toBe('Stable visual regression');
     expect(visual['runs-on']).toContain(
