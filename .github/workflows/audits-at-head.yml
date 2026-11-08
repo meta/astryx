@@ -133,10 +133,11 @@ jobs:
           max-wait-minutes: 60
           max-looks: 12
 
-      - name: Stop when CI is full
-        if: steps.room.outputs.full == 'true' || steps.room.outcome != 'success'
+      # A dispatch starts after its longest wait; only a failed wait stops it.
+      - name: Stop when the wait failed
+        if: steps.room.outcome != 'success'
         run: |
-          echo "::error title=CI is full::CI is full: dispatch again later. The run found no room under the CI ceiling."
+          echo "::error::The wait for room under the CI ceiling failed. Dispatch again later."
           exit 1
 
   # main's planner, run as a later run at a head: every owed audit, in up to
@@ -371,8 +372,26 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: ${{ inputs.head }}
-          fetch-depth: 50
+          fetch-depth: 0
           persist-credentials: false
+
+      # The specs run at the head, but their routing lines, the recorded times
+      # and the axe config come from the head merged into main, as in a
+      # labelled pull-request run's merge commit. The merge is built as an
+      # object only; the checkout stays at the head.
+      - name: Build the head merged into main
+        id: merge
+        env:
+          MAIN_SHA: ${{ github.sha }}
+          HEAD_SHA: ${{ inputs.head }}
+        run: |
+          git fetch --quiet --no-tags origin "$MAIN_SHA"
+          tree=$(git merge-tree --write-tree "$MAIN_SHA" "$HEAD_SHA") || {
+            echo "::error::The head conflicts with main, so its contract routing is unknown. Update the branch."
+            exit 1
+          }
+          merge=$(git -c user.name=audits-at-head -c user.email=audits-at-head@users.noreply.github.com commit-tree "$tree" -p "$MAIN_SHA" -p "$HEAD_SHA" -m "audits-at-head merge")
+          echo "sha=$merge" >> "$GITHUB_OUTPUT"
 
       # Listing the specs needs the workspace's dependencies.
       - name: Setup Node and pnpm
@@ -395,13 +414,14 @@ jobs:
           ASTRYX_HEAD_SHA: ${{ inputs.head }}
           BASE_SHA: ${{ needs.gate.outputs.base }}
           PR_TITLE: ${{ needs.gate.outputs.title }}
-          WORKFLOW_SHA: ${{ github.sha }}
+          MAIN_SHA: ${{ github.sha }}
+          WORKFLOW_SHA: ${{ steps.merge.outputs.sha }}
         run: |
+          # main's runner; the merge's routing lines, times and axe config.
           runner="$RUNNER_TEMP/a11y/.github/scripts/a11y-pr-contracts.mjs"
           mkdir -p "$RUNNER_TEMP/a11y/.github/scripts" "$RUNNER_TEMP/a11y/scripts/lib"
-          git fetch --quiet --no-tags --depth=2 origin "$WORKFLOW_SHA"
-          git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"
-          git show "$WORKFLOW_SHA:scripts/lib/duration-split.mjs" > "$RUNNER_TEMP/a11y/scripts/lib/duration-split.mjs"
+          git show "$MAIN_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"
+          git show "$MAIN_SHA:scripts/lib/duration-split.mjs" > "$RUNNER_TEMP/a11y/scripts/lib/duration-split.mjs"
           # The runner selects for a pull request when the event says so.
           GITHUB_EVENT_NAME=pull_request node "$runner" --count-legs ${{ strategy.job-total }} --leg ${{ matrix.leg }} --share-out "$RUNNER_TEMP/contract-share.json"
           mkdir -p contract-share
@@ -418,7 +438,7 @@ jobs:
           ASTRYX_HEAD_SHA: ${{ inputs.head }}
           BASE_SHA: ${{ needs.gate.outputs.base }}
           PR_TITLE: ${{ needs.gate.outputs.title }}
-          WORKFLOW_SHA: ${{ github.sha }}
+          WORKFLOW_SHA: ${{ steps.merge.outputs.sha }}
         run: |
           runner="$RUNNER_TEMP/a11y/.github/scripts/a11y-pr-contracts.mjs"
           GITHUB_EVENT_NAME=pull_request node "$runner" --share "$RUNNER_TEMP/contract-share.json" --leg ${{ steps.legs.outputs.leg }} --of ${{ steps.legs.outputs.count }}

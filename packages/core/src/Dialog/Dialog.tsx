@@ -42,6 +42,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
   type ReactNode,
 } from 'react';
 import {useIsHydrating} from '../hooks/useIsHydrating';
@@ -80,7 +81,7 @@ import {
 import type {SpacingStep} from '../utils/types';
 import {mergeProps} from '../utils/mergeProps';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
-import {devWarn} from '../utils/devWarning';
+import {createDevWarnings} from '../utils/devWarning';
 import {DialogContext} from './DialogContext';
 import {themeProps} from '../utils/themeProps';
 import type {DialogVariantMap} from './index';
@@ -744,27 +745,19 @@ export function Dialog({
   });
 
   // Dev-time guardrail: an open modal should always have an accessible name.
-  // The header-title check reads the DOM, so this stays in an effect; the ref
-  // keeps it to one warning per component instance.
-  const warnedUnnamedDialogRef = useRef(false);
+  // The header-title check reads the DOM, so this stays in an effect.
+  const [warn] = useState(createDevWarnings);
   useEffect(() => {
     const hasHeaderTitle =
       dialogRef.current?.querySelector(`#${CSS.escape(titleId)}`) != null;
-    if (
-      isOpen &&
-      !isInline &&
-      !hasConsumerName &&
-      !hasHeaderTitle &&
-      !warnedUnnamedDialogRef.current
-    ) {
-      warnedUnnamedDialogRef.current = true;
-      devWarn(
+    if (isOpen && !isInline && !hasConsumerName && !hasHeaderTitle) {
+      warn(
         'Dialog',
         'open dialog has no accessible name. Add a DialogHeader ' +
           'with a `title`, or pass `aria-label`/`aria-labelledby`.',
       );
     }
-  }, [isOpen, isInline, hasConsumerName, titleId]);
+  }, [isOpen, isInline, hasConsumerName, titleId, warn]);
 
   // A press on the ::backdrop targets the <dialog> itself, so native browser
   // popups (date pickers, selects, color pickers) that render outside the

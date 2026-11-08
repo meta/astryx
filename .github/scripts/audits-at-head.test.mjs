@@ -133,8 +133,25 @@ describe('the audits-at-head dispatch', () => {
 
   it("selects the contract specs with main's runner, as a labelled pull request does", () => {
     const count = step('contracts', "Count this leg's contract specs");
+    // main's runner code, with the merge's routing lines and axe config.
     expect(count.run).toContain(
-      'git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs"',
+      'git show "$MAIN_SHA:.github/scripts/a11y-pr-contracts.mjs"',
+    );
+    expect(count.env.MAIN_SHA).toBe('${{ github.sha }}');
+    for (const name of [
+      "Count this leg's contract specs",
+      "Run this leg's contract specs",
+    ]) {
+      expect(step('contracts', name).env.WORKFLOW_SHA, name).toBe(
+        '${{ steps.merge.outputs.sha }}',
+      );
+    }
+    const merge = step('contracts', 'Build the head merged into main');
+    expect(merge.run).toContain(
+      'git merge-tree --write-tree "$MAIN_SHA" "$HEAD_SHA"',
+    );
+    expect(merge.run).toContain(
+      'commit-tree "$tree" -p "$MAIN_SHA" -p "$HEAD_SHA"',
     );
     expect(count.run).toContain(
       'GITHUB_EVENT_NAME=pull_request node "$runner" --count-legs',
