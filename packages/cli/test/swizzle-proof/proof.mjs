@@ -389,10 +389,42 @@ function sourcesOf(t, copy, packages, memo) {
 }
 
 /**
- * Runs one slice of the proof: the targets at `index` of every `count`. A
- * change that touches no component source and no toolchain path proves
- * nothing and returns at once. A toolchain change, or a change git cannot
- * read, proves every target of the slice (fail closed). Otherwise the slice
+ * Which targets a run proves: none, the affected ones, or all. A pull request
+ * whose change git cannot read proves every target (fail closed). A run
+ * outside a pull request diffs its commit against its parent; when that
+ * parent cannot be read it proves none, since the release check proves every
+ * target.
+ * @param {{changed: string[]|null, toolchain: string|undefined, relevant: string[], event: string|undefined, all?: boolean}} change
+ * @returns {{mode: 'none'|'affected'|'all', reason: string}}
+ */
+export function proofScope({changed, toolchain, relevant, event, all = false}) {
+  if (all) return {mode: 'all', reason: 'every target was asked for'};
+  if (changed == null) {
+    if (event && event !== 'pull_request') {
+      return {
+        mode: 'none',
+        reason: `this ${event} run cannot read its parent commit; pull requests and the release check prove every copy`,
+      };
+    }
+    return {
+      mode: 'all',
+      reason: 'the change could not be read, so every target runs',
+    };
+  }
+  if (toolchain)
+    return {mode: 'all', reason: `${toolchain} can change every copy`};
+  if (relevant.length === 0) {
+    return {
+      mode: 'none',
+      reason: 'no component source or toolchain path changed',
+    };
+  }
+  return {mode: 'affected', reason: ''};
+}
+
+/**
+ * Runs one slice of the proof: the targets at `index` of every `count`, in
+ * the scope {@link proofScope} chooses. In the affected scope the slice
  * proves the targets whose copy depends on a changed source file.
  * @param {{index: number, count: number, samples: Record<string, Function>, notRendered: Record<string, string>, project: string, all?: boolean}} options
  */
@@ -414,29 +446,18 @@ export async function runSlice({
         file.startsWith(`packages/${short}/src/`),
       ) && !NOT_SHIPPED.test(file),
   );
-  // Main's full unit run checks out one commit, so it has no base to diff.
-  // The proof runs before merge (spec:AST-110 FR7); the release check proves
-  // every target again, so this post-merge run proves none.
-  if (
-    changed == null &&
-    !all &&
-    process.env.GITHUB_EVENT_NAME &&
-    process.env.GITHUB_EVENT_NAME !== 'pull_request'
-  ) {
+  const scope = proofScope({
+    changed,
+    toolchain,
+    relevant,
+    event: process.env.GITHUB_EVENT_NAME,
+    all,
+  });
+  if (scope.mode === 'none') {
     return {
       offered: null,
       affected: 0,
-      reason: `a ${process.env.GITHUB_EVENT_NAME} run without a base commit; pull requests and the release check prove the copies`,
-      results: [],
-      timings: {},
-      totalMs: Date.now() - start,
-    };
-  }
-  if (changed && !toolchain && relevant.length === 0) {
-    return {
-      offered: null,
-      affected: 0,
-      reason: 'no component source or toolchain path changed',
+      reason: scope.reason,
       results: [],
       timings: {},
       totalMs: Date.now() - start,
@@ -459,13 +480,7 @@ export async function runSlice({
   });
   timings.eject = Date.now() - ejectStart;
   let affected = slice;
-  let reason = all
-    ? 'every target was asked for'
-    : changed == null
-      ? 'the change could not be read, so every target runs'
-      : toolchain
-        ? `${toolchain} can change every copy`
-        : '';
+  let reason = scope.mode === 'all' ? scope.reason : '';
   if (!reason) {
     const packages = workspacePackages();
     const memo = new Map();

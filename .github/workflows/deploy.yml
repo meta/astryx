@@ -202,9 +202,13 @@ jobs:
     permissions:
       contents: read
     steps:
+      # Two commits: the swizzle proof diffs main's squash-merged commit
+      # against its parent to prove only the copies that change affects
+      # (spec:AST-110 FR7).
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.main-commit.outputs.sha }}
+          fetch-depth: 2
 
       - uses: ./.github/actions/setup
 
