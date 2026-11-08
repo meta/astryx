@@ -318,6 +318,7 @@ describe('orderByAffinity with typos', () => {
     {name: 'ButtonGroup'},
     {name: 'HStackShowcase'},
     {name: 'VStackShowcase'},
+    {name: 'Badge'},
   ];
   /** @param {{name: string}[]} list */
   const names = list => list.map(i => i.name);
@@ -331,7 +332,10 @@ describe('orderByAffinity with typos', () => {
   });
 
   it('counts two swapped letters as one slip', () => {
-    expect(order('ButtonGorup', true)[0]).toBe('ButtonGroup');
+    // Five letters allow one slip, so `Bagde` is a near name of Badge only
+    // when the swap counts as one edit rather than two.
+    expect(order('Bagde', false)[0]).not.toBe('Badge');
+    expect(order('Bagde', true)[0]).toBe('Badge');
   });
 
   it('puts the name with fewer slips first', () => {
