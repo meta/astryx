@@ -598,6 +598,85 @@ describe('Lightbox', () => {
       expect(pause).toHaveBeenCalledTimes(1);
     });
 
+    it('pauses a playing video when the viewer closes', () => {
+      const items = [
+        {src: '/clip.mp4', alt: 'A clip', type: 'video' as const},
+        {src: '/b.jpg', alt: 'Image B'},
+      ];
+      const view = (isOpen: boolean) => (
+        <Lightbox
+          isOpen={isOpen}
+          onOpenChange={() => {}}
+          media={items}
+          index={0}
+        />
+      );
+      const {rerender} = render(view(true));
+      const video = document.querySelector('video')!;
+      // Started by someone: playing, with its sound. Closing keeps the
+      // element mounted inside the closed dialog.
+      const pause = vi.fn();
+      video.pause = pause;
+      Object.defineProperty(video, 'paused', {
+        configurable: true,
+        get: () => pause.mock.calls.length > 0,
+      });
+      rerender(view(false));
+      expect(document.querySelector('video')).toBe(video);
+      expect(pause).toHaveBeenCalledTimes(1);
+    });
+
+    it('pauses a single playing video when the viewer closes', () => {
+      const media = {src: '/clip.mp4', alt: 'A clip', type: 'video' as const};
+      const view = (isOpen: boolean) => (
+        <Lightbox isOpen={isOpen} onOpenChange={() => {}} media={media} />
+      );
+      const {rerender} = render(view(true));
+      const video = document.querySelector('video')!;
+      const pause = vi.fn();
+      video.pause = pause;
+      Object.defineProperty(video, 'paused', {
+        configurable: true,
+        get: () => pause.mock.calls.length > 0,
+      });
+      rerender(view(false));
+      expect(document.querySelector('video')).toBe(video);
+      expect(pause).toHaveBeenCalledTimes(1);
+    });
+
+    it('plays a single video again when the viewer reopens, with hasAutoPlay', () => {
+      const play = vi
+        .spyOn(HTMLMediaElement.prototype, 'play')
+        .mockImplementation(async () => {});
+      try {
+        const media = {src: '/clip.mp4', alt: 'A clip', type: 'video' as const};
+        const view = (isOpen: boolean) => (
+          <Lightbox
+            isOpen={isOpen}
+            onOpenChange={() => {}}
+            media={media}
+            hasAutoPlay
+          />
+        );
+        const {rerender} = render(view(true));
+        expect(play).toHaveBeenCalledTimes(1);
+        const video = document.querySelector('video')!;
+        const pause = vi.fn();
+        video.pause = pause;
+        Object.defineProperty(video, 'paused', {
+          configurable: true,
+          get: () => pause.mock.calls.length > 0,
+        });
+        rerender(view(false));
+        expect(pause).toHaveBeenCalledTimes(1);
+        rerender(view(true));
+        expect(play).toHaveBeenCalledTimes(2);
+        expect(play.mock.contexts.at(-1)).toBe(video);
+      } finally {
+        play.mockRestore();
+      }
+    });
+
     it("keeps a paged-away video's element and time once the viewer pages back", () => {
       const items = [
         {src: '/clip.mp4', alt: 'A clip', type: 'video' as const},
