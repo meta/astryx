@@ -1865,3 +1865,186 @@ export const ContentInsets: Story = {
     );
   },
 };
+
+/**
+ * LayoutFooter in each configuration, in plain frames with no padding
+ * container: the inner inset is spacing step 4, and `padding={6}` sets the
+ * Layout-edge inset. Each case names its footer with `data-footer-case`. The
+ * caller-attribute case passes its own `data-divider`, which must not replace
+ * the value the footer reflects.
+ */
+export const FooterStates: Story = {
+  name: 'Footer States',
+  render: () => {
+    const body = <p {...stylex.props(styles.bodyText)}>Content area.</p>;
+    const tallBody = (
+      <VStack gap={2}>
+        {Array.from({length: 12}, (_, index) => (
+          <p key={index} {...stylex.props(styles.bodyText)}>
+            Row {index + 1}
+          </p>
+        ))}
+      </VStack>
+    );
+    const footerText = <p {...stylex.props(styles.bodyText)}>Footer</p>;
+    const cases = [
+      {
+        id: 'automatic',
+        label: 'No divider, padding=6',
+        layout: (
+          <Layout
+            padding={6}
+            content={<LayoutContent>{body}</LayoutContent>}
+            footer={
+              <LayoutFooter data-footer-case="automatic">
+                {footerText}
+              </LayoutFooter>
+            }
+          />
+        ),
+      },
+      {
+        id: 'divider',
+        label: 'hasDivider, padding=6',
+        layout: (
+          <Layout
+            padding={6}
+            content={<LayoutContent>{body}</LayoutContent>}
+            footer={
+              <LayoutFooter hasDivider data-footer-case="divider">
+                {footerText}
+              </LayoutFooter>
+            }
+          />
+        ),
+      },
+      {
+        id: 'layout-default',
+        label: 'Layout defaultHasDividers',
+        layout: (
+          <Layout
+            padding={6}
+            defaultHasDividers
+            content={<LayoutContent>{body}</LayoutContent>}
+            footer={
+              <LayoutFooter data-footer-case="layout-default">
+                {footerText}
+              </LayoutFooter>
+            }
+          />
+        ),
+      },
+      {
+        id: 'explicit-off',
+        label: 'Layout defaultHasDividers, hasDivider={false}',
+        layout: (
+          <Layout
+            padding={6}
+            defaultHasDividers
+            content={<LayoutContent>{body}</LayoutContent>}
+            footer={
+              <LayoutFooter hasDivider={false} data-footer-case="explicit-off">
+                {footerText}
+              </LayoutFooter>
+            }
+          />
+        ),
+      },
+      {
+        id: 'padding-2',
+        label: 'Footer padding=2',
+        layout: (
+          <Layout
+            padding={6}
+            content={<LayoutContent>{body}</LayoutContent>}
+            footer={
+              <LayoutFooter hasDivider padding={2} data-footer-case="padding-2">
+                {footerText}
+              </LayoutFooter>
+            }
+          />
+        ),
+      },
+      {
+        id: 'full-bleed',
+        label: 'Footer padding=0',
+        layout: (
+          <Layout
+            padding={6}
+            content={<LayoutContent>{body}</LayoutContent>}
+            footer={
+              <LayoutFooter
+                hasDivider
+                padding={0}
+                data-footer-case="full-bleed">
+                {footerText}
+              </LayoutFooter>
+            }
+          />
+        ),
+      },
+      {
+        id: 'height',
+        label: 'height=72 below overflowing content',
+        layout: (
+          <Layout
+            padding={6}
+            content={<LayoutContent>{tallBody}</LayoutContent>}
+            footer={
+              <LayoutFooter hasDivider height={72} data-footer-case="height">
+                {footerText}
+              </LayoutFooter>
+            }
+          />
+        ),
+      },
+      {
+        id: 'content-width',
+        label: 'Layout contentWidth=240',
+        layout: (
+          <Layout
+            padding={6}
+            contentWidth={240}
+            content={<LayoutContent>{body}</LayoutContent>}
+            footer={
+              <LayoutFooter hasDivider data-footer-case="content-width">
+                {footerText}
+              </LayoutFooter>
+            }
+          />
+        ),
+      },
+      {
+        id: 'caller-attribute',
+        label: 'No divider, caller data-divider="false"',
+        layout: (
+          <Layout
+            padding={6}
+            content={<LayoutContent>{body}</LayoutContent>}
+            footer={
+              <LayoutFooter
+                data-divider="false"
+                data-footer-case="caller-attribute">
+                {footerText}
+              </LayoutFooter>
+            }
+          />
+        ),
+      },
+    ];
+    return (
+      <VStack gap={4} xstyle={styles.storySection}>
+        <HStack gap={4} wrap="wrap">
+          {cases.map(({id, label, layout}) => (
+            <VStack key={id} gap={2}>
+              <p {...stylex.props(styles.subheading)}>{label}</p>
+              <div {...stylex.props(styles.cwContainer, styles.insetFrame)}>
+                {layout}
+              </div>
+            </VStack>
+          ))}
+        </HStack>
+      </VStack>
+    );
+  },
+};
