@@ -169,6 +169,22 @@ describe('overlappingSpecs', () => {
     ).toBeNull();
   });
 
+  it('lists a changed always spec only for a pull request with the run label', () => {
+    const always = 'internal/a11y-spec/src/patterns/landmarks.chromium.spec.ts';
+    const changed = [
+      {
+        path: always,
+        status: 'changed',
+        mainSource: '// @pr-a11y always\n',
+        headSource: 'older\n',
+      },
+    ];
+    expect(overlappingSpecs(changed, ['README.md'], GRAPH)).toEqual([]);
+    expect(
+      overlappingSpecs(changed, ['README.md'], {...GRAPH, labelled: true}),
+    ).toEqual([{path: always, reason: 'changed-on-main', scope: 'always'}]);
+  });
+
   it('reads the touched components from changed source, never from a record', () => {
     expect(touchedComponents(TREE_CHANGE)).toEqual(['core/Table']);
     expect(
@@ -234,6 +250,27 @@ describe('the command merge-guard runs', () => {
         ],
       });
       expect(VERSION).toBe(1);
+
+      // An empty list of changed paths is unknown, not "no overlap".
+      const empty = path.join(dir, 'empty.txt');
+      fs.writeFileSync(empty, '\n');
+      expect(() =>
+        execFileSync(
+          process.execPath,
+          [
+            SCRIPT,
+            '--base',
+            base,
+            '--main',
+            main,
+            '--head',
+            head,
+            '--paths-file',
+            empty,
+          ],
+          {cwd: dir, encoding: 'utf8', stdio: 'pipe'},
+        ),
+      ).toThrow();
 
       // A routing line main cannot read makes the answer unknown: a non-zero
       // exit, which merge-guard treats as overlap.

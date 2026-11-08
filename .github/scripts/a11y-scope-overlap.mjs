@@ -5,9 +5,10 @@
  * @file The browser accessibility specs main added or changed since a pull
  *   request's merge base that select the pull request's changes but are not at
  *   its head.
- * @input `--base` (`git merge-base <main> <head>`), `--main`, `--head` and
- *   `--paths-file` (the pull request's changed paths, one per line), run from
- *   a checkout of main.
+ * @input `--base` (`git merge-base <main> <head>`), `--main`, `--head`,
+ *   `--paths-file` (the pull request's changed paths, one per line) and
+ *   `--labelled` when the pull request carries the accessibility run label,
+ *   run from a checkout of main.
  * @output JSON `{"version": 1, "specs": [{"path", "reason", "scope"}]}`, where
  *   `reason` is `added-on-main` or `changed-on-main` and `scope` names what
  *   selects the spec; exit 0. Any other exit means the answer is unknown.
@@ -57,9 +58,20 @@ export function touchedComponents(changedPaths) {
  * @param {string} source the spec's source on main
  * @param {string[]} changedPaths
  * @param {Set<string>} owedAudits the audit specs the change owes
+ * @param {boolean} [labelled] the pull request carries the accessibility run
+ *   label
  */
-export function selectingScope(file, source, changedPaths, owedAudits) {
+export function selectingScope(
+  file,
+  source,
+  changedPaths,
+  owedAudits,
+  labelled = false,
+) {
   const routing = parseRouting(source);
+  // A pull request's own run runs an unchanged `always` spec only with the
+  // accessibility run label.
+  if (routing.mode === 'always') return labelled ? 'always' : null;
   if (routing.mode === 'audit') {
     return owedAudits.has(file)
       ? `owed audit of ${componentFolderOf(file)}`
@@ -81,14 +93,15 @@ export function selectingScope(file, source, changedPaths, owedAudits) {
  *   headSource: string | null}[]} changedOnMain the spec files main added or
  *   changed since the merge base, with their source on main and at the head
  * @param {string[]} changedPaths the pull request's changed paths
- * @param {{primitives: string[], importers: Map<string, Set<string>>}} graph
- *   main's shared primitives and import graph, for the audits a change owes
+ * @param {{primitives: string[], importers: Map<string, Set<string>>,
+ *   labelled?: boolean}} graph main's shared primitives and import graph, for
+ *   the audits a change owes, and whether the run label is on
  * @returns {{path: string, reason: string, scope: string}[]}
  */
 export function overlappingSpecs(
   changedOnMain,
   changedPaths,
-  {primitives, importers},
+  {primitives, importers, labelled = false},
 ) {
   const routings = changedOnMain.map(spec => ({
     ...spec,
@@ -109,7 +122,13 @@ export function overlappingSpecs(
   const out = [];
   for (const {path, status, mainSource, headSource} of routings) {
     if (headSource === mainSource) continue;
-    const scope = selectingScope(path, mainSource, changedPaths, owedAudits);
+    const scope = selectingScope(
+      path,
+      mainSource,
+      changedPaths,
+      owedAudits,
+      labelled,
+    );
     if (scope == null) continue;
     out.push({
       path,
@@ -149,7 +168,7 @@ function main() {
   const pathsFile = value('--paths-file');
   if (!base || !mainSha || !head || !pathsFile) {
     console.error(
-      'usage: a11y-scope-overlap.mjs --base <git merge-base main head> --main <main> --head <head> --paths-file <file>',
+      'usage: a11y-scope-overlap.mjs --base <git merge-base main head> --main <main> --head <head> --paths-file <file> [--labelled]',
     );
     process.exit(2);
   }
@@ -158,6 +177,11 @@ function main() {
     .split('\n')
     .map(line => line.trim())
     .filter(Boolean);
+  // An empty list is an unknown change, never "no overlap".
+  if (changedPaths.length === 0) {
+    console.error(`${pathsFile} lists no changed path.`);
+    process.exit(1);
+  }
   const changedOnMain = git([
     'diff',
     '--name-status',
@@ -178,6 +202,7 @@ function main() {
     }));
   const root = process.cwd();
   const specs = overlappingSpecs(changedOnMain, changedPaths, {
+    labelled: argv.includes('--labelled'),
     primitives: readPrimitives(root),
     importers: importerGraph(root),
   });
