@@ -382,14 +382,19 @@ export function createPaneReveal(getRow: () => Element | null): PaneReveal {
 /**
  * The next slide in `row` plays the settle spring, not the theme's curve.
  * It starts from a release `velocity` (px per second toward the end) over
- * `distance` px.
+ * `distance` px. Returns the share of the distance still to go, by ms since
+ * the slide began, or null when nothing slides.
  */
 export function slideNextOnRelease(
   row: Element,
   velocity: number,
   distance: number,
-): void {
-  if (distance > 0) {
-    glideNextChange(row, springGlide(springs.settle, velocity / distance));
+): ((elapsedMs: number) => number) | null {
+  if (!(distance > 0)) {
+    return null;
   }
+  const progress = springGlide(springs.settle, velocity / distance);
+  glideNextChange(row, progress);
+  return elapsedMs =>
+    elapsedMs >= progress.durationMs ? 0 : progress.remaining(elapsedMs);
 }
