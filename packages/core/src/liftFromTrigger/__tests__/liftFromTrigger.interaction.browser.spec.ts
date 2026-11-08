@@ -29,7 +29,7 @@
 
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {build, type Plugin} from 'esbuild';
 // The page's `window.__lift`.
 import type {LiftFixture} from './liftFromTrigger.fixture';
@@ -607,12 +607,12 @@ test('a tap while the row and the menu grow reaches nothing; one on the backdrop
     window.__lift.lift('row2', 0.8);
     window.__lift.presentMenu({x: 180, y: 330});
   });
-  await page.mouse.click(180, 700);
+  await page.touchscreen.tap(180, 700);
   const growing = await page.evaluate(() => ({...window.__lift.log}));
   expect(growing.backdropTaps).toBe(0);
   expect(growing.clicks).not.toContain('page');
   await page.waitForTimeout(2000);
-  await page.mouse.click(180, 700);
+  await page.touchscreen.tap(180, 700);
   const settled = await page.evaluate(() => ({...window.__lift.log}));
   expect(settled.backdropTaps).toBe(1);
   expect(settled.clicks).not.toContain('page');
