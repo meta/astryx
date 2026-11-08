@@ -74,4 +74,16 @@ describe('unknown template suggestions', () => {
     },
     SLOW,
   );
+
+  it(
+    'keeps a template that carries every typed word ahead of its near-name siblings',
+    async () => {
+      // DragToSnapPointsCard carries drag, snap, point and card, and is also
+      // two slips from the typed name; it keeps its full-match rank.
+      expect((await suggested('drag-snap-point-card'))[0]).toBe(
+        'DragToSnapPointsCard',
+      );
+    },
+    SLOW,
+  );
 });

@@ -79,10 +79,8 @@ function affinityOf(typed, name, {typos = false} = {}) {
   const typedJoined = typed.join('');
   const joined = words.join('');
   if (joined === typedJoined) return 40;
-  if (typos) {
-    const slips = nearNameSlips(typedJoined, joined);
-    if (slips > 0) return NEAR_NAME_SCORE - slips * 0.2;
-  }
+  const slips = typos ? nearNameSlips(typedJoined, joined) : 0;
+  const near = slips > 0 ? NEAR_NAME_SCORE - slips * 0.2 : 0;
   const have = new Set(words);
   const want = new Set(typed);
   const covered = typed.filter(w => have.has(w)).length / typed.length;
@@ -90,7 +88,12 @@ function affinityOf(typed, name, {typos = false} = {}) {
   const prefix =
     joined.startsWith(typedJoined) || typedJoined.startsWith(joined) ? 1 : 0;
   const tier = covered === 1 ? 2 : covered > 0 ? 1 : 0;
-  return tier * 10 + covered * 4 + precise * 2 + prefix + precise * 0.01;
+  // A near name keeps its word score when that is higher: a name that also
+  // carries every typed word ranks among the other full matches.
+  return Math.max(
+    near,
+    tier * 10 + covered * 4 + precise * 2 + prefix + precise * 0.01,
+  );
 }
 
 /**
@@ -106,39 +109,8 @@ function nearNameSlips(typed, name) {
   const shorter = Math.min(typed.length, name.length);
   const cap = shorter >= 8 ? 2 : shorter >= 5 ? 1 : 0;
   if (cap === 0 || Math.abs(typed.length - name.length) > cap) return 0;
-  const slips = slipsBetween(typed, name, cap);
+  const slips = levenshteinDistance(typed, name, cap, {swaps: true});
   return slips <= cap ? slips : 0;
-}
-
-/**
- * The optimal-string-alignment distance between two strings, or `cap + 1` once
- * it is past `cap`: an insertion, a deletion, a substitution or two adjacent
- * letters swapped each cost one.
- * @param {string} a
- * @param {string} b
- * @param {number} cap
- * @returns {number}
- */
-function slipsBetween(a, b, cap) {
-  let before = new Array(b.length + 1).fill(0);
-  let prev = Array.from({length: b.length + 1}, (_, j) => j);
-  for (let i = 1; i <= a.length; i++) {
-    const cur = [i];
-    let rowMin = i;
-    for (let j = 1; j <= b.length; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      let v = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
-      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
-        v = Math.min(v, before[j - 2] + 1);
-      }
-      cur[j] = v;
-      rowMin = Math.min(rowMin, v);
-    }
-    if (rowMin > cap) return cap + 1;
-    before = prev;
-    prev = cur;
-  }
-  return prev[b.length];
 }
 
 /**
