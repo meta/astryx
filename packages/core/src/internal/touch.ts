@@ -112,4 +112,8 @@ export {isCoarsePointer} from '../utils/coarsePointer';
 export {animatorFor} from '../motion/animator';
 export {reducedMotionFade} from '../motion/reducedMotion';
 export {useTouchHitArea} from '../utils/touchHitArea';
-export {touchHitAreaStyles} from '../utils/touchHitArea.stylex';
+export {touchHitAreaStyles} from './touchHitArea.stylex';
+
+// Lab's TabBar tracks its press with the shared action-group tracker.
+export {useActionGroupTracking} from '../hooks/useActionGroupTracking';
+export type {ActionGroupTrackingOptions} from '../hooks/useActionGroupTracking';

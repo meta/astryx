@@ -53,7 +53,7 @@ import {Button} from '../Button';
 import {Icon} from '../Icon';
 import {useLayer} from '../Layer';
 import {useAttachment} from '../hooks/useAttachment';
-import {useScrollOverflow} from '../hooks/useScrollOverflow';
+import {useShownScrollOverflow} from '../hooks/useScrollOverflow';
 import {isRtlElement} from '../hooks/isRtlElement';
 import type {BaseProps} from '../BaseProps';
 import {mergeProps, rtlStyles} from '../utils';
@@ -65,6 +65,7 @@ import {
   attachSnapPaging,
   isSnapPaging,
   moveHeldSnapPaging,
+  moveSnapPaging,
   nearestStop,
   type SnapPaging,
   snapStops,
@@ -328,6 +329,20 @@ const paddingStyles = stylex.create({
 });
 
 /**
+ * Runs one of Carousel's own calls into the paging: a scroll call or the
+ * detach. Such a call can run inside React's commit, so a report it raises
+ * takes React's scheduling.
+ */
+function ownCall<T>(depth: {current: number}, run: () => T): T {
+  depth.current += 1;
+  try {
+    return run();
+  } finally {
+    depth.current -= 1;
+  }
+}
+
+/**
  * Where an edge press under snap paging goes from offset `at`: about one view
  * on, to the nearest stop and at least one stop on. With `wraps`, a press past
  * an edge goes to the opposite edge.
@@ -401,6 +416,7 @@ export function Carousel({
   const t = useComponentTranslator();
   const ariaLabel = ariaLabelFromProps ?? t('@astryx.carousel.label');
   const scrollElRef = useRef<HTMLElement | null>(null);
+  const runningOwnCallsRef = useRef(0);
   const startButtonRef = useRef<HTMLButtonElement>(null);
   const endButtonRef = useRef<HTMLButtonElement>(null);
   // Which nav button last held focus, and what the overflow state was on the
@@ -408,8 +424,8 @@ export function Carousel({
   // transition it is allowed to act on.
   const focusedNavRef = useRef<'start' | 'end' | null>(null);
   const prevCanScrollRef = useRef<{start: boolean; end: boolean} | null>(null);
-  const {scrollRef, overflowStart, overflowEnd, hasOverflow} =
-    useScrollOverflow();
+  const {scrollRef, followShown, overflowStart, overflowEnd, hasOverflow} =
+    useShownScrollOverflow();
 
   // Children.toArray drops null/undefined/boolean children and assigns
   // stable keys, so slide numbering ("Slide N of M") matches what actually
@@ -447,12 +463,18 @@ export function Carousel({
     setAttachedPaging(snapPaging);
   }
   // Attaches snap paging to the scroll area, and follows a replaced one.
+  // While the paging holds the row, the edges follow the row as shown.
   useAttachment(
     scrollElRef,
-    scroller =>
-      attachedPaging == null
-        ? () => {}
-        : attachSnapPaging(attachedPaging, scroller),
+    scroller => {
+      if (attachedPaging == null) {
+        return () => {};
+      }
+      const detach = attachSnapPaging(attachedPaging, scroller, held =>
+        followShown(held, runningOwnCallsRef.current === 0),
+      );
+      return () => ownCall(runningOwnCallsRef, detach);
+    },
     attachedPaging,
   );
   // React's wheel listener is passive, so it can't stop the browser's own
@@ -506,10 +528,13 @@ export function Carousel({
       if (!el) {
         return;
       }
-      // While a flick's drag or settle holds the row, the paging moves it.
+      // Under snap paging the paging moves the row, held or at rest. A touch
+      // then catches the move, and the release rests on a page.
       if (
-        moveHeldSnapPaging(el, (at, end) =>
-          pagingStep(el, at, end, direction, hasLoop && hasOverflow),
+        ownCall(runningOwnCallsRef, () =>
+          moveSnapPaging(el, (at, end) =>
+            pagingStep(el, at, end, direction, hasLoop && hasOverflow),
+          ),
         )
       ) {
         return;
@@ -589,8 +614,17 @@ export function Carousel({
     const delta = isRtlElement(el)
       ? itemRect.right - containerRect.right
       : itemRect.left - containerRect.left;
+    // Under snap paging the row goes to the item's stop, inside the scroll
+    // padding, so the hand-back's snap does not pull it back.
     if (
-      moveHeldSnapPaging(el, at => at + (isRtlElement(el) ? -delta : delta))
+      ownCall(runningOwnCallsRef, () =>
+        moveSnapPaging(el, (at, end) =>
+          nearestStop(
+            snapStops(el, at, end),
+            at + (isRtlElement(el) ? -delta : delta),
+          ),
+        ),
+      )
     ) {
       return;
     }
@@ -771,6 +805,9 @@ export function Carousel({
         layer.render(
           <>
             <div
+              // A hidden button is never a Tab stop or in the a11y tree. Its
+              // disabled state alone would keep it focusable.
+              inert={!canScrollStart || undefined}
               {...stylex.props(
                 styles.buttonPill,
                 styles.buttonPillStart,
@@ -790,18 +827,18 @@ export function Carousel({
                 size="sm"
                 isIconOnly
                 // Disabled when there's nothing to scroll toward. Keeps the
-                // button mounted (stable layout) but removes it from the tab
-                // order and a11y tree while it's visually hidden, so keyboard
-                // users don't land on an invisible control. The Effect above
-                // hands focus to the scroll area when the state behind this
-                // one flips it disabled.
+                // button mounted (stable layout). The Effect above hands focus
+                // to the scroll area when the state behind this one flips it
+                // disabled.
                 isDisabled={!canScrollStart}
                 onFocus={() => {
                   focusedNavRef.current = 'start';
                 }}
                 onBlur={event => {
                   // A disabled button was blurred by the commit, not the person.
-                  if (!event.currentTarget.disabled) {
+                  if (
+                    event.currentTarget.getAttribute('aria-disabled') !== 'true'
+                  ) {
                     focusedNavRef.current = null;
                   }
                 }}
@@ -810,6 +847,9 @@ export function Carousel({
               />
             </div>
             <div
+              // A hidden button is never a Tab stop or in the a11y tree. Its
+              // disabled state alone would keep it focusable.
+              inert={!canScrollEnd || undefined}
               {...stylex.props(
                 styles.buttonPill,
                 styles.buttonPillEnd,
@@ -829,14 +869,16 @@ export function Carousel({
                 size="sm"
                 isIconOnly
                 // See "Scroll left" — disabled while visually hidden so the
-                // button stays mounted but out of the tab order / a11y tree.
+                // button stays mounted.
                 isDisabled={!canScrollEnd}
                 onFocus={() => {
                   focusedNavRef.current = 'end';
                 }}
                 onBlur={event => {
                   // A disabled button was blurred by the commit, not the person.
-                  if (!event.currentTarget.disabled) {
+                  if (
+                    event.currentTarget.getAttribute('aria-disabled') !== 'true'
+                  ) {
                     focusedNavRef.current = null;
                   }
                 }}

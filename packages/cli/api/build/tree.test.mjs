@@ -120,7 +120,7 @@ const PINNED = [
       'TableGridDividersTable',
       'TableGroupedRowsTable',
       'TableShowcase',
-      'TableStripedTable',
+      'TableLeadingMarkSelection',
     ],
   ],
   [
@@ -150,7 +150,7 @@ const PINNED = [
       'CardWithInnerLayout',
       'ButtonVariants',
       'FormLayoutShowcase',
-      'FileInputBasic',
+      'FormLayoutMixedControls',
     ],
   ],
   [

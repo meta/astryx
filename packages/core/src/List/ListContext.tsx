@@ -14,7 +14,8 @@
  */
 
 import {use, useMemo, type ReactNode} from 'react';
-import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
+import type {AnimatedLayout} from '../hooks/useAnimatedLayout';
 
 export type ListDensity = 'compact' | 'balanced' | 'spacious';
 export type ListMarkerStyle = 'none' | 'disc' | 'decimal' | 'circle';
@@ -63,9 +64,25 @@ export interface ListContextValue {
    * on their List, so its text starts match RichText without a width threshold.
    */
   hasMarkerGutter?: boolean;
+  /**
+   * Whether a numbered item lays out outside the List's shared number
+   * columns, with its counter beside its own text as a bullet row has it; set
+   * by ListMarkerScope; internal. Markdown sets it on an item that reads
+   * against its list, so that item's text never widens the shared counter
+   * column for the other rows.
+   */
+  isOutsideNumberColumns?: boolean;
+  /**
+   * The list's `animatedLayout` handle, for its rows.
+   */
+  animatedLayout?: AnimatedLayout;
 }
 
-export const ListContext = createContext<ListContextValue | null>(null);
+export const ListContext = createLayerScopedContext<ListContextValue | null>(
+  'ListContext',
+  1,
+  null,
+);
 ListContext.displayName = 'ListContext';
 
 /**
@@ -73,25 +90,30 @@ ListContext.displayName = 'ListContext';
  * List's `listStyle` names, or `task`'s read-only checkbox in place of either;
  * internal, for Markdown's nested lists and task items in mixed lists. With
  * `hasMarkerGutter`, counters keep the ordinary marker column and may paint
- * outside it toward inline-start. Outside a List, or in a List without markers, it
- * changes nothing.
+ * outside it toward inline-start. With `isOutsideNumberColumns`, a numbered
+ * item keeps its counter beside its own text instead of in the shared column.
+ * Outside a List, or in a List without markers, it changes nothing.
  */
 export function ListMarkerScope({
   marker,
   task,
   hasMarkerGutter = false,
+  isOutsideNumberColumns = false,
   children,
 }: {
   readonly marker: ListMarker;
   readonly task?: ListTaskMarker;
   readonly hasMarkerGutter?: boolean;
+  readonly isOutsideNumberColumns?: boolean;
   readonly children: ReactNode;
 }): ReactNode {
   const context = use(ListContext);
   const value = useMemo(
     () =>
-      context == null ? null : {...context, marker, task, hasMarkerGutter},
-    [context, marker, task, hasMarkerGutter],
+      context == null
+        ? null
+        : {...context, marker, task, hasMarkerGutter, isOutsideNumberColumns},
+    [context, marker, task, hasMarkerGutter, isOutsideNumberColumns],
   );
   return value == null ? (
     children
