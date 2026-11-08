@@ -637,8 +637,9 @@ const groupStyles = stylex.create({
  * (WCAG 1.4.11). `ButtonText` is the platform's own button edge. `ghost` is
  * flat by design and keeps none.
  *
- * Each value is `null` outside forced colors, so no declaration exists there.
- * A grouped button gets only the longhands its group does not own: the group's
+ * Outside forced colors a standalone button keeps the base's borderless
+ * values, and a grouped button's longhands are `null`, so the group's own
+ * values stay. A grouped button gets only the longhands its group does not own: the group's
  * dividers stay where they are under both StyleX style resolutions, and the
  * group's first and last buttons close its outer edge.
  */
@@ -646,8 +647,9 @@ const FORCED_COLORS = '@media (forced-colors: active)';
 
 const forcedColorsEdge = stylex.create({
   standalone: {
-    borderWidth: {default: null, [FORCED_COLORS]: '1px'},
-    borderStyle: {default: null, [FORCED_COLORS]: 'solid'},
+    // Repeats the base's 0 and none: these keys replace the base's own.
+    borderWidth: {default: 0, [FORCED_COLORS]: '1px'},
+    borderStyle: {default: 'none', [FORCED_COLORS]: 'solid'},
     borderColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
   },
   groupHorizontal: {
@@ -939,15 +941,15 @@ export function Button({
     // by the ButtonGroup so the shared surface lifts as one unit.
     !buttonGroup && elevationStyles[elevation],
     width != null && dynamicStyles.width(width),
-    // AFTER the shared focus outline: the outline supplies width/style/offset
-    // for every variant, and `destructive` re-colors just the ring to match
-    // its own surface. Ordering is the mechanism — StyleX is last-wins.
     isSolidVariant &&
       (buttonGroup == null
         ? forcedColorsEdge.standalone
         : buttonGroup.orientation === 'horizontal'
           ? forcedColorsEdge.groupHorizontal
           : forcedColorsEdge.groupVertical),
+    // AFTER the shared focus outline: the outline supplies width/style/offset
+    // for every variant, and `destructive` re-colors just the ring to match
+    // its own surface. Ordering is the mechanism — StyleX is last-wins.
     variants[variant],
     xstyle,
   );

@@ -122,6 +122,7 @@ test.describe('Button outside forced colors', () => {
       const borders = await bordersOf(page, variant);
       for (const edge of Object.values(borders)) {
         expect(edge.width).toBe(0);
+        expect(edge.style).toBe('none');
       }
     });
   }
