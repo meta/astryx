@@ -186,6 +186,7 @@ export type TemplateCategory =
   | 'Content - Order Detail'
   | 'Content - Product Detail'
   | 'Content - Work Item Detail'
+  | 'Content - Course Detail'
   | 'Content - Product List'
   | 'Content - Documentation Catalog'
   | 'Content - Documentation Design'

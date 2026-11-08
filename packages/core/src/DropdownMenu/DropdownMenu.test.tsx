@@ -300,11 +300,12 @@ describe('DropdownMenu', () => {
     const heading = screen.getByRole('heading', {name: 'Project actions'});
     expect(heading).toHaveStyle({marginInlineStart: 'var(--spacing-3)'});
     // The menu's content element takes the sheet's content padding itself,
-    // with no wrapper: 16px above the first row, 4px at the sides.
+    // with no wrapper: nothing above the first row but the band the sheet
+    // keeps under its grab bar, 4px at the sides.
     const content = heading.closest('.astryx-dropdown-menu');
     expect(content?.parentElement?.closest('.astryx-section')).toBeNull();
     expect(content).toHaveStyle({
-      paddingTop: 'var(--spacing-4)',
+      paddingTop: '0px',
       paddingInline: 'var(--spacing-1)',
     });
     // The root heading stands alone, with no row wrapper.
@@ -2449,7 +2450,7 @@ describe('DropdownMenu keyboard access for menuitemradio/menuitemcheckbox (#3829
     ).toHaveFocus();
   });
 
-  it('typeahead skips an aria-disabled item and matches the next enabled label', async () => {
+  it('typeahead reaches an aria-disabled item, which stays discoverable', async () => {
     const user = userEvent.setup();
     render(
       <DropdownMenu button={{label: 'Sort'}}>
@@ -2466,21 +2467,14 @@ describe('DropdownMenu keyboard access for menuitemradio/menuitemcheckbox (#3829
     await user.click(screen.getByRole('button', {name: /Sort/}));
     // Anchor the search on 'Edit' so typeahead scans forward and meets the
     // disabled 'Newest' (also an 'n' match) before the enabled 'Nightly'.
-    // This pins the `:not([aria-disabled="true"])` in MENU_ITEM_SELECTOR: the
-    // menus never pass useTypeahead's `isDisabled` option, so that clause is
-    // the only thing keeping disabled rows out of the typeahead list. An
-    // arrow-key test cannot cover it — useListFocus re-filters disabled items
-    // independently, so arrow navigation is guarded twice over.
-    // The disabled row keeps tabIndex={-1} on purpose: it stays focusable, so
-    // the selector clause is the sole reason focus skips it.
     screen.getByRole('menuitem', {name: 'Edit', hidden: true}).focus();
     fireEvent.keyDown(screen.getByRole('menu', {hidden: true}), {key: 'n'});
     expect(
-      screen.getByRole('menuitemcheckbox', {name: 'Nightly', hidden: true}),
+      screen.getByRole('menuitemradio', {name: 'Newest', hidden: true}),
     ).toHaveFocus();
   });
 
-  it('skips aria-disabled menuitemradio and menuitemcheckbox items during arrow navigation', async () => {
+  it('reaches aria-disabled menuitemradio and menuitemcheckbox items during arrow navigation', async () => {
     const user = userEvent.setup();
     render(
       <DropdownMenu button={{label: 'Sort'}}>
@@ -2503,7 +2497,86 @@ describe('DropdownMenu keyboard access for menuitemradio/menuitemcheckbox (#3829
 
     fireEvent.keyDown(menu, {key: 'ArrowDown'});
     expect(
-      screen.getByRole('menuitemradio', {name: 'Oldest', hidden: true}),
+      screen.getByRole('menuitemradio', {name: 'Newest', hidden: true}),
+    ).toHaveFocus();
+    fireEvent.keyDown(menu, {key: 'ArrowDown'});
+    expect(
+      screen.getByRole('menuitemcheckbox', {name: 'Archived', hidden: true}),
+    ).toHaveFocus();
+  });
+
+  it("a disabled row keeps a mouse press's focus off and still runs the caller's onMouseDown", async () => {
+    const user = userEvent.setup();
+    const onMouseDown = vi.fn();
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuItem label="Edit" onClick={() => {}} />
+        <DropdownMenuItem
+          label="Delete"
+          isDisabled
+          onClick={() => {}}
+          onMouseDown={onMouseDown}
+        />
+      </DropdownMenu>,
+    );
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    const del = screen.getByRole('menuitem', {name: 'Delete', hidden: true});
+    expect(fireEvent.mouseDown(del)).toBe(false);
+    expect(onMouseDown).toHaveBeenCalledOnce();
+  });
+
+  it('a disabled row takes focus from the keys, stays inert, and leaves the menu open', async () => {
+    const user = userEvent.setup();
+    const onDelete = vi.fn();
+    render(
+      <DropdownMenu
+        button={{label: 'Actions'}}
+        items={[
+          {label: 'Edit'},
+          {
+            label: 'Delete',
+            isDisabled: true,
+            description: 'Only the owner can delete',
+            onClick: onDelete,
+          },
+          {label: 'Print'},
+        ]}
+      />,
+    );
+
+    screen.getByRole('button', {name: /Actions/}).focus();
+    await user.keyboard('{Enter}');
+    const edit = screen.getByRole('menuitem', {name: 'Edit', hidden: true});
+    await waitFor(() => expect(edit).toHaveFocus());
+
+    const del = screen.getByRole('menuitem', {name: /Delete/, hidden: true});
+    expect(del).toHaveAttribute('aria-disabled', 'true');
+    expect(del).toHaveAttribute('tabindex', '-1');
+    await user.keyboard('{ArrowDown}');
+    expect(del).toHaveFocus();
+    await user.keyboard('{Enter}');
+    await user.keyboard(' ');
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', {name: /Actions/})).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(del).toHaveFocus();
+
+    // A mouse press on the disabled row does not focus or light it.
+    fireEvent.keyDown(screen.getByRole('menu', {hidden: true}), {
+      key: 'Home',
+    });
+    expect(fireEvent.mouseDown(del)).toBe(false);
+    expect(fireEvent.mouseDown(edit)).toBe(true);
+
+    // End and Home move to the first and last rows, as from any row.
+    const menu = screen.getByRole('menu', {hidden: true});
+    fireEvent.keyDown(menu, {key: 'Home'});
+    expect(edit).toHaveFocus();
+    fireEvent.keyDown(menu, {key: 'End'});
+    expect(
+      screen.getByRole('menuitem', {name: 'Print', hidden: true}),
     ).toHaveFocus();
   });
 
@@ -2602,6 +2675,10 @@ describe('DropdownMenu keyboard access for menuitemradio/menuitemcheckbox (#3829
 describe('DropdownMenu open focus follows input modality (#4477)', () => {
   const items = [{label: 'Edit'}, {label: 'Duplicate'}, {label: 'Delete'}];
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('pointer open focuses the menu container, not the first item (items mode)', async () => {
     const user = userEvent.setup();
     render(<DropdownMenu button={{label: 'Actions'}} items={items} />);
@@ -2634,6 +2711,71 @@ describe('DropdownMenu open focus follows input modality (#4477)', () => {
     ).not.toHaveFocus();
   });
 
+  it('a row the pointer lit before the open frame keeps focus after a pointer open', async () => {
+    // The open's frame waits until the test runs it, as on a loaded page
+    // where the pointer reaches a row first.
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const user = userEvent.setup();
+    render(<DropdownMenu button={{label: 'Actions'}} items={items} />);
+
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    const edit = screen.getByRole('menuitem', {name: 'Edit', hidden: true});
+    fireEvent.pointerMove(edit, {pointerType: 'mouse'});
+    expect(edit).toHaveFocus();
+    act(() => {
+      for (const callback of frames.splice(0)) {
+        callback(performance.now());
+      }
+    });
+
+    expect(edit).toHaveFocus();
+  });
+
+  it('a pointer open with no row lit before the open frame still focuses the menu container', async () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const user = userEvent.setup();
+    render(<DropdownMenu button={{label: 'Actions'}} items={items} />);
+
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    act(() => {
+      for (const callback of frames.splice(0)) {
+        callback(performance.now());
+      }
+    });
+
+    expect(screen.getByRole('menu', {hidden: true})).toHaveFocus();
+  });
+
+  it('a keyboard open via Space still focuses the first enabled item when its frame runs', async () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const user = userEvent.setup();
+    render(<DropdownMenu button={{label: 'Actions'}} items={items} />);
+
+    screen.getByRole('button', {name: /Actions/}).focus();
+    await user.keyboard(' ');
+    act(() => {
+      for (const callback of frames.splice(0)) {
+        callback(performance.now());
+      }
+    });
+
+    expect(
+      screen.getByRole('menuitem', {name: 'Edit', hidden: true}),
+    ).toHaveFocus();
+  });
+
   it('first ArrowDown after a pointer open moves focus to the first enabled item', async () => {
     const user = userEvent.setup();
     render(<DropdownMenu button={{label: 'Actions'}} items={items} />);
@@ -2648,7 +2790,7 @@ describe('DropdownMenu open focus follows input modality (#4477)', () => {
     ).toHaveFocus();
   });
 
-  it('ArrowDown after a pointer open skips a disabled leading item', async () => {
+  it('ArrowDown after a pointer open reaches a disabled leading item', async () => {
     const user = userEvent.setup();
     render(
       <DropdownMenu
@@ -2663,7 +2805,7 @@ describe('DropdownMenu open focus follows input modality (#4477)', () => {
 
     fireEvent.keyDown(menu, {key: 'ArrowDown'});
     expect(
-      screen.getByRole('menuitem', {name: 'Delete', hidden: true}),
+      screen.getByRole('menuitem', {name: 'Edit', hidden: true}),
     ).toHaveFocus();
   });
 
@@ -2969,8 +3111,9 @@ describe('DropdownMenu entrance under a finger', () => {
   }
 
   /**
-   * Gives each popover a running entrance (Web Animations' `getAnimations()`,
-   * which jsdom lacks) whose end the test decides.
+   * Gives each popover's surface, the layer's first child where the entrance
+   * plays, a running entrance. Its end is the test's to decide, since jsdom
+   * lacks Web Animations' `getAnimations()`.
    */
   function stubEntrance() {
     let end = () => {};
@@ -2985,7 +3128,11 @@ describe('DropdownMenu entrance under a finger', () => {
     Object.defineProperty(Element.prototype, 'getAnimations', {
       configurable: true,
       value(this: Element) {
-        return this.matches('[popover]') ? [entrance] : [];
+        const layer = this.parentElement;
+        return layer?.matches('[popover]') === true &&
+          layer.firstElementChild === this
+          ? [entrance]
+          : [];
       },
     });
     return {

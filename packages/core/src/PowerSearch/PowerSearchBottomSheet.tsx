@@ -395,11 +395,18 @@ const styles = stylex.create({
     display: 'flex',
     flexDirection: 'column',
     gap: spacingVars['--spacing-3'],
-    // Clears the sheet's floating grab handle.
-    paddingBlockStart: spacingVars['--spacing-6'],
     paddingBlockEnd: spacingVars['--spacing-3'],
     paddingInline: spacingVars['--spacing-4'],
     backgroundColor: colorVars['--color-background-surface'],
+  },
+  // The value sheet scrolls its whole content, so its sticky header can reach
+  // the sheet's top. The header rises into the band that the sheet keeps
+  // under its grab bar and keeps its own padding there, so it clears the bar
+  // at rest and while stuck. The Filters and Add filter sheets do not scroll
+  // their header, and the band alone clears the bar.
+  headerScrollsToTop: {
+    marginBlockStart: `calc(-1 * ${spacingVars['--spacing-6']})`,
+    paddingBlockStart: spacingVars['--spacing-6'],
   },
   headerRow: {
     display: 'flex',
@@ -2548,7 +2555,7 @@ export function PowerSearchBottomSheet({
         padding={0}
         purpose="info">
         <div {...stylex.props(styles.sheet)}>
-          <div {...stylex.props(styles.header)}>
+          <div {...stylex.props(styles.header, styles.headerScrollsToTop)}>
             <div {...stylex.props(styles.headerRow)}>
               <div {...stylex.props(styles.headerText)}>
                 <Heading level={3} maxLines={1}>

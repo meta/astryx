@@ -24,13 +24,13 @@ import {
 } from '@astryxdesign/a11y-spec/playwright';
 import {
   animationStoryboard,
+  armHold,
   drag,
   frames,
   openStory,
   releaseAnimations,
   touchDriver,
   waitForRest,
-  watchAnimations,
   withStorybook,
 } from '@astryxdesign/interaction-harness';
 
@@ -59,27 +59,67 @@ async function settleAt(page: Page, screen: string, top: number) {
   return presentedOpacity(veil(page, screen));
 }
 
+// A report that never comes leaves the finger down for about a second.
+const REPORT_FRAMES = 60;
+
 /**
  * Scrolls a screen while a finger rests on its content, and lifts the finger
- * two frames later, after the observer has reported. The gesture host reads
- * the scroll as the finger's, so the veil fades.
+ * once the observer has reported: the veil then animates or changes. The
+ * gesture host reads the scroll as the finger's, so the veil fades. The scroll
+ * ends under the resting finger, so a lift before a late report would make
+ * the scroll the program's. A page starved of frames reports late. Resolves
+ * with the frames from the scroll to the veil's first change, or null when it
+ * did not change within REPORT_FRAMES.
  */
-async function fingerScrollTo(page: Page, screen: string, top: number) {
-  await scroller(page, screen).evaluate((element, y) => {
-    const target = element.lastElementChild ?? element;
-    const touch = {identifier: 7, clientX: 100, clientY: 400, target};
-    const fire = (type: string, touches: (typeof touch)[]) => {
-      const event = new Event(type, {bubbles: true, cancelable: true});
-      Object.defineProperty(event, 'changedTouches', {value: [touch]});
-      Object.defineProperty(event, 'touches', {value: touches});
-      target.dispatchEvent(event);
-    };
-    fire('touchstart', [touch]);
-    element.scrollTop = y;
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => fire('touchend', [])),
-    );
-  }, top);
+async function fingerScrollTo(
+  page: Page,
+  screen: string,
+  top: number,
+): Promise<number | null> {
+  return scroller(page, screen).evaluate(
+    (element, {y, maxFrames}) =>
+      new Promise<number | null>(resolve => {
+        const target = element.lastElementChild ?? element;
+        const touch = {identifier: 7, clientX: 100, clientY: 400, target};
+        const fire = (type: string, touches: (typeof touch)[]) => {
+          const event = new Event(type, {bubbles: true, cancelable: true});
+          Object.defineProperty(event, 'changedTouches', {value: [touch]});
+          Object.defineProperty(event, 'touches', {value: touches});
+          target.dispatchEvent(event);
+        };
+        const layer = element.parentElement?.querySelector(
+          ':scope > [data-navigation-scroll-edge]',
+        );
+        const animationsBefore = new Set(layer?.getAnimations() ?? []);
+        const opacityBefore =
+          layer == null ? null : getComputedStyle(layer).opacity;
+        fire('touchstart', [touch]);
+        element.scrollTop = y;
+        let frames = 0;
+        const liftAfter = (changedAt: number | null) => () => {
+          fire('touchend', []);
+          resolve(changedAt);
+        };
+        const check = () => {
+          frames += 1;
+          const changed =
+            layer == null ||
+            layer
+              .getAnimations()
+              .some(animation => !animationsBefore.has(animation)) ||
+            getComputedStyle(layer).opacity !== opacityBefore;
+          if (changed) {
+            requestAnimationFrame(liftAfter(frames));
+          } else if (frames >= maxFrames) {
+            requestAnimationFrame(liftAfter(null));
+          } else {
+            requestAnimationFrame(check);
+          }
+        };
+        requestAnimationFrame(check);
+      }),
+    {y: top, maxFrames: REPORT_FRAMES},
+  );
 }
 
 async function openStack(page: Page, story = STORY) {
@@ -253,6 +293,116 @@ test('a finger scrolling the screen fades the veil in', async ({
   expect(await presentedOpacity(veil(page, 'root'))).toBe(1);
 });
 
+/**
+ * Holds the page's IntersectionObserver reports from `holdObserverReports()`
+ * until the finger's scroll has ended. That is after the `scrollend` that
+ * follows the lift, or after the lift when the scroll ended under the resting
+ * finger. A busy page runs a report that late. Each entry keeps its own
+ * `time`. `releasedReports` counts the reports held, so a test can see the
+ * hold.
+ */
+async function holdReportsPastTheScroll(page: Page) {
+  await page.addInitScript(() => {
+    const Observer = window.IntersectionObserver;
+    const held: Array<() => void> = [];
+    let isHolding = false;
+    let isLifted = false;
+    let hasScrollEnded = false;
+    const release = () => {
+      isHolding = false;
+      // After the gesture host and the finger-scroll watch hear the event.
+      setTimeout(() => {
+        const runs = held.splice(0);
+        Object.assign(window, {releasedReports: runs.length});
+        for (const run of runs) {
+          run();
+        }
+      });
+    };
+    Object.assign(window, {
+      releasedReports: 0,
+      holdObserverReports: () => {
+        isHolding = true;
+        isLifted = false;
+        hasScrollEnded = false;
+      },
+    });
+    document.addEventListener(
+      'touchend',
+      () => {
+        if (isHolding) {
+          isLifted = true;
+          if (hasScrollEnded) {
+            release();
+          }
+        }
+      },
+      true,
+    );
+    document.addEventListener(
+      'scrollend',
+      () => {
+        if (isHolding) {
+          hasScrollEnded = true;
+          if (isLifted) {
+            release();
+          }
+        }
+      },
+      true,
+    );
+    window.IntersectionObserver = class extends Observer {
+      constructor(
+        callback: IntersectionObserverCallback,
+        options?: IntersectionObserverInit,
+      ) {
+        super((entries, observer) => {
+          if (isHolding) {
+            held.push(() => callback(entries, observer));
+          } else {
+            callback(entries, observer);
+          }
+        }, options);
+      }
+    };
+  });
+}
+
+test('a finger’s scroll fades the veil even when its report runs after the scroll ended', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'native scrolling from injected touches is Chromium-only (harness README)',
+  );
+  await holdReportsPastTheScroll(page);
+  await openStack(page);
+  const layer = veil(page, 'root');
+  const hold = await armHold(page, layer, {
+    judges: {target: layer, property: 'opacity'},
+    newOnly: true,
+  });
+  const driver = await touchDriver(page);
+  await page.evaluate(() =>
+    (
+      window as unknown as {holdObserverReports: () => void}
+    ).holdObserverReports(),
+  );
+  await driver.play(
+    drag({x: 200, y: 560}, {x: 200, y: 460}, {durationMs: 300, restMs: 450}),
+  );
+  // A switch at once runs no animation, so the hold finds none.
+  await hold.held();
+  expect(
+    await page.evaluate(
+      () => (window as unknown as {releasedReports: number}).releasedReports,
+    ),
+  ).toBeGreaterThan(0);
+  await releaseAnimations(page, {finish: true});
+  expect(await presentedOpacity(layer)).toBe(1);
+});
+
 test('the veil and its sentinel are hidden from assistive technology', async ({
   page,
 }) => {
@@ -311,14 +461,21 @@ test(
     const layer = veil(page, 'root');
     const viewport = page.viewportSize() ?? {width: 402, height: 714};
     const clip = {x: 0, y: 0, width: viewport.width, height: 120};
-    const watch = await watchAnimations(layer);
-    await fingerScrollTo(page, 'root', 120);
-    await watch.started();
+    const hold = await armHold(page, layer, {
+      judges: {target: layer, property: 'opacity'},
+      newOnly: true,
+    });
+    const reportFrames = await fingerScrollTo(page, 'root', 120);
+    // How long the finger rested: a slow reaction to the scroll shows here.
+    testInfo.annotations.push({
+      type: 'veil report frames',
+      description: String(reportFrames),
+    });
+    const held = await hold.held();
     const {storyboard} = await animationStoryboard(page, {
+      held,
       name: 'navigation-stack-scroll-edge-appear',
       clip,
-      scope: layer,
-      judges: {target: layer, property: 'opacity'},
       measure: async () => ({opacity: await presentedOpacity(layer)}),
       columns: 6,
       cellScale: 0.5,
