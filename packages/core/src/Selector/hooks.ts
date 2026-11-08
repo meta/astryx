@@ -376,12 +376,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
     return selectableItems.findIndex(item => item.value === value);
   }, [selectableItems, value]);
 
-  /**
-   * The option the list highlights when it opens: the selected option, else
-   * the first enabled option (the last when opening with ArrowUp), and none
-   * when no option is enabled. A disabled option is never highlighted
-   * (component:Selector FR8).
-   */
+  /** Opening never lands on a disabled option. */
   const findOpeningIndex = useCallback(
     (fromEnd: boolean) => {
       const selectedIndex = findSelectedIndex();
