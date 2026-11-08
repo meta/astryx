@@ -18,6 +18,7 @@ import {render, screen} from '@testing-library/react';
 import {Table} from '../../Table';
 import {useTableStickyColumns} from './useTableStickyColumns';
 import {useTableColumnResize} from '../columnResize/useTableColumnResize';
+import {useTableRowIndex} from '../rowIndex/useTableRowIndex';
 import {pixel, proportional} from '../../columnUtils';
 import type {TableColumn} from '../../types';
 
@@ -68,6 +69,30 @@ describe('useTableStickyColumns', () => {
     }
     render(<Harness />);
     expect(getHeader('Name').style.insetInlineStart).toBe('0px');
+  });
+
+  it("adds a row-number column's windowed extra width to the pinned offsets after it", () => {
+    function Harness() {
+      const rowIndex = useTableRowIndex<Row>();
+      const sticky = useTableStickyColumns<Row>({startKeys: ['name']});
+      return (
+        <Table
+          data={data}
+          columns={columns}
+          idKey="id"
+          plugins={{rowIndex, stickyColumns: sticky}}
+        />
+      );
+    }
+    render(<Harness />);
+    // The number column comes first, so Name sits after its 48px floor plus
+    // whatever extra width a windowed table gives it (none here).
+    expect(getHeader('Name').getAttribute('style')).toContain(
+      'calc(48px + var(--_table-logical-extra-0, 0px))',
+    );
+    expect(screen.getByRole('table').getAttribute('style') ?? '').not.toContain(
+      '--_table-logical-extra',
+    );
   });
 
   it('computes cumulative start offsets for contiguous pinned columns', () => {

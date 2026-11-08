@@ -2536,7 +2536,7 @@ jobs:
           delete-merged: true
 
   # How many legs each interaction lane starts. It counts each lane the way
-  # its legs do (same scope, planner and recorded times, at most six legs),
+  # its legs do (same scope, planner and recorded times, at most ten legs),
   # so a lane starts only the legs that have a share. A leg fails when its
   # own count needs more legs than started.
   interaction-legs:
@@ -2625,7 +2625,7 @@ jobs:
             --key interaction-chromium --fallback-key interaction-webkit \
             --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
             --setup-seconds 90 --max-seconds 600 \
-            --leg 1 --max-legs 6
+            --leg 1 --max-legs 10
 
       - name: Count the WebKit legs
         id: count-webkit
@@ -2660,11 +2660,11 @@ jobs:
             --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
             "${CHANGED[@]}" \
             --setup-seconds 90 --max-seconds 600 \
-            --leg 1 --max-legs 6 \
+            --leg 1 --max-legs 10 \
             -- "${SELECTED[@]}"
 
       # The matrix each lane starts: its counted legs, one leg (which skips)
-      # outside its scope or with nothing to run, and all six when its count
+      # outside its scope or with nothing to run, and all ten when its count
       # failed, so each leg decides for itself as before.
       - name: Name each lane's legs
         id: matrix
@@ -2679,9 +2679,9 @@ jobs:
             case "$outcome" in
               success) [ "${count:-0}" -ge 1 ] 2>/dev/null || count=1 ;;
               skipped) count=1 ;;
-              *) count=6 ;;
+              *) count=10 ;;
             esac
-            [ "$count" -le 6 ] || count=6
+            [ "$count" -le 10 ] || count=10
             local list=1 leg
             for ((leg = 2; leg <= count; leg++)); do list="$list, $leg"; done
             printf '[%s]' "$list"
@@ -2691,7 +2691,7 @@ jobs:
           for lane in "Chromium:$CHROMIUM_OUTCOME" "WebKit:$WEBKIT_OUTCOME"; do
             case "${lane#*:}" in
               success | skipped) ;;
-              *) echo "::warning title=Leg count fell back to six::The ${lane%%:*} leg count failed, so its lane starts six legs that each decide for themselves." ;;
+              *) echo "::warning title=Leg count fell back to ten::The ${lane%%:*} leg count failed, so its lane starts ten legs that each decide for themselves." ;;
             esac
           done
           cat "$GITHUB_OUTPUT"
@@ -2705,12 +2705,12 @@ jobs:
     # (playwright-legs.mjs), as few legs as keep each leg's setup and proofs
     # within ten minutes, which leaves a third of the job's fifteen for a slow
     # runner or checkout; interaction-legs starts only those legs, at most
-    # six. `test` reads the job's result, which is success only when every
+    # ten. `test` reads the job's result, which is success only when every
     # leg passed.
     strategy:
       fail-fast: false
       matrix:
-        leg: ${{ fromJSON(needs.interaction-legs.outputs.chromium || '[1, 2, 3, 4, 5, 6]') }}
+        leg: ${{ fromJSON(needs.interaction-legs.outputs.chromium || '[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -2786,7 +2786,7 @@ jobs:
             --key interaction-chromium --fallback-key interaction-webkit \
             --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
             --setup-seconds 90 --max-seconds 600 \
-            --leg ${{ matrix.leg }} --max-legs 6
+            --leg ${{ matrix.leg }} --max-legs 10
 
       - name: Require a leg for every share
         if: steps.scope.outputs.applies == 'true' && fromJSON(steps.legs.outputs.count || '0') > strategy.job-total
@@ -2923,12 +2923,12 @@ jobs:
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true')) }}
     # Frame evidence measures timing: four cores, one Playwright worker.
     # The leg count plans as many legs as keep each one's setup and proofs
-    # within ten minutes, as the Chromium proofs' count does, at most six;
+    # within ten minutes, as the Chromium proofs' count does, at most ten;
     # interaction-legs starts only those legs.
     strategy:
       fail-fast: false
       matrix:
-        leg: ${{ fromJSON(needs.interaction-legs.outputs.webkit || '[1, 2, 3, 4, 5, 6]') }}
+        leg: ${{ fromJSON(needs.interaction-legs.outputs.webkit || '[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Playwright's own image for the version the lockfile resolves, with
@@ -3024,7 +3024,7 @@ jobs:
 
       # One leg runs every proof while its setup and the recorded times fit
       # ten minutes, which leaves a third of the job's limit for a slow
-      # runner. Past that the planner adds legs, up to the matrix, so a
+      # runner. Past that the planner adds legs, up to the ten-leg ceiling, so a
       # growing suite or a wide change does not reach the limit. Each leg decides the same way, before its
       # own setup, from the workflow's times and the changed files. The spec
       # files come from the merge commit's tree, which the scope checkout
@@ -3061,7 +3061,7 @@ jobs:
             --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
             "${CHANGED[@]}" \
             --setup-seconds 90 --max-seconds 600 \
-            --leg ${{ matrix.leg }} --max-legs 6 \
+            --leg ${{ matrix.leg }} --max-legs 10 \
             -- "${SELECTED[@]}"
 
       - name: Require a leg for every share
@@ -4468,10 +4468,21 @@ jobs:
         with:
           persist-credentials: false
 
+      # When the scope could not be decided (a diff GitHub truncates at 3,000
+      # files, say), everything is in scope: every file counts as changed, and
+      # the job runs every contract its budget fits and lists the rest.
+      - name: List every file when the scope is undecided
+        id: everything
+        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == '' && steps.scope.outputs.decided == 'false'
+        run: |
+          git ls-files > "$RUNNER_TEMP/every-file.txt"
+          echo "path=$RUNNER_TEMP/every-file.txt" >> "$GITHUB_OUTPUT"
+          echo "::notice title=Every contract in scope::The scope could not be decided, so every file counts as changed."
+
       # The changed-spec list and the folder rule both read this list. Without
       # it, a contract would not run and the job would still pass.
       - name: Require the changed-file list
-        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == ''
+        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == '' && steps.scope.outputs.decided != 'false'
         run: |
           echo "::error::The scope step could not list the changed files, so the contracts to run are unknown. Re-run the job."
           exit 1
@@ -4491,7 +4502,7 @@ jobs:
         id: touched
         if: steps.scope.outputs.applies == 'true'
         env:
-          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path || steps.everything.outputs.path }}
         run: |
           GITHUB_STEP_SUMMARY=/dev/null node .github/scripts/touched-components.mjs scope \
             --analysis analysis.json \
@@ -4587,7 +4598,7 @@ jobs:
           ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           WORKFLOW_SHA: ${{ github.sha }}
           SPECS_PATH: ${{ steps.specs.outputs.path }}
-          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path || steps.everything.outputs.path }}
           OWNERS: ${{ steps.touched.outputs.contract_owners }}
           FOLDERS: ${{ steps.touched.outputs.contract_folders }}
           A11Y_CONTRACT_WORKERS: 4
@@ -4685,9 +4696,12 @@ jobs:
           CHANGED_FILES: ${{ steps.scope.outputs.changed_files_path }}
           ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
+          TRUNCATED: ${{ steps.scope.outputs.truncated }}
         run: |
           if [ -n "$CHANGED_FILES" ]; then
             changes=(--changed "$CHANGED_FILES")
+          elif [ "$TRUNCATED" = true ]; then
+            changes=(--all --truncated)
           else
             changes=(--all)
           fi

@@ -54,6 +54,7 @@ import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {useSize} from '../SizeContext/SizeContext';
 import {useButtonGroup} from '../ButtonGroup/ButtonGroupContext';
 import {
+  PressGroupBandContext,
   PressGroupContext,
   pressGroupItemProps,
 } from '../hooks/pressGroupContext';
@@ -118,6 +119,7 @@ const styles = stylex.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacingVars['--spacing-2'],
+    paddingBlock: spacingVars['--spacing-2'],
     paddingInline: spacingVars['--spacing-3'],
     borderWidth: 0,
     borderStyle: 'none',
@@ -268,12 +270,13 @@ const dynamicStyles = stylex.create({
   width: (width: SizeValue | null) => ({width}),
 });
 
-// A label can outgrow the element size when the text size grows. The size is
-// a minimum, so the button grows and its label stays inside the tap target.
+// At the default text size one label line is shorter than the element size,
+// so a caller's height still replaces this one. A larger text size makes the
+// line taller, and the button grows with its label.
 const sizeStyles = stylex.create({
-  sm: {minHeight: sizeVars['--size-element-sm']},
-  md: {minHeight: sizeVars['--size-element-md']},
-  lg: {minHeight: sizeVars['--size-element-lg']},
+  sm: {height: `max(${sizeVars['--size-element-sm']}, 1lh)`},
+  md: {height: `max(${sizeVars['--size-element-md']}, 1lh)`},
+  lg: {height: `max(${sizeVars['--size-element-lg']}, 1lh)`},
 });
 
 // An icon-only button holds its glyph, which does not grow with the text, so
@@ -755,9 +758,10 @@ export function Button({
   const isBusyOnlyDisabled =
     !isTrueDisabled && isLoadingState && !isInterruptible;
   const buttonDisabled = isTrueDisabled || isBusyOnlyDisabled;
-  // The group draws one band for all its members.
-  // A disabled or busy-only button takes no tap.
-  const hasHitArea = buttonGroup == null && !buttonDisabled;
+  // The group draws one band for all its members: a ButtonGroup, or a
+  // tracking group that says so. A disabled or busy-only button takes no tap.
+  const groupDrawsBand = use(PressGroupBandContext);
+  const hasHitArea = buttonGroup == null && !groupDrawsBand && !buttonDisabled;
   const hitAreaRef = useTouchHitArea(hasHitArea, use(ButtonHitAreaContext));
   // isIconOnly prop is the source of truth for icon-only rendering.
   // When false (default), label is always rendered as visible text.
