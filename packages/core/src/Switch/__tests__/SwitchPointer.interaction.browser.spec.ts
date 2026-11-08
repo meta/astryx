@@ -14,7 +14,12 @@
  *   touch presentation under a finger.
  */
 
-import {expect, test, type Browser, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Browser,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   openStory,
   PEN_SKIP,

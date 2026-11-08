@@ -13,6 +13,7 @@ import userEvent from '@testing-library/user-event';
 import {useState} from 'react';
 import {CommandPalette} from './CommandPalette';
 import {CommandPaletteInput} from './CommandPaletteInput';
+import {getFocusableElements} from '../hooks/useFocusTrap';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {createStaticSource} from '@astryxdesign/core/Typeahead';
 import type {SearchSource, SearchableItem} from '@astryxdesign/core/Typeahead';
@@ -51,6 +52,25 @@ beforeEach(() => {
 });
 
 describe('CommandPalette', () => {
+  it('a closed palette adds no document pointermove listener', () => {
+    const addListener = vi.spyOn(document, 'addEventListener');
+    try {
+      render(
+        <CommandPalette
+          isOpen={false}
+          onOpenChange={() => {}}
+          searchSource={simpleSource}
+        />,
+      );
+      const moveListeners = addListener.mock.calls.filter(
+        ([type]) => type === 'pointermove',
+      );
+      expect(moveListeners).toEqual([]);
+    } finally {
+      addListener.mockRestore();
+    }
+  });
+
   it('renders when isOpen is true', () => {
     render(
       <CommandPalette
@@ -318,6 +338,42 @@ describe('CommandPalette', () => {
 
     expect(handleNestedDismiss).toHaveBeenCalledOnce();
     expect(handleOpenChange).not.toHaveBeenCalled();
+  });
+
+  it('an inline preview highlights its value again after a key and a cleared query', async () => {
+    const user = userEvent.setup();
+    render(
+      <CommandPalette
+        isOpen={true}
+        isInline
+        onOpenChange={() => {}}
+        searchSource={simpleSource}
+        value="settings"
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    const settingsId = async () =>
+      (await screen.findByRole('option', {name: 'Settings', hidden: true})).id;
+    await waitFor(async () => {
+      expect(input.getAttribute('aria-activedescendant')).toBe(
+        await settingsId(),
+      );
+    });
+    await user.click(input);
+    // Keys only from here: a press would end the keyboard's hold.
+    await user.keyboard('{ArrowDown}');
+    await user.keyboard('h');
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('option', {name: 'Settings', hidden: true}),
+      ).toBeNull();
+    });
+    await user.keyboard('{Backspace}');
+    await waitFor(async () => {
+      expect(input.getAttribute('aria-activedescendant')).toBe(
+        await settingsId(),
+      );
+    });
   });
 
   it('preserves local Escape closing for inline previews', () => {
@@ -860,5 +916,36 @@ describe('CommandPalette', () => {
       // its results are never counted aloud.
       expect(['', 'Loading']).toContain(politeRegion()?.textContent ?? '');
     });
+  });
+});
+
+// Tab from the last tabbable control wraps to the first and Shift+Tab from the
+// first wraps to the last, so focus never leaves the modal for the browser's
+// own UI.
+function expectTabWrapsInside(modal: HTMLElement) {
+  const tabbables = getFocusableElements(modal);
+  expect(tabbables.length).toBeGreaterThan(0);
+  const first = tabbables[0];
+  const last = tabbables[tabbables.length - 1];
+
+  last.focus();
+  expect(last).toHaveFocus();
+  expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+  expect(first).toHaveFocus();
+
+  expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(last).toHaveFocus();
+}
+
+describe('CommandPalette focus region (Dialog DEC-2)', () => {
+  it('keeps Tab inside the open palette', () => {
+    render(
+      <CommandPalette
+        isOpen
+        onOpenChange={() => {}}
+        searchSource={simpleSource}
+      />,
+    );
+    expectTabWrapsInside(document.querySelector('dialog') as HTMLElement);
   });
 });

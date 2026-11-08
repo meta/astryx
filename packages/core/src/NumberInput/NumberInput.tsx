@@ -4,8 +4,8 @@
 
 /**
  * @file NumberInput.tsx
- * @input Uses React, useId, useState, useMemo, useCallback, Field, Icon, InputGroupContext
- * @output Exports NumberInput component, NumberInputProps; optional steppers are hidden on coarse pointers
+ * @input Uses React, useId, useState, useMemo, useCallback, useEffect, Field, Icon, InputGroupContext
+ * @output Exports NumberInput component, NumberInputProps; optional steppers are hidden on coarse pointers, and a held one repeats into the draft
  * @position Core implementation; consumed by index.ts, tested by NumberInput.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -24,9 +24,12 @@ import {
   useState,
   useMemo,
   useCallback,
+  useEffect,
   useRef,
   type FocusEvent,
   type KeyboardEvent,
+  type MouseEvent,
+  type PointerEvent,
   type ReactNode,
 } from 'react';
 import {flushSync} from 'react-dom';
@@ -53,8 +56,10 @@ import {VisuallyHidden} from '../VisuallyHidden';
 import {useTooltip} from '../Tooltip';
 import {getInputARIA} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
+import {lockSelection, locksSelectionFor} from '../utils/selectionLock';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useSize} from '../SizeContext/SizeContext';
 import {useInputContainer} from '../hooks/useInputContainer';
@@ -402,6 +407,8 @@ interface NumberInputPropsBase extends Omit<
   /**
    * Whether to show increment and decrement buttons at the end of the input.
    * The buttons are hidden on coarse pointers (such as touch screens).
+   * Holding a button with a mouse or a pen repeats the step and commits once,
+   * when the hold ends.
    * Direct text entry and keyboard stepping remain available.
    * @default false
    */
@@ -458,6 +465,32 @@ export type NumberInputProps =
   NumberInputPropsNonClearable | NumberInputPropsClearable;
 
 type StepDirection = -1 | 1;
+
+/**
+ * A held stepper's timing: the first repeat comes `delayMs` after the press.
+ * Each later interval is `acceleration` times the one before, from
+ * `firstIntervalMs` down to `minIntervalMs`.
+ */
+const STEPPER_HOLD = {
+  delayMs: 500,
+  firstIntervalMs: 250,
+  acceleration: 0.9,
+  minIntervalMs: 50,
+} as const;
+
+/**
+ * A held stepper press: its pointer, its next repeat, the value its repeats
+ * reached, whether the field stopped taking them, and the release of its
+ * selection lock.
+ */
+type StepperHold = {
+  pointerId: number;
+  timer: ReturnType<typeof setTimeout> | null;
+  held: number | null;
+  intervalMs: number;
+  isFrozen: boolean;
+  unlockSelection: (() => void) | null;
+};
 
 function getDecimalPlaces(value: number): number {
   const [coefficient, exponentText] = String(value).toLowerCase().split('e');
@@ -624,6 +657,13 @@ export function NumberInput({
 
   // Pending input while user is typing (null = show formatted value)
   const [pendingInput, setPendingInput] = useState<string | null>(null);
+  // The value a held stepper's repeats reached, shown until the hold ends.
+  const [holdDraft, setHoldDraft] = useState<number | null>(null);
+  // A field that turns disabled or read-only drops the held value during
+  // render, so no commit shows a value that the release does not commit.
+  if (holdDraft !== null && (isDisabled || isReadOnly)) {
+    setHoldDraft(null);
+  }
   const [isFocused, setIsFocused] = useState(false);
 
   // Disabled-reason tooltip. The tooltip listeners attach to the input container (which already exists) and
@@ -633,13 +673,7 @@ export function NumberInput({
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   // A disabled field keeps its tab stop but, like a natively disabled one,
   // runs no caller event handler other than focus and blur (`spec:AST-085` FR2).
-  const fieldProps = isDisabled
-    ? Object.fromEntries(
-        Object.entries(rest).filter(
-          ([key]) => !/^on[A-Z]/.test(key) || /^on(Focus|Blur)/.test(key),
-        ),
-      )
-    : rest;
+  const fieldProps = withholdCallerHandlers(rest, isDisabled);
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
     // The container div is not naturally focusable; focusin bubbles up from
@@ -694,6 +728,9 @@ export function NumberInput({
   // Preserve pending text while editing. Otherwise show the formatted value
   // at rest and the raw numeric value while focused so it remains editable.
   const displayValue = useMemo(() => {
+    if (holdDraft !== null) {
+      return formatEditableNumber(holdDraft, locale);
+    }
     if (pendingInput !== null) {
       return pendingInput;
     }
@@ -701,15 +738,19 @@ export function NumberInput({
       return '';
     }
     return isFocused ? formatEditableNumber(value, locale) : formattedValue;
-  }, [formattedValue, isFocused, locale, pendingInput, value]);
+  }, [formattedValue, holdDraft, isFocused, locale, pendingInput, value]);
 
   // Check if current pending input is valid (for styling purposes)
   const isInputValid = useMemo(() => {
+    // A held value is a step on the grid, so it is always valid.
+    if (holdDraft !== null) {
+      return true;
+    }
     if (pendingInput === null || !pendingInput.trim()) {
       return true;
     }
     return parseInput(pendingInput) !== null;
-  }, [pendingInput, parseInput]);
+  }, [holdDraft, pendingInput, parseInput]);
 
   // Keep the whole text edit as a draft until an explicit commit boundary.
   const handleInputChange = useCallback(
@@ -855,6 +896,167 @@ export function NumberInput({
     [getNextValue, isDisabled, isReadOnly, onChange, value],
   );
 
+  // A held stepper repeats into its own draft and commits once, when the hold
+  // ends.
+  const stepperHoldRef = useRef<StepperHold | null>(null);
+  const isClickAfterHoldRef = useRef(false);
+  // The pointer of a repeated hold that another press cancelled. Its own
+  // release still swallows the click that follows.
+  const cancelledHoldPointerRef = useRef<number | null>(null);
+
+  // Ends a hold with no commit, and drops the draft its repeats wrote.
+  const cancelStepperHold = useCallback(() => {
+    const hold = stepperHoldRef.current;
+    if (hold == null) {
+      return;
+    }
+    stepperHoldRef.current = null;
+    cancelledHoldPointerRef.current = hold.held != null ? hold.pointerId : null;
+    if (hold.timer != null) {
+      clearTimeout(hold.timer);
+    }
+    hold.unlockSelection?.();
+    setHoldDraft(null);
+  }, []);
+
+  // Syncs the held stepper's repeat timer with the field's editability: a
+  // field that turns disabled or read-only stops the repeats, and the release
+  // commits nothing.
+  useEffect(() => {
+    const hold = stepperHoldRef.current;
+    if (hold == null || !(isDisabled || isReadOnly)) {
+      return;
+    }
+    hold.isFrozen = true;
+    if (hold.timer != null) {
+      clearTimeout(hold.timer);
+      hold.timer = null;
+    }
+  }, [isDisabled, isReadOnly]);
+
+  // The stepper column's removal or unmount ends the hold with no commit, as
+  // its buttons can no longer hear the release.
+  const stepperColumnRef = useCallback(
+    () => () => {
+      cancelStepperHold();
+    },
+    [cancelStepperHold],
+  );
+
+  const startStepperHold = (
+    direction: StepDirection,
+    canStep: boolean,
+    event: PointerEvent<HTMLButtonElement>,
+  ) => {
+    isClickAfterHoldRef.current = false;
+    if (cancelledHoldPointerRef.current === event.pointerId) {
+      cancelledHoldPointerRef.current = null;
+    }
+    // Any new press ends a running hold, whichever pointer made it.
+    cancelStepperHold();
+    // Steppers render only under a non-coarse primary pointer, so a hold is a
+    // mouse or pen press. A finger keeps the single step of its click.
+    if (
+      event.button !== 0 ||
+      event.pointerType === 'touch' ||
+      !canStep ||
+      isDisabled ||
+      isReadOnly
+    ) {
+      return;
+    }
+    const first = getNextValue(direction);
+    if (first == null) {
+      return;
+    }
+    // The release ends the hold wherever the pointer is by then.
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const grid = {direction, min, max, step, isIntegerOnly};
+    const hold: StepperHold = {
+      pointerId: event.pointerId,
+      timer: null,
+      held: null,
+      intervalMs: STEPPER_HOLD.firstIntervalMs,
+      isFrozen: false,
+      // A pen's hold starts no text selection or callout.
+      unlockSelection: locksSelectionFor(event.pointerType)
+        ? lockSelection([event.currentTarget], event.target)
+        : null,
+    };
+    const repeat = () => {
+      const next =
+        hold.held == null
+          ? first
+          : getSteppedValue({currentValue: hold.held, ...grid});
+      // At a bound the repeats stop, and the release still commits.
+      if (next == null || next === hold.held) {
+        hold.timer = null;
+        return;
+      }
+      hold.held = next;
+      setHoldDraft(next);
+      hold.timer = setTimeout(repeat, hold.intervalMs);
+      hold.intervalMs = Math.max(
+        STEPPER_HOLD.minIntervalMs,
+        hold.intervalMs * STEPPER_HOLD.acceleration,
+      );
+    };
+    hold.timer = setTimeout(repeat, STEPPER_HOLD.delayMs);
+    stepperHoldRef.current = hold;
+  };
+
+  const handleStepperContextMenu = (event: MouseEvent<HTMLButtonElement>) => {
+    const hold = stepperHoldRef.current;
+    if (hold == null) {
+      return;
+    }
+    // A pen's hold opens no callout menu. A mouse's context request, such as
+    // a Control-click, ends its hold with no commit and opens the menu.
+    if (hold.unlockSelection != null) {
+      event.preventDefault();
+      return;
+    }
+    cancelStepperHold();
+    // A click that follows the menu steps nothing, as after any ended hold.
+    cancelledHoldPointerRef.current = hold.pointerId;
+    isClickAfterHoldRef.current = true;
+  };
+
+  const endStepperHold = (end: 'release' | 'cancel', pointerId: number) => {
+    const hold = stepperHoldRef.current;
+    // Only the pointer that holds can end the hold.
+    if (hold == null || hold.pointerId !== pointerId) {
+      if (cancelledHoldPointerRef.current === pointerId) {
+        cancelledHoldPointerRef.current = null;
+        // Only arm the swallow here: a lost capture must not clear it.
+        if (end === 'release') {
+          isClickAfterHoldRef.current = true;
+        }
+      }
+      return;
+    }
+    stepperHoldRef.current = null;
+    if (hold.timer != null) {
+      clearTimeout(hold.timer);
+    }
+    hold.unlockSelection?.();
+    // A press released before its first repeat is a click, and its click
+    // steps.
+    if (hold.held == null) {
+      return;
+    }
+    isClickAfterHoldRef.current = end === 'release';
+    setHoldDraft(null);
+    // A frozen hold commits nothing, so a typed draft under it stays.
+    if (hold.isFrozen || isDisabled || isReadOnly) {
+      return;
+    }
+    setPendingInput(null);
+    if (hold.held !== value) {
+      onChange(hold.held);
+    }
+  };
+
   // Handle keyboard events
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLInputElement>) => {
@@ -932,8 +1134,15 @@ export function NumberInput({
     [ref, wheelListenerRef],
   );
 
-  const canIncrement = getNextValue(1) !== valueForStepping;
-  const canDecrement = getNextValue(-1) !== valueForStepping;
+  // While a hold runs, the steppers follow the value that it shows.
+  const {canIncrement, canDecrement} = useMemo(() => {
+    const base = holdDraft ?? valueForStepping;
+    const grid = {currentValue: base, min, max, step, isIntegerOnly};
+    return {
+      canIncrement: getSteppedValue({...grid, direction: 1}) !== base,
+      canDecrement: getSteppedValue({...grid, direction: -1}) !== base,
+    };
+  }, [holdDraft, isIntegerOnly, max, min, step, valueForStepping]);
 
   // Handle clear button click
   const handleClear = useCallback(
@@ -1074,7 +1283,7 @@ export function NumberInput({
       )}
       {statusIcon}
       {hasNumberSteppers && (
-        <div {...stylex.props(styles.numberSteppers)}>
+        <div ref={stepperColumnRef} {...stylex.props(styles.numberSteppers)}>
           <button
             type="button"
             tabIndex={-1}
@@ -1083,8 +1292,25 @@ export function NumberInput({
               isDisabled || isReadOnly || !canIncrement || undefined
             }
             aria-label={t('@astryx.numberInput.incrementLabel', {label})}
-            onPointerDown={event => event.preventDefault()}
-            onClick={() => {
+            onPointerDown={event => {
+              event.preventDefault();
+              startStepperHold(1, canIncrement, event);
+            }}
+            onContextMenu={handleStepperContextMenu}
+            onPointerUp={event => endStepperHold('release', event.pointerId)}
+            onPointerCancel={event => endStepperHold('cancel', event.pointerId)}
+            onLostPointerCapture={event =>
+              endStepperHold('cancel', event.pointerId)
+            }
+            onClick={event => {
+              const isAfterHold = isClickAfterHoldRef.current;
+              isClickAfterHoldRef.current = false;
+              // A pointer's click after a held press's release steps nothing.
+              // A click with no pointer, such as a screen reader's, steps.
+              if (isAfterHold && event.detail > 0) {
+                inputRef.current?.focus();
+                return;
+              }
               // An aria-disabled stepper does nothing, as a natively disabled
               // one did (spec:AST-085 FR2).
               if (isDisabled || isReadOnly || !canIncrement) {
@@ -1114,8 +1340,25 @@ export function NumberInput({
               isDisabled || isReadOnly || !canDecrement || undefined
             }
             aria-label={t('@astryx.numberInput.decrementLabel', {label})}
-            onPointerDown={event => event.preventDefault()}
-            onClick={() => {
+            onPointerDown={event => {
+              event.preventDefault();
+              startStepperHold(-1, canDecrement, event);
+            }}
+            onContextMenu={handleStepperContextMenu}
+            onPointerUp={event => endStepperHold('release', event.pointerId)}
+            onPointerCancel={event => endStepperHold('cancel', event.pointerId)}
+            onLostPointerCapture={event =>
+              endStepperHold('cancel', event.pointerId)
+            }
+            onClick={event => {
+              const isAfterHold = isClickAfterHoldRef.current;
+              isClickAfterHoldRef.current = false;
+              // A pointer's click after a held press's release steps nothing.
+              // A click with no pointer, such as a screen reader's, steps.
+              if (isAfterHold && event.detail > 0) {
+                inputRef.current?.focus();
+                return;
+              }
               // An aria-disabled stepper does nothing, as a natively disabled
               // one did (spec:AST-085 FR2).
               if (isDisabled || isReadOnly || !canDecrement) {

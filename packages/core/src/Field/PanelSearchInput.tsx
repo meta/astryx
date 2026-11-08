@@ -58,6 +58,7 @@ import {
 } from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
 import {textEntryTraitAttributes} from './textEntryTraits';
+import {inputWrapperStyles} from './inputStyles.stylex';
 
 const styles = stylex.create({
   // Gutter only. Matches the option list's own padding so the field below
@@ -185,6 +186,14 @@ export interface PanelSearchInputProps extends Omit<
    * the field to the same height as its rows.
    */
   fieldXstyle?: StyleXStyles;
+  /**
+   * Draw the field as the shared input box — the input border, accent while
+   * focused, surface and radius — instead of the borderless panel row. A
+   * touch sheet is a full-width surface, not a bordered panel, so its field
+   * reads as a form input.
+   * @default false
+   */
+  hasInputBox?: boolean;
 }
 
 /**
@@ -208,6 +217,7 @@ export function PanelSearchInput({
   onBlur,
   onContainerKeyDown,
   fieldXstyle,
+  hasInputBox = false,
   xstyle,
   className,
   style,
@@ -268,6 +278,7 @@ export function PanelSearchInput({
         {...stylex.props(
           styles.field,
           isKeyboardFocus && styles.fieldKeyboardFocus,
+          hasInputBox && inputWrapperStyles.base,
           fieldXstyle,
         )}>
         <Icon icon="search" size="sm" color="secondary" xstyle={styles.icon} />

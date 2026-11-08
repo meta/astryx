@@ -38,7 +38,10 @@ import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {disabledInteractionProps} from '../utils/disabledInteraction';
+import {
+  disabledInteractionProps,
+  withholdCallerHandlers,
+} from '../utils/disabledInteraction';
 
 /**
  * NavItem styles with hover/selected states
@@ -212,6 +215,10 @@ export function TopNavItem({
   // a disabled item performs no navigation, and custom router links may
   // require a live href. target is omitted with the href. (Mirrors the
   // disabled paths of Link and SideNavItem.)
+  // A disabled item runs no caller handler except `onFocus` and `onBlur`, as a
+  // natively disabled control runs none.
+  const callerProps = withholdCallerHandlers(props, isDisabled);
+
   const isAction = href == null && onClick != null;
   const Root = isDisabled && !isAction ? 'a' : LinkComponent;
   // Space activates on release, like a native button. The key-up handler
@@ -225,7 +232,7 @@ export function TopNavItem({
         role: props.role ?? 'button',
         tabIndex: props.tabIndex ?? 0,
         onKeyDown: (event: React.KeyboardEvent<HTMLAnchorElement>) => {
-          props.onKeyDown?.(event);
+          callerProps.onKeyDown?.(event);
           if (event.defaultPrevented || event.target !== event.currentTarget) {
             return;
           }
@@ -244,7 +251,7 @@ export function TopNavItem({
           if (event.key === ' ') {
             spacePressedRef.current = null;
           }
-          props.onKeyUp?.(event);
+          callerProps.onKeyUp?.(event);
           if (
             activate &&
             !isDisabled &&
@@ -257,14 +264,14 @@ export function TopNavItem({
         },
         onBlur: (event: React.FocusEvent<HTMLAnchorElement>) => {
           spacePressedRef.current = null;
-          props.onBlur?.(event);
+          callerProps.onBlur?.(event);
         },
       }
     : undefined;
   const disabledActionProps =
     isAction && isDisabled
       ? {
-          ...disabledInteractionProps(props.onKeyDown),
+          ...disabledInteractionProps(callerProps.onKeyDown),
           'aria-disabled': true as const,
         }
       : undefined;
@@ -308,7 +315,7 @@ export function TopNavItem({
           className,
           style,
         )}
-        {...props}
+        {...callerProps}
         onClick={handleDrawerClick}
         {...actionKeyboardProps}
         {...disabledActionProps}>
@@ -348,7 +355,7 @@ export function TopNavItem({
         className,
         style,
       )}
-      {...props}
+      {...callerProps}
       {...actionKeyboardProps}
       {...disabledActionProps}>
       {icon}

@@ -21,6 +21,8 @@ import {
   globalCli,
   packedCli,
   placeCli,
+  recyclePlacedCopies,
+  releasePackedCli,
   seedPackedRelease,
   startRegistry,
 } from '../test-utils/global-local-fixtures.mjs';
@@ -56,7 +58,11 @@ const computers = [];
 // the message below and its folders are still removed.
 afterEach(async () => {
   const busy = await settleBackgroundSteps(computers.splice(0));
-  cleanupFixtures();
+  try {
+    recyclePlacedCopies({keep: busy.length === 0});
+  } finally {
+    cleanupFixtures();
+  }
   if (busy.length > 0) {
     throw new Error(
       `A background step was still writing into ${busy.join(', ')} 60 s after the test: it is stuck.`,
@@ -64,7 +70,7 @@ afterEach(async () => {
   }
 }, 90_000);
 afterAll(() => {
-  fs.rmSync(path.dirname(packedCli()), {recursive: true, force: true});
+  releasePackedCli();
 });
 
 /**
@@ -440,6 +446,26 @@ describe.skipIf(!POSIX)(
       );
       expect(error.error).not.toMatch(/Outside a project/u);
       expect(filesIn(dir)).toEqual(before);
+    });
+
+    it("outside a project, a render whose page needs Core says the answering release's Core could not be downloaded", () => {
+      const pc = computer();
+      const g = globalCli('npm', '9.0.0', {root: pc.home});
+      const dir = tempDir('page');
+      fs.writeFileSync(
+        path.join(dir, 'page.jsx'),
+        "import {Button} from '@astryxdesign/core';\nexport default () => <Button label=\"Go\" />;\n",
+      );
+      const r = run(g.bin, ['experimental', 'render', 'page.jsx', '--json'], {
+        cwd: dir,
+        pc,
+      });
+      const error = JSON.parse(r.stdout);
+      expect(error.code).toBe('ERR_VERSIONS_UNAVAILABLE');
+      expect(error.error).toMatch(
+        /^Core 9\.0\.0 could not be (?:installed|downloaded).*\. Outside a project, commands that read Core use the Core of the release that answers; run again when the package registry can be reached\.$/u,
+      );
+      expect(fs.existsSync(path.join(dir, 'page.html'))).toBe(false);
     });
 
     it("in a fresh clone, doctor names the lockfile's Core as the daily hint and notice do", () => {
@@ -877,13 +903,14 @@ describe.skipIf(!POSIX)(
       ).toBe('warn');
     });
 
-    it('the skill outlives the CLI installed for the computer: it repeats the step that installed it, and doctor names it too', () => {
-      for (const [layout, step] of /** @type {const} */ ([
-        // The npm layout is a prefix in the home folder, so the step names it.
-        ['npm', 'npm i -g --prefix ~/.npm-global @astryxdesign/cli'],
-        ['pnpm', 'pnpm add -g @astryxdesign/cli'],
-        ['bun', 'bun add -g @astryxdesign/cli'],
-      ])) {
+    // One test for each layout: each starts the CLI three times.
+    for (const [layout, step] of /** @type {const} */ ([
+      // The npm layout is a prefix in the home folder, so the step names it.
+      ['npm', 'npm i -g --prefix ~/.npm-global @astryxdesign/cli'],
+      ['pnpm', 'pnpm add -g @astryxdesign/cli'],
+      ['bun', 'bun add -g @astryxdesign/cli'],
+    ])) {
+      it(`the skill outlives the CLI installed for the computer (${layout}): it repeats the step that installed it, and doctor names it too`, () => {
         const pc = computer();
         let g;
         if (layout === 'bun') {
@@ -959,8 +986,8 @@ describe.skipIf(!POSIX)(
           );
         }
         pc.path.shift();
-      }
-    });
+      });
+    }
 
     // Volta's command is a shim of its own, not a link into the package, so
     // the search-path scan cannot trace it; an astryx on the search path that
@@ -1753,15 +1780,38 @@ describe.skipIf(!POSIX)(
       });
     });
 
-    it("from a tool folder inside a project (as G36), discover and doctor point an integration installed for the computer at the project's folder, where its command adds it for good; with no project, discover names no command", () => {
+    /**
+     * The global npm copy on the search path, with `@acme/widgets` installed
+     * beside it for the computer.
+     */
+    function computerWithWidgets() {
       const pc = computer();
       const g = globalCli('npm', '9.0.0', {root: pc.home});
       acmeWidgets(path.resolve(g.dir, '..', '..', '..'), {
         topic: 'acme-deploying',
       });
       pc.path.unshift(g.binDir);
+      /** @param {string} cwd */
+      const integrationsCheck = cwd =>
+        JSON.parse(
+          run(g.bin, ['doctor', '--json'], {cwd, pc}).stdout,
+        ).data.checks.find(
+          (/** @type {any} */ c) => c.id === 'computer-integrations',
+        );
+      return {pc, g, integrationsCheck};
+    }
+
+    /** A project with Core and the CLI, installed with npm. */
+    function npmProject() {
       const dir = makeProject({core: '9.0.0', cli: '9.0.0'});
       writeJson(path.join(dir, 'package-lock.json'), {lockfileVersion: 3});
+      return dir;
+    }
+
+    // As G36, in four cases; each runs the CLI at most twice.
+    it("from a tool folder inside a project (as G36), discover and doctor point an integration installed for the computer at the project's folder", () => {
+      const {pc, g, integrationsCheck} = computerWithWidgets();
+      const dir = npmProject();
       const tool = path.join(dir, 'tools', 'codegen');
       writeJson(path.join(tool, 'package.json'), {name: 'codegen'});
       const discover = JSON.parse(
@@ -1779,16 +1829,12 @@ describe.skipIf(!POSIX)(
           source: 'installed for this computer',
         },
       ]);
-      const integrationsCheck = (/** @type {string} */ cwd) =>
-        JSON.parse(
-          run(g.bin, ['doctor', '--json'], {cwd, pc}).stdout,
-        ).data.checks.find(
-          (/** @type {any} */ c) => c.id === 'computer-integrations',
-        );
       expect(integrationsCheck(tool).fix).toBe(DOCTOR_RUN_FROM_PROJECT);
+    });
 
-      // Followed: from the project's folder, the command adds it there, and
-      // once it is installed nothing is offered any more.
+    it("from the project's folder (as G36), discover and doctor give the command that adds an integration installed for the computer", () => {
+      const {pc, g, integrationsCheck} = computerWithWidgets();
+      const dir = npmProject();
       const fromProject = JSON.parse(
         run(g.bin, ['discover', '--json'], {cwd: dir, pc}).stdout,
       );
@@ -1798,6 +1844,11 @@ describe.skipIf(!POSIX)(
       expect(integrationsCheck(dir).fix).toBe(
         'To use one in this project, run `npm install @acme/widgets`.',
       );
+    });
+
+    it('once the project installs it (as G36), discover and doctor no longer offer an integration installed for the computer', () => {
+      const {pc, g, integrationsCheck} = computerWithWidgets();
+      const dir = npmProject();
       const pkg = JSON.parse(
         fs.readFileSync(path.join(dir, 'package.json'), 'utf8'),
       );
@@ -1811,7 +1862,10 @@ describe.skipIf(!POSIX)(
       );
       expect(notOfficial(after)).toEqual([]);
       expect(integrationsCheck(dir)).not.toHaveProperty('fix');
+    });
 
+    it('with no project (as G36), discover names no command for an integration installed for the computer', () => {
+      const {pc, g} = computerWithWidgets();
       // A folder that installs Core but belongs to no project.
       const alone = tempDir('alone');
       writeJson(path.join(alone, 'package.json'), {name: 'alone'});

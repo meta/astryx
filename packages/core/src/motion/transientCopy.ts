@@ -3,21 +3,25 @@
 /**
  * @file transientCopy.ts
  * @input The DOM
- * @output Exports `isCopyable`, `inertCopy`, `visiblePartCopy`, `placeOver`,
- *   `paintedBackground` and `wrapText`: how Core makes, lays out and fades one
- *   transient copy of old content
+ * @output Exports `isCopyable`, `inertCopy`, `restoreScrollOffsets`,
+ *   `visiblePartCopy`, `placeOver`, `paintedBackground` and `wrapText`: how
+ *   Core makes, lays out and fades one transient copy of old content
  * @position Motion foundation, internal to core; the copy mechanism the
  *   in-place swap uses (`spec:AST-105` FR8,
- *   `architecture:component-style-authoring` INV7). Only
- *   motion/animatedLayout.ts imports it.
+ *   `architecture:component-style-authoring` INV7). It also makes the
+ *   layer's exit copy. motion/animatedLayout.ts and Layer/layerExitCopy.ts
+ *   import it.
  *
  * A copy takes no part in the page: it is inert and hidden from assistive
  * technology, carries no ids or test ids, joins no form or radio group (a
  * copied checked radio would uncheck the live one), and its frames and media
  * load nothing. Laying it out changes no ancestor's position, and a scaled
- * host draws it at the old size. Laid in a host outside the element's own
- * ancestors, it keeps what it inherited from them: its inherited properties
- * and custom properties that differ from the host's are written on it.
+ * host draws it at the old size. A clone restarts each CSS animation and runs
+ * no transition but a `@starting-style` one; the copy carries on its
+ * element's from where they were.
+ * Laid in a host outside the element's own ancestors, it keeps what it
+ * inherited from them: its inherited properties and custom properties that
+ * differ from the host's are written on it.
  * Limits: a rule keyed on a removed `id`, or matched through an ancestor
  * between the host and the element (`.collapsed .label`), does not style the
  * copy as it styled the element; and content holding a canvas whose pixels read back
@@ -25,8 +29,16 @@
  * canvas that cannot be read back (a WebGL canvas without
  * `preserveDrawingBuffer`, a tainted one) or a blank one.
  *
- * SYNC: When modified, update /packages/core/src/motion/animatedLayout.ts
+ * SYNC: When modified, update:
+ * - /packages/core/src/motion/animatedLayout.ts
+ * - /packages/core/src/Layer/layerExitCopy.ts
  */
+
+import {
+  carryAnimations,
+  saveAnimations,
+  type SavedAnimations,
+} from './carryAnimations';
 
 /** Above this many elements, old content is not copied: the new one enters. */
 const MAX_COPIED_ELEMENTS = 1500;
@@ -70,6 +82,7 @@ function paintCanvas(
 /** Inherited properties a copy carries when laid outside its ancestors. */
 const INHERITED_PROPERTIES = [
   'color',
+  'color-scheme',
   'cursor',
   'direction',
   'font-family',
@@ -145,6 +158,22 @@ function readInherited(element: Element): Map<string, string> {
   return values;
 }
 
+/** The listed controls a form can own. */
+const FORM_CONTROLS =
+  'button, fieldset, input, object, output, select, textarea';
+
+function isFormAssociated(
+  node: Element,
+  registry: CustomElementRegistry | undefined,
+): boolean {
+  if (!node.localName.includes('-')) {
+    return false;
+  }
+  const definition = registry?.get(node.localName) as
+    {formAssociated?: boolean} | undefined;
+  return definition?.formAssociated === true;
+}
+
 /** Scroll offsets a copy restores once laid out (a clone carries none). */
 const scrollOffsets = new WeakMap<
   HTMLElement,
@@ -152,10 +181,22 @@ const scrollOffsets = new WeakMap<
 >();
 
 /**
+ * The CSS animations and transitions a copy's element ran, and the copy of
+ * each element in the copied subtree. The copy carries them on once laid out
+ * (`placeOver`).
+ */
+const carriedMotion = new WeakMap<
+  HTMLElement,
+  {saved: SavedAnimations; copyOf: ReadonlyMap<Element, Element>}
+>();
+
+/**
  * A copy that takes no part: no ids or test ids, no form or radio group (a
  * copied checked radio would uncheck the live one), no label for a live
- * control, and copied frames and media load nothing. Scrolled descendants
- * keep their offsets once the copy is laid out (`placeOver`).
+ * control, and copied frames and media load nothing. Copied elements carry no
+ * anchor name. Scrolled descendants keep their offsets. The CSS animations
+ * and transitions running in it carry on from where they were, once the copy
+ * is laid out (`placeOver`).
  */
 export function inertCopy(element: HTMLElement): HTMLElement | null {
   const copy = element.cloneNode(true) as HTMLElement;
@@ -169,16 +210,34 @@ export function inertCopy(element: HTMLElement): HTMLElement | null {
   });
   scrollOffsets.set(copy, offsets);
   inheritedValues.set(copy, readInherited(element));
+  carriedMotion.set(copy, {
+    saved: saveAnimations(element),
+    copyOf: new Map(sourceNodes.map((node, index) => [node, copyNodes[index]])),
+  });
   for (const node of copyNodes) {
-    for (const name of [
-      'id',
-      'data-testid',
-      'name',
-      'form',
-      'for',
-      'autofocus',
-    ]) {
+    for (const name of ['id', 'data-testid', 'name', 'for', 'autofocus']) {
       node.removeAttribute(name);
+    }
+  }
+  // A second element with a live anchor's name makes the engine lay out
+  // every frame while the copy moves.
+  const view = element.ownerDocument.defaultView;
+  sourceNodes.forEach((source, index) => {
+    const name = view?.getComputedStyle(source).getPropertyValue('anchor-name');
+    if (name != null && name !== '' && name !== 'none') {
+      (copyNodes[index] as Partial<ElementCSSInlineStyle>).style?.setProperty(
+        'anchor-name',
+        'none',
+      );
+    }
+  });
+  // A copy laid inside a `<form>` would join it, and a copied empty
+  // `required` field would block its submit. `form=""` matches no form's id,
+  // so no form owns a copied control, a form-associated custom element too.
+  const registry = element.ownerDocument.defaultView?.customElements;
+  for (const node of copyNodes) {
+    if (node.matches(FORM_CONTROLS) || isFormAssociated(node, registry)) {
+      node.setAttribute('form', '');
     }
   }
   for (const node of copy.querySelectorAll(
@@ -201,6 +260,22 @@ export function inertCopy(element: HTMLElement): HTMLElement | null {
   return copy;
 }
 
+/**
+ * Puts a copy's scrolled descendants, and the copy, at the offsets its element
+ * had when `inertCopy` made it. It scrolls at once, whatever their
+ * `scroll-behavior`. A box keeps no scroll position until it is laid out.
+ */
+export function restoreScrollOffsets(copy: HTMLElement): void {
+  for (const [node, top, left] of scrollOffsets.get(copy) ?? []) {
+    if (typeof node.scrollTo === 'function') {
+      node.scrollTo({top, left, behavior: 'instant'});
+    } else {
+      node.scrollTop = top;
+      node.scrollLeft = left;
+    }
+  }
+}
+
 /** The background `element` shows: its own, or the nearest ancestor's. */
 export function paintedBackground(element: Element): string {
   for (let node: Element | null = element; node; node = node.parentElement) {
@@ -213,14 +288,35 @@ export function paintedBackground(element: Element): string {
 }
 
 /**
- * Lay `element` over `rect` (viewport coordinates), absolutely, as the last
- * child of `host`, wherever its containing block is: no ancestor's position
- * changes.
+ * Writes on a copy what it inherited where its element was, where its new
+ * parent `host` passes something else.
+ */
+export function keepInherited(copy: HTMLElement, host: Element): void {
+  const hostStyle = getComputedStyle(host);
+  for (const [name, value] of inheritedValues.get(copy) ?? []) {
+    // A line-height is always written: the host may pass the same number as
+    // the other kind (a factor against a length), which descendants inherit
+    // differently.
+    if (
+      value !== '' &&
+      (name === 'line-height' || hostStyle.getPropertyValue(name) !== value)
+    ) {
+      copy.style.setProperty(name, value);
+    }
+  }
+}
+
+/**
+ * Lay `element` over `rect` (viewport coordinates), absolutely, as a child of
+ * `host` (before `beforeNode`, else last), wherever its containing block is:
+ * no ancestor's position changes. A copy's scrolled descendants then restore their offsets, and the
+ * CSS animations and transitions its element ran carry on in it.
  */
 export function placeOver(
   element: HTMLElement,
   host: Element,
   rect: DOMRect,
+  beforeNode: Node | null = null,
 ): void {
   Object.assign(element.style, {
     position: 'absolute',
@@ -231,20 +327,8 @@ export function placeOver(
     width: `${rect.width}px`,
     height: `${rect.height}px`,
   });
-  host.appendChild(element);
-  // What it inherited where it was, where the host passes something else.
-  const hostStyle = getComputedStyle(host);
-  for (const [name, value] of inheritedValues.get(element) ?? []) {
-    // A line-height is always written: the host may pass the same number as
-    // the other kind (a factor against a length), which descendants inherit
-    // differently.
-    if (
-      value !== '' &&
-      (name === 'line-height' || hostStyle.getPropertyValue(name) !== value)
-    ) {
-      element.style.setProperty(name, value);
-    }
-  }
+  host.insertBefore(element, beforeNode);
+  keepInherited(element, host);
   // The origin, and the host's scale: the rect is in viewport pixels, the
   // copy's styles in the host's own.
   // The rendered size over the layout size, as the glide's `scaleOf` reads
@@ -268,14 +352,15 @@ export function placeOver(
   element.style.height = `${rect.height / scaleY}px`;
   element.style.left = `${(rect.left - origin.left) / scaleX}px`;
   element.style.top = `${(rect.top - origin.top) / scaleY}px`;
-  for (const [node, top, left] of scrollOffsets.get(element) ?? []) {
-    // At once, whatever the element's own `scroll-behavior`.
-    if (typeof node.scrollTo === 'function') {
-      node.scrollTo({top, left, behavior: 'instant'});
-    } else {
-      node.scrollTop = top;
-      node.scrollLeft = left;
-    }
+  restoreScrollOffsets(element);
+  const carried = carriedMotion.get(element);
+  if (carried != null) {
+    carriedMotion.delete(element);
+    carryAnimations(
+      carried.saved,
+      element,
+      node => carried.copyOf.get(node) ?? null,
+    );
   }
 }
 
@@ -322,6 +407,12 @@ export function visiblePartCopy(element: HTMLElement): {
   const values = inheritedValues.get(content);
   if (values != null) {
     inheritedValues.set(holder, values);
+  }
+  // The content's CSS motion carries on when the holder is laid out.
+  const carried = carriedMotion.get(content);
+  if (carried != null) {
+    carriedMotion.set(holder, carried);
+    carriedMotion.delete(content);
   }
   const box = element.getBoundingClientRect();
   return {

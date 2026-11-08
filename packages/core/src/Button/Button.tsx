@@ -19,6 +19,7 @@
  */
 
 import {
+  isValidElement,
   use,
   useEffect,
   useRef,
@@ -44,6 +45,7 @@ import {
   focusVars,
 } from '../theme/tokens.stylex';
 import {Spinner} from '../Spinner/Spinner';
+import {Icon} from '../Icon/Icon';
 import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 import {IconDefaultSizeProvider} from '../Icon/IconDefaultSizeContext';
 import {iconBoxSizeStyles, type IconSize} from '../Icon/IconSize.stylex';
@@ -51,6 +53,10 @@ import {iconBoxSizeStyles, type IconSize} from '../Icon/IconSize.stylex';
 import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {useSize} from '../SizeContext/SizeContext';
 import {useButtonGroup} from '../ButtonGroup/ButtonGroupContext';
+import {
+  PressGroupContext,
+  pressGroupItemProps,
+} from '../hooks/pressGroupContext';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {
@@ -59,11 +65,18 @@ import {
 } from '../InputGroup/groupStyles';
 import {mergeProps} from '../utils/mergeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useTouchHitArea} from '../utils/touchHitArea';
+import {ButtonHitAreaContext} from './buttonHitArea';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {
+  controlPressLayerStyles,
+  rowPressLayerStyles,
+} from '../privateAttributes/press.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import type {ButtonVariantMap} from './index';
 import {
@@ -74,6 +87,15 @@ import english from '../i18n/generated-english/Button/Button.generated';
 import {isRenderable} from '../utils/isRenderable';
 
 registerEnglishFallback(english);
+
+/**
+ * Written by the press controller or a group's tracker while a press is
+ * believed. Typed `string`, so StyleX reads it as a computed key.
+ */
+const PRESSED_ON: string = '[data-astryx-press="on"]';
+
+/** `aria-haspopup` values of a trigger that keeps its own press and opening. */
+const MENU_POPUPS: ReadonlySet<string> = new Set(['true', 'menu', 'listbox']);
 
 /**
  * Base button styles
@@ -135,8 +157,38 @@ const styles = stylex.create({
       ':active:where(:not(:disabled,[aria-disabled="true"]))': {
         default: 'scale(0.98)',
         '@media (pointer: coarse)': 'scale(1)',
+        // Under reduced motion a press never scales the button. The overlay
+        // alone shows the press.
+        '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+          'scale(1)',
+        '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+          'scale(1)',
       },
-      '[data-astryx-press="on"]': 'scale(0.98)',
+      [PRESSED_ON]: {
+        default: 'scale(0.98)',
+        '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+          'scale(1)',
+        '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+          'scale(1)',
+      },
+    },
+  },
+  // A tracked action's own `:active` image paints nothing: the tracker paints
+  // the action under the pointer, which need not be the one pressed first.
+  trackedOverlay: {
+    backgroundSize: {default: null, [`:active:not(${PRESSED_ON})`]: '0 0'},
+  },
+  // A tracked action's press is painted by its group's tracker alone.
+  pressableTracked: {
+    transform: {
+      default: 'scale(1)',
+      [PRESSED_ON]: {
+        default: 'scale(0.98)',
+        '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+          'scale(1)',
+        '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+          'scale(1)',
+      },
     },
   },
   inactive: {
@@ -145,7 +197,7 @@ const styles = stylex.create({
     transform: {
       default: 'none',
       ':active': 'none',
-      '[data-astryx-press="on"]': 'none',
+      [PRESSED_ON]: 'none',
     },
   },
   disabled: {
@@ -158,7 +210,7 @@ const styles = stylex.create({
     backgroundImage: {
       default: 'none',
       ':active': 'none',
-      '[data-astryx-press="on"]': 'none',
+      [PRESSED_ON]: 'none',
     },
   },
   iconOnly: {
@@ -182,8 +234,24 @@ const styles = stylex.create({
     justifyContent: 'center',
     flexShrink: 0,
   },
+  // A real box, not `display: contents`: WebKit before macOS 15 drops an
+  // accessible name computed through a `display: contents` element, so
+  // VoiceOver read a labelled Button as unnamed. The box takes the Button's
+  // own layout (it is the only in-flow child; the spinner overlay and the
+  // live region are absolutely positioned), so the content sits as before.
   contentWrapper: {
-    display: 'contents',
+    display: 'flex',
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 'auto',
+    alignSelf: 'stretch',
+    flexDirection: 'inherit',
+    flexWrap: 'inherit',
+    alignItems: 'inherit',
+    justifyContent: 'inherit',
+    gap: 'inherit',
+    // Lets a narrow row shrink the box, so the label inside still truncates.
+    minWidth: 0,
   },
   labelText: {
     overflow: 'hidden',
@@ -560,6 +628,21 @@ const groupStyles = stylex.create({
 });
 
 /**
+ * Whether `node` adds nothing to a content name: nothing renders, or an Icon
+ * with no label. Any other node can add text.
+ */
+function addsNoName(node: ReactNode): boolean {
+  if (!isRenderable(node)) {
+    return true;
+  }
+  if (!isValidElement<{label?: unknown}>(node) || node.type !== Icon) {
+    return false;
+  }
+  const {label} = node.props;
+  return typeof label !== 'string' || label.trim() === '';
+}
+
+/**
  * A versatile button component with multiple variants.
  *
  * Styles use Astryx theme tokens via StyleX.
@@ -615,6 +698,14 @@ export function Button({
   const t = useComponentTranslator();
   const size = useSize(sizeProp, 'md');
   const buttonGroup = useButtonGroup();
+  // A tracking group's tracker paints this button's pointer press. A menu
+  // trigger is not tracked: it keeps its own press and opening.
+  const groupPointers = use(PressGroupContext);
+  const groupItemProps =
+    groupPointers != null && !MENU_POPUPS.has(String(props['aria-haspopup']))
+      ? pressGroupItemProps(groupPointers)
+      : undefined;
+  const isGroupTracked = groupItemProps != null;
   const inputGroup = useInputGroup();
 
   const [isPending, startTransition] = useTransition();
@@ -661,6 +752,10 @@ export function Button({
   const isBusyOnlyDisabled =
     !isTrueDisabled && isLoadingState && !isInterruptible;
   const buttonDisabled = isTrueDisabled || isBusyOnlyDisabled;
+  // The group draws one band for all its members.
+  // A disabled or busy-only button takes no tap.
+  const hasHitArea = buttonGroup == null && !buttonDisabled;
+  const hitAreaRef = useTouchHitArea(hasHitArea, use(ButtonHitAreaContext));
   // isIconOnly prop is the source of truth for icon-only rendering.
   // When false (default), label is always rendered as visible text.
 
@@ -673,12 +768,6 @@ export function Button({
   // mid-action would drop focus the same way the native attribute does
   // (credit @AKnassa, #4879), which is exactly the bug this PR fixes.
   const renderAsLink = href != null && !isTrueDisabled;
-
-  // Use aria-disabled (button stays focusable) when busy-only, or when a
-  // tooltip is present so keyboard users can still reach it. A genuinely
-  // isDisabled/group-disabled button (not busy) keeps native disabled.
-  const useAriaDisabled =
-    buttonDisabled && (isBusyOnlyDisabled || tooltip != null);
 
   // Attach tooltip behavior via the hook rather than wrapping the button in a
   // <Tooltip> element. The hook adds hover/focus triggers to the button itself,
@@ -695,15 +784,9 @@ export function Button({
     // a re-click while pending starts a fresh action that interrupts the prior.
     if (buttonDisabled || (actionInFlightRef.current && !isInterruptible)) {
       e.preventDefault();
-      // A native `disabled` element never dispatches a click at all, so it
-      // never reaches a wrapping element's own handler either. An
-      // aria-disabled button (busy-only, or with a tooltip) is still a real,
-      // interactive element the DOM keeps dispatching clicks on —
-      // preventDefault alone only cancels the button's OWN default action
-      // (form submit, link navigation), not propagation. Without this, an
-      // unavailable Button inside a clickable row/card/backdrop still
-      // triggers that ancestor's action, which the previously native-disabled
-      // control never did.
+      // An aria-disabled button still receives clicks. preventDefault cancels
+      // only its own default action, such as a form submit. Stop propagation
+      // so a clickable ancestor does not act.
       e.stopPropagation();
       return;
     }
@@ -720,9 +803,9 @@ export function Button({
     }
   };
 
-  // When aria-disabled, suppress activation keys (Enter/Space) but allow
-  // other keys (Escape, arrows) to reach consumer handlers.
-  const handleKeyDown = useAriaDisabled
+  // A disabled button cancels Enter and Space, its activation keys. Other
+  // keys, such as Escape and the arrows, still reach the caller's handler.
+  const handleKeyDown = buttonDisabled
     ? (e: React.KeyboardEvent<HTMLButtonElement>) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
@@ -743,11 +826,18 @@ export function Button({
     sizeStyles[size],
     isIconOnly && styles.iconOnly,
     interactionOverlayStyles.backgroundImage,
+    // The press the controller writes, on a layer under the label whose
+    // release runs on the compositor.
+    rowPressLayerStyles.cell,
+    rowPressLayerStyles.cellOnImage,
+    controlPressLayerStyles.control,
+    isGroupTracked && styles.trackedOverlay,
     buttonDisabled && styles.inactive,
     isTrueDisabled && styles.disabled,
-    useAriaDisabled && styles.ariaDisabled,
+    buttonDisabled && styles.ariaDisabled,
     renderAsLink && styles.link,
-    !buttonGroup && styles.pressable,
+    !buttonGroup &&
+      (isGroupTracked ? styles.pressableTracked : styles.pressable),
     buttonGroup &&
       (buttonGroup.orientation === 'horizontal'
         ? groupStyles.horizontal
@@ -798,6 +888,10 @@ export function Button({
       <span
         {...stylex.props(
           styles.contentWrapper,
+          // The content wrapper's `::after` carries the touch band, so the
+          // button's own `::before` (the touch press) and `::after` (a
+          // caller's decoration) stay as they are.
+          hasHitArea && touchHitAreaStyles.layer,
           isLoadingState &&
             (delaySpinner
               ? loadingStyles.hiddenContentDelayed
@@ -836,10 +930,29 @@ export function Button({
     (children != null && children !== label);
   const ariaLabelProp = needsAriaLabel ? {'aria-label': label} : null;
 
+  // The Button's accessible name when props decide it: the derived
+  // aria-label, else a caller aria-label, else the label text alone. It is
+  // not known here when a caller aria-labelledby names the Button from other
+  // elements, or when `icon` or `endContent` can add text to its content
+  // name (a count, for example). A decorative Icon in either slot adds none.
+  const accessibleName =
+    props['aria-labelledby'] != null
+      ? undefined
+      : needsAriaLabel
+        ? label
+        : (props['aria-label'] ??
+          (addsNoName(icon) && addsNoName(endContent) ? label : undefined));
+  // A tooltip that repeats the name adds nothing to the description, so a
+  // screen reader does not read the same words twice.
+  const isTooltipName =
+    tooltip != null &&
+    accessibleName != null &&
+    tooltip.trim() === accessibleName.trim();
+
   // When a tooltip is attached via the hook, point aria-describedby at the
   // tooltip content (composing with any consumer-provided value).
   const describedByProp =
-    tooltip != null
+    tooltip != null && !isTooltipName
       ? {
           'aria-describedby':
             [props['aria-describedby'], tooltipHook.describedBy]
@@ -854,6 +967,7 @@ export function Button({
   const mergedButtonRef = useMergedRefs(
     ref,
     tooltip != null ? tooltipHook.ref : undefined,
+    hitAreaRef,
   );
 
   let element: ReactNode;
@@ -870,6 +984,7 @@ export function Button({
           : undefined)}
         {...sharedMergedProps}
         {...pressFeedback}
+        {...groupItemProps}
         {...props}
         {...ariaLabelProp}
         {...describedByProp}
@@ -877,7 +992,7 @@ export function Button({
         // A caller's own busy or disabled state is kept, so a component that
         // hands these props to a Button (a caller-rendered trigger) is heard.
         aria-busy={isLoadingState || props['aria-busy'] || undefined}
-        aria-disabled={useAriaDisabled || props['aria-disabled'] || undefined}
+        aria-disabled={buttonDisabled || props['aria-disabled'] || undefined}
         onClick={handleClick}
         {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
         {buttonContent}
@@ -888,20 +1003,21 @@ export function Button({
       <button
         ref={mergedButtonRef}
         type={type}
-        disabled={useAriaDisabled ? undefined : buttonDisabled}
         {...(inputGroup != null && buttonGroup == null
           ? inputGroupItemProps
           : undefined)}
         {...sharedMergedProps}
         {...pressFeedback}
+        {...groupItemProps}
         {...props}
+        {...(isTrueDisabled ? {name: undefined} : null)}
         {...ariaLabelProp}
         {...describedByProp}
         {...edgeCompAttr}
         // A caller's own busy or disabled state is kept, so a component that
         // hands these props to a Button (a caller-rendered trigger) is heard.
         aria-busy={isLoadingState || props['aria-busy'] || undefined}
-        aria-disabled={useAriaDisabled || props['aria-disabled'] || undefined}
+        aria-disabled={buttonDisabled || props['aria-disabled'] || undefined}
         onClick={handleClick}
         {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
         {buttonContent}

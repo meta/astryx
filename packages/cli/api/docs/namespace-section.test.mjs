@@ -9,7 +9,8 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {afterEach, beforeEach, describe, expect, it} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {Project} from '../../foundation/config/project.mjs';
 import {docs} from './docs.mjs';
 import {oneGuide} from './detail/section/section.mjs';
 
@@ -97,6 +98,49 @@ afterEach(() => {
 });
 
 describe('a section read on a namespace', () => {
+  it(
+    'ignores a catalog key a caller passes: the read loads its own project',
+    async () => {
+      const reference = await docs('authoring/field-reference', undefined, {
+        index: true,
+      });
+      const key = reference.data.sections[0].id;
+      const expected = await docs('authoring', key);
+      // An undeclared option is not a control (spec:AST-017 FR14).
+      expect(
+        await docs('authoring', key, /** @type {any} */ ({catalog: 'npm'})),
+      ).toEqual(expected);
+      expect(
+        await docs('tokens', undefined, /** @type {any} */ ({catalog: 'npm'})),
+      ).toEqual(await docs('tokens'));
+    },
+    SLOW,
+  );
+
+  it(
+    "loads the project once: every guide below the namespace reads from the read's own catalog",
+    async () => {
+      const reference = await docs('authoring/field-reference', undefined, {
+        index: true,
+      });
+      const key = reference.data.sections[0].id;
+      const load = vi.spyOn(Project, 'load');
+      try {
+        const read = await docs('authoring', key);
+        expect(read).toMatchObject({
+          type: 'docs.detail.section',
+          data: {id: key},
+        });
+        // One load for the read, not one more for each of the dozens of
+        // guides below `authoring`.
+        expect(load).toHaveBeenCalledTimes(1);
+      } finally {
+        load.mockRestore();
+      }
+    },
+    SLOW,
+  );
+
   it(
     'returns the one guide section, by key and by title, as the guide read does',
     async () => {

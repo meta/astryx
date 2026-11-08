@@ -71,6 +71,33 @@ describe('lockSelection where iOS WebKit runs', () => {
       restore();
     }
   });
+
+  it('locks an element whose inline style comes from another window (spec:AST-094 FR41)', () => {
+    const restore = asIosWebKit();
+    try {
+      const get = mount('<a id="row" href="/next">Next</a>');
+      // jsdom builds every window's style objects in this realm. In a browser,
+      // another window's style fails `instanceof Object`, as an object with no
+      // prototype does here.
+      const setProperty = vi.fn();
+      const style = Object.assign(Object.create(null) as CSSStyleDeclaration, {
+        setProperty,
+        getPropertyValue: () => '',
+        getPropertyPriority: () => '',
+        removeProperty: vi.fn(),
+      });
+      Object.defineProperty(get('row'), 'style', {
+        configurable: true,
+        value: style,
+      });
+      const release = lockSelection([get('row')], get('row'));
+      expect(setProperty).toHaveBeenCalledWith('-webkit-touch-callout', 'none');
+      expect(setProperty).toHaveBeenCalledWith('user-select', 'none');
+      release();
+    } finally {
+      restore();
+    }
+  });
 });
 
 describe('lockSelection elsewhere', () => {
@@ -188,6 +215,63 @@ describe('lockDragSelection (spec:AST-094 FR41)', () => {
     expect(selection.toString()).toBe('Page text');
     expect(refuses(field)).toBe(false);
     release({isCancel: true});
+  });
+
+  it("keeps a selection that the lift's own handlers made after the release", async () => {
+    const get = mount(
+      '<p id="text">Text the page selected</p><p id="made">Text a handler selects</p><div id="pan">Pan</div>',
+    );
+    const selection = select(get('text'));
+    const release = lockDragSelection(
+      [get('pan')],
+      window,
+      selectionRangesOf(window),
+    );
+    release();
+    // The lifted action's own click selects other text.
+    select(get('made'));
+    release.keepLiftSelection();
+    document.dispatchEvent(new Event('selectionchange'));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(selection.toString()).toBe('Text a handler selects');
+  });
+
+  it("keeps a selection that the lift's handlers make in a microtask queued before the keep, as a click's render does", async () => {
+    const get = mount(
+      '<p id="text">Text the page selected</p><p id="made">Text a layout effect selects</p><div id="pan">Pan</div>',
+    );
+    const selection = select(get('text'));
+    const release = lockDragSelection(
+      [get('pan')],
+      window,
+      selectionRangesOf(window),
+    );
+    release();
+    // The click queued its render, whose layout effect selects other text.
+    queueMicrotask(() => select(get('made')));
+    release.keepLiftSelection();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    document.dispatchEvent(new Event('selectionchange'));
+    expect(selection.toString()).toBe('Text a layout effect selects');
+  });
+
+  it("puts the press's selection back when the lift's handlers changed nothing", async () => {
+    const get = mount(
+      '<p id="text">Text the page selected</p><div id="pan">Pan</div>',
+    );
+    const selection = select(get('text'));
+    const release = lockDragSelection(
+      [get('pan')],
+      window,
+      selectionRangesOf(window),
+    );
+    release();
+    release.keepLiftSelection();
+    // The press's own mouseup collapses the selection after the handlers ran.
+    selection.collapseToStart();
+    document.dispatchEvent(new Event('selectionchange'));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(selection.toString()).toBe('Text the page selected');
   });
 });
 

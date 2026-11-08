@@ -419,6 +419,32 @@ function formatDiffSummary(
   return lines.join('\n');
 }
 
+/**
+ * Render a GitHub Actions warning when baseline entries no longer occur, so a
+ * stale entry shows on the run's summary page and is not only in the log. A
+ * stale entry can mask a returning violation of the same kind. It never fails
+ * the gate.
+ *
+ * @param {{resolved: string[]}} diff
+ * @param {{baselinePath?: string}} [options]
+ * @returns {string} The workflow command, or '' when nothing resolved.
+ */
+function formatResolvedWarning(
+  diff,
+  {baselinePath = '.github/a11y-baseline.json'} = {},
+) {
+  const count = diff.resolved.length;
+  if (count === 0) return '';
+  const what =
+    count === 1
+      ? '1 baseline entry no longer occurs; remove it'
+      : `${count} baseline entries no longer occur; remove them`;
+  return (
+    `::warning title=Resolved accessibility baseline entries::${what} ` +
+    `from ${baselinePath}. The keys are in this step's log.`
+  );
+}
+
 module.exports = {
   BASELINE_VERSION,
   storyKey,
@@ -428,4 +454,5 @@ module.exports = {
   buildBaseline,
   diffAgainstBaseline,
   formatDiffSummary,
+  formatResolvedWarning,
 };

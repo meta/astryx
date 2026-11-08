@@ -4,43 +4,21 @@
  * @file focusReturn.ts
  * @input The document's current active element and the shared interaction
  *   modality.
- * @output Whether focus is currently "detached" — on nothing in particular —
- *   or would be lost if a surface hid now; a focus move whose ring follows the
- *   last input; and the one path that moves focus out of content a change
- *   removed or hid (`noteFocusWithin`, `moveFocusLeftBehind`).
- * @position Utility; used by overlay triggers (e.g. DateInput, DateTimeInput)
- *   that return focus to their control when the overlay closes, but only when
- *   the dismiss did not already move focus somewhere the user chose, and by
- *   overlays (Dialog, DropdownMenu) that move focus programmatically, and by
- *   disclosures that hide focused content. Only
- *   `isFocusDetached` is exported from the utils entry; the rest is internal.
+ * @output Whether focus would be lost if a surface hid now; a focus move whose
+ *   ring follows the last input; the focus return of a closed overlay, which
+ *   never scrolls the page; and the one path that moves focus out of content a
+ *   change removed or hid (`noteFocusWithin`, `moveFocusLeftBehind`).
+ * @position Utility; used by overlays (BottomSheet, Dialog, DropdownMenu) that
+ *   move focus programmatically, and by disclosures that hide focused
+ *   content. isFocusDetached lives in isFocusDetached.ts, so the utils entry,
+ *   which exports only it, does not reach this module.
  */
 
 import {
   getInteractionModality,
   type InteractionModality,
 } from './interactionModality';
-
-/**
- * True when focus rests on nothing in particular — no active element, or the
- * document body / root element.
- *
- * An overlay (popover, calendar, dropdown) that restores focus to its trigger
- * on close should do so ONLY when this is true. A native `popover="auto"`
- * light-dismiss fires its close synchronously with the pointer event that
- * moved focus, so by the time the close handler runs, focus has already
- * landed on whatever the user clicked — another field, a button, anywhere.
- * Restoring focus unconditionally would yank it back and fight that click.
- * The one case the browser leaves unresolved is Escape or a click on
- * non-focusable empty space, which drops focus to the body; that is exactly
- * when the trigger should reclaim it.
- */
-export function isFocusDetached(doc: Document = document): boolean {
-  const active = doc.activeElement;
-  return (
-    active == null || active === doc.body || active === doc.documentElement
-  );
-}
+import {isFocusDetached} from './isFocusDetached';
 
 /**
  * True when focus would be lost if `surface` hid now: nothing is focused (see
@@ -150,4 +128,93 @@ export function focusForLastInput(
     element.blur();
   }
   element.focus({...options, focusVisible: false});
+}
+
+/**
+ * Returns focus to `opener` after an overlay closes, without a scroll and with
+ * the ring the last input calls for. WebKit records the nearest focusable
+ * ancestor of a tapped button as the opener, such as a `tabindex="-1"` main
+ * region. A reveal of that region scrolls the page to its top edge.
+ */
+export function returnFocusForLastInput(
+  opener: HTMLElement,
+  modality?: InteractionModality,
+): void {
+  focusForLastInput(opener, {preventScroll: true}, modality);
+}
+
+/**
+ * Prepares a focus repair for an open surface that may be removed while open
+ * (rendered only while open, or removed with its view). Removing a `<dialog>`
+ * runs no close and no browser focus return. Call this while the surface is
+ * mounted: it reads the frame that hosts the surface now, because a removed
+ * frame's document has no window. Call the returned function from the effect
+ * cleanup with the repair to run.
+ *
+ * Once the commit has finished, the repair runs only when the surface really
+ * left the document (StrictMode's simulated unmount keeps it) and the removal
+ * lost focus, both in the surface's document and in the document that hosts
+ * its frame. A control the user pressed outside the surface, or outside its
+ * frame, keeps its focus, and so does a surface that took focus in the same
+ * commit.
+ */
+export function prepareFocusRepairOnRemoval(
+  surface: Element,
+  options?: {
+    /**
+     * Skip the repair when focus already rested on the page body before the
+     * commit's first removal: the removal did not lose that focus.
+     */
+    keepRestingFocus?: boolean;
+  },
+): (repair: () => void) => void {
+  const host = surface.ownerDocument.defaultView?.frameElement ?? null;
+  return repair => {
+    if (
+      options?.keepRestingFocus === true &&
+      wasFocusDetachedBeforeRemoval(surface.ownerDocument)
+    ) {
+      return;
+    }
+    queueMicrotask(() => {
+      if (surface.isConnected) {
+        return;
+      }
+      if (isFocusLost(surface) && (host == null || isFocusLost(host))) {
+        repair();
+      }
+    });
+  };
+}
+
+// Whether focus rested on the page body when the current commit began
+// removing surfaces, per document. One removal can drop focus before a later
+// surface's cleanup runs, so every cleanup of the commit reads the first value.
+const focusDetachedAtRemovalStart = new WeakMap<Document, boolean>();
+function wasFocusDetachedBeforeRemoval(doc: Document): boolean {
+  let wasDetached = focusDetachedAtRemovalStart.get(doc);
+  if (wasDetached === undefined) {
+    wasDetached = isFocusDetached(doc);
+    focusDetachedAtRemovalStart.set(doc, wasDetached);
+    queueMicrotask(() => focusDetachedAtRemovalStart.delete(doc));
+  }
+  return wasDetached;
+}
+
+/**
+ * The focus repair above that returns focus to `opener` while the opener is
+ * still on the page. Call the returned function from the effect cleanup with
+ * the opener.
+ */
+export function prepareFocusReturnOnRemoval(
+  surface: Element,
+): (opener: Element | null) => void {
+  const repairOnRemoval = prepareFocusRepairOnRemoval(surface);
+  return opener => {
+    repairOnRemoval(() => {
+      if (opener != null && opener.isConnected) {
+        returnFocusForLastInput(opener as HTMLElement);
+      }
+    });
+  };
 }

@@ -139,6 +139,7 @@ export const WithPreselected: Story = {
   name: 'Pre-selected Items',
 };
 
+/** On touch screens, clear through the sheet's Clear all. */
 export const WithClear: Story = {
   ...Default,
   args: {
@@ -263,6 +264,7 @@ export const WithEntriesOnFocus: Story = {
   name: 'With Entries On Focus',
 };
 
+/** Overflow modes apply to the inline field. */
 export const OverflowInline: Story = {
   render: args => {
     const [value, setValue] = useState<SearchableItem[]>([
@@ -295,6 +297,7 @@ export const OverflowInline: Story = {
   name: 'Overflow Inline',
 };
 
+/** Overflow modes apply to the inline field. */
 export const OverflowLayer: Story = {
   render: args => {
     const [value, setValue] = useState<SearchableItem[]>([
@@ -538,6 +541,9 @@ export const LogicalOrder: Story = {
     label: 'Team Members',
     placeholder: 'Add more...',
     hasClear: true,
+    // A fixture for the inline field's end lane and caret, so it keeps the
+    // inline field on every device.
+    presentation: 'popover',
   },
   name: 'Logical order',
 };
@@ -559,6 +565,9 @@ export const RtlEndLane: Story = {
       value={[users[0]]}
       onChange={() => {}}
       hasClear
+      // A fixture for the inline field's end lane: the inline field on every
+      // device.
+      presentation="popover"
     />
   ),
   args: {
@@ -587,6 +596,9 @@ export const LongTokenEndLane: Story = {
         value={[longToken]}
         onChange={() => {}}
         hasClear
+        // A fixture for the inline field's end lane: the inline field on every
+        // device.
+        presentation="popover"
       />
       <Tokenizer
         {...args}
@@ -598,6 +610,7 @@ export const LongTokenEndLane: Story = {
         renderToken={(item, onRemove) => (
           <Token label={item.label} onRemove={onRemove} />
         )}
+        presentation="popover"
       />
     </div>
   ),
@@ -643,6 +656,9 @@ export const CaretPlacement: Story = {
     label: 'Team Members',
     placeholder: 'Add more...',
     hasClear: true,
+    // A fixture for the inline field's end lane and caret, so it keeps the
+    // inline field on every device.
+    presentation: 'popover',
   },
   name: 'Caret placement',
   play: async ({canvasElement}) => {
@@ -815,4 +831,203 @@ export const CaretPlacement: Story = {
       }
     }
   },
+};
+// A long, searchable dataset for the sheet presentation: enough entries to
+// see the 50-row batches of progressive rendering.
+const sheetTags: SearchableItem[] = Array.from({length: 1000}, (_, index) => {
+  const number = index + 1;
+  return {
+    id: `tag-${number}`,
+    label:
+      number === 1
+        ? 'Design'
+        : number === 2
+          ? 'Eng'
+          : `Tag ${String(number).padStart(2, '0')}`,
+  };
+});
+
+const sheetTagSource: SearchSource = {
+  search: (query: string) =>
+    sheetTags.filter(tag =>
+      tag.label.toLowerCase().includes(query.toLowerCase()),
+    ),
+  bootstrap: () => sheetTags,
+};
+
+/**
+ * The touch surface, forced on every device so it is reviewable on a laptop:
+ * `presentation="bottom-sheet"`. The trigger shows
+ * the selected tokens; tapping it opens one tall sheet with the search row on
+ * top, checkbox rows that keep their place while the sheet is open, a Create
+ * row for typed text, and a pinned footer with a confirmed Clear all beside
+ * Save, which commits the draft; `onChange` fires once, on Save.
+ */
+export const SheetPresentation: Story = {
+  render: args => {
+    const [value, setValue] = useState<SearchableItem[]>([
+      sheetTags[0],
+      sheetTags[1],
+    ]);
+    return (
+      <Tokenizer
+        {...args}
+        searchSource={sheetTagSource}
+        value={value}
+        onChange={items => setValue(items)}
+        hasCreate
+        maxMenuItems={1000}
+        debounceMs={0}
+        presentation="bottom-sheet"
+      />
+    );
+  },
+  args: {
+    label: 'Tags',
+    placeholder: 'Add tags',
+  },
+  name: 'Bottom sheet',
+};
+
+/**
+ * `presentation="adaptive"`, the default: the sheet on a compact
+ * coarse-pointer screen (narrow the viewport and emulate touch), otherwise the
+ * inline combobox — the same resolution Selector uses.
+ */
+export const AdaptivePresentation: Story = {
+  render: args => {
+    // Enough tokens to wrap the inline field's row on a phone, so the box
+    // the trigger keeps at the swap is the wrapped one (FR16, FR17).
+    const [value, setValue] = useState<SearchableItem[]>([
+      sheetTags[0],
+      sheetTags[1],
+      sheetTags[2],
+      sheetTags[3],
+      sheetTags[4],
+    ]);
+    return (
+      <Tokenizer
+        {...args}
+        searchSource={sheetTagSource}
+        value={value}
+        onChange={items => setValue(items)}
+        maxMenuItems={1000}
+        debounceMs={0}
+        presentation="adaptive"
+      />
+    );
+  },
+  args: {
+    label: 'Tags',
+    placeholder: 'Add tags',
+  },
+  name: 'Adaptive (default)',
+};
+
+/**
+ * The sheet presentation keeps `endContent` at the field's inline end and
+ * renders its tokens through `renderToken`, as the inline field does. The end
+ * content's buttons and a token's own remove control act at once; a tap
+ * anywhere else on the field opens the sheet. The grid column sizes the field,
+ * so a test can narrow it.
+ */
+export const SheetPresentationEndContent: Story = {
+  render: () => {
+    const [value, setValue] = useState<SearchableItem[]>([
+      sheetTags[0],
+      sheetTags[1],
+      sheetTags[2],
+      sheetTags[3],
+    ]);
+    const [copies, setCopies] = useState(0);
+    return (
+      <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 400px)'}}>
+        <Tokenizer
+          label="Recipients"
+          searchSource={sheetTagSource}
+          value={value}
+          onChange={items => setValue(items)}
+          debounceMs={0}
+          placeholder="Add recipients"
+          presentation="bottom-sheet"
+          renderToken={(item, onRemove) => (
+            <Token label={item.label} onRemove={onRemove} />
+          )}
+          endContent={
+            <Button
+              label={`Cc (${copies})`}
+              variant="ghost"
+              size="sm"
+              onClick={() => setCopies(count => count + 1)}
+            />
+          }
+        />
+      </div>
+    );
+  },
+  name: 'Bottom sheet with end content and custom tokens',
+  parameters: {viewport: {defaultViewport: 'mobile2'}},
+};
+
+/**
+ * `presentation="popover"`: the inline combobox with its anchored suggestion
+ * menu on every device, a compact coarse-pointer screen included.
+ */
+export const PopoverPresentation: Story = {
+  render: Default.render,
+  args: {
+    ...Default.args,
+    presentation: 'popover',
+  },
+  name: 'Popover (every device)',
+};
+
+/**
+ * Disabled and at-limit states of the sheet presentation: the disabled
+ * trigger stays focusable and does not open; at `maxEntries` the sheet's
+ * unchecked rows are inert while checked rows still toggle.
+ */
+export const SheetPresentationStates: Story = {
+  render: args => {
+    const [value, setValue] = useState<SearchableItem[]>([
+      sheetTags[0],
+      sheetTags[1],
+    ]);
+    return (
+      <div style={{display: 'grid', gap: 16}}>
+        <Tokenizer
+          {...args}
+          label="Disabled"
+          searchSource={sheetTagSource}
+          value={[sheetTags[0], sheetTags[1]]}
+          onChange={() => {}}
+          isDisabled
+          presentation="bottom-sheet"
+        />
+        <Tokenizer
+          {...args}
+          label="Disabled and empty"
+          searchSource={sheetTagSource}
+          value={[]}
+          onChange={() => {}}
+          isDisabled
+          presentation="bottom-sheet"
+        />
+        <Tokenizer
+          {...args}
+          label="At the limit"
+          searchSource={sheetTagSource}
+          value={value}
+          onChange={items => setValue(items)}
+          maxEntries={2}
+          debounceMs={0}
+          presentation="bottom-sheet"
+        />
+      </div>
+    );
+  },
+  args: {
+    placeholder: 'Add tags',
+  },
+  name: 'Bottom sheet states',
 };

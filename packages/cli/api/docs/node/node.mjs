@@ -16,13 +16,14 @@
  */
 
 import {detailView} from '../../../foundation/doc-compiler/lenses.mjs';
-import {isExperimentalTreeNode} from '../../../foundation/doc-compiler/tree.mjs';
 import {
+  childIdentity,
   compileTopic,
   guideEntry,
   nodeContent,
   placeLinks,
   resolveDocsArgument,
+  stabilityOf,
   unknownTopicError,
 } from '../_adapter.mjs';
 
@@ -85,45 +86,6 @@ export async function nodeView(catalog, tree, node, read) {
     view.childCount = countChildren(slots);
   }
   return view;
-}
-
-/**
- * `stability: 'experimental'` for a node whose doc is marked experimental, or
- * that sits under an experimental namespace (spec:AST-017 FR27), the way help
- * marks an experimental command; nothing for a stable one, so stable entries
- * read as they always have.
- * @param {DocsTree} tree
- * @param {TreeNode} node
- * @returns {{stability?: 'experimental'}}
- */
-function stabilityOf(tree, node) {
-  return isExperimentalTreeNode(tree, node) ? {stability: 'experimental'} : {};
-}
-
-/**
- * The fields every child carries: what it is, and the route that opens it.
- * @param {DocsTree} tree
- * @param {TreeNode} child
- * @returns {import('../docs.type.mjs').DocsNodeChild}
- */
-function childIdentity(tree, child) {
-  return {
-    route: child.route,
-    name: child.route.slice(child.route.lastIndexOf('/') + 1),
-    package: child.guideOverlay?.replacement?.package ?? child.provider,
-    // A guide an integration's doc took the place of names whose it was.
-    ...(child.guideOverlay?.replacement
-      ? {
-          replaces: child.route,
-          replacedPackage:
-            child.guideOverlay.replacedPackage ?? child.provider,
-        }
-      : {}),
-    kind: child.kind,
-    title: child.title,
-    summary: child.summary,
-    ...stabilityOf(tree, child),
-  };
 }
 
 /**

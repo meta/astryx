@@ -27,7 +27,11 @@ export const docs = {
   },
   theming: {
     targets: [
-      {className: 'astryx-item', visualProps: ['density', 'align']},
+      {
+        className: 'astryx-item',
+        visualProps: ['density', 'align'],
+        states: ['highlighted', 'selected', 'disabled'],
+      },
       {className: 'astryx-item-swipe-panel', visualProps: ['side']},
       {className: 'astryx-item-swipe-action', visualProps: ['variant']},
     ],
@@ -210,14 +214,25 @@ export const docs = {
         },
         {
           name: 'ref',
-          type: 'React.Ref<HTMLDivElement>',
-          description: 'Ref forwarded to the root element.',
+          type: 'React.Ref<HTMLElement>',
+          description:
+            'Ref forwarded to the root element, whose type follows `as`.',
         },
         {
           name: 'xstyle',
           type: 'StyleXStyles',
           description:
-            'StyleX styles for layout customization. Must be a stylex.create() value.',
+            'StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value: not an inline style object like style={{}}.',
+        },
+        {
+          name: 'className',
+          type: 'string',
+          description: 'CSS class name(s) for the root element.',
+        },
+        {
+          name: 'style',
+          type: 'React.CSSProperties',
+          description: 'Inline styles for the root element.',
         },
         {
           name: 'data-testid',

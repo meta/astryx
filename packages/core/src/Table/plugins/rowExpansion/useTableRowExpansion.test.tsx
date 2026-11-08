@@ -7,6 +7,9 @@ import {Table} from '../../Table';
 import type {TableColumn} from '../../types';
 import {useTableRowExpansion} from './useTableRowExpansion';
 import {InternationalizationProvider} from '../../../i18n';
+import type {ComponentIconMap} from '../../../Icon/index';
+import {defineTheme} from '../../../theme/defineTheme';
+import {Theme} from '../../../theme/Theme';
 
 // popover mock for context-menu tests
 beforeEach(() => {
@@ -64,6 +67,7 @@ function Harness({
   panelVariant,
   dividers,
   isStriped,
+  getRowLabel,
 }: {
   initialExpanded?: Set<string>;
   isItemExpandable?: (item: Row) => boolean;
@@ -74,6 +78,7 @@ function Harness({
   panelVariant?: 'muted' | 'transparent';
   dividers?: 'rows' | 'columns' | 'grid' | 'none';
   isStriped?: boolean;
+  getRowLabel?: (item: Row) => string;
 }) {
   const [expandedKeys, setExpandedKeys] = useState(initialExpanded);
   const expansion = useTableRowExpansion<Row>({
@@ -93,6 +98,7 @@ function Harness({
     getIsItemExpandable: isItemExpandable,
     hasRowClickExpansion,
     panelVariant,
+    getRowLabel,
   });
   return (
     <Table
@@ -108,11 +114,122 @@ function Harness({
 }
 
 describe('useTableRowExpansion (detail panel)', () => {
+  it.each(['omitted', 'blank', 'named'] as const)(
+    'resolves %s labels inside the Table provider and follows locale changes',
+    mode => {
+      function LocalizedTable({locale}: {locale: 'fr' | 'de'}) {
+        const [expandedKeys, setExpandedKeys] = useState(EMPTY_KEYS);
+        const expansion = useTableRowExpansion<Row>({
+          expandedKeys,
+          onToggle: key =>
+            setExpandedKeys(prev =>
+              prev.has(key) ? EMPTY_KEYS : new Set([key]),
+            ),
+          getRowKey: item => item.id,
+          renderExpanded: defaultRenderExpanded,
+          getRowLabel:
+            mode === 'omitted'
+              ? undefined
+              : mode === 'blank'
+                ? () => '   '
+                : item => item.name,
+        });
+        return (
+          <InternationalizationProvider
+            locale={locale}
+            overrides={{
+              fr: {
+                '@astryx.tableRowExpansion.expandRow': 'Développer la ligne',
+                '@astryx.tableRowExpansion.collapseRow': 'Réduire la ligne',
+                '@astryx.tableRowExpansion.expandRowNamed':
+                  'Développer {label}',
+                '@astryx.tableRowExpansion.collapseRowNamed': 'Réduire {label}',
+              },
+              de: {
+                '@astryx.tableRowExpansion.expandRow': 'Zeile öffnen',
+                '@astryx.tableRowExpansion.collapseRow': 'Zeile schließen',
+                '@astryx.tableRowExpansion.expandRowNamed': '{label} öffnen',
+                '@astryx.tableRowExpansion.collapseRowNamed':
+                  '{label} schließen',
+              },
+            }}>
+            <Table
+              data={rows}
+              columns={columns}
+              idKey="id"
+              plugins={{expansion}}
+            />
+          </InternationalizationProvider>
+        );
+      }
+      const named = mode === 'named';
+      const view = render(<LocalizedTable locale="fr" />);
+      const trigger = screen.getAllByRole('button', {
+        name: named ? 'Développer Ada' : 'Développer la ligne',
+      })[0];
+      fireEvent.click(trigger);
+      expect(
+        screen.getByRole('button', {
+          name: named ? 'Réduire Ada' : 'Réduire la ligne',
+        }),
+      ).toHaveAttribute('aria-expanded', 'true');
+      view.rerender(<LocalizedTable locale="de" />);
+      expect(
+        screen.getByRole('button', {
+          name: named ? 'Ada schließen' : 'Zeile schließen',
+        }),
+      ).toHaveAttribute('aria-expanded', 'true');
+    },
+  );
   it('renders an "Expand row" chevron button for every expandable row', () => {
     render(<Harness />);
     expect(screen.getAllByRole('button', {name: /expand row/i})).toHaveLength(
       3,
     );
+  });
+
+  it('names each expansion control when getRowLabel is provided', () => {
+    render(<Harness getRowLabel={item => item.name} />);
+
+    expect(
+      screen.getByRole('button', {name: 'Expand Ada'}),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Expand Bo'})).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Expand Cy'})).toBeInTheDocument();
+  });
+
+  it('keeps the row identity when the expansion state changes', () => {
+    render(
+      <Harness
+        initialExpanded={new Set(['a'])}
+        getRowLabel={item => item.name}
+      />,
+    );
+
+    expect(screen.getByRole('button', {name: 'Collapse Ada'})).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(screen.getByRole('button', {name: 'Expand Bo'})).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+  });
+
+  it('falls back to the generic label when getRowLabel returns blank text', () => {
+    render(<Harness getRowLabel={() => '   '} />);
+
+    expect(screen.getAllByRole('button', {name: 'Expand row'})).toHaveLength(3);
+  });
+
+  it('keeps the context-menu action generic when row-specific labels are enabled', () => {
+    render(<Harness getRowLabel={item => item.name} />);
+
+    fireEvent.contextMenu(screen.getByText('Ada'));
+    expect(
+      screen.getAllByRole('menuitem', {name: 'Expand row', hidden: true})
+        .length,
+    ).toBeGreaterThan(0);
   });
 
   it('does not render the detail panel while collapsed', () => {
@@ -224,7 +341,9 @@ describe('useTableRowExpansion (detail panel)', () => {
     // has to sit on the glyph instead.
     render(<Harness initialExpanded={new Set(['a'])} />);
     const button = screen.getAllByRole('button', {name: /collapse row/i})[0];
-    const glyph = button.querySelector('svg')?.parentElement;
+    // The glyph's box, the button's first child, turns with the glyph in it.
+    const glyph = button.querySelector<HTMLElement>(':scope > *');
+    expect(glyph?.querySelector('svg')).not.toBeNull();
     expect(glyph).toHaveStyle({transform: 'rotate(90deg)'});
     expect(button).not.toHaveStyle({transform: 'rotate(90deg)'});
   });
@@ -408,21 +527,24 @@ describe('useTableRowExpansion (detail panel)', () => {
   describe('panel variant', () => {
     const panelRow = () =>
       screen.getByTestId('panel').closest('tr') as HTMLTableRowElement;
+    const panelCell = () =>
+      screen.getByTestId('panel').closest('td') as HTMLTableCellElement;
+    const wash = {backgroundColor: 'var(--color-background-muted)'};
 
     it('leaves the panel on the surface behind the table by default', () => {
       // The panel is the row's continuation, not a surface of its own: it
       // takes whatever the table sits on, the way the row does.
       render(<Harness initialExpanded={new Set(['a'])} />);
-      expect(panelRow()).not.toHaveStyle({
-        backgroundColor: 'var(--color-background-muted)',
-      });
+      expect(panelRow()).not.toHaveStyle(wash);
+      expect(panelCell()).not.toHaveStyle(wash);
     });
 
-    it('washes the panel when muted is asked for', () => {
+    it('washes the panel cell, not its row, when muted is asked for', () => {
+      // A row that paints its own box keeps a moving clip as the panel plays
+      // in. The cell slides in with the content instead.
       render(<Harness initialExpanded={new Set(['a'])} panelVariant="muted" />);
-      expect(panelRow()).toHaveStyle({
-        backgroundColor: 'var(--color-background-muted)',
-      });
+      expect(panelCell()).toHaveStyle(wash);
+      expect(panelRow()).not.toHaveStyle(wash);
     });
   });
 
@@ -435,6 +557,11 @@ describe('useTableRowExpansion (detail panel)', () => {
      * sibling row in the same tbody (which is what makes an exclusion
      * necessary at all), and every stripe rule counts only rows that are not
      * panels.
+     *
+     * Both cases render without row dividers. The panel's divider carry reads
+     * the striped row's computed style, and jsdom resolves it in about 2,000
+     * nested passes, which takes seconds. Striping does not depend on
+     * dividers.
      */
     const stripeRules = () => {
       const out: string[] = [];
@@ -453,7 +580,9 @@ describe('useTableRowExpansion (detail panel)', () => {
     };
 
     it('counts stripes over data rows only, so an open panel cannot flip them', () => {
-      render(<Harness isStriped initialExpanded={new Set(['a'])} />);
+      render(
+        <Harness isStriped dividers="none" initialExpanded={new Set(['a'])} />,
+      );
 
       // The panel really is a row among the rows — left in the count, it takes
       // the stripe meant for the row below it and inverts everything after.
@@ -473,7 +602,9 @@ describe('useTableRowExpansion (detail panel)', () => {
     it('marks the panel row so the stripe rule can skip it', () => {
       // The attribute is what the selector keys off, so it is contract, not
       // decoration — losing it silently restores the parity shift above.
-      render(<Harness initialExpanded={new Set(['a'])} isStriped />);
+      render(
+        <Harness initialExpanded={new Set(['a'])} isStriped dividers="none" />,
+      );
       const panels = Array.from(
         document.querySelectorAll<HTMLTableRowElement>('tbody tr'),
       ).filter(r => r.hasAttribute('data-expansion-panel'));
@@ -677,5 +808,84 @@ describe('useTableRowExpansion (detail panel)', () => {
     expect(
       screen.getAllByRole('button', {name: 'Développer la ligne'}).length,
     ).toBeGreaterThan(0);
+  });
+});
+
+describe('row expansion icon slot', () => {
+  // Label each shared icon's artwork, so a test reads which name rendered.
+  const icons = {
+    chevronRight: <span data-icon="chevronRight" />,
+    chevronDown: <span data-icon="chevronDown" />,
+    menu: <span data-icon="menu" />,
+  };
+  let themeCount = 0;
+
+  function renderInTheme(componentIcons?: ComponentIconMap<never>) {
+    const theme = defineTheme({
+      name: `table-row-expand-slot-${themeCount++}`,
+      icons,
+      componentIcons,
+    });
+    render(
+      <Theme theme={theme}>
+        <Harness initialExpanded={new Set(['a'])} />
+      </Theme>,
+    );
+  }
+
+  const toggles = () =>
+    screen.getAllByRole('button', {name: /(expand|collapse) row/i});
+  const glyph = (button: HTMLElement) =>
+    button.querySelector('[data-icon]')?.getAttribute('data-icon') ?? null;
+
+  it('draws chevronRight in both states when the theme maps nothing, turned while expanded', () => {
+    renderInTheme();
+    const [expanded, collapsed] = toggles();
+
+    expect(glyph(expanded)).toBe('chevronRight');
+    expect(glyph(collapsed)).toBe('chevronRight');
+    // The component keeps the turn on the toggle's first child, the element
+    // the glide gives its spring: the two states style it apart.
+    const turned = (toggle: HTMLElement) => toggle.querySelector(':scope > *');
+    expect(turned(expanded)?.className).not.toBe(turned(collapsed)?.className);
+    expect(
+      turned(expanded)?.contains(expanded.querySelector('.astryx-icon')),
+    ).toBe(true);
+  });
+
+  it('passes `expanded` to a slot function and draws the name it returns', () => {
+    const slot = vi.fn(({expanded}: {expanded: boolean}) => ({
+      icon: expanded ? ('menu' as const) : ('chevronRight' as const),
+    }));
+    renderInTheme({'table-row-expand': slot});
+    const [expanded, collapsed] = toggles();
+
+    expect(glyph(expanded)).toBe('menu');
+    expect(glyph(collapsed)).toBe('chevronRight');
+    expect(slot).toHaveBeenCalledWith({expanded: true});
+    expect(slot).toHaveBeenCalledWith({expanded: false});
+    fireEvent.click(collapsed);
+    expect(glyph(toggles()[1])).toBe('menu');
+  });
+
+  it('hides only the glyph for null; the toggle keeps its name, state, and action', () => {
+    renderInTheme({'table-row-expand': null});
+    const [expanded, collapsed] = toggles();
+
+    expect(expanded.querySelector('.astryx-icon')).toBeNull();
+    expect(expanded).toHaveAttribute('aria-expanded', 'true');
+    expect(collapsed).toHaveAccessibleName(/expand row/i);
+    fireEvent.click(collapsed);
+    expect(screen.getAllByTestId('panel')).toHaveLength(2);
+  });
+
+  it('changes only the icon size for a size request', () => {
+    renderInTheme({'table-row-expand': {size: 'sm'}});
+
+    expect(toggles()[0].querySelector('.astryx-icon')).toHaveAttribute(
+      'data-size',
+      'sm',
+    );
+    expect(glyph(toggles()[0])).toBe('chevronRight');
   });
 });

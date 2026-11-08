@@ -119,12 +119,24 @@ describe('response-types EnumDoc names every field', () => {
   it('search, across component, hook, template, and doc results', async () => {
     const mixed = await data(['search', 'dashboard', '--limit', '50']);
     const docsOnly = await data(['search', 'tokens', '--type', 'doc']);
+    // Reaches a deprecated component, whose result carries `deprecated`.
+    const deprecated = await data([
+      'search',
+      'switcher',
+      '--type',
+      'component',
+    ]);
     expect(new Set(mixed.data.results.map(r => r.domain))).toContain(
       'template',
     );
+    expect(deprecated.data.results.some(r => r.deprecated)).toBe(true);
     expectNamed(
       'search',
-      new Set([...fieldsOf(mixed.data), ...fieldsOf(docsOnly.data)]),
+      new Set([
+        ...fieldsOf(mixed.data),
+        ...fieldsOf(docsOnly.data),
+        ...fieldsOf(deprecated.data),
+      ]),
     );
   });
 
