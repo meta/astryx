@@ -1,13 +1,15 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope core/Timestamp
 
 /**
- * @file Timestamp.a11y.chromium.spec.ts
- * @input Built Storybook, Chromium keyboard navigation and a delayed card chunk
+ * @file Timestamp.a11y.browser.spec.ts
+ * @input Built Storybook, keyboard navigation in Chromium and WebKit, and a
+ *   delayed card chunk
  * @output Proof of sequential copy access and focus preservation on cold loads
  * @position Browser regressions for Timestamp's lazy details attachment
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
