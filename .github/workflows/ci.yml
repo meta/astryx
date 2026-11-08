@@ -4436,9 +4436,10 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # Dependent audits (spec:AST-030 FR12): a change to a shared primitive that
-  # .github/a11y-shared-primitives.json lists runs the `audit` specs of the
-  # components that use it, which otherwise run only in their own
+  # Dependent audits (spec:AST-030 FR12): a change to a component's source runs
+  # that component's own `audit` specs, and a change to a shared primitive that
+  # .github/a11y-shared-primitives.json lists also runs the `audit` specs of
+  # the components that use it. These otherwise run only in their own
   # component-audit pull request and in the release check. The plan job reads
   # the changed files and the import graph at the merge commit and splits the
   # audits into at most three legs of about ten minutes each by recorded time.
@@ -4451,9 +4452,16 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+    # owed, ran, deferred and complete are the record merge-guard reads: a
+    # head merges only on a run whose complete is true. The same record is
+    # the a11y-dependent-audits-record-<attempt> artifact.
     outputs:
       count: ${{ steps.plan.outputs.count || '0' }}
       shares: ${{ steps.plan.outputs.shares || '[]' }}
+      owed: ${{ steps.plan.outputs.owed || '[]' }}
+      ran: ${{ steps.plan.outputs.ran || '[]' }}
+      deferred: ${{ steps.plan.outputs.deferred || '[]' }}
+      complete: ${{ steps.plan.outputs.complete || 'true' }}
     steps:
       - name: Check out the scope action
         uses: actions/checkout@v7
@@ -4484,18 +4492,41 @@ jobs:
 
       # Without the list a changed primitive would go unseen and its
       # dependents' audits would not run.
+      # When the scope could not be decided (a diff GitHub truncates, say),
+      # everything is in scope and every audit is owed. A decided scope
+      # without its list is an error.
       - name: Require the changed-file list
-        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == ''
+        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == '' && steps.scope.outputs.decided != 'false'
         run: |
           echo "::error::The scope step could not list the changed files, so the dependent audits to run are unknown. Re-run the job."
           exit 1
 
+      # A first run fits what it can into three legs of about ten minutes and
+      # names the rest as not yet run; a later run at the same head (a re-run
+      # of all jobs) runs every owed audit.
       - name: Plan the dependent audits
         id: plan
         if: steps.scope.outputs.applies == 'true'
         env:
           CHANGED_FILES: ${{ steps.scope.outputs.changed_files_path }}
-        run: node .github/scripts/a11y-dependent-audits.mjs --changed "$CHANGED_FILES" --out "$RUNNER_TEMP/dependent-audits.json"
+          ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          if [ -n "$CHANGED_FILES" ]; then
+            changes=(--changed "$CHANGED_FILES")
+          else
+            changes=(--all)
+          fi
+          node .github/scripts/a11y-dependent-audits.mjs "${changes[@]}" --out "$RUNNER_TEMP/a11y-dependent-audits.json" --attempt "$RUN_ATTEMPT"
+
+      - name: Upload the dependent-audit record
+        if: steps.plan.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          # One record per attempt: merge-guard reads the latest attempt's.
+          name: a11y-dependent-audits-record-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/a11y-dependent-audits.json
+          retention-days: 30
 
   # Each leg runs its share of the plan at the head that built the Storybook.
   # A leg without a share runs on a slim runner and only says so. The `test`
@@ -4508,10 +4539,12 @@ jobs:
     # An empty count (the plan skipped) compares as 0.
     runs-on: ${{ needs.a11y-dependent-audits-plan.outputs.count >= matrix.leg && 'ubuntu-latest' || 'ubuntu-slim' }}
     timeout-minutes: 15
+    # A first run plans at most three legs; a later run at the same head may
+    # plan up to six to run every owed audit.
     strategy:
       fail-fast: false
       matrix:
-        leg: [1, 2, 3]
+        leg: [1, 2, 3, 4, 5, 6]
     permissions:
       contents: read
     steps:
