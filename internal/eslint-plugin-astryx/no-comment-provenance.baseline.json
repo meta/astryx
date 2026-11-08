@@ -591,9 +591,7 @@
     "spec:AST-085",
     "spec:AST-085"
   ],
-  "packages/core/src/List/List.tsx": ["FR29", "spec:AST-017"],
   "packages/core/src/List/ListContext.tsx": ["DEC-6", "spec:AST-061"],
-  "packages/core/src/List/ListItem.tsx": ["FR11", "spec:AST-061"],
   "packages/core/src/Markdown/Markdown.fr23.bench.ts": [
     "AST-036",
     "FR23",

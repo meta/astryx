@@ -195,6 +195,14 @@ export {
   type DragToSnapPointsOptions,
 } from './dragToSnapPoints/createDragToSnapPoints';
 
+// Reorder (a collection's `reorderable` prop)
+export {
+  createReorderable,
+  type Reorderable,
+  type ReorderableOptions,
+  type ReorderMove,
+} from './reorderable/createReorderable';
+
 // Hooks
 export * from './hooks';
 

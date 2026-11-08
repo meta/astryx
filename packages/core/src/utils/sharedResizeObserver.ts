@@ -5,7 +5,8 @@
 /**
  * @file sharedResizeObserver.ts
  * @input ResizeObserver API
- * @output Exports observeResize / unobserveResize for shared observation
+ * @output Exports observeResize / unobserveResize for shared observation, and
+ *   the internal isResizeObserved
  * @position Utility; consumed by useTruncation, useOverflow, and any component
  *   that needs resize observation without creating per-instance observers
  *
@@ -50,6 +51,11 @@ function getObserver(): ResizeObserver | null {
     });
   }
   return observer;
+}
+
+/** Whether the shared observer already watches `element`. Internal. */
+export function isResizeObserved(element: Element): boolean {
+  return callbacks.has(element);
 }
 
 /**

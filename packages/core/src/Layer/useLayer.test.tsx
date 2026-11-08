@@ -3048,6 +3048,136 @@ describe('wasJustDismissed (light dismiss vs. the trigger click, #5004)', () => 
   });
 });
 
+describe('a light-dismiss layer opened by a context-menu press', () => {
+  function ContextOpenedHarness({lightDismiss}: {lightDismiss: boolean}) {
+    const layer = useLayerInternal({mode: 'context', lightDismiss});
+    return (
+      <>
+        <div
+          data-testid="zone"
+          ref={layer.ref}
+          onContextMenu={event => {
+            event.preventDefault();
+            layer.show();
+          }}
+        />
+        {layer.render(<span>Menu</span>, {placement: 'below'})}
+      </>
+    );
+  }
+
+  /** A press of `pointerId` on `target`, which jsdom's events do not carry. */
+  function pressDown(target: Element, pointerId: number) {
+    fireEvent(
+      target,
+      Object.assign(new MouseEvent('pointerdown', {bubbles: true, button: 2}), {
+        pointerId,
+      }),
+    );
+  }
+
+  let captured: {element: Element; pointerId: number}[] = [];
+  beforeEach(() => {
+    captured = [];
+    HTMLElement.prototype.setPointerCapture = function (pointerId: number) {
+      captured.push({element: this, pointerId});
+    };
+  });
+  afterEach(() => {
+    // The press ends, so no claim outlives its test.
+    fireEvent(
+      document,
+      Object.assign(new MouseEvent('pointerup', {bubbles: true}), {
+        pointerId: 7,
+      }),
+    );
+    delete (HTMLElement.prototype as Partial<HTMLElement>).setPointerCapture;
+  });
+
+  it('captures the opening press, so its release lands on the layer and cannot dismiss it', () => {
+    const {container, getByTestId} = render(
+      <ContextOpenedHarness lightDismiss />,
+    );
+    const zone = getByTestId('zone');
+    pressDown(zone, 7);
+    fireEvent.contextMenu(zone);
+    expect(captured).toEqual([
+      {element: container.querySelector('[popover]'), pointerId: 7},
+    ]);
+  });
+
+  it('lets the capture go while the pointer is over the layer, and takes it again outside', () => {
+    const released: number[] = [];
+    HTMLElement.prototype.hasPointerCapture = () => true;
+    HTMLElement.prototype.releasePointerCapture = (pointerId: number) => {
+      released.push(pointerId);
+    };
+    const {container, getByTestId} = render(
+      <ContextOpenedHarness lightDismiss />,
+    );
+    const zone = getByTestId('zone');
+    pressDown(zone, 7);
+    fireEvent.contextMenu(zone);
+    const layer = container.querySelector('[popover]') as HTMLElement;
+    vi.spyOn(layer, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(100, 100, 100, 100),
+    );
+    let at = {x: 150, y: 150};
+    const move = (pointerId: number) =>
+      fireEvent(
+        layer,
+        Object.assign(
+          new MouseEvent('pointermove', {
+            bubbles: true,
+            clientX: at.x,
+            clientY: at.y,
+          }),
+          {pointerId},
+        ),
+      );
+
+    move(7);
+    expect(released).toEqual([7]);
+    at = {x: 20, y: 20};
+    move(7);
+    expect(captured).toHaveLength(2);
+    // Another pointer's move leaves the claim alone.
+    move(8);
+    expect(captured).toHaveLength(2);
+
+    // The release ends the claim: later moves capture nothing.
+    fireEvent(
+      zone,
+      Object.assign(new MouseEvent('pointerup', {bubbles: true}), {
+        pointerId: 7,
+      }),
+    );
+    move(7);
+    expect(captured).toHaveLength(2);
+    delete (HTMLElement.prototype as Partial<HTMLElement>).hasPointerCapture;
+    delete (HTMLElement.prototype as Partial<HTMLElement>)
+      .releasePointerCapture;
+  });
+
+  it('captures nothing for a context menu from the keyboard, which has no press', () => {
+    const {getByTestId} = render(<ContextOpenedHarness lightDismiss />);
+    const zone = getByTestId('zone');
+    pressDown(zone, 7);
+    fireEvent.pointerUp(zone);
+    fireEvent.keyDown(zone, {key: 'F10', shiftKey: true});
+    fireEvent.contextMenu(zone);
+    expect(captured).toEqual([]);
+  });
+
+  it('captures nothing for a layer without light dismiss', () => {
+    const {getByTestId} = render(<ContextOpenedHarness lightDismiss={false} />);
+    const zone = getByTestId('zone');
+    pressDown(zone, 7);
+    fireEvent.contextMenu(zone);
+    expect(captured).toEqual([]);
+  });
+});
+
 describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
   function ClearHarness({placement}: {placement?: LayerPlacement}) {
     const layer = useLayerInternal({mode: 'context', keepsAnchorClear: true});

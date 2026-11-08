@@ -778,6 +778,156 @@ describe('private Table shared-geometry controller', () => {
     unmount();
     viewport.remove();
   });
+  it('sizes a logical-position column from canvas text metrics without a layout read or DOM write', () => {
+    const measureText = vi.fn((text: string) => ({width: text.length * 7}));
+    vi.stubGlobal(
+      'OffscreenCanvas',
+      class {
+        getContext() {
+          return {font: '', measureText};
+        }
+      },
+    );
+    const viewport = document.createElement('div');
+    const table = document.createElement('table');
+    const body = document.createElement('tbody');
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    const number = document.createElement('span');
+    number.textContent = '1';
+    number.style.fontSize = '12px';
+    number.style.fontFamily = 'monospace';
+    cell.style.paddingLeft = '12px';
+    cell.style.paddingRight = '12px';
+    cell.append(number);
+    row.append(cell);
+    body.append(row);
+    table.append(body);
+    viewport.append(table);
+    document.body.append(viewport);
+    Object.defineProperty(viewport, 'clientHeight', {value: 100});
+    vi.spyOn(body, 'getBoundingClientRect').mockImplementation(
+      () => ({height: 2000}) as DOMRect,
+    );
+    vi.spyOn(row, 'getBoundingClientRect').mockImplementation(
+      () => ({height: 20}) as DOMRect,
+    );
+    const numberRect = vi.spyOn(number, 'getBoundingClientRect');
+    const cellWrites = vi.spyOn(cell, 'append');
+    const positions = new Set([0]);
+    const measured = {viewportHeight: 100, bodyOffset: 0, isMeasured: true};
+    const geometry = source({
+      ...measured,
+      scrollTop: 0,
+      revision: 1,
+      layoutRevision: 1,
+    });
+    const {result, unmount} = renderHook(() =>
+      useTableWindow({
+        capability: useTableRowsVirtualization({
+          rowHeight: 20,
+          viewportHeight: 100,
+        }),
+        data,
+        keys,
+        isAdmitted: true,
+        logicalPositionColumns: positions,
+        viewport: {current: viewport},
+        body: {current: body},
+        table: {current: table},
+        geometry: geometry.store,
+      }),
+    );
+    // '100' at 7px per digit, 24px of padding and 1px of slack.
+    expect(result.current.logicalPositionWidths.get(0)).toBe(46);
+    expect(measureText).toHaveBeenLastCalledWith('100');
+    expect(numberRect).not.toHaveBeenCalled();
+    expect(cellWrites).not.toHaveBeenCalled();
+    const calls = measureText.mock.calls.length;
+    const publish = (scrollTop: number, revision: number, layout: number) =>
+      act(() =>
+        geometry.publish({
+          ...measured,
+          scrollTop,
+          revision,
+          layoutRevision: layout,
+        }),
+      );
+    // A scroll or a content change does not measure again; a layout change does.
+    publish(4, 1, 1);
+    publish(4, 2, 1);
+    expect(measureText).toHaveBeenCalledTimes(calls);
+    publish(4, 3, 2);
+    expect(measureText.mock.calls.length).toBeGreaterThan(calls);
+    unmount();
+    viewport.remove();
+    vi.unstubAllGlobals();
+  });
+  it('checks the body extent after a row-number width changes at mount', () => {
+    vi.stubGlobal(
+      'OffscreenCanvas',
+      class {
+        getContext() {
+          return {
+            font: '',
+            measureText: (text: string) => ({width: text.length * 7}),
+          };
+        }
+      },
+    );
+    const viewport = document.createElement('div');
+    const table = document.createElement('table');
+    const body = document.createElement('tbody');
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    const number = document.createElement('span');
+    number.textContent = '1';
+    number.style.fontSize = '12px';
+    number.style.fontFamily = 'monospace';
+    cell.append(number);
+    row.append(cell);
+    body.append(row);
+    table.append(body);
+    viewport.append(table);
+    document.body.append(viewport);
+    Object.defineProperty(viewport, 'clientHeight', {value: 100});
+    // 100 rows of 20px need a 2,000px body; this one cannot hold them.
+    vi.spyOn(body, 'getBoundingClientRect').mockImplementation(
+      () => ({height: 1234}) as DOMRect,
+    );
+    vi.spyOn(row, 'getBoundingClientRect').mockImplementation(
+      () => ({height: 20}) as DOMRect,
+    );
+    const positions = new Set([0]);
+    const geometry = source({
+      viewportHeight: 100,
+      bodyOffset: 0,
+      isMeasured: true,
+      scrollTop: 0,
+      revision: 1,
+      layoutRevision: 1,
+    });
+    const {result, unmount} = renderHook(() =>
+      useTableWindow({
+        capability: useTableRowsVirtualization({
+          rowHeight: 20,
+          viewportHeight: 100,
+        }),
+        data,
+        keys,
+        isAdmitted: true,
+        logicalPositionColumns: positions,
+        viewport: {current: viewport},
+        body: {current: body},
+        table: {current: table},
+        geometry: geometry.store,
+      }),
+    );
+    expect(result.current.isWindowed).toBe(false);
+    unmount();
+    viewport.remove();
+    vi.unstubAllGlobals();
+  });
   it('cleans the parent source subscription across StrictMode replay', () => {
     const geometry = source();
     const refs = {
