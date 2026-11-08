@@ -351,7 +351,11 @@ describe('useScrollableArea', () => {
     act(() => {
       for (const callback of resizeObservers) {
         callback(
-          [{target: viewport} as ResizeObserverEntry],
+          [
+            {
+              target: viewport,
+            } as Partial<ResizeObserverEntry> as ResizeObserverEntry,
+          ],
           {} as ResizeObserver,
         );
       }
