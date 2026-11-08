@@ -85,9 +85,16 @@ describe('WebKit interaction proof routing', () => {
   });
 
   it('always reports, behind the same pull-request gate as the Chromium proofs', () => {
-    expect(webkit.if).toBe(chromium.if);
+    // The same gate, and the weekly full run on main as its one dispatch
+    // (spec:AST-030 DEC-24).
+    expect(webkit.if).toBe(
+      chromium.if.replace(
+        "github.event_name != 'workflow_dispatch' && always()",
+        "(github.event_name != 'workflow_dispatch' || inputs.operation == 'webkit-weekly') && always()",
+      ),
+    );
     expect(ungated(webkit.if)).toBe(
-      "github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true'",
+      "(github.event_name != 'workflow_dispatch' || inputs.operation == 'webkit-weekly') && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true'",
     );
     // Admission too: the Storybook build starts beside it (spec:AST-030 FR16).
     expect(webkit.needs).toEqual([
@@ -96,6 +103,7 @@ describe('WebKit interaction proof routing', () => {
       'heavy-ci',
       'build-storybook',
       'interaction-legs',
+      'webkit-weekly-request',
     ]);
   });
 
@@ -114,7 +122,7 @@ describe('WebKit interaction proof routing', () => {
     );
     expect(webkit.steps.indexOf(decide(webkit))).toBe(1);
     expect(decide(webkit).with).toMatchObject({
-      'outside-pull-request': 'skip',
+      'outside-pull-request': "${{ github.event_name == 'workflow_dispatch' && 'run' || 'skip' }}",
       'requires-head-file': 'playwright.interaction.config.ts',
     });
     expect(step(webkit, 'Skip the WebKit proofs outside their scope').if).toBe(
@@ -158,14 +166,14 @@ describe('WebKit interaction proof routing', () => {
     );
   });
 
-  it('runs the interaction config in WebKit against the exact PR head', () => {
+  it('runs the interaction config in WebKit against the exact PR head, or main on the weekly run', () => {
     const checkout = webkit.steps.find(
       candidate =>
         candidate.uses?.startsWith('actions/checkout@') &&
         candidate.with?.path === undefined,
     );
     expect(checkout?.with?.ref).toBe(
-      '${{ github.event.pull_request.head.sha }}',
+      '${{ github.event.pull_request.head.sha || github.sha }}',
     );
     // The image already holds WebKit and its system libraries: no apt step.
     expect(step(webkit, 'Install Playwright WebKit').run).toBe(

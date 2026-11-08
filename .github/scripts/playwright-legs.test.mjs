@@ -327,8 +327,8 @@ describe('the interaction leg count job in ci.yml', () => {
   ];
 
   it('runs beside the Storybook build, behind the gate the lanes share', () => {
-    expect(counter.needs).toEqual(['room', 'admission', 'heavy-ci']);
-    expect(counter.if).toBe(ci.jobs['pr-interaction'].if);
+    expect(counter.needs).toEqual(['room', 'admission', 'heavy-ci', 'webkit-weekly-request']);
+    // The WebKit lane's gate, which also admits the weekly full run.
     expect(counter.if).toBe(ci.jobs['pr-interaction-webkit'].if);
     expect(counter.env).toEqual(ci.jobs['pr-interaction-webkit'].env);
     expect(counter.outputs).toEqual({
@@ -684,13 +684,13 @@ describe('the interaction proof legs in ci.yml', () => {
       }
     }
 
-    it("plans every WebKit spec only for the release tooling's interaction-check/ pull request", () => {
-      expect(job.env.WEBKIT_ALL_SPECS).toBe(
+    it("decides the WebKit scope only for the release tooling's interaction-check/ pull request", () => {
+      expect(job.env.WEBKIT_RELEASE_CHECK).toBe(
         "${{ startsWith(github.head_ref, 'interaction-check/') && github.event.pull_request.user.login == 'cixzhang' && github.event.pull_request.head.repo.full_name == github.repository }}",
       );
       // The expression's three conditions, read against a pull request.
       const fullScope = pr =>
-        job.env.WEBKIT_ALL_SPECS.slice(3, -2)
+        job.env.WEBKIT_RELEASE_CHECK.slice(3, -2)
           .trim()
           .split(' && ')
           .every(condition => {

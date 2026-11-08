@@ -600,10 +600,12 @@ they are separately named.
   help when the reference is unclear. A range it cannot read fails the check. A
   maintainer handles a false positive through the normal fix-forward route,
   with no bypass.
-- **FR28 — A release interaction check's throwaway pull request runs the full
-  WebKit scope.** A release interaction check's throwaway pull request, on an
+- **FR28 — A release interaction check's throwaway pull request runs WebKit's
+  release scope.** A release interaction check's throwaway pull request, on an
   `interaction-check/` branch that the release tooling creates for a named
-  release attempt, runs the full WebKit browser spec scope. The workflow
+  release attempt, runs WebKit's release scope (DEC-24): the touch and gesture
+  subset, or the full WebKit browser spec scope after a failed or stale weekly
+  full run and at every minor release. The workflow
   verifies the branch prefix, the creator identity and that the head repository
   is this one, so a pull request that only picks the prefix, or comes from a
   fork, does not qualify. The creator check matches the shared automation
@@ -679,7 +681,7 @@ The nightly perf lane is the one scheduled measurement outside them (FR18).
 | FR24     | `ci-heavy-lanes.test.mjs` cadence cases                                                                                                                                          | release-check 170 and 176 minutes old; the unit lane hourly beside it; weekday 06:37 Pacific inside the window in standard and daylight time; the pre-cut check already started; the tip already checked; a weekend morning; before 06:30 and after 07:30                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | a release-check starts inside the 175-minute window, the pre-cut check is skipped or starts twice, or it runs on a weekend                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | FR26     | `ci-lab-only-routing.test.mjs`, `change-scope.test.mjs` and `test-scope-action.test.mjs` Lab-only cases                                                                          | a Lab-only change, with and without a Changeset; a new Lab component with its routes, discovery entry and story; Lab beside core, charts, a core Storybook story, a route or discovery entry for another component, an entry-file diff GitHub leaves out, the docsite, the Sandbox, a workflow, the lockfile, root configuration, internal tooling or a spec record; a rename into or out of Lab; an incomplete list; a base classifier without the lane; each required context, its owners, the UI legs' Lab tests, the UI and Node guard tests, the repository guards, the Storybook build and Lab typecheck, the heavy suites with and without a label, lint and an agent push                                                                                                                | a mixed change takes the Lab-only lane; a new Lab component's own entry files make it mixed, or another component's do not; a changed existing story, a story for a component the change does not carry, or a renamed entry file keeps the lane; the CLI official-packages check, the route-lock check when the lock changed, or the Storybook build does not run for one; a required context skips or fails, or passes without its notice; a Lab test, a guard test, a repository guard, the Lab typecheck or the Storybook build does not run; an unlabelled heavy suite, the docsite or the full typecheck runs, or a label's suite cannot audit Lab; lint is skipped |
 | FR27     | `check-public-text.test.mjs` over the check and the Lint workflow step                                                                                                           | each identifier shape; a hashed name and host made up in the test; ordinary text; a finding in a commit message, an added line and the description; a match before the merge base; an empty range, a bad sha, a missing commit and a missing digest file                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | a reference passes; the output holds the matched text; a match on the base branch fails a later pull request; an unreadable range passes; the step runs the pull request's own copy                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| FR28     | `playwright-legs.test.mjs` creator, prefix and head-repository cases ("plans every WebKit spec only for the release tooling's interaction-check/ pull request")                  | release interaction-check PRs: the release tooling's pull request; the same prefix from another author or from a fork; the tooling account on another branch                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | A prefix-only, other-author or fork pull request gets the full WebKit scope, or the tooling's interaction-check pull request does not                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| FR28     | `playwright-legs.test.mjs` creator, prefix and head-repository cases ("decides the WebKit scope only for the release tooling's interaction-check/ pull request"); `ci-webkit-weekly.test.mjs` | release interaction-check PRs: the release tooling's pull request; the same prefix from another author or from a fork; the tooling account on another branch. A release run lists the WebKit subset; a release after a failed or stale weekly run, and a minor release, list the full suite; a reproducing weekly failure blocks the next release |
 
 ## Decision log
 
@@ -1188,18 +1190,32 @@ Rejected: dropping the five-component limit for every audit (the visual,
 accessibility and RTL audits of a wide change do not fit the default check's
 time).
 
-### DEC-24 — Release interaction-check pull requests run the full WebKit scope
+### DEC-24 — Release WebKit runs the touch and gesture subset, with a weekly full run
 
 **Reference:** `spec:AST-030/DEC-24`
 **Decider:** the Chief with the release owner, `2026-11-06`
 
-A release interaction check's throwaway pull request runs the full WebKit
-browser spec scope (FR28). It qualifies only when its head branch starts with
-`interaction-check/`, the release tooling's account opened it, and its head
-repository is this repository. Such pull requests stay non-mergeable, and the
-rule widens the scope of no other pull request.
+A release runs WebKit's touch and gesture subset, the same subset a pull
+request runs. WebKit's full interaction suite runs weekly on main. A release
+runs the full WebKit suite instead when the last full weekly run failed or is
+more than 7 days old (age is the time since the last green full run completed
+at a recorded commit on main), and every minor release (for example 0.8.0)
+runs it at its exact commit. A reproducing failure in a weekly full run blocks
+the next release until it is fixed forward. The visual, accessibility and
+right-to-left release gates are unchanged.
+
+A release interaction check's throwaway pull request (FR28) qualifies only
+when its head branch starts with `interaction-check/`, the release tooling's
+account opened it, and its head repository is this repository. Such pull
+requests stay non-mergeable, and the rule widens the scope of no other pull
+request.
 
 Rejected: any pull request on the prefix (a prefix alone is spoofable).
+
+Amended 2026-11-08 by the chief of staff with CI & Release and the release
+owner: per-release WebKit runs the touch and gesture subset; the full suite
+moves to a weekly run on main, with the fallbacks above. CI & Release reviews
+escaped WebKit defects on 2026-12-06.
 
 ### DEC-25 — A shared primitive's change runs its dependents' audits
 
