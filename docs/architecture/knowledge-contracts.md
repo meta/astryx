@@ -57,6 +57,14 @@ deciding_specs: []
 }
 ```
 
+<!-- path-applicability:v1 -->
+
+```json
+{
+  "paths": ["apps/docsite/**"]
+}
+```
+
 ## Purpose
 
 A reviewer should be able to answer two questions without rereading old pull
