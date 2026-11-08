@@ -70,7 +70,9 @@ const styles = stylex.create({
     display: 'flex',
     gap: 8,
     padding: 12,
-    borderBottom: '1px solid #e5e5e5',
+    borderBottomWidth: 1,
+    borderBottomStyle: 'solid',
+    borderBottomColor: '#e5e5e5',
     flexWrap: 'wrap' as const,
     alignItems: 'center',
   },
@@ -306,7 +308,7 @@ function VirtualizedMessages({
         getItemType={rowTypeOf}
         estimatedItemSize={120}
         endThreshold={endThreshold}
-        renderItem={({item}) => (
+        renderItem={({item}: {item: DemoMessage}) => (
           <div {...stylex.props(styles.rowPad)}>
             <ChatMessage sender={item.role}>
               {item.role === 'user' ? (
