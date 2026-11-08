@@ -28,9 +28,14 @@ describe.skipIf(process.env.SWIZZLE_PROOF_BROWSER !== '1')(
         const target = (await listTargets(project)).find(
           t => t.key === 'core__Badge',
         );
+        const samplesFile = path.join(project, 'empty-samples.mjs');
+        fs.writeFileSync(
+          samplesFile,
+          'export const samples = {core__Badge: () => null};\n',
+        );
         const {results} = await prove([target], {
           project,
-          samples: {core__Badge: () => null},
+          samplesFile,
           browser: true,
         });
         expect(results[0].failure).toEqual({

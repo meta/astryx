@@ -482,12 +482,11 @@ function hasParentCommit() {
  * Runs one slice of the proof: the targets at `index` of every `count`, in
  * the scope {@link proofScope} chooses. In the affected scope the slice
  * proves the targets whose copy depends on a changed source file.
- * @param {{index: number, count: number, samples: Record<string, Function>, notRendered: Record<string, string>, project: string, all?: boolean, browser?: boolean}} options
+ * @param {{index: number, count: number, notRendered: Record<string, string>, project: string, all?: boolean, browser?: boolean}} options
  */
 export async function runSlice({
   index,
   count,
-  samples,
   notRendered,
   project,
   all = false,
@@ -568,7 +567,6 @@ export async function runSlice({
   const proof = ejectedAffected.length
     ? await prove(ejectedAffected, {
         project,
-        samples,
         notRendered,
         ejected,
         browser,
@@ -592,11 +590,22 @@ export async function runSlice({
  * Proves each target. Each step's failure is recorded on the target, and a
  * target that fails a step skips the later ones.
  * @param {Array<{name: string, pkg: string, key: string}>} targets
- * @param {{project: string, samples: Record<string, Function>, notRendered?: Record<string, string>, ejected?: Map<string, any>, browser?: boolean}} options
+ * @param {{project: string, samplesFile?: string, notRendered?: Record<string, string>, ejected?: Map<string, any>, browser?: boolean}} options
+ *   `samplesFile` is the module whose `samples` render the targets; by
+ *   default the proof's own samples.mjs.
  */
 export async function prove(
   targets,
-  {project, samples, notRendered = {}, ejected, browser = false},
+  {
+    project,
+    samplesFile = path.join(
+      REPO,
+      'packages/cli/test/swizzle-proof/samples.mjs',
+    ),
+    notRendered = {},
+    ejected,
+    browser = false,
+  },
 ) {
   const timings = {};
   const time = async (step, run) => {
@@ -683,10 +692,10 @@ export async function prove(
     const entries = path.join(project, 'entries');
     fs.rmSync(entries, {recursive: true, force: true});
     fs.mkdirSync(entries, {recursive: true});
-    const samplesFile = path.join(entries, 'samples.mjs');
+    const samplesEntry = path.join(entries, 'samples.mjs');
     fs.writeFileSync(
-      samplesFile,
-      `export {samples} from ${JSON.stringify(pathToFileURL(path.join(REPO, 'packages/cli/test/swizzle-proof/samples.mjs')).href)};\n`,
+      samplesEntry,
+      `export {samples} from ${JSON.stringify(pathToFileURL(samplesFile).href)};\n`,
     );
     const packages = workspacePackages();
     for (const t of alive()) {
