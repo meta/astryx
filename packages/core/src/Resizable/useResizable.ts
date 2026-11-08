@@ -132,8 +132,8 @@ export interface UseResizableSingleOptions {
   defaultIsCollapsed?: boolean;
   /**
    * Controlled collapse state. When set, the caller owns collapse:
-   * `collapse()`, `expand()` and a drag past the collapse threshold report
-   * through `onCollapseChange` instead of changing state here.
+   * `collapse()`, `expand()` and a drag lifted past the collapse threshold
+   * report through `onCollapseChange` instead of changing state here.
    */
   isCollapsed?: boolean;
   /** Called when size changes during drag. */
