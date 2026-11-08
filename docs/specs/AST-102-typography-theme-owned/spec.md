@@ -112,8 +112,9 @@ the person's device.
   with its text under FR4.
 - Defects under FR3 and FR4:
   - Safari on iPhone follows Dynamic Type in every theme, recorded in the iOS
-    simulator at the current implementation. Safari on iPad, other iOS
-    browsers, and macOS Safari at its default text size are unverified.
+    simulator at the current implementation. Safari on iPad and other iOS
+    browsers are unverified, and macOS Safari at its default text size is a
+    recorded follow-up verification.
   - Controls hold fixed heights, such as 40 px elements, `component:Badge`
     FR1's block size, `component:Token` FR1's element size, and InputGroup's
     row height in `family:input-fields`, so a larger label can overflow; those
