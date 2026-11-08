@@ -2,10 +2,11 @@
 
 /**
  * @file project.issues.test.mjs
- * @input A consumer project with no integration, and one with an integration
- *   whose template has no source, each under a repo-local temp dir
- * @output Proves that Project.issues() reads no template doc when no
- *   integration is loaded, and still finds an integration's template issue
+ * @input Consumer projects under a repo-local temp dir: one with no
+ *   integration, one whose integration has no templates, and ones whose
+ *   integration's templates are broken or replace a missing Core template
+ * @output Proves that Project.issues() reads no template doc unless an
+ *   integration has templates, and still finds that integration's issues
  * @position Beside project.test.mjs, in its own file because it replaces
  *   the doc compiler's import module to count template doc imports
  */
@@ -58,12 +59,69 @@ afterEach(() => {
   fs.rmSync(tmpDir, {recursive: true, force: true});
 });
 
+/**
+ * Installs `@acme/widgets` with `manifest` and names it in the config.
+ * @param {object} manifest
+ * @returns {string} the package folder
+ */
+function installIntegration(manifest) {
+  fs.writeFileSync(
+    path.join(tmpDir, 'astryx.config.mjs'),
+    `export default ${JSON.stringify({integrations: ['@acme/widgets']})};\n`,
+  );
+  const pkgDir = path.join(tmpDir, 'node_modules', '@acme', 'widgets');
+  fs.mkdirSync(pkgDir, {recursive: true});
+  fs.writeFileSync(
+    path.join(pkgDir, 'package.json'),
+    JSON.stringify({name: '@acme/widgets', version: '1.0.0'}),
+  );
+  fs.writeFileSync(
+    path.join(pkgDir, 'astryx.integration.mjs'),
+    `export default ${JSON.stringify(manifest)};\n`,
+  );
+  return pkgDir;
+}
+
 describe('Project.issues()', () => {
   it('reads no template doc for a project with no integration', async () => {
     const project = await Project.load(tmpDir);
     expect(project.loadedIntegrations).toEqual([]);
     expect(await project.issues()).toEqual([]);
     expect(templateImports.count).toBe(0);
+  });
+
+  it('reads no template doc when no loaded integration has templates', async () => {
+    const pkgDir = installIntegration({themes: './themes'});
+    fs.mkdirSync(path.join(pkgDir, 'themes'));
+    const project = await Project.load(tmpDir);
+    expect(project.loadedIntegrations).toHaveLength(1);
+    expect(await project.issues()).toEqual([]);
+    expect(templateImports.count).toBe(0);
+  });
+
+  it("still finds an integration's replacement of a missing Core template", async () => {
+    const pkgDir = installIntegration({templates: './templates'});
+    fs.mkdirSync(path.join(pkgDir, 'templates', 'pages', 'acme-shell'), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(pkgDir, 'templates', 'pages', 'acme-shell', 'template.doc.mjs'),
+      `export default {type: 'page', name: 'Acme shell', description: 'A shell', replaces: 'no-such-core-page'};\n`,
+    );
+    fs.writeFileSync(
+      path.join(pkgDir, 'templates', 'pages', 'acme-shell', 'template.tsx'),
+      'export default function Template() { return null; }\n',
+    );
+    const project = await Project.load(tmpDir);
+    expect(await project.issues()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          package: '@acme/widgets',
+          code: 'missing_template_replacement_target',
+        }),
+      ]),
+    );
+    expect(templateImports.count).toBeGreaterThan(0);
   });
 
   it("still finds an integration's template issue when nothing discovered templates first", async () => {

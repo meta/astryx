@@ -10,8 +10,15 @@
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {discoverCoreTemplates} from '../../foundation/discovery/template-adapter.mjs';
-import {integrationTemplateConflicts} from './authoring-checks.mjs';
+import {requireNatively} from '../../test-utils/native-require.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('../../foundation/discovery/template-adapter.mjs')} */
+const {
+  discoverCoreTemplates,
+} = require('../../foundation/discovery/template-adapter.mjs');
+/** @type {typeof import('./authoring-checks.mjs')} */
+const {integrationTemplateConflicts} = require('./authoring-checks.mjs');
 
 let tmpDir;
 

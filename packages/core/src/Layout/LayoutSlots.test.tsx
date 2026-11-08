@@ -12,8 +12,8 @@
  * update tests to match new behavior
  */
 
-import {describe, it, expect} from 'vitest';
-import {render, screen} from '@testing-library/react';
+import {describe, it, expect, vi} from 'vitest';
+import {fireEvent, render, screen} from '@testing-library/react';
 import {createRef} from 'react';
 import {Layout} from './Layout';
 import {LayoutHeader} from './LayoutHeader';
@@ -189,6 +189,58 @@ describe('LayoutFooter', () => {
     expect(ref.current).toBeInstanceOf(HTMLDivElement);
     expect(ref.current?.className).toContain('astryx-layout-footer');
   });
+
+  it('applies a numeric height as pixels on the root', () => {
+    const {container} = render(<LayoutFooter height={72}>F</LayoutFooter>);
+    const el = container.querySelector('.astryx-layout-footer') as HTMLElement;
+    expect(el.getAttribute('style') ?? '').toContain('72px');
+  });
+
+  it('exposes no role or name without a caller role', () => {
+    const {container} = render(<LayoutFooter>F</LayoutFooter>);
+    const footer = container.querySelector('.astryx-layout-footer');
+    expect(footer).not.toHaveAttribute('role');
+    expect(footer).not.toHaveAttribute('aria-label');
+  });
+
+  it('passes className, style, DOM, data, and event props to the root', () => {
+    const onClick = vi.fn();
+    render(
+      <LayoutFooter
+        className="caller"
+        style={{color: 'red'}}
+        id="page-footer"
+        data-testid="footer"
+        aria-describedby="hint"
+        onClick={onClick}>
+        F
+      </LayoutFooter>,
+    );
+    const footer = screen.getByTestId('footer');
+    expect(footer).toHaveClass('astryx-layout-footer', 'caller');
+    expect(footer.style.color).toBe('red');
+    expect(footer).toHaveAttribute('id', 'page-footer');
+    expect(footer).toHaveAttribute('aria-describedby', 'hint');
+    fireEvent.click(screen.getByText('F'));
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps data-divider when a caller passes its own value', () => {
+    const {container, rerender} = render(
+      <LayoutFooter data-divider="false">F</LayoutFooter>,
+    );
+    const sel = '.astryx-layout-footer';
+    expect(container.querySelector(sel)).not.toHaveAttribute('data-divider');
+    rerender(
+      <LayoutFooter hasDivider {...{'data-divider': undefined}}>
+        F
+      </LayoutFooter>,
+    );
+    expect(container.querySelector(sel)).toHaveAttribute(
+      'data-divider',
+      'true',
+    );
+  });
 });
 
 // =============================================================================
@@ -247,6 +299,27 @@ describe('LayoutContent', () => {
     const el = container.querySelector('.astryx-layout-content') as HTMLElement;
     expect(el.className).toContain('body-custom');
     expect(el.style.color).toBe('rgb(1, 2, 3)');
+  });
+
+  it('exposes no role or name of its own when it does not scroll', () => {
+    const {container} = render(<LayoutContent>C</LayoutContent>);
+    const el = container.querySelector('.astryx-layout-content') as HTMLElement;
+    expect(el).not.toHaveAttribute('role');
+    expect(el).not.toHaveAttribute('aria-label');
+  });
+
+  it('forwards DOM, data, and event props to the root', () => {
+    const onClick = vi.fn();
+    const {container} = render(
+      <LayoutContent id="body" data-zone="admin" onClick={onClick}>
+        C
+      </LayoutContent>,
+    );
+    const el = container.querySelector('.astryx-layout-content') as HTMLElement;
+    expect(el).toHaveAttribute('id', 'body');
+    expect(el).toHaveAttribute('data-zone', 'admin');
+    fireEvent.click(el);
+    expect(onClick).toHaveBeenCalledTimes(1);
   });
 
   it('renders correctly as the content slot of a Layout (reads slot context)', () => {

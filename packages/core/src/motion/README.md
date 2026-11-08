@@ -22,12 +22,15 @@ roles through `resolveMotion`.
 | `uikit/alert.ts`                                 | UIAlertController: how a finger is tracked across the actions (highlight onset and bounds).                                                                          |
 | `uikit/navigation.ts`                            | UINavigationController: push velocity, parallax, dimming, transition clock, interactive pop finish rule.                                                             |
 | `uikit/progressBar.ts`                           | UIProgressView's fill: the whole-track duration and curve, its minimum length and empty alpha; the reduced-motion pulse (three roles).                               |
+| `uikit/popover.ts`                               | UIPopoverPresentationController: the scale and the length a popover grows out of and shrinks back into.                                                              |
 | `uikit/gestures.ts`                              | Gesture recognizer thresholds, the velocity filter and haptic stand-ins, as `{value, unit}` entries (sources in JSDoc).                                              |
 | `uikit/picker.ts`                                | UIPickerView: row pitch, height and rubber band, velocity floor, the coast's stop speed, snap at rest, tap spin, tick.                                               |
 | `uikit/segmented.ts`                             | UISegmentedControl: the selection indicator's spring; under Reduce Motion the animator's cross-fade replaces it.                                                     |
+| `uikit/sheet.ts`                                 | UISheetPresentationController: the flick speed, how near a detent counts as on it, how far ahead a release is projected, and the speed below which it is not.        |
 | `uikit/switch.ts`                                | UISwitch on iOS 26.2: geometry, the lift, settle, travel and tracking springs, the flip distance, the track colour.                                                  |
 | `uikit/datePicker.ts`                            | UIDatePicker: the rules it adds to its wheels.                                                                                                                       |
 | `android/keyboard.ts`                            | Android's software keyboard (Chrome with Gboard): its slides' durations and curves (no theme's) and when they start against Chrome's report and a blur.              |
+| `uikit/zoomMedia.ts`                             | UIScrollView zooming for a photo viewer: overshoot past the limits, double-tap and maximum zoom.                                                                     |
 | `roles.ts`                                       | The internal motion roles: the springs, durations and curves `spec:AST-094` FR4 names, registered by the shared tables, and a role's CSS form read back.             |
 | `roleValue.ts`                                   | A role's CSS form, written: a spring's duration and bounce, a duration in ms, a curve's `cubic-bezier()`.                                                            |
 | `resolveMotion.ts`                               | A role's value: its table value, as the per-role tables stay internal (`spec:AST-094` DEC-15).                                                                       |
@@ -57,28 +60,28 @@ names for their use (`springs.settle`, `timing.stateChangeMs`,
 `timing.curves.move`, …): a shared table lists them when it registers
 (`roles`), and every other value, a component's measured spring included, is
 a plain constant. The per-role tables stay internal (`spec:AST-094` DEC-15): a
-role plays its table value, and nothing reads its CSS variable
-(`--motion-springs-settle`), so no page or theme style sets a role. A table's
-roles exist once its `register<Name>Table()` has run: the animator registers
-the Reduce Motion fade's curve, and code that plays the shared springs calls
-`registerSpringsTable()` before its first motion. The animator resolves each
-role it is handed when the motion starts; code that times something itself
+role plays its table value at the theme's tempo, and nothing reads the
+role's own CSS variable (`--motion-springs-settle`), so no page or theme
+style sets a role. A table's roles exist once its `register<Name>Table()`
+has run. A page that plays no spring ships no springs registry; each spring
+role registers itself when the module that plays it loads (one idempotent
+in-memory write, no DOM). The navigation, paging and picker tables register
+themselves at import, and the animator registers the Reduce Motion fade's
+curve. The animator resolves each role it is handed when the
+motion starts; code that times something itself
 calls `resolveMotion(element, timing, 'stateChangeMs')`. Gesture thresholds and
 the timings that decide who gets a touch are not roles.
 
 ## Animator
 
 ```
-import {createMotionAnimator} from '../motion/animator';
+import {createMotionEngine} from '../motion/animator';
 import {coast} from '../motion/coast';
 import {solveSpringTowardRamp, toSpring} from '../motion/spring';
 import {resolveMotion} from '../motion/resolveMotion';
-import {registerSpringsTable, springs} from '../motion/uikit';
+import {springs} from '../motion/uikit';
 
-// Once, so the springs are registered as their roles:
-registerSpringsTable();
-
-const animator = createMotionAnimator(sheet);
+const animator = createMotionEngine(sheet);
 // The animator plays a motion role (spec:AST-094 FR4), its table value, as the
 // per-role tables stay internal (DEC-15); math on a spring reads the role with
 // resolveMotion.
@@ -175,10 +178,13 @@ await handle.finished; // true if it ran to the end, false if interrupted
 - `animatorFor(element)` returns the one animator for an element, so code
   that animates it from several places (a swipe on x, a removal on y)
   composes in one `translate` track.
-- `createMotionAnimator(dialog, {pseudoElement: '::backdrop'})` drives a
+- `createMotionEngine(dialog, {pseudoElement: '::backdrop'})` drives a
   pseudo-element; with no inline style to hold it, a static filling animation
   holds its end value until the next animation replaces it, while the
-  pseudo-element exists. A dialog's `::backdrop` is made again each time the
+  pseudo-element exists. A value equal to its `base` (`{base: {opacity: 0}}`,
+  what its stylesheet shows at rest) is not held, so the pseudo-element keeps
+  no compositing layer at rest; in development, the first such value warns
+  when the stylesheet shows another. A dialog's `::backdrop` is made again each time the
   dialog opens, so a presentation `set`s its starting value right after
   `showModal()`, in the same task (a `set` before it lands on the backdrop
   the open replaces).

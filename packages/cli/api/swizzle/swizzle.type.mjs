@@ -34,8 +34,10 @@
  * @property {string} data.package Owner package the component source was copied from.
  * @property {string} data.outputDir
  * @property {number} data.filesCopied
- * @property {string[]} data.files
+ * @property {string[]} data.files Copied file names, relative to the component folder; the internal modules copied beside it start with `../` (spec:AST-110 FR2).
  * @property {boolean} data.usesStyleX Whether any copied file uses StyleX (requires build-time setup).
+ * @property {Record<string, string>} data.dependencies Each npm package the copied files import, other than the owner package, with the version range the owner package declares (`*` when it declares none). The copy builds once the product installs them (spec:AST-110 FR1).
+ * @property {{path: string, written: boolean, found?: string[]}} [data.marker] The output folder's astryx-swizzle.json, relative to the project (spec:AST-110 FR5). Swizzle writes it only into a folder it owns: one the copy creates, an empty one, or one it marked before. When it does not, `written` is false and `found` names up to five entries already in the folder.
  * @property {SwizzleFeedback} [data.feedback]
  */
 
@@ -46,7 +48,7 @@
  * @property {string} [output] Output directory (must resolve inside cwd). Defaults to ./components/astryx.
  * @property {string} [package] Scope to a specific owning package when a name is ambiguous.
  * @property {boolean} [list] Force the list response even with a component argument.
- * @property {boolean} [overwrite] Overwrite existing files instead of erroring.
+ * @property {boolean} [overwrite] Replace the component's existing files instead of erroring. A copy that carries a helper an earlier swizzle wrote never replaces it, except a changed private attribute owner module and the style modules it imports; swizzling the component whose folder holds the helper counts it as that component's own file.
  */
 
 export {};

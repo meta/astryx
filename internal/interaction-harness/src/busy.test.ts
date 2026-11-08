@@ -9,7 +9,13 @@
  *   presentation order; a settle bound in cast steps reads the step from the
  *   run (2 px in WebKit's cast, 1 px in Chromium's), stops a WebKit coast at
  *   its tail's plateaus where a 2 px bound reads them as a stall, and still
- *   fails a 40 ms freeze more than two steps from rest in either cast.
+ *   fails a 40 ms freeze more than two steps from rest in either cast. The
+ *   proof reads a held frame at its run's own pace, whatever the settle
+ *   bound. A slow spring late in a WebKit block passes, and its holds and a
+ *   freeze still fail. A sub-pixel read judges every frame of a slow slide
+ *   that a whole-pixel read shows as stalls, and still fails a freeze. Against
+ *   a control, a frame delivered early on such a slide misses on a
+ *   whole-pixel read and moves on a sub-pixel one.
  * @position Unit test of ./busy and ./frames' ordering; the browser proof
  *   with a real compositor animation and a rAF control is in
  *   harness.interaction.browser.spec.ts.
@@ -17,11 +23,16 @@
 
 import {describe, expect, it} from 'vitest';
 import {busyWindowProof, BusyWindowTooLateError, castStep} from './busy';
+import * as lateBlock from './busy.lateblock.fixture';
 import * as skip from './busy.skip.fixture';
 import * as slowTail from './busy.slowtail.fixture';
 import * as webkitDecel from './busy.webkitdecel.fixture';
 import * as webkitTail from './busy.webkittail.fixture';
-import {inPresentationOrder, type TrackedFrame} from './frames';
+import {
+  inPresentationOrder,
+  SUBPIXEL_STEP_PX,
+  type TrackedFrame,
+} from './frames';
 
 const FRAME = 1000 / 60;
 const BLOCK = {from: 1000, to: 1700};
@@ -357,6 +368,40 @@ describe('busyWindowProof on-screen start', () => {
     const proof = busyWindowProof(unseen, BLOCK);
     expect(proof.onScreenFromMs).toBeNull();
     expect(proof.verdict.failures.join('\n')).toMatch(/longest stall/);
+  });
+
+  it('judges an element that enters from off screen from its first position inside the block, and reports when', () => {
+    // The cast's frames before the block show the screen without it.
+    const entering = moving().map(f =>
+      f.t < 1020
+        ? ({...f, box: null} as TrackedFrame)
+        : ({...f, box: {...f.box!, y: f.box!.y - 60}} as TrackedFrame),
+    );
+    const proof = busyWindowProof(entering, BLOCK);
+    expect(proof.verdict.failures).toEqual([]);
+    expect(proof.onScreenFromMs).toBeGreaterThanOrEqual(20);
+    expect(proof.onScreenFromMs).toBeLessThan(20 + FRAME);
+    expect(proof.summary).toMatch(/\(off screen before the block\)/);
+  });
+
+  it('still fails an entrance the main thread drives: off screen before the block, and no frame in it shows the element', () => {
+    const blocked = moving().map(f =>
+      f.t < 1720 ? ({...f, box: null} as TrackedFrame) : f,
+    );
+    const proof = busyWindowProof(blocked, BLOCK);
+    expect(proof.onScreenFromMs).toBeNull();
+    expect(proof.verdict.failures.join('\n')).toMatch(/no frame presented/);
+  });
+
+  it('still fails an entrance the block delays: too few frames inside it from the first position', () => {
+    const late = moving().map(f =>
+      f.t < 1640 ? ({...f, box: null} as TrackedFrame) : f,
+    );
+    const proof = busyWindowProof(late, BLOCK);
+    expect(proof.onScreenFromMs).toBeGreaterThanOrEqual(640);
+    expect(proof.verdict.failures.join('\n')).toMatch(
+      /frames < 4: the animation under test was not moving/,
+    );
   });
 
   it('still fails a start the block itself delays until it ends', () => {
@@ -707,6 +752,80 @@ describe('busyWindowProof in a slow tail', () => {
   });
 });
 
+describe('busyWindowProof in a slow tail late in a WebKit block', () => {
+  const control = slowTailFrames(lateBlock.control);
+  /**
+   * The spring's frames, each frame from `from` through `to` ms holding the
+   * position before.
+   */
+  const held = (from: number, to: number): TrackedFrame[] => {
+    const frames = slowTailFrames(lateBlock.tracked);
+    const hold = [...frames].reverse().find(f => f.t < from)!.box!;
+    return frames.map(f =>
+      f.t >= from && f.t <= to ? ({...f, box: {...hold}} as TrackedFrame) : f,
+    );
+  };
+  const judge = (tracked: readonly TrackedFrame[]) =>
+    busyWindowProof(tracked, lateBlock.block, {
+      axis: 'x',
+      settledWithin: 2,
+      control,
+    });
+
+  it("reads a held frame at its run's own pace where uneven stamps put the frames before it over two steps a frame", () => {
+    // The frame at +942 ms holds the position before while the control
+    // moves, and the next catches up 2 px. The run moves 1.0 px a frame.
+    const proof = judge(slowTailFrames(lateBlock.tracked));
+    expect(proof.verdict.failures).toEqual([]);
+  });
+
+  it('still fails a one-frame hold there where the spring moves two steps a frame or more', () => {
+    // Held at 168 px at +397 ms, where the spring moves about 5 px a frame:
+    // the next frame catches up 9 px.
+    const proof = judge(held(390, 400));
+    expect(proof.verdict.failures.join('\n')).toMatch(
+      /moved on \d+ of the \d+ frames the control moved/,
+    );
+  });
+
+  it('still fails a two-frame hold in its slow tail', () => {
+    // Held at 258 px at +847 and +872 ms, then 264 px: about 1.6 px a frame
+    // across the run, two frames held.
+    const proof = judge(held(840, 880));
+    expect(proof.verdict.failures.join('\n')).toMatch(
+      /moved on \d+ of the \d+ frames the control moved/,
+    );
+  });
+
+  it('still fails the spring frozen through the block', () => {
+    const proof = judge(held(100, 1000));
+    expect(proof.verdict.pass, proof.summary).toBe(false);
+  });
+
+  it('reads a held frame across a sparse stretch at the pace before it', () => {
+    // 1 px a frame, then three frames 36.7 ms apart read 230, 230 and 232.
+    // The pace before the run explains the held frame, as with frames on
+    // time. The run's own reading, over the time it spans, is slower.
+    const frames: (readonly [number, number])[] = [];
+    for (let i = 0; i <= 30; i += 1) {
+      frames.push([-200 + i * 16.7, 200 + i]);
+    }
+    const sparse = frames[frames.length - 1][0];
+    frames.push([sparse + 36.7, 230], [sparse + 73.4, 232]);
+    for (let j = 1; sparse + 73.4 + j * 16.7 <= 1100; j += 1) {
+      frames.push([sparse + 73.4 + j * 16.7, 232 + j]);
+    }
+    const proof = busyWindowProof(slowTailFrames(frames), lateBlock.block, {
+      axis: 'x',
+      settledWithin: 2,
+      control: slowTailFrames(
+        frames.map(([t]) => [t, Math.round(0.18 * (t + 200))] as const),
+      ),
+    });
+    expect(proof.verdict.failures).toEqual([]);
+  });
+});
+
 describe('busyWindowProof settledWithinSteps', () => {
   /** Holds the position the frame at or before `fromT` shows for `ms`. */
   const freeze = (
@@ -978,9 +1097,9 @@ describe('busyWindowProof settledWithinSteps', () => {
     expect(proof.verdict.failures).toEqual([]);
   });
 
-  it("reads the run's own pace only for a step-counted bound: with settledWithin, that held frame fails as before", () => {
-    // The same coast with a pixel bound: the pace before the hold alone
-    // judges the held frame, as for every proof that does not opt in.
+  it("reads that held frame at the run's own pace under a pixel bound too", () => {
+    // The same coast with a pixel bound: the settle bound does not change how
+    // a held frame is read.
     const proof = busyWindowProof(
       webkit(webkitDecel.tracked),
       webkitDecel.block,
@@ -990,9 +1109,7 @@ describe('busyWindowProof settledWithinSteps', () => {
         control: webkit(webkitDecel.control),
       },
     );
-    expect(proof.verdict.failures.join('\n')).toMatch(
-      /moved on 7 of the 8 frames the control moved/,
-    );
+    expect(proof.verdict.failures).toEqual([]);
   });
 
   it('reads a three-frame plateau that ends in a two-step change at about 1.3 px a frame as slow motion', () => {
@@ -1079,5 +1196,140 @@ describe('busyWindowProof settledWithinSteps', () => {
         settledWithinSteps: 2,
       }),
     ).toThrow(/no tracked frame carries the cast's step/);
+  });
+});
+
+describe('busyWindowProof on a sub-pixel read', () => {
+  /**
+   * A marker sliding `pxPerFrame` from t = 800 to 1900, read as `trackMarker`
+   * reads it: under a pixel with `subpixel`, else in whole pixels.
+   */
+  const slide = (pxPerFrame: number, subpixel: boolean): TrackedFrame[] =>
+    moving().map((f, i) => {
+      const y = pxPerFrame * i;
+      return {
+        ...f,
+        box: {...f.box!, y: subpixel ? y : Math.round(y)},
+        step: subpixel
+          ? {x: SUBPIXEL_STEP_PX, y: SUBPIXEL_STEP_PX}
+          : {x: 1, y: 1},
+      } as TrackedFrame;
+    });
+
+  it('judges every frame of a slide under a pixel a frame, which a whole-pixel read shows as stalls', () => {
+    // 0.2 px a frame: each change is under the 0.25 px a whole-pixel read
+    // counts from.
+    const fine = busyWindowProof(slide(0.2, true), BLOCK, {axis: 'y'});
+    expect(fine.verdict.failures, fine.summary).toEqual([]);
+    expect(fine.stepPx).toBe(SUBPIXEL_STEP_PX);
+    expect(fine.movedFraction).toBe(1);
+    const whole = busyWindowProof(slide(0.2, false), BLOCK, {axis: 'y'});
+    expect(whole.verdict.pass).toBe(false);
+    expect(whole.verdict.failures.join('\n')).toMatch(/expected frames moved/);
+  });
+
+  it('still fails a slide that freezes for the block, read under a pixel', () => {
+    const frozen = slide(0.2, true).map(f =>
+      f.t >= BLOCK.from
+        ? ({...f, box: {...f.box!, y: 0.2 * at(BLOCK.from)}} as TrackedFrame)
+        : f,
+    );
+    const proof = busyWindowProof(frozen, BLOCK, {axis: 'y'});
+    expect(proof.verdict.pass).toBe(false);
+    expect(proof.moved).toBe(0);
+  });
+
+  it('counts a change from half the read step, so jitter under it is no motion', () => {
+    // 0.02 px of jitter around a position that holds: no frame moves.
+    const jitter = slide(0, true).map(
+      (f, i) =>
+        ({...f, box: {...f.box!, y: i % 2 === 0 ? 0 : 0.02}}) as TrackedFrame,
+    );
+    const proof = busyWindowProof(jitter, BLOCK, {axis: 'y'});
+    expect(proof.moved).toBe(0);
+    expect(proof.verdict.pass).toBe(false);
+  });
+});
+
+describe('busyWindowProof against a control, on a sub-pixel read', () => {
+  /**
+   * A slide of 0.4 px a frame, with one frame delivered 3 ms after frame 20.
+   * It is read in whole pixels or under a pixel, beside the control's frames.
+   */
+  const earlyFrame = (
+    subpixel: boolean,
+    freeze?: {from: number; to: number},
+  ) => {
+    const times: number[] = [];
+    for (let i = 0; 800 + i * FRAME <= 1900; i += 1) {
+      times.push(800 + i * FRAME);
+      if (i === 20) {
+        times.push(800 + i * FRAME + 3);
+      }
+    }
+    const position = (t: number) => {
+      const held =
+        freeze != null && t >= freeze.from
+          ? Math.min(t, freeze.to) - freeze.from
+          : 0;
+      return (0.4 * (t - 800 - held)) / FRAME;
+    };
+    const tracked = times.map(
+      t =>
+        ({
+          t,
+          box: {
+            x: 0,
+            y: subpixel ? position(t) : Math.round(position(t)),
+            width: 10,
+            height: 10,
+          },
+          step: subpixel
+            ? {x: SUBPIXEL_STEP_PX, y: SUBPIXEL_STEP_PX}
+            : {x: 1, y: 1},
+        }) as TrackedFrame,
+    );
+    const control = times.map(
+      t =>
+        ({
+          t,
+          box: {
+            x: Math.round((3 * (t - 800)) / FRAME),
+            y: 0,
+            width: 12,
+            height: 12,
+          },
+        }) as TrackedFrame,
+    );
+    return {tracked, control};
+  };
+
+  it('reads a frame delivered early as moved, which a whole-pixel read misses', () => {
+    const whole = earlyFrame(false);
+    const wholeProof = busyWindowProof(whole.tracked, BLOCK, {
+      axis: 'y',
+      control: whole.control,
+    });
+    expect(wholeProof.verdict.failures).toContain(
+      'moved on 37 of the 40 frames the control moved (93%)',
+    );
+    const fine = earlyFrame(true);
+    const fineProof = busyWindowProof(fine.tracked, BLOCK, {
+      axis: 'y',
+      control: fine.control,
+    });
+    expect(fineProof.verdict.failures, fineProof.summary).toEqual([]);
+  });
+
+  it('still fails a slide that holds for five frames inside the block', () => {
+    const held = earlyFrame(true, {from: 1300, to: 1300 + 5 * FRAME});
+    const proof = busyWindowProof(held.tracked, BLOCK, {
+      axis: 'y',
+      control: held.control,
+    });
+    expect(proof.verdict.pass).toBe(false);
+    expect(proof.verdict.failures.join('\n')).toMatch(
+      /moved on \d+ of the \d+ frames the control moved/,
+    );
   });
 });

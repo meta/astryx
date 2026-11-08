@@ -138,6 +138,25 @@ function pad(n: number): string {
 }
 
 /**
+ * The long name of the zone an instant is shown in ("Pacific Standard Time"),
+ * in the viewer's zone when no `timeZone` is given.
+ */
+export function formatZoneName(
+  date: Date,
+  locale: Locale,
+  timeZone?: string,
+): string {
+  return (
+    new Intl.DateTimeFormat(locale, {
+      timeZoneName: 'long',
+      ...(timeZone === undefined ? {} : {timeZone}),
+    })
+      .formatToParts(date)
+      .find(part => part.type === 'timeZoneName')?.value ?? ''
+  );
+}
+
+/**
  * Renders one instant in one absolute format.
  *
  * Pure: the same arguments always produce the same string for the requested

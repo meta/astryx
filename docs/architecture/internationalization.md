@@ -279,7 +279,7 @@ for all 30 shipped locales plus `pseudo`.
   `Calendar` shows the calendar that it resolves from its own `calendar` prop
   or the provider's `calendar` prop, and otherwise the Gregorian calendar
   (`spec:AST-111` FR2). `DateInput`, `DateRangeInput`, and `DateTimeInput`
-  show Gregorian dates. Locale changes language, numbering, and field order; a
+  do the same. Locale changes language, numbering, and field order; a
   locale never selects the calendar, neither by its default calendar nor by a
   `-u-ca-` keyword. `PlainDate` values, constraints, and machine formats stay
   Gregorian ISO in every calendar. The runtime's `Temporal` owns the arithmetic

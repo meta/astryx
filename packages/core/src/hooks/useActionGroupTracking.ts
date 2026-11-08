@@ -6,10 +6,14 @@
  * @file useActionGroupTracking.ts
  * @input A ref to a group of sibling actions, the actions' selector, and the
  *   component's tracking constants
- * @output Exports useActionGroupTracking and ActionGroupTrackingOptions
+ * @output Exports useActionGroupTracking, ActionGroupTrackingOptions,
+ *   resolveNearestAction, the finger resolution of a group whose targets grow,
+ *   and measureNeighbours, the members that resolution must not reach into
  * @position Internal hook, not exported from the hooks entry. A long press
  *   drives the shared action-group tracker (hooks/actionGroupTracker.ts) for
- *   a group that a held pointer slides across. AlertDialog consumes it.
+ *   a group that a held pointer slides across. AlertDialog and
+ *   useGroupPressTracking consume it, and Lab components through the internal
+ *   touch entry.
  *
  * SYNC: When modified, update useActionGroupTracking.test.tsx
  */
@@ -21,13 +25,20 @@ import {lockSelection} from '../utils/selectionLock';
 import type {GestureTouch, PointerKind} from '../gestures/types';
 import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
 import {UIKIT_PRESS} from '../motion/uikit/gestures';
+import {INTERACTIVE_SELECTOR, resolveHitTarget} from '../utils/hitArea';
 import {isIosWebKit} from '../utils/touchQueries';
-import {createActionGroupTracker} from './actionGroupTracker';
+import {
+  createActionGroupTracker,
+  DISABLED_SELECTOR,
+  type ActionGroupTarget,
+} from './actionGroupTracker';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 
 export interface ActionGroupTrackingOptions {
   /** Selects the actions inside the tracked element. */
   itemSelector: string;
+  /** Keeps only the actions this accepts among those `itemSelector` selects. */
+  isItem?: (element: HTMLElement) => boolean;
   /** How long after touch-down the touched action highlights, ms. */
   highlightOnsetMs: number;
   /**
@@ -35,10 +46,22 @@ export interface ActionGroupTrackingOptions {
    * pen hit-tests the actions' exact rects.
    */
   highlightExpansion: number;
+  /**
+   * Picks the action under a finger, in place of the flat expansion. It gets
+   * the actions measured when the press begins, and their neighbours: the
+   * disabled actions and the members the group does not track. A mouse or a
+   * pen hit-tests the exact rects.
+   */
+  resolveTarget?: (
+    x: number,
+    y: number,
+    targets: ReadonlyArray<ActionGroupTarget>,
+    neighbours: ReadonlyArray<ActionGroupTarget>,
+  ) => HTMLElement | null;
   /** Pointers that are tracked; others keep the browser's click. @default every pointer */
   pointerTypes?: ReadonlyArray<PointerKind>;
-  /** A press whose target this rejects is not tracked. */
-  shouldTrack?: (target: unknown) => boolean;
+  /** A press this rejects is not tracked, and its click stays the browser's. */
+  shouldTrack?: (touch: GestureTouch) => boolean;
   /** Off, nothing is attached and nothing is tracked. @default true */
   isEnabled?: boolean;
   /**
@@ -49,9 +72,81 @@ export interface ActionGroupTrackingOptions {
   manageStyle?: boolean;
   /** Runs the action under the finger at the lift. @default its own click */
   onActivate?: (item: HTMLElement) => void;
+  /**
+   * Paint the tracked action with the press attribute. Off, the group draws
+   * its own highlight. @default true
+   */
+  paintsHighlight?: boolean;
+  /** A press began at viewport (x, y) on `action` (null: none). */
+  onPressBegin?: (x: number, y: number, action: HTMLElement | null) => void;
+  /** The press moved to viewport (x, y), now on `action` (null: none). */
+  onPressMove?: (x: number, y: number, action: HTMLElement | null) => void;
+  /** The lift, before its action runs, with the tracked action (null: none). */
+  onPressEnd?: (action: HTMLElement | null) => void;
+  /**
+   * The press ended with nothing acting: a cancel, a second finger, or
+   * tracking turned off.
+   */
+  onPressCancel?: () => void;
 }
 
 const PRESS = UIKIT_PRESS;
+
+const NO_TARGETS: ReadonlyArray<ActionGroupTarget> = [];
+
+/**
+ * The action under a finger: the nearest enabled action whose target, grown
+ * toward 44 px, holds the point. A neighbour counts for nearness but
+ * resolves to none. So nothing highlights over a disabled action, and no
+ * grown target reaches into another member.
+ */
+export function resolveNearestAction(
+  x: number,
+  y: number,
+  targets: ReadonlyArray<ActionGroupTarget>,
+  neighbours: ReadonlyArray<ActionGroupTarget>,
+): HTMLElement | null {
+  const index = resolveHitTarget(
+    x,
+    y,
+    neighbours.length === 0 ? targets : [...targets, ...neighbours],
+  );
+  return index >= 0 && index < targets.length ? targets[index].element : null;
+}
+
+/**
+ * The members inside `root` that a finger must not reach through, with their
+ * boxes: the disabled actions and every member the group does not track.
+ */
+export function measureNeighbours(
+  root: HTMLElement | null,
+  {
+    itemSelector,
+    isItem,
+  }: Pick<ActionGroupTrackingOptions, 'itemSelector' | 'isItem'>,
+): ReadonlyArray<ActionGroupTarget> {
+  if (root == null) {
+    return NO_TARGETS;
+  }
+  const isTracked = (element: HTMLElement) =>
+    element.matches(itemSelector) && isItem?.(element) !== false;
+  const neighbours: ActionGroupTarget[] = [];
+  for (const element of root.querySelectorAll<HTMLElement>(
+    `${itemSelector}, ${INTERACTIVE_SELECTOR}`,
+  )) {
+    // A tracked action is a neighbour only when it is disabled. An untracked
+    // member inside a tracked action is part of that action.
+    const host = element.parentElement?.closest<HTMLElement>(itemSelector);
+    const isNeighbour = isTracked(element)
+      ? element.matches(DISABLED_SELECTOR)
+      : host == null || !root.contains(host) || !isTracked(host);
+    if (isNeighbour) {
+      const {left, top, right, bottom} = element.getBoundingClientRect();
+      neighbours.push({element, left, top, right, bottom});
+    }
+  }
+  return neighbours;
+}
 
 /** The ref handed to the recognizer while tracking is off: no element. */
 const DETACHED: RefObject<Element | null> = {current: null};
@@ -90,14 +185,24 @@ export function useActionGroupTracking(
   // expansion; a mouse or a pen hit-tests the actions' exact rects.
   const pointerRef = useRef<PointerKind>('touch');
   const landedRef = useRef<Node | null>(null);
+  // A finger press's neighbours, read once when it begins, for the caller's
+  // `resolveTarget`. Nothing is read per move.
+  const neighboursRef = useRef(NO_TARGETS);
   const [tracker] = useState(() =>
     createActionGroupTracker(() => ({
       roots: () => [ref.current],
       itemSelector: optionsRef.current.itemSelector,
+      isItem: optionsRef.current.isItem,
       highlightExpansion:
         pointerRef.current === 'touch'
           ? optionsRef.current.highlightExpansion
           : 0,
+      ...fingerResolver(
+        pointerRef.current,
+        optionsRef.current.resolveTarget,
+        neighboursRef.current,
+      ),
+      paintsHighlight: optionsRef.current.paintsHighlight,
       onActivate: optionsRef.current.onActivate,
       // The browser's own click for a press the group ran is taken, so the
       // action runs once. The gesture host swallows it for a press it claims.
@@ -109,11 +214,16 @@ export function useActionGroupTracking(
   // Synchronizes the tracker with tracking on and mounted. Turning tracking
   // off, or unmounting, drops a tracked press and ends its release fades.
   // The host reports no cancellation to a disabled recognizer, and the lift
-  // that runs an action often closes the owner before its fade ends.
+  // that runs an action often closes the owner before its fade ends. The
+  // group hears the dropped press as a cancel, so its own highlight goes out.
   useEffect(
     () => () => {
+      const wasTracking = tracker.isTracking;
       tracker.cancel();
       tracker.dispose();
+      if (wasTracking) {
+        optionsRef.current.onPressCancel?.();
+      }
     },
     [tracker, isEnabled],
   );
@@ -145,15 +255,23 @@ export function useActionGroupTracking(
       switch (recognizer.state) {
         case 'began': {
           const {x, y} = recognizer.location();
+          neighboursRef.current =
+            pointerRef.current === 'touch' &&
+            optionsRef.current.resolveTarget != null
+              ? measureNeighbours(ref.current, optionsRef.current)
+              : NO_TARGETS;
           tracker.begin(x, y, {landed: landedRef.current});
+          optionsRef.current.onPressBegin?.(x, y, tracker.highlighted);
           break;
         }
         case 'changed': {
           const {x, y} = recognizer.location();
           tracker.move(x, y);
+          optionsRef.current.onPressMove?.(x, y, tracker.highlighted);
           break;
         }
         case 'ended': {
+          optionsRef.current.onPressEnd?.(tracker.highlighted);
           const doc = ref.current?.ownerDocument;
           const focusedBefore = doc?.activeElement ?? null;
           const beganOn = tracker.beganOn;
@@ -166,22 +284,27 @@ export function useActionGroupTracking(
             pointerRef.current === 'touch'
               ? !isIosWebKit(doc?.defaultView)
               : beganOn != null && focusedBefore === beganOn;
-          const lifted = tracker.end();
-          // The lift runs the action's own click(), which moves no focus. So
-          // focus moves to the lifted action, unless its click moved focus.
+          // The lifted action takes focus first, as a native press gives it
+          // before the click. Then its click runs, so a click that moves focus
+          // or selects text keeps its result.
+          const toLift = tracker.highlighted;
           if (
             clickFocuses &&
-            lifted != null &&
-            lifted.isConnected &&
-            doc?.activeElement === focusedBefore &&
-            focusedBefore !== lifted
+            toLift != null &&
+            toLift.isConnected &&
+            !toLift.matches(DISABLED_SELECTOR) &&
+            focusedBefore !== toLift
           ) {
-            lifted.focus({preventScroll: true, focusVisible: false});
+            toLift.focus({preventScroll: true, focusVisible: false});
           }
+          tracker.end();
+          neighboursRef.current = NO_TARGETS;
           break;
         }
         case 'cancelled':
+          neighboursRef.current = NO_TARGETS;
           tracker.cancel();
+          optionsRef.current.onPressCancel?.();
           break;
         case 'possible':
         case 'failed':
@@ -198,21 +321,45 @@ export function useActionGroupTracking(
 }
 
 /**
- * The recognizer's should-receive delegate. It also picks the press's clock.
- * Inside a scroller the press waits the content-touch delay and fails past
- * the slop, so the scroller takes a flick. Elsewhere it begins at once, with
- * no movement limit.
+ * A finger's resolver: the caller's `resolveTarget` with the press's
+ * neighbours. Without one, and for a mouse or a pen, the tracker's own hit
+ * test applies.
+ */
+function fingerResolver(
+  pointer: PointerKind,
+  resolve: ActionGroupTrackingOptions['resolveTarget'],
+  neighbours: ReadonlyArray<ActionGroupTarget>,
+): {
+  resolveTarget?: (
+    x: number,
+    y: number,
+    targets: ReadonlyArray<ActionGroupTarget>,
+  ) => HTMLElement | null;
+} {
+  if (pointer !== 'touch' || resolve == null) {
+    return {};
+  }
+  return {resolveTarget: (x, y, targets) => resolve(x, y, targets, neighbours)};
+}
+
+/**
+ * The recognizer's should-receive delegate. It declines a press the caller
+ * rejects. It also picks the press's clock. Inside a scroller a finger's or a
+ * pen's press waits the content-touch delay and fails past the slop. So the
+ * scroller takes a flick, and an iPad's Pencil scrolls a page too. A mouse, or
+ * a press elsewhere, begins at once, with no movement limit.
  */
 function receiveTouch(
   recognizer: LongPressGestureRecognizer,
   touch: GestureTouch,
   options: ActionGroupTrackingOptions,
 ): boolean {
-  if (options.shouldTrack?.(touch.target) === false) {
+  if (options.shouldTrack?.(touch) === false) {
     return false;
   }
   if (recognizer.numberOfTouches === 0) {
-    const isInsideScroller = touch.scroll?.isInsideScroller === true;
+    const isInsideScroller =
+      touch.pointerType !== 'mouse' && touch.scroll?.isInsideScroller === true;
     recognizer.minimumPressDuration = isInsideScroller
       ? PRESS.contentTouchDelay.value
       : options.highlightOnsetMs;

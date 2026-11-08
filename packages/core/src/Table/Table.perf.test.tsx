@@ -450,8 +450,25 @@ describe('Table render performance', () => {
   // ===========================================================================
 
   describe('render benchmarks', () => {
+    // An untimed render first: a run's first Table render also pays one-off
+    // module and compiler work, which is not what these budgets measure. The
+    // warm-up unmounts and uses other rows, so the timed render is a fresh
+    // mount that reuses nothing.
+    const warmUp = () => {
+      const rows = createTestData(100).map(row => ({
+        ...row,
+        id: `warm-${row.id}`,
+        name: `Warm ${row.name}`,
+      }));
+      const {unmount} = render(
+        <Table data={rows} columns={testColumns} idKey="id" />,
+      );
+      unmount();
+    };
+
     it('should render 100 rows within performance budget', () => {
       const data = createTestData(100);
+      warmUp();
 
       const started = process.threadCpuUsage();
       render(<Table data={data} columns={testColumns} idKey="id" />);
@@ -464,6 +481,7 @@ describe('Table render performance', () => {
 
     it('should render 500 rows within performance budget', () => {
       const data = createTestData(500);
+      warmUp();
 
       const started = process.threadCpuUsage();
       render(<Table data={data} columns={testColumns} idKey="id" />);
@@ -582,6 +600,10 @@ describe('Table render performance', () => {
 describe('re-sort', () => {
   const sortedRows = createTestData(1000);
   const reversedRows = [...sortedRows].reverse();
+  // By default, a role query reads each row's computed style to check that
+  // the row is not hidden. Over 1,000 rows in jsdom that costs seconds. These
+  // cases assert which rows come first, so they skip that check.
+  const rows = () => screen.getAllByRole('row', {hidden: true});
 
   function renderSortable(
     renderCell: (row: TestRow) => string,
@@ -618,7 +640,7 @@ describe('re-sort', () => {
     resort();
 
     expect(renderCell).not.toHaveBeenCalled();
-    expect(screen.getAllByRole('row')[1]).toHaveTextContent('Item 999');
+    expect(rows()[1]).toHaveTextContent('Item 999');
   });
 
   it('re-renders the rows when a plugin reads the row index', () => {
@@ -635,7 +657,7 @@ describe('re-sort', () => {
     resort();
 
     expect(renderCell).toHaveBeenCalledTimes(1000);
-    const [, first, second] = screen.getAllByRole('row');
+    const [, first, second] = rows();
     expect(first).toHaveTextContent('Item 999');
     expect(first).toHaveAttribute('data-odd', 'false');
     expect(second).toHaveAttribute('data-odd', 'true');

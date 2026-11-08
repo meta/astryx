@@ -254,7 +254,12 @@ async function observe(page: Page) {
           padding: `${style.paddingBlockStart} ${style.paddingInlineEnd} ${style.paddingBlockEnd} ${style.paddingInlineStart}`,
           backgroundColor: style.backgroundColor,
           cursor: style.cursor,
-          hitAreaInsets: [after.top, after.right, after.bottom, after.left],
+          // The touch hit area is the button's `::after`. Where it has no
+          // content it draws no box, so there is no hit area to grow.
+          hitAreaInsets:
+            after.content === 'none' || after.content === 'normal'
+              ? null
+              : [after.top, after.right, after.bottom, after.left],
           box: box(button),
           icon: icon
             ? {
@@ -440,8 +445,11 @@ for (const item of cases) {
       );
       check(button.describedBy !== '', `${where} has no aria-describedby`);
       check(
-        button.hitAreaInsets.every(inset => Math.abs(parseFloat(inset)) === 0),
-        `${where} grows under a fine pointer: ${button.hitAreaInsets.join(' ')}`,
+        button.hitAreaInsets == null ||
+          button.hitAreaInsets.every(
+            inset => Math.abs(parseFloat(inset)) === 0,
+          ),
+        `${where} grows under a fine pointer: ${button.hitAreaInsets?.join(' ')}`,
       );
       const icon = button.icon;
       if (icon == null) {

@@ -18,7 +18,7 @@
  * - /packages/cli/assets/templates/blocks/components/RadioList/ (showcase blocks)
  */
 
-import React, {use, useCallback, useId, useRef, type ReactNode} from 'react';
+import React, {use, useId, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
@@ -33,12 +33,18 @@ import {indicatorScope} from '../Indicator/indicator.markers.stylex';
 import {useIndicatorFocusRing} from '../hooks/useIndicatorFocusRing';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {useMergedRefs} from '../hooks/useMergedRefs';
-import {watchHitArea, writeHitInsets} from '../utils/hitArea';
-import {touchHitAreaStyles} from '../utils/touchHitArea.stylex';
+import {useTouchHitArea} from '../utils/touchHitArea';
+import {pressBoxProps} from '../privateAttributes/pressBox.stylex';
+import {registerBoxHold} from '../utils/boxHold';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {useIndicator} from '../Indicator/useIndicator';
 import {Item, type ItemAlign} from '../Item/Item';
 import {themeProps} from '../utils/themeProps';
 import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
+
+// Registered here, not in the press controller, so a page with no box carries
+// none of its code.
+registerBoxHold();
 
 // The touch press's paint, declared by the shared overlay styles on the
 // element the controller writes to (`pressedAlpha`) at the press's strength,
@@ -310,21 +316,17 @@ export function RadioListItem({
 
   // Under a coarse pointer an option's row grows toward 44 px through an
   // invisible band, and the row keeps its size. A tap on the band lands on
-  // the row, which hands it to the radio. The watch lives as long as the row
-  // is attached: the ref's cleanup stops it.
-  const watchRowHitArea = useCallback(
-    (row: HTMLDivElement | null) => {
-      if (row == null || isDisabled) {
-        return;
-      }
-      return watchHitArea(row, insets => writeHitInsets(row, insets));
-    },
-    [isDisabled],
-  );
+  // the row, which hands it to the radio. The band's insets stay live while
+  // the row takes taps, and clear when it stops.
+  const watchRowHitArea = useTouchHitArea(!isDisabled);
   const mergedRowRef = useMergedRefs(ref, watchRowHitArea);
 
   const radioCircle = (
     <div
+      // iOS answers a long hold on the circle with a text selection and no
+      // click. The press controller holds the row's selection for a press on
+      // the marked circle, and picks the option if no click comes.
+      {...(isDisabled ? undefined : pressBoxProps)}
       {...stylex.props(
         styles.radioWrapper,
         wrapperSizeStyles[size],

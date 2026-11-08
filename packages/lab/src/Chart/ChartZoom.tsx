@@ -173,19 +173,22 @@ export function ChartZoom({
   );
 
   const handleWheel = useCallback(
-    (e: React.WheelEvent<SVGRectElement>) => {
+    (e: WheelEvent) => {
+      // A sideways wheel zooms nothing, so the page keeps its scroll.
+      if (e.deltaY === 0) {
+        return;
+      }
       e.preventDefault();
 
-      const svg = e.currentTarget.ownerSVGElement;
+      const surface = e.currentTarget as SVGRectElement;
+      const svg = surface.ownerSVGElement;
       if (!svg) {
         return;
       }
       const pt = svg.createSVGPoint();
       pt.x = e.clientX;
       pt.y = e.clientY;
-      const local = pt.matrixTransform(
-        e.currentTarget.getScreenCTM()?.inverse(),
-      );
+      const local = pt.matrixTransform(surface.getScreenCTM()?.inverse());
 
       // Clamp delta to prevent trackpad acceleration from blowing out the domain.
       // A single tick should zoom by at most zoomSpeed (10% default).
@@ -218,6 +221,16 @@ export function ChartZoom({
       yOnly,
       zoomAxis,
     ],
+  );
+
+  // React registers `wheel` as passive, so a React `onWheel` cannot stop the
+  // page scrolling. The zoom surface's ref adds a native listener instead.
+  const surfaceRef = useCallback(
+    (surface: SVGRectElement) => {
+      surface.addEventListener('wheel', handleWheel, {passive: false});
+      return () => surface.removeEventListener('wheel', handleWheel);
+    },
+    [handleWheel],
   );
 
   const onPointerDown = useCallback(
@@ -338,13 +351,13 @@ export function ChartZoom({
     <>
       <g>
         <rect
+          ref={surfaceRef}
           x={0}
           y={0}
           width={width}
           height={height}
           fill="transparent"
           style={zoomRectStyle}
-          onWheel={handleWheel}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}

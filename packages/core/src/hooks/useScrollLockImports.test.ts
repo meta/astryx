@@ -91,13 +91,12 @@ describe('useScrollLock imports', () => {
   // The lock itself, and the overlays that take it: whatever the lock pulls
   // in ships with each of them.
   // AlertDialog is left out: its action group's press tracking brings the
-  // host itself.
+  // host itself. So is Lightbox: its zoom's gestures bring the host itself.
   it.each([
     'hooks/useScrollLock.ts',
     'Dialog/Dialog.tsx',
     'BottomSheet/BottomSheet.tsx',
     'Drawer/Drawer.tsx',
-    'Lightbox/Lightbox.tsx',
   ])('%s reaches neither the gesture host nor its arena', entry => {
     const reached = reachableFrom(entry);
     const gestures = [...reached].filter(path => path.startsWith('gestures/'));

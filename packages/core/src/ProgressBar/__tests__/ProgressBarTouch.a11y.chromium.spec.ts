@@ -186,7 +186,10 @@ test('a theme\u2019s tempo scales the move', async ({page}) => {
   // A theme with a tempo writes it beside its tokens. The move's duration is
   // the role times the share moved, times the tempo.
   await open(page, 10);
-  await page.addStyleTag({content: ':root { --_astryx-motion-tempo: 1.5; }'});
+  // On the bar itself: the story's theme root declares its own tempo.
+  await page.addStyleTag({
+    content: '[role="progressbar"] { --_astryx-motion-tempo: 1.5; }',
+  });
   await changeAndPause(page, 90);
   const duration = await page.evaluate(() => {
     const fill = document.querySelector('[role="progressbar"]')

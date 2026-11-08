@@ -17,9 +17,10 @@
  * - /packages/cli/assets/templates/blocks/components/Table/ (showcase blocks)
  */
 
-import {createContext, use, useMemo, type ReactElement, type Ref} from 'react';
+import {use, useMemo, type ReactElement, type Ref} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {colorVars} from '../theme/tokens.stylex';
+import {borderVars, colorVars, focusVars} from '../theme/tokens.stylex';
+import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {BaseTable} from './BaseTable';
 import {TableContext} from './TableContext';
 import {useBaseTablePlugins} from './useBaseTablePlugins';
@@ -38,6 +39,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Table/Table.generated';
+import {createSharedContext} from '../utils/sharedContext';
 
 registerEnglishFallback(english);
 
@@ -138,6 +140,34 @@ const scrollWrapperStyles = stylex.create({
       default: null,
       ':last-child': 'calc(-1 * var(--container-padding-block-end, 0px))',
     },
+    // As its container's first or last child, the region reaches that block
+    // edge. There it takes the published corner, so its ring and fills follow
+    // the curve. Every other corner is square.
+    borderStartStartRadius: {
+      default: '0px',
+      ':first-child': 'var(--container-corner-start-start, 0px)',
+    },
+    borderStartEndRadius: {
+      default: '0px',
+      ':first-child': 'var(--container-corner-start-end, 0px)',
+    },
+    borderEndStartRadius: {
+      default: '0px',
+      ':last-child': 'var(--container-corner-end-start, 0px)',
+    },
+    borderEndEndRadius: {
+      default: '0px',
+      ':last-child': 'var(--container-corner-end-end, 0px)',
+    },
+  },
+  // The wrapper bleeds to its container's edges, under a Card's border, and
+  // the Card clips there, so its keyboard ring sits inside its own box, clear
+  // of that border too.
+  focusRingInset: {
+    outlineOffset: {
+      default: null,
+      ':focus-visible': `calc(-1 * (${focusVars['--focus-outline-width']} + ${borderVars['--border-width']}))`,
+    },
   },
 });
 
@@ -146,10 +176,10 @@ const scrollWrapperStyles = stylex.create({
  * Internal to Table: the scroll wrapper is not given it as a prop, so it adds
  * nothing to the public table types.
  */
-const TableNameContext = createContext<{
+const TableNameContext = createSharedContext<{
   label?: string;
   labelledBy?: string;
-} | null>(null);
+} | null>('TableNameContext', 1, null);
 TableNameContext.displayName = 'TableNameContext';
 
 function TableScrollWrapper({
@@ -192,6 +222,8 @@ function TableScrollWrapper({
     'aria-labelledby':
       restHtmlProps['aria-label'] == null ? labelledBy : undefined,
     ...(state.inline.isScrollable ? {tabIndex: 0} : {}),
+    // Reads the corner its container publishes (scrollWrapperStyles).
+    'data-container-corner': '',
     ...restHtmlProps,
     ref,
     ...mergeProps(
@@ -199,6 +231,10 @@ function TableScrollWrapper({
       stylex.props(
         scrollWrapperStyles.base,
         scrollWrapperStyles.containerBleed,
+        // A tab stop once the table scrolls inline: the shared ring, which a
+        // theme restyles through the focus-outline tokens.
+        focusOutlineStyles.focusVisible,
+        scrollWrapperStyles.focusRingInset,
         ...(pluginStyles ?? []),
       ),
     ),

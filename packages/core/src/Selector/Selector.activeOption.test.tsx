@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, expect, it} from 'vitest';
-import {render, screen} from '@testing-library/react';
+import {fireEvent, render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Selector} from './Selector';
 import {compositeOver, contrastRatio} from '../theme/contrast';
@@ -92,6 +92,43 @@ describe('Selector active option indicator', () => {
     expect(getComputedStyle(row).getPropertyValue('outline-offset')).toContain(
       '--focus-outline-width',
     );
+  });
+
+  it('moves to the fill alone when the mouse takes the highlight after keyboard input', async () => {
+    const user = userEvent.setup();
+    const field = renderSelector();
+    field.focus();
+    await user.keyboard('{ArrowDown}');
+    await user.keyboard('{ArrowDown}');
+    expect(hasRing(activeOption(field))).toBe(true);
+
+    // A hover without a press: the shared modality still reads keyboard.
+    await user.hover(option('Cherry'));
+    const row = activeOption(field);
+    expect(row).toHaveTextContent('Cherry');
+    expect(hasRing(row)).toBe(false);
+    expect(hasRing(option('Banana'))).toBe(false);
+
+    await user.keyboard('{ArrowUp}');
+    const back = activeOption(field);
+    expect(back).toHaveTextContent('Banana');
+    expect(hasRing(back)).toBe(true);
+  });
+
+  it('keeps the ring when a key brings the active option under a still mouse', async () => {
+    const user = userEvent.setup();
+    const field = renderSelector();
+    field.focus();
+    await user.keyboard('{ArrowDown}');
+    await user.keyboard('{ArrowDown}');
+    const row = activeOption(field);
+    expect(row).toHaveTextContent('Banana');
+
+    // The browser reports the row under a still pointer as entered when a
+    // key scrolls the list. No pointer move happens.
+    fireEvent.mouseEnter(row);
+    expect(activeOption(field)).toBe(row);
+    expect(hasRing(row)).toBe(true);
   });
 
   // WCAG 2.2 1.4.11: a state indicator needs 3:1 against the listbox it sits

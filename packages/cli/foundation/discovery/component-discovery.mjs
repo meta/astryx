@@ -381,6 +381,22 @@ export function familyMember(docs, name) {
  * @returns {Record<string, string[]>}
  */
 export function discoverComponents(coreDir) {
+  // The component matcher calls this for each name it resolves, so one
+  // operation reads the docs once. Each caller gets its own copy to change.
+  const found = oncePerListing(`components\0${coreDir}`, () =>
+    readComponentGroups(coreDir),
+  );
+  return Object.fromEntries(
+    Object.entries(found).map(([key, names]) => [key, [...names]]),
+  );
+}
+
+/**
+ * The component groups under `coreDir`, read from disk.
+ * @param {string} coreDir
+ * @returns {Record<string, string[]>}
+ */
+function readComponentGroups(coreDir) {
   const srcDir = path.join(coreDir, 'src');
   /** @type {Map<string, string|null>} componentName → group */
   const componentGroups = new Map();
@@ -766,12 +782,7 @@ function caseSpelledComponentSource(srcDir, name) {
  */
 export function resolveImportPath(coreDir, componentName) {
   const srcDir = path.join(coreDir, 'src');
-  const pkgPath = path.join(coreDir, 'package.json');
-  const pkg = pathExists(pkgPath)
-    ? JSON.parse(fs.readFileSync(pkgPath, 'utf-8'))
-    : null;
-
-  const exportKeys = Object.keys(pkg?.exports || {});
+  const exportKeys = exportKeysOf(coreDir);
 
   // Priority 1: exact subpath export matching the component name (e.g. ./Heading)
   // This allows convenience re-export directories to win over the source directory.
@@ -797,6 +808,22 @@ export function resolveImportPath(coreDir, componentName) {
   }
 
   return '@astryxdesign/core';
+}
+
+/**
+ * The subpaths the package's `exports` map names, read once per operation:
+ * a search resolves the import of every component.
+ * @param {string} coreDir
+ * @returns {string[]}
+ */
+function exportKeysOf(coreDir) {
+  const pkgPath = path.join(coreDir, 'package.json');
+  return oncePerListing(`export-keys\0${pkgPath}`, () => {
+    const pkg = pathExists(pkgPath)
+      ? JSON.parse(fs.readFileSync(pkgPath, 'utf-8'))
+      : null;
+    return Object.keys(pkg?.exports || {});
+  });
 }
 
 /**

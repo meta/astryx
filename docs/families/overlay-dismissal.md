@@ -229,6 +229,17 @@ this record's current membership snapshot must be updated with it.
   text selection or a slider drag released past the edge, does not dismiss
   it, and a cancelled pointer ends the press. The rule is the same for a
   mouse, a pen, and a finger, and these members share one implementation.
+- **FR11 — The topmost surface consumes its outside press.** An outside press
+  that light-dismisses the topmost surface is consumed by it; a host surface
+  under it does not also light-dismiss on that press. A backdrop press that
+  closes a layer open inside a Dialog with `purpose="info"`, a Drawer with its
+  scrim, or CommandPalette (a menu, a popover, a combobox list, a date
+  calendar, a pinned tooltip, or a context menu) leaves the host open, and the
+  next backdrop press dismisses the host. A layer that hides on its own, such
+  as a tooltip whose trigger lost focus, does not consume the press. A press
+  that closes only the layer leaves focus inside the host: where the closed
+  layer returns it, or else on the host itself. The rule is the same for a
+  mouse, a pen, and a finger.
 
 ## Allowed component variation
 
@@ -241,7 +252,7 @@ this record's current membership snapshot must be updated with it.
   CSS anchor positioning, fixed coordinates, or a component-owned host.
 - **AV4 — Outside dismissal.** Members own whether and how pointer, hover,
   focus-loss, backdrop, touch, or gesture interaction dismisses them; the
-  backdrop press of the members FR10 names follows FR10.
+  backdrop press of the members FR10 names follows FR10 and FR11.
 - **AV5 — Open-state API.** Members own controlled and uncontrolled state,
   defaults, callback names, and imperative commands.
 - **AV6 — Presentation.** Members own animation, visual treatment, and theming
@@ -302,6 +313,7 @@ modality, positioning, outside-dismissal, and open-state contracts.
 | FR8, FR9           | Real-browser second-document checks; implementation gap: none has them                                          | BottomSheet, BottomSheetSwitcher, and Lightbox in a Picture-in-Picture window: opens, takes Escape, and returns focus to its return target there                                                                                                                                                                                                                                                                                                          | The surface ranks in the page, or focus lands on the page or the body                                                                                               |
 | FR8                | Source check over Drawer and MobileNav                                                                          | Drawer and MobileNav rendered from a control in a second document                                                                                                                                                                                                                                                                                                                                                                                         | A page-level surface moves into the second document                                                                                                                 |
 | FR10               | `useBackdropPress.test.tsx`; `BackdropPress.a11y.chromium.spec.ts`                                              | Dialog (`purpose="info"`), Drawer scrim, and CommandPalette, with a mouse and a finger: a press that starts and ends on the backdrop, one that starts inside and ends on it, one that starts on it and ends inside, a cancelled pointer, and a backdrop start followed by a press inside                                                                                                                                                                  | A press that crosses the edge either way dismisses, a cancelled or earlier press carries over, or a press on the backdrop alone does not dismiss                    |
+| FR11               | `useBackdropPress.test.tsx`; `BackdropPress.a11y.chromium.spec.ts`                                              | Dialog (`purpose="info"`) and Drawer scrim with a menu open inside, with a mouse and a finger: a backdrop press, then a second one; a Dialog with a Typeahead list, a DateInput calendar, a pinned InfoTip, or a ContextMenu open inside, with a mouse; a DateTimeInput time list whose field blurs at mousedown; a press while a tooltip hides on its own; a press that closes no layer above                                                            | A press that closes the menu also closes the host, or the second press leaves the host open                                                                         |
 
 ## Decision links
 

@@ -1,4 +1,4 @@
-Results for "icon set" (20 of 381)
+Results for "icon set" (20 of 387)
 name:        authoring/building-blocks/templates/build-the-template/template-assets/template-icons
 section:     use-astryx-icon
 domain:      doc
@@ -47,6 +47,11 @@ domain:      component
 package:     @astryxdesign/core
 import:      @astryxdesign/core/InfoTip
 command:     pnpm exec astryx component InfoTip
+name:        useIcon
+domain:      hook
+package:     @astryxdesign/core
+import:      @astryxdesign/core/Icon
+command:     pnpm exec astryx hook useIcon
 name:        useInputContainer
 domain:      hook
 package:     @astryxdesign/core
@@ -57,39 +62,44 @@ domain:      hook
 package:     @astryxdesign/core
 import:      @astryxdesign/core/hooks
 command:     pnpm exec astryx hook useInputStatusIcon
-name:        BaseTypeaheadCustomSearch
-domain:      template
+name:        icons
+section:     component-icon-slots
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs icons component-icon-slots
+parent:      pnpm exec astryx docs icons --index
+name:        NavIcon
+domain:      component
 package:     @astryxdesign/core
-command:     pnpm exec astryx template BaseTypeaheadCustomSearch --type block
-name:        BottomSheetSnapPoints
-domain:      template
+import:      @astryxdesign/core/NavIcon
+command:     pnpm exec astryx component NavIcon
+name:        BottomSheet
+domain:      component
 package:     @astryxdesign/core
-command:     pnpm exec astryx template BottomSheetSnapPoints --type block
-name:        BreadcrumbsDeepHierarchy
-domain:      template
+import:      @astryxdesign/core/BottomSheet
+command:     pnpm exec astryx component BottomSheet
+name:        BottomSheetSwitcher
+domain:      component
 package:     @astryxdesign/core
-command:     pnpm exec astryx template BreadcrumbsDeepHierarchy --type block
-name:        BreadcrumbsWithIcons
-domain:      template
+import:      @astryxdesign/core/BottomSheet
+command:     pnpm exec astryx component BottomSheetSwitcher
+name:        Carousel
+domain:      component
 package:     @astryxdesign/core
-command:     pnpm exec astryx template BreadcrumbsWithIcons --type block
-name:        ButtonFloating
-domain:      template
+import:      @astryxdesign/core/Carousel
+command:     pnpm exec astryx component Carousel
+name:        ChatLayout
+domain:      component
 package:     @astryxdesign/core
-command:     pnpm exec astryx template ButtonFloating --type block
-name:        ButtonGroupShowcase
-domain:      template
+import:      @astryxdesign/core/Chat
+command:     pnpm exec astryx component ChatLayout
+name:        ChatMessageList
+domain:      component
 package:     @astryxdesign/core
-command:     pnpm exec astryx template ButtonGroupShowcase --type block
-name:        ButtonWithIcon
-domain:      template
+import:      @astryxdesign/core/Chat
+command:     pnpm exec astryx component ChatMessageList
+name:        InternationalizationProvider
+domain:      component
 package:     @astryxdesign/core
-command:     pnpm exec astryx template ButtonWithIcon --type block
-name:        CenterHorizontal
-domain:      template
-package:     @astryxdesign/core
-command:     pnpm exec astryx template CenterHorizontal --type block
-name:        CenterInsideACard
-domain:      template
-package:     @astryxdesign/core
-command:     pnpm exec astryx template CenterInsideACard --type block
+import:      @astryxdesign/core/i18n
+command:     pnpm exec astryx component InternationalizationProvider

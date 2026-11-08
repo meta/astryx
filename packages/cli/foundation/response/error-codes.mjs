@@ -298,8 +298,9 @@ export const ERROR_CODES = Object.freeze({
    */
   ERR_RENDER_FAILED: 'ERR_RENDER_FAILED',
   /**
-   * `render --reverse` was given an HTML file that holds no Astryx markup and
-   * no embedded source, so there is nothing to rebuild. Nothing was written.
+   * `render --reverse` was given an HTML file that a render did not write and
+   * that holds no Astryx markup and no embedded source, so there is nothing
+   * to rebuild. Nothing was written.
    */
   ERR_RENDER_NOT_ASTRYX: 'ERR_RENDER_NOT_ASTRYX',
   /**

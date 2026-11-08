@@ -1,9 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect} from 'vitest';
-import {render, screen, within} from '@testing-library/react';
+import {act, render, screen, within} from '@testing-library/react';
+import {useState} from 'react';
 import {Table} from '../../Table';
-import type {TableColumn} from '../../types';
+import type {TableColumn, TablePlugin} from '../../types';
 import {useTableRowIndex} from './useTableRowIndex';
 
 interface Row extends Record<string, unknown> {
@@ -41,7 +42,47 @@ function Harness({
   );
 }
 
+function ContextHarness({rows = data}: {rows?: Row[]}) {
+  const rowIndex = useTableRowIndex<Row>();
+  return (
+    <Table data={rows} columns={columns} idKey="id" plugins={{rowIndex}} />
+  );
+}
+
 describe('useTableRowIndex', () => {
+  it('numbers from a passed data array, not from row positions', () => {
+    // The table shows Bob and Carol; the caller's data orders the numbers.
+    function Subset() {
+      const rowIndex = useTableRowIndex<Row>({data});
+      return (
+        <Table
+          data={[data[1], data[2]]}
+          columns={columns}
+          idKey="id"
+          plugins={{rowIndex}}
+        />
+      );
+    }
+    render(<Subset />);
+    const rows = screen.getAllByRole('row');
+    expect(within(rows[1]).getByText('2')).toBeInTheDocument();
+    expect(within(rows[2]).getByText('3')).toBeInTheDocument();
+  });
+
+  it('numbers rows from the row context without data, and renumbers after a re-sort', () => {
+    const {rerender} = render(<ContextHarness />);
+    let rows = screen.getAllByRole('row');
+    expect(within(rows[1]).getByText('1')).toBeInTheDocument();
+    expect(within(rows[3]).getByText('3')).toBeInTheDocument();
+
+    rerender(<ContextHarness rows={[data[2], data[0], data[1]]} />);
+    rows = screen.getAllByRole('row');
+    expect(within(rows[1]).getByText('Carol')).toBeInTheDocument();
+    expect(within(rows[1]).getByText('1')).toBeInTheDocument();
+    expect(within(rows[2]).getByText('Alice')).toBeInTheDocument();
+    expect(within(rows[2]).getByText('2')).toBeInTheDocument();
+  });
+
   it('prepends a header cell with the default label', () => {
     render(<Harness />);
     const headers = screen.getAllByRole('columnheader');
@@ -128,5 +169,35 @@ describe('useTableRowIndex', () => {
     const rows = screen.getAllByRole('row');
     expect(within(rows[1]).getByText('1')).toBeInTheDocument();
     expect(within(rows[2]).getByText('2')).toBeInTheDocument();
+  });
+
+  it('keeps unchanged rows from re-rendering when the parent re-renders', () => {
+    let cellTransforms = 0;
+    const audit: TablePlugin<Row> = {
+      rowModel: 'flat',
+      transformBodyCell(props) {
+        cellTransforms++;
+        return props;
+      },
+    };
+    let rerender: () => void = () => {};
+    function Parent() {
+      const [, setTick] = useState(0);
+      rerender = () => setTick(value => value + 1);
+      const rowIndex = useTableRowIndex<Row>();
+      return (
+        <Table
+          data={data}
+          columns={columns}
+          idKey="id"
+          plugins={{rowIndex, audit}}
+        />
+      );
+    }
+    render(<Parent />);
+    const afterMount = cellTransforms;
+    expect(afterMount).toBeGreaterThan(0);
+    act(() => rerender());
+    expect(cellTransforms).toBe(afterMount);
   });
 });

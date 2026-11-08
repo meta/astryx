@@ -42,6 +42,7 @@ import {
   type LogicalAxisMapping,
   type LogicalOverflowGeometry,
 } from './scrollGeometry';
+import {publishScrollGeometry} from './scrollGeometrySubscriptions';
 import {
   registerScrollOwner,
   unregisterScrollOwner,
@@ -283,6 +284,8 @@ export function useScrollableArea({
         statesEqual(current, nextState) ? current : nextState,
       );
     };
+    let hasContentInvalidation = true;
+    let hasLayoutInvalidation = true;
 
     // Measures now; `measure` is the frame callback that also clears the
     // pending frame. The same-commit remeasure below calls this one, so a frame
@@ -331,6 +334,13 @@ export function useScrollableArea({
       );
       // The measured DOM state is the hook's output.
       publish(nextState);
+      publishScrollGeometry(
+        viewport,
+        hasContentInvalidation,
+        hasLayoutInvalidation,
+      );
+      hasContentInvalidation = false;
+      hasLayoutInvalidation = false;
       // A writing-mode change remaps the behavior-owned physical CSS.
       setMapping(current =>
         mappingsEqual(current, nextMapping) ? current : nextMapping,
@@ -401,13 +411,67 @@ export function useScrollableArea({
       if (next !== current) {
         publish(next);
       }
+      publishScrollGeometry(viewport);
     };
 
+    const scheduleContentMeasure = () => {
+      hasContentInvalidation = true;
+      scheduleMeasure();
+    };
+    const scheduleLayoutMeasure = () => {
+      hasLayoutInvalidation = true;
+      scheduleContentMeasure();
+    };
+    // An ancestor's inline style reaches the measurement two ways: through the
+    // viewport's or the content's box, which the resize observers report, or
+    // through the axis mapping and the boxes' existence. So an ancestor's
+    // `style` mutation counts only when one of those declarations changed.
+    // A surface that moves under a finger writes its transform on every input
+    // sample; measuring on each of those forced a style recalculation and a
+    // layout every frame of the drag.
+    const isUnmappedAncestorStyle = (record: MutationRecord) => {
+      const target = record.target;
+      return (
+        record.type === 'attributes' &&
+        record.attributeName === 'style' &&
+        target instanceof Element &&
+        !viewport.contains(target) &&
+        !content.contains(target) &&
+        !inlineStyleChangesMapping(
+          record.oldValue,
+          target.getAttribute('style'),
+        )
+      );
+    };
+    // A change below the content root, such as a mounted row, is content
+    // only. A change to the content root, the viewport or an ancestor can
+    // change how mounted content fits.
+    const onMutations = (records: MutationRecord[]) => {
+      const counted = records.filter(
+        record => !isUnmappedAncestorStyle(record),
+      );
+      if (counted.length === 0) {
+        return;
+      }
+      if (
+        counted.some(
+          record =>
+            record.target === content || !content.contains(record.target),
+        )
+      ) {
+        scheduleLayoutMeasure();
+      } else {
+        scheduleContentMeasure();
+      }
+    };
     registerScrollOwner(viewport, stateRef.current);
     measureRef.current = measureNow;
     measure();
-    const stopObservingViewport = observeResize(viewport, scheduleMeasure);
-    const stopObservingContent = observeResize(content, scheduleMeasure);
+    const stopObservingViewport = observeResize(
+      viewport,
+      scheduleLayoutMeasure,
+    );
+    const stopObservingContent = observeResize(content, scheduleLayoutMeasure);
 
     viewport.addEventListener('scroll', onScroll, {passive: true});
     window.addEventListener('resize', scheduleMeasure);
@@ -420,38 +484,10 @@ export function useScrollableArea({
 
     // Geometry invalidation is independent of keyboard eligibility. The latter
     // is inspected only on native keyboard entry, never by these observers.
-    // An ancestor's inline style reaches the measurement two ways: through the
-    // viewport's or the content's box, which the resize observers report, or
-    // through the axis mapping and the boxes' existence. So an ancestor's
-    // `style` mutation measures only when one of those declarations changed.
-    // A surface that moves under a finger writes its transform on every input
-    // sample; measuring on each of those forced a style recalculation and a
-    // layout every frame of the drag.
-    const onMutation = (records: MutationRecord[]) => {
-      for (const record of records) {
-        const target = record.target;
-        const isAncestorStyle =
-          record.type === 'attributes' &&
-          record.attributeName === 'style' &&
-          target instanceof Element &&
-          !viewport.contains(target) &&
-          !content.contains(target);
-        if (
-          !isAncestorStyle ||
-          inlineStyleChangesMapping(
-            record.oldValue,
-            target.getAttribute('style'),
-          )
-        ) {
-          scheduleMeasure();
-          return;
-        }
-      }
-    };
     const mutationObserver =
       typeof MutationObserver === 'undefined'
         ? null
-        : new MutationObserver(onMutation);
+        : new MutationObserver(onMutations);
     mutationObserver?.observe(viewport, {
       attributes: true,
       attributeFilter: ['class', 'dir', 'hidden', 'style'],
@@ -474,8 +510,8 @@ export function useScrollableArea({
     }
 
     const fonts = document.fonts;
-    fonts?.addEventListener?.('loadingdone', scheduleMeasure);
-    void fonts?.ready.then(scheduleMeasure);
+    fonts?.addEventListener?.('loadingdone', scheduleLayoutMeasure);
+    void fonts?.ready.then(scheduleLayoutMeasure);
 
     return () => {
       isActive = false;
@@ -492,7 +528,7 @@ export function useScrollableArea({
       viewport.removeEventListener('animationend', scheduleMeasure);
       content.removeEventListener('transitionend', scheduleMeasure);
       content.removeEventListener('animationend', scheduleMeasure);
-      fonts?.removeEventListener?.('loadingdone', scheduleMeasure);
+      fonts?.removeEventListener?.('loadingdone', scheduleLayoutMeasure);
       if (frame != null) {
         window.cancelAnimationFrame(frame);
       }

@@ -4,7 +4,7 @@
  * @file animator.ts
  * @input An element, target values, and a spring, momentum curves (coast.ts)
  *   or any closed-form curve
- * @output Exports `createMotionAnimator`, a compositor animator for
+ * @output Exports `createMotionEngine`, a compositor animator for
  *   translate, rotate, scale and opacity, and its option, handle and
  *   transition types. It reads presentation values and velocities from the
  *   analytic curves. It retargets with the velocity kept, freezes in place on
@@ -153,21 +153,26 @@
  * release (`touchRelease`) and at once elsewhere (DR2, DR3).
  *
  * Roles: every spring and curve the animator plays passes through
- * resolveMotion.ts, which names the motion role it plays (`springs.settle`
- * once `registerSpringsTable()` has run, the Reduce Motion fade's curve,
- * which the animator registers alone). The per-role tables stay internal
+ * resolveMotion.ts, which names the motion role it plays. `springs.settle`
+ * registers as its module loads, and the animator registers the Reduce Motion
+ * fade's curve alone. The per-role tables stay internal
  * (`spec:AST-094` DEC-15), so a role plays its table value: nothing reads a
- * CSS variable or the element's style for it. A spring written inline at the call
+ * role's own CSS variable. Its time scales by the tempo of the element's
+ * theme. A spring written inline at the call
  * site, and a table never registered, play as given; the fade's length is not
  * a role.
  *
  * A pseudo-element (`options.pseudoElement`, a dialog's `::backdrop`) has no
- * inline style: its end value is held by a static filling animation (after a
- * curve ends, and after `set`) until the next animation replaces it, and for
- * as long as the pseudo-element exists. The browser makes a `::backdrop`
- * again each time its dialog opens, without the hold, so a presentation
- * calls `set` with its starting value right after `showModal()`, in the same
- * task: a `set` before it lands on the backdrop the open replaces.
+ * inline style. A static filling animation holds its end value, after a
+ * curve ends and after `set`, until the next animation replaces it. The hold
+ * lasts as long as the pseudo-element exists. A value equal to its `base`,
+ * the values its own stylesheet shows at rest, is not held. The stylesheet
+ * shows it, so the pseudo-element keeps no compositing layer at rest. In
+ * development, the first hold dropped this way checks that the stylesheet
+ * shows it. The browser makes a `::backdrop` again, without the hold, each
+ * time its dialog opens. So a presentation calls `set` with its starting
+ * value right after `showModal()`, in the same task. A `set` before it lands
+ * on the backdrop the open replaces.
  *
  * SSR-safe: nothing touches `window` or `document` at module scope, and an
  * animator created without an element only keeps state until one is attached.
@@ -183,7 +188,12 @@
 import {cubicBezier} from './bezier';
 import {LATE_START_MS} from './frameBlock';
 import {solveSpring, toSpring, type SpringDescription} from './spring';
-import {registerPresentedOffset, type PresentedSource} from './presentation';
+import {
+  clearPresentedResolve,
+  registerPresentedOffset,
+  type PresentedSource,
+  writePresentedResolve,
+} from './presentation';
 import {resolveMotion} from './resolveMotion';
 import {
   reducedMotionCrossFade,
@@ -191,6 +201,9 @@ import {
 } from './uikit/timing';
 import {planReducedMotion, type ReducedMotionView} from './reducedMotionPlan';
 import {themeReducesMotion} from '../privateAttributes/reducedMotion.stylex';
+import {devWarn} from '../utils/devWarning';
+
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 /**
  * A value the animator can drive.
@@ -215,6 +228,23 @@ export interface SpringTransition {
    * has on screen.
    */
   velocity?: MotionValues;
+}
+
+/** What `Animator.rebase` takes besides the amounts. */
+export interface RebaseOptions {
+  /** Time of the shift on the document timeline (ms). Defaults to now. */
+  at?: number;
+  /**
+   * Per property, the value its spring heads for after the shift. A spring
+   * whose target plus its amount lands there moves whole, before its first
+   * frame and once its start is known. Its curve and target move by the
+   * amount. It keeps its start time and velocity, as when the element's
+   * resting place moves under a curve that keeps going. If its first frame
+   * has run while its start is unread, only the model moves. The next call
+   * on the channel in the same task rebuilds its animation, or else the end
+   * of the task does.
+   */
+  towards?: MotionValues;
 }
 
 /**
@@ -299,9 +329,6 @@ export interface MotionCurve {
   readonly isTransition?: boolean;
 }
 
-/**
- * Options of `createMotionAnimator`.
- */
 /** How `set` puts values in place. */
 export interface SetOptions {
   /**
@@ -317,22 +344,35 @@ export interface SetOptions {
   promote?: boolean;
 }
 
+/**
+ * Options of `createMotionEngine`.
+ */
 export interface AnimatorOptions {
   /**
    * Animates a pseudo-element of the element instead (`'::backdrop'` of a
-   * native dialog). A pseudo-element has no inline style, so a static filling
-   * animation holds its value after a curve ends and after `set`.
+   * native dialog). A pseudo-element has no inline style. So a static filling
+   * animation holds its value after a curve ends and after `set`, unless the
+   * value is its `base`.
    */
   pseudoElement?: string;
   /** Starting values; identity by default. Never read from the DOM. */
   initial?: MotionValues;
+  /**
+   * For a pseudo-element: the values its own stylesheet shows at rest. A
+   * value equal to its base needs no holding animation, so the
+   * pseudo-element keeps no compositing layer there. Declare only what the
+   * stylesheet shows: in development, the first hold dropped warns when the
+   * computed style differs.
+   */
+  base?: MotionValues;
   /** Clock in ms on the document timeline's time base. */
   now?: () => number;
   /**
-   * Runs a callback in the next animation frame; `requestAnimationFrame` by
-   * default. A call from rest reads the start the browser gave it there.
+   * Runs a callback in the next animation frame, with the frame's timestamp;
+   * `requestAnimationFrame` by default. A call from rest reads the start the
+   * browser gave it there.
    */
-  requestFrame?: (callback: () => void) => void;
+  requestFrame?: (callback: (frame?: number) => void) => void;
 }
 
 /**
@@ -446,9 +486,10 @@ export interface Animator {
    * moves the element under them: a property moving on a spring keeps its
    * spring, velocity and target (the curve restarts from the shifted value);
    * any other moving curve shifts whole, its end included; a resting
-   * property takes the offset and stays.
+   * property takes the offset and stays. `towards` moves some springs whole
+   * instead (RebaseOptions).
    */
-  rebase(deltas: MotionValues, options?: Pick<AnimateOptions, 'at'>): void;
+  rebase(deltas: MotionValues, options?: RebaseOptions): void;
   /** Freezes properties (all by default) at their presentation values. */
   stop(properties?: ReadonlyArray<MotionProperty | 'scale'>): void;
   /**
@@ -671,6 +712,13 @@ const REST_FRAMES_PER_SECOND = 60;
 const MAX_DURATION_MS = 30_000;
 
 /**
+ * How close a spring's target and a value must be to count as the same, in
+ * the property's own units. Only float rounding separates two ways of
+ * computing one value, far below anything the screen shows.
+ */
+const SAME_VALUE = 1e-6;
+
+/**
  * The task calls from rest are made in, shared by every call made in it
  * (every animator's), so one motion's parts that are separate calls start
  * together (startAfterBlock).
@@ -704,6 +752,36 @@ function markTask(time: number, clock: () => number): TaskMark {
     });
   }
   return openTask;
+}
+
+/** The first read of the time an animation frame runs, by its timestamp. */
+let frameRead: {readonly frame: number; readonly time: number} | null = null;
+
+/**
+ * The time the animation frame with timestamp `frame` runs, read once in
+ * that frame. Every animator's callback in the frame takes that read, so the
+ * calls from rest that one frame commits start together. A long callback
+ * before them does not move their start. A call on a moving element keeps
+ * its own clock. The read ends with the frame's task, so a frame
+ * source that repeats a timestamp still reads each frame anew. A frame
+ * source with no timestamp reads the clock.
+ */
+function frameTime(frame: number | undefined, clock: () => number): number {
+  if (frame == null) {
+    return clock();
+  }
+  if (frameRead?.frame === frame) {
+    return frameRead.time;
+  }
+  const read = {frame, time: clock()};
+  frameRead = read;
+  // A browser runs every callback of a frame before its next task.
+  setTimeout(() => {
+    if (frameRead === read) {
+      frameRead = null;
+    }
+  }, 0);
+  return read.time;
 }
 
 /** Above this many keyframes the tolerance is relaxed. */
@@ -749,9 +827,6 @@ export const PROMOTION_LINGER_MS = 500;
 
 type Channel = 'translate' | 'rotate' | 'scale' | 'opacity';
 
-/** The custom property whose writes make WebKit resolve a moving element. */
-const RESOLVE_PROPERTY = '--astryx-presented';
-
 const CHANNELS: Record<Channel, ReadonlyArray<MotionProperty>> = {
   translate: ['x', 'y'],
   rotate: ['rotate'],
@@ -788,6 +863,33 @@ function format(
   }
 }
 
+/**
+ * Whether a computed value shows `expected` (`format`'s text). An unset or
+ * `none` value is the channel's identity. One value of a two-value channel
+ * stands for both (scale), or for x with y at 0 (translate).
+ */
+function sameShown(channel: Channel, shown: string, expected: string): boolean {
+  const numbers = (text: string): number[] => {
+    const values = (
+      text === '' || text === 'none' ? IDENTITY_TEXT[channel] : text
+    ).match(/-?\d*\.?\d+(?:e-?\d+)?/g);
+    const list = (values ?? []).map(Number);
+    if (channel === 'translate') {
+      return [list[0] ?? 0, list[1] ?? 0];
+    }
+    if (channel === 'scale') {
+      return [list[0] ?? 1, list[1] ?? list[0] ?? 1];
+    }
+    return list.length > 0 ? list : [channel === 'opacity' ? 1 : 0];
+  };
+  const a = numbers(shown);
+  const b = numbers(expected);
+  return (
+    a.length === b.length &&
+    a.every((value, i) => Math.abs(value - b[i]) < 1e-3)
+  );
+}
+
 const shared = new WeakMap<HTMLElement, Map<string, Animator>>();
 
 /**
@@ -811,7 +913,7 @@ export function animatorFor(
   const key = options.pseudoElement ?? '';
   let animator = byPseudo.get(key);
   if (animator == null) {
-    animator = createMotionAnimator(element, options);
+    animator = createMotionEngine(element, options);
     byPseudo.set(key, animator);
   }
   return animator;
@@ -928,7 +1030,7 @@ const REDUCED_TRANSITION: SpringTransition = {
  *
  * @example
  * ```
- * const animator = createMotionAnimator(sheet);
+ * const animator = createMotionEngine(sheet);
  * // finger lifts at 1200 px/s heading for the detent at 0 (a component
  * // passes the spring of its motion role):
  * animator.animate({y: 0}, {spring: {response: 0.45, dampingRatio: 0.9}, velocity: {y: 1200}});
@@ -937,7 +1039,7 @@ const REDUCED_TRANSITION: SpringTransition = {
  * animator.stop(['y']);
  * ```
  */
-export function createMotionAnimator(
+export function createMotionEngine(
   element: HTMLElement | null,
   options: AnimatorOptions = {},
 ): Animator {
@@ -945,8 +1047,8 @@ export function createMotionAnimator(
   const frameSource =
     options.requestFrame ??
     (typeof requestAnimationFrame === 'function'
-      ? (callback: () => void) => {
-          requestAnimationFrame(() => callback());
+      ? (callback: (frame?: number) => void) => {
+          requestAnimationFrame(frame => callback(frame));
         }
       : null);
   // Every frame callback of an animator's counts itself, so a call made in
@@ -954,11 +1056,11 @@ export function createMotionAnimator(
   const requestFrame =
     frameSource == null
       ? null
-      : (callback: () => void) => {
-          frameSource(() => {
+      : (callback: (frame?: number) => void) => {
+          frameSource(frame => {
             frameDepth += 1;
             try {
-              callback();
+              callback(frame);
             } finally {
               frameDepth -= 1;
             }
@@ -975,6 +1077,7 @@ export function createMotionAnimator(
     ...IDENTITY,
     ...expand(options.initial ?? {}),
   };
+  const base = expand(options.base ?? {});
   const segments = new Map<MotionProperty, Segment>();
   const running = new Map<Channel, Animation>();
   /** Drops a finished, still-filling animation once the main thread runs. */
@@ -1025,8 +1128,6 @@ export function createMotionAnimator(
    * moves it: where the animation started, or where a `resolve` left it.
    */
   let hitTested = {x: 0, y: 0};
-  /** Counts the style writes that make WebKit resolve the element again. */
-  let resolutions = 0;
   let unpresent: (() => void) | null = null;
   /** Channels promoted to the element's compositing layer (will-change). */
   const promoted = new Set<Channel>();
@@ -1260,8 +1361,7 @@ export function createMotionAnimator(
       // Any style write makes WebKit resolve the element's transform again,
       // to the value drawn now, where it then stays (iOS 26.2: in the same
       // task); a custom property changes nothing else.
-      resolutions += 1;
-      target.style.setProperty(RESOLVE_PROPERTY, String(resolutions));
+      writePresentedResolve(target);
       hitTested = {x: drawnTranslate('x', time), y: drawnTranslate('y', time)};
     },
   };
@@ -1275,7 +1375,7 @@ export function createMotionAnimator(
     unpresent?.();
     unpresent = null;
     if (presented instanceof HTMLElement) {
-      presented.style.removeProperty(RESOLVE_PROPERTY);
+      clearPresentedResolve(presented);
     }
     presented = element;
     if (element != null) {
@@ -1356,9 +1456,61 @@ export function createMotionAnimator(
     return times;
   };
 
-  /** A pseudo-element's resting value, held by a static filling animation. */
+  /**
+   * Whether the pseudo-element's stylesheet shows the channel's resting
+   * value: its base, to within the sampling tolerance, which no frame shows.
+   * A curve that settles to a threshold ends that close to its target.
+   */
+  const atBase = (channel: Channel) =>
+    CHANNELS[channel].every(property => {
+      const value = base[property];
+      return (
+        value != null &&
+        Math.abs(finalValue(property) - value) <= SAMPLE_TOLERANCE[property]
+      );
+    });
+
+  let baseChecked = false;
+  /**
+   * The first hold dropped at `base` checks, in development, that the
+   * stylesheet shows it. It reads after the cancel and off the motion's task,
+   * so it adds no style read to a frame that starts a motion.
+   */
+  const checkBase = (channel: Channel) => {
+    if (process.env.NODE_ENV === 'production' || baseChecked) {
+      return;
+    }
+    baseChecked = true;
+    setTimeout(() => {
+      if (target == null) {
+        return;
+      }
+      const shown = getComputedStyle(target, pseudoElement).getPropertyValue(
+        channel,
+      );
+      const expected = format(channel, p => base[p] ?? IDENTITY[p]);
+      if (!sameShown(channel, shown, expected)) {
+        devWarn(
+          'Astryx motion',
+          `the ${pseudoElement} stylesheet shows ${channel} ` +
+            `${shown || '(unset)'}, not its declared base ${expected}, so ` +
+            'it shows the wrong value at rest. Make `base` match the ' +
+            'stylesheet.',
+        );
+      }
+    }, 0);
+  };
+
+  /**
+   * A pseudo-element's resting value, held by a static filling animation,
+   * unless its stylesheet shows it (`base`).
+   */
   const hold = (channel: Channel, time: number) => {
     if (target == null) {
+      return;
+    }
+    if (atBase(channel)) {
+      checkBase(channel);
       return;
     }
     const value = format(channel, finalValue);
@@ -1371,7 +1523,43 @@ export function createMotionAnimator(
     running.set(channel, animation);
   };
 
+  const replaceIn = (group: StartGroup, segment: Segment, next: Segment) => {
+    const index = group.segments.indexOf(segment);
+    if (index >= 0) {
+      group.segments[index] = next;
+    } else {
+      group.segments.push(next);
+    }
+  };
+
+  /**
+   * Channels whose model a rebase moved while their animation still shows
+   * the old curve. Any rebuild clears its channel; the end of the task
+   * rebuilds the rest, so a frame never shows the old curve at the new rest.
+   */
+  const stale = new Set<Channel>();
+  let healQueued = false;
+
+  const markStale = (channel: Channel) => {
+    stale.add(channel);
+    if (!healQueued) {
+      healQueued = true;
+      queueMicrotask(healStale);
+    }
+  };
+
+  const healStale = () => {
+    healQueued = false;
+    if (stale.size === 0) {
+      return;
+    }
+    const properties = [...stale].flatMap(channel => CHANNELS[channel]);
+    stale.clear();
+    commit(properties, now());
+  };
+
   const rebuild = (channel: Channel, time: number) => {
+    stale.delete(channel);
     const previous = running.get(channel);
     running.delete(channel);
     clearTimeout(retireTimers.get(channel));
@@ -1586,14 +1774,14 @@ export function createMotionAnimator(
       if (rebuiltAfterFirstFrame) {
         // The frame that commits it dates this channel's start again. The
         // call's other channels keep their own.
-        requestFrame?.(() => {
+        requestFrame?.(frame => {
           if (
             !waiting.resolved &&
             running.get(channel) === animation &&
             animation.startTime == null &&
             animation.playState === 'running'
           ) {
-            (waiting.latest ??= new Map()).set(channel, now());
+            (waiting.latest ??= new Map()).set(channel, frameTime(frame, now));
           }
         });
       }
@@ -2281,7 +2469,7 @@ export function createMotionAnimator(
     // or when its compositor starts them (Chromium). Read it in that first
     // frame, ahead of anything that might pause or seek the animations, and
     // when `ready` settles.
-    requestFrame?.(() => {
+    requestFrame?.(frame => {
       syncGroup(group);
       group.framed = true;
       // Chromium's compositor starts a composited animation when the frame
@@ -2289,24 +2477,28 @@ export function createMotionAnimator(
       // more later (longer under load). Until then the call would read as
       // not started while the screen moves it, and a retarget or a rebase
       // would replay its curve from the start. A call made in a task, still
-      // waiting in the first frame after it, starts now, which the compositor
-      // then takes as its start: the time this frame runs, not its timestamp,
+      // waiting in the first frame after it, starts when this frame runs. The
+      // compositor takes that time as its start. All calls the frame commits
+      // take one read of it (frameTime). That read is not the frame timestamp,
       // which after a block is the frame time from before the block. Only
       // when this frame is the one that commits it: not for a call made in a
       // frame callback, whose frame committed it already, nor when a block
       // ran between the call and this frame (more than LATE_START_MS), after
       // which this frame cannot tell a call made in a task from one a page's
       // own frame callback made; those keep the browser's start.
+      if (group.resolved) {
+        return;
+      }
+      const at = frameTime(frame, now);
       if (
-        !group.resolved &&
         group.madeInFrame !== true &&
-        now() - (group.task?.first ?? group.provisional) <= LATE_START_MS &&
+        at - (group.task?.first ?? group.provisional) <= LATE_START_MS &&
         group.animations.some(
           animation =>
             animation.startTime == null && animation.playState === 'running',
         )
       ) {
-        resolveGroup(group, now());
+        resolveGroup(group, at);
       }
       // The browser's start is still unread. The compositor starts the call
       // near this frame, so each moving channel's reads take the curve from
@@ -2320,7 +2512,7 @@ export function createMotionAnimator(
             animation.startTime == null &&
             animation.playState === 'running'
           ) {
-            (group.latest ??= new Map()).set(channel, now());
+            (group.latest ??= new Map()).set(channel, at);
           }
         }
       }
@@ -2729,7 +2921,7 @@ export function createMotionAnimator(
     if (from === to && velocity === 0) {
       return null;
     }
-    // The motion role it plays: its table value (DEC-15).
+    // The motion role it plays, at the tempo of the theme it is in.
     const resolved = resolveMotion(target, spring);
     const curve = solveSpring(toSpring(resolved), {from, to, velocity});
     const duration = Math.min(
@@ -2995,6 +3187,61 @@ export function createMotionAnimator(
     landings.delete(landing);
   };
 
+  /**
+   * How long `landing` still waits for its fade, in ms. A sampler that pauses
+   * the fade holds it, so it checks again later. A resumed fade holds it until
+   * the fade starts again. A fade that runs past the landing's due time, as
+   * after a pause, holds it for the rest of the fade. Any other fade holds
+   * nothing.
+   */
+  const fadeHeldFor = (landing: Landing): number => {
+    const animation = running.get('opacity');
+    const owner = segments.get('opacity')?.owner;
+    if (
+      animation == null ||
+      owner == null ||
+      (owner !== landing.owner && !landing.carried.includes(owner))
+    ) {
+      return 0;
+    }
+    if (animation.playState === 'paused') {
+      return RETIRE_RECHECK_MS;
+    }
+    // The timeline reads the frame before a long task, so the fade's current
+    // time would date a fade that has ended as still running.
+    const start = animation.startTime;
+    const duration = Number(animation.effect?.getTiming?.().duration);
+    if (!Number.isFinite(duration)) {
+      return 0;
+    }
+    if (start == null) {
+      // A fade resumed with play() has no start until its next frame.
+      return animation.playState === 'running' ? END_RECHECK_MS : 0;
+    }
+    // A fade that ends by the landing's due time holds nothing. A timer runs
+    // in whole milliseconds, so it often fires a fraction early.
+    const end = Number(start) + duration - END_HOLD_MS;
+    if (landing.due != null && end <= landing.due) {
+      return 0;
+    }
+    const left = end - now();
+    return left > 0 ? left : 0;
+  };
+
+  /**
+   * The landing's timer: it lands once its fade lets it. A call that takes the
+   * landing over lands it directly, at once.
+   */
+  const landWhenFaded = (landing: Landing) => {
+    const held = fadeHeldFor(landing);
+    if (held > 0) {
+      landing.due = now() + held;
+      landing.timer = setTimeout(() => landWhenFaded(landing), held);
+      return;
+    }
+    land(landing);
+  };
+
   /** Arms a landing from the call's start (the browser's, for a call from rest). */
   const scheduleLanding = (
     owner: HandleState,
@@ -3026,7 +3273,7 @@ export function createMotionAnimator(
       }
       landing.due = start + landing.at;
       landing.timer = setTimeout(
-        () => land(landing),
+        () => landWhenFaded(landing),
         Math.max(0, landing.due - now()),
       );
     });
@@ -3814,6 +4061,7 @@ export function createMotionAnimator(
       syncPending();
       flushDeferred();
       const time = rebaseOptions.at ?? now();
+      const towards = expand(rebaseOptions.towards ?? {});
       const changed: MotionProperty[] = [];
       const owners = new Set<HandleState>();
       for (const [property, delta] of Object.entries(expand(deltas)) as [
@@ -3823,9 +4071,9 @@ export function createMotionAnimator(
         if (delta === 0) {
           continue;
         }
-        changed.push(property);
         const segment = segmentAt(property, time);
         if (segment == null) {
+          changed.push(property);
           resting[property] = valueAt(property, time) + delta;
           segments.delete(property);
           continue;
@@ -3841,15 +4089,40 @@ export function createMotionAnimator(
             : undefined;
         const replace = (next: Segment) => {
           if (group != null) {
-            const index = group.segments.indexOf(segment);
-            if (index >= 0) {
-              group.segments[index] = next;
-            } else {
-              group.segments.push(next);
-            }
+            replaceIn(group, segment, next);
           }
           segments.set(property, next);
         };
+        const heading = towards[property];
+        if (
+          segment.spring != null &&
+          heading != null &&
+          Math.abs(segment.target + delta - heading) <= SAME_VALUE
+        ) {
+          // The spring keeps its course to the shifted target from its own
+          // start.
+          const whole: Segment = {
+            ...segment,
+            target: heading,
+            at: t => segment.at(t) + delta,
+          };
+          if (latest == null) {
+            changed.push(property);
+            replace(whole);
+            continue;
+          }
+          // While the browser has not told the start, only the model moves.
+          // The call that follows rebuilds the channel from it, or else the
+          // end of the task does.
+          const waiting = segment.group;
+          if (waiting != null && !waiting.resolved) {
+            replaceIn(waiting, segment, whole);
+            segments.set(property, whole);
+            markStale(CHANNEL_OF[property]);
+            continue;
+          }
+        }
+        changed.push(property);
         if (segment.spring != null) {
           const from = valueAt(property, time) + delta;
           const velocity = velocityAt(property, time);
@@ -3968,6 +4241,7 @@ export function createMotionAnimator(
         animation.cancel();
       }
       running.clear();
+      stale.clear();
       for (const timer of retireTimers.values()) {
         clearTimeout(timer);
       }

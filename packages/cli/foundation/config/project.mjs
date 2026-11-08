@@ -384,6 +384,15 @@ export function providerLedgerOf(project) {
 }
 
 /**
+ * True when an integration's templates root exists, the only place its
+ * templates come from (discoverIntegrationTemplatesForOne).
+ * @param {any} integration
+ * @returns {boolean}
+ */
+const hasTemplatesRoot = integration =>
+  integration?.templates != null && fs.existsSync(integration.templates);
+
+/**
  * The single API for reading resolved project configuration. Construct via the
  * async {@link Project.load} factory.
  */
@@ -1265,8 +1274,12 @@ export class Project {
     if (this.#loadedIntegrations.length > 0) {
       // Template replacement validity depends on the combined Core +
       // integration catalog. Resolve it first so issue results never depend
-      // on which discovery method the caller happened to invoke earlier.
-      await this.templates();
+      // on which discovery method the caller happened to invoke earlier. Only
+      // an integration's own templates can replace one, so with none, Core's
+      // templates stay unread.
+      if (this.#loadedIntegrations.some(hasTemplatesRoot)) {
+        await this.templates();
+      }
       // Component replacement validity likewise depends on Core plus every
       // integration's components.
       await this.componentReplacements();

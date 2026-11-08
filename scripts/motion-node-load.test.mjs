@@ -28,7 +28,7 @@ const coreSrc = path.join(root, 'packages/core/src');
  * the press paint's styles).
  */
 const ENTRY = `
-export {createMotionAnimator, animatorFor, SETTLE_THRESHOLD} from './motion/animator';
+export {createMotionEngine, animatorFor, SETTLE_THRESHOLD} from './motion/animator';
 export {reducedMotionFade} from './motion/reducedMotion';
 export {resolveMotion} from './motion/resolveMotion';
 export {solveSpring, toSpring} from './motion/spring';
@@ -105,10 +105,10 @@ describe('the touch motion foundation in plain Node', () => {
           '-e',
           `const m = await import(${JSON.stringify(pathToFileURL(file).href)});
            m.registerSpringsTable();
-           const animator = m.createMotionAnimator(null);
+           const animator = m.createMotionEngine(null);
            const pan = new m.PanGestureRecognizer({});
            console.log(JSON.stringify({
-             createMotionAnimator: typeof m.createMotionAnimator,
+             createMotionEngine: typeof m.createMotionEngine,
              set: typeof animator.set,
              sheet: m.springs.sheetPresent != null,
              pan: typeof pan.state,
@@ -117,7 +117,7 @@ describe('the touch motion foundation in plain Node', () => {
         {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']},
       );
       expect(JSON.parse(out.trim().split('\n').at(-1))).toEqual({
-        createMotionAnimator: 'function',
+        createMotionEngine: 'function',
         set: 'function',
         sheet: true,
         pan: 'string',
