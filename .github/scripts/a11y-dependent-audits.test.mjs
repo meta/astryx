@@ -18,6 +18,7 @@ import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 
 import {
+  budgetFor,
   changedPrimitives,
   dependentAudits,
   LATER_MAX_LEGS,
@@ -189,6 +190,28 @@ describe("a component's source change runs its own audits", () => {
     ),
   };
 
+  it('gives an audit over ten minutes its own leg and still fits the rest', () => {
+    const file = name =>
+      `packages/core/src/${name}/__tests__/${name}Audit.a11y.chromium.spec.ts`;
+    const long = {
+      changed: ['A', 'B', 'C'].map(
+        name => `packages/core/src/${name}/${name}.tsx`,
+      ),
+      primitives: ['core/Button'],
+      specs: ['A', 'B', 'C'].map(name => ({file: file(name), mode: 'audit'})),
+      importers: new Map(),
+      seconds: {[file('A')]: 700, [file('B')]: 300, [file('C')]: 300},
+    };
+    const both = planDependentAudits(long);
+    expect(both.files).toEqual([file('A'), file('B'), file('C')]);
+    expect(both.deferred).toEqual([]);
+    expect(both.shares).toContainEqual([file('A')]);
+    // A lone long audit plans one leg, never an empty one.
+    const alone = planDependentAudits({...long, changed: [long.changed[0]]});
+    expect(alone.count).toBe(1);
+    expect(alone.shares).toEqual([[file('A')]]);
+  });
+
   it('names the audits a first run cannot fit, and runs them all later at the same head', () => {
     const first = planDependentAudits(wide);
     expect(first.owed).toHaveLength(5);
@@ -228,7 +251,9 @@ describe('an undecided scope', () => {
     expect([...everything.files, ...everything.deferred].sort()).toEqual(
       [...audits].sort(),
     );
-    expect(everything.longestMs).toBeLessThanOrEqual(LEG_BUDGET_MS);
+    expect(everything.longestMs).toBeLessThanOrEqual(
+      budgetFor(everything.files, seconds),
+    );
   });
 });
 

@@ -1164,8 +1164,9 @@ fix-forward lands).
 
 **Reference:** `spec:AST-030/DEC-23`
 **Decider:** chief of staff with the release owner, `2026-11-05`
-**Superseded in part by:** `spec:AST-030/DEC-25` (a shared primitive's change
-runs the `audit` specs of the components that use it)
+**Superseded in part by:** `spec:AST-030/DEC-25` (a changed component runs its
+own `audit` specs, and a shared primitive's change runs the `audit` specs of
+the components that use it)
 
 A wide refactor that changed Spinner's behavior (its role and its shared
 announcement, across eight components) merged without Spinner's own motion
@@ -1183,7 +1184,8 @@ the label that runs it. The one-minute share holds the added runner time to abou
 rendering folders' share widens only if it catches failures the owned
 contracts miss. The default touched-components check keeps its wide-change skip, and
 unchanged `audit` and `always` specs still do not run on a pull request, except
-the dependent audits of a shared primitive (DEC-25).
+a changed component's own audits and the dependent audits of a shared primitive
+(DEC-25).
 
 Rejected: dropping the five-component limit for every audit (the visual,
 accessibility and RTL audits of a wide change do not fit the default check's

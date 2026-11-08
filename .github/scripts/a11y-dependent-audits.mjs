@@ -112,14 +112,9 @@ export function listAuditSpecs(root) {
  */
 export function fitLegs(files, seconds, maxLegs) {
   const cost = costOf(files, seconds);
-  let plan = planLegs(files, seconds, maxLegs);
-  for (
-    let count = plan.count + 1;
-    plan.longestMs > LEG_BUDGET_MS && count <= Math.min(maxLegs, files.length);
-    count++
-  ) {
+  const split = (/** @type {number} */ count) => {
     const shares = splitByDuration(files, count, cost);
-    plan = {
+    return {
       count,
       shares,
       longestMs: Math.max(
@@ -128,8 +123,24 @@ export function fitLegs(files, seconds, maxLegs) {
         ),
       ),
     };
+  };
+  const most = Math.max(1, Math.min(maxLegs, files.length));
+  let plan = split(Math.min(planLegs(files, seconds, maxLegs).count, most));
+  while (plan.longestMs > budgetFor(files, seconds) && plan.count < most) {
+    plan = split(plan.count + 1);
   }
   return plan;
+}
+
+/**
+ * A leg's budget for these files: ten minutes, or the longest single file's
+ * recorded time when one file alone is longer.
+ * @param {string[]} files
+ * @param {Record<string, number>} seconds
+ */
+export function budgetFor(files, seconds) {
+  const cost = costOf(files, seconds);
+  return Math.max(LEG_BUDGET_MS, ...files.map(file => cost(file) * 1000));
 }
 
 /**
@@ -215,7 +226,8 @@ export function planDependentAudits({
   const deferred = [];
   for (const file of owed) {
     const fits =
-      fitLegs([...files, file], seconds, MAX_LEGS).longestMs <= LEG_BUDGET_MS;
+      fitLegs([...files, file], seconds, MAX_LEGS).longestMs <=
+      budgetFor([...files, file], seconds);
     (fits || files.length === 0 ? files : deferred).push(file);
   }
   const legs = fitLegs(files, seconds, MAX_LEGS);

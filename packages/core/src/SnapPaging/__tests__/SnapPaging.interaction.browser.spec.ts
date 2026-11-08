@@ -561,6 +561,10 @@ test('the scroll offset holds through a swipe, and the settle hands it on', asyn
   await expect.poll(async () => offset(scroller)).toBeCloseTo(stops[6], 0);
 });
 
+/** The fifth item's native snap alignment. */
+const fifthAlign = async (scroller: Locator) =>
+  scroller.evaluate(el => getComputedStyle(el.children[4]).scrollSnapAlign);
+
 /**
  * The partial last page with its row 1 px narrower. The fifth item's stop sits
  * 1.37 px before the row's end, within half its step of it.
@@ -577,12 +581,21 @@ async function openSplitEnd(page: Page, mode: Mode) {
       timeout: 5000,
     })
     .toBe(before + 1);
+  // The paging writes the skip in a frame after the resize. Ten frames are
+  // its budget.
+  const isSkipped = await scroller.evaluate(async el => {
+    const fifth = el.children[4];
+    for (let frame = 0; frame < 10; frame++) {
+      if (getComputedStyle(fifth).scrollSnapAlign === 'none') {
+        return true;
+      }
+      await new Promise(resolve => requestAnimationFrame(resolve));
+    }
+    return getComputedStyle(fifth).scrollSnapAlign === 'none';
+  });
+  expect(isSkipped, 'paging never wrote the skip').toBe(true);
   return scroller;
 }
-
-/** The fifth item's native snap alignment. */
-const fifthAlign = async (scroller: Locator) =>
-  scroller.evaluate(el => getComputedStyle(el.children[4]).scrollSnapAlign);
 
 /** Adds an eighth item to the row, a copy of its last. */
 async function addItem(scroller: Locator) {
