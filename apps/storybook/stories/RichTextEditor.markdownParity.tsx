@@ -885,11 +885,6 @@ const WIDE_MARKER_SOURCE = [
 ].join('\n');
 
 const wideMarkerStyles = stylex.create({
-  editorFrame: {
-    // The in-place frame: the field's inset and border sit outside the common
-    // measure, rather than testing unequal widths.
-    marginInline: `calc(-1 * (${spacingVars['--spacing-2']} + ${borderVars['--border-width']}))`,
-  },
   columns: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))',
@@ -963,7 +958,7 @@ function NumberMarkerParity({source}: {source: string}) {
             label="Wide counters"
             isLabelHidden
             defaultValue={state}
-            xstyle={wideMarkerStyles.editorFrame}
+            xstyle={inPlaceStyles.editorFrame}
           />
         </div>
       </div>
