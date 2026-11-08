@@ -89,10 +89,11 @@ export async function list({cwd, depth} = {}) {
  * `depth`, every level for `'all'`. `docs <namespace> --depth` reads the same
  * way, so one flag means one thing everywhere.
  * @param {number | 'all'} [depth]
- * @returns {number}
+ * @returns {number | null} null for a list read with no depth, which carries
+ *   the namespaces alone
  */
 function depthLevels(depth) {
-  if (depth == null) return 0;
+  if (depth == null) return null;
   return depth === 'all' ? Infinity : depth;
 }
 
@@ -102,10 +103,13 @@ function depthLevels(depth) {
  * that opens it, and the package that owns it — the integration's, for a
  * guide an integration replaced, with the package whose route it took beside
  * it. Every line of the list is then an argument a reader can pass straight
- * back to `astryx docs`, attributed the way the read attributes it.
+ * back to `astryx docs`, attributed the way the read attributes it. Where the
+ * depth stops on a doc with docs below it, the row says how many, as a
+ * namespace read's child does; `levels` of null is a read with no depth,
+ * which says nothing about what is below.
  * @param {import('../../../foundation/doc-compiler/tree.mjs').DocsTree} tree
  * @param {import('../../../foundation/doc-compiler/tree.mjs').TreeNode} node
- * @param {number} levels
+ * @param {number | null} levels
  * @returns {import('../docs.type.mjs').DocsListNamespace}
  */
 function branch(tree, node, levels) {
@@ -115,28 +119,28 @@ function branch(tree, node, levels) {
     description: node.summary,
     package: node.provider,
   };
-  if (levels <= 0) return listed;
-  const children = node.slots
-    .flatMap(slot => slot.children)
+  if (levels == null) return listed;
+  const below = node.slots.flatMap(slot => slot.children);
+  if (levels <= 0) {
+    if (below.length > 0) listed.childCount = below.length;
+    return listed;
+  }
+  const children = below
     .map(route => tree.get(route))
     .filter(child => child != null)
     .map(child => {
-      const identity = childIdentity(
-        tree,
-        /** @type {import('../../../foundation/doc-compiler/tree.mjs').TreeNode} */ (
-          child
-        ),
+      const node = /** @type {import('../../../foundation/doc-compiler/tree.mjs').TreeNode} */ (
+        child
       );
-      const below = branch(
-        tree,
-        /** @type {import('../../../foundation/doc-compiler/tree.mjs').TreeNode} */ (
-          child
-        ),
-        levels - 1,
-      );
-      /** @type {import('../docs.type.mjs').DocsListChild} */
-      const row = {...identity, topic: identity.route, description: identity.summary};
-      return below.children == null ? row : {...row, children: below.children};
+      const {topic: _route, ...rest} = branch(tree, node, levels - 1);
+      const identity = childIdentity(tree, node);
+      return /** @type {import('../docs.type.mjs').DocsListChild} */ ({
+        ...identity,
+        topic: identity.route,
+        description: identity.summary,
+        ...(rest.children ? {children: rest.children} : {}),
+        ...(rest.childCount ? {childCount: rest.childCount} : {}),
+      });
     });
   if (children.length > 0) listed.children = children;
   return listed;

@@ -107,7 +107,7 @@ export const doc = {
     {
       type: 'docs.list',
       description:
-        "Every reference-doc topic in read order, as DocsListEntry[] ({topic, description, package, replaces?, replacedPackage?}), each readable with docs(topic). meta.namespaces lists the docs tree's top-level namespaces ({topic, description, package}); with depth, each also carries children, the docs below it as a namespace read names them ({topic, description, route, name, package, kind, title, summary, replaces?, replacedPackage?, stability?}), nested the same way to the depth asked for. meta.notLoaded names each package whose docs did not load ({package, message}).",
+        "Every reference-doc topic in read order, as DocsListEntry[] ({topic, description, package, replaces?, replacedPackage?}), each readable with docs(topic). meta.namespaces lists the docs tree's top-level namespaces ({topic, description, package}); with depth, each also carries children, the docs below it as a namespace read names them ({topic, description, route, name, package, kind, title, summary, replaces?, replacedPackage?, stability?}), nested the same way to the depth asked for, and childCount where the depth stops on a doc with docs below it. meta.notLoaded names each package whose docs did not load ({package, message}).",
     },
     {
       type: 'docs.detail',

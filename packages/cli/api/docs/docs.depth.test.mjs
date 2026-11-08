@@ -144,6 +144,42 @@ describe('docs() depth', () => {
   );
 
   it(
+    'says how many docs sit below a list row where the depth stops',
+    async () => {
+      const one = await docs(undefined, undefined, {depth: 1});
+      if (one.type !== 'docs.list') return;
+      const cli = (one.meta?.namespaces ?? []).find(
+        each => each.topic === 'cli',
+      );
+      const api = (cli?.children ?? []).find(each => each.topic === 'cli/api');
+      // The same count the namespace read gives the same row.
+      const read = await docs('cli', undefined, {depth: 1});
+      if (read.type !== 'docs.node') return;
+      const fromRead = read.data.slots
+        .flatMap((/** @type {any} */ slot) => slot.children)
+        .find((/** @type {any} */ child) => child.route === 'cli/api');
+      expect(api?.childCount).toBe(fromRead.childCount);
+      expect(api?.childCount).toBeGreaterThan(0);
+      // A row the depth did not stop on carries children instead of a count.
+      const deeper = await docs(undefined, undefined, {depth: 2});
+      if (deeper.type !== 'docs.list') return;
+      const apiDeeper = (
+        (deeper.meta?.namespaces ?? []).find(each => each.topic === 'cli')
+          ?.children ?? []
+      ).find(each => each.topic === 'cli/api');
+      expect(apiDeeper?.children?.length).toBe(api?.childCount);
+      expect(apiDeeper?.childCount).toBeUndefined();
+      // A list with no depth says nothing about what is below.
+      const plain = await docs();
+      if (plain.type !== 'docs.list') return;
+      expect(
+        (plain.meta?.namespaces ?? []).every(each => each.childCount == null),
+      ).toBe(true);
+    },
+    SLOW,
+  );
+
+  it(
     'lists the whole tree for a depth of all, each doc by the route that opens it',
     async () => {
       const all = await docs(undefined, undefined, {depth: 'all'});
