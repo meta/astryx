@@ -102,6 +102,10 @@
         },
         {
           "kind": "component",
+          "name": "CircleCheckIndicator"
+        },
+        {
+          "kind": "component",
           "name": "CircularProgress"
         },
         {
@@ -134,10 +138,6 @@
         },
         {
           "kind": "component",
-          "name": "InfoTip"
-        },
-        {
-          "kind": "component",
           "name": "ListInput"
         },
         {
@@ -146,11 +146,15 @@
         },
         {
           "kind": "component",
-          "name": "MobilePowerSearch"
+          "name": "NavigationScreen"
         },
         {
           "kind": "component",
-          "name": "MobileTokenizer"
+          "name": "NavigationStack"
+        },
+        {
+          "kind": "component",
+          "name": "PageControl"
         },
         {
           "kind": "component",
@@ -166,11 +170,23 @@
         },
         {
           "kind": "component",
+          "name": "SelectableCardGroup"
+        },
+        {
+          "kind": "component",
           "name": "Stat"
         },
         {
           "kind": "component",
           "name": "SVGIcon"
+        },
+        {
+          "kind": "component",
+          "name": "TabBar"
+        },
+        {
+          "kind": "component",
+          "name": "TabBarItem"
         },
         {
           "kind": "component",
@@ -274,6 +290,18 @@
         {
           "kind": "component",
           "name": "RichTextEditor"
+        },
+        {
+          "kind": "component",
+          "name": "RichTextEditorAutoLinkPlugin"
+        },
+        {
+          "kind": "component",
+          "name": "RichTextEditorToolbar"
+        },
+        {
+          "kind": "component",
+          "name": "RichTextView"
         },
         {
           "kind": "template",

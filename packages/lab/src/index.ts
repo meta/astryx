@@ -24,6 +24,19 @@ export {
 // InfoTip — accessible info-icon help affordance (RFC meta/astryx#3349)
 export {InfoTip, type InfoTipProps, type InfoTipSize} from './InfoTip';
 
+// SelectableCardGroup — a set of selectable cards with the semantics of its
+// selection: one choice is a radio group, several a group of checkboxes
+export {
+  SelectableCardGroup,
+  SelectableCardGroupItem,
+  type SelectableCardGroupProps,
+  type SelectableCardGroupItemProps,
+} from './SelectableCardGroup';
+
+// CircleCheckIndicator — the iOS multiple-selection circle, a checkbox-family
+// indicator a theme can map to `checkbox`
+export {CircleCheckIndicator} from './CircleCheckIndicator';
+
 // EmojiPicker — standalone searchable emoji panel
 export {
   EmojiPicker,
@@ -315,24 +328,37 @@ export {
   type DiffViewerSide,
 } from './DiffViewer';
 
-// MobileTokenizer — Lab prototype (stack layer 1) of the touch Tokenizer
-// flow: summary trigger + stacked manage/add BottomSheets. Graduates to
-// Core Tokenizer presentation="bottom-sheet" (stack layer 2).
+// NavigationStack: push/pop drill-down navigation with UIKit's transitions
+// and back swipes.
 export {
-  MobileTokenizer,
-  type MobileTokenizerProps,
-  type MobileTokenizerChange,
-} from './MobileTokenizer';
+  NavigationScreen,
+  NavigationStack,
+  useNavigationStack,
+  type NavigationScreenProps,
+  type NavigationStackApi,
+  type NavigationStackProps,
+} from './NavigationStack';
 
-// MobilePowerSearch — Lab prototype (stack layer 1) of the touch PowerSearch
-// flow: field-wide "Manage filters" trigger with display-only tokens, a
-// Filters sheet, and a field → operator → value drill-down. The caller picks
-// it explicitly on touch layouts; the API mirrors Core PowerSearch.
+// PageControl: UIPageControl's row of page indicators.
+export {PageControl, type PageControlProps} from './PageControl';
+
+// TabBar: the floating bottom tab bar of iOS 26's UITabBarController.
 export {
-  MobilePowerSearch,
-  type MobilePowerSearchProps,
-} from './MobilePowerSearch';
+  TabBar,
+  TabBarItem,
+  type TabBarItemProps,
+  type TabBarProps,
+} from './TabBar';
 
 // RichTextEditor (RFC meta/astryx#3899) moved out of @astryxdesign/lab into
 // its own package, @astryxdesign/richtext. Import it from there:
 //   import {RichTextEditor, RichTextView} from '@astryxdesign/richtext';
+
+// Pull to refresh as UIRefreshControl, applied by the app to its own scroll
+// container, on Core's touch foundation.
+export {
+  REFRESH_REVEAL_VAR,
+  useRefreshControl,
+  type UseRefreshControlOptions,
+  type UseRefreshControlResult,
+} from './RefreshControl';

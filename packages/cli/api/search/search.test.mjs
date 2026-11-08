@@ -24,10 +24,19 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {docs} from '../docs/docs.mjs';
-import {listAvailableThemes} from '../theme/_adapter.mjs';
-import {doc as themeAddCommandDoc} from '../../clients/cli/commands/theme-add.doc.mjs';
-import {
+import {requireNatively} from '../../test-utils/native-require.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('../docs/docs.mjs')} */
+const {docs} = require('../docs/docs.mjs');
+/** @type {typeof import('../theme/_adapter.mjs')} */
+const {listAvailableThemes} = require('../theme/_adapter.mjs');
+/** @type {typeof import('../../clients/cli/commands/theme-add.doc.mjs')} */
+const {
+  doc: themeAddCommandDoc,
+} = require('../../clients/cli/commands/theme-add.doc.mjs');
+/** @type {typeof import('./search.mjs')} */
+const {
   headingWithPhrase,
   titleInQuery,
   search,
@@ -35,8 +44,11 @@ import {
   scoreQuery,
   tokenizeQuery,
   SEARCH_DOMAINS,
-} from './search.mjs';
-import {linkThisCliAsProjectCli} from '../../test-utils/release-fixtures.mjs';
+} = require('./search.mjs');
+/** @type {typeof import('../../test-utils/release-fixtures.mjs')} */
+const {
+  linkThisCliAsProjectCli,
+} = require('../../test-utils/release-fixtures.mjs');
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
 const cwd = REPO;

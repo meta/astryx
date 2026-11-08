@@ -12,7 +12,7 @@
  */
 
 import {use} from 'react';
-import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 
 export type SegmentedControlSize = 'sm' | 'md' | 'lg';
 export type SegmentedControlLayout = 'hug' | 'fill';
@@ -29,10 +29,20 @@ export interface SegmentedControlContextValue {
    * described by the reason (spec:AST-085 FR5).
    */
   disabledReasonID?: string;
+  /**
+   * True in the touch presentation (under a finger, `useTouchPresentation`):
+   * the control animates selection changes itself (the surface slides), so
+   * segments drop their CSS transitions.
+   */
+  isTouchPresentation?: boolean;
 }
 
 export const SegmentedControlContext =
-  createContext<SegmentedControlContextValue | null>(null);
+  createLayerScopedContext<SegmentedControlContextValue | null>(
+    'SegmentedControlContext',
+    1,
+    null,
+  );
 SegmentedControlContext.displayName = 'SegmentedControlContext';
 
 export function useSegmentedControlContext(): SegmentedControlContextValue {

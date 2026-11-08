@@ -160,6 +160,7 @@ export function useAutoMediaMode(
   const {tokens} = useTheme();
   const lastRef = useRef<{background: string; tokens: unknown} | null>(null);
 
+  // Syncs the media mode with the painted color behind the element.
   // No dependency array. A surface color is a painted value, and it changes
   // when a prop on some ancestor changes. No dependency that this hook can
   // name catches that. So the measurement runs on each render, and it skips

@@ -17,8 +17,8 @@ import {dirname, join, relative, resolve} from 'node:path';
 import {describe, expect, it} from 'vitest';
 
 /**
- * The tables shared code may read. The animator and gestures read these, and
- * the paging math reads paging.
+ * The tables shared code may read. The animator and gestures read these. The
+ * paging math and the pager, one hook for every paging component, read paging.
  */
 const SHARED_TABLES = new Set([
   'motion/uikit/gestures.ts',

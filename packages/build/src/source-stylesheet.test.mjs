@@ -19,6 +19,7 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 
 const require = createRequire(import.meta.url);
 const {
+  PREBUILT_OPTIONS,
   compileRules,
   pluginOptions,
   resolveStyleXImport,
@@ -139,6 +140,43 @@ describe('a source build against the prebuilt stylesheets', () => {
 });
 
 describe('reading packages and resolving imports', () => {
+  it('compiles a module again for another resolver the caller sets', async () => {
+    const dir = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-resolver-')),
+    );
+    try {
+      fs.writeFileSync(
+        path.join(dir, 'tokens.stylex.ts'),
+        "import * as stylex from '@stylexjs/stylex';\nexport const tokens = stylex.defineVars({gap: '4px'});\n",
+      );
+      const file = path.join(dir, 'Box.ts');
+      fs.writeFileSync(
+        file,
+        "import * as stylex from '@stylexjs/stylex';\nimport {tokens} from './tokens.stylex';\nexport const styles = stylex.create({box: {gap: tokens.gap}});\n",
+      );
+      const calls = [];
+      const options = name => ({
+        ...PREBUILT_OPTIONS,
+        aliases: {},
+        unstable_moduleResolution: {
+          type: 'custom',
+          filePathResolver: (request, importer) => {
+            calls.push(name);
+            return path.resolve(path.dirname(importer), `${request}.ts`);
+          },
+          getCanonicalFilePath: target => path.relative(dir, target),
+        },
+      });
+      await compileRules(file, options('first'));
+      await compileRules(file, options('second'));
+      // Present first: the first resolver ran.
+      expect(calls).toContain('first');
+      expect(calls).toContain('second');
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+
   it('matches an alias key without a wildcard only exactly', () => {
     const dir = fs.realpathSync(
       fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-alias-')),

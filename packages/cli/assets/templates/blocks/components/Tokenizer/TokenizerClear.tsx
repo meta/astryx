@@ -29,7 +29,8 @@ export default function TokenizerClear() {
     <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 400px)'}}>
       <Stack direction="vertical" gap={2}>
         <Text type="supporting" color="secondary">
-          Clear-all button appears when tokens are selected
+          Clear-all button appears when tokens are selected; on touch screens,
+          clear through the sheet's Clear all
         </Text>
         <Tokenizer
           label="Team Members"

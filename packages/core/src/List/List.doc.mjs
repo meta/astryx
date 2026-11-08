@@ -13,6 +13,15 @@ export const docs = {
       {className: 'astryx-list', visualProps: ['density', 'listStyle']},
       {className: 'astryx-list-item'},
     ],
+    vars: [
+      {
+        name: '--_hit-border-bottom',
+        description:
+          "Width of the divider below a divided row, 0 on the last row. The row's touch hit layer adds it to its offset, so its band starts past the divider. ListItem sets it on the row's own ::after from --border-width under hasDividers, so content inside the row never inherits it, and a theme changes the divider through that token.",
+        default: '0px',
+        private: true,
+      },
+    ],
   },
   description: 'List container with density, dividers, and header support.',
   props: [
@@ -32,7 +41,7 @@ export const docs = {
     {
       name: 'density',
       type: "'compact' | 'balanced' | 'spacious'",
-      description: 'Spacing density for items.',
+      description: "Spacing density for items. Under a finger, an interactive row's hit target reaches 44px where its neighbors leave room, with no change to how rows look or lay out.",
       default: "'balanced'",
     },
     {
@@ -40,6 +49,11 @@ export const docs = {
       type: 'boolean',
       description: 'Show dividers between items.',
       default: 'false',
+    },
+    {
+      name: 'animatedLayout',
+      type: 'AnimatedLayout',
+      description: 'The handle from useAnimatedLayout({containerRef}). With it, when rows are inserted, removed or reordered, an inserted row enters, a removed row collapses in place, a row that crosses rows moving the other way rides above them with the surface color behind it, and the rows after a change and the content after the list, up to that container, glide to their new places, all on one shared motion, under every pointer. Under Reduce Motion nothing travels. A row is identified by its itemKey: a row without one changes at once. Without a handle the list changes at once.',
     },
     {
       name: 'edge',

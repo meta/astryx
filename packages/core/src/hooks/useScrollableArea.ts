@@ -216,6 +216,8 @@ export function useScrollableArea({
   const getComposedViewportRef = useStableComposedRef(viewportRef);
   const getComposedContentRef = useStableComposedRef(contentRef);
 
+  // Syncs the scroll geometry with the viewport and content nodes. It measures
+  // them, then follows resize, scroll, transition and font events.
   useIsomorphicLayoutEffect(() => {
     if (viewport == null || content == null) {
       return;
@@ -430,6 +432,8 @@ export function useScrollableArea({
   // commit. A loss waits for the next frame.
   const previousOverflowRef = useRef<LogicalOverflowGeometry>(INITIAL_OVERFLOW);
   const previousMappingRef = useRef<LogicalAxisMapping>(INITIAL_MAPPING);
+  // Measures the layout again when overflow starts or the writing-mode mapping
+  // changes. A new scrollbar gutter changes the geometry.
   useIsomorphicLayoutEffect(() => {
     const previous = previousOverflowRef.current;
     const hasGainedOverflow =

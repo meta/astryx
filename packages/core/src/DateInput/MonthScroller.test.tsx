@@ -3,7 +3,12 @@
 import {act, render} from '@testing-library/react';
 import {createRef} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {
+  fakeAnimate,
+  type FakeAnimation,
+} from '../motion/__tests__/fakeWebAnimation';
 import {MonthScroller, type MonthScrollerHandle} from './MonthScroller';
+import {createMonthModel} from './monthGeometry';
 
 /**
  * A touch screen with Reduced Motion on: the policy's combined query
@@ -35,6 +40,12 @@ class FakeResizeObserver {
 
 describe('MonthScroller under Reduced Motion on a touch screen', () => {
   const scrollTo = vi.fn();
+  // The dips' animations, in order. A fade-out ends only when a test ends it.
+  let animations: FakeAnimation[] = [];
+  /** The newest dip's fade-out ends: its step lands. */
+  async function endFadeOut() {
+    await act(async () => animations[animations.length - 1].finish());
+  }
   beforeEach(() => {
     vi.useFakeTimers();
     stubReducedMotionTouch();
@@ -42,10 +53,11 @@ describe('MonthScroller under Reduced Motion on a touch screen', () => {
     vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(300);
     vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(300);
     Element.prototype.scrollTo = scrollTo;
-    Element.prototype.animate = vi.fn(() => ({
-      cancel: vi.fn(),
-    })) as unknown as typeof Element.prototype.animate;
-    scrollTo.mockClear();
+    const fake = fakeAnimate();
+    Element.prototype.animate = fake.animate;
+    animations = fake.animations;
+    // mockReset, not mockClear: a test's implementation must not outlive it.
+    scrollTo.mockReset();
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -60,6 +72,7 @@ describe('MonthScroller under Reduced Motion on a touch screen', () => {
     const view = render(
       <MonthScroller
         handleRef={handleRef}
+        monthModel={createMonthModel('gregory')}
         minMonthIndex={0}
         maxMonthIndex={23}
         initialMonthIndex={9}
@@ -75,51 +88,78 @@ describe('MonthScroller under Reduced Motion on a touch screen', () => {
     return {handleRef, ...view};
   }
 
-  it('lets a second step within the dip replace the first: only its scroll lands', () => {
+  it('lets a second step within the dip replace the first: only its scroll lands', async () => {
     const {handleRef} = renderScroller();
     act(() => handleRef.current?.scrollToMonth(10));
-    act(() => {
-      vi.advanceTimersByTime(40);
-    });
+    const first = animations[0];
     act(() => handleRef.current?.scrollToMonth(11));
-    act(() => {
-      vi.advanceTimersByTime(400);
-    });
+    expect(first.cancel).toHaveBeenCalled();
+    // The replaced dip's fade-out ending lands nothing.
+    await act(async () => first.finish());
+    expect(scrollTo).not.toHaveBeenCalled();
+    await endFadeOut();
     expect(scrollTo).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps a jump to a distant month made within the dip: the dip does not land after it', () => {
+  it('lands a step to another month before its fade-in starts', async () => {
+    // The fade-in starts as soon as the landing returns. A month that only
+    // scheduled its scroll then would change fully visible on a busy page.
+    const {handleRef} = renderScroller();
+    const order: string[] = [];
+    scrollTo.mockImplementation(() => {
+      order.push('scroll');
+    });
+    const fake = fakeAnimate();
+    Element.prototype.animate = function (
+      this: Element,
+      ...args: Parameters<Element['animate']>
+    ) {
+      order.push('animate');
+      return fake.animate.apply(this, args);
+    };
+    act(() => handleRef.current?.scrollToMonth(10));
+    expect(order).toEqual(['animate']);
+    await act(async () => fake.animations[0].finish());
+    expect(order).toEqual(['animate', 'scroll', 'animate']);
+  });
+
+  it('lands a step only when its fade-out ends, however late its frame comes', async () => {
+    // design:reduced-motion DR2: a timer at the dip's middle could fire after
+    // the fade-in began, and the month would change fully visible.
     const {handleRef} = renderScroller();
     act(() => handleRef.current?.scrollToMonth(10));
     act(() => {
-      vi.advanceTimersByTime(40);
+      vi.advanceTimersByTime(10_000);
     });
+    expect(scrollTo).not.toHaveBeenCalled();
+    await endFadeOut();
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a jump to a distant month made within the dip: the dip does not land after it', async () => {
+    const {handleRef} = renderScroller();
+    act(() => handleRef.current?.scrollToMonth(10));
+    const dip = animations[0];
     // Eleven months on: beyond the mounted window, so it jumps at once.
     act(() => handleRef.current?.scrollToMonth(20));
-    act(() => {
-      vi.advanceTimersByTime(400);
-    });
+    await act(async () => dip.finish());
     expect(
       scrollTo.mock.calls.map(([options]) => (options as ScrollToOptions).left),
     ).toEqual([20 * 300]);
   });
 
-  it('keeps a step at once made within the dip: the dip does not land after it', () => {
+  it('keeps a step at once made within the dip: the dip does not land after it', async () => {
     const {handleRef} = renderScroller();
     act(() => handleRef.current?.scrollToMonth(10));
-    act(() => {
-      vi.advanceTimersByTime(40);
-    });
+    const dip = animations[0];
     act(() => handleRef.current?.scrollToMonth(8, 'auto'));
-    act(() => {
-      vi.advanceTimersByTime(400);
-    });
+    await act(async () => dip.finish());
     expect(
       scrollTo.mock.calls.map(([options]) => (options as ScrollToOptions).left),
     ).toEqual([8 * 300]);
   });
 
-  it('reports a trackpad scroll after a step lands, even with an earlier steer that never arrived', () => {
+  it('reports a trackpad scroll after a step lands, even with an earlier steer that never arrived', async () => {
     const onVisibleMonthChange = vi.fn();
     const {handleRef, container} = renderScroller({onVisibleMonthChange});
     const scroller = container.querySelector<HTMLElement>(
@@ -133,9 +173,7 @@ describe('MonthScroller under Reduced Motion on a touch screen', () => {
     act(() => handleRef.current?.scrollToMonth(9, 'auto'));
     // A step lands at its dip's middle.
     act(() => handleRef.current?.scrollToMonth(10));
-    act(() => {
-      vi.advanceTimersByTime(400);
-    });
+    await endFadeOut();
     // A trackpad scroll on to the next month: no touch ends the steer.
     act(() => {
       scroller.scrollLeft = 11 * 300;
@@ -145,13 +183,12 @@ describe('MonthScroller under Reduced Motion on a touch screen', () => {
     expect(onVisibleMonthChange).toHaveBeenLastCalledWith(11);
   });
 
-  it('scrolls nothing once unmounted within the dip', () => {
+  it('scrolls nothing once unmounted within the dip', async () => {
     const {handleRef, unmount} = renderScroller();
     act(() => handleRef.current?.scrollToMonth(10));
     unmount();
-    act(() => {
-      vi.advanceTimersByTime(400);
-    });
+    expect(animations[0].cancel).toHaveBeenCalled();
+    await endFadeOut();
     expect(scrollTo).not.toHaveBeenCalled();
   });
 });

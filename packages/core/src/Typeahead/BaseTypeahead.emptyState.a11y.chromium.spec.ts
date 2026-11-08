@@ -8,7 +8,7 @@
  * @position Browser regression for AST-092 FR5 and AST-056 AR1 (#8903)
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test} from '@astryxdesign/a11y-spec/playwright';
 import {
   serveStorybook,
   DEFAULT_STORYBOOK_DIR,

@@ -38,9 +38,10 @@ export interface ToastOptions {
   /**
    * Replaces the content of this toast's card with your own layout.
    *
-   * Astryx keeps the card, live-region role and auto-hide behavior, then hands
-   * the renderer this toast's content, resolved settings and `dismiss`
-   * callback. The renderer owns every control inside its layout; call
+   * Astryx keeps the card and its auto-hide behavior (inside a
+   * `ToastViewport` the viewport announces the toast, and while a modal hosts
+   * the viewport the card announces itself), then hands the
+   * renderer this toast's content, resolved settings and `dismiss` callback. The renderer owns every control inside its layout; call
    * `dismiss` from the control that should close the toast. Astryx does not
    * inject a fallback control into custom content.
    *
@@ -100,4 +101,9 @@ export interface ToastEntry {
   id: string;
   options: ToastOptions;
   createdAt: number;
+  /**
+   * The row's identity in the stack. A uniqueID overwrite keeps the replaced
+   * toast's, so the card updates in place and focus inside it stays.
+   */
+  rowKey?: string;
 }

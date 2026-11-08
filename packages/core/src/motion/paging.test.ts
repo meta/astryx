@@ -353,6 +353,38 @@ describe("solvePaging: UIKit's paging settle, frame by frame", () => {
     expect(curve.at(0.1)).toBe(804);
   });
 
+  it.each([0.75, 1.5, 3])(
+    'at tempo %s, a settle from rest keeps its shape and takes tempo times as long',
+    tempo => {
+      const measured = solvePaging({from: 633.33, velocity: 0, to: 804});
+      const paced = solvePaging({from: 633.33, velocity: 0, to: 804, tempo});
+      expect(paced.steps).toBe(measured.steps);
+      expect(paced.duration).toBeCloseTo(measured.duration * tempo, 9);
+      for (let t = 0; t <= measured.duration; t += 0.01) {
+        expect(paced.at(t * tempo)).toBeCloseTo(measured.at(t), 6);
+      }
+      expect(paced.at(paced.duration)).toBe(804);
+    },
+  );
+
+  it("at any tempo, a release starts at UIKit's step velocity", () => {
+    for (const tempo of [0.75, 1.5, 3]) {
+      const curve = solvePaging({from: 500, velocity: 1000, to: 804, tempo});
+      expect(curve.velocity(0)).toBeCloseTo(960, 6);
+      expect(curve.at(curve.duration)).toBe(804);
+    }
+  });
+
+  it('at tempo 1, the settle is the measured one', () => {
+    const measured = solvePaging({from: 450, velocity: 600, to: 804});
+    const atOne = solvePaging({from: 450, velocity: 600, to: 804, tempo: 1});
+    expect(atOne.steps).toBe(measured.steps);
+    expect(atOne.duration).toBe(measured.duration);
+    for (let t = 0; t <= measured.duration; t += 0.004) {
+      expect(atOne.at(t)).toBe(measured.at(t));
+    }
+  });
+
   it('runs the documented integrator', () => {
     const {springPull, friction} = paging.integrator;
     const curve = solvePaging({from: 0, velocity: 0, to: 100});
@@ -386,8 +418,44 @@ describe('solveAnimatedPageScroll: setContentOffset(_:animated:)', () => {
     }
   });
 
-  it('peaks at π/2 times the average speed halfway', () => {
+  // spec:AST-094 FR6: a new target keeps the current velocity (UIKit's
+  // setContentOffset drops it).
+  it('a retarget starts at the velocity it was handed and still ends on the target, at rest, on time', () => {
+    for (const velocity of [900, -900, 0]) {
+      const curve = solveAnimatedPageScroll({from: 100, to: 804, velocity});
+      expect(curve.at(0)).toBe(100);
+      expect(curve.velocity(0)).toBe(velocity);
+      expect(curve.velocity(1e-4)).toBeCloseTo(velocity, -1);
+      expect(curve.at(0.3)).toBe(804);
+      expect(curve.velocity(0.3)).toBe(0);
+      expect(curve.velocity(0.2999)).toBeCloseTo(0, -1);
+    }
+  });
+
+  it('peaks at π/2 times the average speed halfway (the sinusoid, to 0.2 %)', () => {
     const curve = solveAnimatedPageScroll({from: 0, to: 402});
-    expect(curve.velocity(0.15)).toBeCloseTo((Math.PI / 2) * (402 / 0.3), 6);
+    expect(curve.velocity(0.15) / ((Math.PI / 2) * (402 / 0.3))).toBeCloseTo(
+      1,
+      2,
+    );
+  });
+
+  it('follows the sinusoid to 0.02 % of the distance', () => {
+    const curve = solveAnimatedPageScroll({from: 0, to: 402});
+    for (let t = 0; t <= 0.3; t += 0.01) {
+      const sine = (402 * (1 - Math.cos((Math.PI * t) / 0.3))) / 2;
+      expect(Math.abs(curve.at(t) - sine)).toBeLessThan(0.1);
+    }
+  });
+
+  it("takes a theme's duration and curve", () => {
+    const curve = solveAnimatedPageScroll({
+      from: 0,
+      to: 100,
+      durationMs: 500,
+      curve: [0, 0, 1, 1],
+    });
+    expect(curve.duration).toBe(0.5);
+    expect(curve.at(0.25)).toBeCloseTo(50, 1);
   });
 });

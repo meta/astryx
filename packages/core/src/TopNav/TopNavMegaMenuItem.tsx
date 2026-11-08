@@ -32,7 +32,7 @@ import type {LinkComponentType} from '../Link/types';
 import {useTopNavRenderMode} from './TopNavRenderContext';
 import {mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
-import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
+import {useCloseMobileDrawerOnActivate} from '../AppShell/useCloseMobileDrawerOnActivate';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
@@ -200,7 +200,9 @@ export function TopNavMegaMenuItem({
   const pressable = usePressFeedback();
   const renderMode = useTopNavRenderMode();
   const LinkComponent = useLinkComponent(as);
-  const {closeMobileNav} = useAppShellMobile();
+  const closeDrawerAfter = useCloseMobileDrawerOnActivate(
+    renderMode === 'drawer',
+  );
 
   // =========================================================================
   // Drawer mode — matches SideNavItem / TopNavMenu drawer appearance
@@ -208,10 +210,9 @@ export function TopNavMegaMenuItem({
   if (renderMode === 'drawer') {
     const Element = href ? LinkComponent : 'button';
     const elementProps = Element === 'button' ? {type: 'button' as const} : {};
-    const handleDrawerClick = () => {
+    const handleDrawerClick = closeDrawerAfter(() => {
       onClick?.();
-      closeMobileNav();
-    };
+    });
     return (
       <Element
         {...restProps}

@@ -5,11 +5,10 @@
 /**
  * @astryxdesign/build: source stylesheets. A source build of a package's
  * modules prints its prebuilt stylesheet's rules, selectors and order. It
- * prints them in one `@layer astryx-base` after the layer order.
- * `stylexOptions()` holds the options the prebuilt stylesheets use
- * (scripts/build-css.mjs), `packageModules()` the module set, and
- * `renderPackage()` prints it. The bundler compiles the same modules with the
- * same options (turbopack-loader.js), so rendered class names match the rules.
+ * prints them in one `@layer astryx-base` after the layer order. The walk,
+ * the compile options and the layer block here also build the prebuilt
+ * stylesheets (scripts/build-css.mjs). The bundler compiles the same modules
+ * with the same options (turbopack-loader.js), so class names match the rules.
  */
 
 const fs = require('node:fs');
@@ -54,10 +53,9 @@ const PREBUILT_STYLESHEETS = {
 
 /**
  * Variable modules a prebuilt stylesheet compiles though none of the package's
- * modules imports them: scripts/build-css.mjs's `stylexEntries`. Core's public
- * `dataVars` entry is one, since an app reads its defaults as plain `var()`
- * references. The parity test, whose reference comes from that script's own
- * targets, fails if this list drifts from it.
+ * modules imports them. Core's public `dataVars` entry is one, since an app
+ * reads its defaults as plain `var()` references. The targets of
+ * scripts/build-css.mjs take their `stylexEntries` from this list.
  */
 const STYLEX_ENTRIES = {[CORE]: ['theme/dataTokens.stylex.ts']};
 
@@ -128,25 +126,35 @@ function prebuiltStylesheet(pkg) {
 }
 
 /**
- * The StyleX options the prebuilt stylesheets are compiled with: the default
+ * The StyleX options every prebuilt stylesheet is compiled with: the default
  * `x` class-name prefix, no development class names and StyleX's default
- * property validation. Plain JSON, since Turbopack passes only serializable
- * loader options: `pluginOptions()` adds the resolution's functions.
+ * property validation.
+ */
+const PREBUILT_OPTIONS = {
+  dev: false,
+  runtimeInjection: false,
+  genConditionalClasses: true,
+  treeshakeCompensation: true,
+};
+
+/** The aliases that point another package's imports of Core at Core's source. */
+function coreAliases(srcDir) {
+  return {
+    '@astryxdesign/core/*': [path.join(srcDir, '*')],
+    '@astryxdesign/core': [srcDir],
+  };
+}
+
+/**
+ * An installed package's StyleX options. They are plain JSON, since Turbopack
+ * passes only serializable loader options. `pluginOptions()` adds the
+ * resolution's functions.
  */
 function stylexOptions(pkg, packages) {
   const core = packages.find(candidate => candidate.name === CORE);
   return {
-    dev: false,
-    runtimeInjection: false,
-    genConditionalClasses: true,
-    treeshakeCompensation: true,
-    aliases:
-      pkg.name === CORE || core == null
-        ? {}
-        : {
-            '@astryxdesign/core/*': [path.join(core.srcDir, '*')],
-            '@astryxdesign/core': [core.srcDir],
-          },
+    ...PREBUILT_OPTIONS,
+    aliases: pkg.name === CORE || core == null ? {} : coreAliases(core.srcDir),
     unstable_moduleResolution: {type: 'custom', rootDir: pkg.dir},
   };
 }
@@ -166,6 +174,13 @@ const UNRESOLVED = new Set([
  * `<package name>:<path inside it>`, so Core's names do not change.
  */
 function pluginOptions(options) {
+  // The prebuilt build passes the resolver the packages' JavaScript builds use.
+  // Keep it, so CSS and JavaScript name each variable the same way.
+  if (
+    typeof options.unstable_moduleResolution.filePathResolver === 'function'
+  ) {
+    return options;
+  }
   const {rootDir} = options.unstable_moduleResolution;
   let packages;
   const owner = request =>
@@ -265,33 +280,26 @@ function resolveStyleXImport(specifier, importer, aliases) {
 }
 
 /**
- * The modules a package's prebuilt stylesheet is compiled from, walked as
- * scripts/build-css.mjs walks them. That is every source file except tests and
- * `.stylex` modules, plus the package's `STYLEX_ENTRIES`. The walk adds the
- * variable modules they import, minus those a provider's stylesheet already
- * emits. It adds the provided modules the package imports to `imported`. The
- * parity test in source-stylesheet.test.mjs fails if this drifts from
- * scripts/build-css.mjs.
+ * The modules a stylesheet is compiled from. The walk starts at every source
+ * file under `srcDir` except tests and `.stylex` modules, plus `entries`. It
+ * follows static `.stylex` imports, through `aliases`. A module in `provided`
+ * belongs to another stylesheet. The walk adds each one it reaches to
+ * `imported`.
  */
-function packageModules(
-  pkg,
-  packages,
+function reachableModules(
+  {srcDir, aliases, entries = []},
   provided = new Set(),
   imported = new Set(),
 ) {
-  const {aliases} = stylexOptions(pkg, packages);
   const queue = [
     ...globSync('**/*.{ts,tsx}', {
-      cwd: pkg.srcDir,
+      cwd: srcDir,
       absolute: true,
       ignore: ['**/*.test.*', '**/*.d.ts', '**/node_modules/**'],
     })
       .map(file => path.normalize(file))
       .filter(file => !STYLEX_MODULE.test(file)),
-    // A version older than an entry has none of it to print.
-    ...(STYLEX_ENTRIES[pkg.name] ?? [])
-      .map(entry => path.join(pkg.srcDir, entry))
-      .filter(file => fs.existsSync(file)),
+    ...entries,
   ].filter(file => !provided.has(file));
   const modules = new Set();
   while (queue.length > 0) {
@@ -314,20 +322,32 @@ function packageModules(
   return modules;
 }
 
+function packageWalk(pkg, packages) {
+  return {
+    srcDir: pkg.srcDir,
+    aliases: stylexOptions(pkg, packages).aliases,
+    // A version older than an entry has none of it to print.
+    entries: (STYLEX_ENTRIES[pkg.name] ?? [])
+      .map(entry => path.join(pkg.srcDir, entry))
+      .filter(file => fs.existsSync(file)),
+  };
+}
+
+function packageModules(pkg, packages, provided, imported) {
+  return reachableModules(packageWalk(pkg, packages), provided, imported);
+}
+
 /** A `defineConsts` value, as StyleX collects it: no CSS of its own. */
 const isConstant = rule =>
   rule[1]?.constKey != null && rule[1]?.constVal != null;
 
 /**
- * Every rule of a package's prebuilt stylesheet, collected as
- * scripts/build-css.mjs collects them. That is its modules' rules, plus the
- * constants it reads from a provider's modules. Those constants resolve where
- * they are read.
+ * Every rule of a stylesheet: its modules' rules, plus the constants it reads
+ * from provided modules. Those constants resolve where they are read.
  */
-async function packageRules(pkg, packages, provided) {
-  const options = stylexOptions(pkg, packages);
+async function collectRules(walk, provided, options) {
   const imported = new Set();
-  const modules = packageModules(pkg, packages, provided, imported);
+  const modules = reachableModules(walk, provided, imported);
   const rules = [];
   for (const file of modules) {
     rules.push(...(await compileRules(file, options)));
@@ -338,6 +358,14 @@ async function packageRules(pkg, packages, provided) {
   return {modules, rules};
 }
 
+function packageRules(pkg, packages, provided) {
+  return collectRules(
+    packageWalk(pkg, packages),
+    provided,
+    stylexOptions(pkg, packages),
+  );
+}
+
 const compiled = new Map();
 
 function stamp(file) {
@@ -345,9 +373,22 @@ function stamp(file) {
   return `${stat.mtimeMs}:${stat.size}`;
 }
 
+// `JSON.stringify` drops a resolver's functions, so each resolver object a
+// caller sets gets an id in the cache key.
+const resolverIds = new WeakMap();
+let nextResolverId = 0;
+
+function resolverKey({unstable_moduleResolution: resolution}) {
+  if (typeof resolution?.filePathResolver !== 'function') return '';
+  if (!resolverIds.has(resolution)) {
+    resolverIds.set(resolution, nextResolverId++);
+  }
+  return `:${resolverIds.get(resolution)}`;
+}
+
 /** One module's StyleX rules, cached on its modification stamp. */
 async function compileRules(file, options) {
-  const key = `${stamp(file)}:${JSON.stringify(options)}`;
+  const key = `${stamp(file)}:${JSON.stringify(options)}${resolverKey(options)}`;
   if (compiled.get(file)?.key === key) {
     return compiled.get(file).rules;
   }
@@ -368,23 +409,31 @@ async function compileRules(file, options) {
   return rules;
 }
 
-/**
- * The cascade-layer order every Astryx stylesheet registers before its rules,
- * the line scripts/build-css.mjs writes into each prebuilt stylesheet.
- */
+/** The cascade-layer order every Astryx stylesheet registers before its rules. */
 const LAYER_ORDER = '@layer reset, astryx-base, astryx-theme;';
 
+/** A stylesheet's block: the layer order, then `css` inside `@layer astryx-base`. */
+function layerBlock(css) {
+  const body = css
+    .split('\n')
+    .map(line => `  ${line}`)
+    .join('\n');
+  return `${LAYER_ORDER}\n\n@layer astryx-base {\n${body}\n}\n`;
+}
+
+/** StyleX's CSS for `rules`, from the copy of StyleX that compiled them. */
+function processRules(rules) {
+  return stylexBabelPlugin().processStylexRules(rules, false);
+}
+
 /**
- * Print a package's rules as its prebuilt stylesheet prints them. Print the
- * layer order, then StyleX's output inside one `@layer astryx-base`. Print
- * nothing when there are no rules. Each block carries the order, so the order
- * holds whichever block or chunk loads first. The product needs no line of its
- * own.
+ * Print a package's rules as its prebuilt stylesheet prints them, or nothing
+ * when there are no rules. Each block carries the order, so the order holds
+ * whichever block or chunk loads first. The product needs no line of its own.
  */
 function renderPackage(rules) {
-  const css = stylexBabelPlugin().processStylexRules(rules, false);
-  if (!css.trim()) return '';
-  return `${LAYER_ORDER}\n\n@layer astryx-base {\n${css.replace(/^/gm, '  ')}\n}\n`;
+  const css = processRules(rules);
+  return css.trim() ? layerBlock(css) : '';
 }
 
 /**
@@ -411,13 +460,22 @@ module.exports = {
   ASTRYX_PACKAGES,
   SOURCE_PACKAGES,
   PREBUILT_STYLESHEETS,
+  PREBUILT_OPTIONS,
+  STYLEX_ENTRIES,
+  STYLEX_MODULE,
+  LAYER_ORDER,
   prebuiltStylesheet,
   findPackageDir,
   sourcePackages,
+  coreAliases,
   stylexOptions,
   pluginOptions,
+  reachableModules,
   packageModules,
+  collectRules,
   compileRules,
+  processRules,
+  layerBlock,
   renderPackage,
   resolveStyleXImport,
   sourceStylesheet,

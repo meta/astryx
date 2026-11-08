@@ -10,6 +10,7 @@
  */
 
 import type {SelectionLock} from './GestureRecognizer';
+import {isElement} from '../utils/nodeType';
 
 /**
  * UIGestureRecognizer.State. A discrete recognizer goes straight from
@@ -155,13 +156,16 @@ export const DEFAULT_ENVIRONMENT: GestureEnvironment = {
     return {width: window.innerWidth, height: window.innerHeight};
   },
   isRtl(view) {
-    if (typeof window === 'undefined' || !(view instanceof Element)) {
+    if (typeof window === 'undefined' || !isElement(view)) {
       return false;
     }
-    return window.getComputedStyle(view).direction === 'rtl';
+    return (
+      (view.ownerDocument.defaultView ?? window).getComputedStyle(view)
+        .direction === 'rtl'
+    );
   },
   viewRect(view) {
-    if (typeof Element === 'undefined' || !(view instanceof Element)) {
+    if (!isElement(view)) {
       return null;
     }
     const {left, top, width, height} = view.getBoundingClientRect();
@@ -202,6 +206,12 @@ export interface TouchConsumer {
    * undefined and keeps the browser's long-press selection.
    */
   readonly selectionLock?: SelectionLock;
+  /**
+   * Whether this touch's press holds the browser's context menu closed now.
+   * A control whose hold acts uses it (a switch's hold toggles it). The host
+   * then cancels the menu, as for a claimed touch.
+   */
+  holdsContextMenu?(touchId: number): boolean;
   /**
    * Whether the consumer takes touches now (a disabled control does not).
    * The host listens only while something enabled is attached

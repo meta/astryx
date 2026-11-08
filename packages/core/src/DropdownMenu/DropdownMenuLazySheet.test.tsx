@@ -6,44 +6,83 @@
  * @output Tests DropdownMenu while its on-demand touch sheet is still loading
  * @position Test file for DropdownMenu
  *
- * This file never warms the sheet, and it checks that a popover menu never
- * requests it: each test holds the sheet modules until it
- * releases them, so it exercises the path a real page takes while the sheet's
- * code is still downloading.
+ * It checks that importing DropdownMenu and opening a popover menu never
+ * request the sheet. Each test holds the sheet modules until it releases them.
+ * So it exercises the path a real page takes while the sheet's code still
+ * downloads. The sheet modules' own code loads once, when the file is
+ * collected, past the hold. No test waits on a timer for a module load.
  */
 
-import {describe, it, expect, vi, beforeAll, beforeEach} from 'vitest';
-import {render, screen, waitFor, act} from '@testing-library/react';
+import {describe, it, expect, vi, beforeEach} from 'vitest';
+import {render, screen, act} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type {DropdownMenu as DropdownMenuComponent} from './DropdownMenu';
 
 const sheetLoad = vi.hoisted(() => {
   let release: () => void = () => {};
   const gate = new Promise<void>(resolve => {
     release = resolve;
   });
-  return {gate, release: () => release(), requested: [] as string[]};
+  let announce: (name: string) => void = () => {};
+  // Settles the moment any sheet module is requested.
+  const firstRequest = new Promise<string>(resolve => {
+    announce = resolve;
+  });
+  const requested: string[] = [];
+  return {
+    gate,
+    release: () => release(),
+    requested,
+    firstRequest,
+    request(name: string) {
+      requested.push(name);
+      announce(name);
+    },
+  };
 });
 
 vi.mock('./MenuBottomSheet', async importOriginal => {
-  sheetLoad.requested.push('MenuBottomSheet');
+  sheetLoad.request('MenuBottomSheet');
   await sheetLoad.gate;
   return importOriginal();
 });
 
 vi.mock('./MenuBottomSheetActionList', async importOriginal => {
-  sheetLoad.requested.push('MenuBottomSheetActionList');
+  sheetLoad.request('MenuBottomSheetActionList');
   await sheetLoad.gate;
   return importOriginal();
 });
 
-let DropdownMenu: typeof DropdownMenuComponent;
-
-// If any module the dropdown loads imported the sheet eagerly, this import
-// would wait on the held sheet and the hook would time out.
-beforeAll(async () => {
-  ({DropdownMenu} = await import('./DropdownMenu'));
-}, 10000);
+// The file loads DropdownMenu while it is collected, and no timeout bounds
+// collection. If any module the dropdown loads imported the sheet eagerly, this
+// import would wait on the held sheet forever. So the file fails the moment a
+// sheet module is requested.
+const loaded = await Promise.race([
+  import('./DropdownMenu').then(module => ({module})),
+  sheetLoad.firstRequest.then(name => ({eager: name})),
+]);
+if ('eager' in loaded) {
+  throw new Error(
+    `Importing DropdownMenu requested ${loaded.eager}: the sheet must load only when a menu shows it.`,
+  );
+}
+const {DropdownMenu} = loaded.module;
+// The sheet modules' own code loads here too, once. `importActual` skips the
+// mocks above, so `requested` stays empty. The hold still decides when the
+// sheet arrives. The mocks' `importOriginal` then returns these modules. If one
+// sheet module imported the other, that import would wait on the hold forever.
+// So this load also fails the moment a sheet module is requested.
+const sheetCode = await Promise.race([
+  Promise.all([
+    vi.importActual('./MenuBottomSheet'),
+    vi.importActual('./MenuBottomSheetActionList'),
+  ]).then(() => ({})),
+  sheetLoad.firstRequest.then(name => ({eager: name})),
+]);
+if ('eager' in sheetCode) {
+  throw new Error(
+    `Loading the sheet's own code requested the held ${sheetCode.eager}: one sheet module imports the other.`,
+  );
+}
 
 beforeEach(() => {
   HTMLDialogElement.prototype.showModal = vi.fn(function (
@@ -111,16 +150,21 @@ describe('DropdownMenu touch sheet loaded on demand', () => {
     });
     expect(screen.queryByRole('button', {name: 'Edit project'})).toBeNull();
 
+    // The sheet's modules arrive.
     await act(async () => {
       sheetLoad.release();
     });
+    // React renders the rows when the dropdown's own loads settle. On a busy
+    // machine that can be after this act, so wait for the rows themselves.
+    const action = await screen.findByRole('button', {name: 'Edit project'});
 
-    await waitFor(
-      () =>
-        expect(
-          screen.getByRole('button', {name: 'Edit project'}),
-        ).toHaveFocus(),
-      {timeout: 15000},
-    );
-  }, 20000);
+    // The dropdown focuses the first row a frame after the rows appear. The
+    // frame this awaits runs after that one.
+    await act(async () => {
+      await new Promise<void>(resolve => {
+        requestAnimationFrame(() => resolve());
+      });
+    });
+    expect(action).toHaveFocus();
+  });
 });

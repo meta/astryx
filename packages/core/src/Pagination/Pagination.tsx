@@ -41,6 +41,9 @@ import {Selector} from '../Selector';
 import {Text} from '../Text';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {useListFocus} from '../hooks/useListFocus';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {focusForLastInput} from '../utils/focusReturn';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {mergeProps, rtlStyles} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
@@ -180,16 +183,23 @@ export interface PaginationProps extends Omit<
 const PAGE_SIZE_SELECTOR_WIDTH = 80;
 
 const styles = stylex.create({
+  // Both rows wrap when their controls do not fit, as at a larger text size,
+  // so no control leaves the screen.
   root: {
     display: 'flex',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacingVars['--spacing-4'],
   },
   controls: {
     display: 'flex',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacingVars['--spacing-1'],
+    // Lets the controls row narrow to the landmark's width, so it wraps
+    // instead of pushing past it.
+    minWidth: 0,
   },
   compactFirst: {
     marginInlineEnd: `calc(-1 * ${spacingVars['--spacing-1']})`,
@@ -460,6 +470,9 @@ export function Pagination({
     wrap: true,
     orientation: 'horizontal',
   });
+  // The click's focus takes the ring of the dots' own document's last input.
+  const {ref: modalityRef} = useInteractionModalityTracking();
+  const dotsRef = useMergedRefs(dotsListRef, modalityRef);
 
   const computedTotalPages =
     totalPagesProp ??
@@ -688,9 +701,12 @@ export function Pagination({
 
         return (
           <div
-            ref={dotsListRef}
+            ref={dotsRef}
             {...stylex.props(styles.dotsContainer)}
-            role="group"
+            // The dots already behave as an APG radio group (one Tab stop,
+            // arrows, Home/End, selection follows focus), so they expose its
+            // roles: a reader announces "Page 3, 3 of 7".
+            role="radiogroup"
             aria-label={pageIndicatorsLabel}
             onKeyDown={handleDotsKeyDown}
             onFocus={handleDotsFocus}>
@@ -700,18 +716,23 @@ export function Pagination({
                 <button
                   key={i + 1}
                   type="button"
+                  role="radio"
                   data-page={i + 1}
-                  aria-label={t('@astryx.pagination.goToPage', {
-                    page: i + 1,
+                  aria-label={t('@astryx.pagination.pageAnnounce', {
+                    current: i + 1,
                   })}
-                  aria-current={isActive ? 'page' : undefined}
+                  // aria-checked carries the current page; aria-current beside
+                  // it would announce the same state twice.
+                  aria-checked={isActive}
                   // The active dot is the single roving tab stop; useListFocus
                   // maintains it as focus and the active page move.
                   tabIndex={isActive ? 0 : -1}
-                  // Selection is driven by focus (handleDotsFocus); clicking only
-                  // needs to focus the dot, which some browsers (Safari) skip for
-                  // buttons, so focus it explicitly.
-                  onClick={e => e.currentTarget.focus()}
+                  // Focus selects the page (handleDotsFocus). The click focuses
+                  // the dot, with the ring the last input calls for.
+                  onClick={e => focusForLastInput(e.currentTarget)}
+                  // A press must not choose a page before release. Sliding off
+                  // takes it back. So the press does not focus the dot.
+                  onMouseDown={e => e.preventDefault()}
                   // Disabled dots stay focusable (spec:AST-085 FR1); the page
                   // only follows focus while enabled (handleDotsFocus).
                   aria-disabled={isDisabled || undefined}

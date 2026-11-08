@@ -31,33 +31,19 @@
 import {isRtlElement} from '../hooks/isRtlElement';
 import type {NativeScrollProbe} from './types';
 import {parentAcrossShadow} from '../utils/flatTree';
+import {
+  isInsideScrollView,
+  parseTouchAction,
+  rootOverflow,
+  SCROLLABLE_OVERFLOW as SCROLLABLE,
+  type AllowedPans,
+} from '../utils/scrollView';
+import {isElement} from '../utils/nodeType';
 
 export {parentAcrossShadow};
 
-export interface AllowedPans {
-  readonly x: boolean;
-  readonly y: boolean;
-}
-
-/** Which pans a `touch-action` value lets the browser perform. */
-export function parseTouchAction(value: string): AllowedPans {
-  const tokens = value.trim().split(/\s+/);
-  if (tokens.includes('auto') || tokens.includes('manipulation')) {
-    return {x: true, y: true};
-  }
-  if (tokens.includes('none')) {
-    return {x: false, y: false};
-  }
-  return {
-    x: tokens.some(
-      token =>
-        token === 'pan-x' || token === 'pan-left' || token === 'pan-right',
-    ),
-    y: tokens.some(
-      token => token === 'pan-y' || token === 'pan-up' || token === 'pan-down',
-    ),
-  };
-}
+export {parseTouchAction};
+export type {AllowedPans};
 
 interface ChainEntry {
   readonly element: Element;
@@ -66,15 +52,8 @@ interface ChainEntry {
   readonly isRtl: boolean;
   readonly stopsX: boolean;
   readonly stopsY: boolean;
-  /**
-   * The scroller sits beyond a `position: fixed` ancestor of the touch: it
-   * still scrolls under the finger, but it does not carry the touched
-   * element, so the element is not inside a scroll view (spec:AST-094 FR11).
-   */
-  readonly isBeyondFixed: boolean;
 }
 
-const SCROLLABLE = new Set(['auto', 'scroll', 'overlay']);
 const EDGE_TOLERANCE = 1;
 
 interface Chain {
@@ -94,13 +73,12 @@ function buildChain(target: Element, readsTouchAction: boolean): Chain {
   let allowX = true;
   let allowY = true;
   let reachedRoot = false;
-  let isBeyondFixed = false;
   for (
     let node: Node | null = target;
     node != null;
     node = parentAcrossShadow(node)
   ) {
-    if (!(node instanceof Element)) {
+    if (!isElement(node)) {
       continue;
     }
     const style = view.getComputedStyle(node);
@@ -128,17 +106,13 @@ function buildChain(target: Element, readsTouchAction: boolean): Chain {
         isRtl: isRtlElement(element as HTMLElement),
         stopsX: behaviorX !== 'auto',
         stopsY: behaviorY !== 'auto',
-        isBeyondFixed,
       });
     }
     if (isRoot) {
       break;
     }
-    if (style.position === 'fixed') {
-      isBeyondFixed = true;
-    }
   }
-  if (!reachedRoot && root instanceof Element) {
+  if (!reachedRoot && isElement(root)) {
     chain.push({
       element: root,
       x: allowX && SCROLLABLE.has(rootOverflow(doc, 'x')),
@@ -146,7 +120,6 @@ function buildChain(target: Element, readsTouchAction: boolean): Chain {
       isRtl: false,
       stopsX: false,
       stopsY: false,
-      isBeyondFixed,
     });
   }
   return {entries: chain, allowsPan: allowX || allowY};
@@ -165,28 +138,6 @@ function overscrollBehavior(style: CSSStyleDeclaration): [string, string] {
     .trim()
     .split(/\s+/);
   return [x || first, y || second];
-}
-
-/**
- * The viewport scrolls unless the root or the body clips it (a scroll lock
- * sets `overflow: hidden` on one of them).
- */
-function rootOverflow(doc: Document, axis: 'x' | 'y'): string {
-  const view = doc.defaultView;
-  if (view == null) {
-    return 'hidden';
-  }
-  for (const element of [doc.documentElement, doc.body]) {
-    if (element == null) {
-      continue;
-    }
-    const style = view.getComputedStyle(element);
-    const value = axis === 'x' ? style.overflowX : style.overflowY;
-    if (value === 'hidden' || value === 'clip') {
-      return 'hidden';
-    }
-  }
-  return 'auto';
 }
 
 function canMoveY(element: Element, dy: number): boolean {
@@ -254,10 +205,9 @@ export function createNativeScrollProbe(
 ): NativeScrollProbe {
   let chain: Chain | null = null;
   const getChain = (): ChainEntry[] => {
-    chain ??=
-      target instanceof Element
-        ? buildChain(target, readsTouchAction)
-        : {entries: [], allowsPan: false};
+    chain ??= isElement(target)
+      ? buildChain(target, readsTouchAction)
+      : {entries: [], allowsPan: false};
     return chain.entries;
   };
   return {
@@ -288,15 +238,8 @@ export function createNativeScrollProbe(
       return chain?.allowsPan === true;
     },
     get isInsideScroller(): boolean {
-      return getChain().some(
-        entry =>
-          !entry.isBeyondFixed &&
-          ((entry.y &&
-            entry.element.scrollHeight - entry.element.clientHeight >
-              EDGE_TOLERANCE) ||
-            (entry.x &&
-              entry.element.scrollWidth - entry.element.clientWidth >
-                EDGE_TOLERANCE)),
+      return (
+        isElement(target) && isInsideScrollView(target, {readsTouchAction})
       );
     },
   };

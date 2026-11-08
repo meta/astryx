@@ -19,7 +19,7 @@
  */
 
 import {useCallback, use, useMemo, type ReactNode} from 'react';
-import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import type {ButtonSize} from '../Button';
@@ -44,7 +44,11 @@ interface ToggleButtonGroupContextValue {
 }
 
 const ToggleButtonGroupContext =
-  createContext<ToggleButtonGroupContextValue | null>(null);
+  createLayerScopedContext<ToggleButtonGroupContextValue | null>(
+    'ToggleButtonGroupContext',
+    1,
+    null,
+  );
 ToggleButtonGroupContext.displayName = 'ToggleButtonGroupContext';
 
 /**

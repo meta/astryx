@@ -432,6 +432,8 @@ function PinnedDividerModeWatch({
   const {mode} = useTheme();
   const themeName = useThemeName();
   const lastRef = useRef({mode, themeName});
+  // Syncs the pinned divider with the computed theme CSS after a color mode or
+  // theme change.
   useLayoutEffect(() => {
     const last = lastRef.current;
     if (last.mode !== mode || last.themeName !== themeName) {
@@ -609,6 +611,7 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
 
   return useMemo(
     (): TablePlugin<T> => ({
+      rowModel: 'flat',
       transformTableContext(children: ReactNode): ReactNode {
         return (
           <>

@@ -6,7 +6,7 @@
  *   paging constants
  * @output Exports `pagingSettleVelocity`, `solvePaging` (UIKit's paging settle
  *   as a curve the animator plays) and `solveAnimatedPageScroll`
- * @position Pure math, with no DOM and no React
+ * @position Pure math, with no DOM and no React; hooks/usePager.ts reads it
  *
  * SYNC: When modified, update:
  * - /packages/core/src/motion/paging.test.ts
@@ -14,6 +14,7 @@
  */
 
 import type {MotionCurve} from './animator';
+import {cubicBezier, type BezierPoints} from './bezier';
 import {paging} from './uikit/paging';
 
 /**
@@ -49,24 +50,34 @@ export interface PagingCurve extends MotionCurve {
  * The release velocity enters in px per millisecond per step, as UIKit hands it
  * to the integrator. At 960 steps a second, the content starts at 96 % of the
  * finger's speed, as in UIKit.
+ *
+ * At a theme's `tempo`, each step lasts tempo times as long and carries tempo
+ * times the release's distance. So a settle from rest keeps its shape and
+ * takes tempo times as long, and a release still starts at 96 % of the
+ * finger's speed. At tempo 1 the settle is the measured one.
  */
 export function solvePaging({
   from,
   velocity,
   to,
+  tempo = 1,
 }: {
   from: number;
   velocity: number;
   to: number;
+  /** The tempo of the theme the motion plays in (themeTempo.ts). */
+  tempo?: number;
 }): PagingCurve {
-  const {springPull, friction, stepsPerSecond, restDistance, restSpeed} =
-    paging.integrator;
+  const {springPull, friction, restDistance, restSpeed} = paging.integrator;
+  const pace = Number.isFinite(tempo) && tempo > 0 ? tempo : 1;
+  const stepsPerSecond = paging.integrator.stepsPerSecond / pace;
+  const startVelocity = (velocity / 1000) * pace;
   const xs: number[] = [from];
-  const vs: number[] = [velocity / 1000];
+  const vs: number[] = [startVelocity];
   let x = from;
-  let v = velocity / 1000;
-  // ~10 s of steps: far beyond any settle (≈ 0.35 s from rest).
-  const maxSteps = stepsPerSecond * 10;
+  let v = startVelocity;
+  // ~10 s of steps at tempo 1: far beyond any settle (≈ 0.35 s from rest).
+  const maxSteps = paging.integrator.stepsPerSecond * 10;
   let steps = 0;
   while (steps < maxSteps) {
     if (Math.abs(to - x) < restDistance && Math.abs(v) < restSpeed) {
@@ -106,33 +117,55 @@ export function solvePaging({
 }
 
 /**
- * `setContentOffset(_:animated:)`: `paging.animatedScroll.duration` on a
- * sinusoidal ease-in-out, whatever the distance. UIKit starts it from the
- * current offset and drops any velocity, as here.
+ * `setContentOffset(_:animated:)`: `paging.animatedScroll.durationMs` on its
+ * curve, from the current offset, at any distance. The pager passes the
+ * duration and curve that `resolveMotion` gives, which are the measured values
+ * of the table.
+ *
+ * `velocity` (px/s) is the velocity of a move that this one retargets. The new
+ * curve starts at it and still ends on `to`, at rest and on time. A new target
+ * keeps the current velocity, where UIKit drops it. The carry is a Hermite
+ * term, v × duration × u(1 − u)², less the curve's own starting slope. So a
+ * move from rest is the curve itself.
  */
 export function solveAnimatedPageScroll({
   from,
   to,
+  durationMs = paging.animatedScroll.durationMs,
+  curve = paging.animatedScroll.curve,
+  velocity,
 }: {
   from: number;
   to: number;
+  durationMs?: number;
+  curve?: BezierPoints;
+  velocity?: number;
 }): MotionCurve {
-  const {duration} = paging.animatedScroll;
+  const duration = durationMs / 1000;
   const distance = to - from;
+  const ease = cubicBezier(curve);
+  const progress = (u: number) => ease(Math.min(1, Math.max(0, u)));
+  // The carry, in px: the retargeted velocity over the whole duration, less
+  // what the curve's own starting slope already gives.
+  const startSlope = progress(1e-4) / 1e-4;
+  const carry =
+    velocity == null ? 0 : velocity * duration - distance * startSlope;
+  const at = (t: number) => {
+    const u = Math.min(1, Math.max(0, t / duration));
+    return from + distance * progress(u) + carry * u * (1 - u) * (1 - u);
+  };
   return {
     duration,
-    at: t => {
-      const u = Math.min(1, Math.max(0, t / duration));
-      return from + (distance * (1 - Math.cos(Math.PI * u))) / 2;
-    },
+    at,
     velocity: t => {
-      if (t <= 0 || t >= duration) {
+      if (t <= 0) {
+        return velocity ?? 0;
+      }
+      if (t >= duration) {
         return 0;
       }
-      return (
-        ((distance * Math.PI) / (2 * duration)) *
-        Math.sin((Math.PI * t) / duration)
-      );
+      const h = Math.min(1e-4, t / 2, (duration - t) / 2);
+      return (at(t + h) - at(t - h)) / (2 * h);
     },
   };
 }
