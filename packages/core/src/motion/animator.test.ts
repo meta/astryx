@@ -4076,6 +4076,97 @@ describe('play: any closed-form curve', () => {
     }
   });
 
+  it('calls in one task that play the same curve share one bake', async () => {
+    stubMedia(false, false);
+    let reads = 0;
+    const curve = {
+      duration: 0.4,
+      at: (t: number) => {
+        reads += 1;
+        return 300 * t * t;
+      },
+      velocity: (t: number) => 600 * t,
+    };
+    const animators = [0, 1, 2].map(() =>
+      createMotionEngine(document.createElement('div'), {
+        now: () => clock,
+        requestFrame,
+      }),
+    );
+    animators[0].play({x: curve});
+    const firstReads = reads;
+    animators[1].play({x: curve});
+    animators[2].play({x: curve});
+    const [first, second, third] = live('translate');
+    // The later calls play the first call's keyframes: the curve is sampled
+    // once. Each later call reads it only for its own start and end.
+    expect(second.keyframes).toBe(first.keyframes);
+    expect(third.keyframes).toBe(first.keyframes);
+    expect(firstReads).toBeGreaterThan(40);
+    expect((reads - firstReads) / 2).toBeLessThanOrEqual(4);
+    // A call in a later task bakes again.
+    await Promise.resolve();
+    const later = createMotionEngine(document.createElement('div'), {
+      now: () => clock,
+      requestFrame,
+    });
+    later.play({x: curve});
+    expect(live('translate').at(-1)?.keyframes).not.toBe(first.keyframes);
+  });
+
+  it('a call whose other values differ keeps its own keyframes, at the shared times', () => {
+    stubMedia(false, false);
+    let reads = 0;
+    const curve = {
+      duration: 0.4,
+      at: (t: number) => {
+        reads += 1;
+        return 300 * t * t;
+      },
+      velocity: (t: number) => 600 * t,
+    };
+    const plain = createMotionEngine(document.createElement('div'), {
+      now: () => clock,
+      requestFrame,
+    });
+    const lifted = createMotionEngine(document.createElement('div'), {
+      now: () => clock,
+      requestFrame,
+    });
+    lifted.set({y: 5});
+    plain.play({x: curve});
+    const firstReads = reads;
+    lifted.play({x: curve});
+    const [own, other] = live('translate');
+    expect(other.keyframes).not.toBe(own.keyframes);
+    expect(other.keyframes.map(frame => frame.offset)).toEqual(
+      own.keyframes.map(frame => frame.offset),
+    );
+    for (const [i, frame] of other.keyframes.entries()) {
+      const [x, y] = parse(frame.translate);
+      expect(x).toBe(parse(own.keyframes[i].translate)[0]);
+      expect(y).toBe(5);
+    }
+    // Its values are read once each, at the times the first call sampled.
+    expect(reads - firstReads).toBeLessThan(firstReads);
+  });
+
+  it('a curve played and rebased in one task bakes the shifted keyframes', () => {
+    const {animator} = setup();
+    const curve = {
+      duration: 0.4,
+      at: (t: number) => 120 * t,
+      velocity: () => 120,
+    };
+    animator.play({x: curve});
+    animator.rebase({x: -16});
+    // The curve plays 0 to 48. Shifted by -16, it plays -16 to 32.
+    const [animation] = live('translate');
+    const xs = animation.keyframes.map(frame => parse(frame.translate)[0]);
+    expect(xs[0]).toBeCloseTo(-16, 6);
+    expect(xs.at(-1)).toBeCloseTo(32, 6);
+  });
+
   it('finishes true at its end, false when interrupted', async () => {
     const {animator} = setup();
     const done = animator.play({

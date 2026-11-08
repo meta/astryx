@@ -218,7 +218,16 @@ animations, the page looked too late, and the wait rejects with
 `BusyWindowTooLateError`. With `pseudoElement` (`'::before'` or
 `'::after'`), only that pseudo-element's animations on `during` itself count,
 as `sampleCurve` reads them: a child's animation, such as a switch thumb's
-press, does not start the block. The `verdict` judges the
+press, does not start the block. With `property`, only animations that set
+that property count, named as CSS names it (`translate`, `background-color`,
+`--press-strength`), as a hold's judged motion names it. The animation must
+also be the same one the page saw at its frame before:
+a component can rebuild a running animation on its old clock, and the page sees
+it running before the compositor shows a frame of it. The window names the
+animation it caught (`animation`): when it started and where its curve ends.
+These times are on the real clock, as the window's own are, after a page
+freeze too.
+The `verdict` judges the
 frames the screencast delivered, whatever its rate (a loaded machine's can
 deliver one frame in five or six), and tolerates nothing a frozen animation
 does: at least one frame in the judged part, no stall longer than three of the
@@ -377,7 +386,10 @@ interaction; `countBetween` counts the steady middle of an animation (its
 first and last frames may commit). A transform/opacity animation does no
 Layout or Paint there; a layout-property animation does one per frame. Each
 counted `Paint` names the node it painted (`node`), and each `UpdateLayoutTree`
-counts the elements it restyled (`elements`). The
+counts the elements it restyled (`elements`). A proof that expects no Layout
+can explain one: `traceRendering(page, body, {keepEvents: true})` keeps the
+window's main-thread events, and `layoutSources` names the task that ran each
+Layout and each invalidation before it. The
 harness's own animation recorder stands down while the trace runs, since its
 frame loop would make every frame a main-thread one, restyling each running
 animation's target and laying out an anchored one: it reads only the element a

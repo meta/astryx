@@ -36,6 +36,7 @@ import {
   use,
   useEffect,
   useRef,
+  useState,
   useSyncExternalStore,
   useId,
   type KeyboardEvent,
@@ -59,7 +60,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/List/ListReorderHandle.generated';
-import {devWarn} from '../utils/devWarning';
+import {createDevWarnings} from '../utils/devWarning';
 import {getNodeText} from '../utils/getNodeText';
 import {ItemLabelContext} from '../Item/ItemLabelContext';
 import {ListContext} from './ListContext';
@@ -272,7 +273,7 @@ export function ListReorderHandle({
     callerLabel != null ? undefined : (rowLabelledBy ?? labelID ?? undefined);
   const named = callerLabel != null || labelledBy != null || text !== '';
   const verb = t('@astryx.list.reorderHandleVerb');
-  const warnedNamelessRef = useRef(false);
+  const [warn] = useState(createDevWarnings);
   // Syncs the handle into the reorder session, which lives outside React. The
   // session moves the row only with its handle recorded, and reports its
   // moves with the row's key.
@@ -335,15 +336,12 @@ export function ListReorderHandle({
     }
     // Named after its place only: a person hears "Reorder item 3" with
     // nothing to tell the rows apart. Development says so, once a handle.
-    if (!warnedNamelessRef.current) {
-      warnedNamelessRef.current = true;
-      devWarn(
-        'ListItem',
-        'A reorderable row has no accessible name, so its reorder handle is ' +
-          'named after its place ("Reorder item N"). Give the row a text ' +
-          'label or an aria-label.',
-      );
-    }
+    warn(
+      'ListItem',
+      'A reorderable row has no accessible name, so its reorder handle is ' +
+        'named after its place ("Reorder item N"). Give the row a text ' +
+        'label or an aria-label.',
+    );
     handle.setAttribute(
       'aria-label',
       t('@astryx.list.reorderHandleAt', {position}),

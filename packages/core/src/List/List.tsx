@@ -130,8 +130,9 @@ export interface ListProps extends BaseProps<
    *   reach a little past it into the container's padding. Suits interactive
    *   rows in a container
    * - 'bleed': text sits on the heading's line, and dividers and backgrounds
-   *   reach the container's edges with square corners, like Table rows in a
-   *   Card
+   *   reach the container's edges, like Table rows in a Card. Rows are
+   *   square, except that the first or last row of a list that is a rounded
+   *   Card's or Dialog's first or last child takes its corner
    *
    * A row's first content is what lines up with the heading: its marker,
    * icon, or avatar when it has one, otherwise its label. 'outset' and
@@ -235,6 +236,48 @@ const styles = stylex.create({
     marginInlineEnd: 'calc(-1 * var(--container-padding-inline-end, 0px))',
     width:
       'calc(100% + var(--container-padding-inline-start, 0px) + var(--container-padding-inline-end, 0px))',
+  },
+  // 'bleed' rows reach the container's padding edge inline, and keep its block
+  // padding. The list passes its first and last rows the corner a rounded
+  // container publishes, less that block padding. It is at a corner only as
+  // the container's first or last child.
+  bleedCorners: {
+    '--_list-corner-start-start': {
+      default: '0px',
+      ':first-child':
+        'max(0px, var(--container-corner-start-start, 0px) - var(--container-padding-block-start, 0px))',
+    },
+    '--_list-corner-start-end': {
+      default: '0px',
+      ':first-child':
+        'max(0px, var(--container-corner-start-end, 0px) - var(--container-padding-block-start, 0px))',
+    },
+    '--_list-corner-end-start': {
+      default: '0px',
+      ':last-child':
+        'max(0px, var(--container-corner-end-start, 0px) - var(--container-padding-block-end, 0px))',
+    },
+    '--_list-corner-end-end': {
+      default: '0px',
+      ':last-child':
+        'max(0px, var(--container-corner-end-end, 0px) - var(--container-padding-block-end, 0px))',
+    },
+  },
+  // With a header, the list's root is the container's child, and the header
+  // sits above the first row.
+  bleedCornersBelowHeader: {
+    '--_list-corner-start-start': '0px',
+    '--_list-corner-start-end': '0px',
+    '--_list-corner-end-start': {
+      default: '0px',
+      ':last-child':
+        'max(0px, var(--container-corner-end-start, 0px) - var(--container-padding-block-end, 0px))',
+    },
+    '--_list-corner-end-end': {
+      default: '0px',
+      ':last-child':
+        'max(0px, var(--container-corner-end-end, 0px) - var(--container-padding-block-end, 0px))',
+    },
   },
   withDividers: {
     gap: 0,
@@ -380,6 +423,11 @@ export function List({
       // role restores "list, N items" announcements for every listStyle
       // variant.
       role="list"
+      // A bleeding list reads the corner its container publishes. With a
+      // header, the root below is the container's child and reads it.
+      {...(edge === 'bleed' && header == null
+        ? {'data-container-corner': ''}
+        : null)}
       {...mergeProps(
         themeProps('list', {density, listStyle}),
         stylex.props(
@@ -388,6 +436,7 @@ export function List({
           isOrdered && styles.numberColumns,
           hasDividers && styles.withDividers,
           reachesContainerPadding && styles.reachesContainerPadding,
+          edge === 'bleed' && header == null && styles.bleedCorners,
           listStyle !== 'none' &&
             (start != null && start !== 1
               ? dynamicStyles.counterStart(start - 1)
@@ -431,7 +480,12 @@ export function List({
   return (
     <ListContext value={contextValue}>
       {snapshot}
-      <div {...stylex.props(styles.root)}>
+      <div
+        {...(edge === 'bleed' ? {'data-container-corner': ''} : null)}
+        {...stylex.props(
+          styles.root,
+          edge === 'bleed' && styles.bleedCornersBelowHeader,
+        )}>
         <div id={headerId} {...stylex.props(styles.header)}>
           {header}
         </div>
