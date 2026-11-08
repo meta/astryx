@@ -21,11 +21,16 @@
  * - /packages/cli/assets/templates/blocks/components/ToggleButton/ (showcase blocks)
  */
 
-import React, {useOptimistic, type ReactNode} from 'react';
+import React, {use, useOptimistic, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars, fontWeightVars} from '../theme/tokens.stylex';
 
 import {Button, type ButtonSize} from '../Button';
+import {
+  PressGroupBandContext,
+  PressGroupContext,
+} from '../hooks/pressGroupContext';
+import {GROUP_PRESS_POINTERS} from '../hooks/useGroupPressTracking';
 import type {Elevation} from '../utils/types';
 import {useToggleButtonGroup} from './ToggleButtonGroup';
 import type {BaseProps} from '../BaseProps';
@@ -342,40 +347,57 @@ export function ToggleButton({
       </span>
     ) : undefined;
 
+  // In a group, the group tracks only a toggle with a value. A toggle without
+  // one keeps its own press. Outside a group, the toggle follows its parent.
+  const parentPointers = use(PressGroupContext);
+  const groupPointers =
+    group == null
+      ? parentPointers
+      : group.tracksPress === true && value != null
+        ? GROUP_PRESS_POINTERS
+        : null;
+
+  // The group's hit layer is the touch band of each toggle it tracks.
+  const isInGroupBand = group != null && groupPointers != null;
+
   return (
-    <Button
-      ref={ref}
-      label={label}
-      variant="ghost"
-      size={size}
-      elevation={elevation}
-      isDisabled={isDisabled}
-      isLoading={isLoading}
-      isInterruptible
-      isIconOnly={isIconOnly}
-      icon={resolvedIcon}
-      tooltip={tooltip}
-      {...mergeProps(
-        themeProps('toggle-button', {
-          isPressed: isPressed ? 'true' : 'false',
-          elevation,
-        }),
-        className,
-      )}
-      xstyle={[isPressed ? pressedStyles.background : undefined, xstyle]}
-      style={style}
-      onClick={handleClick}
-      clickAction={clickAction}
-      {...props}
-      // The pressed state this component owns wins over a caller's
-      // same-named attributes (public-component-api INV5).
-      aria-pressed={isPressed}
-      {...themeDataAttributes({
-        isPressed: isPressed ? 'true' : 'false',
-        elevation,
-      })}>
-      {labelContent}
-    </Button>
+    <PressGroupContext value={groupPointers}>
+      <PressGroupBandContext value={isInGroupBand}>
+        <Button
+          ref={ref}
+          label={label}
+          variant="ghost"
+          size={size}
+          elevation={elevation}
+          isDisabled={isDisabled}
+          isLoading={isLoading}
+          isInterruptible
+          isIconOnly={isIconOnly}
+          icon={resolvedIcon}
+          tooltip={tooltip}
+          {...mergeProps(
+            themeProps('toggle-button', {
+              isPressed: isPressed ? 'true' : 'false',
+              elevation,
+            }),
+            className,
+          )}
+          xstyle={[isPressed ? pressedStyles.background : undefined, xstyle]}
+          style={style}
+          onClick={handleClick}
+          clickAction={clickAction}
+          {...props}
+          // The pressed state this component owns wins over a caller's
+          // same-named attributes (public-component-api INV5).
+          aria-pressed={isPressed}
+          {...themeDataAttributes({
+            isPressed: isPressed ? 'true' : 'false',
+            elevation,
+          })}>
+          {labelContent}
+        </Button>
+      </PressGroupBandContext>
+    </PressGroupContext>
   );
 }
 

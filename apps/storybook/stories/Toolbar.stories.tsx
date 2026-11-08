@@ -72,7 +72,7 @@ export const Default: Story = {
   },
 };
 
-/** Three-slot layout: CSS grid 1fr auto 1fr. Center content stays centered regardless of start/end width. */
+/** Three-slot layout. The center sits at the middle while each side lane fits in half of the width it leaves; when the lanes do not fit, the row wraps. */
 export const ThreeSlot: Story = {
   render: () => (
     <Toolbar
@@ -467,6 +467,36 @@ export const WithCenterTabNavigation: Story = {
               isIconOnly
             />
           }
+          centerContent={
+            <TabList
+              value={tab}
+              onChange={setTab}
+              aria-label="Center tab navigation">
+              <Tab value="overview" label="Overview" />
+              <Tab value="analytics" label="Analytics" />
+              <Tab value="settings" label="Settings" />
+            </TabList>
+          }
+          endContent={<Button label="New item" />}
+        />
+        <Section>
+          <Text type="body">Content for the center tab navigation</Text>
+        </Section>
+      </Card>
+    );
+  },
+};
+
+/** Center tab navigation with an end action and no start lane. */
+export const CenterTabNavigationEndOnly: Story = {
+  name: 'Composition: Center Tab Navigation, End Only',
+  render: () => {
+    const [tab, setTab] = useState('overview');
+    return (
+      <Card>
+        <Toolbar
+          label="Center tab navigation"
+          dividers={['bottom']}
           centerContent={
             <TabList
               value={tab}

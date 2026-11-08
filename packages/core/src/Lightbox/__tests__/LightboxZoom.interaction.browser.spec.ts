@@ -19,7 +19,6 @@ import {
   type Locator,
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
-import {themeTempo} from '../../motion/themeTempo';
 // @ts-expect-error -- pngjs ships no declarations; runtime support is pinned.
 import {PNG} from 'pngjs';
 import {
@@ -68,6 +67,7 @@ import {
   type TouchScript,
 } from '@astryxdesign/interaction-harness';
 import {recordLiftOffset} from './liftOffset';
+import {slowViewer} from './viewerTempo';
 
 const storybook = withStorybook(test);
 
@@ -793,6 +793,51 @@ test('a zoomed pan tracks the finger, rubber-bands past the edge and returns', a
   expect(back.scale).toBeCloseTo(zoomed.scale, 6);
 });
 
+test("a single zoomed photo's drag outward from the edge it rests at rubber-bands and returns", async ({
+  page,
+}) => {
+  const {driver, photo, state} = await openViewer(page);
+  const before = await state();
+  const mid = {x: 201, y: before.stage.y + before.stage.height / 2};
+  await driver.play(doubleTap(mid));
+  await waitForAnimation(photo);
+  await waitForRest(photo);
+  const zoomed = await state();
+  // First the photo comes to rest with its left edge on the screen's.
+  const room = -(zoomed.fit.x + zoomed.x);
+  await driver.play(
+    drag(mid, {x: mid.x + room + 10, y: mid.y}, {durationMs: 400, restMs: 150}),
+  );
+  await waitForRest(photo);
+  const atEdge = await state();
+  expect(atEdge.fit.x + atEdge.x).toBeCloseTo(0, 1);
+  // Then a drag that starts there and heads outward. With no pager to take
+  // it, the pan begins and gives past the edge, as on main.
+  const overshoot = 120;
+  const xs: number[] = [];
+  await driver.play(
+    drag(
+      mid,
+      {x: mid.x + overshoot + 10, y: mid.y},
+      {durationMs: 500, restMs: 150},
+    ),
+    {
+      onEvent: async step => {
+        if (step.type === 'touchMove') {
+          xs.push((await state()).x);
+        }
+      },
+    },
+  );
+  const d = zoomed.stage.width;
+  const banded = (1 - 1 / ((overshoot * 0.55) / d + 1)) * d;
+  expect(xs.at(-1)).toBeCloseTo(atEdge.x + banded, 0);
+  await waitForRest(photo);
+  const back = await state();
+  expect(back.fit.x + back.x).toBeCloseTo(0, 1);
+  expect(back.scale).toBeCloseTo(zoomed.scale, 6);
+});
+
 test('a zoomed flick coasts and stops at the far edge', async ({page}) => {
   const {driver, photo, state} = await openViewer(page);
   const before = await state();
@@ -956,6 +1001,9 @@ test('a finger left down after a pinch keeps panning without a jump', async ({
   const xs: {type: string; x: number}[] = [];
   await driver.play(script, {
     onEvent: async step => {
+      // A touchmove nothing has cancelled yet reaches the page with the next
+      // frame (Chromium aligns them to it): read once it has.
+      await frames(page, 1);
       xs.push({type: step.type, x: (await state()).x});
     },
   });
@@ -1007,7 +1055,7 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   // With the main thread blocked, a loaded runner's compositor presents a
   // frame every 100 to 250 ms. The spring moves for half a second, which
   // leaves too few frames to judge. So the zoom plays at a slow tempo.
-  await slowZoom(page);
+  await slowViewer(page, ZOOM_TEMPO);
   const since = await page.evaluate(() => performance.now());
   const cast = await startScreencast(page);
   // The page itself waits for the zoom and blocks one frame into it. The
@@ -1033,8 +1081,8 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   const tracked = await trackMarker(page, castFrames);
   const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
   const proof = busyWindowProof(tracked, block, {
-    axis: 'height',
-    settledWithinSteps: ZOOM_SETTLED_STEPS,
+    axis: ZOOM_AXIS,
+    settledWithin: ZOOM_SETTLED_PX,
     control,
   });
   await writeEvidence(
@@ -1075,29 +1123,14 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   // animation presents fewer frames there, the control's too. The photo keeps
   // pace with the control, and a main-thread animation would not.
   expect(proof.verdict.failures).toEqual([]);
+  // The verdict, spelled out. The top edge takes a new position on every
+  // frame the control moves, with none excused as under a cast step. The
+  // control moves on at least the verdict's floor of four frames.
+  expect(proof.control?.movedWith).toBe(proof.control?.moved);
+  expect(proof.control?.belowStep).toBe(0);
+  expect(proof.control?.moved).toBeGreaterThanOrEqual(4);
   expect(proof.monotonic).toBe(true);
 });
-
-/**
- * The custom property Lightbox's motion reads its tempo from, asked of
- * `themeTempo` itself. A rename there renames it here too.
- */
-function tempoProperty(): string {
-  let read = '';
-  const view = {
-    getComputedStyle: () => ({
-      getPropertyValue: (name: string) => {
-        read = name;
-        return '';
-      },
-    }),
-  };
-  themeTempo({ownerDocument: {defaultView: view}} as unknown as Element);
-  if (!read.startsWith('--')) {
-    throw new Error(`themeTempo read no custom property: "${read}"`);
-  }
-  return read;
-}
 
 /**
  * The tempo the busy zoom proof plays the viewer at. Blocked, WebKit's
@@ -1111,25 +1144,24 @@ const ZOOM_TEMPO = 5;
 const ZOOM_BLOCK_MS = 2500;
 
 /**
- * Where the busy zoom proof stops judging, in cast steps from the zoom's
- * end. Near the end, each 60 Hz frame moves the spring about 0.042 of what
- * remains (2π / 2.5 s, critically damped). So within about 23.9 cast steps
- * of its end a frame moves less than one step, and the cast shows plateaus
- * there.
+ * The photo's coordinate the busy zoom proof judges: its top edge. The zoom
+ * grows the photo at both edges, and the cast reads each edge in whole
+ * steps. So near the end the height can show no change for a frame while it
+ * grows almost two steps a frame. The proof's step rules expect one edge's
+ * travel, so the proof judges the top edge.
  */
-const ZOOM_SETTLED_STEPS = 24;
+const ZOOM_AXIS = 'y';
 
 /**
- * Plays the viewer's motion at `ZOOM_TEMPO`, through the property its motion
- * reads. A theme's tempo stops at 1.5, so this tempo is for the busy proof
- * only. Every element in the viewer carries it, so no nested theme's own
- * tempo wins.
+ * Where the busy zoom proof stops judging, in px of the top edge from its
+ * end. There the edge's move between two cast frames falls under one cast
+ * step. Near the end, each 60 Hz frame moves the spring about 0.042 of what
+ * remains (2π / 2.5 s, critically damped). Chromium casts every frame in 1 px
+ * steps, so its moves fall under a step 23.9 px from the end. Blocked, WebKit
+ * casts a frame only every 116 ms or more, seven 60 Hz frames, in 2 px steps.
+ * Its moves stay over a step until about 8 px from the end, inside 24 px.
  */
-async function slowZoom(page: Page): Promise<void> {
-  await page.addStyleTag({
-    content: `dialog, dialog * { ${tempoProperty()}: ${ZOOM_TEMPO} !important; }`,
-  });
-}
+const ZOOM_SETTLED_PX = 24;
 
 /** Each animated property's curve length, and whether it still runs. */
 function curvesByProperty(runs: ReadonlyArray<ActiveAnimation>) {
@@ -1189,7 +1221,7 @@ for (const pace of ['main-thread', 'frozen'] as const) {
     const before = await state();
     await markElement(photo, {mode: 'outline'});
     await startBusyControl(page);
-    await slowZoom(page);
+    await slowViewer(page, ZOOM_TEMPO);
     await breakZoom(page, pace);
     const cast = await startScreencast(page);
     await driver.play(
@@ -1205,8 +1237,8 @@ for (const pace of ['main-thread', 'frozen'] as const) {
     let failures: ReadonlyArray<string>;
     try {
       failures = busyWindowProof(tracked, block, {
-        axis: 'height',
-        settledWithinSteps: ZOOM_SETTLED_STEPS,
+        axis: ZOOM_AXIS,
+        settledWithin: ZOOM_SETTLED_PX,
         control,
       }).verdict.failures;
     } catch (error) {

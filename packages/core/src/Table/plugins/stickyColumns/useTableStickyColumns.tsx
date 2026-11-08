@@ -23,6 +23,8 @@ import {
   type RefObject,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {registerCountIndependentPlugin} from '../../tableRowContextUsage';
+
 import {colorVars, durationVars, easeVars} from '../../../theme/tokens.stylex';
 import type {
   TableColumn,
@@ -32,6 +34,10 @@ import type {
   ScrollWrapperRenderProps,
 } from '../../types';
 import {resolveColumnFloorWidths} from '../../columnUtils';
+import {
+  getLogicalPositionExtraVar,
+  getLogicalPositionRenderer,
+} from '../../tableColumnAdmission';
 import {collapsedBottom} from '../../rowDivider';
 import {GLIDING_ATTRIBUTE, PINNED_ATTRIBUTE} from '../../glidingDivider';
 import {useTheme, useThemeName} from '../../../theme/useTheme';
@@ -73,14 +79,28 @@ export interface UseTableStickyColumnsConfig {
 // pinned block stays contiguous for pixel, proportional, and width-less mixes.
 
 /**
- * Columns pinned to the START edge → cumulative inline offset (px). The pinned
+ * A pinned offset as a CSS length: the floors before the column plus the extra
+ * width a windowed table gives each row-number column among them.
+ */
+function toOffset(pixels: number, extras: number[]): string {
+  if (extras.length === 0) {
+    return `${pixels}px`;
+  }
+  const parts = extras.map(
+    index => `var(${getLogicalPositionExtraVar(index)}, 0px)`,
+  );
+  return `calc(${pixels}px + ${parts.join(' + ')})`;
+}
+
+/**
+ * Columns pinned to the START edge → cumulative inline offset. The pinned
  * block is the contiguous run from column 0 through the last key in `startKeys`
  * (inclusive of any synthetic columns before it). `null` if none / no context.
  */
 function computeStartOffsets(
   columns: ReadonlyArray<TableColumn<Record<string, unknown>>> | undefined,
   startKeys: string[],
-): Map<string, number> | null {
+): Map<string, string> | null {
   if (!columns || columns.length === 0 || startKeys.length === 0) {
     return null;
   }
@@ -94,11 +114,15 @@ function computeStartOffsets(
     return null;
   }
   const widths = resolveColumnFloorWidths(columns);
-  const offsets = new Map<string, number>();
+  const offsets = new Map<string, string>();
+  const extras: number[] = [];
   let cumulative = 0;
   for (let i = 0; i <= lastStickyIndex; i++) {
-    offsets.set(columns[i].key, cumulative);
+    offsets.set(columns[i].key, toOffset(cumulative, extras));
     cumulative += widths.get(columns[i].key) ?? 0;
+    if (getLogicalPositionRenderer(columns[i]) != null) {
+      extras.push(i);
+    }
   }
   return offsets;
 }
@@ -111,7 +135,7 @@ function computeStartOffsets(
 function computeEndOffsets(
   columns: ReadonlyArray<TableColumn<Record<string, unknown>>> | undefined,
   endKeys: string[],
-): Map<string, number> | null {
+): Map<string, string> | null {
   if (!columns || columns.length === 0 || endKeys.length === 0) {
     return null;
   }
@@ -126,16 +150,20 @@ function computeEndOffsets(
     return null;
   }
   const widths = resolveColumnFloorWidths(columns);
-  const offsets = new Map<string, number>();
+  const offsets = new Map<string, string>();
+  const extras: number[] = [];
   let cumulative = 0;
   for (let i = columns.length - 1; i >= firstStickyIndex; i--) {
-    offsets.set(columns[i].key, cumulative);
+    offsets.set(columns[i].key, toOffset(cumulative, extras));
     cumulative += widths.get(columns[i].key) ?? 0;
+    if (getLogicalPositionRenderer(columns[i]) != null) {
+      extras.push(i);
+    }
   }
   return offsets;
 }
 
-type StickySide = {edge: 'start' | 'end'; offset: number};
+type StickySide = {edge: 'start' | 'end'; offset: string};
 
 /**
  * Resolve how a single column should be pinned given the start/end configs and
@@ -150,11 +178,11 @@ function resolveStickySide(
 ): StickySide | null {
   const startOffsets = computeStartOffsets(columns, startKeys);
   if (startOffsets?.has(columnKey)) {
-    return {edge: 'start', offset: startOffsets.get(columnKey) ?? 0};
+    return {edge: 'start', offset: startOffsets.get(columnKey) ?? '0px'};
   }
   const endOffsets = computeEndOffsets(columns, endKeys);
   if (endOffsets?.has(columnKey)) {
-    return {edge: 'end', offset: endOffsets.get(columnKey) ?? 0};
+    return {edge: 'end', offset: endOffsets.get(columnKey) ?? '0px'};
   }
   return null;
 }
@@ -609,7 +637,7 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
     refreshRef.current?.();
   });
 
-  return useMemo(
+  const plugin = useMemo(
     (): TablePlugin<T> => ({
       rowModel: 'flat',
       transformTableContext(children: ReactNode): ReactNode {
@@ -643,8 +671,8 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
         // buying a lucky order from the plugin sequence.
         const offsetStyle: CSSProperties =
           side.edge === 'start'
-            ? {position: 'sticky', insetInlineStart: `${side.offset}px`}
-            : {position: 'sticky', insetInlineEnd: `${side.offset}px`};
+            ? {position: 'sticky', insetInlineStart: side.offset}
+            : {position: 'sticky', insetInlineEnd: side.offset};
         return {
           ...props,
           htmlProps: {
@@ -672,8 +700,8 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
         }
         const offsetStyle: CSSProperties =
           side.edge === 'start'
-            ? {insetInlineStart: `${side.offset}px`}
-            : {insetInlineEnd: `${side.offset}px`};
+            ? {insetInlineStart: side.offset}
+            : {insetInlineEnd: side.offset};
         return {
           ...props,
           htmlProps: {
@@ -732,4 +760,5 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
     // computed once and reused across renders.
     [attachScrollShadow],
   );
+  return registerCountIndependentPlugin(plugin);
 }

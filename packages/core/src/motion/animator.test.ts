@@ -63,8 +63,10 @@ interface Recorded {
 let clock = 1000;
 let recorded: Recorded[] = [];
 /** Callbacks waiting for the next animation frame (`requestFrame`). */
-let frameQueue: (() => void)[] = [];
-const requestFrame = (callback: () => void) => {
+let frameQueue: ((frame?: number) => void)[] = [];
+/** The last frame's timestamp: one of its own per frame, never reused. */
+let frameStamp = 0;
+const requestFrame = (callback: (frame?: number) => void) => {
   frameQueue.push(callback);
 };
 /**
@@ -240,8 +242,11 @@ async function commitFrame(
   }
   const frames = frameQueue;
   frameQueue = [];
+  // A browser gives every callback of one frame the same timestamp, and no
+  // other frame that timestamp.
+  frameStamp += 1;
   for (const callback of frames) {
-    callback();
+    callback(frameStamp);
   }
   await Promise.resolve();
   await Promise.resolve();
@@ -943,6 +948,85 @@ describe('a call from rest starts at the commit, as Core Animation does', () => 
       });
       await Promise.resolve();
       expect(started).toBe(false);
+    });
+
+    it('the calls from rest that one frame commits start at one time, however long the frame callbacks between them run', async () => {
+      const first = setup();
+      const second = setup();
+      first.animator.animate({x: 300}, {spring: springs.settle});
+      // A page's own frame callback runs 3 ms between the two animators'.
+      frameQueue.push(() => {
+        clock += 3;
+      });
+      second.animator.animate({x: 300}, {spring: springs.settle});
+      const [a, b] = live('translate');
+      clock = 1016;
+      await commitFrame(1016, {startUnread: true});
+      expect(a.startTime).toBe(1016);
+      expect(b.startTime).toBe(1016);
+    });
+
+    it('calls made in two tasks before one frame start together at that frame', async () => {
+      const first = setup();
+      const second = setup();
+      first.animator.animate({x: 300}, {spring: springs.settle});
+      frameQueue.push(() => {
+        clock += 3;
+      });
+      // The first task ends; the second call comes in a later task.
+      await Promise.resolve();
+      clock = 1005;
+      second.animator.animate({x: 300}, {spring: springs.settle});
+      const [a, b] = live('translate');
+      clock = 1016;
+      await commitFrame(1016, {startUnread: true});
+      expect(a.startTime).toBe(1016);
+      expect(b.startTime).toBe(1016);
+    });
+
+    it('a frame source that repeats a timestamp still reads each frame anew', async () => {
+      // Each frame gives its callbacks timestamp 0, as some test doubles do.
+      let queue: ((frame?: number) => void)[] = [];
+      const repeating = {
+        requestFrame: (callback: (frame?: number) => void) => {
+          queue.push(callback);
+        },
+      };
+      const runFrame = () => {
+        const frames = queue;
+        queue = [];
+        for (const callback of frames) {
+          callback(0);
+        }
+      };
+      const first = setup(repeating);
+      const second = setup(repeating);
+      first.animator.animate({x: 300}, {spring: springs.settle});
+      clock = 1016;
+      runFrame();
+      await vi.advanceTimersByTimeAsync(0);
+      clock = 1020;
+      second.animator.animate({x: 300}, {spring: springs.settle});
+      clock = 1033;
+      runFrame();
+      const [a, b] = live('translate');
+      expect(a.startTime).toBe(1016);
+      expect(b.startTime).toBe(1033);
+    });
+
+    it('a call first framed in a later frame takes the time that frame runs', async () => {
+      const first = setup();
+      const second = setup();
+      first.animator.animate({x: 300}, {spring: springs.settle});
+      clock = 1016;
+      await commitFrame(1016, {startUnread: true});
+      clock = 1020;
+      second.animator.animate({x: 300}, {spring: springs.settle});
+      const [a, b] = live('translate');
+      clock = 1033;
+      await commitFrame(1033, {startUnread: true});
+      expect(a.startTime).toBe(1016);
+      expect(b.startTime).toBe(1033);
     });
 
     it('a call whose first frame comes after a block keeps the start the browser gives it', async () => {
@@ -3990,6 +4074,97 @@ describe('play: any closed-form curve', () => {
     for (const axis of parse(element.style.scale)) {
       expect(axis).toBeCloseTo(end, 4);
     }
+  });
+
+  it('calls in one task that play the same curve share one bake', async () => {
+    stubMedia(false, false);
+    let reads = 0;
+    const curve = {
+      duration: 0.4,
+      at: (t: number) => {
+        reads += 1;
+        return 300 * t * t;
+      },
+      velocity: (t: number) => 600 * t,
+    };
+    const animators = [0, 1, 2].map(() =>
+      createMotionEngine(document.createElement('div'), {
+        now: () => clock,
+        requestFrame,
+      }),
+    );
+    animators[0].play({x: curve});
+    const firstReads = reads;
+    animators[1].play({x: curve});
+    animators[2].play({x: curve});
+    const [first, second, third] = live('translate');
+    // The later calls play the first call's keyframes: the curve is sampled
+    // once. Each later call reads it only for its own start and end.
+    expect(second.keyframes).toBe(first.keyframes);
+    expect(third.keyframes).toBe(first.keyframes);
+    expect(firstReads).toBeGreaterThan(40);
+    expect((reads - firstReads) / 2).toBeLessThanOrEqual(4);
+    // A call in a later task bakes again.
+    await Promise.resolve();
+    const later = createMotionEngine(document.createElement('div'), {
+      now: () => clock,
+      requestFrame,
+    });
+    later.play({x: curve});
+    expect(live('translate').at(-1)?.keyframes).not.toBe(first.keyframes);
+  });
+
+  it('a call whose other values differ keeps its own keyframes, at the shared times', () => {
+    stubMedia(false, false);
+    let reads = 0;
+    const curve = {
+      duration: 0.4,
+      at: (t: number) => {
+        reads += 1;
+        return 300 * t * t;
+      },
+      velocity: (t: number) => 600 * t,
+    };
+    const plain = createMotionEngine(document.createElement('div'), {
+      now: () => clock,
+      requestFrame,
+    });
+    const lifted = createMotionEngine(document.createElement('div'), {
+      now: () => clock,
+      requestFrame,
+    });
+    lifted.set({y: 5});
+    plain.play({x: curve});
+    const firstReads = reads;
+    lifted.play({x: curve});
+    const [own, other] = live('translate');
+    expect(other.keyframes).not.toBe(own.keyframes);
+    expect(other.keyframes.map(frame => frame.offset)).toEqual(
+      own.keyframes.map(frame => frame.offset),
+    );
+    for (const [i, frame] of other.keyframes.entries()) {
+      const [x, y] = parse(frame.translate);
+      expect(x).toBe(parse(own.keyframes[i].translate)[0]);
+      expect(y).toBe(5);
+    }
+    // Its values are read once each, at the times the first call sampled.
+    expect(reads - firstReads).toBeLessThan(firstReads);
+  });
+
+  it('a curve played and rebased in one task bakes the shifted keyframes', () => {
+    const {animator} = setup();
+    const curve = {
+      duration: 0.4,
+      at: (t: number) => 120 * t,
+      velocity: () => 120,
+    };
+    animator.play({x: curve});
+    animator.rebase({x: -16});
+    // The curve plays 0 to 48. Shifted by -16, it plays -16 to 32.
+    const [animation] = live('translate');
+    const xs = animation.keyframes.map(frame => parse(frame.translate)[0]);
+    expect(xs[0]).toBeCloseTo(-16, 6);
+    expect(xs.at(-1)).toBeCloseTo(32, 6);
   });
 
   it('finishes true at its end, false when interrupted', async () => {
