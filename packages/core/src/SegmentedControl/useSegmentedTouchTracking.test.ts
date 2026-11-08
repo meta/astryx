@@ -78,7 +78,7 @@ describe('liftTargetAt', () => {
     ['table', 210, 314],
   ];
   const liftAt = (x: number, y: number, segments: SegmentSpan[]) =>
-    liftTargetAt(x, y, bounds, segments)?.dataset.value ?? null;
+    liftTargetAt(x, y, [bounds], segments)?.dataset.value ?? null;
 
   it('commits the segment a lift inside the control counts for, the padding included', () => {
     const segments = spans(layout);
@@ -99,5 +99,22 @@ describe('liftTargetAt', () => {
 
   it('commits nothing over a disabled segment', () => {
     expect(liftAt(150, 35, spans(layout, ['list']))).toBeNull();
+  });
+
+  it("commits on a segment's own touch band, never on the box around every band", () => {
+    const segments = spans(layout);
+    // Grid's band stops 4 px above the control (a neighbor clamped it);
+    // Table's reaches 8 px above.
+    const area = [
+      bounds,
+      {left: 12, top: 18 - 4, right: 108, bottom: 49},
+      {left: 210, top: 18 - 8, right: 314, bottom: 49},
+    ];
+    const lift = (x: number, y: number) =>
+      liftTargetAt(x, y, area, segments)?.dataset.value ?? null;
+    expect(lift(60, 15)).toBe('grid');
+    expect(lift(250, 11)).toBe('table');
+    // Above Grid, past its band but within Table's reach: nothing.
+    expect(lift(60, 11)).toBeNull();
   });
 });

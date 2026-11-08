@@ -51,6 +51,7 @@ import {isImeKeyEvent} from '../utils/ime';
 import {TypeaheadItem} from './TypeaheadItem';
 import {Icon} from '../Icon';
 import {Spinner} from '../Spinner';
+import {SpinnerOwnerContext} from '../Spinner/SpinnerOwnerContext';
 import {
   borderVars,
   colorVars,
@@ -315,8 +316,13 @@ const styles = stylex.create({
   },
   dropdown: {
     boxSizing: 'border-box',
-    // Matches DROPDOWN_MAX_HEIGHT, which the room-below cap uses.
-    maxHeight: '300px',
+    // Matches DROPDOWN_MAX_HEIGHT, which the room-below cap uses. It is no
+    // taller than its layer's block-size cap either, which folds in the
+    // software keyboard: the list ends above the keyboard with the layer.
+    maxHeight: stylex.firstThatWorks(
+      `min(300px, ${layerViewportInset.maxBlockSize})`,
+      `min(300px, ${layerViewportInset.maxBlockSizeFallback})`,
+    ),
     overflowY: 'auto',
     padding: spacingVars['--spacing-1'],
   },
@@ -1770,11 +1776,14 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       />
       {isLoading && busyLane == null && (
         <span {...stylex.props(styles.loadingStatus)}>
-          <Spinner
-            size="sm"
-            aria-label={t('@astryx.typeahead.loading')}
-            role="img"
-          />
+          {/* Named, never live: the typeahead announces its search. */}
+          <SpinnerOwnerContext value={true}>
+            <Spinner
+              size="sm"
+              aria-label={t('@astryx.typeahead.loading')}
+              role="img"
+            />
+          </SpinnerOwnerContext>
         </span>
       )}
       {popover.render(

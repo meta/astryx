@@ -84,6 +84,8 @@ import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {joinAriaIDs} from '../utils/inputAria';
 import {
   plainDateFromISO,
+  plainDateIsEqual,
+  plainDateToISO,
   plainDateToday,
   type PlainDate,
 } from '../utils/plainDate';
@@ -118,6 +120,7 @@ import {
   DEFAULT_MONTH_REACH,
   clampIndex,
   createMonthModel,
+  dateInMonth,
 } from '../DateInput/monthGeometry';
 import type {DateTimeInputProps, ISODateTimeString} from './DateTimeInput';
 import {
@@ -785,6 +788,37 @@ export function TouchDateTimeField({
     [clampTimeForDate, fireChange, optimisticValue, timeForWheels],
   );
 
+  // UIDatePicker moves a chosen date with these wheels
+  // (`datePicker.calendar.monthYearWheels.changesDate`).
+  const handleWheelChange = useCallback(
+    (next: number) => {
+      setMonthIndex(next);
+      scrollerHandleRef.current?.scrollToMonth(next, 'auto');
+      if (!isTouch || selectedDate == null) {
+        return;
+      }
+      const moved = dateInMonth(
+        monthModel,
+        selectedDate,
+        next,
+        parseValidISODate(calendarMin),
+        parseValidISODate(calendarMax),
+      );
+      if (!plainDateIsEqual(moved, selectedDate) && !isDateDisabled(moved)) {
+        handleDateSelect(plainDateToISO(moved));
+      }
+    },
+    [
+      isTouch,
+      selectedDate,
+      monthModel,
+      calendarMin,
+      calendarMax,
+      isDateDisabled,
+      handleDateSelect,
+    ],
+  );
+
   const commitWheelTime = useCallback(
     (rawTime: ISOTimeString) => {
       const nextTime = clampTimeForDate(valueParts.date, rawTime);
@@ -1104,10 +1138,7 @@ export function TouchDateTimeField({
                 keptDay={keptDay}
                 minMonthIndex={minMonthIndex}
                 maxMonthIndex={maxMonthIndex}
-                onChange={next => {
-                  setMonthIndex(next);
-                  scrollerHandleRef.current?.scrollToMonth(next, 'auto');
-                }}
+                onChange={handleWheelChange}
                 monthLabel={t('@astryx.dateInput.monthWheel')}
                 yearLabel={t('@astryx.dateInput.yearWheel')}
                 isActive={activePanel === 'date' && isWheelOpen}
@@ -1266,6 +1297,7 @@ export function TouchDateTimeField({
             }),
             stylex.props(
               inputWrapperStyles.base,
+              inputWrapperStyles.textField,
               sizeStyles[size],
               styles.touchDateWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
@@ -1357,6 +1389,7 @@ export function TouchDateTimeField({
             }),
             stylex.props(
               inputWrapperStyles.base,
+              inputWrapperStyles.textField,
               sizeStyles[size],
               styles.touchTimeWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,

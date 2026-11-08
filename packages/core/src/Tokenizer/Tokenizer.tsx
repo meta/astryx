@@ -73,6 +73,7 @@ import {
 } from '../Field';
 import {Token} from '../Token';
 import {Spinner} from '../Spinner';
+import {SpinnerOwnerContext} from '../Spinner/SpinnerOwnerContext';
 import {useEndLaneReserve} from './useEndLaneReserve';
 import {renderIconSlot, type IconType} from '../Icon';
 import {OverflowList} from '../OverflowList';
@@ -743,16 +744,19 @@ function EndLane({
   return (
     <div ref={laneRef} {...stylex.props(laneXStyle)}>
       {(isBusy || hasBusySlot) && (
-        <Spinner
-          // Remounts when a search starts, so the ring syncs its phase on
-          // mount exactly as a newly shown Spinner did before.
-          key={isBusy ? 'busy' : 'idle'}
-          size="sm"
-          aria-label={loadingLabel}
-          role="img"
-          aria-hidden={isBusy ? undefined : true}
-          xstyle={isBusy ? undefined : styles.idleSpinner}
-        />
+        // Named, never live: the tokenizer announces its search.
+        <SpinnerOwnerContext value={true}>
+          <Spinner
+            // Remounts when a search starts, so the ring syncs its phase on
+            // mount exactly as a newly shown Spinner did before.
+            key={isBusy ? 'busy' : 'idle'}
+            size="sm"
+            aria-label={loadingLabel}
+            role="img"
+            aria-hidden={isBusy ? undefined : true}
+            xstyle={isBusy ? undefined : styles.idleSpinner}
+          />
+        </SpinnerOwnerContext>
       )}
       {children}
     </div>
@@ -1227,6 +1231,9 @@ export function Tokenizer<T extends SearchableItem>({
         const results = await searchSource.bootstrap();
         return results.filter(item => !selectedIds.has(item.id));
       },
+      // BaseTypeahead cancels this wrapper, not the caller's source. Pass the
+      // call on, so the caller can stop its request.
+      cancel: () => searchSource.cancel?.(),
     }),
     [searchSource, selectedIds],
   );
@@ -1485,6 +1492,7 @@ export function Tokenizer<T extends SearchableItem>({
         }),
         stylex.props(
           inputWrapperStyles.base,
+          inputWrapperStyles.textField,
           styles.wrapper,
           value.length > 0 && styles.wrapperWithTokens,
           isTruncated ? truncatedSizeStyles[size] : sizeStyle,
@@ -1712,6 +1720,7 @@ export function Tokenizer<T extends SearchableItem>({
             }),
             stylex.props(
               inputWrapperStyles.base,
+              inputWrapperStyles.textField,
               styles.wrapper,
               styles.sheetField,
               isDisabled && styles.sheetFieldDisabled,
@@ -1891,6 +1900,7 @@ export function Tokenizer<T extends SearchableItem>({
             }),
             stylex.props(
               inputWrapperStyles.base,
+              inputWrapperStyles.textField,
               styles.wrapper,
               value.length > 0 && styles.wrapperWithTokens,
               placeholderSizeStyle,

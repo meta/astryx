@@ -54,7 +54,8 @@
     "react": ">=19.2.0",
     "react-dom": ">=19.2.0",
     "vega": ">=6.0.0",
-    "vega-lite": ">=6.0.0"
+    "vega-lite": ">=6.0.0",
+    "vega-util": ">=2.0.0"
   },
   "devDependencies": {
     "@astryxdesign/cli": "workspace:*",

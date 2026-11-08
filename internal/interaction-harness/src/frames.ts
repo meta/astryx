@@ -6,9 +6,12 @@
  *   the engine's screencast (Chromium CDP `Page.startScreencast`; WebKit's
  *   `Screencast` domain)
  * @output `startScreencast` (timestamped composited frames), `markElement`
- *   (a marker outline the frames can find), `trackMarker` (per-frame marker
- *   box and the cast's position step), `colorBlockPx` (a frame's color
- *   resolution), `sampleRects` (per-rAF rect sampling), `frameStats`.
+ *   (a marker outline the frames can find) and `trackMarker` (per-frame
+ *   marker box and the cast's position step). `trackMarkers` tracks several
+ *   colors from one decode of each frame. Also `colorBlockPx` (a frame's color
+ *   resolution), `sampleRects` (per-rAF rect sampling) and `frameStats`.
+ *   `requireFrames` gives a proof its frames, or fails it by name when the
+ *   page drew too few.
  * @position Frame evidence for motion proofs. The screencast is captured off
  *   the page's main thread, from what the compositor presents, so it keeps
  *   delivering frames while a script blocks the main thread: that is what makes
@@ -18,6 +21,8 @@
  * Marker tracking needs no image library: frames are decoded and scanned in a
  * scratch page of the same browser (createImageBitmap + canvas), so the
  * harness adds no dependency.
+ * With `subpixel`, the read places the marker under a pixel, from its
+ * anti-aliased edges (Chromium's PNG cast).
  *
  * SYNC: Keep the README's frame-evidence section equal to what this measures.
  */
@@ -301,10 +306,20 @@ export interface TrackedFrame {
    * WebKit's JPEG cast, whose 4:2:0 chroma holds color in 2 by 2 pixel
    * blocks, and 1 px in Chromium's PNG cast, both at the viewport's size.
    * Another color carries none: a cyan control in the same WebKit frames
-   * moves by odd px.
+   * moves by odd px. A sub-pixel read (`subpixel`) carries its own step,
+   * `SUBPIXEL_STEP_PX`, whatever the color.
    */
   readonly step?: {readonly x: number; readonly y: number};
 }
+
+/**
+ * The step of a sub-pixel marker read, CSS px. On Chromium's PNG cast, a
+ * layer that a transform puts between pixels shows anti-aliased edges. The
+ * read places the marker from them. A 10 px slide over 60 frames read 0.164
+ * to 0.169 px a frame, where it moves 0.167 px. Identical frames read
+ * identical positions. The step sits well above that spread.
+ */
+export const SUBPIXEL_STEP_PX = 0.05;
 
 /**
  * The bitmap pixels per block of a cast frame's color resolution, per axis:
@@ -355,6 +370,14 @@ export function colorBlockPx(
  * browser, so neither the page under test nor Node needs an image decoder.
  * With `region` (CSS px), only that part of each frame is searched. On a
  * loaded machine, a search of every pixel can take longer than the test.
+ *
+ * With `subpixel`, the box comes from the marker's anti-aliased edges, not
+ * its whole pixels. Each pixel near the marker counts by its color's share of
+ * the way from the background to the marker's color. The box sits on the
+ * centroid of those weights. The background is read from a ring 2 px outside
+ * the marker, so the marker must be opaque on a plain background. Use the
+ * default chip marker: an outline marker's window holds the element's own
+ * content. Only a PNG cast keeps those edges: a JPEG frame throws.
  */
 export async function trackMarker(
   page: Page,
@@ -363,24 +386,67 @@ export async function trackMarker(
     rgb = MARKER_RGB,
     tolerance = 40,
     region,
+    subpixel = false,
   }: {
     rgb?: readonly [number, number, number];
     tolerance?: number;
     region?: Box;
+    subpixel?: boolean;
   } = {},
 ): Promise<TrackedFrame[]> {
-  const isDefaultMarker = rgb.every((value, i) => value === MARKER_RGB[i]);
+  const [tracked] = await trackMarkers(page, frames, {
+    colors: [rgb],
+    tolerance,
+    region,
+    subpixel,
+  });
+  return tracked;
+}
+
+/**
+ * `trackMarker` for several colors at once. Each frame is decoded once and
+ * searched for every color, so a proof that tracks a marker and a control
+ * decodes each frame once. Returns one track per color, in order.
+ */
+export async function trackMarkers(
+  page: Page,
+  frames: readonly CastFrame[],
+  {
+    colors,
+    tolerance = 40,
+    region,
+    subpixel = false,
+  }: {
+    colors: readonly (readonly [number, number, number])[];
+    tolerance?: number;
+    region?: Box;
+    subpixel?: boolean;
+  },
+): Promise<TrackedFrame[][]> {
+  if (subpixel && frames.some(f => f.format !== 'png')) {
+    throw new Error(
+      "trackMarkers: subpixel needs a PNG cast; a JPEG frame's chroma blocks hide the marker's edges",
+    );
+  }
+  const isDefaultMarker = colors.map(rgb =>
+    rgb.every((value, i) => value === MARKER_RGB[i]),
+  );
   const scratch = await page.context().newPage();
   try {
-    const out: TrackedFrame[] = [];
+    const out: TrackedFrame[][] = colors.map(() => []);
     // Batches keep each evaluate payload moderate.
     for (let i = 0; i < frames.length; i += 12) {
       const batch = frames.slice(i, i + 12);
-      const boxes = await scratch.evaluate(
-        async ({batch: items, color, tol, area}) => {
-          const results: {
-            box: {x: number; y: number; width: number; height: number} | null;
-            pixels: number;
+      const results = await scratch.evaluate(
+        async ({batch: items, palette, tol, area, sub}) => {
+          const found: {
+            boxes: ({
+              x: number;
+              y: number;
+              width: number;
+              height: number;
+            } | null)[];
+            pixels: number[];
             scale: number;
           }[] = [];
           for (const item of items) {
@@ -417,50 +483,129 @@ export async function trackMarker(
               right - left,
               bottom - top,
             );
-            let minX = Infinity;
-            let minY = Infinity;
-            let maxX = -Infinity;
-            let maxY = -Infinity;
-            let pixels = 0;
+            const minX = palette.map(() => Infinity);
+            const minY = palette.map(() => Infinity);
+            const maxX = palette.map(() => -Infinity);
+            const maxY = palette.map(() => -Infinity);
+            const pixels = palette.map(() => 0);
             for (let y = 0; y < height; y += 1) {
               for (let x = 0; x < width; x += 1) {
                 const o = (y * width + x) * 4;
-                if (
-                  Math.abs(data[o] - color[0]) <= tol &&
-                  Math.abs(data[o + 1] - color[1]) <= tol &&
-                  Math.abs(data[o + 2] - color[2]) <= tol
-                ) {
-                  pixels += 1;
-                  if (x < minX) {
-                    minX = x;
-                  }
-                  if (x > maxX) {
-                    maxX = x;
-                  }
-                  if (y < minY) {
-                    minY = y;
-                  }
-                  if (y > maxY) {
-                    maxY = y;
+                for (let c = 0; c < palette.length; c += 1) {
+                  const color = palette[c];
+                  if (
+                    Math.abs(data[o] - color[0]) <= tol &&
+                    Math.abs(data[o + 1] - color[1]) <= tol &&
+                    Math.abs(data[o + 2] - color[2]) <= tol
+                  ) {
+                    pixels[c] += 1;
+                    if (x < minX[c]) {
+                      minX[c] = x;
+                    }
+                    if (x > maxX[c]) {
+                      maxX[c] = x;
+                    }
+                    if (y < minY[c]) {
+                      minY[c] = y;
+                    }
+                    if (y > maxY[c]) {
+                      maxY[c] = y;
+                    }
                   }
                 }
               }
             }
-            results.push({
-              box:
-                pixels === 0
+            // The marker's box from its anti-aliased edges: each pixel counts
+            // by its color's share of the way from the background to the
+            // marker's. The background is the median of a ring 2 px out.
+            const fine = (c: number) => {
+              const x0 = Math.max(0, minX[c] - 2);
+              const x1 = Math.min(width - 1, maxX[c] + 2);
+              const y0 = Math.max(0, minY[c] - 2);
+              const y1 = Math.min(height - 1, maxY[c] + 2);
+              const ring: number[][] = [[], [], []];
+              for (let y = y0; y <= y1; y += 1) {
+                for (let x = x0; x <= x1; x += 1) {
+                  if (x === x0 || x === x1 || y === y0 || y === y1) {
+                    const o = (y * width + x) * 4;
+                    for (let k = 0; k < 3; k += 1) {
+                      ring[k].push(data[o + k]);
+                    }
+                  }
+                }
+              }
+              const background = ring.map(values => {
+                const sorted = values.sort((a, b) => a - b);
+                return sorted[Math.floor(sorted.length / 2)];
+              });
+              const toward = palette[c].map((v, k) => v - background[k]);
+              const span = toward.reduce((sum, v) => sum + v * v, 0);
+              if (span < 30 * 30) {
+                throw new Error(
+                  `trackMarkers: the marker's color lies within ${Math.sqrt(span).toFixed(0)} of its background, too close to read under a pixel`,
+                );
+              }
+              let total = 0;
+              let sumX = 0;
+              let sumY = 0;
+              const rows: number[] = [];
+              const columns = new Array<number>(x1 - x0 + 1).fill(0);
+              for (let y = y0; y <= y1; y += 1) {
+                let row = 0;
+                for (let x = x0; x <= x1; x += 1) {
+                  const o = (y * width + x) * 4;
+                  let dot = 0;
+                  for (let k = 0; k < 3; k += 1) {
+                    dot += (data[o + k] - background[k]) * toward[k];
+                  }
+                  const weight = Math.min(1, Math.max(0, dot / span));
+                  total += weight;
+                  sumX += weight * (x + 0.5);
+                  sumY += weight * (y + 0.5);
+                  row += weight;
+                  columns[x - x0] += weight;
+                }
+                if (y > minY[c] && y < maxY[c]) {
+                  rows.push(row);
+                }
+              }
+              const median = (values: number[], fallback: number) => {
+                if (values.length === 0) {
+                  return fallback;
+                }
+                const sorted = [...values].sort((a, b) => a - b);
+                return sorted[Math.floor(sorted.length / 2)];
+              };
+              const markerWidth = median(rows, maxX[c] - minX[c] + 1);
+              const markerHeight = median(
+                columns.filter((_, i) => x0 + i > minX[c] && x0 + i < maxX[c]),
+                maxY[c] - minY[c] + 1,
+              );
+              return {
+                x: (left + sumX / total - markerWidth / 2) / scale,
+                y: (top + sumY / total - markerHeight / 2) / scale,
+                width: markerWidth / scale,
+                height: markerHeight / scale,
+              };
+            };
+            found.push({
+              boxes: palette.map((_, c) =>
+                pixels[c] === 0
                   ? null
-                  : {
-                      x: (left + minX) / scale,
-                      y: (top + minY) / scale,
-                      width: (maxX - minX + 1) / scale,
-                      height: (maxY - minY + 1) / scale,
-                    },
+                  : sub
+                    ? fine(c)
+                    : {
+                        x: (left + minX[c]) / scale,
+                        y: (top + minY[c]) / scale,
+                        width: (maxX[c] - minX[c] + 1) / scale,
+                        height: (maxY[c] - minY[c] + 1) / scale,
+                      },
+              ),
               pixels,
               scale,
             });
           }
-          return results;
+          return found;
         },
         {
           batch: batch.map(f => ({
@@ -468,22 +613,41 @@ export async function trackMarker(
             format: f.format,
             viewportWidth: f.viewportWidth,
           })),
-          color: [...rgb],
+          palette: colors.map(rgb => [...rgb]),
           tol: tolerance,
           area: region ?? null,
+          sub: subpixel,
         },
       );
-      boxes.forEach((result, k) => {
-        if (!isDefaultMarker) {
-          out.push({t: batch[k].t, box: result.box, pixels: result.pixels});
-          return;
-        }
-        const block = colorBlockPx(batch[k].data, batch[k].format);
-        out.push({
-          t: batch[k].t,
-          box: result.box,
-          pixels: result.pixels,
-          step: {x: block.x / result.scale, y: block.y / result.scale},
+      results.forEach((result, k) => {
+        const block = isDefaultMarker.some(Boolean)
+          ? colorBlockPx(batch[k].data, batch[k].format)
+          : null;
+        colors.forEach((_, c) => {
+          out[c].push(
+            subpixel
+              ? {
+                  t: batch[k].t,
+                  box: result.boxes[c],
+                  pixels: result.pixels[c],
+                  step: {x: SUBPIXEL_STEP_PX, y: SUBPIXEL_STEP_PX},
+                }
+              : isDefaultMarker[c] && block != null
+                ? {
+                    t: batch[k].t,
+                    box: result.boxes[c],
+                    pixels: result.pixels[c],
+                    step: {
+                      x: block.x / result.scale,
+                      y: block.y / result.scale,
+                    },
+                  }
+                : {
+                    t: batch[k].t,
+                    box: result.boxes[c],
+                    pixels: result.pixels[c],
+                  },
+          );
         });
       });
     }
@@ -629,4 +793,94 @@ export function frameStats(
     first: inside[0]?.value ?? null,
     last: inside[inside.length - 1]?.value ?? null,
   };
+}
+
+/**
+ * A gap between two frames the page drew, ms, past which the page counts as
+ * starved: about three frames at 60 Hz.
+ */
+export const FRAME_STARVATION_MS = 50;
+
+const framesDrawn = (count: number) =>
+  `${count} ${count === 1 ? 'frame' : 'frames'}`;
+
+/** A proof's frames when the page drew too few of them. */
+export interface FrameShortfall {
+  /** The harness function that needed the frames (default `requireFrames`). */
+  readonly by?: string;
+  /** What the frames had to show. */
+  readonly during: string;
+  /** The frames the page drew during it. */
+  readonly frames: number;
+  /** The frames the proof needs. */
+  readonly min: number;
+  /**
+   * The longest gap between frames around them, ms; Infinity when the page
+   * drew fewer than two frames.
+   */
+  readonly longestGapMs: number;
+}
+
+/**
+ * The page drew too few frames for a proof, because it was starved of
+ * frames: no frame came for longer than `FRAME_STARVATION_MS`. A loaded
+ * machine does that, and so does a long task on the page. Such a run proves
+ * nothing about the motion, so it fails, and the error says why.
+ */
+export class FrameStarvationError extends Error {
+  readonly numbers: FrameShortfall;
+  constructor(numbers: FrameShortfall) {
+    super(
+      `${numbers.by ?? 'requireFrames'}: the page drew ${framesDrawn(numbers.frames)} while ${numbers.during}, where the proof needs ${numbers.min}. ${Number.isFinite(numbers.longestGapMs) ? `No frame came for ${numbers.longestGapMs.toFixed(1)} ms` : 'No second frame came'}: the page was starved of frames (a loaded machine, or a long task on the page), so the run proves nothing about the motion`,
+    );
+    this.name = 'FrameStarvationError';
+    this.numbers = numbers;
+  }
+}
+
+/**
+ * The samples that `where` selects from the page's own per-frame `samples`
+ * (an rAF trace), when there are at least `min` of them. Else the proof
+ * fails. The error is `FrameStarvationError` when no frame came for longer
+ * than `FRAME_STARVATION_MS` around the selected samples. Otherwise the
+ * motion did not last that long, and the error says so. `during` names what
+ * the frames had to show.
+ */
+export function requireFrames<T extends {readonly t: number}>(
+  samples: readonly T[],
+  {
+    min,
+    during,
+    where = () => true,
+  }: {
+    readonly min: number;
+    readonly during: string;
+    readonly where?: (sample: T) => boolean;
+  },
+): T[] {
+  const selected = samples.filter(where);
+  if (selected.length >= min) {
+    return selected;
+  }
+  // The gaps from the frame before the first selected sample to the frame
+  // after the last one. With none selected, every gap counts.
+  const first = selected.length > 0 ? samples.indexOf(selected[0]) : 0;
+  const last =
+    selected.length > 0
+      ? samples.indexOf(selected[selected.length - 1])
+      : samples.length - 1;
+  const around = samples.slice(Math.max(0, first - 1), last + 2);
+  // With fewer than two frames there is no gap to measure. The page drew one
+  // frame at most in the whole sample, so it was starved.
+  const longestGapMs =
+    around.length < 2
+      ? Number.POSITIVE_INFINITY
+      : Math.max(...around.slice(1).map((sample, i) => sample.t - around[i].t));
+  const numbers = {during, frames: selected.length, min, longestGapMs};
+  if (longestGapMs > FRAME_STARVATION_MS) {
+    throw new FrameStarvationError(numbers);
+  }
+  throw new Error(
+    `requireFrames: the page drew ${framesDrawn(selected.length)} while ${during}, where the proof needs ${min}. No frame came more than ${FRAME_STARVATION_MS} ms after the one before: the motion did not last that long`,
+  );
 }

@@ -11,7 +11,7 @@
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {act, renderHook} from '@testing-library/react';
-import {useScrollOverflow} from './useScrollOverflow';
+import {useScrollOverflow, useShownScrollOverflow} from './useScrollOverflow';
 
 // jsdom has no ResizeObserver. This one hands the test the shared observer's
 // callback so a resize can be delivered on demand; the registration-time
@@ -318,6 +318,118 @@ describe('useScrollOverflow', () => {
     });
     expect(result.current.overflowStart).toBe(true);
     expect(result.current.overflowEnd).toBe(false);
+    unmount();
+  });
+
+  it('returns the same fields as before, with no way to report a position', () => {
+    const {result, unmount} = renderHook(() => useScrollOverflow());
+    expect(Object.keys(result.current).sort()).toEqual([
+      'hasOverflow',
+      'overflowEnd',
+      'overflowStart',
+      'scrollRef',
+    ]);
+    unmount();
+  });
+});
+
+describe('useShownScrollOverflow', () => {
+  function attach() {
+    const el = document.createElement('div');
+    fakeScrollBox(el, {scrollWidth: 600, clientWidth: 300});
+    stubRendered(el, true);
+    const hook = renderHook(() => useShownScrollOverflow());
+    act(() => {
+      hook.result.current.scrollRef(el);
+    });
+    return {el, ...hook};
+  }
+
+  const nextFrame = async () =>
+    act(
+      async () =>
+        new Promise<void>(resolve => {
+          requestAnimationFrame(() => resolve());
+        }),
+    );
+
+  it('measures the edges from a reported position while the scroll offset stays put', () => {
+    const {result, unmount} = attach();
+    expect([result.current.overflowStart, result.current.overflowEnd]).toEqual([
+      false,
+      true,
+    ]);
+    act(() => result.current.followShown({offset: 150, travel: 300}));
+    expect([result.current.overflowStart, result.current.overflowEnd]).toEqual([
+      true,
+      true,
+    ]);
+    act(() => result.current.followShown({offset: 299.5, travel: 300}));
+    expect([result.current.overflowStart, result.current.overflowEnd]).toEqual([
+      true,
+      false,
+    ]);
+    unmount();
+  });
+
+  it('commits an edge change in the report itself, so a held row changes the buttons in its frame', () => {
+    const {result, unmount} = attach();
+    act(() => {
+      result.current.followShown({offset: 150, travel: 300});
+      // Rendered before the report returns, not when the batch ends.
+      expect(result.current.overflowStart).toBe(true);
+    });
+    unmount();
+  });
+
+  it('renders nothing for a report that changes no edge', () => {
+    let renders = 0;
+    const el = document.createElement('div');
+    fakeScrollBox(el, {scrollWidth: 600, clientWidth: 300});
+    stubRendered(el, true);
+    const {result, unmount} = renderHook(() => {
+      renders += 1;
+      return useShownScrollOverflow();
+    });
+    act(() => {
+      result.current.scrollRef(el);
+    });
+    act(() => result.current.followShown({offset: 150, travel: 300}));
+    const before = renders;
+    act(() => result.current.followShown({offset: 160, travel: 300}));
+    act(() => result.current.followShown({offset: 170, travel: 300}));
+    expect(renders).toBe(before);
+    unmount();
+  });
+
+  it('keeps the reported edges for one frame after null, then measures the scroll offset', async () => {
+    const {el, result, unmount} = attach();
+    act(() => result.current.followShown({offset: 300, travel: 300}));
+    act(() => result.current.followShown(null));
+    expect(result.current.overflowEnd).toBe(false);
+    // A scroll before that frame still reads the reported position.
+    act(() => {
+      el.dispatchEvent(new Event('scroll'));
+    });
+    expect(result.current.overflowEnd).toBe(false);
+    await nextFrame();
+    expect(result.current.overflowEnd).toBe(true);
+    unmount();
+  });
+
+  it('leaves no frame running when the container detaches or the hook unmounts', () => {
+    const cancel = vi.spyOn(window, 'cancelAnimationFrame');
+    const {result, unmount} = attach();
+    act(() => result.current.followShown({offset: 300, travel: 300}));
+    act(() => result.current.followShown(null));
+    const calls = cancel.mock.calls.length;
+    act(() => result.current.scrollRef(null));
+    expect(cancel.mock.calls.length).toBeGreaterThan(calls);
+    // With no container, null schedules nothing.
+    const request = vi.spyOn(window, 'requestAnimationFrame');
+    act(() => result.current.followShown({offset: 300, travel: 300}));
+    act(() => result.current.followShown(null));
+    expect(request).not.toHaveBeenCalled();
     unmount();
   });
 });

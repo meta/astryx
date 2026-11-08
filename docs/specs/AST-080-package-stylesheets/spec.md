@@ -63,7 +63,8 @@ first.
 - Which StyleX variable groups a package stylesheet contains, owned by
   `spec:AST-066` FR3.
 - How a product compiles its own code, including any StyleX settings it uses for
-  its own styles or for components it ejects with `astryx swizzle`.
+  its own styles or for components it ejects with `astryx swizzle`, except where
+  a swizzled copy's rules land under `@astryxdesign/build` (FR5, FR7).
 - How `@astryxdesign/build` plugs into a bundler other than through
   `withAstryx()` (FR9), and how a source build chooses a subset of a package's
   modules to compile.
@@ -137,6 +138,11 @@ first.
   @import '@astryxdesign/theme-neutral/theme.css';
   ```
 
+  Under `@astryxdesign/build`, a swizzled copy whose folder holds an
+  `astryx-swizzle.json` marker builds through the library pass, so its rules
+  land in `astryx-base` below `astryx-theme` (`spec:AST-110` FR5); the stock
+  StyleX plugins have no library pass.
+
   The documentation MAY also present a source build as an alternative to a default
   setup: the source of one or more packages compiled through `@astryxdesign/build`
   under FR7 (and FR9 for `withAstryx()`), each in place of that package's
@@ -161,8 +167,10 @@ first.
   reproduces its prebuilt stylesheet's rules; compiling a subset produces the
   rules those modules use. A source build of Core always includes the Core
   definitions other packages' prebuilt stylesheets rely on under FR2, such as
-  variable groups and keyframes. Product rules stay outside `astryx-base`. A
-  source build needs no data beyond the package's own source, and holds in
+  variable groups and keyframes. Product rules stay outside `astryx-base`,
+  except a swizzled copy's: modules under a folder holding an
+  `astryx-swizzle.json` marker compile in the library pass into `astryx-base`
+  (`spec:AST-110` FR5). A source build needs no data beyond the package's own source, and holds in
   development builds as in production builds.
 
 - **FR8 — Stylesheet growth is reported and budgeted per component.** Every
@@ -197,8 +205,9 @@ first.
     `@layer reset, astryx-base, astryx-theme`: Core's `reset.css` in `reset`,
     each package's compiled block in `astryx-base`, and the theme in
     `astryx-theme`. Each compiled block begins with the FR3 order registration
-    (FR7). Product CSS, including the product's own StyleX output, stays
-    unlayered and wins over every Astryx rule in any chunk or load order. A
+    (FR7). Product CSS, including the product's own StyleX output other than
+    a marked swizzled copy's (FR7), stays unlayered and wins over every Astryx
+    rule in any chunk or load order. A
     non-Core block relies on Core's variables and keyframes as under FR2.
   - **Stylesheet entry (Turbopack).** The product lists the PostCSS plugin
     `@astryxdesign/build/next/postcss` in its PostCSS config and puts one
@@ -269,6 +278,11 @@ first.
   emits no order registration in its own output (FR7), relying on `reset.css`,
   the theme, or the product's line. Closing these gaps changes existing webpack
   output.
+- The FR7 exception for a swizzled copy holds in the Babel, PostCSS, and Vite
+  integrations. `withAstryx()` under Turbopack does not read the
+  `astryx-swizzle.json` marker that `astryx swizzle` writes (FR5, FR7). Under webpack,
+  `withAstryx()` makes each app module depend on the marker paths above it, so
+  a cached build recompiles a copy when its marker appears or disappears (FR7).
 - Under Turbopack no maintained StyleX compiler runs in the native pipeline, so
   the FR9 fast path is a goal with a known gap: the Turbopack route compiles
   Astryx modules through a JavaScript loader running Babel and the StyleX Babel

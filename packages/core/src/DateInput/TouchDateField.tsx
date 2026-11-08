@@ -58,6 +58,8 @@ import {
   useState,
   useTransition,
 } from 'react';
+import {flushSync} from 'react-dom';
+import {moveFocusLeftBehind, noteFocusWithin} from '../utils/focusReturn';
 import * as stylex from '@stylexjs/stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {BottomSheet} from '../BottomSheet';
@@ -106,6 +108,8 @@ import {
   rtlStyles,
   themeProps,
   plainDateFromISO,
+  plainDateIsEqual,
+  plainDateToISO,
   plainDateToday,
   type ISODateString,
 } from '../utils';
@@ -120,12 +124,14 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {normalizeDayOfWeek} from '../utils/dateTypes';
 import {getWeekdayHeaders} from '../Calendar/getWeekdayHeaderNames';
+import {useTouchPresentation} from '../utils/touchPresentation';
 import {MonthScroller, type MonthScrollerHandle} from './MonthScroller';
 import {MonthYearWheels} from './MonthYearWheels';
 import {
   DEFAULT_MONTH_REACH,
   clampIndex,
   createMonthModel,
+  dateInMonth,
 } from './monthGeometry';
 import {dateInputTouchSizes, dateInputTouchGeometry} from './tokens.stylex';
 import {
@@ -679,6 +685,9 @@ export function TouchDateField({
   );
   const [isWheelOpen, setIsWheelOpen] = useState(false);
   const scrollerHandleRef = useRef<MonthScrollerHandle | null>(null);
+  const previousArrowRef = useRef<HTMLButtonElement | null>(null);
+  const nextArrowRef = useRef<HTMLButtonElement | null>(null);
+  const monthYearButtonRef = useRef<HTMLButtonElement | null>(null);
   // Pending focus handoff from the clear button; see handleClear.
   const clearFocusTimerRef = useRef<number | null>(null);
   // Releases the focus timer on unmount.
@@ -896,13 +905,81 @@ export function TouchDateField({
     [monthIndex, minMonthIndex, maxMonthIndex],
   );
 
+  // An arrow at the range end hides, and a hidden element loses focus. So
+  // when a move to `target` hides the focused arrow, focus moves to the other
+  // arrow, or to the month-and-year button when both hide. The move renders
+  // first, because in a two-month range the other arrow is hidden until then.
+  const moveMonth = useCallback(
+    (target: number, move: () => void) => {
+      const previousHides = target <= minMonthIndex;
+      const nextHides = target >= maxMonthIndex;
+      const previousArrow = previousArrowRef.current;
+      const nextArrow = nextArrowRef.current;
+      const focusOnPrevious = previousHides
+        ? noteFocusWithin(previousArrow)
+        : null;
+      const focusOnNext = nextHides ? noteFocusWithin(nextArrow) : null;
+      const focusOnArrow = focusOnPrevious ?? focusOnNext;
+      if (focusOnArrow == null) {
+        move();
+        return;
+      }
+      // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the other arrow must be shown before it can take focus
+      flushSync(move);
+      const isOnPrevious = focusOnPrevious != null;
+      const otherArrowHides = isOnPrevious ? nextHides : previousHides;
+      const destination = otherArrowHides
+        ? monthYearButtonRef.current
+        : isOnPrevious
+          ? nextArrowRef.current
+          : previousArrowRef.current;
+      moveFocusLeftBehind(
+        focusOnArrow,
+        destination,
+        isOnPrevious ? previousArrow : nextArrow,
+      );
+    },
+    [minMonthIndex, maxMonthIndex],
+  );
+
+  const stepMonthFromArrow = useCallback(
+    (delta: -1 | 1) => {
+      const target = clampIndex(
+        monthIndex + delta,
+        minMonthIndex,
+        maxMonthIndex,
+      );
+      moveMonth(target, () => stepMonth(delta));
+    },
+    [monthIndex, minMonthIndex, maxMonthIndex, moveMonth, stepMonth],
+  );
+
   // A wheel commit steers the scroller immediately, even though it is behind
   // the wheels: it keeps its layout box while hidden, so by the time the
-  // wheels close it is already resting on the new month.
-  const handleWheelChange = useCallback((next: number) => {
-    setMonthIndex(next);
-    scrollerHandleRef.current?.scrollToMonth(next, 'auto');
-  }, []);
+  // wheels close it is already resting on the new month. Under a finger,
+  // UIDatePicker moves a chosen date with these wheels
+  // (datePicker.calendar.monthYearWheels.changesDate).
+  const {isTouch} = useTouchPresentation();
+  const handleWheelChange = useCallback(
+    (next: number) => {
+      setMonthIndex(next);
+      scrollerHandleRef.current?.scrollToMonth(next, 'auto');
+      if (!isTouch || selectedDate == null) {
+        return;
+      }
+      const moved = dateInMonth(
+        monthModel,
+        selectedDate,
+        next,
+        min != null ? plainDateFromISO(min) : null,
+        max != null ? plainDateFromISO(max) : null,
+      );
+      if (!plainDateIsEqual(moved, selectedDate) && !isDateDisabled(moved)) {
+        fireChange(plainDateToISO(moved));
+      }
+    },
+    [isTouch, selectedDate, monthModel, min, max, isDateDisabled, fireChange],
+  );
 
   /**
    * The calendar reports the month it has scrolled to — but only while it is
@@ -927,9 +1004,10 @@ export function TouchDateField({
       if (isWheelOpen) {
         return;
       }
-      setMonthIndex(next);
+      // A swipe to the range end hides an arrow, as a press does.
+      moveMonth(next, () => setMonthIndex(next));
     },
-    [isWheelOpen],
+    [isWheelOpen, moveMonth],
   );
 
   /**
@@ -989,6 +1067,7 @@ export function TouchDateField({
     <div {...stylex.props(styles.surface)}>
       <div {...stylex.props(styles.header)}>
         <button
+          ref={monthYearButtonRef}
           type="button"
           onClick={() => setIsWheelOpen(open => !open)}
           aria-expanded={isWheelOpen}
@@ -1048,8 +1127,9 @@ export function TouchDateField({
               styles.monthArrow,
               !canStepBack && styles.monthArrowUnavailable,
             ]}
+            ref={previousArrowRef}
             isDisabled={!canStepBack}
-            onClick={() => stepMonth(-1)}
+            onClick={() => stepMonthFromArrow(-1)}
             label={t('@astryx.calendar.previousMonth')}
             icon={
               <span {...stylex.props(styles.monthArrowIcon, rtlStyles.mirror)}>
@@ -1064,8 +1144,9 @@ export function TouchDateField({
               styles.monthArrow,
               !canStepForward && styles.monthArrowUnavailable,
             ]}
+            ref={nextArrowRef}
             isDisabled={!canStepForward}
-            onClick={() => stepMonth(1)}
+            onClick={() => stepMonthFromArrow(1)}
             label={t('@astryx.calendar.nextMonth')}
             icon={
               <span {...stylex.props(styles.monthArrowIcon, rtlStyles.mirror)}>
@@ -1241,6 +1322,7 @@ export function TouchDateField({
         }),
         stylex.props(
           inputWrapperStyles.base,
+          inputWrapperStyles.textField,
           sizeStyles[size],
           styles.wrapper,
           // Disabled paint belongs to the disabled state only; a busy field

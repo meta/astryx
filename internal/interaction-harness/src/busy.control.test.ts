@@ -17,7 +17,7 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {busyWindowProof, pooledBusyProof} from './busy';
+import {busyWindowProof, BusyWindowTooLateError, pooledBusyProof} from './busy';
 import type {TrackedFrame} from './frames';
 
 const FRAME = 1000 / 60;
@@ -268,13 +268,29 @@ describe('busyWindowProof against a control', () => {
     expect(proof.control?.belowStep).toBeGreaterThan(0);
   });
 
+  it('judges a component that enters from off screen from its first position inside the block, against the control', () => {
+    // A card pushed in from an edge first shows 20 ms into the block. The
+    // cast's frames before the block show the screen without it.
+    const entering = moving().map(f =>
+      f.t < 1020
+        ? ({...f, box: null} as TrackedFrame)
+        : ({...f, box: {...f.box!, y: f.box!.y - 60}} as TrackedFrame),
+    );
+    const proof = busyWindowProof(entering, BLOCK, {
+      control: asControl(moving()),
+    });
+    expect(proof.verdict.failures, proof.summary).toEqual([]);
+    expect(proof.onScreenFromMs).toBeGreaterThanOrEqual(20);
+  });
+
   it('fails a window in which the control itself presented too little to judge', () => {
     const still = asControl(
       moving().map(f => ({...f, box: {...f.box!, y: 0}}) as TrackedFrame),
     );
     const proof = busyWindowProof(moving(), BLOCK, {control: still});
+    // It names how starved the cast was: here every frame came, 60 Hz.
     expect(proof.verdict.failures.join('\n')).toMatch(
-      /the control moved on 0 frames in the judged part/,
+      /the control moved on 0 frames in the judged part, under 4: the compositor presented too little in this window to judge \(the cast delivered \d+ frames in the \d+ ms block, none for 1[67] ms\)/,
     );
   });
 });
@@ -301,6 +317,58 @@ describe('pooledBusyProof', () => {
     expect(pooled.summary).toMatch(
       /^3 runs pooled: moved on 9 of the control's 9 frames; run 1: /,
     );
+  });
+
+  it('leaves out a run whose block began after its motion had settled, and names it', () => {
+    const control = asControl(moving());
+    // Settled 50 ms before the run's block: nothing in it is left to judge.
+    const settled = moving().map(f =>
+      f.t < 950
+        ? f
+        : ({...f, box: {...f.box!, y: 3 * at(950)}} as TrackedFrame),
+    );
+    const pooled = pooledBusyProof(
+      [
+        {tracked: settled, control, window: short(1000)},
+        {tracked: moving(), control, window: short(1300)},
+        {tracked: moving(), control, window: short(1600)},
+      ],
+      {settledWithin: 2},
+    );
+    expect(pooled.verdict.failures, pooled.summary).toEqual([]);
+    expect(pooled.judged).toEqual([false, true, true]);
+    expect(pooled.runs[0]).toBeNull();
+    expect(pooled.late[0]).toBeInstanceOf(BusyWindowTooLateError);
+    expect(pooled.late.slice(1)).toEqual([null, null]);
+    // Only the judged runs' frames count toward the pool's floors.
+    expect(pooled.control).toEqual({moved: 6, movedWith: 6});
+    expect(pooled.summary).toMatch(
+      /^3 runs pooled, 2 judged: .*; run 1: too late to judge: busyWindowProof: /,
+    );
+  });
+
+  it('fails by name a pool left with fewer judged runs than its minimum, however many began too late', () => {
+    const control = asControl(moving());
+    const settled = moving().map(f =>
+      f.t < 950
+        ? f
+        : ({...f, box: {...f.box!, y: 3 * at(950)}} as TrackedFrame),
+    );
+    // One long run passes every floor alone, beside two that began too late.
+    const pooled = pooledBusyProof(
+      [
+        {tracked: settled, control, window: short(1000)},
+        {tracked: settled, control, window: short(1000)},
+        {tracked: moving(), control, window: {from: 1100, to: 1700}},
+      ],
+      {settledWithin: 2},
+    );
+    expect(pooled.verdict.pass).toBe(false);
+    expect(pooled.verdict.failures).toEqual([
+      '1 of 3 runs judged, under 2: 2 began after the motion had settled, and the compositor presented too little in any other to judge',
+    ]);
+    expect(pooled.summary).toMatch(/run 1: too late to judge/);
+    expect(pooled.summary).toMatch(/run 2: too late to judge/);
   });
 
   it('still fails a component that is frozen in every run while the control moves', () => {
@@ -413,9 +481,89 @@ describe('pooledBusyProof', () => {
         window: short(from),
       })),
     );
-    expect(pooled.verdict.failures.join('\n')).toMatch(
-      /the control moved on 0 frames over 2 runs, under 4/,
+    expect(pooled.verdict.failures).toEqual([
+      '0 of 2 runs judged, under 1: the compositor presented too little in the others to judge',
+    ]);
+  });
+
+  /** `frames` held at the position they had at `from`, from `from` to `to`. */
+  const held = (frames: TrackedFrame[], from: number, to: number) =>
+    frames.map(f =>
+      f.t >= from && f.t <= to
+        ? ({...f, box: {...f.box!, y: 3 * at(from)}} as TrackedFrame)
+        : f,
     );
+
+  it('names a run whose control presented nothing as too little to judge and leaves it out: the other runs decide', () => {
+    // The control stands still through run 2's block only, as if the machine
+    // starved it there.
+    const pooled = pooledBusyProof(
+      [1000, 1300, 1600].map(from => ({
+        tracked: moving(),
+        control: asControl(held(moving(), 1300, 1390)),
+        window: short(from),
+      })),
+    );
+    expect(pooled.verdict.failures, pooled.summary).toEqual([]);
+    expect(pooled.judged).toEqual([true, false, true]);
+    expect(pooled.control).toEqual({moved: 6, movedWith: 6});
+    expect(pooled.summary).toMatch(
+      /^3 runs pooled, 2 judged: .*; run 2: too little to judge, the control moved on 0 frames, under 1: /,
+    );
+  });
+
+  it('fails a pool in which every run but one was too little to judge, even when that run holds enough frames', () => {
+    const windows = [1000, 1300, 1600].map(from => ({from, to: from + 200}));
+    const starved = held(held(moving(), 1300, 1500), 1600, 1800);
+    const pooled = pooledBusyProof(
+      windows.map(window => ({
+        tracked: moving(),
+        control: asControl(starved),
+        window,
+      })),
+    );
+    expect(pooled.judged).toEqual([true, false, false]);
+    expect(pooled.control.moved).toBeGreaterThanOrEqual(4);
+    expect(pooled.verdict.failures.join('\n'), pooled.summary).toMatch(
+      /1 of 3 runs judged, under 2: the compositor presented too little in the others to judge/,
+    );
+  });
+
+  it('judges a run in which the component froze while its control moved: it is never left out, and it fails on its own', () => {
+    const pooled = pooledBusyProof(
+      [1000, 1300, 1600].map(from => ({
+        tracked: held(moving(), 1300, 1390),
+        control: asControl(moving()),
+        window: short(from),
+      })),
+    );
+    expect(pooled.judged).toEqual([true, true, true]);
+    const failures = pooled.verdict.failures.join('\n');
+    expect(failures).toMatch(
+      /moved on 6 of the 9 frames the control moved over 3 runs/,
+    );
+    expect(failures).toMatch(
+      /run 2: moved on 0 of the 3 frames its control moved/,
+    );
+    expect(failures).not.toMatch(/run [13]: moved on/);
+    expect(failures).toMatch(
+      /run 2: longest stall .* longer than the control's/,
+    );
+  });
+
+  it('throws when it needs more judged runs than it has, or none', () => {
+    expect(() =>
+      pooledBusyProof(
+        [{tracked: moving(), control: asControl(moving()), window: BLOCK}],
+        {minJudgedRuns: 2},
+      ),
+    ).toThrow(/minJudgedRuns 2 is not between 1 and the 1 runs/);
+    expect(() =>
+      pooledBusyProof(
+        [{tracked: moving(), control: asControl(moving()), window: BLOCK}],
+        {minJudgedRuns: 0},
+      ),
+    ).toThrow(/minJudgedRuns 0 is not between 1 and the 1 runs/);
   });
 
   it('judges one long run as busyWindowProof judges it against the control', () => {

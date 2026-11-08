@@ -50,9 +50,15 @@ const FOUNDATION_PATTERNS = [
 /** A Storybook story file. */
 export const STORY_FILE = /\.stories\.(?:[cm]?[jt]sx?|mdx)$/;
 
+// Tests, stories, docs and notes in a foundation folder style nothing.
+const NOT_A_STYLE =
+  /(?:^|\/)__tests__\/|\.(?:test|spec|stories|doc)\.[^/]+$|\.md$/;
+
 export function foundationChanges(files) {
-  return files.filter(file =>
-    FOUNDATION_PATTERNS.some(pattern => pattern.test(file)),
+  return files.filter(
+    file =>
+      !NOT_A_STYLE.test(file) &&
+      FOUNDATION_PATTERNS.some(pattern => pattern.test(file)),
   );
 }
 
@@ -604,6 +610,11 @@ export function main(argv = process.argv.slice(2)) {
       changed_stories: String(files.some(file => STORY_FILE.test(file))),
       visual_components: scope.visualComponents.join(','),
       a11y_owners: scope.a11yOwners.join(','),
+      // The contract job runs the touched components' own specs, and those of
+      // the folders that render them, wide change or not, inside its own
+      // budget (spec:AST-030 FR12).
+      contract_owners: scope.touched.join(','),
+      contract_folders: scope.folders.join(','),
       rtl_packages: Object.keys(scope.rtlOwnersByPackage).join(','),
       rtl_owners: scope.touched.join(','),
     });

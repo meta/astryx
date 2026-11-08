@@ -236,7 +236,7 @@ export const y2kTheme = defineTheme({
     '--color-tint-hover': [neutral.light[15], neutral.dark[95]],
 
     // Typography override
-    '--text-supporting-size': '12px',
+    '--text-supporting-size': '0.75rem', // 12px at the default root size
 
     // Categorical colors
     '--color-background-green': [green.light[80], green.dark[80]],
