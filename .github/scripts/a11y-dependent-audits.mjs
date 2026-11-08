@@ -332,6 +332,10 @@ function main() {
     ran: plan.files,
     deferred: plan.deferred,
     complete: plan.complete,
+    // Why the scope is undecided, so a reader can say "split" or "re-run".
+    ...(plan.everything
+      ? {undecided: truncated ? 'truncated' : 'unreadable'}
+      : {}),
   };
   fs.writeFileSync(out, `${JSON.stringify(record, null, 2)}\n`);
   if (plan.owed.length === 0) {
