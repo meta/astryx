@@ -1225,13 +1225,14 @@ export function Lightbox({
     if (dialog == null || container == null) {
       return {backdrop: null, chrome: []};
     }
+    // A caption in a band fades as the band, which carries its backing.
     const chrome: HTMLElement[] = [];
     for (const element of container.querySelectorAll<HTMLElement>(
-      '[data-lightbox-chrome], [data-lightbox-page]:not([data-current]), [data-lightbox-caption]',
+      '[data-lightbox-chrome], [data-lightbox-page]:not([data-current]), [data-lightbox-caption-band], [data-lightbox-caption]',
     )) {
       if (
         element.parentElement?.closest(
-          '[data-lightbox-page]:not([data-current])',
+          '[data-lightbox-page]:not([data-current]), [data-lightbox-caption-band]',
         ) == null
       ) {
         chrome.push(element);
@@ -1931,6 +1932,7 @@ export function Lightbox({
                             </div>
                             {hasCaptionBand && (
                               <div
+                                data-lightbox-caption-band=""
                                 {...stylex.props(
                                   styles.captionBand,
                                   !isRenderable(mediaArray[i].caption) &&
