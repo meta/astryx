@@ -22,7 +22,9 @@ import {
   type TableCellNode,
   type TableNode,
 } from '@lexical/table';
+import {$createCodeNode, $isCodeNode} from '@lexical/code';
 import {
+  $createTextNode,
   $getRoot,
   $setSelection,
   PASTE_COMMAND,
@@ -204,6 +206,37 @@ describe('pasting into a table cell', () => {
       ['d1', 'd2intro/t1\tt2/t3\tt4', 'd3'],
       ['e1', 'e2', 'e3'],
     ]);
+  });
+
+  it('leaves a table pasted into a code block in a cell to the code block', async () => {
+    const editor = mountTable();
+    await select(editor, () => {
+      const code = $createCodeNode();
+      code.append($createTextNode('x'));
+      $cellHolding('d2').clear().append(code);
+      code.selectEnd();
+    });
+    await paste(editor, '<table><tr><td>p</td><td>q</td></tr></table>');
+    const shape = tableShape(editor);
+    expect(shape[1][0]).toBe('d1');
+    expect(shape[1][2]).toBe('d3');
+    expect(shape[2]).toEqual(['e1', 'e2', 'e3']);
+    const code = editor.getEditorState().read(() => {
+      const block = $table()
+        .getChildren()
+        .filter($isTableRowNode)[1]
+        .getChildren()
+        .filter($isTableCellNode)[1]
+        .getFirstChild();
+      return {
+        isCode: $isCodeNode(block),
+        text: block?.getTextContent() ?? '',
+      };
+    });
+    expect(code.isCode).toBe(true);
+    expect(code.text.startsWith('x')).toBe(true);
+    expect(code.text).toContain('p');
+    expect(code.text).toContain('q');
   });
 
   it('leaves a paste without a table to the editor', async () => {
