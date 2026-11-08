@@ -86,6 +86,7 @@ import {
   holdInputUntil,
   installInputLog,
   type InputRecord,
+  type PlayOptions,
   installLongTaskLog,
   installPageFreeze,
   installTimerGate,
@@ -399,6 +400,35 @@ test.describe('touch input', () => {
     );
   });
 
+  test('a lift whose page pointerup listener holds its touchend reads at the pointerup, as the gesture host does: the paced flick passes', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'webkit',
+      'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
+    );
+    // The lift's pointerup listener holds the main thread 50 ms, as a busy
+    // app's can. WebKit stamps the touchend after it, but the gesture host
+    // reads the lift at the pointerup, paired with the moves.
+    await page.route('http://pointerup-stalling-page.test/', route =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>addEventListener("pointerup",()=>{const end=performance.now()+50;while(performance.now()<end){}});</script>',
+      }),
+    );
+    await page.goto('http://pointerup-stalling-page.test/');
+    const driver = await touchDriver(page);
+    const played = await driver.play(
+      flick(
+        {x: 200, y: 400},
+        {velocity: {x: 0, y: -1500}, durationMs: 80, hz: 120},
+      ),
+      {pacing: 'spacing'},
+    );
+    expect(played.at(-1)?.release).toBeDefined();
+  });
+
   test("a page whose touch listener holds its main thread changes a paced flick's release itself: TouchPageStallError, never the runner's", async ({
     page,
     browserName,
@@ -434,12 +464,16 @@ test.describe('touch input', () => {
     );
   });
 
-  /** A flick up a page that takes every touch, its lift right after its last move. */
+  /**
+   * A flick up a page that takes every touch, its lift right after its last
+   * move. The page logs each move and the lift at its pointer event, where
+   * Core's gesture host and the play read them.
+   */
   async function liftStallPage(page: Page) {
     await page.route('http://lift-stall.test/', route =>
       route.fulfill({
         contentType: 'text/html',
-        body: '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>window.touches=[];for(const type of ["touchmove","touchend"])addEventListener(type,e=>touches.push([type,e.timeStamp]),{passive:true})</script>',
+        body: '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>window.touches=[];for(const type of ["pointermove","pointerup"])addEventListener(type,e=>touches.push([type,e.timeStamp]),{passive:true})</script>',
       }),
     );
     await page.goto('http://lift-stall.test/');
@@ -460,7 +494,7 @@ test.describe('touch input', () => {
     const pageLiftGap = () =>
       page.evaluate(() => {
         const {touches} = window as unknown as {touches: [string, number][]};
-        const lift = touches.findIndex(([type]) => type === 'touchend');
+        const lift = touches.findIndex(([type]) => type === 'pointerup');
         return touches[lift][1] - touches[lift - 1][1];
       });
     return {driver: await touchDriver(page), script, slowRead, pageLiftGap};
@@ -486,6 +520,11 @@ test.describe('touch input', () => {
     const {numbers} = outcome as TouchLiftStallError;
     expect(numbers.gapMs).toBeGreaterThan(40);
     expect(numbers.scriptedGapMs).toBeLessThanOrEqual(40);
+    // Like every pacing error, it names the longest frame gap.
+    expect(numbers.frameGapMs).toEqual(expect.any(Number));
+    expect(String(outcome)).toMatch(
+      /; the page drew no frame for \d+ ms during the gesture\. /,
+    );
     // The error gives the gap the page itself read.
     const gap = await pageLiftGap();
     expect(gap).toBeGreaterThan(40);
@@ -494,6 +533,55 @@ test.describe('touch input', () => {
     await driver.play(script, {onEvent: () => {}});
     // A proof that reads no release from the lift opts out.
     await driver.play(script, {onEvent: slowRead, releaseUnread: true});
+  });
+
+  test("a lift stall is named before the page's stall that stretched the lift gap further; with a quick onEvent the page's stall is named", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'webkit',
+      'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
+    );
+    const {driver, script} = await liftStallPage(page);
+    const moves = toTouchEvents(script).filter(
+      step => step.type === 'touchMove',
+    ).length;
+    const lastMove = toTouchEvents(script).length - 2;
+    // The page's own listener holds the last move 100 ms, so WebKit hands
+    // the page the lift only after that.
+    await page.evaluate(count => {
+      let seen = 0;
+      addEventListener(
+        'touchmove',
+        () => {
+          seen += 1;
+          if (seen % count === 0) {
+            const end = performance.now() + 100;
+            while (performance.now() < end) {
+              // the page is busy
+            }
+          }
+        },
+        {passive: true},
+      );
+    }, moves);
+    // onEvent waits 60 ms on the runner's own timer at the last move: alone,
+    // it carries the lift past the stillness interval.
+    const runnerWait = async (_: unknown, index: number) => {
+      if (index === lastMove) {
+        await new Promise(resolve => setTimeout(resolve, 60));
+      }
+    };
+    const outcome = (onEvent: PlayOptions['onEvent']) =>
+      driver.play(script, {onEvent}).then(
+        () => 'resolved',
+        (error: unknown) => error,
+      );
+    const stalled = await outcome(runnerWait);
+    expect(stalled, String(stalled)).toBeInstanceOf(TouchLiftStallError);
+    const held = await outcome(() => {});
+    expect(held, String(held)).toBeInstanceOf(TouchPageStallError);
   });
 
   test('a default-paced play whose page holds its last move fails by name: TouchPageStallError, where the page stamps touches on arrival', async ({
@@ -570,6 +658,43 @@ test.describe('touch input', () => {
         `gap ${index} of ${stamps.length - 1}`,
       ).toBeGreaterThanOrEqual(scripted - ANSWER_SLACK_MS - 1);
     }
+  });
+
+  test("a tap the page holds past the component's catch time fails by name, with the time the page drew no frame, where the page stamps touches on arrival", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'webkit',
+      'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
+    );
+    // The page's own touchstart listener holds its main thread for 120 ms, so
+    // WebKit hands it the lift late, and no frame is drawn meanwhile.
+    await page.route('http://touch-hold.test/', route =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>addEventListener("touchstart",()=>{if(window.busy){const end=performance.now()+120;while(performance.now()<end){}}},{passive:true})</script>',
+      }),
+    );
+    await page.goto('http://touch-hold.test/');
+    const driver = await touchDriver(page);
+    const script = tap({x: 200, y: 300}, {holdMs: 40});
+    // On a free page, the 40 ms hold stays under the 85 ms bound.
+    await driver.play(script, {boundaries: {holdMs: 85}});
+    await page.evaluate(() => {
+      (window as unknown as {busy: boolean}).busy = true;
+    });
+    // Without a bound, a tap's hold is not judged.
+    await driver.play(script);
+    const outcome = await driver.play(script, {boundaries: {holdMs: 85}}).then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
+    expect(String(outcome)).toMatch(
+      /the page read a hold of \d+ ms where the script holds 40 ms, on the other side of the 85 ms the component decides on; the page drew no frame for (\d+) ms during the gesture/,
+    );
+    const gap = Number(/drew no frame for (\d+) ms/.exec(String(outcome))?.[1]);
+    expect(gap).toBeGreaterThan(100);
   });
 
   test('a Chromium play carries the scripted times, so a slow onEvent before its lift does not fail it', async ({
@@ -1985,6 +2110,83 @@ test.describe('frame evidence', () => {
     expect(numbers.longestGapMs).toBeGreaterThan(FRAME_STARVATION_MS);
   });
 
+  test('waitForRest on a page starved of frames fails by name, and an element still in motion still says so', async ({
+    page,
+  }) => {
+    await page.setContent(
+      '<!doctype html><div id="box" style="width:40px;height:40px;background:#000"></div>',
+    );
+    const box = page.locator('#box');
+    await waitForRest(box, {timeout: 1000});
+    // Motion at the deadline, on pace.
+    await box.evaluate(el =>
+      el.animate(
+        [{transform: 'translateX(0)'}, {transform: 'translateX(100px)'}],
+        {duration: 3000},
+      ),
+    );
+    await expect(waitForRest(box, {timeout: 500})).rejects.toThrow(
+      /waitForRest: still moving \(/,
+    );
+    await box.evaluate(el => {
+      for (const animation of el.getAnimations()) {
+        animation.cancel();
+      }
+    });
+    // Script motion every third frame, with one 120 ms long task early in
+    // the wait. Still frames between the moves are no starvation, and nor is
+    // a gap long before the deadline.
+    await box.evaluate(el => {
+      let n = 0;
+      const step = () => {
+        n += 1;
+        if (n % 3 === 0) {
+          (el as HTMLElement).style.transform = `translateX(${n % 90}px)`;
+        }
+        if (el.isConnected && el.id === 'box') {
+          requestAnimationFrame(step);
+        }
+      };
+      requestAnimationFrame(step);
+      setTimeout(() => {
+        const end = performance.now() + 120;
+        while (performance.now() < end) {
+          // the page's main thread is busy
+        }
+      }, 100);
+    });
+    await expect(waitForRest(box, {timeout: 900})).rejects.toThrow(
+      /waitForRest: still moving \(/,
+    );
+    // Stops the script motion: the element rests again.
+    await box.evaluate(el => {
+      el.id = 'rested';
+      (el as HTMLElement).style.transform = '';
+    });
+    await waitForRest(page.locator('#rested'), {timeout: 1000});
+    await page.locator('#rested').evaluate(el => {
+      el.id = 'box';
+    });
+    // Each frame now comes 1,000 ms after the one before, as on a starved
+    // machine: the element rests, but too few frames come to tell.
+    await page.evaluate(() => {
+      const frame = window.requestAnimationFrame.bind(window);
+      window.requestAnimationFrame = callback => {
+        setTimeout(() => frame(callback), 1000);
+        return 0;
+      };
+    });
+    const outcome = await waitForRest(box, {timeout: 1500}).then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
+    expect(outcome).toBeInstanceOf(FrameStarvationError);
+    const {numbers} = outcome as FrameStarvationError;
+    expect(numbers.frames).toBeLessThan(3);
+    expect(numbers.longestGapMs).toBeGreaterThan(FRAME_STARVATION_MS);
+    expect((outcome as Error).message).toMatch(/^waitForRest: the page drew /);
+  });
+
   test('the trace counts no Layout for a transform animation and one per frame for `top`', async ({
     page,
     browserName,
@@ -2666,17 +2868,20 @@ test.describe('frame evidence', () => {
     const within = (w: {from: number; to: number}) => (t: {start: number}) =>
       t.start >= w.from - 20 && t.start < w.to;
     // The read itself is set apart. The rows' frames around it may be long
-    // tasks too, the page's own: they stay in longTasks.
+    // tasks too, the page's own: they stay with the page's tasks. A loaded
+    // machine can keep a 60 ms spin's thread under 50 ms, so the page's own
+    // tasks are its long and its stretched ones.
     expect(trace.devtoolsTasks.some(within(read))).toBe(true);
-    expect(
-      trace.longTasks.some(t => within(timer)(t) && t.durationMs >= 55),
-    ).toBe(true);
-    expect(
-      trace.longTasks.some(t => within(click)(t) && t.durationMs >= 55),
-    ).toBe(true);
-    expect(
-      trace.longTasks.some(t => within(direct)(t) && t.durationMs >= 55),
-    ).toBe(true);
+    const pageTasks = [...trace.longTasks, ...trace.stretchedTasks];
+    expect(pageTasks.some(t => within(timer)(t) && t.durationMs >= 55)).toBe(
+      true,
+    );
+    expect(pageTasks.some(t => within(click)(t) && t.durationMs >= 55)).toBe(
+      true,
+    );
+    expect(pageTasks.some(t => within(direct)(t) && t.durationMs >= 55)).toBe(
+      true,
+    );
     expect(trace.devtoolsTasks.filter(within(direct))).toEqual([]);
   });
 });

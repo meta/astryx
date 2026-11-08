@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/core",
-  "version": "0.7.11",
+  "version": "0.7.12",
   "displayName": "Astryx Core",
   "description": "The component library. Accessible, themeable React components with built-in spacing, dark mode, and StyleX styling.",
   "author": "Meta Open Source",
@@ -908,7 +908,7 @@
     "test:watch": "vitest --root ../..",
     "lint": "eslint src",
     "typecheck:docs": "tsc --project tsconfig.docs.json",
-    "typecheck": "tsc --project tsconfig.json --noEmit && pnpm typecheck:docs"
+    "typecheck": "node ../../scripts/typecheck-sharded.mjs --project tsconfig.json --shards 3 && pnpm typecheck:docs"
   },
   "peerDependencies": {
     "@stylexjs/stylex": "^0.19.0",

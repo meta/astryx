@@ -92,6 +92,22 @@ export const TOUCH_STILLNESS_MS = 40;
  */
 export const TOUCH_RELEASE_NEWEST_WEIGHT = 0.2;
 
+/**
+ * The newest pan value's share of a scrolling surface's release, such as a
+ * pager's; the pan value before it carries the rest (`PlayOptions.release`).
+ *
+ * SYNC: Keep equal to `UIKIT_VELOCITY.scrollReleaseWeight` in
+ *   packages/core/src/motion/uikit/gestures.ts.
+ */
+export const TOUCH_SCROLL_RELEASE_NEWEST_WEIGHT = 0.25;
+
+/**
+ * Which of Core's release filters a page reads (`PlayOptions.release`): a
+ * dragged surface's (`'pan'`) or a scrolling surface's, such as a pager's
+ * (`'scroll'`).
+ */
+export type TouchReleaseFilter = 'pan' | 'scroll';
+
 export interface PlayOptions {
   /**
    * Pace dispatch on the wall clock so each event leaves at its scripted time
@@ -133,6 +149,25 @@ export interface PlayOptions {
    * (see `pacing`).
    */
   readonly releaseUnread?: boolean;
+  /**
+   * Which release the page reads (default `'pan'`, a dragged surface's). A
+   * scrolling surface, such as a pager, reads `'scroll'`: Core's
+   * `scrollVelocity` blends the newest pan value with the one before it.
+   */
+  readonly release?: TouchReleaseFilter;
+  /**
+   * The thresholds the component under test decides on: a release speed it
+   * pages from (`releasePxPerS`), a hold it catches after (`holdMs`). The
+   * play fails by name when the page read the release on the other side of
+   * a threshold from the script. The first finger's hold from touch-down to
+   * lift fails the same way. Then the proof never judges a gesture the page
+   * did not receive. Only a driver whose page stamps touches on arrival
+   * (WebKit) judges them.
+   */
+  readonly boundaries?: {
+    readonly releasePxPerS?: number;
+    readonly holdMs?: number;
+  };
   /**
    * Called after each event is dispatched, before the next one (storyboards).
    * The next event waits for it, so page work here delays that event by a
@@ -238,8 +273,18 @@ export function pacedDeadline(
 
 /** What the page saw of one touch event of a paced play. */
 export interface TouchArrival {
-  /** The event's own `timeStamp`: when it reached the page, in WebKit. */
+  /**
+   * When the page's gesture host read the step, in WebKit. A move or a lift
+   * reads at its pointer event's `timeStamp`, a touch-down at its touch
+   * event's. A step with no pointer event reads at its touch event's.
+   */
   readonly stamp: number;
+  /**
+   * The step's earliest `timeStamp`, its pointer event's; `stamp` when the
+   * step had none. A touch-down reads later than this when the page's own
+   * pointer listeners held its touch event.
+   */
+  readonly firstStamp?: number;
   /**
    * When the page's own touch and pointer listeners had finished with it;
    * NaN unseen.
@@ -252,9 +297,10 @@ export interface TouchPacingFault {
   /**
    * `'rest'`: the page read a resting finger; `'throw'`: a throw where the
    * script rests; `'moves'`: fewer than two moves; `'release'`: another
-   * speed.
+   * speed. `'boundary'` and `'hold'`: a release or a hold on the other side
+   * of a play's `boundaries` from the script's.
    */
-  readonly kind: 'rest' | 'throw' | 'moves' | 'release';
+  readonly kind: 'rest' | 'throw' | 'moves' | 'release' | 'boundary' | 'hold';
   /** The release the page read, px/s (0 for a rest or too few moves). */
   readonly pageReleasePxPerS: number;
   /** The script's release, px/s. */
@@ -271,6 +317,16 @@ export interface TouchPacingFault {
     readonly gapMs: number;
     readonly handlingMs: number;
   } | null;
+  /** For `'boundary'` and `'hold'`: the threshold crossed, px/s or ms. */
+  readonly threshold?: number;
+  /** For `'hold'`: the first finger's hold as the page read it, and as scripted, ms. */
+  readonly holdMs?: {readonly page: number; readonly script: number};
+  /**
+   * The longest time the page drew no frame during the gesture, ms, or null
+   * unread. A gap far past a frame means the renderer was starved: no
+   * dispatch can deliver a gesture's timing then.
+   */
+  readonly frameGapMs?: number | null;
 }
 
 /** The lifting finger's release, read from the page's stamps and the script's. */
@@ -311,24 +367,30 @@ interface CoreReading {
   readonly moves: number;
   /** The finger was still for longer than the stillness interval. */
   readonly rests: boolean;
-  /** The moved samples the release reads, oldest first (up to three). */
+  /**
+   * The moved samples the release reads, oldest first: up to three for a
+   * pan's release, four for a scrolling surface's.
+   */
   readonly moved: readonly FingerSample[];
 }
 
 /**
  * The release Core's velocity tracker reads, px/s. It copies that filter:
  * Core's `VelocityTracker` is internal to the core package, so the harness
- * cannot call it. Keep the two equal (`add`, `releases`, `panVelocity`):
- * Core's VelocityTracker.harness.test.ts reads the same samples with both.
- * Only a sample that moves
+ * cannot call it. Keep the two equal (`add`, `releases`, `panVelocity`,
+ * `scrollVelocity`): Core's VelocityTracker.harness.test.ts reads the same
+ * samples with both. Only a sample that moves
  * counts, and a sample at the newest moved sample's time replaces it. The
  * newest interval weighs 0.2 and the one before it 0.8, and an interval
- * across no time reads 0. The release is 0 with fewer than two moves after
- * the touch-down, or after a rest longer than the stillness interval.
+ * across no time reads 0. A scrolling surface's release blends the newest
+ * pan value, 0.25, with the one before it. The release is 0 with fewer than
+ * two moves after the touch-down, or after a rest longer than the stillness
+ * interval.
  */
 function coreRelease(
   samples: readonly FingerSample[],
   liftTime: number,
+  filter: TouchReleaseFilter = 'pan',
 ): CoreReading {
   const moved: FingerSample[] = [];
   let moves = 0;
@@ -346,7 +408,7 @@ function coreRelease(
       moved[moved.length - 1] = sample;
     } else {
       moved.push(sample);
-      if (moved.length > 3) {
+      if (moved.length > 4) {
         moved.shift();
       }
       if (last != null) {
@@ -354,10 +416,11 @@ function coreRelease(
       }
     }
   }
+  const read = filter === 'scroll' ? moved : moved.slice(-3);
   const last = moved[moved.length - 1];
   const rests = last != null && liftTime - last.time > TOUCH_STILLNESS_MS;
   if (moves < 2 || last == null || rests) {
-    return {x: 0, y: 0, moves, rests, moved};
+    return {x: 0, y: 0, moves, rests, moved: read};
   }
   const pair = (a: FingerSample, b: FingerSample) => {
     const seconds = (b.time - a.time) / 1000;
@@ -365,16 +428,33 @@ function coreRelease(
       ? {x: (b.x - a.x) / seconds, y: (b.y - a.y) / seconds}
       : {x: 0, y: 0};
   };
-  const n = moved.length;
-  const current = pair(moved[n - 2], moved[n - 1]);
-  const before = n === 3 ? pair(moved[0], moved[1]) : current;
-  const w = TOUCH_RELEASE_NEWEST_WEIGHT;
+  // The pan's value over the last three of `upTo`, as Core updates it on
+  // each moved sample.
+  const pan = (upTo: readonly FingerSample[]) => {
+    const n = upTo.length;
+    if (n < 2) {
+      return {x: 0, y: 0};
+    }
+    const current = pair(upTo[n - 2], upTo[n - 1]);
+    const before = n >= 3 ? pair(upTo[n - 3], upTo[n - 2]) : current;
+    const w = TOUCH_RELEASE_NEWEST_WEIGHT;
+    return {
+      x: w * current.x + (1 - w) * before.x,
+      y: w * current.y + (1 - w) * before.y,
+    };
+  };
+  const current = pan(moved.slice(-3));
+  if (filter === 'pan') {
+    return {...current, moves, rests, moved: read};
+  }
+  const previous = pan(moved.slice(0, -1).slice(-3));
+  const w = TOUCH_SCROLL_RELEASE_NEWEST_WEIGHT;
   return {
-    x: w * current.x + (1 - w) * before.x,
-    y: w * current.y + (1 - w) * before.y,
+    x: w * current.x + (1 - w) * previous.x,
+    y: w * current.y + (1 - w) * previous.y,
     moves,
     rests,
-    moved,
+    moved: read,
   };
 }
 
@@ -387,6 +467,7 @@ function coreRelease(
 export function readRelease(
   steps: readonly TouchEventStep[],
   arrivals: readonly TouchArrival[],
+  filter: TouchReleaseFilter = 'pan',
 ): ReleaseReading | null {
   const lift = steps.length - 1;
   const id =
@@ -410,10 +491,12 @@ export function readRelease(
   const script = coreRelease(
     positions.map(p => ({...p, time: steps[p.index].t})),
     steps[lift].t,
+    filter,
   );
   const page = coreRelease(
     positions.map(p => ({...p, time: arrivals[p.index].stamp})),
     arrivals[lift].stamp,
+    filter,
   );
   const scriptPxPerS = Math.hypot(script.x, script.y);
   const first = page.moved[0]?.index ?? positions[0].index;
@@ -456,33 +539,73 @@ export function touchPacingFault(
   steps: readonly TouchEventStep[],
   arrivals: readonly TouchArrival[],
   tolerance?: number,
+  {
+    release = 'pan',
+    boundaries = {},
+  }: Pick<PlayOptions, 'release' | 'boundaries'> = {},
 ): TouchPacingFault | null {
-  const reading = readRelease(steps, arrivals);
-  if (
-    reading == null ||
-    !(
-      reading.rests ||
+  const reading = readRelease(steps, arrivals, release);
+  const sides = (threshold: number, page: number, script: number) =>
+    page >= threshold !== script >= threshold;
+  const releaseBound = boundaries.releasePxPerS;
+  const crossesRelease =
+    reading != null &&
+    releaseBound != null &&
+    sides(releaseBound, reading.pagePxPerS, reading.scriptPxPerS);
+  const hold =
+    arrivals.length === steps.length ? readHold(steps, arrivals) : null;
+  const crossesHold =
+    hold != null &&
+    boundaries.holdMs != null &&
+    sides(boundaries.holdMs, hold.page, hold.script);
+  const releaseFault =
+    reading != null &&
+    (reading.rests ||
       reading.throws ||
       reading.fewMoves ||
-      (tolerance != null && reading.strayShare > tolerance)
-    )
-  ) {
+      (tolerance != null && reading.strayShare > tolerance) ||
+      crossesRelease);
+  if (!releaseFault && !crossesHold) {
     return null;
   }
-  const {span} = reading;
+  // The gaps the fault reads: the release's, or for a hold every gap from
+  // touch-down to the lift.
+  const span =
+    releaseFault && reading != null
+      ? reading.span
+      : Array.from({length: steps.length - 1}, (_, k) => k + 1);
   const gapsMs = span.map(i => arrivals[i].stamp - arrivals[i - 1].stamp);
   const scriptedGapsMs = span.map(i => steps[i].t - steps[i - 1].t);
   let heldByPage: TouchPacingFault['heldByPage'] = null;
   span.forEach((i, k) => {
-    const handlingMs = arrivals[i - 1].handledAt - arrivals[i - 1].stamp;
-    const held =
-      Number.isFinite(handlingMs) &&
-      handlingMs > scriptedGapsMs[k] &&
-      handlingMs + HELD_BACK_MS >= gapsMs[k] - scriptedGapsMs[k];
-    if (held && (heldByPage == null || handlingMs > heldByPage.handlingMs)) {
-      heldByPage = {gapMs: gapsMs[k], handlingMs};
+    // The event before held this one back, or this step's own pointer
+    // listeners held its touch event (a lift read at its touchend).
+    const before = arrivals[i - 1].handledAt - arrivals[i - 1].stamp;
+    const own =
+      arrivals[i].stamp - (arrivals[i].firstStamp ?? arrivals[i].stamp);
+    for (const handlingMs of [before, own]) {
+      const held =
+        Number.isFinite(handlingMs) &&
+        handlingMs > scriptedGapsMs[k] &&
+        handlingMs + HELD_BACK_MS >= gapsMs[k] - scriptedGapsMs[k];
+      if (held && (heldByPage == null || handlingMs > heldByPage.handlingMs)) {
+        heldByPage = {gapMs: gapsMs[k], handlingMs};
+      }
     }
   });
+  if (!releaseFault || reading == null) {
+    return {
+      kind: 'hold',
+      pageReleasePxPerS: reading?.pagePxPerS ?? 0,
+      scriptReleasePxPerS: reading?.scriptPxPerS ?? 0,
+      gapsMs,
+      scriptedGapsMs,
+      heldByPage,
+      threshold: boundaries.holdMs,
+      holdMs: hold ?? undefined,
+    };
+  }
+  const strays = tolerance != null && reading.strayShare > tolerance;
   return {
     kind: reading.rests
       ? 'rest'
@@ -490,17 +613,58 @@ export function touchPacingFault(
         ? 'throw'
         : reading.fewMoves
           ? 'moves'
-          : 'release',
+          : strays
+            ? 'release'
+            : 'boundary',
     pageReleasePxPerS: reading.pagePxPerS,
     scriptReleasePxPerS: reading.scriptPxPerS,
     gapsMs,
     scriptedGapsMs,
     heldByPage,
+    threshold: strays ? undefined : releaseBound,
+  };
+}
+
+/**
+ * The first finger's hold from touch-down to the lift that ends the play, ms.
+ * It gives the page's reading and the script's: a tap's hold, or a drag's
+ * whole span.
+ */
+export function readHold(
+  steps: readonly TouchEventStep[],
+  arrivals: readonly TouchArrival[],
+): {readonly page: number; readonly script: number} | null {
+  const lift = steps.length - 1;
+  if (
+    lift < 1 ||
+    steps[0].type !== 'touchStart' ||
+    steps[lift].type !== 'touchEnd' ||
+    arrivals.length !== steps.length
+  ) {
+    return null;
+  }
+  return {
+    page: arrivals[lift].stamp - arrivals[0].stamp,
+    script: steps[lift].t - steps[0].t,
   };
 }
 
 function describeFault(fault: TouchPacingFault): string {
+  const frames =
+    fault.frameGapMs == null
+      ? ''
+      : `; the page drew no frame for ${fault.frameGapMs.toFixed(0)} ms during the gesture`;
+  return `${describeReading(fault)}${frames}`;
+}
+
+function describeReading(fault: TouchPacingFault): string {
   const gaps = `gaps ${fault.gapsMs.map(g => g.toFixed(0)).join(', ')} ms where the script spaces ${fault.scriptedGapsMs.map(g => g.toFixed(0)).join(', ')} ms`;
+  if (fault.kind === 'hold' && fault.holdMs != null) {
+    return `the page read a hold of ${fault.holdMs.page.toFixed(0)} ms where the script holds ${fault.holdMs.script.toFixed(0)} ms, on the other side of the ${fault.threshold} ms the component decides on`;
+  }
+  if (fault.kind === 'boundary') {
+    return `the page read a release of ${fault.pageReleasePxPerS.toFixed(0)} px/s where the script throws ${fault.scriptReleasePxPerS.toFixed(0)} px/s, on the other side of the ${fault.threshold} px/s the component decides on (${gaps})`;
+  }
   if (fault.kind === 'rest') {
     return `the page read a resting finger: the lift reached it more than ${TOUCH_STILLNESS_MS} ms after the last move (${gaps})`;
   }
@@ -550,10 +714,12 @@ export class TouchPageStallError extends Error {
 
 /**
  * A play's lift reached the page more than the stillness interval after its
- * finger's last move, where the script throws. The play's own `onEvent` ran
- * for that excess: page work there holds the next event back by a round trip.
- * On a page that stamps touches on arrival (WebKit), the page then reads a
- * resting finger and releases at 0.
+ * finger's last move, where the script throws. The scripted gap plus the time
+ * the play's own `onEvent` ran passes that interval. Page work there holds the
+ * next event back by a round trip. A loaded runner can stretch the
+ * gap more, and the error still names `onEvent`. On a page that stamps
+ * touches on arrival (WebKit), the page then reads a resting finger and
+ * releases at 0.
  */
 export class TouchLiftStallError extends Error {
   constructor(
@@ -564,11 +730,17 @@ export class TouchLiftStallError extends Error {
       readonly gapMs: number;
       /** How long `onEvent` ran in that gap, ms. */
       readonly onEventMs: number;
+      /** As in `TouchPacingFault`: the longest frame gap, ms, or null unread. */
+      readonly frameGapMs?: number | null;
     },
   ) {
-    const {scriptedGapMs, gapMs, onEventMs} = numbers;
+    const {scriptedGapMs, gapMs, onEventMs, frameGapMs} = numbers;
+    const frames =
+      frameGapMs == null
+        ? ''
+        : `; the page drew no frame for ${frameGapMs.toFixed(0)} ms during the gesture`;
     super(
-      `touchDriver: the lift reached the page ${gapMs.toFixed(0)} ms after its finger's last move, where the script spaces ${scriptedGapMs.toFixed(0)} ms: past the ${TOUCH_STILLNESS_MS} ms stillness interval, the page reads a resting finger. onEvent ran ${onEventMs.toFixed(0)} ms in that gap: page work there holds the next event back. Read the page in a listener of its own, or rest the script before the lift`,
+      `touchDriver: the lift reached the page ${gapMs.toFixed(0)} ms after its finger's last move, where the script spaces ${scriptedGapMs.toFixed(0)} ms: past the ${TOUCH_STILLNESS_MS} ms stillness interval, the page reads a resting finger. onEvent ran ${onEventMs.toFixed(0)} ms in that gap: page work there holds the next event back${frames}. Read the page in a listener of its own, or rest the script before the lift`,
     );
     this.name = 'TouchLiftStallError';
   }
@@ -576,10 +748,12 @@ export class TouchLiftStallError extends Error {
 
 /**
  * The `TouchLiftStallError` for a fault the play's own `onEvent` explains. The
- * page read a rest, and `onEvent` ran for the lift gap's excess over the
- * script. Null for any other fault.
+ * page read a rest, and the scripted gap plus `onEvent`'s run passes the
+ * stillness interval. A loaded runner that stretched the gap more changes
+ * nothing: the lift stall is the more specific cause, so it comes before any
+ * pacing error. Null for any other fault.
  */
-function liftStallError(
+export function liftStallError(
   steps: readonly TouchEventStep[],
   arrivals: readonly TouchArrival[],
   fault: TouchPacingFault,
@@ -609,15 +783,66 @@ function liftStallError(
   const ranMs = onEventMs
     .slice(lastMoved, lift)
     .reduce((sum, ms) => sum + ms, 0);
-  return ranMs >= gapMs - scriptedGapMs
-    ? new TouchLiftStallError({scriptedGapMs, gapMs, onEventMs: ranMs})
+  return scriptedGapMs + ranMs > TOUCH_STILLNESS_MS
+    ? new TouchLiftStallError({
+        scriptedGapMs,
+        gapMs,
+        onEventMs: ranMs,
+        frameGapMs: fault.frameGapMs,
+      })
     : null;
+}
+
+/**
+ * The error a paced play's fault throws. The lift stall comes first, since
+ * it is the more specific cause. Then a gap the page's own listeners held is
+ * the page's, and any other gap is the runner's.
+ */
+export function touchPlayError(
+  steps: readonly TouchEventStep[],
+  arrivals: readonly TouchArrival[],
+  fault: TouchPacingFault,
+  onEventMs: readonly number[],
+): TouchLiftStallError | TouchPageStallError | TouchPacingError {
+  return (
+    liftStallError(steps, arrivals, fault, onEventMs) ??
+    (fault.heldByPage == null
+      ? new TouchPacingError(fault)
+      : new TouchPageStallError({...fault, heldByPage: fault.heldByPage}))
+  );
 }
 
 /** Records what the page saw of a paced play's touches (WebKit). */
 interface TouchArrivalProbe {
   arm(): Promise<void>;
-  read(): Promise<TouchArrival[]>;
+  /** Each touch event's arrival, and when the page drew each frame meanwhile. */
+  read(): Promise<{arrivals: TouchArrival[]; frames: number[]}>;
+}
+
+/**
+ * The longest time the page drew no frame while the gesture reached it, ms.
+ * The span runs from the last frame before the first touch to the first
+ * frame after the lift. With no such frame, the touch or the lift itself
+ * bounds it. Null with no frame read.
+ */
+export function longestFrameGap(
+  frames: readonly number[],
+  arrivals: readonly TouchArrival[],
+): number | null {
+  if (frames.length === 0 || arrivals.length === 0) {
+    return null;
+  }
+  const from = arrivals[0].stamp;
+  const to = arrivals[arrivals.length - 1].stamp;
+  const sorted = [...frames].sort((a, b) => a - b);
+  const before = sorted.filter(t => t <= from).at(-1) ?? from;
+  const after = sorted.find(t => t >= to) ?? to;
+  const edges = [before, ...sorted.filter(t => t > from && t < to), after];
+  let longest = 0;
+  for (let i = 1; i < edges.length; i += 1) {
+    longest = Math.max(longest, edges[i] - edges[i - 1]);
+  }
+  return longest;
 }
 
 async function playSteps(
@@ -633,6 +858,8 @@ async function playSteps(
     pacing = 'schedule',
     releaseTolerance,
     releaseUnread = false,
+    release = 'pan',
+    boundaries,
   } = options;
   const steps = toTouchEvents(script);
   // Only where the page reads a velocity from arrival times: scripted
@@ -668,7 +895,7 @@ async function playSteps(
   }
   // Judged once the lift is out, so no finger is left down.
   if (judges) {
-    const arrivals = await probe.read();
+    const {arrivals, frames} = await probe.read();
     // A page that lost events, such as a target removed mid-gesture, gives no
     // release to read. Only a `'spacing'` play, which asks for the
     // judgment, fails then.
@@ -677,16 +904,15 @@ async function playSteps(
         `touchDriver: the page received ${arrivals.length} of a paced play's ${steps.length} touch events`,
       );
     }
-    const fault = touchPacingFault(steps, arrivals, releaseTolerance);
-    if (fault != null) {
-      throw (
-        liftStallError(steps, arrivals, fault, onEventMs) ??
-        (fault.heldByPage == null
-          ? new TouchPacingError(fault)
-          : new TouchPageStallError({...fault, heldByPage: fault.heldByPage}))
-      );
+    const found = touchPacingFault(steps, arrivals, releaseTolerance, {
+      release,
+      boundaries,
+    });
+    if (found != null) {
+      const fault = {...found, frameGapMs: longestFrameGap(frames, arrivals)};
+      throw touchPlayError(steps, arrivals, fault, onEventMs);
     }
-    const reading = readRelease(steps, arrivals);
+    const reading = readRelease(steps, arrivals, release);
     if (reading != null) {
       played[played.length - 1] = {
         ...played[played.length - 1],
@@ -793,8 +1019,11 @@ const TOUCH_TYPES = [
  * One arrival for each touch event a probe recorded, in dispatch order. WebKit
  * dispatches each step's pointer events just before its touch event, and
  * stamps the touch event only once the page's pointer listeners are done.
- * So an arrival takes the earliest stamp of its step's events, when a
- * gesture host samples the finger, and the latest handling mark of them.
+ * Core's gesture host reads a finger's moves from its pointer events, and
+ * its lift from the pointerup paired with them. It reads the touch-down from
+ * its touch event. So a move or a lift arrives at the earliest stamp of its
+ * step, and a touch-down at its touch event's own stamp. Each takes the
+ * latest handling mark of its step.
  */
 export function touchArrivalsFrom(record: {
   readonly eventTypes: readonly string[];
@@ -816,7 +1045,11 @@ export function touchArrivalsFrom(record: {
       handledAt = Number.isNaN(handledAt) ? mark : Math.max(handledAt, mark);
     }
     if (type.startsWith('touch')) {
-      arrivals.push({stamp, handledAt});
+      arrivals.push({
+        stamp: type === 'touchstart' ? record.stamps[i] : stamp,
+        firstStamp: stamp,
+        handledAt,
+      });
       stamp = Number.POSITIVE_INFINITY;
       handledAt = Number.NaN;
     }
@@ -830,15 +1063,43 @@ export function touchArrivalsFrom(record: {
  */
 function touchArrivalProbe(page: Page): TouchArrivalProbe {
   let armed: JSHandle<InputRun> | null = null;
+  let drawn: JSHandle<{times: number[]; stopped: boolean}> | null = null;
   return {
     async arm() {
       await armed?.evaluate(run => run.stop());
       await armed?.dispose();
+      await drawn?.evaluate(record => {
+        record.stopped = true;
+      });
+      await drawn?.dispose();
       armed = await armInputRun(page, TOUCH_TYPES);
+      // When the page draws each frame, on the clock its events are stamped
+      // on. The harness's own frames run on the real timers: a frozen timer
+      // gate (story.ts) holds only the page's.
+      drawn = await page.evaluateHandle(() => {
+        const gate = (
+          window as unknown as {
+            __harnessTimerGate?: {frame?: typeof requestAnimationFrame};
+          }
+        ).__harnessTimerGate;
+        const frame = gate?.frame ?? window.requestAnimationFrame.bind(window);
+        const record = {times: [] as number[], stopped: false};
+        // Resolves at the first frame, so a frame before the gesture is read.
+        return new Promise<typeof record>(resolve => {
+          const tick = (time: number) => {
+            if (!record.stopped) {
+              record.times.push(time);
+              resolve(record);
+              frame(tick);
+            }
+          };
+          frame(tick);
+        });
+      });
     },
     async read() {
       if (armed == null) {
-        return [];
+        return {arrivals: [], frames: []};
       }
       const run = armed;
       armed = null;
@@ -852,7 +1113,16 @@ function touchArrivalProbe(page: Page): TouchArrivalProbe {
         };
       });
       await run.dispose();
-      return touchArrivalsFrom(record);
+      const frames =
+        drawn == null
+          ? []
+          : await drawn.evaluate(recorded => {
+              recorded.stopped = true;
+              return recorded.times.slice();
+            });
+      await drawn?.dispose();
+      drawn = null;
+      return {arrivals: touchArrivalsFrom(record), frames};
     },
   };
 }

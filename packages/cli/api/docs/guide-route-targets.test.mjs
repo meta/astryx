@@ -155,6 +155,34 @@ describe('a flat topic that replaces a placed guide by its route', () => {
   );
 
   it(
+    'lists under its own package where the topic list names the guide',
+    async () => {
+      const list = await docs(undefined, undefined, {cwd: tmpDir, depth: 'all'});
+      if (list.type !== 'docs.list') return;
+      /** @param {any[]} rows */
+      const flat = rows =>
+        rows.flatMap((/** @type {any} */ row) => [
+          row,
+          ...flat(row.children ?? []),
+        ]);
+      const child = flat(list.meta?.namespaces ?? []).find(
+        (/** @type {any} */ row) => row.topic === GUIDE,
+      );
+      // The same attribution the namespace read gives it, not the package
+      // whose route it took.
+      expect(child).toMatchObject({
+        package: KIT,
+        replaces: GUIDE,
+        replacedPackage: CLI,
+        title: 'Acme quick-start',
+      });
+      const text = await cliText(['docs', '--depth', 'all']);
+      expect(text.stdout).toContain(GUIDE);
+    },
+    SLOW,
+  );
+
+  it(
     'lists under its own package where its namespace lists the guide',
     async () => {
       const parent = await docs('authoring', undefined, {cwd: tmpDir});

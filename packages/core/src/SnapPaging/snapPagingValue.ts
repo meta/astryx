@@ -11,6 +11,7 @@
  */
 
 import {isRtlElement} from '../hooks/isRtlElement';
+import {realmValue, sharedKey} from '../utils/sharedRealm';
 
 /** Options of `useSnapPaging`. */
 export interface SnapPagingOptions {
@@ -22,14 +23,16 @@ export interface SnapPagingOptions {
   readonly pages?: 'view' | 'item';
 }
 
-declare const snapPagingBrand: unique symbol;
-
 /**
  * Configured snap paging. Make it with `useSnapPaging`, and pass it to
  * Carousel's `hasSnap`.
  */
 export interface SnapPaging {
-  readonly [snapPagingBrand]: true;
+  /**
+   * A brand that is never present, so the paging types of the package and a
+   * swizzled copy match.
+   */
+  readonly '@astryxdesign/core/snap-paging/v1'?: never;
 }
 
 /** The paging attached to one row. */
@@ -60,7 +63,11 @@ interface SnapPagingValue {
   readonly attach: Attach;
 }
 
-const values = new WeakSet<object>();
+// Registered, so a swizzled Carousel accepts the package's paging value.
+const values = realmValue(
+  sharedKey('snap-paging/values', 1),
+  () => new WeakSet<object>(),
+);
 // Each attached row's paging, for Carousel's own scroll calls.
 const attachments = new WeakMap<HTMLElement, SnapPagingAttachment>();
 
@@ -133,22 +140,74 @@ export function nearestStop(stops: ReadonlyArray<number>, at: number): number {
 }
 
 /**
- * Each item's snap stop: the scroll offset that aligns its start edge with
- * the scroll padding, clamped to `end`. Read from the items' rects, with the
- * position `shown` added back. Stops closer than half a pixel are one stop.
+ * The scale a scaled ancestor gives the row's rects: the rect's width over the
+ * row's layout width. Scroll offsets do not have it.
+ */
+export function rowScale(element: HTMLElement, box: DOMRect): number {
+  return element.offsetWidth > 0 && box.width > 0
+    ? box.width / element.offsetWidth
+    : 1;
+}
+
+/** A row's pages: one stop each, and the items whose stops native snap skips. */
+export interface SnapPages {
+  readonly stops: number[];
+  readonly skipped: Element[];
+}
+
+/**
+ * The row's stops, one per page (`snapPages`). Read from the items' rects,
+ * with the position `shown` added back.
  */
 export function snapStops(
   element: HTMLElement,
   shown: number,
   end: number,
 ): number[] {
+  return snapPages(element, shown, end).stops;
+}
+
+/**
+ * The row's stops, one per page. Stops closer than half a pixel are one stop.
+ * The end's page is the page that the end rounds to. So a stop within half
+ * its preceding step of the end is that page, which rests where the row
+ * ends. Native snap skips the items of that stop (`skipped`).
+ */
+export function snapPages(
+  element: HTMLElement,
+  shown: number,
+  end: number,
+): SnapPages {
+  const stops: number[] = [];
+  const owners: Element[][] = [];
+  for (const {item, stop} of itemStops(element, shown, end)) {
+    if (stops.length === 0 || stop > stops[stops.length - 1] + 0.5) {
+      stops.push(stop);
+      owners.push([item]);
+    } else {
+      owners[owners.length - 1].push(item);
+    }
+  }
+  const n = stops.length;
+  if (
+    n >= 3 &&
+    stops[n - 1] >= end - 0.5 &&
+    stops[n - 1] - stops[n - 2] < (stops[n - 2] - stops[n - 3]) / 2
+  ) {
+    stops.splice(n - 2, 1);
+    return {stops, skipped: owners[n - 2]};
+  }
+  return {stops: n > 0 ? stops : [0], skipped: []};
+}
+
+function itemStops(
+  element: HTMLElement,
+  shown: number,
+  end: number,
+): {item: Element; stop: number}[] {
   const rtl = isRtlElement(element);
   const box = element.getBoundingClientRect();
-  // A scaled ancestor scales the rects, not the scroll offsets.
-  const scale =
-    element.offsetWidth > 0 && box.width > 0
-      ? box.width / element.offsetWidth
-      : 1;
+  const scale = rowScale(element, box);
   const border = rtl
     ? element.offsetWidth - element.clientWidth - element.clientLeft
     : element.clientLeft;
@@ -157,18 +216,13 @@ export function snapStops(
     Number.parseFloat(
       rtl ? style.scrollPaddingRight : style.scrollPaddingLeft,
     ) || 0;
-  const stops: number[] = [];
-  for (const child of Array.from(element.children)) {
-    const rect = child.getBoundingClientRect();
+  return Array.from(element.children, item => {
+    const rect = item.getBoundingClientRect();
     const fromEdge =
       (rtl ? box.right - rect.right : rect.left - box.left) / scale;
-    const stop = Math.min(
-      Math.max(fromEdge - border + shown - padding, 0),
-      end,
-    );
-    if (stops.length === 0 || stop > stops[stops.length - 1] + 0.5) {
-      stops.push(stop);
-    }
-  }
-  return stops.length > 0 ? stops : [0];
+    return {
+      item,
+      stop: Math.min(Math.max(fromEdge - border + shown - padding, 0), end),
+    };
+  });
 }
