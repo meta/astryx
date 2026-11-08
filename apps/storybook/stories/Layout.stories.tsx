@@ -1885,6 +1885,10 @@ export const FooterStates: Story = {
             Row {index + 1}
           </p>
         ))}
+        {/* A focusable control keeps the scrolling content keyboard-reachable. */}
+        <Button label="Load more" variant="secondary">
+          Load more
+        </Button>
       </VStack>
     );
     const footerText = <p {...stylex.props(styles.bodyText)}>Footer</p>;
