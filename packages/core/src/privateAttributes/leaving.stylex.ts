@@ -2,12 +2,14 @@
 
 /**
  * @file privateAttributes/leaving.stylex.ts
- * @input A List row put back in the document for its exit
+ * @input A List row put back in the document for its exit, or an element a
+ *   reorder's drag draws over the list
  * @output markLeaving, which marks such a row, and isLeaving, which reads the
  *   mark
  * @position Owner module of the private leaving attribute: the only file that
- *   writes its name. List/listLayoutUpdates.ts marks a row it puts back, so no
- *   later commit counts it as a row. No package entry exports it.
+ *   writes its name. List/listLayoutUpdates.ts marks a row it puts back. The
+ *   reorder (List/listReorderEngine.tsx) marks what a drag draws over the
+ *   list. So no later commit counts them as rows. No package entry exports it.
  */
 
 const LEAVING = 'data-astryx-leaving';

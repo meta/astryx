@@ -83,10 +83,10 @@
 
 import {LATE_START_MS} from './frameBlock';
 import {sharedKey} from '../utils/sharedRealm';
+import {paintedBackground} from './inertClone';
 import {
   inertCopy,
   isCopyable,
-  paintedBackground,
   placeOver,
   visiblePartCopy,
   wrapText,

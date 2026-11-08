@@ -119,6 +119,7 @@ import {
   toTouchEvents,
   touchDriver,
   trackBrightness,
+  TouchPacingError,
   TouchPageStallError,
   touchStoryboard,
   TouchLiftStallError,
@@ -430,6 +431,139 @@ test.describe('touch input', () => {
     expect(played.at(-1)?.release).toBeDefined();
   });
 
+  test("a page task that holds the main thread before an event changes a paced flick's release, and the error names the wait, not the page's listeners", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'webkit',
+      'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
+    );
+    // Each pointer move queues a 60 ms task, as a component's timer can. The
+    // listeners themselves return at once, and the next move waits for the
+    // task before they begin. The driver comes first, so its mark does too.
+    const driver = await touchDriver(page);
+    await page.route('http://task-stalling-page.test/', route =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>addEventListener("pointermove",()=>{setTimeout(()=>{const end=performance.now()+60;while(performance.now()<end){}},0)});</script>',
+      }),
+    );
+    await page.goto('http://task-stalling-page.test/');
+    const outcome = await driver
+      .play(
+        drag({x: 200, y: 400}, {x: 200, y: 300}, {durationMs: 100, hz: 60}),
+        {pacing: 'spacing'},
+      )
+      .then(
+        () => 'resolved',
+        (error: unknown) => error,
+      );
+    expect(outcome).toBeInstanceOf(TouchPacingError);
+    expect(String(outcome)).toMatch(
+      /an event waited \d+ ms for the main thread before the page's listeners began/,
+    );
+  });
+
+  test("a page's own window capture listener counts as the page's listeners when the driver is created before the page loads", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'webkit',
+      'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
+    );
+    // The driver marks when the page's listeners begin with a window capture
+    // listener of its own, added here before the page's scripts. So it runs
+    // before the page's, which the page adds at load on the window's capture
+    // phase and which holds each pointer move 60 ms.
+    const driver = await touchDriver(page);
+    await page.route('http://capture-stalling-page.test/', route =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>addEventListener("pointermove",()=>{const end=performance.now()+60;while(performance.now()<end){}},{capture:true});</script>',
+      }),
+    );
+    await page.goto('http://capture-stalling-page.test/');
+    const outcome = await driver
+      .play(
+        drag({x: 200, y: 400}, {x: 200, y: 300}, {durationMs: 100, hz: 60}),
+        {pacing: 'spacing'},
+      )
+      .then(
+        () => 'resolved',
+        (error: unknown) => error,
+      );
+    expect(outcome).toBeInstanceOf(TouchPageStallError);
+    expect(String(outcome)).toMatch(
+      /the page's own touch and pointer listeners took \d+ ms/,
+    );
+  });
+
+  test("a page's window capture listener added before a driver created after load still counts as the page's listeners, as a gesture host's does", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'webkit',
+      'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
+    );
+    // The page adds its window capture listener at load, as a gesture host
+    // does at mount, and the driver comes after. Its mark then runs after
+    // that listener, so the hold counts from the event's stamp, as before.
+    await page.route('http://late-driver-page.test/', route =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>addEventListener("pointermove",()=>{const end=performance.now()+60;while(performance.now()<end){}},{capture:true});</script>',
+      }),
+    );
+    await page.goto('http://late-driver-page.test/');
+    const driver = await touchDriver(page);
+    const outcome = await driver
+      .play(
+        drag({x: 200, y: 400}, {x: 200, y: 300}, {durationMs: 100, hz: 60}),
+        {pacing: 'spacing'},
+      )
+      .then(
+        () => 'resolved',
+        (error: unknown) => error,
+      );
+    expect(outcome).toBeInstanceOf(TouchPageStallError);
+    expect(String(outcome)).toMatch(
+      /the page's own touch and pointer listeners took \d+ ms/,
+    );
+  });
+
+  test("a page set by setContent after the driver keeps the old reading: its window capture listener counts as the page's listeners", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'webkit',
+      'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
+    );
+    // The driver's mark runs first on the blank page it navigates to.
+    // setContent then reopens that document, which drops the mark's listener
+    // and keeps the mark, and the new page adds its own capture listener.
+    const driver = await touchDriver(page);
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>addEventListener("pointermove",()=>{const end=performance.now()+60;while(performance.now()<end){}},{capture:true});</script>',
+    );
+    const outcome = await driver
+      .play(
+        drag({x: 200, y: 400}, {x: 200, y: 300}, {durationMs: 100, hz: 60}),
+        {pacing: 'spacing'},
+      )
+      .then(
+        () => 'resolved',
+        (error: unknown) => error,
+      );
+    expect(outcome).toBeInstanceOf(TouchPageStallError);
+    expect(String(outcome)).toMatch(
+      /the page's own touch and pointer listeners took \d+ ms/,
+    );
+  });
   test("a page whose touch listener holds its main thread changes a paced flick's release itself: TouchPageStallError, never the runner's", async ({
     page,
     browserName,
