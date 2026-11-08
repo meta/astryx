@@ -261,7 +261,9 @@ test("a release moving down sends the photo on the dismissal's spring and closes
   const v = await openViewer(page);
   await v.driver.play(pullDown(v.centre, 110));
   const [exit] = await waitForAnimation(v.photo);
-  const held = await holdAnimations(page, v.photo);
+  const held = await holdAnimations(page, v.photo, {
+    judges: {target: v.photo, property: 'translate'},
+  });
   const duration = Math.max(...held.map(a => a.curveEndMs));
   const samples = curveOf(
     await sampleCurve(v.photo, timeline(duration)),
@@ -320,7 +322,9 @@ test('a pull flicked back up springs back on springs.settle', async ({
     );
   await v.driver.play(script);
   const [ret] = await waitForAnimation(v.photo);
-  const held = await holdAnimations(page, v.photo);
+  const held = await holdAnimations(page, v.photo, {
+    judges: {target: v.photo, property: 'scale'},
+  });
   const duration = Math.max(...held.map(a => a.curveEndMs));
   const samples = curveOf(
     await sampleCurve(v.photo, timeline(duration)),
@@ -475,7 +479,9 @@ test('under Reduce Motion the dismissal fades the photo out in place', async ({
   const v = await openViewer(page);
   await v.driver.play(pullDown(v.centre, 110));
   await waitForAnimation(v.photo);
-  const held = await holdAnimations(page, v.photo);
+  const held = await holdAnimations(page, v.photo, {
+    judges: {target: v.photo, property: 'opacity'},
+  });
   const samples = await sampleCurve(v.photo, [0, 50]);
   await releaseAnimations(page);
   // Under reduced motion, a fade of 200 ms or less.

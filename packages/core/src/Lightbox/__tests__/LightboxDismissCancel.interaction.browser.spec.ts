@@ -178,9 +178,18 @@ function pullThenReturn(
     );
 }
 
-/** The held return's translateY and scale curves, and how long it runs. */
-async function heldReturn(page: Page, photo: Locator) {
-  const held = await holdAnimations(page, photo);
+/**
+ * The held return's translateY and scale curves, and how long it runs. The
+ * hold judges the motions the test reads.
+ */
+async function heldReturn(
+  page: Page,
+  photo: Locator,
+  judged: ReadonlyArray<'translate' | 'scale'>,
+) {
+  const held = await holdAnimations(page, photo, {
+    judges: judged.map(property => ({target: photo, property})),
+  });
   const duration = Math.max(...held.map(a => a.curveEndMs));
   const samples = await sampleCurve(photo, timeline(duration));
   await releaseAnimations(page);
@@ -207,7 +216,7 @@ test('released moving up, the photo springs back on springs.settle and the viewe
   const v = await openViewer(page);
   await v.driver.play(pullThenFlickUp(v.centre, 150, 60));
   const [ret] = await waitForAnimation(v.photo);
-  const back = await heldReturn(page, v.photo);
+  const back = await heldReturn(page, v.photo, ['translate', 'scale']);
   // The size returns from rest. The position carries the finger's upward
   // velocity, read from the first two samples as one unknown. The rest of the
   // curve must follow springs.settle.
@@ -252,7 +261,7 @@ test('brought back within 10 pt of the start and held still, it springs back fro
   const v = await openViewer(page);
   await v.driver.play(pullThenReturn(v.centre, 120, 4));
   const [ret] = await waitForAnimation(v.photo);
-  const back = await heldReturn(page, v.photo);
+  const back = await heldReturn(page, v.photo, ['translate']);
   const position = compareCurve(
     back.y,
     criticallyDamped(SETTLE_K, back.y[0].value),
@@ -374,7 +383,7 @@ test('a slow short drag released below the threshold springs back', async ({
     ),
   );
   const [ret] = await waitForAnimation(v.photo);
-  const back = await heldReturn(page, v.photo);
+  const back = await heldReturn(page, v.photo, ['translate']);
   const position = compareCurve(
     back.y,
     criticallyDamped(SETTLE_K, back.y[0].value),
@@ -407,7 +416,9 @@ test('under Reduce Motion a cancelled drag returns by a fade of 200 ms or less, 
   const v = await openViewer(page);
   await v.driver.play(pullThenFlickUp(v.centre, 150, 60));
   await waitForAnimation(v.photo);
-  const held = await holdAnimations(page, v.photo);
+  const held = await holdAnimations(page, v.photo, {
+    judges: {target: v.photo, property: 'opacity'},
+  });
   const duration = Math.max(...held.map(a => a.curveEndMs));
   const samples = await sampleCurve(v.photo, timeline(duration));
   await releaseAnimations(page);
