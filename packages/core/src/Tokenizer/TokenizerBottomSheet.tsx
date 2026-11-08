@@ -448,6 +448,10 @@ function TokenizerSheetContent<T extends SearchableItem>({
     LIST_RENDER_BATCH_SIZE,
   );
   const seqRef = useRef(0);
+  // Whether a request to the source is still unanswered. Pending work is
+  // cancelled when a newer query replaces it, and when the sheet closes or
+  // unmounts, as the inline field does.
+  const isRequestPendingRef = useRef(false);
   const lastLoadScrollHeightRef = useRef<number | null>(null);
   const [selectedItemsAtOpen, setSelectedItemsAtOpen] = useState<T[]>(value);
 
@@ -520,11 +524,21 @@ function TokenizerSheetContent<T extends SearchableItem>({
   // that lands after a newer request, so the list never shows stale results
   // (`architecture:react-component-runtime` INV3).
   useIsomorphicLayoutEffect(() => {
+    const cancelPending = () => {
+      if (isRequestPendingRef.current) {
+        isRequestPendingRef.current = false;
+        searchSourceRef.current.cancel?.();
+      }
+    };
     if (!isOpen) {
+      // Retire the closed sheet's request, so its answer never lands.
+      seqRef.current++;
+      cancelPending();
       return;
     }
     const trimmed = query.trim();
     const seq = ++seqRef.current;
+    cancelPending();
     if (trimmed !== '' && trimmed.length < minQueryLength) {
       // Not searched; the derived `results` are already empty, and taking a
       // sequence number retires a still-running search so its rows cannot
@@ -533,6 +547,7 @@ function TokenizerSheetContent<T extends SearchableItem>({
     }
     const settle = (items: T[]) => {
       if (seqRef.current === seq) {
+        isRequestPendingRef.current = false;
         setSourceResults(items.slice(0, maxMenuItems));
         setIsPending(false);
       }
@@ -553,6 +568,7 @@ function TokenizerSheetContent<T extends SearchableItem>({
       }
       // Anything else is awaited as a thenable — a native Promise, one from
       // another realm, or a library's — as the inline field's `await` does.
+      isRequestPendingRef.current = true;
       void Promise.resolve(answer).then(settle, () => {
         // A rejecting source settles to no results, as the inline field does:
         // the previous query's rows are not this query's answer.
@@ -565,6 +581,16 @@ function TokenizerSheetContent<T extends SearchableItem>({
     }
     run();
   }, [isOpen, query, minQueryLength, maxMenuItems, debounceMs]);
+  // Cancels a request the source has not answered when the field unmounts.
+  useEffect(
+    () => () => {
+      if (isRequestPendingRef.current) {
+        isRequestPendingRef.current = false;
+        searchSourceRef.current.cancel?.();
+      }
+    },
+    [],
+  );
 
   const visibleItems = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();

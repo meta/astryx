@@ -3371,8 +3371,8 @@ describe('Tokenizer sheet presentation: search cancellation', () => {
   function pendingSource() {
     const cancel = vi.fn();
     const pending: SearchSource<SearchableItem> = {
-      search: () => new Promise<SearchableItem[]>(() => {}),
-      bootstrap: () => new Promise<SearchableItem[]>(() => {}),
+      search: async () => new Promise<SearchableItem[]>(() => {}),
+      bootstrap: async () => new Promise<SearchableItem[]>(() => {}),
       cancel,
     };
     return {source: pending, cancel};
