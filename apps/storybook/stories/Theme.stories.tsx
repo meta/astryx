@@ -7,6 +7,8 @@ import {Card} from '@astryxdesign/core/Card';
 import {Stack} from '@astryxdesign/core/Stack';
 import {Heading} from '@astryxdesign/core/Text';
 import {Badge} from '@astryxdesign/core/Badge';
+import {Button} from '@astryxdesign/core/Button';
+import {List, ListItem} from '@astryxdesign/core/List';
 import {neutralTheme} from '@astryxdesign/theme-neutral';
 
 // =============================================================================
@@ -424,5 +426,43 @@ export const TokenInspectorStory: StoryObj = {
         <TokenInspector />
       </Theme>
     </div>
+  ),
+};
+
+const pressTheme = defineTheme({
+  name: 'themed-press',
+  components: {
+    button: {
+      base: {':active': {backgroundColor: '#7c3aed', color: '#ffffff'}},
+    },
+    item: {
+      base: {':active': {backgroundColor: '#ede9fe'}},
+    },
+  },
+});
+
+const PRESS_ROWS = Array.from({length: 30}, (_, index) => `Row ${index + 1}`);
+
+/**
+ * A theme that overrides `:active` on Button and on list rows. With a mouse
+ * the theme's press paints on `:active`. Under a finger it follows the touch
+ * press model: it paints once the press is believed, never on the touch
+ * itself or through a scroll.
+ */
+export const ThemedPress: StoryObj = {
+  name: 'Themed press',
+  render: () => (
+    <Theme theme={pressTheme} mode="light">
+      <Stack direction="vertical" gap={3}>
+        <Button label="Themed button" variant="secondary" onClick={() => {}} />
+        <div style={{height: 320, overflowY: 'auto'}}>
+          <List aria-label="Themed rows">
+            {PRESS_ROWS.map(row => (
+              <ListItem key={row} label={row} onClick={() => {}} />
+            ))}
+          </List>
+        </div>
+      </Stack>
+    </Theme>
   ),
 };

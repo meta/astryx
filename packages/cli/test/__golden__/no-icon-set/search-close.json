@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "close",
-    "matchCount": 45,
+    "matchCount": 48,
     "results": [
       {
         "domain": "component",
@@ -36,6 +36,10 @@
         "description": "<text>",
         "import": "@astryxdesign/core/BottomSheet",
         "command": "astryx component BottomSheetSwitcher",
+        "deprecated": {
+          "replacement": "<text>",
+          "description": "<text>"
+        },
         "mentions": []
       },
       {

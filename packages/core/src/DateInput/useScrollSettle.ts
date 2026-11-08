@@ -98,6 +98,8 @@ export function useScrollSettle(
 
   const isAtRestRef = useRef(true);
 
+  // Syncs scroll, touch and pointer listeners with `isEnabled`. They find when
+  // scrolling stops.
   useEffect(() => {
     const element = ref.current;
     if (element == null || !isEnabled) {

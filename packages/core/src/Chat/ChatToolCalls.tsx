@@ -39,7 +39,13 @@ import {Spinner} from '../Spinner';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Chat/ChatToolCalls.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Types
@@ -363,7 +369,7 @@ const STATUS_STYLES: Record<
 };
 
 function getStatusAnnouncement(
-  t: ReturnType<typeof useTranslator>,
+  t: ReturnType<typeof useComponentTranslator>,
   status: ChatToolCallStatus,
   errorMessage?: string,
 ): string {
@@ -408,7 +414,7 @@ function CallRow({
   call: ChatToolCallItem;
   hasClippedFocusRing?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const status = call.status ?? 'complete';
   const hasDetail = call.resultDetail != null;
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -548,7 +554,7 @@ function CallRow({
  * ```
  */
 export function ChatToolCalls(props: ChatToolCallsProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const {
     calls,
     label: customLabel,

@@ -948,7 +948,7 @@ id; --records shows how each one links.
  * from its merge base with HEAD to the working tree (uncommitted edits
  * included), the change an author is about to make.
  */
-function diffText(root, range) {
+export function diffText(root, range) {
   const git = args =>
     execFileSync('git', ['-C', root, ...args], {
       encoding: 'utf8',

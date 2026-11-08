@@ -394,7 +394,7 @@ describe('shipped Resizable examples', () => {
     expect(pairings.filter(pairing => pairing.error != null)).toEqual([]);
   });
 
-  it('detects all six shipped vertical mismatches against the unfixed source shape', () => {
+  it('detects all seven shipped vertical mismatches against the unfixed source shape', () => {
     const pairings = sourcePairings(source =>
       source.replace(/^\s*direction: 'vertical',\n/gm, ''),
     );
@@ -402,7 +402,7 @@ describe('shipped Resizable examples', () => {
       pairing => pairing.handleDirection === 'vertical',
     );
 
-    expect(mismatches).toHaveLength(6);
+    expect(mismatches).toHaveLength(7);
     expect(mismatches.every(pairing => pairing.error != null)).toBe(true);
   });
 

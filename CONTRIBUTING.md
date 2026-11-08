@@ -668,10 +668,10 @@ Chromium and fails on any other cursor.
 
 The docsite playground runs user-authored code in a sandboxed iframe with an
 opaque origin, tied to the page only by a nonce-attested MessagePort handshake
-(`apps/docsite/src/app/playground/previewChannel.ts`). The required
-`docsite-test` check's browser-contract step proves that boundary in
-Chromium against a production build: a reloaded
-preview document recovers with the current code and theme, and a document that
+(`apps/docsite/src/app/playground/previewChannel.ts`). The browser
+contracts in the `docsite-browser` job, which the required `docsite-test`
+check joins, prove that boundary in Chromium against a production build: a
+reloaded preview document recovers with the current code and theme, and a document that
 previewed code navigated the frame to receives nothing. The sandbox only exists
 in production builds (`next dev` cannot serve its assets to an opaque origin),
 so the specs need a build first:
@@ -964,6 +964,12 @@ Storybook story for anything you added or altered.
   request past either limit shows a failing check that says why, and runs in
   full at its pre-merge re-run. Engineering owners listed in `.github/ENGOWNERS`
   are not limited.
+- **Pull requests from the shared agent login run the heavy suites when ready
+  and before merge.** A push to a ready agent pull request runs lint and, in
+  the CI workflow, only typecheck (path-filtered workflows run as usual);
+  `test`, `build` and `docsite-test` fail with "Heavy CI deferred" (unless the
+  change is spec-only, which runs everything) until the pull request is marked ready or reopened, or its latest run is
+  re-run with **Re-run all jobs**, which runs everything at that head.
 
 ## Code Style
 

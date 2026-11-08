@@ -26,7 +26,8 @@ export interface DayCellStateInput {
   rangeEnd: PlainDate | null;
   previewStart: PlainDate | null;
   previewEnd: PlainDate | null;
-  today: PlainDate;
+  /** Today, or `null` on the server and while hydrating. */
+  today: PlainDate | null;
   isDisabled: boolean;
   isOutside: boolean;
 }
@@ -56,7 +57,7 @@ export function computeDayCellState(input: DayCellStateInput): DayCellState {
 
   return {
     effectivelyDisabled: isDisabled || isOutside,
-    isToday: !isOutside && plainDateIsEqual(date, today),
+    isToday: !isOutside && today != null && plainDateIsEqual(date, today),
     isSelected: !!(
       !isOutside &&
       mode === 'single' &&

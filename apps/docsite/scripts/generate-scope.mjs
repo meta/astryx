@@ -294,6 +294,12 @@ lines.push('');
 lines.push("import * as Hooks from '@astryxdesign/core/hooks';");
 lines.push('');
 
+// ── Utils ──────────────────────────────────────────────────────────────
+// camelCase too, and skipped for the same reason. Page templates mirror their
+// directional icons in right-to-left with `rtlStyles` from here.
+lines.push("import * as Utils from '@astryxdesign/core/utils';");
+lines.push('');
+
 // ── Icon and chart libraries ───────────────────────────────────────────
 lines.push("import * as LucideIcons from 'lucide-react';");
 lines.push("import * as Recharts from 'recharts';");
@@ -401,6 +407,9 @@ lines.push("  '@astryxdesign/core/theme/tokens.stylex': astryxTokens,");
 
 // hooks (useMediaQuery, etc.)
 lines.push("  '@astryxdesign/core/hooks': Hooks,");
+
+// utils (rtlStyles, etc.)
+lines.push("  '@astryxdesign/core/utils': Utils,");
 
 // Per-component and nested-module subpath entries
 for (const name of components) {

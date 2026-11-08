@@ -251,6 +251,56 @@ for each bug.
   fragment, but the compatibility page MUST NOT automatically redirect, build
   either application, or host CI evidence.
 
+### Blog posts
+
+- **FR22 — Blog posts render runnable example blocks.** A fenced code block in
+  a blog post's Markdown whose info string is `tsx live` renders a runnable
+  example through the Docsite's existing live-example renderer, the playground
+  preview frame (`/playground/preview`), which compiles the block's source in
+  the browser and resolves its imports against the generated preview scope.
+  The example runs sandboxed so a post cannot break the page: each block gets
+  its own frame with the FR16 boundary, an `allow-scripts`-only sandbox with an
+  opaque origin, so its styles and scripts stay inside that frame, and a
+  compile or runtime error shows inside the frame while the rest of the post
+  renders. An example may import published Astryx packages and post-local
+  example assets that live beside the post's Markdown file, such as docs-only
+  demo components like tarot cards; those assets are not Astryx components,
+  are not exported from any package, enter no catalog, and resolve only for
+  their own post. The plain-text post route shows a static fallback in place
+  of the running example: the block's source as an ordinary code block, read
+  the way the page reads fences (inside blockquotes and list items too, and
+  never inside another fenced block). RSS items carry the post's description
+  and no body, so no example reaches the feed. A post's example assets live in a folder named after the post,
+  beside its Markdown file, and load only in the frames of that post's live
+  examples. Test fixture posts under `src/content/blog/fixtures/` are served
+  on the canary only and never listed in the blog index, feed, or sitemap.
+
+### Example code
+
+- **FR23 — Example source replaces demo contents the way copy does.** In a
+  motion or gesture example, a real Astryx component may wrap docs-only demo
+  contents, such as `<Card><PlayingCardContents /></Card>`. The live example
+  renders the original. Every surface that hands out the example's source
+  carries it after the demo-content element replacement of `spec:AST-028`
+  FR13: each demo-content element becomes a generic placeholder, the source
+  keeps no reference to the code that defines it, and the outer component keeps
+  its props and behavior. A demo-content wrapper that only adds docs-only
+  presentation around a real component, such as a usage hint, is removed rather
+  than replaced: the source keeps the wrapped component and its props as if the
+  wrapper were absent. Surfaces that only hand out source run that
+  replacement alone, so each keeps its fixture media:
+  the Code tab and its copy action; Open in Playground, which opens and runs
+  that replaced source, so the playground shows the placeholder; the Sandbox
+  code view and its Copy source action; and the MCP server's `get()`, whose
+  component result carries the showcase example's source and one more
+  example's source and whose template result carries the template's example
+  sources or, without them, its page source. The shadcn Install item writes
+  the example into the consumer's project, so it is a copy under
+  `spec:AST-028` FR13 and its registry item carries the source with fixture
+  media and demo-content elements both replaced. Integration-package blocks
+  display `template show` output, so their displayed code has fixture media
+  replaced.
+
 ### Authority routing
 
 `architecture:knowledge-contracts` owns public-delta routing and change disposition.
@@ -303,6 +353,11 @@ Known conformance gaps remain implementation work:
 - existing interaction tests do not yet cover the complete primary-selection,
   Back/Forward, close, cancellation, and supersession matrix.
 
+The Code tab, Open in Playground, the Sandbox code view, and the MCP server's
+`get()` carry example source after the demo-content element replacement, with
+fixture media kept. The shadcn Install item carries it with demo-content
+elements and fixture media both replaced (FR23).
+
 Stable Storybook and Sandbox currently use a split deployment: pull-request
 previews are staged inside the Vercel Docsite, while stable main is rebuilt and
 published through a separate GitHub Pages branch. That duplicates application
@@ -316,15 +371,17 @@ exact source already serving those public surfaces.
 
 ## Verification
 
-| Contract  | Verification                                                                             | Representative states                                                                                                    | Mutation or failure expectation                                                                                                                           |
-| --------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1–FR3   | generator/data-extraction tests plus cross-projection inventory; search endpoint parity with `astryx search --json` | package, component, template, theme; gallery, sidebar, search, direct route, preview, playground                         | a local map changes membership or a canonical item fact, or availability and visibility collapse into one projection                                      |
-| FR4–FR6   | latest/canary generation and projection tests                                            | stable package, canary-only package, ready/unready item, overview-hidden item, invalid integration metadata              | latest exposes canary package docs, workspace-backed content is called release-pinned, a second readiness state appears, or projections disagree          |
-| FR7–FR9   | navigation-family checks plus real-browser navigation/history tests                      | direct link, modified click, new tab, deep link, primary selection, secondary tab/filter, canonicalization, Back/Forward | Docsite misclassifies a destination, canonical identity diverges, primary selections replace one another, or secondary state clutters history             |
-| FR10–FR12 | selection/transition tests plus real-browser visible-content checks                      | initial open, reopen, deep link, direct selection, pending previous/next, close, supersede, reject, unmount              | header/body/actions disagree, stale content paints without its owning pending state, or obsolete selection work commits after supersession                |
-| FR13–FR15 | analytics schema and interaction tests with transport spies                              | navigation intent, successful/failed copy, cancel, URL restoration, render/effect, duplicate activation                  | event names/properties drift, free-form/high-cardinality data is logged, a passive lifecycle emits, success logs on failure, or one action emits twice    |
-| FR16      | production-browser playground isolation and recovery tests                               | direct load, reload, hostile navigation, storage and parent-DOM denial                                                   | preview code reaches parent/storage or trusted recovery restores stale source/theme                                                                       |
-| FR17–FR21 | exact-head Vercel build, route/asset probes, metadata checks, and Pages landing contract | production and PR Preview; Storybook manager/frame; Sandbox route/embed; old root/deep path; desktop/mobile; light/dark  | one app is absent or stale, a direct asset/route fails, metadata claims the wrong owner, identity drifts, or Pages hosts more than the compatibility page |
+| Contract  | Verification                                                                                                                                                                                     | Representative states                                                                                                                                                                                                                                                                                                                                                                                                                                      | Mutation or failure expectation                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1–FR3   | generator/data-extraction tests plus cross-projection inventory; search endpoint parity with `astryx search --json`                                                                              | package, component, template, theme; gallery, sidebar, search, direct route, preview, playground                                                                                                                                                                                                                                                                                                                                                           | a local map changes membership or a canonical item fact, or availability and visibility collapse into one projection                                                                                                                                                                                                                                                                                                                                                      |
+| FR4–FR6   | latest/canary generation and projection tests                                                                                                                                                    | stable package, canary-only package, ready/unready item, overview-hidden item, invalid integration metadata                                                                                                                                                                                                                                                                                                                                                | latest exposes canary package docs, workspace-backed content is called release-pinned, a second readiness state appears, or projections disagree                                                                                                                                                                                                                                                                                                                          |
+| FR7–FR9   | navigation-family checks plus real-browser navigation/history tests                                                                                                                              | direct link, modified click, new tab, deep link, primary selection, secondary tab/filter, canonicalization, Back/Forward                                                                                                                                                                                                                                                                                                                                   | Docsite misclassifies a destination, canonical identity diverges, primary selections replace one another, or secondary state clutters history                                                                                                                                                                                                                                                                                                                             |
+| FR10–FR12 | selection/transition tests plus real-browser visible-content checks                                                                                                                              | initial open, reopen, deep link, direct selection, pending previous/next, close, supersede, reject, unmount                                                                                                                                                                                                                                                                                                                                                | header/body/actions disagree, stale content paints without its owning pending state, or obsolete selection work commits after supersession                                                                                                                                                                                                                                                                                                                                |
+| FR13–FR15 | analytics schema and interaction tests with transport spies                                                                                                                                      | navigation intent, successful/failed copy, cancel, URL restoration, render/effect, duplicate activation                                                                                                                                                                                                                                                                                                                                                    | event names/properties drift, free-form/high-cardinality data is logged, a passive lifecycle emits, success logs on failure, or one action emits twice                                                                                                                                                                                                                                                                                                                    |
+| FR16      | production-browser playground isolation and recovery tests                                                                                                                                       | direct load, reload, hostile navigation, storage and parent-DOM denial                                                                                                                                                                                                                                                                                                                                                                                     | preview code reaches parent/storage or trusted recovery restores stale source/theme                                                                                                                                                                                                                                                                                                                                                                                       |
+| FR17–FR21 | exact-head Vercel build, route/asset probes, metadata checks, and Pages landing contract                                                                                                         | production and PR Preview; Storybook manager/frame; Sandbox route/embed; old root/deep path; desktop/mobile; light/dark                                                                                                                                                                                                                                                                                                                                    | one app is absent or stale, a direct asset/route fails, metadata claims the wrong owner, identity drifts, or Pages hosts more than the compatibility page                                                                                                                                                                                                                                                                                                                 |
+| FR22      | `e2e/blog-live-examples.spec.ts` (real-browser post, plain-text route, feed, sitemap, and index checks) and `blog-live-examples.test.tsx` (fence rule, static fallback, fixture listing, runner) | a post with a `tsx live` block; that post's plain-text route; a block importing a post-local asset; a block that fails to compile or throws; live fences in a blockquote, a list item, and quoted inside a longer fence                                                                                                                                                                                                                                    | the live block does not run in the browser, the text route shows anything but the source fallback for a fence the page runs, a post-local import fails to resolve, a broken example breaks the page outside its frame, or the feed, sitemap, or index lists the fixture                                                                                                                                                                                                   |
+| FR23      | Output checks for each surface plus real-browser live-example check                                                                                                                              | a motion or gesture example whose `Card` wraps a demo-content element; one whose `Card` sits in a docs-only hint wrapper; its Code tab and copied text; its Open in Playground source; its Sandbox code view and copied source; its MCP `get()` component and template results; its shadcn registry item and the `.astryx/<item>.json` receipt it installs; an example with fixture media; an integration-package block's displayed code; its live preview | any of those surfaces still references a demo-content element or the code that defines it, or keeps a docs-only wrapper or its hint text; the outer component or its props change; fixture media changes on a surface that only hands out source; the shadcn registry item or an integration-package block's displayed code still references `/template-assets/`, or the installed receipt is not the released v2 shape; or the live preview stops rendering the original |
 
 ## Decision log
 
@@ -435,6 +492,36 @@ endpoint equal to `astryx search --json` for the site's project.
 
 Rejected: a site-owned index or ranking, and a browser copy of the CLI's search
 data that has to track every CLI release.
+
+### DEC-9 — Blog posts run examples in the existing sandboxed renderer
+
+**Reference:** `spec:AST-033/DEC-9`
+**Decider:** `cixzhang`, `2026-11-01`
+
+Blog posts support runnable HTML blocks inside the post, so a post can
+demonstrate Astryx with demo material that is not an Astryx component, such as
+tarot cards. A `tsx live` fence runs through the playground preview frame and
+its FR16 isolation, so a post example and a playground session share one
+renderer and one sandbox boundary. Post-local demo assets stay beside the post
+and outside every package and catalog.
+
+Rejected: a second blog-only renderer that would need its own isolation.
+
+### DEC-10 — Example code replaces demo contents the way copy does
+
+**Reference:** `spec:AST-033/DEC-10`
+**Decider:** `cixzhang`, `2026-11-01`
+
+Motion and gesture examples may show docs-only demo contents, such as a
+playing-card face, inside a real Astryx component, without a second copy of
+each example to maintain. Every surface that hands out example source runs the
+CLI copy's demo-content element replacement (`spec:AST-028/DEC-4`), so the demo
+contents a person or agent reads, copies, opens, or installs are the generic
+placeholders a CLI copy writes. Surfaces that only hand out source run no other
+copy step. The shadcn Install item writes into the consumer's project, so it is
+a copy and also replaces fixture media.
+
+Rejected: a docs-only duplicate of each example, which adds documents to keep in sync.
 
 ## Open questions
 

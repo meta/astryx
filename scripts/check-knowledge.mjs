@@ -15,6 +15,7 @@ import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {collectThemingTargets} from '../packages/cli/foundation/discovery/theming-targets.mjs';
+import {readObjects} from './lib/git-objects.mjs';
 
 const require = createRequire(import.meta.url);
 const {
@@ -37,6 +38,7 @@ const {
   componentSpecPathForSource,
   isComponentSpecRecordPath,
   isIgnoredComponentKnowledgeSegment,
+  isKnowledgeRecordPath,
   isPlatformComponentSpecPath,
   locateComponentKnowledgePath,
 } = require('../.github/scripts/knowledge-paths.cjs');
@@ -528,21 +530,6 @@ function repositoryFileList(root) {
   }
 }
 
-function isKnowledgeRecordPath(filePath) {
-  if (/^docs\/(?:architecture|design|families)\/[^/]+\.md$/.test(filePath)) {
-    return !filePath.endsWith('/README.md');
-  }
-  if (/^docs\/specs\/[^/]+\/(?:spec|plan)\.md$/.test(filePath)) {
-    return true;
-  }
-  const themeMatch = /^packages\/themes\/([^/]+)\/([^/]+)\.spec\.md$/.exec(
-    filePath,
-  );
-  if (themeMatch) return themeMatch[1] === themeMatch[2];
-  if (classifyPackageArchitectureRecordPath(filePath)) return true;
-  return isComponentSpecRecordPath(filePath);
-}
-
 const REVIEW_CONCERN_NAME_PATTERN = REVIEW_TRIGGER_PATTERN;
 const IDENTIFIER_PATTERN = /^[A-Za-z_$][\w$]*$/;
 
@@ -806,21 +793,36 @@ export function readKnowledgeRecordsAtAuthority(
   authorityCommit,
   reviewHead,
 ) {
-  const resolvedCommit = execFileSync(
+  // One process resolves both commits, and fails when either does not.
+  const resolved = execFileSync(
     'git',
-    ['-C', root, 'rev-parse', '--verify', `${authorityCommit}^{commit}`],
+    [
+      '-C',
+      root,
+      'rev-parse',
+      `${authorityCommit}^{commit}`,
+      `${reviewHead}^{commit}`,
+    ],
     {encoding: 'utf8'},
-  ).trim();
+  )
+    .trim()
+    .split('\n');
+  // Without --verify, rev-parse echoes an option and expands a range, so
+  // only two object ids count as a resolution.
+  if (
+    resolved.length !== 2 ||
+    !resolved.every(line => /^[0-9a-f]{40,64}$/.test(line))
+  ) {
+    throw new Error(
+      `cannot resolve ${authorityCommit} and ${reviewHead} to two commits.`,
+    );
+  }
+  const [resolvedCommit, resolvedHead] = resolved;
   if (resolvedCommit !== authorityCommit) {
     throw new Error(
       `authority commit must be the full resolved commit ${resolvedCommit}.`,
     );
   }
-  const resolvedHead = execFileSync(
-    'git',
-    ['-C', root, 'rev-parse', '--verify', `${reviewHead}^{commit}`],
-    {encoding: 'utf8'},
-  ).trim();
   if (resolvedHead !== reviewHead) {
     throw new Error(
       `review head must be the full resolved commit ${resolvedHead}.`,
@@ -859,14 +861,17 @@ export function readKnowledgeRecordsAtAuthority(
   )
     .split(/\r?\n/)
     .filter(isKnowledgeRecordPath);
-  const records = paths.map(filePath => ({
-    path: filePath,
-    content: execFileSync(
-      'git',
-      ['-C', root, 'show', `${resolvedCommit}:${filePath}`],
-      {encoding: 'utf8'},
-    ),
-  }));
+  const objects = readObjects(
+    root,
+    paths.map(filePath => `${resolvedCommit}:${filePath}`),
+  );
+  const records = paths.map(filePath => {
+    const content = objects.get(`${resolvedCommit}:${filePath}`);
+    if (!content) {
+      throw new Error(`cannot read ${filePath} at ${resolvedCommit}.`);
+    }
+    return {path: filePath, content: content.toString('utf8')};
+  });
   return {records, authority: resolvedCommit};
 }
 

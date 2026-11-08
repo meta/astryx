@@ -17,8 +17,8 @@ const {
   describeOwnerCommandProblem,
   newestGateRun,
   parseOwnerCommandIntent,
-  parseAuthority,
-  parseKind,
+  leadingAuthority,
+  recordApprovalGroups,
   parseOwnerFile,
   requiredApprovalGroups,
   resolveOwnerDecision,
@@ -455,31 +455,23 @@ async function reconcileWithinBudget({
     commandProblem,
   }) {
     if (typeof core.summary?.addRaw !== 'function') return;
+    // The same per-record rule the decision uses, so the two never disagree.
     const groupFor = record => {
-      const current =
-        parseAuthority(record.headContent, record.path) === 'current' ||
-        parseAuthority(record.baseContent, record.previousPath) === 'current';
-      if (!current) return 'none (draft)';
-      const kind = parseKind(
-        record.headContent ?? record.baseContent,
-        record.path,
-      );
-      return kind === 'design' || kind === 'theme'
-        ? 'design or eng owner'
-        : 'eng owner';
+      const groups = recordApprovalGroups(record);
+      if (groups.size === 0) return 'none (draft)';
+      return groups.has('spec') ? 'eng owner' : 'design or eng owner';
     };
+    const authorityOf = content => leadingAuthority(content) ?? 'no authority';
     const rows = changedRecords.map(record => {
       const text = record.headContent ?? record.baseContent ?? '';
       const id = text.match(/^id:\s*(.+)$/m)?.[1]?.trim() ?? record.path;
       const title = text.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? '';
       const before =
-        record.baseContent == null
-          ? 'new'
-          : (parseAuthority(record.baseContent, record.previousPath) ?? '?');
+        record.baseContent == null ? 'new' : authorityOf(record.baseContent);
       const after =
         record.headContent == null
           ? 'removed'
-          : (parseAuthority(record.headContent, record.path) ?? '?');
+          : authorityOf(record.headContent);
       const change = before === after ? after : `${before} → ${after}`;
       return `| \`${id}\` | ${title} | ${change} | ${groupFor(record)} |`;
     });

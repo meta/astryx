@@ -58,7 +58,9 @@ const styles = stylex.create({
     display: 'flex',
     borderRadius: radiusVars['--radius-element'],
     backgroundColor: colorVars['--color-background-muted'],
-    border: `${borderVars['--border-width']} solid ${colorVars['--color-border']}`,
+    borderWidth: borderVars['--border-width'],
+    borderStyle: 'solid',
+    borderColor: colorVars['--color-border'],
     overflow: 'hidden',
   },
   rootFocused: {
@@ -73,7 +75,9 @@ const styles = stylex.create({
     textAlign: 'end',
     userSelect: 'none',
     color: colorVars['--color-text-disabled'],
-    borderRight: `${borderVars['--border-width']} solid ${colorVars['--color-border']}`,
+    borderRightWidth: borderVars['--border-width'],
+    borderRightStyle: 'solid',
+    borderRightColor: colorVars['--color-border'],
   },
   gutterLine: {
     fontFamily: typographyVars['--font-family-code'],

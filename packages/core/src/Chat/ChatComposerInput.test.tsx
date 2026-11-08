@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {createRef, StrictMode, useLayoutEffect} from 'react';
+import {createRef, StrictMode, useLayoutEffect, useState} from 'react';
 import {describe, it, expect, vi, afterEach, beforeEach} from 'vitest';
 import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -276,6 +276,49 @@ describe('ChatComposerInput', () => {
       expect(onChange).toHaveBeenCalledWith('hello');
     });
 
+    it('reports an imperative insertToken through onChange once, as typing does (FR1)', () => {
+      const onChange = vi.fn();
+      const handleRef = createRef<ChatComposerInputHandle>();
+      render(<ChatComposerInput onChange={onChange} handleRef={handleRef} />);
+      const textbox = screen.getByRole('textbox');
+      textbox.focus();
+      act(() => {
+        handleRef.current!.insertToken({value: '@sam', label: 'Sam'});
+      });
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange).toHaveBeenLastCalledWith(handleRef.current!.getValue());
+      expect(onChange.mock.lastCall?.[0]).toContain('@sam');
+    });
+
+    it('enables Send and sends the token after an imperative insertToken in a controlled composer (FR1)', () => {
+      const onSubmit = vi.fn();
+      const handleRef = createRef<ChatComposerInputHandle>();
+      function Host() {
+        const [value, setValue] = useState('');
+        return (
+          <ChatComposer
+            value={value}
+            onChange={setValue}
+            onSubmit={onSubmit}
+            input={<ChatComposerInput handleRef={handleRef} />}
+          />
+        );
+      }
+      render(<Host />);
+      expect(screen.getByRole('button', {name: 'Send'})).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
+      screen.getByRole('textbox').focus();
+      act(() => {
+        handleRef.current!.insertToken({value: '@sam', label: 'Sam'});
+      });
+      const send = screen.getByRole('button', {name: 'Send'});
+      expect(send).not.toHaveAttribute('aria-disabled');
+      fireEvent.click(send);
+      expect(onSubmit.mock.lastCall?.[0]).toContain('@sam');
+    });
+
     it('calls onSubmit on Enter', () => {
       const onSubmit = vi.fn();
       render(<ChatComposerInput onSubmit={onSubmit} />);
@@ -352,6 +395,55 @@ describe('ChatComposerInput', () => {
       fireEvent.click(body);
       expect(document.activeElement).toBe(editable);
     });
+  });
+
+  describe('touch keyboard Return key', () => {
+    it('labels the Return key Send by default, since Enter sends', () => {
+      render(<ChatComposerInput onSubmit={() => {}} />);
+      expect(screen.getByRole('textbox')).toHaveAttribute(
+        'enterkeyhint',
+        'send',
+      );
+    });
+
+    it('takes enterKeyHint for a composer whose Enter inserts a line break', () => {
+      render(<ChatComposerInput onSubmit={() => {}} enterKeyHint="enter" />);
+      expect(screen.getByRole('textbox')).toHaveAttribute(
+        'enterkeyhint',
+        'enter',
+      );
+    });
+
+    it('labels the default input of ChatComposer Send', () => {
+      render(<ChatComposer onSubmit={() => {}} />);
+      expect(screen.getByRole('textbox')).toHaveAttribute(
+        'enterkeyhint',
+        'send',
+      );
+    });
+
+    it.each([
+      'enter',
+      'done',
+      'go',
+      'next',
+      'previous',
+      'search',
+      'send',
+    ] as const)(
+      'only labels the key: Enter still submits under %s',
+      enterKeyHint => {
+        const onSubmit = vi.fn();
+        render(
+          <ChatComposerInput onSubmit={onSubmit} enterKeyHint={enterKeyHint} />,
+        );
+        const textbox = screen.getByRole('textbox');
+        textbox.textContent = 'hello';
+        fireEvent.input(textbox);
+        fireEvent.keyDown(textbox, {key: 'Enter'});
+        expect(onSubmit).toHaveBeenCalledWith('hello');
+      },
+    );
   });
 
   describe('Enter submit behavior', () => {
@@ -788,7 +880,8 @@ describe('ChatComposerInput', () => {
     });
 
     it('paste inserts a token chip for long pastes after a focus() with no selection range', () => {
-      render(<ChatComposerInput />);
+      const onChange = vi.fn();
+      render(<ChatComposerInput onChange={onChange} />);
       const textbox = screen.getByRole('textbox');
 
       textbox.focus();
@@ -804,6 +897,7 @@ describe('ChatComposerInput', () => {
       });
 
       expect(textbox.querySelector('[data-astryx-token]')).toBeInTheDocument();
+      expect(onChange).toHaveBeenCalledTimes(1);
     });
 
     it('imperative insertToken works after a focus() with no selection range', () => {
@@ -1534,6 +1628,79 @@ describe('ChatComposerInput', () => {
       fireEvent.input(editable);
     }
 
+    it('keeps the trigger menu open on a press in the editor or the menu, closes it on a press elsewhere', async () => {
+      render(
+        <>
+          <ChatComposerInput
+            triggers={[
+              createMentionTrigger({searchSource: createStaticSource(USERS)}),
+            ]}
+            debounceMs={0}
+          />
+          <button type="button">Elsewhere</button>
+        </>,
+      );
+      const editable = screen.getByRole('combobox');
+      editable.focus();
+      typeAtEnd(editable, '@c');
+      await waitFor(() => {
+        expect(editable).toHaveAttribute('aria-expanded', 'true');
+      });
+      const listbox = screen.getByRole('listbox', {hidden: true});
+      // A text editor cannot be an invoker, so native light dismiss would
+      // close the menu on this press; the menu is a manual popover.
+      expect(listbox.closest('[popover]')).toHaveAttribute('popover', 'manual');
+
+      const pressOn = (target: Element) => {
+        fireEvent.pointerDown(target);
+        fireEvent.pointerUp(target);
+      };
+      pressOn(editable);
+      expect(editable).toHaveAttribute('aria-expanded', 'true');
+      pressOn(listbox);
+      expect(editable).toHaveAttribute('aria-expanded', 'true');
+
+      pressOn(screen.getByRole('button', {name: 'Elsewhere'}));
+      await waitFor(() => {
+        expect(editable).toHaveAttribute('aria-expanded', 'false');
+      });
+    });
+
+    it('closes the trigger menu when a click in the editor moves the caret out of the query, and Enter then sends the draft', async () => {
+      const onSubmit = vi.fn();
+      render(
+        <ChatComposerInput
+          triggers={[
+            createMentionTrigger({searchSource: createStaticSource(USERS)}),
+          ]}
+          debounceMs={0}
+          onSubmit={onSubmit}
+        />,
+      );
+      const editable = screen.getByRole('combobox');
+      editable.focus();
+      typeAtEnd(editable, 'hello @c');
+      await waitFor(() => {
+        expect(editable).toHaveAttribute('aria-expanded', 'true');
+      });
+      // The click puts the caret between "he" and "llo".
+      const text = editable.firstChild as Text;
+      fireEvent.pointerDown(editable);
+      const range = document.createRange();
+      range.setStart(text, 2);
+      range.collapse(true);
+      const selection = window.getSelection()!;
+      selection.removeAllRanges();
+      selection.addRange(range);
+      fireEvent.pointerUp(editable);
+      fireEvent.click(editable);
+      await waitFor(() => {
+        expect(editable).toHaveAttribute('aria-expanded', 'false');
+      });
+      fireEvent.keyDown(editable, {key: 'Enter'});
+      expect(onSubmit).toHaveBeenCalledWith('hello @c');
+    });
+
     it('Enter while a newer trigger search is pending sends the typed text, picks no row, and no menu reopens after the send', async () => {
       const onSubmit = vi.fn();
       let resolveSlow: (items: SearchableItem[]) => void = () => {};
@@ -1959,6 +2126,7 @@ describe('ChatComposerInput', () => {
 
       const options = await getMenuOptions(textbox);
       fireEvent.mouseEnter(options[1]);
+      fireEvent.pointerMove(options[1], {screenX: 107, screenY: 107});
 
       expect(options[1]).toHaveAttribute('aria-selected', 'true');
       expect(spy.mock.calls.length).toBe(callsAfterOpen);

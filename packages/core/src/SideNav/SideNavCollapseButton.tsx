@@ -31,10 +31,16 @@ import {
   type SideNavImperativeCollapseHandle,
 } from './SideNavCollapseContext';
 import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
-import {useTranslator} from '../i18n';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {SideNavFocusTargetsContext} from './SideNavFocusTargetsContext';
 import type {ElementSize} from '../SizeContext/SizeContext';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/SideNav/SideNavCollapseButton.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Styles
@@ -71,9 +77,10 @@ const styles = stylex.create({
 export interface SideNavCollapseButtonProps extends BaseProps<HTMLButtonElement> {
   ref?: React.Ref<HTMLButtonElement>;
   /**
-   * The same controlled `collapsible` config given to SideNav
-   * (`{isCollapsed, onCollapsedChange}`). Needed only when the button is
-   * rendered outside the sidenav, where collapse context cannot reach it.
+   * The same controlled `collapsible` config given to SideNav, with all its
+   * keys (`isCollapsed` and `onCollapsedChange` are required). Needed only
+   * when the button is rendered outside the sidenav, where collapse context
+   * cannot reach it.
    */
   collapsible?: SideNavControlledCollapsible;
 
@@ -140,7 +147,7 @@ export function SideNavCollapseButton({
   onClick: onClickProp,
   ...props
 }: SideNavCollapseButtonProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const {isCollapsed, toggle, isCollapsible} = useSideNavCollapseState(
     collapsible,
     handleRef,

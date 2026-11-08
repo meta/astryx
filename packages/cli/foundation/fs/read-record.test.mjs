@@ -5,7 +5,7 @@
  * any changed since, including a change made while the operation ran.
  */
 
-import {describe, it, expect} from 'vitest';
+import {afterAll, beforeAll, describe, it, expect} from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -16,8 +16,23 @@ import {
   unchangedSince,
 } from './read-record.mjs';
 
+/**
+ * Every temporary folder these tests make lives here, removed once they
+ * finish. It is made in beforeAll, not when the module loads: Vitest skips
+ * both hooks when a run filters out every test here.
+ */
+let TEMP_ROOT = '';
+beforeAll(() => {
+  TEMP_ROOT = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'astryx-read-record-test-'),
+  );
+});
+afterAll(() => {
+  fs.rmSync(TEMP_ROOT, {recursive: true, force: true});
+});
+
 function scratch() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-read-record-'));
+  const dir = fs.mkdtempSync(path.join(TEMP_ROOT, 'astryx-read-record-'));
   const file = path.join(dir, 'doc.txt');
   fs.writeFileSync(file, 'one');
   return {dir, file};
@@ -149,6 +164,31 @@ describe('reusedWhileUnchanged', () => {
     expect([...seen.keys()]).toEqual([file]);
     fs.writeFileSync(file, 'two, longer');
     expect(unchangedSince(seen)).toBe(false);
+  });
+
+  it('shares a load that is still running, unless what it read has changed since', async () => {
+    const {file} = scratch();
+    let loads = 0;
+    /** @type {(() => void)[]} */
+    const finish = [];
+    const get = reusedWhileUnchanged(async () => {
+      loads += 1;
+      const text = fs.readFileSync(file, 'utf8');
+      await new Promise(resolve => finish.push(() => resolve(undefined)));
+      return text;
+    });
+    const running = get();
+    const joined = get();
+    expect(loads).toBe(1);
+    // An edit to a file the running load already read: a later call loads
+    // again instead of sharing the pre-edit value.
+    fs.writeFileSync(file, 'two, longer');
+    const afterEdit = get();
+    expect(loads).toBe(2);
+    for (const done of finish) done();
+    expect(await running).toBe('one');
+    expect(await joined).toBe('one');
+    expect(await afterEdit).toBe('two, longer');
   });
 
   it('tries a failed load again', async () => {

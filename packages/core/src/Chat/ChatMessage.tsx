@@ -37,7 +37,14 @@ import {
 import {isRenderable, mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {chatMessageVars} from './chatMessage.vars.stylex';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Chat/ChatMessage.generated';
+
+registerEnglishFallback(english);
 
 export interface ChatMessageProps extends BaseProps<HTMLElement> {
   ref?: React.Ref<HTMLElement>;
@@ -108,12 +115,20 @@ const styles = stylex.create({
   // Slot wrappers collapse when the caller's content renders nothing, so an
   // empty Fragment or a component that returns null leaves no gap. Content is
   // never inspected to decide this.
+  // Judged from this article (parent-relative), never from siblings, so the
+  // global stylesheet keeps no sibling-relative :has().
+  avatarOffset: {
+    [chatMessageVars['--_chat-avatar-offset']]: {
+      default: '0px',
+      ':has([data-chat-name])': spacingVars['--spacing-5'],
+    },
+  },
   avatarWrap: {
     display: {default: null, ':empty': 'none'},
     flexShrink: 0,
-    ':has(~ * [data-chat-name])': {
-      marginBlockStart: spacingVars['--spacing-5'],
-    },
+    // The avatar lines up with a bubble's name row when the message holds
+    // one; the article sets the offset (see chatMessageVars).
+    marginBlockStart: chatMessageVars['--_chat-avatar-offset'],
   },
   contentColumn: {
     display: 'flex',
@@ -196,7 +211,7 @@ export function ChatMessage({
   ref,
   ...rest
 }: ChatMessageProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const listContext = useChatListContext();
   const density = densityProp ?? listContext?.density ?? 'balanced';
 
@@ -257,6 +272,7 @@ export function ChatMessage({
         {...mergeProps(
           themeProps('chat-message', {sender, density}),
           stylex.props(
+            styles.avatarOffset,
             styles.root,
             rootAlignment,
             hasAvatar && rootGap,

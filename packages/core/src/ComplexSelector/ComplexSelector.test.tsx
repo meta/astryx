@@ -11,7 +11,14 @@
 
 import React, {useLayoutEffect} from 'react';
 import {beforeEach, describe, expect, it, vi} from 'vitest';
-import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Button} from '../Button/Button';
 import * as stylex from '@stylexjs/stylex';
@@ -432,9 +439,8 @@ describe('ComplexSelector', () => {
       </ComplexSelector>,
     );
 
-    const popover = screen
-      .getByRole('dialog', {hidden: true})
-      .closest('[popover]');
+    // Closed, the surface carries no dialog role, so find the layer itself.
+    const popover = document.querySelector('[popover]');
     expect(popover?.getAttribute('style')).toContain(
       'position-area: self-block-end span-self-inline-start',
     );
@@ -949,6 +955,80 @@ describe('ComplexSelector onOpenChange', () => {
     expect(onOpenChange.mock.calls).toEqual([[false]]);
   });
 
+  describe('focus on close', () => {
+    function lightDismiss(): void {
+      const popover = screen
+        .getByRole('dialog', {hidden: true})
+        .closest('[popover]') as HTMLElement;
+      act(() => {
+        popover.dispatchEvent(
+          Object.assign(new Event('toggle'), {
+            oldState: 'open',
+            newState: 'closed',
+          }),
+        );
+      });
+    }
+
+    it('Escape and a close from the content return focus to the trigger', async () => {
+      const user = userEvent.setup();
+      const trigger = renderSelector(() => {});
+      await user.click(trigger);
+      await user.keyboard('{Escape}');
+      expect(trigger).toHaveFocus();
+      await user.click(trigger);
+      await user.click(screen.getByRole('button', {name: 'Apply', ...h}));
+      expect(trigger).toHaveFocus();
+    });
+
+    it('a light dismiss onto another control leaves focus there; onto nothing focusable it returns to the trigger', async () => {
+      const user = userEvent.setup();
+      render(
+        <>
+          <ComplexSelector label="View options" value={[]}>
+            {() => <button type="button">Apply</button>}
+          </ComplexSelector>
+          <input aria-label="Notes" />
+        </>,
+      );
+      const trigger = screen.getByRole('combobox', {name: 'View options'});
+      const notes = screen.getByRole('textbox', {name: 'Notes'});
+      await user.click(trigger);
+      act(() => notes.focus());
+      lightDismiss();
+      expect(notes).toHaveFocus();
+
+      await user.click(trigger);
+      act(() => (document.activeElement as HTMLElement | null)?.blur());
+      lightDismiss();
+      expect(trigger).toHaveFocus();
+    });
+
+    it('a caller-rendered control gets focus back even after a light dismiss onto another control', async () => {
+      const user = userEvent.setup();
+      render(
+        <>
+          <ComplexSelector
+            label="View options"
+            value={[]}
+            renderTrigger={props => (
+              <button type="button" {...props}>
+                Options
+              </button>
+            )}>
+            {() => <button type="button">Apply</button>}
+          </ComplexSelector>
+          <input aria-label="Notes" />
+        </>,
+      );
+      const opener = screen.getByRole('combobox', {name: 'View options'});
+      await user.click(opener);
+      act(() => screen.getByRole('textbox', {name: 'Notes'}).focus());
+      lightDismiss();
+      expect(opener).toHaveFocus();
+    });
+  });
+
   it('reports opens and closes driven through the imperative handle', () => {
     const onOpenChange = vi.fn();
     const handleRef = React.createRef<ComplexSelectorHandle>();
@@ -1044,6 +1124,49 @@ describe('ComplexSelector onOpenChange', () => {
       },
     );
 
+    it('shows the status icon in place of the chevron with attached status, and the chevron with detached', () => {
+      const {container, rerender} = render(
+        <ComplexSelector
+          label="Filter"
+          value={[]}
+          status={{type: 'error', message: 'Required'}}>
+          {() => <button type="button">Apply</button>}
+        </ComplexSelector>,
+      );
+      const controlBox = screen.getByRole('combobox', {name: 'Filter'})
+        .parentElement as HTMLElement;
+      expect(
+        controlBox.querySelector('.astryx-input-status-icon'),
+      ).toBeInTheDocument();
+      // A plain icon, not a control: the combobox stays the one tab stop.
+      expect(within(controlBox).queryAllByRole('button')).toHaveLength(0);
+      // It takes the chevron's place, as in Selector.
+      expect(
+        controlBox.querySelector('.astryx-complex-selector-indicator-icon'),
+      ).not.toBeInTheDocument();
+      rerender(
+        <ComplexSelector
+          label="Filter"
+          value={[]}
+          status={{type: 'error', message: 'Required'}}
+          statusVariant="detached">
+          {() => <button type="button">Apply</button>}
+        </ComplexSelector>,
+      );
+      const detachedBox = screen.getByRole('combobox', {name: 'Filter'})
+        .parentElement as HTMLElement;
+      expect(
+        detachedBox.querySelector('.astryx-input-status-icon'),
+      ).not.toBeInTheDocument();
+      expect(
+        detachedBox.querySelector('.astryx-complex-selector-indicator-icon'),
+      ).toBeInTheDocument();
+      // The detached message box shows its own icon.
+      expect(
+        container.querySelector('.astryx-field-status'),
+      ).toBeInTheDocument();
+    });
+
     it('renders no message box for statusVariant="tooltip"', () => {
       const {container} = render(
         <ComplexSelector
@@ -1081,6 +1204,10 @@ describe('ComplexSelector onOpenChange', () => {
         expect(document.getElementById(id)).not.toBeNull();
       }
       expect(trigger).toHaveAccessibleDescription('Required');
+      // The info-tip takes the chevron's place, as in Selector.
+      expect(
+        document.querySelector('.astryx-complex-selector-indicator-icon'),
+      ).not.toBeInTheDocument();
 
       // Focusing the info-tip reveals the message without opening the popup.
       await user.tab();

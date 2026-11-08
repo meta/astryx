@@ -4,40 +4,44 @@
  * @file clickGuard.ts
  * @input A document whose gesture already acted (a menu row's release, a
  *   touch a gesture recognizer claimed)
- * @output Exports armClickGuard (and its ClickGuardOptions),
- *   disarmClickGuard, isClickGuardArmed, withoutClickGuard and
- *   CLICK_GUARD_WINDOW_MS
+ * @output armClickGuard (and its ClickGuardOptions), disarmClickGuard,
+ *   isClickGuardArmed, withoutClickGuard and CLICK_GUARD_WINDOW_MS
  * @position The one guard for the browser's click after a gesture that
- *   already acted (useMenuPress FR5, `spec:AST-057` FR6), shared by the menu
- *   press model (hooks/useMenuPress.ts) and the gesture host
- *   (gestures/GestureHost.ts)
+ *   already acted, shared by hooks/useMenuPress.ts, gestures/GestureHost.ts,
+ *   utils/boxHold.ts and the keyboard module's tap route
+ *   (keyboard/keyboardHeight.ts)
  *
- * Armed at a tracked release, it swallows the next click the browser
- * reports, on the window's capture phase through the input stream
- * (utils/inputStream.ts), so no framework sees it. It disarms on that click,
- * at the next `pointerdown` (a new gesture, whose click must act), or after
- * {@link CLICK_GUARD_WINDOW_MS}; disarmed, it lets every click pass. Its
- * click listener comes with an arm. Once the menu press model arms it, it
- * stays: installed once per document and armed per gesture, it keeps its
- * place ahead of any window listener the page adds later
- * (`module:DropdownMenu/useMenuPress` PR2, which `spec:AST-094` FR24 counts
- * once per page). Armed only by the gesture host, it goes when the guard
- * disarms: a release-armed swallower is press work (FR24).
- *
- * Some clicks always pass:
- * - a click whose `detail` is 0: a keyboard's, a screen reader's, or an
- *   activation the page dispatches;
- * - a click dispatched inside {@link withoutClickGuard}: a menu row's own
- *   activation, or a recognizer's replayed or retargeted click;
- * - the hidden haptic switch's click (gestures/haptics.ts), the tap's own
- *   feedback.
- *
- * SYNC: When modified, update clickGuard.test.ts, hooks/useMenuPress.ts and
- * gestures/GestureHost.ts.
+ * SYNC: When modified, update clickGuard.test.ts, hooks/useMenuPress.ts,
+ * gestures/GestureHost.ts and utils/boxHold.ts.
  */
+
+// Armed at a tracked release, the guard swallows the next click on the
+// window's capture phase (utils/inputStream.ts), so no framework sees it. It
+// disarms on that click, at the next `pointerdown`, or after
+// {@link CLICK_GUARD_WINDOW_MS}. After the menu press model arms it, its click
+// listener stays, so it keeps its place ahead of window listeners that the
+// page adds later (AST-057, AST-094). If only the gesture host arms it, the
+// click listener stays only while the guard is armed.
+//
+// An arm at a claimed touch's lift also takes that touch's late `mousedown`
+// and `mouseup`. WebKit sends them a few ms after a held tap's cancelled
+// `touchend`, aimed at whatever is under the finger by then. They go with
+// the click, the next `pointerdown` or the window, as the guard does.
+//
+// The menu press model's arm at a finger's release also cancels that touch's
+// `touchend`, so the browser creates no click and no compatibility mouse
+// events. A busy main thread can otherwise hold that click past the window,
+// when a drill-in has put another row under the finger.
+//
+// Some clicks always pass:
+// - a click with `detail` 0: a keyboard's, a screen reader's, or one that the
+//   page dispatches;
+// - a click dispatched inside {@link withoutClickGuard};
+// - the hidden haptic switch's click (gestures/haptics.ts).
 
 import {isHapticSwitch} from '../privateAttributes/hapticSwitch.stylex';
 import {subscribeInput} from './inputStream';
+import {realmValue, sharedKey} from './sharedRealm';
 
 /**
  * How long after a release the browser's click is still swallowed, in ms.
@@ -50,11 +54,23 @@ export const CLICK_GUARD_WINDOW_MS = 400;
 export interface ClickGuardOptions {
   /**
    * The menu press model's arm: the window's click listener stays from then
-   * on (`module:DropdownMenu/useMenuPress` PR2). Any other arm keeps it only
-   * while the guard is armed (`spec:AST-094` FR24).
+   * on. Any other arm keeps it only while the guard is armed.
    * @default false
    */
   readonly staysInstalled?: boolean;
+  /**
+   * The gesture host's arm at a claimed touch's lift: the guard also takes
+   * that touch's late `mousedown` and `mouseup` while it is armed.
+   * @default false
+   */
+  readonly takesLateMouse?: boolean;
+  /**
+   * The menu press model's arm at a finger's release: the guard also cancels
+   * that touch's `touchend`, so the browser creates no click for it. A
+   * cancelled `touchend` disarms the guard.
+   * @default false
+   */
+  readonly cancelsTouchEnd?: boolean;
 }
 
 interface Guard {
@@ -62,10 +78,17 @@ interface Guard {
   timer: ReturnType<typeof setTimeout> | null;
 }
 
-const guards = new Map<Document, Guard>();
-/** The click listeners that stay, by window: the menu press model's (PR2). */
-const stayingClickListeners = new WeakMap<Window, () => void>();
-let unguardedDepth = 0;
+/**
+ * The click guard's state, registered, so a swizzled copy guards the same
+ * clicks as the package.
+ */
+const guardState = realmValue(sharedKey('click-guard', 1), () => ({
+  guards: new Map<Document, Guard>(),
+  /** The click listeners that stay, by window: the menu press model's. */
+  stayingClickListeners: new WeakMap<Window, () => void>(),
+  unguardedDepth: 0,
+}));
+const {guards, stayingClickListeners} = guardState;
 
 /** Listen for the next click on `view`'s capture phase; returns the stop. */
 function listenForClicks(view: Window): () => void {
@@ -88,7 +111,11 @@ function listenForClicks(view: Window): () => void {
 /** Swallow the browser's next click on `doc` (see the file header). */
 export function armClickGuard(
   doc: Document,
-  {staysInstalled = false}: ClickGuardOptions = {},
+  {
+    staysInstalled = false,
+    takesLateMouse = false,
+    cancelsTouchEnd = false,
+  }: ClickGuardOptions = {},
 ): void {
   const view = doc.defaultView;
   if (view == null) {
@@ -108,6 +135,33 @@ export function armClickGuard(
     // The next press is a new gesture: its click must never be eaten.
     subscribeInput(view, 'pointerdown', () => disarmClickGuard(doc)),
   );
+  if (takesLateMouse) {
+    for (const type of ['mousedown', 'mouseup'] as const) {
+      guard.unsubscribers.push(
+        subscribeInput(view, type, swallowLateMouse, {cancels: true}),
+      );
+    }
+  }
+  if (cancelsTouchEnd) {
+    // A touch sends its pointerup before its touchend, so the next touchend is
+    // that touch's own. The next pointerdown disarms the guard first.
+    const stopTouchEnd = subscribeInput(
+      view,
+      'touchend',
+      event => {
+        stopTouchEnd();
+        // A touchend that the browser took for a scroll is not cancelable.
+        // The guard stays armed for a click that may follow it.
+        if (event.cancelable) {
+          event.preventDefault();
+          // No click follows a cancelled touchend.
+          disarmClickGuard(doc);
+        }
+      },
+      {cancels: true},
+    );
+    guard.unsubscribers.push(stopTouchEnd);
+  }
   guard.timer = setTimeout(() => disarmClickGuard(doc), CLICK_GUARD_WINDOW_MS);
 }
 
@@ -137,11 +191,11 @@ export function isClickGuardArmed(doc: Document): boolean {
  * retargeted click).
  */
 export function withoutClickGuard<T>(dispatch: () => T): T {
-  unguardedDepth++;
+  guardState.unguardedDepth++;
   try {
     return dispatch();
   } finally {
-    unguardedDepth--;
+    guardState.unguardedDepth--;
   }
 }
 
@@ -159,8 +213,17 @@ export function __resetClickGuardForTest(): void {
   }
 }
 
+/** Swallows a claimed touch's late `mousedown` or `mouseup`. */
+function swallowLateMouse(event: MouseEvent): void {
+  if (isExempt(event)) {
+    return;
+  }
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}
+
 function isExempt(event: MouseEvent): boolean {
-  if (event.detail === 0 || unguardedDepth > 0) {
+  if (event.detail === 0 || guardState.unguardedDepth > 0) {
     return true;
   }
   return isHapticSwitch(event.target);

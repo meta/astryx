@@ -49,5 +49,18 @@ describe('levenshteinDistance', () => {
     // so a real 5-away typo isn't dropped by the short-circuit.
     expect(d('use', 'useMedia')).toBe(5); // 5 pure insertions
   });
+
+  it('answers max + 1 past an optional bound, and the distance within it', () => {
+    const words = ['kitten', 'sitting', 'mitten', 'kitchen', 'knitting', 'kit'];
+    for (const a of words) {
+      for (const b of words) {
+        const full = d(a, b);
+        for (let max = 0; max <= 5; max++) {
+          const within = full <= max ? full : max + 1;
+          expect(d(a, b, max), `${a} ${b} ${max}`).toBe(within);
+        }
+      }
+    }
+  });
 });
 
