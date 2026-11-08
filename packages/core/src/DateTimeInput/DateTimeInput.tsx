@@ -1712,6 +1712,7 @@ function PointerDateTimeField({
             }),
             stylex.props(
               inputWrapperStyles.base,
+              inputWrapperStyles.textField,
               sizeStyles[size],
               styles.dateWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
@@ -1866,6 +1867,7 @@ function PointerDateTimeField({
             }),
             stylex.props(
               inputWrapperStyles.base,
+              inputWrapperStyles.textField,
               sizeStyles[size],
               styles.timeWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
