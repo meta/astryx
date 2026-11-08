@@ -588,12 +588,17 @@ function NativeScrollTranscript({messageCount}: {messageCount: number}) {
 }
 
 export default function ChatVirtualizerPhonePage() {
-  const [mode] = useState(() =>
-    typeof window === 'undefined'
-      ? 'virtualized'
-      : (new URLSearchParams(window.location.search).get('mode') ??
-        'virtualized'),
-  );
+  // Read after hydration, so the server render and the first client render
+  // agree.
+  const [mode, setMode] = useState<string | null>(null);
+  useEffect(() => {
+    setMode(
+      new URLSearchParams(window.location.search).get('mode') ?? 'virtualized',
+    );
+  }, []);
+  if (mode == null) {
+    return null;
+  }
   if (mode === 'native') {
     return <NativeScrollTranscript messageCount={1000} />;
   }
