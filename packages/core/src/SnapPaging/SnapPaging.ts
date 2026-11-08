@@ -17,14 +17,17 @@ import {createPager, type PagerAnimator} from '../hooks/usePager';
 import {isRtlElement} from '../hooks/isRtlElement';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {animatorFor, type MotionHandle} from '../motion/animator';
+import {observeMutations} from '../utils/sharedMutationObserver';
+import {observeResize} from '../utils/sharedResizeObserver';
 import {
   type HeldRowListener,
   makeSnapPaging,
   rowScale,
+  type SnapPages,
   type SnapPaging,
   type SnapPagingAttachment,
   type SnapPagingOptions,
-  snapStops,
+  snapPages,
 } from './snapPagingValue';
 
 export type {SnapPaging, SnapPagingOptions} from './snapPagingValue';
@@ -229,8 +232,12 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
       : Math.max(0, element.scrollWidth - element.clientWidth);
   }
 
+  function pages(): SnapPages {
+    return snapPages(element, position(), travel());
+  }
+
   function stops(): number[] {
-    return snapStops(element, position(), travel());
+    return pages().stops;
   }
 
   function viewWidth(): number {
@@ -279,7 +286,10 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
     follow();
   }
 
-  function handBack(): void {
+  // `beforeSnap` runs once the children are back in place and before the
+  // row's snap type returns, so the hand-back's scroll snaps on what it
+  // writes.
+  function handBack(beforeSnap?: () => void): void {
     if (!isMoving) {
       return;
     }
@@ -291,6 +301,7 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
       child.style.removeProperty('translate');
     }
     isMoving = false;
+    beforeSnap?.();
     if (ownSnapType === '') {
       element.style.removeProperty('scroll-snap-type');
     } else {
@@ -364,6 +375,7 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
     position,
     travel,
     remeasure,
+    pages,
     stops,
     viewWidth,
     place,
@@ -394,6 +406,52 @@ function attachPaging(
   let anchor = 0;
   // The row's stops and view width, read before a takeover's first write.
   let measured: {stops: number[]; viewWidth: number} | null = null;
+  // Native snap skips each item whose stop the end's page takes. So a wheel,
+  // a key or a scroll rests on the same pages as a flick. Each skipped item
+  // gets its own inline value and priority back when its stop leaves the
+  // end's page or the paging detaches.
+  const skipped = new Map<HTMLElement, {value: string; priority: string}>();
+  const skip = (items: ReadonlyArray<Element>) => {
+    for (const [item, own] of skipped) {
+      if (!items.includes(item)) {
+        skipped.delete(item);
+        if (own.value === '') {
+          item.style.removeProperty('scroll-snap-align');
+        } else {
+          item.style.setProperty('scroll-snap-align', own.value, own.priority);
+        }
+      }
+    }
+    for (const item of items) {
+      if (item instanceof HTMLElement && !skipped.has(item)) {
+        skipped.set(item, {
+          value: item.style.getPropertyValue('scroll-snap-align'),
+          priority: item.style.getPropertyPriority('scroll-snap-align'),
+        });
+        item.style.setProperty('scroll-snap-align', 'none');
+      }
+    }
+  };
+  // The skip follows the stops at rest, at most once a frame. A change while
+  // the paging holds the row waits for the hand-back, which writes it before
+  // the row snaps again.
+  let resnapFrame: number | null = null;
+  let isResnapDue = false;
+  const resnap = () => {
+    if (track.isMoving) {
+      isResnapDue = true;
+      return;
+    }
+    resnapFrame ??= requestAnimationFrame(() => {
+      resnapFrame = null;
+      if (track.isMoving) {
+        isResnapDue = true;
+        return;
+      }
+      isResnapDue = false;
+      skip(track.pages().skipped);
+    });
+  };
   const takeOverShown = (at: number) => {
     // Every read comes before the takeover's first write.
     const stops = track.stops();
@@ -425,6 +483,9 @@ function attachPaging(
         // A resize while the row is held moves its travel first.
         track.remeasure();
         const stops = measured?.stops ?? track.stops();
+        // Native snap follows the new stops. The skip writes in a later
+        // frame, so this read stays ahead of any write.
+        resnap();
         return (options.pages ?? 'view') === 'item'
           ? stops
           : viewPages(
@@ -442,18 +503,49 @@ function attachPaging(
       },
       onSettle: () => {
         if (!pager.isDragging && !pager.isSettling) {
-          track.handBack();
+          track.handBack(
+            isResnapDue
+              ? () => {
+                  isResnapDue = false;
+                  skip(track.pages().skipped);
+                }
+              : undefined,
+          );
         }
       },
     },
     {animator: track.animator},
   );
   const detach = pager.attach(element, element);
+  // Items that change while the row keeps its size move the stops too.
+  let unobserveItems: (() => void)[] = [];
+  const observeItems = () => {
+    for (const unobserve of unobserveItems) {
+      unobserve();
+    }
+    unobserveItems = Array.from(element.children, item =>
+      observeResize(item, resnap),
+    );
+  };
+  const unobserveList = observeMutations(element, {childList: true}, () => {
+    observeItems();
+    resnap();
+  });
+  observeItems();
   return {
     detach: () => {
       detach();
       pager.dispose();
+      unobserveList();
+      for (const unobserve of unobserveItems) {
+        unobserve();
+      }
+      if (resnapFrame != null) {
+        cancelAnimationFrame(resnapFrame);
+        resnapFrame = null;
+      }
       track.handBack();
+      skip([]);
     },
     move: target => {
       // A finger on the row keeps it.
@@ -480,7 +572,7 @@ function attachPaging(
       if (!pager.isDragging) {
         const end = track.travel();
         const to = Math.min(Math.max(target(track.position(), end), 0), end);
-        // The pager's own move: a finger catches it as it catches a settle.
+        // The pager's own move: a finger on the row stops it at the touch.
         pager.goTo(pager.nearestPage(to), {offset: to});
       }
       return true;

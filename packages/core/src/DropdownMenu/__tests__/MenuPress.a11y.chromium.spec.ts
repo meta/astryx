@@ -50,6 +50,7 @@ async function mount(page: Page, story: string) {
 /**
  * Waits until the open menu has finished entering. Under a finger, input that
  * lands during the entrance is held, as UIMenu takes none until it is shown.
+ * The entrance runs on the surface, the layer's child.
  */
 async function presented(page: Page) {
   const layer = page.locator('[popover]:has([role="menu"])').first();
@@ -57,8 +58,8 @@ async function presented(page: Page) {
     .poll(async () =>
       layer.evaluate(
         element =>
-          element
-            .getAnimations()
+          [element, element.firstElementChild]
+            .flatMap(node => node?.getAnimations() ?? [])
             .filter(animation => animation.playState === 'running').length,
       ),
     )

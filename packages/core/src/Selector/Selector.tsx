@@ -1370,6 +1370,9 @@ export function Selector<T extends SelectorOptionType>(
       // The theme target belongs on the SURFACE that paints the popup, which
       // `usePopover` owns — not on the scrolling list inside it.
       surfaceTarget: 'selector-popup',
+      // The entrance runs on the surface: an anchored layer lays out again on
+      // each frame its own style animates.
+      xstyle: layerAnimations[placement ?? 'below'],
     },
   });
   const {popover} = surface;
@@ -2111,7 +2114,7 @@ export function Selector<T extends SelectorOptionType>(
       offset: shouldOverlaySelectedItem
         ? undefined
         : spacingVars['--spacing-1'],
-      xstyle: [styles.popover, layerAnimations[popoverPlacement]],
+      xstyle: styles.popover,
       style: popoverOffsetStyle,
     });
   }

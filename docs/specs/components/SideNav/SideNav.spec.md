@@ -96,8 +96,10 @@ Consumer migration instructions belong in consumer docs and release notes.
   `family:navigation-destinations`.
 - The collapsed item's tooltip and how it attaches — owned by
   `component:SideNavItem`.
-- Exact fill colors, radius, row height, and row padding per size — owned by
-  the shared nav item styles and the `side-nav-item` theme target.
+- Exact fill colors, radius, minimum row height, and row padding per size —
+  owned by the shared nav item styles and the `side-nav-item` theme target;
+  the shared styles take the height as a minimum, so a row grows with a
+  larger text size (`spec:AST-102` FR4).
 - Layout of caller content placed directly inside a SideNavItem that is not a
   SideNavItem — owned by the product callsite.
 - SideNavHeading — owned by `component:SideNavHeading`; SideNavCollapseButton —
@@ -107,10 +109,10 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Public concepts
 
-| Concept       | Closed values or states                        | Meaning                                                                                                     | Availability by variant/orientation/state | Default | Owner               | Stability | Invalid-value behavior |
-| ------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------- | ------- | ------------------- | --------- | ---------------------- |
-| Nesting depth | `0`, `1`, `2`, … (derived, not a prop)         | The number of SideNavItem ancestors of a row within the same list. A collapsed rail's flyout restarts at 0. | Expanded rail; mobile drawer; flyout      | `0`     | `component:SideNav` | stable    | Not caller-settable    |
-| Row size      | `sm`, `md`, `lg` (existing SideNavItem `size`) | Sets the row's height and base inline padding; the indent adds to that padding.                             | Every row                                 | `md`    | `component:SideNav` | stable    | Rejected by the type   |
+| Concept       | Closed values or states                        | Meaning                                                                                                                                                | Availability by variant/orientation/state | Default | Owner               | Stability | Invalid-value behavior |
+| ------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------- | ------- | ------------------- | --------- | ---------------------- |
+| Nesting depth | `0`, `1`, `2`, … (derived, not a prop)         | The number of SideNavItem ancestors of a row within the same list. A collapsed rail's flyout restarts at 0.                                            | Expanded rail; mobile drawer; flyout      | `0`     | `component:SideNav` | stable    | Not caller-settable    |
+| Row size      | `sm`, `md`, `lg` (existing SideNavItem `size`) | Sets an expanded row's minimum height and every row's base inline padding; the indent adds to that padding. A collapsed rail row keeps a fixed square. | Every row                                 | `md`    | `component:SideNav` | stable    | Rejected by the type   |
 
 ## Behavioral and layout contract
 

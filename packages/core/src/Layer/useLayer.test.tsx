@@ -3074,38 +3074,6 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
 
   const TRIGGER = rect(300, 400, 30, 100);
 
-  /**
-   * An intersection report as an engine makes it: the target's box, and the
-   * root's box, which is the viewport shrunk by the observer's root margin.
-   */
-  function report(
-    options: IntersectionObserverInit | undefined,
-    box: DOMRect,
-    intersectionRatio: number,
-    isIntersecting = intersectionRatio > 0,
-    viewport = {
-      width: document.documentElement.clientWidth,
-      height: document.documentElement.clientHeight,
-    },
-  ) {
-    const [top = 0, right = 0, bottom = 0, left = 0] = (
-      options?.rootMargin ?? '0px 0px 0px 0px'
-    )
-      .split(' ')
-      .map(value => -parseFloat(value));
-    return {
-      intersectionRatio,
-      isIntersecting,
-      boundingClientRect: box,
-      rootBounds: rect(
-        top,
-        left,
-        viewport.height - bottom - top,
-        viewport.width - right - left,
-      ),
-    } as unknown as IntersectionObserverEntry;
-  }
-
   /** Let the next animation frame run, as the browser does before it paints. */
   async function nextFrame() {
     await act(
@@ -3306,8 +3274,8 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     const {container} = render(<ClearHarness />);
     await user.click(container.querySelector('button')!);
     // Mid-scroll: the trigger has moved under the layer's stale box, which
-    // reads as covering it and past the viewport. A scroll is read only once
-    // it has painted, by the anchor-move observer.
+    // reads as covering it and past the viewport. A scroll is checked only
+    // after it stops.
     spy.mockRestore();
     placeBoxes(rect(-40, 380, 30, 100), rect(-60, 350, 100, 200));
     act(() => {
@@ -3481,29 +3449,22 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     expect(placedAfresh()).toBe(0);
   });
 
-  it('scrolls only while its content overflows the box it was given', async () => {
+  it('scrolls once its content overflows, by CSS alone, with no read of its scroll size', async () => {
     const user = userEvent.setup();
     placeBoxes(TRIGGER, rect(200, 350, 100, 200));
-    let scrollHeight = 100;
-    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(
-      () => scrollHeight,
+    const scrollSizeReads = vi.spyOn(
+      HTMLElement.prototype,
+      'scrollHeight',
+      'get',
     );
-    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(100);
     const {container, getByText} = render(<ClearHarness />);
     await user.click(getByText('Trigger'));
     const layerEl = container.querySelector('[popover]') as HTMLElement;
-    // A layer that fits stays a plain box.
-    expect(layerEl).not.toHaveAttribute('data-astryx-layer-scrolls');
-
-    await user.click(getByText('Hide'));
-    scrollHeight = 900;
-    await user.click(getByText('Trigger'));
-    expect(layerEl).toHaveAttribute('data-astryx-layer-scrolls');
+    expect(layerEl.className).toContain('useLayer__styles.scrollsOnOverflow');
+    expect(scrollSizeReads).not.toHaveBeenCalled();
     const css =
       document.getElementById('astryx-layer-slide-rules')?.textContent ?? '';
-    expect(css).toContain(
-      '[data-astryx-layer-scrolls]{overflow-y:auto;overscroll-behavior-block:contain;}',
-    );
+    expect(css).not.toContain('overscroll-behavior');
   });
 
   it('re-reads its geometry while open when it or its content resizes', async () => {
@@ -3541,291 +3502,6 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
       }
     });
     expect(placedAfresh()).toBeGreaterThan(0);
-    vi.unstubAllGlobals();
-  });
-
-  it('follows a trigger that moves in layout without resizing, and leaves its placement to the engine', async () => {
-    const observers: {
-      callback: (entries: IntersectionObserverEntry[]) => void;
-      options: IntersectionObserverInit;
-      disconnected: boolean;
-    }[] = [];
-    vi.stubGlobal(
-      'IntersectionObserver',
-      class {
-        record: (typeof observers)[number];
-        constructor(
-          callback: (entries: IntersectionObserverEntry[]) => void,
-          options: IntersectionObserverInit,
-        ) {
-          this.record = {callback, options, disconnected: false};
-          observers.push(this.record);
-        }
-        observe() {}
-        disconnect() {
-          this.record.disconnected = true;
-        }
-        unobserve() {}
-      },
-    );
-    const user = userEvent.setup();
-    const spy = placeBoxes(TRIGGER, rect(200, 350, 100, 200));
-    const {getByText} = render(<ClearHarness />);
-    await user.click(getByText('Trigger'));
-    expect(placedAfresh()).toBe(0);
-    // The move observer's root is the viewport shrunk to the trigger's rect.
-    const move = observers.find(o => o.options?.root === document);
-    expect(move?.options.threshold).toBe(1);
-    expect(move?.options.rootMargin).toBe(
-      `-300px ${-(document.documentElement.clientWidth - 500)}px ${-(document.documentElement.clientHeight - 330)}px -400px`,
-    );
-
-    // Its initial report: fully inside its own rect.
-    act(() => move?.callback([report(move.options, TRIGGER, 1)]));
-    expect(placedAfresh()).toBe(0);
-
-    // The trigger moves, and the layer now reads as covering it.
-    spy.mockRestore();
-    placeBoxes(TRIGGER, rect(16, 350, 688, 300));
-    const before = observers.length;
-    act(() => move?.callback([report(move.options, TRIGGER, 0.4)]));
-    // Re-armed on the new rect at once.
-    expect(move?.disconnected).toBe(true);
-    expect(observers.length).toBe(before + 1);
-    // A move never places the layer afresh: CSS anchor positioning places it.
-    await nextFrame();
-    expect(placedAfresh()).toBe(0);
-    vi.unstubAllGlobals();
-  });
-
-  it('follows a move from its report alone: no layout read, armed on the reported box', async () => {
-    type Record = {
-      callback: (entries: IntersectionObserverEntry[]) => void;
-      options: IntersectionObserverInit;
-    };
-    const observers: Record[] = [];
-    vi.stubGlobal(
-      'IntersectionObserver',
-      class {
-        constructor(
-          callback: (entries: IntersectionObserverEntry[]) => void,
-          options: IntersectionObserverInit,
-        ) {
-          observers.push({callback, options});
-        }
-        observe() {}
-        disconnect() {}
-        unobserve() {}
-      },
-    );
-    const moves = () =>
-      observers.filter(
-        o => o.options?.root === document && o.options.rootMargin != null,
-      );
-    const latest = () => moves()[moves().length - 1];
-    vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(
-      1280,
-    );
-    viewport720();
-    const user = userEvent.setup();
-    const spy = placeBoxes(TRIGGER, rect(200, 350, 100, 200));
-    const {getByText} = render(<ClearHarness />);
-    await user.click(getByText('Trigger'));
-    expect(latest().options.rootMargin).toBe('-300px -780px -390px -400px');
-
-    // Every frame of a scroll reports a move. Following it reads no layout:
-    // the box and the viewport come from the report.
-    const width = vi.spyOn(document.documentElement, 'clientWidth', 'get');
-    const height = vi.spyOn(document.documentElement, 'clientHeight', 'get');
-    const triggerReads = () =>
-      spy.mock.contexts.filter(
-        el => !(el as HTMLElement).hasAttribute('popover'),
-      ).length;
-    const readsBefore = triggerReads();
-    width.mockClear();
-    height.mockClear();
-    const scrolled = rect(247.5, 400, 30, 100);
-    const screen = {width: 1280, height: 720};
-    act(() =>
-      latest().callback([
-        report(latest().options, scrolled, 0.4, true, screen),
-      ]),
-    );
-    // Armed on the reported box, as a fresh read of it would arm it.
-    expect(latest().options.rootMargin).toBe('-247px -780px -442px -400px');
-    // A move under a pixel leaves the ratio at 1; the reported box shows it.
-    const nudged = rect(247.25, 400, 30, 100);
-    act(() =>
-      latest().callback([report(latest().options, nudged, 1, true, screen)]),
-    );
-    expect(moves().length).toBe(3);
-    expect(latest().options.rootMargin).toBe('-247px -780px -442px -400px');
-    expect(triggerReads()).toBe(readsBefore);
-    expect(width).not.toHaveBeenCalled();
-    expect(height).not.toHaveBeenCalled();
-    vi.unstubAllGlobals();
-  });
-
-  it('handles a move its observer reports in the next frame, never in the reporting task, and never checks the box or places the layer afresh', async () => {
-    // During a scroll, CSS anchor positioning alone places the layer
-    // (spec:AST-059 FR4). Several reports in one frame share one call.
-    const observers: {
-      callback: (entries: IntersectionObserverEntry[]) => void;
-      options: IntersectionObserverInit;
-    }[] = [];
-    vi.stubGlobal(
-      'IntersectionObserver',
-      class {
-        constructor(
-          callback: (entries: IntersectionObserverEntry[]) => void,
-          options: IntersectionObserverInit,
-        ) {
-          observers.push({callback, options});
-        }
-        observe() {}
-        disconnect() {}
-        unobserve() {}
-      },
-    );
-    const latestMove = () =>
-      observers.filter(o => o.options?.rootMargin != null).at(-1);
-    const user = userEvent.setup();
-    const spy = placeBoxes(TRIGGER, rect(200, 350, 100, 200));
-    const {container, getByText} = render(<ClearHarness />);
-    await user.click(getByText('Trigger'));
-    const layerEl = container.querySelector('[popover]') as HTMLElement;
-    act(() => {
-      const move = latestMove();
-      move?.callback([report(move.options, TRIGGER, 1)]);
-    });
-    await nextFrame();
-    expect(placedAfresh()).toBe(0);
-
-    // A scroll carries the trigger under the layer; the observer reports it
-    // after the frame that painted the move, twice before the next frame.
-    spy.mockRestore();
-    const reads = vi.fn();
-    const covering = rect(16, 350, 688, 300);
-    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
-      function (this: HTMLElement) {
-        if (!this.hasAttribute('popover')) {
-          return TRIGGER;
-        }
-        reads();
-        return covering;
-      },
-    );
-    act(() => {
-      const first = latestMove();
-      first?.callback([report(first.options, TRIGGER, 0.4)]);
-      const second = latestMove();
-      second?.callback([report(second.options, TRIGGER, 0.6)]);
-    });
-    expect(placedAfresh()).toBe(0);
-    expect(reads).not.toHaveBeenCalled();
-
-    // The next frame neither reads the layer's box nor places it afresh, so
-    // the layer does not jump to another side mid-scroll.
-    await nextFrame();
-    expect(reads).not.toHaveBeenCalled();
-    expect(placedAfresh()).toBe(0);
-    expect(layerEl.style.display).not.toBe('none');
-
-    // A later move does neither either.
-    act(() => {
-      const move = latestMove();
-      move?.callback([report(move.options, TRIGGER, 0.5)]);
-    });
-    await nextFrame();
-    expect(reads).not.toHaveBeenCalled();
-    expect(placedAfresh()).toBe(0);
-    vi.unstubAllGlobals();
-  });
-
-  it('follows a move that spans several frames and never goes idle while a scrolled container clips its trigger', async () => {
-    type Entry = IntersectionObserverEntry;
-    const observers: {
-      callback: (entries: Entry[]) => void;
-      options: IntersectionObserverInit;
-      disconnected: boolean;
-    }[] = [];
-    vi.stubGlobal(
-      'IntersectionObserver',
-      class {
-        record: (typeof observers)[number];
-        constructor(
-          callback: (entries: Entry[]) => void,
-          options: IntersectionObserverInit,
-        ) {
-          this.record = {callback, options, disconnected: false};
-          observers.push(this.record);
-        }
-        observe() {}
-        disconnect() {
-          this.record.disconnected = true;
-        }
-        unobserve() {}
-      },
-    );
-    const moves = () =>
-      observers.filter(
-        o => o.options?.root === document && o.options.rootMargin != null,
-      );
-    const visibilities = () =>
-      observers.filter(
-        o => o.options?.root === document && o.options.rootMargin == null,
-      );
-    const latest = () => moves()[moves().length - 1];
-    const user = userEvent.setup();
-    let spy = placeBoxes(TRIGGER, rect(200, 350, 100, 200));
-    const {getByText} = render(<ClearHarness />);
-    await user.click(getByText('Trigger'));
-    expect(placedAfresh()).toBe(0);
-
-    // A fresh observer's first report already differs: the trigger kept
-    // moving after its rectangle was read, as in a smooth scroll. That is a
-    // move: it re-arms at the reported ratio, and leaves placement to CSS.
-    spy.mockRestore();
-    spy = placeBoxes(TRIGGER, rect(16, 350, 688, 300));
-    let armed = moves().length;
-    act(() => latest().callback([report(latest().options, TRIGGER, 0.7)]));
-    expect(moves().length).toBe(armed + 1);
-    expect(latest().options.threshold).toBe(0.7);
-    await nextFrame();
-    expect(placedAfresh()).toBe(0);
-
-    // A first report of 0 for a trigger that moved since the observer read
-    // its rectangle re-arms at once on the new rectangle.
-    spy.mockRestore();
-    const moved = rect(260, 400, 30, 100);
-    spy = placeBoxes(moved, rect(16, 350, 688, 300));
-    armed = moves().length;
-    act(() => latest().callback([report(latest().options, moved, 0)]));
-    expect(moves().length).toBe(armed + 1);
-    expect(latest().options.threshold).toBe(1);
-
-    // A first report of 0 for a trigger that has not moved: a scrolled
-    // container clips it. No timer runs; a visibility observer rooted at the
-    // viewport waits for it to come back into view, however long that takes.
-    const timers = vi.spyOn(globalThis, 'setTimeout');
-    armed = moves().length;
-    act(() => latest().callback([report(latest().options, moved, 0)]));
-    expect(moves().length).toBe(armed);
-    expect(timers).not.toHaveBeenCalled();
-    const visibility = visibilities()[visibilities().length - 1];
-    expect(visibility?.options.threshold).toBe(0);
-    act(() =>
-      visibility?.callback([report(visibility.options, moved, 0, false)]),
-    );
-    expect(moves().length).toBe(armed);
-    // Back in view: it re-reads and re-arms, and the visibility observer goes.
-    act(() =>
-      visibility?.callback([report(visibility.options, moved, 0.2, true)]),
-    );
-    expect(moves().length).toBe(armed + 1);
-    expect(visibility?.disconnected).toBe(true);
-    expect(timers).not.toHaveBeenCalled();
-    spy.mockRestore();
     vi.unstubAllGlobals();
   });
 
@@ -3959,5 +3635,8 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
       getPositionTryFallbacks('above', 'center'),
     );
     expect(layerEl.style.alignSelf).toBe('');
+    expect(layerEl.className).not.toContain(
+      'useLayer__styles.scrollsOnOverflow',
+    );
   });
 });
