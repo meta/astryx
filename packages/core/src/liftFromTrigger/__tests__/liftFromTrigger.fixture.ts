@@ -3,13 +3,11 @@
 /**
  * @file liftFromTrigger.fixture.ts
  * @input Nothing: bundled by esbuild and injected into a blank page
- * @output A page with a list of rows inside a clipping, transformed panel
- *   (the first row rounded by `:first-child`, the second holding twelve
- *   elements), a menu popover beside it, and `window.__lift`: lift a row,
- *   grow and close the menu, drop, end, and the backdrop taps and the
- *   clicks the page received; and a thumbnail, a hidden viewer with its
- *   photo, and `window.__zoom` (liftCopy and the rect morph) for the zoom's
- *   copy
+ * @output A page with a list of rows in a clipping, transformed panel, and a
+ *   menu popover beside it. The first row is rounded by `:first-child`, and
+ *   the second holds twelve elements. `window.__lift` lifts a row, grows and
+ *   closes the menu, drops and ends, and logs taps and clicks. A thumbnail
+ *   and a hidden viewer serve the zoom's copy through `window.__zoom`
  * @position Browser fixture of liftFromTrigger.interaction.browser.spec.ts; test-only
  */
 

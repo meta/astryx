@@ -3,9 +3,9 @@
 /**
  * @file liftFromTriggerGeometry.test.ts
  * @input vitest, the lift geometry
- * @output Checks how far a source grows (the cap, the points on its larger
- *   side, the viewport's width), where it lands inside the gutter, and which
- *   side of it a surface takes, in either direction
+ * @output Checks how far a source grows: the cap, the points on its larger
+ *   side and the viewport's width. It also checks where it lands inside the
+ *   gutter, and a surface's side in either direction
  * @position Unit tests of packages/core/src/liftFromTrigger/liftFromTriggerGeometry.ts; a
  *   surface's own numbers (UIKit's, for ContextMenu) are tested with it
  */

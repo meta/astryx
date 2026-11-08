@@ -3,26 +3,14 @@
 /**
  * @file liftFromTrigger.interaction.browser.spec.ts
  * @input The lift bundled with esbuild onto a blank fixture page
- *   (liftFromTrigger.fixture.ts): a list of rows in a clipping, transformed panel and a
- *   menu popover, a thumbnail and a viewer with its photo; Chromium and
- *   WebKit
- * @output Proof in real engines that a row lifts itself into the top layer
- *   at its lifted rect while one placeholder holds its spot (nothing else
- *   moves, and the row keeps its look); that every motion the lift plays is
- *   `translate`, `scale`, `transform` or `opacity` (spec:AST-094 FR5); that
- *   the menu grows out of the press and keeps nothing inline at rest, and
- *   its close shrinks the layer runtime's exit copy back into it, or, with
- *   no press, fades in where it rests; that the
- *   page has the layer, the shadow, the anchor and the placeholder more while
- *   lifted, whatever the row holds, at most 5 at any moment, and none after
- *   the drop
- *   (AST-017 FR60); that repeated lifts leave no node or listener behind;
- *   that a tap while it grows reaches nothing (FR35) and one on the backdrop
- *   afterwards is the backdrop tap; that the zoom's copy lifts into the
- *   viewer at the thumbnail's box (one element more, stacked by the viewer,
- *   the thumbnail hidden in place), grows on the rect morph, turns around
- *   from the rect on screen as the same element and lands in the thumbnail,
- *   and that its drop leaves the page as it was
+ *   (liftFromTrigger.fixture.ts), in Chromium and WebKit
+ * @output Proof in real engines of the lift and the zoom's copy. A row lifts
+ *   into the top layer while a placeholder holds its spot. Every motion is
+ *   `translate`, `scale`, `transform` or `opacity`. The menu grows out of the
+ *   press and shrinks back into it on close. The page has at most five more
+ *   elements while lifted, and none after the drop. A tap while it grows
+ *   reaches nothing. The zoom's copy grows on the rect morph, turns around
+ *   and lands in the thumbnail
  * @position Browser proof for liftFromTrigger.ts, run by `pnpm test:interaction`; jsdom
  *   has no layout, no top layer and no animations
  */
@@ -197,8 +185,8 @@ test('a lifted item of an ordered list leaves the numbers of the items after it 
   page,
 }) => {
   await open(page);
-  // An ordered list with its markers outside, and no tint and no shadow: a
-  // later item's marker paints the same while an item is lifted unless its
+  // An ordered list with its markers outside, and no tint and no shadow. A
+  // later item's marker paints the same while an item is lifted, unless its
   // number changes.
   const clip = await page.evaluate(() => {
     const root = document.documentElement.style;
@@ -503,8 +491,8 @@ test('while lifted the page has the layer, the shadow, the anchor and the placeh
 }) => {
   await open(page);
   const counts = await page.evaluate(async () => {
-    // The layer runtime's exit copy is the transient copy INV7 allows (made
-    // by the layer runtime, gone within a second): not one of the lift's.
+    // The layer runtime's exit copy is not one of the lift's elements: the
+    // runtime makes it, and it is gone within a second.
     const count = () =>
       [...document.body.querySelectorAll('*')].filter(
         element => element.closest('[data-lift-exit]') == null,
@@ -552,9 +540,9 @@ test('while lifted the page has the layer, the shadow, the anchor and the placeh
       lifted: window.__lift.isLifted(),
     };
   });
-  // A row of 13 elements and a row of 1: the same 4 more once grown (the
-  // layer, the shadow, the anchor and the placeholder), and the hold's
-  // shield while the lift grows.
+  // A row of 13 elements and a row of 1 add the same 4 once grown: the layer,
+  // the shadow, the anchor and the placeholder. The hold's shield joins while
+  // the lift grows.
   expect(counts.deep).toBe(5);
   expect(counts.shallow).toBe(5);
   expect(counts.open).toBe(4);
@@ -754,9 +742,8 @@ test('the copy grows to the photo on the rect morph, a close mid-growth turns th
   const lastOpen = opening[opening.length - 1].width;
   expect(lastOpen).toBeGreaterThanOrEqual(150);
   expect(lastOpen).toBeLessThan(run.photoWidth);
-  // The close starts where the opening was drawn: its first frame is nearer
-  // that than either end, so no frame jumps back to the thumbnail or on to
-  // the photo.
+  // The close starts where the opening was drawn. Its first frame is nearer
+  // that than either end, so no frame jumps to the thumbnail or the photo.
   expect(Math.abs(closing[0].width - lastOpen)).toBeLessThan(
     Math.min(lastOpen - 80, run.photoWidth - lastOpen),
   );

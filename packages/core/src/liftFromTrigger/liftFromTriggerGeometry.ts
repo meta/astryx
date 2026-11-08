@@ -4,9 +4,8 @@
  * @file liftFromTriggerGeometry.ts
  * @input A source's box, the viewport and the layer runtime's gutter, and
  *   the caller's scale rule and gap
- * @output liftFromTriggerScale, liftFromTriggerRect and surfacePlacement:
- *   how far a lifted source grows, where it lands inside the gutter, and
- *   which side of it a surface (a menu) takes
+ * @output liftFromTriggerScale, liftFromTriggerRect and surfacePlacement: a
+ *   lifted source's growth, its place inside the gutter, and a surface's side
  * @position The geometry of the lift presentation (liftFromTrigger.ts);
  *   internal to core. A source grows about its center by the caller's rule,
  *   as UIKit's preview platter does, then moves inside the gutter
@@ -17,10 +16,10 @@
 import type {MorphRect} from '../motion/rectMorph';
 
 /**
- * The layer runtime's viewport gutter on each edge, CSS px
- * (Layer/layerViewportInset.stylex.ts): the spacing step or the
- * edge's safe-area inset, whichever is larger, plus the inset an app declares
- * for a bar floating over that edge.
+ * The layer runtime's viewport gutter on each edge, in CSS px
+ * (Layer/layerViewportInset.stylex.ts). It is the spacing step or the edge's
+ * safe-area inset, whichever is larger. It adds the inset an app declares for
+ * a bar over that edge.
  */
 export interface LiftFromTriggerGutter {
   readonly top: number;
@@ -55,8 +54,8 @@ export interface SurfacePlacement {
 
 /**
  * The factor a `width` × `height` source grows by: up to `rule.maxScale`, by
- * `rule.scaleUpPoints` on its larger side, and never wider than the viewport
- * less its gutter (which can make it smaller than 1).
+ * `rule.scaleUpPoints` on its larger side. It is never wider than the viewport
+ * less its gutter, which can make the factor less than 1.
  */
 export function liftFromTriggerScale(
   width: number,
@@ -111,9 +110,9 @@ export function liftFromTriggerRect(
 
 /**
  * A surface's place: below the lifted source when `surfaceHeight` fits
- * between it, `gap` and the bottom gutter, else above; centered on the
- * source, or flush with the source's edge when the source is held against a
- * side of the viewport.
+ * between it, `gap` and the bottom gutter, else above. It centers on the
+ * source, or sits flush with the source's edge when the source is held against
+ * a side of the viewport.
  */
 export function surfacePlacement(
   lifted: MorphRect,

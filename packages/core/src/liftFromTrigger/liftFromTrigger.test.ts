@@ -4,15 +4,10 @@
  * @file liftFromTrigger.test.ts
  * @input vitest (jsdom), the lift, stand-ins for the popover API and for
  *   layout (jsdom has neither) and a spy on the input hold
- * @output Checks the lift's bookkeeping in the page: while up it adds the
- *   layer and one placeholder whatever the source holds, and nothing at
- *   rest; the source keeps its place among its siblings; a drop or an
- *   unmount puts back exactly what the source had inline and takes the rest
- *   away; nothing of it (an element, a document listener, a timer) outlives
- *   it over repeated lifts; the gutter it reads; the holds it takes; taps on
- *   its backdrop. And the zoom's copy (liftCopy): one copy of the source's
- *   picture in the caller's host at the source's box while the source hides
- *   in place, and a drop that leaves the page as it was
+ * @output Checks the lift's bookkeeping in the page. While up it adds the
+ *   layer and one placeholder, and nothing at rest. A drop or an unmount puts
+ *   back what the source had inline. Nothing outlives repeated lifts. It also
+ *   checks the gutter, the holds, backdrop taps and the zoom's copy
  * @position Testing; the motion, the top layer and the counts in real
  *   engines are proven in __tests__/liftFromTrigger.interaction.browser.spec.ts
  */
@@ -415,9 +410,9 @@ describe('lift', () => {
 
 describe('liftCopy', () => {
   /**
-   * A viewer's host over the page, and a grid of thumbnails: one a button
-   * around a picture, one a bare picture with its own inline visibility, one
-   * that shows no picture.
+   * A viewer's host over the page, and a grid of three thumbnails. One is a
+   * button around a picture, one a bare picture with its own inline
+   * visibility, and one shows no picture.
    */
   function renderGrid() {
     document.body.innerHTML = `

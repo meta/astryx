@@ -4,18 +4,15 @@
 
 /**
  * @file liftFromTrigger.ts
- * @input An element to lift (the source), a surface that grows out of the
- *   press beside it, the caller's springs, scale rule, tint and attribute,
- *   the rect morph, and the layer runtime's input hold, exit copy and inset
- * @output createLiftFromTrigger, which lifts a source above a tinted
- *   backdrop, grows and shrinks a surface at the press, and puts the source
- *   back; and liftCopy, a copy of a source's picture for a zoom
- * @position The one lift-from-trigger presentation, internal to core and
- *   opt-in. README.md says what a lift adds to the page and how it moves
+ * @input A source to lift, a surface to grow beside it, and the caller's
+ *   springs, scale rule, tint and attribute
+ * @output createLiftFromTrigger, which lifts a source and grows a surface at
+ *   the press; and liftCopy, a copy of a source's picture for a zoom
+ * @position The one lift-from-trigger presentation, internal and opt-in.
+ *   README.md says what a lift adds to the page and how it moves
  *
- * SYNC: When modified, update:
- * - /packages/core/src/liftFromTrigger/liftFromTrigger.test.ts
- * - /packages/core/src/liftFromTrigger/__tests__/liftFromTrigger.interaction.browser.spec.ts
+ * SYNC: When modified, update liftFromTrigger.test.ts and
+ * __tests__/liftFromTrigger.interaction.browser.spec.ts.
  */
 
 import type {LayerInset} from '../Layer/LayerContext';
@@ -47,9 +44,8 @@ import {
 } from './liftFromTriggerGeometry';
 
 /**
- * How long the layer waits, once the last pointer that went down on it has
- * lifted, for that touch's click before it hides anyway (a long press sends
- * none).
+ * How long the layer waits for a touch's click after the last pointer on it
+ * lifts. A long press sends no click, so the layer then hides anyway.
  */
 const CLICK_AFTER_LIFT_MS = 350;
 
@@ -86,9 +82,9 @@ export interface LiftFromTriggerOptions {
    */
   readonly from?: MorphRect;
   /**
-   * Called once the lift has read the page and before it writes to it: lets
-   * go of what the source was doing (a press feedback's scale), so letting go
-   * doesn't restyle the page before the lift reads it.
+   * Called after the lift reads the page and before it writes to it. It lets
+   * go of what the source was doing, such as a press feedback's scale. The
+   * release then cannot restyle the page before the lift reads it.
    */
   readonly release?: () => void;
   /** The tint, a CSS color resolved where the source is. */
@@ -116,9 +112,9 @@ export interface LiftFromTriggerResult {
   /** The viewport and the layer runtime's gutter it lifted in. */
   readonly viewport: LiftFromTriggerViewport;
   /**
-   * An empty box at the lifted rect, in the layer: what a surface is placed
-   * against (an anchor inside the source would move with the source's
-   * transform, which anchor positioning follows).
+   * An empty box at the lifted rect, in the layer, for a surface to be
+   * placed against. Anchor positioning follows transforms, so an anchor
+   * inside the source would move with it.
    */
   readonly anchor: HTMLElement;
 }
@@ -133,11 +129,11 @@ export interface LiftFromTrigger {
     options: LiftFromTriggerOptions,
   ): LiftFromTriggerResult | null;
   /**
-   * Grows `surface` (a popover laid out at rest, or an element inside one)
-   * out of `press` (client px) into its box, or, without a press, fades it
-   * in where it rests; and holds the lift until the lift and the surface
-   * settle, so a tap during the growth reaches nothing. A no-op when nothing
-   * is lifted.
+   * Grows `surface` out of `press` (client px) into its box: a popover laid
+   * out at rest, or an element inside one. Without a press, it fades the
+   * surface in where it rests. The lift holds input until the lift and the
+   * surface settle, so a tap during the growth reaches nothing. A no-op when
+   * nothing is lifted.
    */
   presentSurface(
     surface: HTMLElement,
@@ -159,9 +155,9 @@ export interface LiftFromTrigger {
 /** Where a copy goes, and how it is marked. */
 export interface LiftCopyOptions {
   /**
-   * The element the copy goes in (a viewer's container): positioned, so the
-   * copy is laid out against its box; its stacking decides what the copy
-   * shows over and under.
+   * The element the copy goes in, such as a viewer's container. It is
+   * positioned, so the copy is laid out against its box. Its stacking decides
+   * what the copy shows over and under.
    */
   readonly host: HTMLElement;
   /** The picture for a source that shows none. */
@@ -181,9 +177,9 @@ export interface LiftedCopy {
   /** The source's box, client px, where the copy is laid out. */
   readonly box: MorphRect;
   /**
-   * Takes the copy away and shows the source again, as it was, once the last
-   * copy of it drops: at the landing, or on unmount (nothing is left either
-   * way). A second call does nothing.
+   * Takes the copy away. Once the last copy of the source drops, the source
+   * shows again as it was. Call it at the landing or on unmount; nothing is
+   * left either way. A second call does nothing.
    */
   drop(): void;
 }
@@ -217,8 +213,8 @@ interface LiftState {
   /** The tint's color, held on the layer's `::backdrop`. */
   readonly layerFill: Animation | null;
   /**
-   * The shadow under the source: a box in the layer laid out where the
-   * source is, which follows it frame for frame and fades on its own spring.
+   * The shadow under the source, a box in the layer laid out where the source
+   * is. It follows the source frame for frame and fades on its own spring.
    */
   readonly shadow: HTMLElement;
   shadowAnimation: Animation | null;
@@ -293,11 +289,12 @@ function springKeyframes(
 }
 
 /**
- * Web Animation keyframes for a box laid out on `box` that travels from
- * `from` to `to` on `travel` (starting with progress velocity `velocity`, as
- * the rect morph does) while its opacity goes from `fade[0]` to `fade[1]` on
- * `fadeSpring`, sampled at 60 Hz until both settle: one compositor animation
- * of `transform` and `opacity`, frame for frame with the source's own morph.
+ * Web Animation keyframes for a box laid out on `box`. It travels from
+ * `from` to `to` on `travel`, starting at progress velocity `velocity`, as the
+ * rect morph does. Its opacity goes from `fade[0]` to `fade[1]` on
+ * `fadeSpring`. The keyframes sample both at 60 Hz until both settle. The
+ * result is one compositor animation of `transform` and `opacity`, frame for
+ * frame with the source's morph.
  */
 function shadowKeyframes(
   box: MorphRect,
@@ -379,10 +376,10 @@ function shapeRadius(source: HTMLElement): string {
 }
 
 /**
- * Resolves CSS values where `element` is (its theme, its color scheme): on an
- * empty, undisplayed child it removes again, so the element's own style and
- * the page's layout stay as they were. A pair is a fallback and a value a
- * browser may reject.
+ * Resolves CSS values where `element` is, in its theme and color scheme. It
+ * reads them on an empty, undisplayed child and removes the child again. So
+ * the element's own style and the page's layout stay as they were. A pair is
+ * a fallback and a value a browser may reject.
  */
 function probe(
   element: HTMLElement,
@@ -410,9 +407,9 @@ function probe(
 }
 
 /**
- * The lift's springs as they resolve at `element` (a spring that is a motion
- * role, through its role), read once: plain springs, which nothing reads
- * from the page again.
+ * The lift's springs as they resolve at `element`, read once. A spring that
+ * is a motion role resolves through its role. The result is plain springs,
+ * and nothing reads the page for them again.
  */
 function resolvedMotion(
   element: Element,
@@ -521,9 +518,8 @@ function createLayer(doc: Document, attribute: string): HTMLElement {
 }
 
 /**
- * The element that holds a source's spot: an `li` in a list, so the list
- * keeps only `li` children (HTML's content model for `ul`, `ol` and `menu`),
- * and a `span` elsewhere.
+ * The element that holds a source's spot: an `li` in a list, and a `span`
+ * elsewhere. HTML lets `ul`, `ol` and `menu` hold only `li` children.
  */
 function placeholderTag(source: HTMLElement): 'li' | 'span' {
   const parent = source.parentElement?.localName;
@@ -533,11 +529,11 @@ function placeholderTag(source: HTMLElement): 'li' | 'span' {
 }
 
 /**
- * The placeholder that holds a source's spot in the page while it is lifted:
- * empty, hidden, at its laid-out size, with its margins and its place in a
- * flex or grid container. It is never a list item itself, so it takes no
- * number and the items after it keep theirs, and the page's own rules for
- * its tag (an `li`'s minimum height, its padding) never change its size.
+ * The placeholder that holds a source's spot while it is lifted. It is empty
+ * and hidden, at the source's laid-out size, margins and place in a flex or
+ * grid container. It is never a list item, so it takes no number and the
+ * items after it keep theirs. The page's own rules for its tag, such as an
+ * `li`'s minimum height or padding, never change its size.
  */
 function placeholderStyle(
   computed: CSSStyleDeclaration,
@@ -677,10 +673,11 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     }
   };
 
-  // Every pointer that went down on the layer and is still down (the tint
-  // while it presents, the hold's shield while it closes), read from the
-  // document so an inert target hides none; and whether the last one to lift
-  // still owes its click (a touch's click comes after its pointer's up).
+  // Every pointer still down that went down on the layer: on the tint as it
+  // presents, or the shield as it closes. The watch reads them from the
+  // document, so an inert target hides none. It also knows whether the last
+  // one to lift still owes its click. A touch's click comes after its
+  // pointer's up.
   const watchPointers = (current: LiftState) => {
     const {layer, waits} = current;
     const doc = layer.ownerDocument;
@@ -908,9 +905,9 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     }
     source.setAttribute('popover', 'manual');
     const waits = new AbortController();
-    // The source grows out of where the press left it into its lifted rect,
-    // laid out at its own size, so its content scales as UIKit's snapshot
-    // does. Under Reduce Motion it lands at once and fades in.
+    // The source grows from where the press left it into its lifted rect. It
+    // stays laid out at its own size, so its content scales as UIKit's
+    // snapshot does. Under Reduce Motion it lands at once and fades in.
     let heldAt: number | null = null;
     const holdClock = (at: number | null) => {
       heldAt = at;
@@ -937,11 +934,11 @@ export function createLiftFromTrigger(): LiftFromTrigger {
       ],
       {duration: 0},
     );
-    // The shadow rises with the source: it follows the source's path on the
-    // lift's spring and fades in on its own, from the frame the source starts
-    // in, as one compositor animation (an animated `::backdrop` of the source
-    // would restyle and lay out the page on every frame). Under Reduce Motion
-    // it fades in where the source lands.
+    // The shadow rises with the source. It follows the source's path on the
+    // lift's spring and fades in on its own spring, from the source's first
+    // frame. It is one compositor animation: an animated `::backdrop` of the
+    // source would restyle and lay out the page on every frame. Under Reduce
+    // Motion it fades in where the source lands.
     const rise = playShadow(
       shadowEl,
       reduced == null
@@ -995,9 +992,9 @@ export function createLiftFromTrigger(): LiftFromTrigger {
       isSourceLifted: true,
     };
     state = current;
-    // Taps on the backdrop: only a pointer that went down on the layer lifts
-    // there (WebKit hands the layer the lift of the finger that opened the
-    // menu).
+    // Taps on the backdrop count only for a pointer that went down on the
+    // layer. WebKit hands the layer the lift of the finger that opened the
+    // menu.
     let backdropPointer: number | null = null;
     const listen = {signal: waits.signal};
     layer.addEventListener(
@@ -1200,12 +1197,13 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     current.tint?.cancel();
     current.tint = fadeBackdrop(layer, 0, motion.clear, {from: tintFrom});
     // The source returns to its place from wherever it is now, with its
-    // velocity; its shadow follows it back frame for frame (the same start,
-    // the same velocity along the way back) and fades on its own spring.
-    // Under Reduce Motion both fade where they are.
-    // One instant for the shadow's reading and the morph's own, and the
-    // morph's velocity there (from the rect it presents a millisecond
-    // before: the morph keeps its own clock, synced to its animations').
+    // velocity. Its shadow follows it back frame for frame, with the same
+    // start and velocity, and fades on its own spring. Under Reduce Motion
+    // both fade where they are.
+    // The shadow and the morph read one instant, and the morph's velocity
+    // there. That velocity comes from the rect the morph presents a
+    // millisecond before. The morph keeps its own clock, synced to its
+    // animations.
     const at = performance.now();
     current.holdClock(at - 1);
     const before = current.morph.presentedRect() ?? lifted;
@@ -1261,9 +1259,9 @@ export function createLiftFromTrigger(): LiftFromTrigger {
         });
       }
     });
-    // The close holds the layer: nothing reaches the page under it until the
-    // source is back, the surface's exit is done and every press on the
-    // layer has lifted.
+    // The close holds the layer, so nothing reaches the page under it. The
+    // hold ends when the source is back, the surface's exit is done and every
+    // press has lifted.
     const ended = settled.then(async () => current.untilPointersLift());
     current.releaseHold?.();
     current.releaseHold = holdInput(layer, {
@@ -1292,8 +1290,9 @@ export function createLiftFromTrigger(): LiftFromTrigger {
 }
 
 /**
- * Sources a copy hides: how many copies hold each, and the visibility it had
- * inline before the first, which it gets back when the last drops.
+ * Sources a copy hides: how many copies hold each, and its inline visibility
+ * before the first. A source gets that visibility back when its last copy
+ * drops.
  */
 const hiddenSources = new WeakMap<
   HTMLElement,
@@ -1347,10 +1346,11 @@ function pictureOf(source: HTMLElement): string {
 
 /**
  * Lifts a copy of `source`'s picture into `host` for a zoom, the lift's one
- * transient copy: one image laid out at the source's box (aspect fill, its corners), inert and hidden from assistive
- * technology, while the source hides where it stands. The caller moves the
- * copy on the rect morph and drops it at the landing. Null, with nothing
- * changed, for a source that is not in the page or has no box.
+ * transient copy. The copy is one image at the source's box, with aspect fill
+ * and its corners. It is inert and hidden from assistive technology, and the
+ * source hides where it stands. The caller moves the copy on the rect morph
+ * and drops it at the landing. Null, with nothing changed, for a source that
+ * is not in the page or has no box.
  */
 export function liftCopy(
   source: HTMLElement,
