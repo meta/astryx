@@ -1063,6 +1063,22 @@ describe('a pointerup that matches no held press', () => {
     }
     expect(reportError).not.toHaveBeenCalled();
   });
+
+  it('leaves a held finger press alone', () => {
+    const reportError = vi.fn();
+    vi.stubGlobal('reportError', reportError);
+    coarsePrimaryPointer();
+    try {
+      // No box component is mounted, so the finger holds a press but no contact.
+      press(rows[0], 'pointerdown', 10, 10);
+      vi.advanceTimersByTime(PRESS_ONSET_MS);
+      document.body.dispatchEvent(new Event('pointerup', {bubbles: true}));
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(reportError).not.toHaveBeenCalled();
+    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
 });
 
 describe('a phone or tablet paints a mouse or Space press itself', () => {
