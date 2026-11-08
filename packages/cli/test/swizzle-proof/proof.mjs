@@ -910,7 +910,10 @@ export async function prove(
         logLevel: 'silent',
         plugins: plugins(),
         resolve,
-        define: {'process.env.NODE_ENV': '"production"'},
+        // The React plugin emits the development JSX runtime under a test
+        // run, so the page uses React's development build to match.
+        mode: 'development',
+        define: {'process.env.NODE_ENV': '"development"'},
         build: {
           outDir: out,
           emptyOutDir: false,
