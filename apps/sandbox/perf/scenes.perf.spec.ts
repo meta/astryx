@@ -7,7 +7,10 @@
  *   PERF_RESULTS_DIR (default test-results/perf), PERF_CPU_THROTTLE (default
  *   1: Chromium's CPU slowed this many times, to check that a count does not
  *   follow the runner's speed)
- * @output One JSON file per scene: every sample and the per-metric median
+ * @output One JSON file per scene: every sample and the per-metric median;
+ *   and runner.json: the runner's CPU model and a calibration score (the
+ *   median time of a fixed script in Chromium), so the trend compares timing
+ *   metrics only between runs on the same CPU model
  * @position The perf scenes' measurement driver. Run locally with
  *   `pnpm build && pnpm -F @astryxdesign/sandbox build` then
  *   `pnpm exec playwright test --config playwright.perf.config.ts`.
@@ -21,6 +24,7 @@
  */
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {expect, test, type Page} from '@playwright/test';
 import {
@@ -50,13 +54,49 @@ const OVERLAY_CYCLES = 50;
 const ENTRANCE_SETTLE_MS = 250;
 const SANDBOX_DIR = 'apps/sandbox/out';
 
+const CALIBRATION_RUNS = 5;
+
+/**
+ * The median time, in ms, of a fixed CPU-bound script in a blank Chromium
+ * page. It describes the runner and gates nothing.
+ */
+async function calibrate(page: Page): Promise<number> {
+  const times: number[] = [];
+  for (let run = 0; run < CALIBRATION_RUNS; run++) {
+    times.push(
+      await page.evaluate(() => {
+        const start = performance.now();
+        let sum = 0;
+        for (let i = 0; i < 20_000_000; i++) sum += Math.sqrt(i);
+        // Using the sum keeps the loop from being optimized away.
+        return performance.now() - start + (sum < 0 ? 1 : 0);
+      }),
+    );
+  }
+  return Math.round(median(times) * 10) / 10;
+}
+
 let server: StaticServer | undefined;
-test.beforeAll(async () => {
+test.beforeAll(async ({browser}) => {
   server = await serveStatic(SANDBOX_DIR, {
     sentinel: 'pages/perf-scenes/index.html',
     missing: root =>
       `No built Sandbox with the perf scenes at ${root}. Run \`pnpm build && pnpm -F @astryxdesign/sandbox build\` first.`,
   });
+  const context = await browser.newContext();
+  try {
+    const runner = {
+      cpu: os.cpus()[0]?.model.trim() || null,
+      calibrationMs: await calibrate(await context.newPage()),
+    };
+    fs.mkdirSync(RESULTS_DIR, {recursive: true});
+    fs.writeFileSync(
+      path.join(RESULTS_DIR, 'runner.json'),
+      `${JSON.stringify(runner, null, 2)}\n`,
+    );
+  } finally {
+    await context.close();
+  }
 });
 test.afterAll(async () => {
   await server?.close();

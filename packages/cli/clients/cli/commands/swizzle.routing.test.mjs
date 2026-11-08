@@ -198,6 +198,86 @@ describe('swizzle — the npm packages a copy imports', () => {
   });
 });
 
+describe('swizzle — the astryx-swizzle.json marker', () => {
+  it('marks the output folder with each package the copies came from and its version', async () => {
+    buildFakeCore(project);
+    writeProjectPackageJson(project);
+    buildIntegration(project, {issuesUrl: 'https://example.com/meta/issues'});
+    const marker = path.join(project, 'components', 'astryx', 'astryx-swizzle.json');
+
+    const core = await runCli(['--json', 'swizzle', 'Button', '-f'], project);
+    expect(core.code).toBe(0);
+    expect(JSON.parse(fs.readFileSync(marker, 'utf-8'))).toEqual({
+      packages: {'@astryxdesign/core': '0.0.13'},
+    });
+    // The marker is not one of the copy's files.
+    const coreEnv = JSON.parse(core.stdout);
+    expect(coreEnv.data.files.some(f => f.includes('astryx-swizzle'))).toBe(false);
+    expect(coreEnv.data.marker).toEqual({path: 'components/astryx/astryx-swizzle.json', written: true});
+
+    const integration = await runCli(['--json', 'swizzle', 'MetaAppShell', '-f'], project);
+    expect(integration.code).toBe(0);
+    expect(JSON.parse(fs.readFileSync(marker, 'utf-8'))).toEqual({
+      packages: {'@astryxdesign/core': '0.0.13', '@test/meta': '1.2.3'},
+    });
+  });
+
+  it('does not mark a folder that holds files swizzle did not write, and says how to add the marker', async () => {
+    buildFakeCore(project);
+    writeProjectPackageJson(project);
+    // The product's own components live in src/components.
+    fs.mkdirSync(path.join(project, 'src', 'components'), {recursive: true});
+    fs.writeFileSync(path.join(project, 'src', 'components', 'Header.tsx'), `export const Header = 1;\n`);
+
+    const json = await runCli(['--json', 'swizzle', 'Button', '--output', 'src/components', '-f'], project);
+    expect(json.code).toBe(0);
+    expect(JSON.parse(json.stdout).data.marker).toEqual({
+      path: 'src/components/astryx-swizzle.json',
+      written: false,
+      found: ['Header.tsx'],
+    });
+    expect(fs.existsSync(path.join(project, 'src', 'components', 'astryx-swizzle.json'))).toBe(false);
+
+    const text = await runCli(['swizzle', 'Button', '--output', 'src/components', '-f'], project);
+    expect(text.stdout).toContain(
+      'Did not mark src/components/ with astryx-swizzle.json: it already holds Button, Header.tsx and no astryx-swizzle.json',
+    );
+    expect(text.stdout).toContain('add src/components/astryx-swizzle.json to mark it');
+  });
+
+  it('leaves a folder of earlier copies unmarked on re-swizzle, and names what it holds', async () => {
+    buildFakeCore(project);
+    writeProjectPackageJson(project);
+    // Copies from a swizzle that wrote no marker.
+    fs.mkdirSync(path.join(project, 'components', 'astryx', 'Button'), {recursive: true});
+    fs.writeFileSync(path.join(project, 'components', 'astryx', 'Button', 'Button.tsx'), `export const Button = 1;\n`);
+
+    const result = await runCli(['swizzle', 'Button', '-f'], project);
+    expect(result.code).toBe(0);
+    expect(fs.existsSync(path.join(project, 'components', 'astryx', 'astryx-swizzle.json'))).toBe(false);
+    expect(result.stdout).toContain('it already holds Button and no astryx-swizzle.json');
+    expect(result.stdout).toContain('add components/astryx/astryx-swizzle.json to mark it');
+  });
+
+  it('reports a write failure when the output path is a file', async () => {
+    buildFakeCore(project);
+    writeProjectPackageJson(project);
+    fs.writeFileSync(path.join(project, 'notes.txt'), 'notes\n');
+    const result = await runCli(['--json', 'swizzle', 'Button', '--output', 'notes.txt'], project);
+    expect(result.code).not.toBe(0);
+    expect(JSON.parse(result.stdout).code).toBe('ERR_WRITE_FAILED');
+  });
+
+  it('marks a folder the copy creates, and says what the marker does', async () => {
+    buildFakeCore(project);
+    writeProjectPackageJson(project);
+    const result = await runCli(['swizzle', 'Button', '--output', 'src/astryx', '-f'], project);
+    expect(result.code).toBe(0);
+    expect(fs.existsSync(path.join(project, 'src', 'astryx', 'astryx-swizzle.json'))).toBe(true);
+    expect(result.stdout).toContain('Marked src/astryx/ with astryx-swizzle.json');
+  });
+});
+
 describe('swizzle — integration-owned components', () => {
   it('copies the component and the unexported helper it imports, without its test or doc, and routes feedback to the integration issuesUrl', async () => {
     buildFakeCore(project);
@@ -394,6 +474,153 @@ describe('swizzle — integration-owned components', () => {
     const out = await swizzleFooBesideBar({'./*': {source: './components/*/index.ts'}, './Bar': null});
     expect(out).not.toContain('@test/meta');
     expect(out).toContain(`from '../Bar`);
+  });
+
+  it("carries another Astryx package's internal module under a folder named after that package", async () => {
+    const core = buildFakeCore(project);
+    writeProjectPackageJson(project);
+    const {compDir} = buildIntegration(project, {
+      issuesUrl: 'https://example.com/meta/issues',
+    });
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(core, 'package.json'), 'utf-8'),
+    );
+    manifest.exports['.'] = {
+      source: './src/index.ts',
+      default: './dist/index.js',
+    };
+    manifest.exports['./internal/*'] = {
+      source: './src/internal/*.ts',
+      default: './dist/internal/*.js',
+    };
+    fs.writeFileSync(path.join(core, 'package.json'), JSON.stringify(manifest));
+    fs.mkdirSync(path.join(core, 'src', 'internal'), {recursive: true});
+    fs.mkdirSync(path.join(core, 'src', 'utils'), {recursive: true});
+    fs.writeFileSync(
+      path.join(core, 'src', 'index.ts'),
+      `export {publicName} from './utils/pub';\n`,
+    );
+    fs.writeFileSync(
+      path.join(core, 'src', 'utils', 'pub.ts'),
+      `export const publicName = 1;\n`,
+    );
+    fs.writeFileSync(
+      path.join(core, 'src', 'utils', 'priv.ts'),
+      `export const priv = 2;\n`,
+    );
+    fs.writeFileSync(
+      path.join(core, 'src', 'internal', 'touch.ts'),
+      `import {publicName} from '../utils/pub';\nimport {priv} from '../utils/priv';\nexport const touch = publicName + priv;\n`,
+    );
+    // A StyleX identity module Core exports under internal/.
+    fs.writeFileSync(
+      path.join(core, 'src', 'internal', 'press.stylex.ts'),
+      `export const pressScope = {};\n`,
+    );
+    manifest.exports['./internal/press.stylex'] = {
+      source: './src/internal/press.stylex.ts',
+      default: './dist/internal/press.stylex.js',
+    };
+    fs.writeFileSync(path.join(core, 'package.json'), JSON.stringify(manifest));
+    fs.writeFileSync(
+      path.join(project, 'node_modules', '@test', 'meta', 'package.json'),
+      JSON.stringify({
+        name: '@test/meta',
+        version: '1.2.3',
+        peerDependencies: {'@astryxdesign/core': '>=0.0.13'},
+      }),
+    );
+    fs.writeFileSync(
+      path.join(compDir, 'MetaAppShell.tsx'),
+      `import {touch} from '@astryxdesign/core/internal/touch';\nimport {pressScope} from '@astryxdesign/core/internal/press.stylex';\nexport function MetaAppShell() { return [touch, pressScope]; }\n`,
+    );
+
+    const result = await runCli(
+      ['--json', 'swizzle', 'MetaAppShell', '-f'],
+      project,
+    );
+    expect(result.code).toBe(0);
+    const env = JSON.parse(result.stdout);
+    const output = path.join(project, 'components', 'astryx');
+    const read = rel => fs.readFileSync(path.join(output, rel), 'utf-8');
+    expect(read('MetaAppShell/MetaAppShell.tsx')).toContain(
+      `from '../core/internal/touch'`,
+    );
+    // Its identity is its path, so the StyleX module keeps the package import.
+    expect(read('MetaAppShell/MetaAppShell.tsx')).toContain(
+      `from '@astryxdesign/core/internal/press.stylex'`,
+    );
+    expect(env.data.dependencies).toEqual({'@astryxdesign/core': '>=0.0.13'});
+    expect(read('core/internal/touch.ts')).toContain(
+      `import {publicName} from '@astryxdesign/core';`,
+    );
+    expect(read('core/internal/touch.ts')).toContain(`from '../utils/priv'`);
+    expect(read('core/utils/priv.ts')).toBe(`export const priv = 2;\n`);
+    expect(env.data.files).toEqual(
+      expect.arrayContaining([
+        '../core/internal/touch.ts',
+        '../core/utils/priv.ts',
+      ]),
+    );
+    for (const rel of env.data.files) {
+      expect(read(path.join('MetaAppShell', rel)), rel).not.toMatch(
+        /@astryxdesign\/core\/internal\/(?!press\.stylex)/,
+      );
+    }
+  });
+
+  it('refuses to replace a changed owner module carried from another package without --overwrite', async () => {
+    const core = buildFakeCore(project);
+    writeProjectPackageJson(project);
+    const {compDir} = buildIntegration(project, {
+      issuesUrl: 'https://example.com/meta/issues',
+    });
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(core, 'package.json'), 'utf-8'),
+    );
+    manifest.exports['./internal/*'] = {
+      source: './src/internal/*.ts',
+      default: './dist/internal/*.js',
+    };
+    fs.writeFileSync(path.join(core, 'package.json'), JSON.stringify(manifest));
+    fs.mkdirSync(path.join(core, 'src', 'internal'), {recursive: true});
+    fs.mkdirSync(path.join(core, 'src', 'privateAttributes'), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(core, 'src', 'privateAttributes', 'group.stylex.ts'),
+      `export const group = 1;\n`,
+    );
+    fs.writeFileSync(
+      path.join(core, 'src', 'internal', 'grouping.ts'),
+      `import {group} from '../privateAttributes/group.stylex';\nexport const grouping = group;\n`,
+    );
+    fs.writeFileSync(
+      path.join(compDir, 'MetaAppShell.tsx'),
+      `import {grouping} from '@astryxdesign/core/internal/grouping';\nexport function MetaAppShell() { return grouping; }\n`,
+    );
+
+    expect(
+      (await runCli(['--json', 'swizzle', 'MetaAppShell'], project)).code,
+    ).toBe(0);
+    const owner = path.join(
+      project,
+      'components',
+      'astryx',
+      'core',
+      'privateAttributes',
+      'group.stylex.ts',
+    );
+    fs.appendFileSync(owner, '// edited\n');
+    fs.rmSync(path.join(project, 'components', 'astryx', 'MetaAppShell'), {
+      recursive: true,
+      force: true,
+    });
+
+    const again = await runCli(['--json', 'swizzle', 'MetaAppShell'], project);
+    expect(again.code).not.toBe(0);
+    expect(JSON.parse(again.stdout).code).toBe('ERR_FILE_EXISTS');
+    expect(fs.readFileSync(owner, 'utf-8')).toContain('// edited');
   });
 
   it('omits the feedback note when the integration ships no issuesUrl', async () => {
