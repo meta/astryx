@@ -304,6 +304,10 @@ button.
 
 ## Current-state impact
 
+- **Width at the largest text sizes (FR2).** At iOS AX4 and AX5 text sizes
+  the Calendar grows wider than a phone screen (436 px and 482 px on a 402 px
+  screen), so the last weekday column is reached only after a sideways
+  scroll, against `spec:AST-102` FR4. Each day still owns its own taps.
 - **Stale Tab stop (FR3, AR1).** After a key move places the Tab stop, a later
   pointer pick can leave it there (always when the picked day comes later in
   the grid), and when every day of that month becomes disabled it stays on a
