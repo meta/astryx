@@ -296,8 +296,10 @@ request two treatments at once.
 **Decider:** cixzhang, 2026-10-15
 
 `bleed` matches Table rows in a padded host: row paint reaches the host's padding
-edge with square corners, and content sits on the host content line, never closer
-to the row edge than the row's own inset. It is opt-in, so existing lists keep
+edge with square corners, except that, when the list is a rounded host's first or
+last child, its first or last row takes that host's corner less the host block
+padding it keeps (FR5). Content sits on the host content line, never closer to the
+row edge than the row's own inset. It is opt-in, so existing lists keep
 their geometry.
 
 Rejected: bleed as the default inside padded hosts, because it would move every
