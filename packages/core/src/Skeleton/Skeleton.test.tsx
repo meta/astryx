@@ -4,6 +4,8 @@ import {createRef} from 'react';
 import {describe, it, expect} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import {Skeleton} from './Skeleton';
+import type {SkeletonRadius} from './Skeleton';
+import {declaredValue} from '../__tests__/stylexDeclarations';
 import {
   getAllInjectedCss,
   getForcedColorsRules,
@@ -62,9 +64,11 @@ function opacityAt(frames: [number, number][], x: number): number {
   return frames[frames.length - 1][1];
 }
 
-/** The values of the element's inline custom properties, in any order. */
-function inlineValues(el: HTMLElement): string[] {
-  return Array.from(el.style, name => el.style.getPropertyValue(name));
+/** The value a dynamic StyleX property resolves to on this element. */
+function resolved(el: HTMLElement, property: string): string {
+  const declared = declaredValue(el, property) ?? '';
+  const name = /^var\((--[\w-]+)/.exec(declared)?.[1];
+  return name ? el.style.getPropertyValue(name) : declared;
 }
 
 describe('Skeleton', () => {
@@ -156,67 +160,62 @@ describe('forced colors (WCAG 1.4.11)', () => {
 describe('size', () => {
   it('fills its container when no size is given', () => {
     render(<Skeleton data-testid="sk" />);
-    const values = inlineValues(screen.getByTestId('sk'));
-    expect(values.filter(v => v === '100%')).toHaveLength(2);
+    const el = screen.getByTestId('sk');
+    expect(resolved(el, 'width')).toBe('100%');
+    expect(resolved(el, 'height')).toBe('100%');
   });
 
   it('reads a number as pixels', () => {
     render(<Skeleton width={200} height={20} data-testid="sk" />);
-    const values = inlineValues(screen.getByTestId('sk'));
-    expect(values).toContain('200px');
-    expect(values).toContain('20px');
+    const el = screen.getByTestId('sk');
+    expect(resolved(el, 'width')).toBe('200px');
+    expect(resolved(el, 'height')).toBe('20px');
   });
 
   it('passes a string size through unchanged', () => {
     render(<Skeleton width="12rem" height="50%" data-testid="sk" />);
-    const values = inlineValues(screen.getByTestId('sk'));
-    expect(values).toContain('12rem');
-    expect(values).toContain('50%');
+    const el = screen.getByTestId('sk');
+    expect(resolved(el, 'width')).toBe('12rem');
+    expect(resolved(el, 'height')).toBe('50%');
   });
 });
 
 describe('stagger', () => {
   it('starts the pulse after a one second delay by default', () => {
     render(<Skeleton width={200} height={20} data-testid="sk" />);
-    expect(inlineValues(screen.getByTestId('sk'))).toContain('1000ms');
+    expect(resolved(screen.getByTestId('sk'), 'animation-delay')).toBe(
+      '1000ms',
+    );
   });
 
   it('adds 100ms to the delay for each index step', () => {
     const {rerender} = render(
       <Skeleton width={200} height={20} index={1} data-testid="sk" />,
     );
-    expect(inlineValues(screen.getByTestId('sk'))).toContain('1100ms');
+    expect(resolved(screen.getByTestId('sk'), 'animation-delay')).toBe(
+      '1100ms',
+    );
     rerender(<Skeleton width={200} height={20} index={3} data-testid="sk" />);
-    expect(inlineValues(screen.getByTestId('sk'))).toContain('1300ms');
+    expect(resolved(screen.getByTestId('sk'), 'animation-delay')).toBe(
+      '1300ms',
+    );
   });
 });
 
 describe('radius', () => {
-  function radiusDeclarations(radius: 'none' | 3 | 'rounded') {
-    const {unmount} = render(
-      <Skeleton width={40} height={40} radius={radius} data-testid="sk" />,
+  it.each([
+    ['none', '0'],
+    [0, 'var(--radius-none)'],
+    [1, 'var(--radius-inner)'],
+    [2, 'var(--radius-element)'],
+    [3, 'var(--radius-container)'],
+    [4, 'var(--radius-container)'],
+    ['rounded', 'var(--radius-full)'],
+  ] as [SkeletonRadius, string][])('maps radius %s to %s', (radius, token) => {
+    render(<Skeleton radius={radius} data-testid="sk" />);
+    expect(declaredValue(screen.getByTestId('sk'), 'border-radius')).toBe(
+      token,
     );
-    const css = getAllInjectedCss();
-    const found = declarationsOf(screen.getByTestId('sk'), css).filter(d =>
-      d.split(':')[0].includes('radius'),
-    );
-    unmount();
-    return found.join(';');
-  }
-
-  it('sets a radius for every option', () => {
-    expect(radiusDeclarations('none')).not.toBe('');
-    expect(radiusDeclarations(3)).not.toBe('');
-    expect(radiusDeclarations('rounded')).not.toBe('');
-  });
-
-  it('draws sharp corners and full rounding differently from the default', () => {
-    const none = radiusDeclarations('none');
-    const standard = radiusDeclarations(3);
-    const rounded = radiusDeclarations('rounded');
-    expect(none).not.toBe(standard);
-    expect(rounded).not.toBe(standard);
-    expect(none).not.toBe(rounded);
   });
 });
 
@@ -240,7 +239,7 @@ describe('props', () => {
     const el = screen.getByTestId('sk');
     expect(el).toHaveClass('caller-class');
     expect(el.style.marginTop).toBe('4px');
-    expect(inlineValues(el)).toContain('200px');
+    expect(resolved(el, 'width')).toBe('200px');
   });
 
   it('passes other attributes through to the root element', () => {
