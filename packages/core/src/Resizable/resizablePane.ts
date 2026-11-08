@@ -468,7 +468,10 @@ export interface OvershootDrawing {
  * reflows. The handle and the content beside it move with the edge. The
  * geometry is measured once, as the overshoot starts.
  */
-export function createOvershootDrawing(pane: ResizablePane): OvershootDrawing {
+export function createOvershootDrawing(
+  pane: ResizablePane,
+  sizeOf: () => number,
+): OvershootDrawing {
   const element = pane.element;
   let geometry: {
     sign: number;
@@ -504,7 +507,9 @@ export function createOvershootDrawing(pane: ResizablePane): OvershootDrawing {
         : 'bottom';
     geometry = {
       sign: (isTowardEnd ? 1 : -1) * (isRtl ? -1 : 1),
-      extent: isInline ? element.offsetWidth : element.offsetHeight,
+      // The size the pane lays out at. A pane caught mid-close has not
+      // rendered it yet when the catch draws.
+      extent: sizeOf(),
       isInline,
       origin: isInline ? `${farSide} center` : `center ${farSide}`,
       movers: [handle, beside].filter(
