@@ -15,9 +15,10 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {describe, it, expect} from 'vitest';
+import yaml from 'yaml';
 
 import {computeChanges} from '../../scripts/api-report/changes.mjs';
-import {CHANGES_VERSION} from '../../scripts/api-report/cli.mjs';
+import {changesFile} from '../../scripts/api-report/cli.mjs';
 
 const SCRIPTS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(SCRIPTS_DIR, '../..');
@@ -236,16 +237,22 @@ describe('comment length budget', () => {
       'utf8',
     );
     const head = base.replace(/^function postcss: .*\n/m, '');
-    const file = {
-      version: CHANGES_VERSION,
-      baseRecord: 'main',
-      packages: computeChanges([
-        {pkg: '@astryxdesign/build', base, head, committed: base},
-        {pkg: '@astryxdesign/new', base: null, head, committed: null},
-      ]),
-    };
+    const changes = computeChanges([
+      {pkg: '@astryxdesign/build', base, head, committed: base},
+      {pkg: '@astryxdesign/new', base: null, head, committed: null},
+    ]);
+    const file = changesFile(changes, {haveSurface: true, baseRecord: 'main'});
+    expect(Object.keys(file).sort()).toEqual([
+      'baseRecord',
+      'packages',
+      'version',
+    ]);
     expect(file.version).toBe(2);
-    expect(['main', 'build', null]).toContain(file.baseRecord);
+    expect(file.baseRecord).toBe('main');
+    expect(
+      changesFile(changes, {haveSurface: true, baseRecord: 'build'}).baseRecord,
+    ).toBe('build');
+    expect(changesFile(changes, {haveSurface: false}).baseRecord).toBeNull();
     for (const pkg of file.packages) {
       expect(Object.keys(pkg).sort()).toEqual(
         [
@@ -282,13 +289,15 @@ describe('comment length budget', () => {
     });
     expect(added).toMatchObject({baseline: true, missing: true, rows: []});
     // The artifact that carries it outlives a day, so merge-guard can read it.
-    const ci = fs.readFileSync(
-      path.join(repoRoot, '.github/workflows/ci.yml'),
-      'utf8',
+    const ci = yaml.parse(
+      fs.readFileSync(path.join(repoRoot, '.github/workflows/ci.yml'), 'utf8'),
     );
-    expect(ci).toMatch(
-      /name: pr-analysis\n\s+path: \|\n(?:\s+\S+\n)*?\s+api-changes\.json\n[\s\S]*?retention-days: 3\n/,
+    const upload = ci.jobs['build-storybook'].steps.find(
+      step => step.name === 'Upload analysis artifact',
     );
+    expect(upload.with.name).toBe('pr-analysis');
+    expect(upload.with.path.split('\n')).toContain('api-changes.json');
+    expect(upload.with['retention-days']).toBe(3);
   });
 
   it("keeps a report with 150 long API rows under GitHub's comment limit", () => {
