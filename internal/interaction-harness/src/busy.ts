@@ -841,6 +841,10 @@ function motionStepPx(values: readonly number[]): number {
  * at `setBeforeBlock`, the value the page itself last set before the block,
  * is excused. Every frame after that first change is judged, so a freeze
  * later in the block fails.
+ * An element off screen before the judged part is judged from its first
+ * position inside the part, as a card that enters from an edge. The cast's
+ * frames before the part must show the screen without it. A main-thread
+ * entrance shows no frame during the block, so it still fails.
  * The judged part still ends with the block and the `minJudgedFrames` floor
  * applies to it, so a start the block itself delays fails; any other
  * animation that was already moving is judged from the block's start, and a
@@ -1141,12 +1145,28 @@ export function busyWindowProof(
     prior[holdStart].t < window.from &&
     heldFrames >= 2 &&
     Math.abs(lead[lead.length - 1] - setBeforeBlock) <= matchPx;
+  // Off screen before the judged part, as a card that enters from an edge:
+  // the cast's frames there show the screen without it. Its first position
+  // inside the part is then its on-screen start, and judging starts there.
+  // With no frame before at all, nothing is known. A main-thread entrance
+  // shows no frame during the block, so it has no such position.
+  const shownWithout = tracked.some(
+    f =>
+      f.box == null &&
+      f.t < inner.from &&
+      f.t >= inner.from - BUSY_PROOF_LOOKAROUND_MS,
+  );
+  const firstShown = values.find(v => v.value != null);
+  const entersAt =
+    prior.length === 0 && shownWithout && firstShown != null
+      ? firstShown.t
+      : null;
   const onScreenFrom =
     prior.length > 0 &&
     (!movedBefore || heldFromBeforeBlock) &&
     inWindow.length > 0
       ? inWindow[0]
-      : null;
+      : entersAt;
   const judged = {from: onScreenFrom ?? inner.from, to: inner.to};
   const changes = inWindow.filter(t => t > judged.from || onScreenFrom == null);
   const edges = [judged.from, ...changes, judged.to];
@@ -1545,7 +1565,7 @@ export function busyWindowProof(
       : `, compositor presenting every ${compositorFrameMs.toFixed(1)} ms`) +
     (onScreenFromMs == null
       ? ''
-      : `, on screen from +${onScreenFromMs.toFixed(0)} ms (nothing moved before the block)`) +
+      : `, on screen from +${onScreenFromMs.toFixed(0)} ms (${entersAt == null ? 'nothing moved before the block' : 'off screen before the block'})`) +
     (controlRead == null
       ? ''
       : `; against the control: moved on ${controlRead.movedWith} of its ${controlRead.moved} frames${controlRead.belowStep > 0 ? ` (${controlRead.belowStep} where the cast could not show the step)` : ''}, its longest stall ${controlRead.longestStallMs.toFixed(1)} ms`) +

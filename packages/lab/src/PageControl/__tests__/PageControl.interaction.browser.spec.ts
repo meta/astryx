@@ -49,6 +49,42 @@ const DOT_SCALE = 0.967;
  * is a 190 ms spring that shows about five frames of travel there.
  */
 const MIN_JUDGED_FRAMES = 4;
+/** UIPageControl's interaction delay, ms. */
+const HOLD_MS = 155;
+/** One frame at 60 Hz, ms. */
+const FRAME_MS = 1000 / 60;
+/** WebKit's page clocks keep whole milliseconds. */
+const CLOCK_SLOP_MS = 2;
+
+/** A timer the page ran, on the page's clock. */
+interface TimerTask {
+  id: number;
+  delay: number;
+  due: number;
+  ranAt: number | null;
+  scheduledAt: number;
+  /** The timer task that set it, if any. */
+  parentId: number | null;
+}
+
+/** What the held-finger proof records on the page, on the page's clock. */
+interface HeldClock {
+  /** The landing's pointer and touch event timeStamps. */
+  landings: number[];
+  /** When the page dispatched the landing, on the same clock. */
+  dispatchedAt: number;
+  /** The timer task that runs now. */
+  task: TimerTask | null;
+  timers: TimerTask[];
+  frames: number[];
+  flip: {
+    at: number;
+    task: TimerTask | null;
+    /** The pointer or touch event being dispatched at the commit, if any. */
+    input: {type: string; timeStamp: number} | null;
+    fadedAt: number | null;
+  } | null;
+}
 
 /**
  * Opens a PageControl story. The phone projects have a coarse primary
@@ -314,18 +350,100 @@ test('a held finger shows the platter, the pressed overlay, and dims the other i
     other: number;
     touchedScale: string;
   }> = [];
-  // Each read is dated on the page's clock from the moment the finger landed.
-  // The 155 ms runs on that clock. On a loaded runner, the driver plays the
-  // moves later than scripted, so a scripted time would date a late read
-  // early.
+  // The held look comes from the hold's own timer, not from elapsed time. The
+  // page records its timer tasks, its frames and the commit that shows the
+  // look, all on its own clock.
   await slider.evaluate(el => {
-    el.addEventListener(
-      'touchstart',
-      () => {
-        (window as unknown as {landedAt: number}).landedAt = performance.now();
-      },
-      {capture: true, once: true},
-    );
+    const clock: HeldClock = {
+      landings: [],
+      dispatchedAt: 0,
+      task: null,
+      timers: [],
+      frames: [],
+      flip: null,
+    };
+    (window as unknown as {heldClock: HeldClock}).heldClock = clock;
+    // Posted as a timer task starts, this message runs as a later task. It
+    // marks the end of that timer task.
+    const taskEnd = new MessageChannel();
+    taskEnd.port1.onmessage = event => {
+      if (clock.task?.id === event.data) {
+        clock.task = null;
+      }
+    };
+    let ids = 0;
+    const setTimer = window.setTimeout.bind(window);
+    window.setTimeout = ((
+      handler: (...args: unknown[]) => void,
+      delay?: number,
+      ...args: unknown[]
+    ) => {
+      const scheduledAt = performance.now();
+      const task: TimerTask = {
+        id: (ids += 1),
+        delay: Number(delay) || 0,
+        due: scheduledAt + (Number(delay) || 0),
+        ranAt: null,
+        scheduledAt,
+        parentId: clock.task?.id ?? null,
+      };
+      clock.timers.push(task);
+      return setTimer(() => {
+        task.ranAt = performance.now();
+        clock.task = task;
+        taskEnd.port2.postMessage(task.id);
+        handler(...args);
+      }, delay);
+    }) as typeof window.setTimeout;
+    for (const type of ['pointerdown', 'touchstart']) {
+      el.addEventListener(
+        type,
+        event => {
+          clock.landings.push(event.timeStamp);
+          clock.dispatchedAt = Math.max(clock.dispatchedAt, performance.now());
+        },
+        {capture: true, once: true},
+      );
+    }
+    const frame = () => {
+      clock.frames.push(performance.now());
+      if (clock.frames.length < 600) {
+        requestAnimationFrame(frame);
+      }
+    };
+    requestAnimationFrame(frame);
+    new MutationObserver(() => {
+      if (clock.flip == null && el.hasAttribute('data-interacting')) {
+        const event = (window as unknown as {event?: Event}).event;
+        const flip: NonNullable<HeldClock['flip']> = {
+          at: performance.now(),
+          task: clock.task,
+          input:
+            event != null && /^(pointer|touch)/.test(event.type)
+              ? {type: event.type, timeStamp: event.timeStamp}
+              : null,
+          fadedAt: null,
+        };
+        clock.flip = flip;
+        // The platter fades in over its own short transition from here.
+        const fade = el
+          .getAnimations({subtree: true})
+          .find(
+            a =>
+              (a.effect as KeyframeEffect | null)?.pseudoElement === '::before',
+          );
+        if (fade == null) {
+          flip.fadedAt = flip.at;
+        } else {
+          fade.finished.then(
+            () => {
+              flip.fadedAt = performance.now();
+            },
+            () => {},
+          );
+        }
+      }
+    }).observe(el, {attributes: true, attributeFilter: ['data-interacting']});
   });
   const read = async () => {
     const state = await slider.evaluate(el => {
@@ -334,9 +452,7 @@ test('a held finger shows the platter, the pressed overlay, and dims the other i
       const other = el.querySelector('[data-page="0"]') as HTMLElement;
       const touched = el.querySelector('[data-page="3"]') as HTMLElement;
       return {
-        t:
-          performance.now() -
-          (window as unknown as {landedAt: number}).landedAt,
+        t: performance.now(),
         interacting: el.hasAttribute('data-interacting'),
         platter: Number(platter.opacity),
         other: Number(other.style.opacity),
@@ -355,13 +471,104 @@ test('a held finger shows the platter, the pressed overlay, and dims the other i
       },
     },
   );
-  const early = states.filter(s => s.t < 100);
-  const late = states.filter(s => s.t > 260);
-  expect(early.length).toBeGreaterThan(0);
-  expect(early.every(s => !s.interacting && s.other === 0.48)).toBe(true);
-  expect(late.length).toBeGreaterThan(0);
-  expect(late.every(s => s.interacting && s.other === 0.25)).toBe(true);
-  expect(late.every(s => s.platter > 0.9)).toBe(true);
+  const clock = await page.evaluate(
+    () => (window as unknown as {heldClock: HeldClock}).heldClock,
+  );
+  const flip = clock.flip;
+  if (flip == null) {
+    throw new Error('The held look never showed.');
+  }
+  // The hold begins where the gesture arena learns its deadline has passed.
+  // That is the hold timer's own task, or the one 0 ms task the arena sets
+  // after the deadline when that timer ran late. It is also any input dated
+  // after the deadline that the page dispatches first. The look commits there.
+  const task = flip.task;
+  const parent = clock.timers.find(timer => timer.id === task?.parentId);
+  // The deadline is 155 ms after the landing, as the gesture arena dates it.
+  // The arena's clock never runs back, so a busy page that dispatches the
+  // landing late can date it as late as that dispatch.
+  const earliest = Math.min(...clock.landings) + HOLD_MS;
+  const latest = Math.max(clock.dispatchedAt, ...clock.landings) + HOLD_MS;
+  const holdTimer =
+    task != null &&
+    task.delay === 0 &&
+    parent != null &&
+    task.scheduledAt >= earliest
+      ? parent
+      : task;
+  const isHoldTimer =
+    holdTimer != null &&
+    holdTimer.due >= earliest - CLOCK_SLOP_MS &&
+    holdTimer.due <= latest + CLOCK_SLOP_MS;
+  const isLateInput =
+    !isHoldTimer &&
+    flip.input != null &&
+    flip.input.timeStamp >= earliest - CLOCK_SLOP_MS;
+  expect(
+    isHoldTimer || isLateInput,
+    `the held look commits where the hold begins: landing ${JSON.stringify(clock.landings)}, dispatched at ${clock.dispatchedAt}, commit task ${JSON.stringify(task)}, its parent ${JSON.stringify(parent ?? null)}, input ${JSON.stringify(flip.input)}`,
+  ).toBe(true);
+  // The product sets the deadline. When the page acts on it is the page's. A
+  // hold more than a frame late passes only inside a page stall at least that
+  // long. A stall past the harness's starvation bound fails by name.
+  const due = isHoldTimer ? holdTimer.due : earliest;
+  const ranAt = isHoldTimer
+    ? (holdTimer.ranAt ?? Number.POSITIVE_INFINITY)
+    : flip.at;
+  const timerLateMs = ranAt - due;
+  if (timerLateMs > FRAME_MS) {
+    const after = Math.min(...clock.frames.filter(at => at >= ranAt));
+    const marks = [
+      Math.max(...clock.frames.filter(at => at <= due)),
+      ...clock.frames.filter(at => at > due && at < ranAt),
+      Number.isFinite(after) ? after : ranAt,
+    ];
+    const stallMs = Math.max(...marks.slice(1).map((at, i) => at - marks[i]));
+    if (stallMs > FRAME_STARVATION_MS) {
+      throw new FrameStarvationError({
+        during: `the hold began ${Math.round(timerLateMs)} ms past due`,
+        frames: marks.length - 2,
+        min: 1,
+        longestGapMs: Math.round(stallMs),
+      });
+    }
+    expect(
+      timerLateMs,
+      `the hold began ${Math.round(timerLateMs)} ms past due, in a page stall of ${Math.round(stallMs)} ms`,
+    ).toBeLessThanOrEqual(stallMs);
+  }
+  const before = states.filter(s => s.t < flip.at);
+  const after = states.filter(s => s.t > flip.at);
+  expect(before.length).toBeGreaterThan(0);
+  expect(before.every(s => !s.interacting && s.other === 0.48)).toBe(true);
+  expect(after.length).toBeGreaterThan(0);
+  expect(after.every(s => s.interacting && s.other === 0.25)).toBe(true);
+  // Reads after the platter's own short fade has finished show it.
+  const fadedAt = flip.fadedAt ?? Number.POSITIVE_INFINITY;
+  const shown = states.filter(s => s.t > fadedAt);
+  if (shown.length === 0) {
+    // No read came after the fade ended. Only a stall over the harness's
+    // starvation bound explains that; otherwise the fade itself ran late.
+    const lastRead = states[states.length - 1].t;
+    const marks = [
+      flip.at,
+      ...clock.frames.filter(at => at > flip.at && at < lastRead),
+      lastRead,
+    ];
+    const stallMs = Math.max(...marks.slice(1).map((at, i) => at - marks[i]));
+    if (stallMs > FRAME_STARVATION_MS) {
+      throw new FrameStarvationError({
+        during: 'the platter faded in',
+        frames: marks.length - 2,
+        min: 1,
+        longestGapMs: Math.round(stallMs),
+      });
+    }
+    throw new Error(
+      `The platter's fade ended ${Math.round(fadedAt - flip.at)} ms after the look showed, past the last read at ${Math.round(lastRead - flip.at)} ms.`,
+    );
+  }
+  expect(shown.every(s => s.platter > 0.9)).toBe(true);
   // The platter is the held look: the system pressed overlay, resolved as any
   // element resolves it here.
   const colors = await slider.evaluate(el => {

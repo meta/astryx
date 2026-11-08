@@ -32,6 +32,11 @@ import {
   type ResizableSnapshot,
 } from './createResizable';
 import {
+  createRegionPaneSlot,
+  registerPropsRegion,
+  type RegionPaneSlot,
+} from './resizablePane';
+import {
   DEFAULT_COLLAPSED_SIZE,
   type ResizableDirection,
 } from './resizableModel';
@@ -218,8 +223,10 @@ const EMPTY_SNAPS: number[] = [];
  * factory's region through them.
  */
 function useSingleResizable(config: UseResizableSingleConfig): ResizableRegion {
+  // The region's pane: the LayoutPanel that takes these props hands it over.
+  const [regionSlot] = useState(createRegionPaneSlot);
   const {getResizable, size, isCollapsed, snapshot, collapse, expand, resize} =
-    useResizableController(config);
+    useResizableController(config, regionSlot);
   // The region's side of the handle's gesture, read at each input, so a whole
   // drag reaches the factory as it is now.
   const model = useCallback(() => {
@@ -258,6 +265,9 @@ function useSingleResizable(config: UseResizableSingleConfig): ResizableRegion {
     _isResizableProps: true,
   };
   collapseControls.set(props, {collapse, expand});
+  // The LayoutPanel that takes these props hands its pane to the region, and
+  // the ResizeHandle that takes them says when a pointer drags it.
+  registerPropsRegion(props, regionSlot);
   // Without a configured maximum a measured extent stands in, only once it
   // is a real measurement (an observed container, or the window).
   if (snapshot.effectiveMaxPx != null) {
@@ -520,12 +530,26 @@ interface ResizableReading {
  */
 function useResizableController(
   options: CreateResizableOptions,
+  regionSlot?: RegionPaneSlot,
 ): ResizableReading {
   const optionsRef = useRef(options);
   optionsRef.current = options;
   const [slot] = useState(() => createSlot(readInitialResizableState(options)));
   const [serverInitial] = useState(() =>
     readInitialResizableState(options, 'server'),
+  );
+  // Every start of the factory, the commit's and an early call's, follows the
+  // region a LayoutPanel lends.
+  const start = useCallback(
+    (passed: CreateResizableOptions): ResizableController => {
+      const resizable = createResizableAs('useResizable', null, passed);
+      if (regionSlot != null) {
+        // destroy() stops following the region.
+        readResizableInternals(resizable)?.followRegion(regionSlot);
+      }
+      return resizable;
+    },
+    [regionSlot],
   );
   // The hook keeps one factory. After an unmount or an `<Activity>` hide, the
   // same factory takes the page back (`resume`).
@@ -536,9 +560,9 @@ function useResizableController(
       return;
     }
     const passed = optionsRef.current;
-    const resizable = createResizableAs('useResizable', null, passed);
+    const resizable = start(passed);
     slot.set({resizable, passed});
-  }, [slot]);
+  }, [slot, start]);
   useIsomorphicLayoutEffect(() => {
     follow();
   });
@@ -613,11 +637,11 @@ function useResizableController(
       return entry.resizable;
     }
     const passed = optionsRef.current;
-    const resizable = createResizableAs('useResizable', null, passed);
+    const resizable = start(passed);
     readResizableInternals(resizable)?.suspend();
     slot.set({resizable, passed});
     return resizable;
-  }, [slot]);
+  }, [slot, start]);
   const collapse = useCallback(() => {
     ensureResizable().collapse();
   }, [ensureResizable]);

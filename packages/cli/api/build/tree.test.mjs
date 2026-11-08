@@ -150,7 +150,7 @@ const PINNED = [
       'CardWithInnerLayout',
       'ButtonVariants',
       'FormLayoutShowcase',
-      'FileInputBasic',
+      'FormLayoutMixedControls',
     ],
   ],
   [
