@@ -394,20 +394,27 @@ function expectEdgeRide(result: EdgeRide): void {
     expect(f.gap, detail).toBeGreaterThan(result.restGap - result.beyond - 1.5);
   }
   // The held reads judge the curves. These prove the page drew the motion.
-  // Its two drawn reveal frames come while the reveal still rides, so the
-  // reversal still finds it.
-  requireFrames(result.frames, {
-    min: 2,
-    during: 'the reveal plays',
-    where: f => f.phase === 'opening',
-  });
+  // Each phase is judged on its own reads, so a gap in the other phase cannot
+  // name it starved. Its two drawn reveal frames come while the reveal still
+  // rides, so the reversal still finds it.
+  requireFrames(
+    result.frames.filter(f => f.phase.startsWith('opening')),
+    {
+      min: 2,
+      during: 'the reveal plays',
+      where: f => f.phase === 'opening',
+    },
+  );
   // With those two, the conceal's 6 make the 8 drawn reads this proof always
   // required: its 9 shown reads included the held reversal.
-  requireFrames(result.frames, {
-    min: 6,
-    during: 'the conceal plays',
-    where: f => f.phase === 'closing' && f.shown > 0.5,
-  });
+  requireFrames(
+    result.frames.filter(f => f.phase.startsWith('closing')),
+    {
+      min: 6,
+      during: 'the conceal plays',
+      where: f => f.phase === 'closing' && f.shown > 0.5,
+    },
+  );
   const reversed = result.frames.find(f => f.phase === 'reversed');
   expect(reversed?.shown).toBeGreaterThan(2);
   expect(reversed?.shown).toBeLessThan(result.height - 2);
