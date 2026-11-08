@@ -714,13 +714,14 @@ function watchDock(win: Window): {
       notifyDockReveal();
     }
   };
-  // Where the dock rests when the wait ends decides the show.
-  const settle = () => {
+  // Where the dock rests when the wait ends decides the show. Only a clean
+  // wait that ends on its own teaches the page.
+  const settle = (atCap: boolean) => {
     if (isRevealed(getKeyboardPan(win), getKeyboardHeight(win))) {
       clearTimers();
       show = 'revealed';
     } else {
-      cover(!inputSinceShow);
+      cover(!atCap && !inputSinceShow);
     }
   };
   const restartSettle = () => {
@@ -730,7 +731,7 @@ function watchDock(win: Window): {
     settleTimer = setTimeout(() => {
       settleTimer = null;
       if (show === 'watching') {
-        settle();
+        settle(false);
       }
     }, DOCK_REVEAL_SETTLE_MS);
   };
@@ -768,7 +769,7 @@ function watchDock(win: Window): {
       capTimer = setTimeout(() => {
         capTimer = null;
         if (show === 'watching') {
-          cover(false);
+          settle(true);
         }
       }, DOCK_REVEAL_CAP_MS);
       restartSettle();

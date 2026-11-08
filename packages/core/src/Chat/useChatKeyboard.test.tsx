@@ -721,6 +721,22 @@ describe('ChatLayout in a page that scrolls the document', () => {
     expect(isDockLeftCovered(window)).toBe(true);
   });
 
+  it('lifts nothing at the 3 s cap when the dock is revealed by then', () => {
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 290);
+    for (let i = 1; i <= 5; i += 1) {
+      wait(500);
+      pan(i * 10);
+    }
+    // Late input keeps the last pan from deciding the show at once.
+    drag();
+    wait(400);
+    pan(290);
+    wait(100);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    expect(isDockLeftCovered(window)).toBe(false);
+  });
+
   it('keeps the lift at a show that reached the cap when a touch came before the pan', () => {
     const {container} = renderDocumentLayout();
     report(window.innerHeight - 290);
