@@ -71,10 +71,12 @@ const styles = stylex.create({
     flex: '1 1 0%',
     minWidth: stylex.firstThatWorks('fit-content', '-webkit-fit-content'),
   },
+  // The heading shrinks only to its own narrowest width. TopNavHeading keeps
+  // its logo there.
   heading: {
     display: 'flex',
     alignItems: 'center',
-    flexShrink: 0,
+    flexShrink: 1,
   },
   startContent: {
     display: 'flex',
