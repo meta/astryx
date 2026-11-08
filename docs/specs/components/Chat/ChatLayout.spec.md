@@ -162,7 +162,8 @@ has a safe theme-independent baseline, so it stays closed under
   presentation the CSS container/flex model already resolves
   (`architecture:component-style-authoring/INV2`). A fixed dock is out of
   flow, so flex layout cannot reserve its height. That height reaches the
-  message area through PR2's pooled observer.
+  message area through PR2's pooled observer. Its first call carries no size,
+  so the mount reads the dock's height once.
 - **PR2 — Shared observation only.** Content-size observation reaches the browser
   through the pooled `observeResize` utility used by `useChatNewMessages`, never a
   per-instance observer.

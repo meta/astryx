@@ -53,7 +53,6 @@ import {KeyboardSurfaceContext} from './keyboardSurface';
 import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
-import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {
   registerEnglishFallback,
@@ -362,33 +361,26 @@ export function ChatLayout({
   // A fixed dock is out of flow, so the message area makes room for it. The
   // room is the dock's border-box height, as the pooled observer reports it.
   // The padding changes only the message area, so it never resizes the dock.
-  const dockElementRef = useRef<HTMLDivElement | null>(null);
+  // React calls the returned unsubscribe when the dock detaches or the
+  // scroll mode changes.
   const [dockHeight, setDockHeight] = useState(0);
-  const keyboardDockRef = keyboard.dockRef;
-  const dockRef = useCallback(
-    (element: HTMLDivElement | null) => {
-      dockElementRef.current = element;
-      keyboardDockRef(element);
+  const observeDock = useCallback(
+    (dock: HTMLDivElement | null) => {
+      if (dock == null || isSelfScrolling) {
+        return undefined;
+      }
+      return observeResize(dock, entry => {
+        // The pooled observer's first call carries no size. The mount reads
+        // the dock once, so the first paint has the room.
+        const height =
+          entry.borderBoxSize?.[0]?.blockSize ??
+          dock.getBoundingClientRect().height;
+        setDockHeight(Math.round(height));
+      });
     },
-    [keyboardDockRef],
+    [isSelfScrolling],
   );
-  // Synchronizes the room with the dock's size, through the pooled resize
-  // observer.
-  useIsomorphicLayoutEffect(() => {
-    const dock = dockElementRef.current;
-    if (isSelfScrolling || dock == null) {
-      setDockHeight(0);
-      return undefined;
-    }
-    return observeResize(dock, entry => {
-      // The pooled observer's first call carries no size. The mount reads the
-      // dock once, so the first paint has the room.
-      const height =
-        entry.borderBoxSize?.[0]?.blockSize ??
-        dock.getBoundingClientRect().height;
-      setDockHeight(Math.round(height));
-    });
-  }, [isSelfScrolling]);
+  const dockRef = useMergedRefs(keyboard.dockRef, observeDock);
   const endRoom = keyboard.lift + (isSelfScrolling ? 0 : dockHeight);
 
   const defaultScrollButton = (
