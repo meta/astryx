@@ -149,9 +149,10 @@ export interface TooltipOptions {
 
   /**
    * Controlled open state. When provided, overrides hover/focus triggers:
-   * - `true`: force-show the tooltip (hover/focus hide is suppressed)
-   * - `false`: force-hide the tooltip. Focus that would show it calls
-   *   `onShow` and shows nothing.
+   * - `true`: force-show the tooltip. A pointer or focus leave that would hide
+   *   it calls `onHide` and hides nothing.
+   * - `false`: force-hide the tooltip. A hover or focus that would show it
+   *   calls `onShow` once and shows nothing.
    * - `undefined`: uncontrolled — hover/focus triggers manage visibility
    *
    * A controlled tooltip still takes Escape when it is the top-most layer, and
@@ -168,14 +169,15 @@ export interface TooltipOptions {
   isDefaultOpen?: boolean;
 
   /**
-   * Callback fired when tooltip is shown. Under `isOpen={false}`, it reports
-   * focus that would show the tooltip.
+   * Callback fired when tooltip is shown. Under `isOpen={false}`, it reports a
+   * hover or focus that would show the tooltip.
    * Wrap in useCallback for stable identity.
    */
   onShow?: () => void;
 
   /**
-   * Callback fired when tooltip is hidden.
+   * Callback fired when tooltip is hidden. Under `isOpen={true}`, it reports
+   * Escape and a pointer or focus leave that would hide the tooltip.
    * Wrap in useCallback for stable identity.
    */
   onHide?: () => void;
@@ -476,9 +478,10 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     registerLayerSurface,
   );
 
-  // Schedule show with delay (suppressed when isOpen is false)
+  // Held closed, the hover reports through onShow and shows nothing. The
+  // caller decides.
   const scheduleShow = useCallback(() => {
-    if (!isEnabled || isOpen === false) {
+    if (!isEnabled) {
       return;
     }
     clearTimeouts();
@@ -486,26 +489,37 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     showTimeoutRef.current = setTimeout(() => {
       // A show runs only if the tooltip stayed enabled since it was
       // scheduled: nothing would close a tooltip that opens after a disable.
-      if (disabledRendersRef.current === disabledRenders) {
-        showLayer();
+      if (disabledRendersRef.current !== disabledRenders) {
+        return;
       }
+      const latest = latestRef.current;
+      if (latest.isOpen === false) {
+        latest.onShow?.();
+        return;
+      }
+      showLayer();
     }, delay);
-  }, [isEnabled, isOpen, clearTimeouts, showLayer, delay]);
+  }, [isEnabled, clearTimeouts, showLayer, delay]);
 
-  // Schedule hide with delay (suppressed when isOpen is true).
   // A small hover bridge (when hideDelay is 0) lets the pointer travel from the
   // trigger onto the tooltip surface without the tooltip vanishing — required
-  // for WCAG 1.4.13 (Content on Hover or Focus: hoverable).
+  // for WCAG 1.4.13 (Content on Hover or Focus: hoverable). Held open, the
+  // leave reports through onHide and hides nothing. The caller decides.
   const scheduleHide = useCallback(() => {
-    if (isOpen === true || isHeldOpen()) {
+    if (isHeldOpen()) {
       return;
     }
     clearTimeouts();
     const effectiveHideDelay = hideDelay > 0 ? hideDelay : HOVER_BRIDGE_DELAY;
     hideTimeoutRef.current = setTimeout(() => {
+      const latest = latestRef.current;
+      if (latest.isOpen === true) {
+        latest.onHide?.();
+        return;
+      }
       hideLayer();
     }, effectiveHideDelay);
-  }, [isOpen, isHeldOpen, clearTimeouts, hideLayer, hideDelay]);
+  }, [isHeldOpen, clearTimeouts, hideLayer, hideDelay]);
 
   // Cancel a pending hide (e.g. the pointer entered the tooltip surface).
   const cancelHide = useCallback(() => {
@@ -575,8 +589,6 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         return;
       }
       clearTimeouts();
-      // Held closed, the focus reports through onShow and shows nothing. The
-      // caller decides.
       const latest = latestRef.current;
       if (latest.isOpen === false) {
         latest.onShow?.();

@@ -422,23 +422,33 @@ describe('useTooltip — controlled isOpen', () => {
     expect(onShow).toHaveBeenCalledTimes(1);
   });
 
-  it('ignores pointer-leave while isOpen is true', () => {
+  it('reports pointer-leave through onHide while isOpen is true, and stays shown', () => {
     const onHide = vi.fn();
     render(<Harness isOpen onHide={onHide} />);
 
     fireEvent.mouseLeave(trigger());
     tick(1000);
 
-    expect(onHide).not.toHaveBeenCalled();
+    expect(onHide).toHaveBeenCalledTimes(1);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
   });
 
-  it('never schedules a show while isOpen is false', () => {
+  it('reports hover intent through onShow while isOpen is false, and never shows', () => {
     const onShow = vi.fn();
     render(<Harness isOpen={false} onShow={onShow} />);
 
     fireEvent.mouseEnter(trigger());
-    expect(vi.getTimerCount()).toBe(0);
+    tick(1000);
+    expect(onShow).toHaveBeenCalledTimes(1);
+    expect(tooltipElement().matches(':popover-open')).toBe(false);
+  });
 
+  it('drops the hover report when the pointer leaves before the delay', () => {
+    const onShow = vi.fn();
+    render(<Harness isOpen={false} onShow={onShow} delay={300} />);
+
+    fireEvent.mouseEnter(trigger());
+    fireEvent.mouseLeave(trigger());
     tick(1000);
     expect(onShow).not.toHaveBeenCalled();
   });

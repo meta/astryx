@@ -961,6 +961,35 @@ describe('Comments threads', () => {
     ).toBeTruthy();
   });
 
+  it('closes the copy-link tooltip once the pointer leaves the button', async () => {
+    // The tooltip is held open by state the hover sets, so it closes only when
+    // the leave reports through onOpenChange(false).
+    render(
+      <Sized>
+        <Comments
+          comments={[{...COMMENTS[0], replies: []}]}
+          currentUser={OTHER}
+        />
+      </Sized>,
+    );
+    const button = screen.getByRole('button', {name: 'Copy comment link'});
+    const tipIsShown = () =>
+      screen
+        .getAllByRole('tooltip', {hidden: true})
+        .some(
+          tip =>
+            tip.textContent === 'Copy comment link' &&
+            (tip.closest<HTMLElement>('[popover]')?.matches(':popover-open') ??
+              false),
+        );
+    fireEvent.pointerEnter(button);
+    fireEvent.mouseEnter(button);
+    await waitFor(() => expect(tipIsShown()).toBe(true), {timeout: 2000});
+    fireEvent.pointerLeave(button);
+    fireEvent.mouseLeave(button);
+    await waitFor(() => expect(tipIsShown()).toBe(false), {timeout: 2000});
+  });
+
   it('keeps the copied label for the full time after a second copy', async () => {
     vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
     const wait = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));

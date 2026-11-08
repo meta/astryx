@@ -25,7 +25,7 @@ import {
   fireEvent,
   waitFor,
 } from '@testing-library/react';
-import {useRef} from 'react';
+import {useRef, useState} from 'react';
 import {Tooltip} from './Tooltip';
 import {ClickableCard} from '../ClickableCard/ClickableCard';
 import {Item} from '../Item/Item';
@@ -360,6 +360,26 @@ describe('Tooltip', () => {
         .closest<HTMLElement>('[popover]')
         ?.matches(':popover-open') ?? false;
 
+    it('reports hover intent once while held closed, and shows nothing', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Tooltip
+          content="Held"
+          isOpen={false}
+          onOpenChange={onOpenChange}
+          delay={0}>
+          <button type="button">Trigger</button>
+        </Tooltip>,
+      );
+      const trigger = screen.getByRole('button', {name: 'Trigger'});
+      fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
+      fireEvent.mouseEnter(trigger);
+      await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(true));
+      await new Promise(r => setTimeout(r, 20));
+      expect(onOpenChange).toHaveBeenCalledTimes(1);
+      expect(isShown()).toBe(false);
+    });
+
     it('reports keyboard-focus intent once while held closed, and shows nothing', async () => {
       const onOpenChange = vi.fn();
       render(
@@ -395,6 +415,55 @@ describe('Tooltip', () => {
       onOpenChange.mockClear();
       fireEvent.keyDown(document, {key: 'Escape'});
       expect(onOpenChange).toHaveBeenCalledWith(false);
+      expect(isShown()).toBe(true);
+    });
+
+    it('closes a state-wired tooltip once the pointer leaves', async () => {
+      function StateWired() {
+        const [open, setOpen] = useState(false);
+        return (
+          <Tooltip
+            content="Wired"
+            isOpen={open}
+            onOpenChange={setOpen}
+            delay={0}
+            hideDelay={0}>
+            <button type="button">Trigger</button>
+          </Tooltip>
+        );
+      }
+      render(<StateWired />);
+      const trigger = screen.getByRole('button', {name: 'Trigger'});
+      fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
+      fireEvent.mouseEnter(trigger);
+      await waitFor(() => expect(isShown()).toBe(true));
+      fireEvent.pointerLeave(trigger, {pointerType: 'mouse'});
+      fireEvent.mouseLeave(trigger);
+      await waitFor(() => expect(isShown()).toBe(false));
+    });
+
+    it('reports a pointer leave as onOpenChange(false) while held open, and stays shown', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Tooltip
+          content="Held"
+          isOpen
+          onOpenChange={onOpenChange}
+          delay={0}
+          hideDelay={0}>
+          <button type="button">Trigger</button>
+        </Tooltip>,
+      );
+      await waitFor(() => expect(isShown()).toBe(true));
+      onOpenChange.mockClear();
+      const trigger = screen.getByRole('button', {name: 'Trigger'});
+      fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
+      fireEvent.mouseEnter(trigger);
+      fireEvent.pointerLeave(trigger, {pointerType: 'mouse'});
+      fireEvent.mouseLeave(trigger);
+      await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+      await new Promise(r => setTimeout(r, 20));
+      expect(onOpenChange).toHaveBeenCalledTimes(1);
       expect(isShown()).toBe(true);
     });
 
