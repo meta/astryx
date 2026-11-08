@@ -291,17 +291,19 @@ describe('List reorderable', () => {
 
   it('names the handle of a row that shows no text and has no name after its place, and warns in development', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    render(
+    const rows = () => (
       <List reorderable={createReorderable({onReorder: () => {}})}>
         <ListItem itemKey="inbox" label="Inbox" />
         <ListItem itemKey="dot" label={<svg aria-hidden="true" />} />
         <ListItem itemKey="star" label={<svg aria-label="Starred" />} />
-      </List>,
+      </List>
     );
+    const {rerender} = render(rows());
     expect(
       await screen.findByRole('button', {name: 'Reorder item 2'}),
     ).toBeInTheDocument();
-    // Only the nameless row warns, once.
+    // Only the nameless row warns, once, however often it renders.
+    rerender(rows());
     const nameless = warn.mock.calls.filter(([message]) =>
       String(message).includes('A reorderable row has no accessible name'),
     );
@@ -461,12 +463,16 @@ describe('List reorderable', () => {
     expect(handleOf('Inbox')).toBeInTheDocument();
     expect(warnings()).toHaveLength(0);
     unmount();
-    render(
+    const unkeyed = () => (
       <List reorderable={createReorderable({onReorder: () => {}})}>
         <ListItem label="Sent" />
         <ListItem label="Drafts" />
-      </List>,
+      </List>
     );
+    const {rerender} = render(unkeyed());
+    expect(warnings()).toHaveLength(1);
+    // Once a list, however often it renders.
+    rerender(unkeyed());
     expect(warnings()).toHaveLength(1);
     warn.mockRestore();
   });

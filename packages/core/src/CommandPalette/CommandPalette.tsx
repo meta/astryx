@@ -434,11 +434,17 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
           );
         }
 
-        const result = isBootstrap
-          ? searchSource.bootstrap()
-          : searchSource.search(query);
+        let items: T[] = [];
+        try {
+          const result = isBootstrap
+            ? searchSource.bootstrap()
+            : searchSource.search(query);
 
-        const items = await Promise.resolve(result);
+          items = await Promise.resolve(result);
+        } catch {
+          // A failed request settles as an empty answer. React sends an
+          // uncaught error from this transition to the nearest error boundary.
+        }
 
         if (searchVersionRef.current === version) {
           if (!isBootstrap) {
