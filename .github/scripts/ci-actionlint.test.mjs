@@ -25,6 +25,13 @@ const job = lint.jobs.lint;
 const step = job.steps.find(
   candidate => candidate.name === 'Lint changed workflows (actionlint)',
 );
+const scope = job.steps.find(
+  candidate =>
+    candidate.name === 'Decide whether workflows changed (actionlint)',
+);
+const cache = job.steps.find(
+  candidate => candidate.name === 'Restore the actionlint archive',
+);
 const config = yaml.parse(
   fs.readFileSync(path.join(root, '.github/actionlint.yaml'), 'utf8'),
 );
@@ -35,17 +42,51 @@ const HOSTED = /^(ubuntu|windows|macos)-/;
 describe('Lint: actionlint on workflow changes', () => {
   it('runs on pull requests and skips unless a workflow, action or the config changed', () => {
     expect(step).toBeDefined();
-    expect(step.if).toBe("github.event_name == 'pull_request'");
-    expect(step.run).toContain(
+    expect(scope.if).toBe("github.event_name == 'pull_request'");
+    expect(step.if).toBe(
+      "github.event_name == 'pull_request' && steps.actionlint-scope.outputs.run == 'true'",
+    );
+    expect(scope.run).toContain(
       'git diff --quiet "$MERGE_BASE"...HEAD -- .github/workflows .github/actions .github/actionlint.yaml',
     );
     // An unknown merge base runs it rather than skipping.
-    expect(step.run).toContain('if [ -n "$MERGE_BASE" ] && git diff --quiet');
+    expect(scope.run).toContain('if [ -n "$MERGE_BASE" ] && git diff --quiet');
     // It comes after the classifier step that fetches the base branch.
     const names = job.steps.map(candidate => candidate.name);
     expect(names.indexOf('Classify changed files')).toBeLessThan(
       names.indexOf(step.name),
     );
+  });
+
+  it('retries a failed download, and checks the checksum of a downloaded or restored archive', () => {
+    expect(step.run).toContain(
+      'curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 --max-time 60 -o "$archive"',
+    );
+    // The checksum check comes after the download and before the archive is
+    // unpacked, whether the archive came from the download or the cache.
+    const lines = step.run.split('\n').map(line => line.trim());
+    const at = text => lines.findIndex(line => line.startsWith(text));
+    expect(at('if [ ! -f "$archive" ]; then')).toBeGreaterThan(-1);
+    expect(
+      at('echo "$ACTIONLINT_SHA256  $archive" | sha256sum -c -'),
+    ).toBeGreaterThan(at('curl -fsSL'));
+    expect(at('tar -xzf "$archive"')).toBeGreaterThan(
+      at('echo "$ACTIONLINT_SHA256  $archive" | sha256sum -c -'),
+    );
+  });
+
+  it('keeps the archive by version, so most runs never download it', () => {
+    expect(cache.uses).toMatch(/^actions\/cache@v\d+$/);
+    expect(cache.if).toBe(step.if);
+    expect(cache.with.path).toBe('${{ runner.temp }}/actionlint-archive');
+    expect(cache.with.key).toBe(
+      `actionlint-${step.env.ACTIONLINT_VERSION}-linux-arm64`,
+    );
+    expect(step.run).toContain(
+      'archive="$RUNNER_TEMP/actionlint-archive/actionlint_${ACTIONLINT_VERSION}_linux_arm64.tar.gz"',
+    );
+    const names = job.steps.map(candidate => candidate.name);
+    expect(names.indexOf(cache.name)).toBe(names.indexOf(step.name) - 1);
   });
 
   it('pins actionlint by version and checksum for the arm64 runner', () => {
