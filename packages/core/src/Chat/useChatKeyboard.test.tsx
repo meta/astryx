@@ -16,18 +16,21 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {act, fireEvent, render, screen} from '@testing-library/react';
+import type {ReactNode} from 'react';
 import {ChatComposer} from './ChatComposer';
 import {ChatLayout} from './ChatLayout';
 import {
-  __leavesRevealToBrowserForTest,
-  __learnRevealForTest,
-  __resetRevealForTest,
-  __revealLearnedForTest,
-  editableToClaim,
-} from './useChatKeyboard';
+  ChatComposerInput,
+  type ChatComposerInputHandle,
+} from './ChatComposerInput';
+import {editableToClaim} from './useChatKeyboard';
 import {getKeyboardLayoutGuide} from '../keyboard/keyboardLayoutGuide';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
-import {__focusTakeoverCallersForTest} from '../keyboard/keyboardHeight';
+import {
+  __focusTakeoverCallersForTest,
+  __resetDockRevealForTest,
+  getDockReveal,
+} from '../keyboard/keyboardHeight';
 
 // jsdom dates events on the epoch clock, but a browser dates them on
 // performance.now()'s, which the keyboard guide reads them against.
@@ -356,6 +359,8 @@ describe('ChatLayout and the software keyboard', () => {
 
 describe('ChatLayout in a page that scrolls the document', () => {
   beforeEach(() => {
+    // The keyboard module decides a show on a settle timer: tests script it.
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
     // A phone: its primary pointer is a coarse finger.
     vi.stubGlobal('matchMedia', (query: string) => ({
       matches: query === '(pointer: coarse)',
@@ -372,50 +377,22 @@ describe('ChatLayout in a page that scrolls the document', () => {
       configurable: true,
       value: viewport,
     });
-    __resetRevealForTest(window);
+    __resetDockRevealForTest(window);
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     Reflect.deleteProperty(window, 'visualViewport');
     Reflect.deleteProperty(navigator, 'virtualKeyboard');
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
-    __resetRevealForTest(window);
+    __resetDockRevealForTest(window);
   });
 
-  // Scripted animation frames: the wait for the browser's pan counts frames,
-  // so these cases run no clock.
-  let frames = new Map<number, FrameRequestCallback>();
-  function scriptFrames() {
-    frames = new Map();
-    let nextFrame = 1;
-    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
-      const id = nextFrame;
-      nextFrame += 1;
-      frames.set(id, callback);
-      return id;
-    });
-    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(id => {
-      frames.delete(id);
-    });
-  }
-  function frame(count = 1) {
+  // Time on the keyboard module's settle timer, with no real wait.
+  function wait(ms: number) {
     act(() => {
-      for (let i = 0; i < count; i += 1) {
-        const queued = [...frames.values()];
-        frames.clear();
-        for (const callback of queued) {
-          callback(performance.now());
-        }
-      }
-    });
-  }
-  // A finger down on the page, or none.
-  function touches(count: number) {
-    const event = new Event(count > 0 ? 'touchstart' : 'touchend');
-    Object.defineProperty(event, 'touches', {value: {length: count}});
-    act(() => {
-      document.dispatchEvent(event);
+      vi.advanceTimersByTime(ms);
     });
   }
   // The browser pans the visual viewport, as Safari's reveal of the dock does.
@@ -425,253 +402,326 @@ describe('ChatLayout in a page that scrolls the document', () => {
       viewport.dispatchEvent(new Event('scroll'));
     });
   }
+  // A touch event as the browser raises it, at the given points.
+  function touch(type: string, points: {x: number; y: number}[]) {
+    const event = new Event(type, {bubbles: true, cancelable: true});
+    const list = points.map((p, identifier) => ({
+      identifier,
+      clientX: p.x,
+      clientY: p.y,
+    }));
+    Object.assign(event, {
+      touches: type === 'touchend' ? [] : list,
+      changedTouches: list,
+    });
+    return event;
+  }
+  // A reader's drag or fling: a finger down on the page, then up.
+  function drag() {
+    act(() => {
+      document.dispatchEvent(touch('touchstart', [{x: 5, y: 5}]));
+      document.dispatchEvent(touch('touchend', [{x: 5, y: 50}]));
+    });
+  }
+  function wheel() {
+    act(() => {
+      document.dispatchEvent(new Event('wheel'));
+    });
+  }
+  // A tap on the composer's text: whether the composer claimed it.
+  function tapText(field: HTMLElement): boolean {
+    const end = touch('touchend', [{x: 10, y: 10}]);
+    act(() => {
+      field.dispatchEvent(touch('touchstart', [{x: 10, y: 10}]));
+      field.dispatchEvent(end);
+    });
+    return end.defaultPrevented;
+  }
+  // A first keyboard show the dock stays covered at, then the keyboard goes:
+  // the page has learned that its browser does not pan to the dock.
+  function learnCovered() {
+    report(window.innerHeight - 290);
+    wait(800);
+    report(window.innerHeight);
+  }
 
-  function renderDocumentLayout() {
+  function renderDocumentLayout(
+    composer: ReactNode = (
+      <div data-testid="composer">
+        <textarea aria-label="Message" />
+      </div>
+    ),
+  ) {
     return render(
       <ChatLayout
         data-testid="layout"
         scrollRef={{current: document.documentElement}}
-        composer={
-          <div data-testid="composer">
-            <textarea aria-label="Message" />
-          </div>
-        }>
+        composer={composer}>
         <p>Hello</p>
       </ChatLayout>,
     );
   }
 
-  it('lifts the fixed dock nothing in Safari on iOS, whose reveal pans the visual viewport to it and keeps the pan', async () => {
+  it('lifts the fixed dock nothing in Safari on iOS, whose reveal pans the visual viewport to it and keeps the pan', () => {
     const {container} = renderDocumentLayout();
     // Safari's reveal: the keyboard's report comes with a pan by its height.
     viewport.offsetTop = 300;
     report(window.innerHeight - 300);
-    await settle();
+    wait(3000);
     expect(layoutLift(dockOf(container))).toBe(0);
     expect(keyboardRoom(messagesOf())).toBe(0);
+    expect(getDockReveal(window)).toBe(true);
   });
 
-  it('lifts the fixed dock by the keyboard once the visual viewport settles with no pan, as in Firefox for Android', () => {
-    scriptFrames();
+  it('lifts nothing while the browser may still pan, then lifts by the cover 0.7 s after the keyboard\u2019s report, as in Firefox for Android', () => {
     const {container} = renderDocumentLayout();
     report(window.innerHeight - 290);
-    frame(10);
+    wait(650);
     expect(layoutLift(dockOf(container))).toBe(0);
-    frame(40);
+    wait(50);
     expect(layoutLift(dockOf(container))).toBe(290);
     expect(keyboardRoom(messagesOf())).toBe(290);
-    expect(__revealLearnedForTest(window)).toBe(false);
+    expect(getDockReveal(window)).toBe(false);
   });
 
-  it('lifts nothing when the visual viewport pans within the wait, as Safari on iOS does', () => {
-    scriptFrames();
+  it('keeps the 0.7 s wait through the height reports of the keyboard\u2019s slide, then follows the keyboard\u2019s height', () => {
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 50);
+    wait(100);
+    report(window.innerHeight - 150);
+    wait(100);
+    report(window.innerHeight - 250);
+    wait(450);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    wait(50);
+    expect(layoutLift(dockOf(container))).toBe(250);
+    report(window.innerHeight - 290);
+    expect(layoutLift(dockOf(container))).toBe(290);
+  });
+
+  it('restarts the wait at each pan, so a pan still under way keeps the dock down', () => {
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 290);
+    wait(500);
+    pan(40);
+    wait(650);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    wait(50);
+    expect(layoutLift(dockOf(container))).toBe(290);
+  });
+
+  it('lifts nothing when the visual viewport pans to the dock within the wait, as Safari does', () => {
     const {container} = renderDocumentLayout();
     report(window.innerHeight - 337);
-    frame(20);
+    wait(300);
     pan(337);
-    frame(60);
+    wait(3000);
     expect(layoutLift(dockOf(container))).toBe(0);
-    expect(keyboardRoom(messagesOf())).toBe(0);
-    expect(__revealLearnedForTest(window)).toBe(true);
+    expect(getDockReveal(window)).toBe(true);
     expect(__focusTakeoverCallersForTest(document)).toBe(0);
   });
 
-  it('lifts nothing when the dock is already revealed at the report, and learns nothing from a show that needed no pan', () => {
-    scriptFrames();
+  it('lifts nothing, and learns nothing, when the dock is revealed at the report with no pan', () => {
     viewport.offsetTop = 337;
     const {container} = renderDocumentLayout();
     report(window.innerHeight - 337);
-    frame(60);
+    wait(3000);
     expect(layoutLift(dockOf(container))).toBe(0);
-    expect(__revealLearnedForTest(window)).toBeUndefined();
+    expect(getDockReveal(window)).toBeUndefined();
   });
 
-  it('drops the lift once when the browser pans after the wait, and keeps it off for that show', () => {
-    scriptFrames();
+  it('lifts at the 3 s cap when pans keep restarting the wait, and learns nothing from that show', () => {
     const {container} = renderDocumentLayout();
     report(window.innerHeight - 290);
-    frame(45);
-    expect(layoutLift(dockOf(container))).toBe(290);
-    pan(290);
-    expect(layoutLift(dockOf(container))).toBe(0);
-    pan(0);
-    frame(45);
+    for (let i = 1; i <= 6; i += 1) {
+      wait(500);
+      pan(i % 2 === 1 ? 10 : 0);
+    }
+    expect(layoutLift(dockOf(container))).toBeGreaterThanOrEqual(290);
+    expect(getDockReveal(window)).toBeUndefined();
+    report(window.innerHeight);
     expect(layoutLift(dockOf(container))).toBe(0);
   });
 
   it('after a show that left the dock covered, keeps the composer above the keyboard itself: the takeover, and a lift with no wait', () => {
-    scriptFrames();
     const {container} = renderDocumentLayout();
     expect(__focusTakeoverCallersForTest(document)).toBe(0);
-    report(window.innerHeight - 290);
-    frame(45);
+    learnCovered();
     expect(__focusTakeoverCallersForTest(document)).toBe(1);
-    report(window.innerHeight);
-    expect(layoutLift(dockOf(container))).toBe(0);
     report(window.innerHeight - 290);
-    expect(layoutLift(dockOf(container))).toBe(290);
-  });
-
-  it('keeps the lift when a finger pans the visual viewport with the keyboard up, as a reader\u2019s scroll in Firefox does', () => {
-    scriptFrames();
-    const {container} = renderDocumentLayout();
-    report(window.innerHeight - 290);
-    frame(45);
-    expect(layoutLift(dockOf(container))).toBe(290);
-    touches(1);
-    pan(156.4);
-    frame(5);
-    pan(290);
-    frame(5);
-    expect(layoutLift(dockOf(container))).toBe(290);
-    expect(__revealLearnedForTest(window)).toBe(false);
-  });
-
-  it('keeps the lift for a small pan with no finger down', () => {
-    scriptFrames();
-    const {container} = renderDocumentLayout();
-    report(window.innerHeight - 290);
-    frame(45);
-    pan(40);
-    frame(5);
-    expect(layoutLift(dockOf(container))).toBe(290);
-  });
-
-  it('drops the lift once for a slow browser whose pan to the dock comes after the settle, and leaves it the reveal', () => {
-    scriptFrames();
-    const {container} = renderDocumentLayout();
-    report(window.innerHeight - 337);
-    frame(45);
-    expect(layoutLift(dockOf(container))).toBe(337);
-    pan(337);
-    frame(2);
-    expect(layoutLift(dockOf(container))).toBe(0);
-    expect(__revealLearnedForTest(window)).toBe(true);
-    expect(__focusTakeoverCallersForTest(document)).toBe(0);
-  });
-
-  it('keeps the lift for a reveal-sized pan after a touch, as a reader\u2019s fling to the end', () => {
-    scriptFrames();
-    const {container} = renderDocumentLayout();
-    report(window.innerHeight - 290);
-    frame(45);
-    expect(layoutLift(dockOf(container))).toBe(290);
-    touches(1);
-    touches(0);
-    pan(290);
-    frame(2);
-    expect(layoutLift(dockOf(container))).toBe(290);
-    expect(__revealLearnedForTest(window)).toBe(false);
-  });
-
-  it('keeps the lift for a reveal-sized pan after a wheel', () => {
-    scriptFrames();
-    const {container} = renderDocumentLayout();
-    report(window.innerHeight - 290);
-    frame(45);
-    act(() => {
-      document.dispatchEvent(new Event('wheel'));
-    });
-    pan(290);
-    frame(2);
-    expect(layoutLift(dockOf(container))).toBe(290);
-  });
-
-  it('keeps the lift on a show that reached the cap when a touch came before the pan', () => {
-    scriptFrames();
-    let now = 1000;
-    vi.spyOn(performance, 'now').mockImplementation(() => now);
-    const {container} = renderDocumentLayout();
-    report(window.innerHeight - 290);
-    // The visual viewport never settles: the cap decides, and nothing is learned.
-    for (let i = 0; i < 31; i += 1) {
-      now += 100;
-      viewport.height = window.innerHeight - 290 - (i % 2);
-      frame();
-    }
-    expect(layoutLift(dockOf(container))).toBe(290);
-    expect(__revealLearnedForTest(window)).toBeUndefined();
-    touches(1);
-    touches(0);
-    pan(290);
-    frame(2);
-    expect(layoutLift(dockOf(container))).toBe(290);
-  });
-
-  it('never flips a page that learned the dock stays covered at a later show', () => {
-    scriptFrames();
-    const {container} = renderDocumentLayout();
-    report(window.innerHeight - 290);
-    frame(45);
-    report(window.innerHeight);
-    report(window.innerHeight - 290);
-    expect(layoutLift(dockOf(container))).toBe(290);
-    pan(290);
-    frame(2);
-    expect(layoutLift(dockOf(container))).toBe(290);
-    expect(__revealLearnedForTest(window)).toBe(false);
-  });
-
-  it('restarts the count, but decides nothing, for a pan during the wait that is smaller than the cover', () => {
-    scriptFrames();
-    const {container} = renderDocumentLayout();
-    report(window.innerHeight - 290);
-    frame(10);
-    pan(40);
-    frame(30);
-    expect(layoutLift(dockOf(container))).toBe(0);
-    frame(15);
     expect(layoutLift(dockOf(container))).toBe(290);
   });
 
   it('after a show the browser panned to, keeps leaving the reveal to it', () => {
-    scriptFrames();
     const {container} = renderDocumentLayout();
     report(window.innerHeight - 337);
-    frame(5);
+    wait(50);
     pan(337);
-    frame(2);
     report(window.innerHeight);
     pan(0);
     report(window.innerHeight - 337);
-    frame(3);
+    wait(50);
     pan(337);
-    frame(60);
+    wait(3000);
     expect(layoutLift(dockOf(container))).toBe(0);
     expect(__focusTakeoverCallersForTest(document)).toBe(0);
-    expect(__revealLearnedForTest(window)).toBe(true);
+    expect(getDockReveal(window)).toBe(true);
+  });
+
+  it('drops the lift once for a slow browser whose pan to the dock comes after the wait, with no input since the show opened', () => {
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 337);
+    wait(800);
+    expect(layoutLift(dockOf(container))).toBe(337);
+    pan(337);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    expect(getDockReveal(window)).toBe(true);
+    expect(__focusTakeoverCallersForTest(document)).toBe(0);
+  });
+
+  it('keeps the lift for a reveal-sized pan after a touch, as a reader\u2019s fling to the end', () => {
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 290);
+    wait(800);
+    drag();
+    pan(290);
+    expect(layoutLift(dockOf(container))).toBe(290);
+    expect(getDockReveal(window)).toBe(false);
+  });
+
+  it('keeps the lift for a reveal-sized pan after a wheel', () => {
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 290);
+    wait(800);
+    wheel();
+    pan(290);
+    expect(layoutLift(dockOf(container))).toBe(290);
+  });
+
+  it('keeps the input gate closed through a report during a drag, such as a toolbar\u2019s resize', () => {
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 290);
+    wait(800);
+    act(() => {
+      document.dispatchEvent(touch('touchstart', [{x: 5, y: 5}]));
+    });
+    report(window.innerHeight - 280);
+    pan(280);
+    expect(layoutLift(dockOf(container))).toBe(280);
+    expect(getDockReveal(window)).toBe(false);
+  });
+
+  it('keeps the lift for a pan smaller than the cover', () => {
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 290);
+    wait(800);
+    pan(40);
+    expect(layoutLift(dockOf(container))).toBe(290);
+  });
+
+  it('never flips a page that learned the dock stays covered, at a later show', () => {
+    const {container} = renderDocumentLayout();
+    learnCovered();
+    report(window.innerHeight - 290);
+    pan(290);
+    expect(layoutLift(dockOf(container))).toBe(290);
+    expect(getDockReveal(window)).toBe(false);
+  });
+
+  it('keeps the lift at a show that reached the cap when a touch came before the pan', () => {
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 290);
+    for (let i = 1; i <= 6; i += 1) {
+      wait(500);
+      pan(i % 2 === 1 ? 10 : 0);
+    }
+    report(window.innerHeight - 290);
+    expect(layoutLift(dockOf(container))).toBe(290);
+    drag();
+    pan(290);
+    expect(layoutLift(dockOf(container))).toBe(290);
+  });
+
+  it('leaves the composer\u2019s tap to the browser until a show finds the dock covered, then claims it', () => {
+    renderDocumentLayout();
+    const field = screen.getByRole('textbox', {name: 'Message'});
+    expect(tapText(field)).toBe(false);
+    act(() => {
+      field.blur();
+    });
+    learnCovered();
+    expect(tapText(field)).toBe(true);
+  });
+
+  it('keeps the browser\u2019s reveal for the input\u2019s focus() until a show finds the dock covered', () => {
+    let handle: ChatComposerInputHandle | null = null;
+    const {container} = renderDocumentLayout(
+      <ChatComposer
+        onSubmit={() => {}}
+        input={
+          <ChatComposerInput
+            handleRef={h => {
+              handle = h;
+            }}
+          />
+        }
+      />,
+    );
+    const editable = container.querySelector<HTMLElement>(
+      '[contenteditable="true"]',
+    )!;
+    const focus = vi.spyOn(editable, 'focus');
+    act(() => handle!.focus());
+    expect(focus).toHaveBeenLastCalledWith();
+    act(() => {
+      editable.blur();
+    });
+    learnCovered();
+    act(() => handle!.focus());
+    expect(focus).toHaveBeenLastCalledWith({preventScroll: true});
+  });
+
+  it('leaves the browser\u2019s pan to the dock in place until a show finds the dock covered, then puts a reveal pan back', () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    try {
+      renderDocumentLayout();
+      const field = screen.getByRole('textbox', {name: 'Message'});
+      act(() => {
+        field.focus();
+      });
+      // Safari's reveal: no put-back.
+      report(window.innerHeight - 337);
+      wait(50);
+      pan(337);
+      expect(scrollIntoView).not.toHaveBeenCalled();
+      report(window.innerHeight);
+      pan(0);
+      // A page whose browser leaves the dock covered: a reveal pan goes back.
+      __resetDockRevealForTest(window);
+      learnCovered();
+      report(window.innerHeight - 290);
+      pan(290);
+      expect(scrollIntoView).toHaveBeenCalled();
+    } finally {
+      Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+    }
   });
 
   it('learns per window: what one page found never changes another', () => {
-    const root = document.documentElement;
-    const first = {navigator: {}} as unknown as Window;
-    const second = {navigator: {}} as unknown as Window;
-    __learnRevealForTest(first, false);
-    expect(__leavesRevealToBrowserForTest(first, root)).toBe(false);
-    expect(__leavesRevealToBrowserForTest(second, root)).toBe(true);
-    __learnRevealForTest(second, true);
-    expect(__leavesRevealToBrowserForTest(second, root)).toBe(true);
-    expect(__revealLearnedForTest(first)).toBe(false);
-    __resetRevealForTest(first);
-    __resetRevealForTest(second);
-  });
-
-  it('counts frames, not time: a busy device that draws few frames waits longer, up to a cap', () => {
-    scriptFrames();
-    let now = 1000;
-    vi.spyOn(performance, 'now').mockImplementation(() => now);
-    const {container} = renderDocumentLayout();
-    report(window.innerHeight - 290);
-    for (let i = 0; i < 20; i += 1) {
-      now += 100;
-      frame();
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    try {
+      renderDocumentLayout();
+      learnCovered();
+      expect(getDockReveal(window)).toBe(false);
+      expect(getDockReveal(frame.contentWindow!)).toBeUndefined();
+    } finally {
+      frame.remove();
     }
-    expect(layoutLift(dockOf(container))).toBe(0);
-    for (let i = 0; i < 10; i += 1) {
-      now += 100;
-      frame();
-    }
-    expect(layoutLift(dockOf(container))).toBe(290);
   });
 
   it('leaves the composer\u2019s focus to Safari there: no focus takeover and no composer group', () => {
@@ -681,7 +731,7 @@ describe('ChatLayout in a page that scrolls the document', () => {
     expect(region.getAttribute('role')).toBeNull();
   });
 
-  it('keeps the lift and the focus takeover for a scrollRef on an inner scroller, in Safari on iOS too', async () => {
+  it('keeps the lift and the focus takeover for a scrollRef on an inner scroller, in Safari on iOS too', () => {
     const scroller = document.createElement('div');
     document.body.append(scroller);
     try {
@@ -699,28 +749,26 @@ describe('ChatLayout in a page that scrolls the document', () => {
       );
       expect(__focusTakeoverCallersForTest(document)).toBe(1);
       report(window.innerHeight - 300);
-      await settle();
       expect(layoutLift(dockOf(container))).toBe(300);
+      expect(getDockReveal(window)).toBeUndefined();
     } finally {
       scroller.remove();
     }
   });
 
-  it('lifts the fixed dock by the keyboard with the VirtualKeyboard API, as in Chrome on Android', async () => {
+  it('lifts the fixed dock by the keyboard with the VirtualKeyboard API, as in Chrome on Android, and never watches the dock there', async () => {
+    vi.useRealTimers();
     Object.defineProperty(navigator, 'virtualKeyboard', {
       configurable: true,
       value: {overlaysContent: false},
     });
     const {container} = renderDocumentLayout();
-    expect(
-      __leavesRevealToBrowserForTest(window, document.documentElement),
-    ).toBe(false);
     report(window.innerHeight - 300);
     await settle();
     expect(layoutLift(dockOf(container))).toBe(300);
     expect(keyboardRoom(messagesOf())).toBe(300);
-    // The reveal wait never runs where the layout guide rides the keyboard.
-    expect(__revealLearnedForTest(window)).toBeUndefined();
+    pan(300);
+    expect(getDockReveal(window)).toBeUndefined();
     expect(__focusTakeoverCallersForTest(document)).toBe(1);
   });
 });

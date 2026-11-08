@@ -107,7 +107,7 @@ export const docs = {
       {
         name: 'Composer',
         required: true,
-        description: 'The input area for sending messages, typically ChatComposer. Docked at the bottom inside the frosted glass layer. In a top-level page on a touch screen, its wrapper (without the scroll button) is a group with no name. When the keyboard\u2019s Done ends typing, focus rests on that group (it is no tab stop), so the next tap or Tab starts from the composer. It shows the focus ring after keyboard input only. Under a mouse or inside an iframe, the wrapper is a plain container. So it is when scrollRef names the document in Safari on iOS: the browser keeps focus there.',
+        description: 'The input area for sending messages, typically ChatComposer. Docked at the bottom inside the frosted glass layer. In a top-level page on a touch screen, its wrapper (without the scroll button) is a group with no name. When the keyboard\u2019s Done ends typing, focus rests on that group (it is no tab stop), so the next tap or Tab starts from the composer. It shows the focus ring after keyboard input only. Under a mouse or inside an iframe, the wrapper is a plain container. So it is when scrollRef names the document in Safari on iOS, and at a page\u2019s first keyboard show in another browser without the VirtualKeyboard API: the browser keeps focus there.',
       },
       {
         name: 'Empty state',

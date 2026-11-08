@@ -136,9 +136,10 @@ app to turn on.
   control into view with its own scroller. When the keyboard's Done button
   ends entry, focus moves to the surface so the next tap is handled the same
   way. A document scroll that still happens while the page is scroll-locked,
-  such as on returning to the app, is put back in the same frame. FR3 names one
-  exception: ChatLayout's composer in Safari on iOS, when its `scrollRef` names
-  the document's scroller.
+  such as on returning to the app, is put back in the same frame. FR3 names two
+  exceptions when ChatLayout's `scrollRef` names the document's scroller: its
+  composer in Safari on iOS, and a page's first keyboard show in another browser
+  without the VirtualKeyboard API (Gap 16).
 - **FR5 — Moving a surface dismisses the keyboard.** When a surface that holds
   the focused control starts to move, such as a sheet dragged between heights,
   a drag to dismiss, or a close, the control is blurred so the keyboard
@@ -391,14 +392,14 @@ No covered field meets FR9 on `main`. Each gap below is open.
   Firefox reports the keyboard's hide once, at its end. The sheet's content
   moves at that report, in one frame, instead of riding from the blur (FR3).
 - **Gap 16 — The first keyboard show of a document-scrolling ChatLayout without
-  the VirtualKeyboard API.** ChatLayout cannot tell before that show whether
-  the browser pans to its fixed dock (FR3). So the first show leaves focus to
-  the browser. In Firefox for Android, the first keyboard show on each page
-  leaves the composer covered for up to 40 still frames of the visual viewport.
-  That is about 0.7 s at 60 Hz, and 3 s at most. Every later show lifts the dock
-  at once. On the iOS Simulator, Safari's pan arrived 0 to 384 ms after the
-  keyboard's report. A short cover once, at Firefox's first show, is better than
-  a lift and then a drop in a slow Safari.
+  the VirtualKeyboard API.** ChatLayout cannot tell before that show whether the
+  browser pans to its fixed dock (FR3). So the first show leaves focus to the
+  browser. In Firefox for Android, the first keyboard show on each page leaves
+  the composer covered for about 0.7 s after the keyboard's report. Only a pan
+  of the visual viewport restarts that wait, and the wait ends at 3 s at most.
+  Every later show lifts the dock at once. On the iOS Simulator, Safari's pan
+  arrived 0 to 384 ms after the keyboard's report. A short cover once, at
+  Firefox's first show, is better than a lift and then a drop in a slow Safari.
 
 ### Follow-up
 
