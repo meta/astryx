@@ -1,6 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {afterEach, describe, expect, it, vi} from 'vitest';
+import * as diagnostics from './devWarning';
 import {
   devWarn,
   devError,
@@ -12,6 +13,54 @@ import {
 afterEach(() => {
   __resetDevWarnings();
   vi.restoreAllMocks();
+});
+
+function instanceWarnings() {
+  const create = diagnostics.createDevWarnings;
+  expect(typeof create).toBe('function');
+  return create();
+}
+
+describe('per-instance warnings', () => {
+  it('exposes a shared instance warning factory', () => {
+    instanceWarnings();
+  });
+  it('deduplicates messages per instance without sharing history across mounts', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const first = instanceWarnings();
+    first('Table', 'first');
+    first('Table', 'first');
+    first('Table', 'second');
+    const second = instanceWarnings();
+    second('Table', 'first');
+    expect(spy.mock.calls).toEqual([
+      ['Table: first'],
+      ['Table: second'],
+      ['Table: first'],
+    ]);
+  });
+  it('supports one stable key while preserving the current message prefix', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warn = instanceWarnings();
+    warn('FirstComponent', 'initial', '');
+    warn('NextComponent', 'changed', '');
+    expect(spy.mock.calls).toEqual([['FirstComponent: initial']]);
+  });
+  it('keeps production diagnostics silent', async () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.resetModules();
+    try {
+      const production = await import('./devWarning');
+      const create = production.createDevWarnings;
+      expect(typeof create).toBe('function');
+      create()('Table', 'silent');
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
+  });
 });
 
 describe('formatDevMessage', () => {

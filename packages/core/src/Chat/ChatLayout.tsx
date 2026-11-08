@@ -5,7 +5,7 @@
 /**
  * @file ChatLayout.tsx
  * @input Uses React, StyleX, theme tokens, useChatStreamScroll, useChatNewMessages,
- *   useChatKeyboard
+ *   useChatKeyboard, the pooled resize observer
  * @output Exports ChatLayout component and ChatLayoutProps
  * @position Layout shell for full chat interfaces — messages in page flow, composer fixed to bottom
  *
@@ -19,6 +19,9 @@
  * exactly 100% with no overflow, and long content grows past the root so
  * self-scroll mode scrolls (#2573). In external-scrollRef mode the dock
  * is position: fixed (out of flow) and the message area fills the root.
+ * There the message area's end padding also holds the dock's height, which
+ * the pooled resize observer reports. So the newest message rests above the
+ * dock at the scroll's end, as it does in self-scroll mode.
  *
  * Software keyboard (useChatKeyboard): the dock rests above the keyboard.
  * The message area's end padding lets the newest message scroll above it.
@@ -35,7 +38,7 @@
  * - /packages/cli/assets/templates/blocks/components/ChatLayout/ (block examples)
  */
 
-import {type ReactNode, useMemo, useRef} from 'react';
+import {type ReactNode, useCallback, useMemo, useRef, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {focusVars, spacingVars} from '../theme/tokens.stylex';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
@@ -50,6 +53,7 @@ import {KeyboardSurfaceContext} from './keyboardSurface';
 import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {observeResize} from '../utils/sharedResizeObserver';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -151,11 +155,11 @@ const styles = stylex.create({
     paddingInline: 0,
   },
 
-  // The end padding grows by the part of the keyboard over the dock. So the
-  // newest message can scroll above the lifted composer, with no element
-  // added for it.
-  messageAreaKeyboard: (lift: number) => ({
-    paddingBlockEnd: `calc(${spacingVars['--spacing-6']} + ${lift}px)`,
+  // The end padding grows by the part of the keyboard over the dock and, for
+  // a fixed dock, by the dock's height. So the newest message can scroll
+  // above the composer, with no element added for it.
+  messageAreaEndRoom: (room: number) => ({
+    paddingBlockEnd: `calc(${spacingVars['--spacing-6']} + ${room}px)`,
   }),
 
   emptyState: {
@@ -353,6 +357,32 @@ export function ChatLayout({
     scrollToBottom: scroll.scrollToBottom,
   });
 
+  // --- Fixed dock's height ---
+  // A fixed dock is out of flow, so the message area makes room for it. The
+  // room is the dock's border-box height, as the pooled observer reports it.
+  // The padding changes only the message area, so it never resizes the dock.
+  // React calls the returned unsubscribe when the dock detaches or the
+  // scroll mode changes.
+  const [dockHeight, setDockHeight] = useState(0);
+  const observeDock = useCallback(
+    (dock: HTMLDivElement | null) => {
+      if (dock == null || isSelfScrolling) {
+        return undefined;
+      }
+      return observeResize(dock, entry => {
+        // The pooled observer's first call carries no size. The mount reads
+        // the dock once, so the first paint has the room.
+        const height =
+          entry.borderBoxSize?.[0]?.blockSize ??
+          dock.getBoundingClientRect().height;
+        setDockHeight(Math.round(height));
+      });
+    },
+    [isSelfScrolling],
+  );
+  const dockRef = useMergedRefs(keyboard.dockRef, observeDock);
+  const endRoom = keyboard.lift + (isSelfScrolling ? 0 : dockHeight);
+
   const defaultScrollButton = (
     <ChatLayoutScrollButton
       isVisible={scroll.isScrolledUp || newMsgs.hasNewMessages}
@@ -420,7 +450,7 @@ export function ChatLayout({
           {...stylex.props(
             styles.messageArea,
             currentDensity.messageArea,
-            keyboard.lift > 0 && styles.messageAreaKeyboard(keyboard.lift),
+            endRoom > 0 && styles.messageAreaEndRoom(endRoom),
           )}>
           {showEmpty && emptyState ? (
             <div {...stylex.props(styles.emptyState)}>{emptyState}</div>
@@ -431,7 +461,7 @@ export function ChatLayout({
 
         {/* Dock container — sticky/fixed, holds blur + scroll button + composer */}
         <div
-          ref={keyboard.dockRef}
+          ref={dockRef}
           {...stylex.props(
             styles.dockContainer,
             isSelfScrolling

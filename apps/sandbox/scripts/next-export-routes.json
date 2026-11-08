@@ -825,6 +825,7 @@
     "/templates/useScrollOverflowHookUsage/",
     "/templates/useScrollableAreaHookUsage/",
     "/templates/useStreamingTextHookUsage/",
+    "/templates/useTableColumnSettingsStateHookUsage/",
     "/templates/useTableSortableStateHookUsage/",
     "/templates/useThemeHookUsage/",
     "/templates/useToastHookUsage/",
