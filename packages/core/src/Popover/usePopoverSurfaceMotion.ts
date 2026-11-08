@@ -4,7 +4,8 @@
 
 /**
  * @file usePopoverSurfaceMotion.ts
- * @input React, the shared touch resolver and popoverSurfaceMotion
+ * @input React, the shared touch resolver, the layer runtime's presentation
+ *   hold and popoverSurfaceMotion
  * @output Exports `usePopoverSurfaceMotion`, the calls Popover makes as it
  *   opens and as it starts to close. Under a finger they present and dismiss
  *   the popover the UIKit way; a mouse keeps the layer's own entrance.
@@ -23,7 +24,8 @@
  * - /packages/core/src/Popover/usePopoverSurfaceMotion.test.tsx
  */
 
-import {useCallback, useEffect, useMemo, useRef} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {createPresentationHold} from '../Layer/presentationHold';
 import {isCoarsePointer} from '../utils/coarsePointer';
 import {
   createPopoverSurfaceMotion,
@@ -46,9 +48,14 @@ function boxOf(element: Element): PopoverSurfaceRect {
 export interface PopoverSurfaceMotionCalls {
   /**
    * Call as the popover opens, right after the browser shows it and before
-   * it paints.
+   * it paints. `entrance` is the surface that carries the pointer
+   * presentation's CSS entrance; the touch presentation turns it off there.
    */
-  present: (layer: HTMLElement | null, source: HTMLElement | null) => void;
+  present: (
+    layer: HTMLElement | null,
+    source: HTMLElement | null,
+    entrance?: HTMLElement | null,
+  ) => void;
   /** Call as the popover starts to close, while the browser still shows it. */
   closeStart: () => void;
 }
@@ -56,38 +63,48 @@ export interface PopoverSurfaceMotionCalls {
 export function usePopoverSurfaceMotion(): PopoverSurfaceMotionCalls {
   const motionRef = useRef<{
     element: HTMLElement;
+    entrance: HTMLElement | null;
     motion: PopoverSurfaceMotion;
   } | null>(null);
-  const isTouchPresentationRef = useRef(false);
+  // Whether the presentation in progress is the touch one, held from the
+  // open until its close begins (Layer/presentationHold).
+  const [touchHold] = useState(() => createPresentationHold<boolean>());
 
   const release = useCallback(() => {
     motionRef.current?.motion.dispose();
     motionRef.current = null;
   }, []);
 
-  const motionFor = useCallback((element: HTMLElement) => {
-    const current = motionRef.current;
-    if (current?.element === element) {
-      return current.motion;
-    }
-    current?.motion.dispose();
-    const motion = createPopoverSurfaceMotion(element);
-    motionRef.current = {element, motion};
-    return motion;
-  }, []);
+  const motionFor = useCallback(
+    (element: HTMLElement, entrance: HTMLElement | null) => {
+      const current = motionRef.current;
+      if (current?.element === element && current.entrance === entrance) {
+        return current.motion;
+      }
+      current?.motion.dispose();
+      const motion = createPopoverSurfaceMotion(element, {entrance});
+      motionRef.current = {element, entrance, motion};
+      return motion;
+    },
+    [],
+  );
 
   // Releases the motion's compositor animations, and any exit copy still on
   // screen, at unmount.
   useEffect(() => release, [release]);
 
   const present = useCallback(
-    (layer: HTMLElement | null, source: HTMLElement | null) => {
+    (
+      layer: HTMLElement | null,
+      source: HTMLElement | null,
+      entrance: HTMLElement | null = null,
+    ) => {
       if (layer == null) {
         return;
       }
       const isTouch =
         source != null && isCoarsePointer(layer.ownerDocument.defaultView);
-      isTouchPresentationRef.current = isTouch;
+      touchHold.take(isTouch);
       if (!isTouch || source == null) {
         // A fine pointer animates nothing here, so nothing is created for
         // it, and nothing is promoted to the compositor. A motion this layer
@@ -96,19 +113,20 @@ export function usePopoverSurfaceMotion(): PopoverSurfaceMotionCalls {
         release();
         return;
       }
-      motionFor(layer).enter(() => ({
+      motionFor(layer, entrance).enter(() => ({
         surface: boxOf(layer),
         source: boxOf(source),
       }));
     },
-    [motionFor, release],
+    [motionFor, release, touchHold],
   );
 
   const closeStart = useCallback(() => {
-    if (isTouchPresentationRef.current) {
+    if (touchHold.current() === true) {
       motionRef.current?.motion.exit();
     }
-  }, []);
+    touchHold.release();
+  }, [touchHold]);
 
   return useMemo(() => ({present, closeStart}), [present, closeStart]);
 }

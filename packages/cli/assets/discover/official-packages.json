@@ -130,11 +130,19 @@
         },
         {
           "kind": "component",
+          "name": "DialogHeroHeader"
+        },
+        {
+          "kind": "component",
           "name": "DiffViewer"
         },
         {
           "kind": "component",
           "name": "EmojiPicker"
+        },
+        {
+          "kind": "component",
+          "name": "LineClamp"
         },
         {
           "kind": "component",
