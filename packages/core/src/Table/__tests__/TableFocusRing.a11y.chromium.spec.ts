@@ -137,7 +137,7 @@ test.describe('Table focus ring (Chromium)', () => {
     await mount(page, 'core-tabletree--compact-density');
     for (const selector of [
       '#storybook-root thead button',
-      '#storybook-root tbody tr[aria-expanded] button',
+      '#storybook-root tbody tr button[aria-expanded]',
     ]) {
       const fit = await tabToAndMeasure(page, selector);
       expect(fit.focusVisible, selector).toBe(true);
