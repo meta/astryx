@@ -5,7 +5,9 @@
 /**
  * @file useTruncation.ts
  * @input Uses React hooks, sharedResizeObserver, sharedMutationObserver
- * @output Exports useTruncation hook for detecting text overflow
+ * @output Exports useTruncation hook for detecting text overflow, and
+ *   useHeldTruncation, internal to core: the same check with a hold, which
+ *   its caller measures
  * @position Hook; consumed by Text.tsx, Heading.tsx
  *
  * SYNC: When modified, update:
@@ -13,6 +15,7 @@
  */
 
 import {useCallback, useRef, useState, type RefCallback} from 'react';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {observeContent} from '../utils/sharedMutationObserver';
 
@@ -22,6 +25,15 @@ export interface UseTruncationOptions {
    * 0 = no truncation, hook returns isTruncated: false
    */
   maxLines: number;
+}
+
+interface HeldTruncationOptions extends UseTruncationOptions {
+  /**
+   * While true, the hook keeps its last result and measures nothing. A caller
+   * that shows the text unclamped for a while, such as an expanded caption,
+   * keeps the clamped answer. Releasing it measures again.
+   */
+  isHeld: boolean;
 }
 
 export interface UseTruncationReturn {
@@ -69,7 +81,47 @@ export interface UseTruncationReturn {
 export function useTruncation(
   options: UseTruncationOptions,
 ): UseTruncationReturn {
-  const {maxLines} = options;
+  const {ref, isTruncated, fullText} = useTruncationMeasure(
+    options.maxLines,
+    NEVER_HELD,
+    true,
+  );
+  return {ref, isTruncated, fullText};
+}
+
+/**
+ * useTruncation with a hold, internal to core. Lightbox holds its caption's
+ * clamped answer while the caption is open. This variant observes nothing and
+ * reads nothing by itself. Its caller observes the text and calls `measure`
+ * after the browser lays the text out.
+ */
+export function useHeldTruncation(
+  options: HeldTruncationOptions,
+): UseTruncationReturn & {measure: () => void} {
+  const {maxLines, isHeld} = options;
+  const isHeldRef = useRef(isHeld);
+  const truncation = useTruncationMeasure(maxLines, isHeldRef, false);
+  // Syncs the hold with the caller's flag. The held answer stands until the
+  // caller's next measurement after the release, so it never flickers.
+  useIsomorphicLayoutEffect(() => {
+    isHeldRef.current = isHeld;
+  }, [isHeld]);
+  return truncation;
+}
+
+/** A hold that never holds: plain useTruncation's. */
+const NEVER_HELD: {readonly current: boolean} = {current: false};
+
+/**
+ * The measurement both hooks share. While `isHeldRef` holds, it measures
+ * nothing. `measure` checks the current element again. Without `observes`, it
+ * leaves observing and measuring the element to its caller.
+ */
+function useTruncationMeasure(
+  maxLines: number,
+  isHeldRef: {readonly current: boolean},
+  observes: boolean,
+): UseTruncationReturn & {measure: () => void} {
   const [isTruncated, setIsTruncated] = useState(false);
   const [fullText, setFullText] = useState('');
   const elementRef = useRef<HTMLElement | null>(null);
@@ -78,6 +130,9 @@ export function useTruncation(
 
   const checkTruncation = useCallback(
     (element: HTMLElement) => {
+      if (isHeldRef.current) {
+        return;
+      }
       if (maxLines === 0) {
         setIsTruncated(false);
         return;
@@ -108,7 +163,7 @@ export function useTruncation(
         setIsTruncated(contentHeight > element.offsetHeight);
       }
     },
-    [maxLines],
+    [maxLines, isHeldRef],
   );
 
   const ref: RefCallback<HTMLElement> = useCallback(
@@ -121,6 +176,15 @@ export function useTruncation(
       unobserveContentRef.current = null;
 
       elementRef.current = element;
+      if (!observes) {
+        // A replaced text shows no truncation until its caller measures the
+        // next one. So a stale answer never sizes the next text.
+        if (element == null) {
+          setIsTruncated(false);
+          setFullText('');
+        }
+        return;
+      }
 
       if (element && maxLines > 0) {
         // Observe via shared singleton (if available). The first measurement
@@ -161,12 +225,20 @@ export function useTruncation(
         setFullText('');
       }
     },
-    [maxLines, checkTruncation],
+    [maxLines, checkTruncation, observes],
   );
+
+  const measure = useCallback(() => {
+    const element = elementRef.current;
+    if (element != null && maxLines > 0) {
+      checkTruncation(element);
+    }
+  }, [maxLines, checkTruncation]);
 
   return {
     ref,
     isTruncated,
     fullText,
+    measure,
   };
 }
