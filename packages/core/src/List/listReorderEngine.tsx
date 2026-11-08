@@ -46,7 +46,8 @@
  * begin until the commit that applies the drop. So the List's layout updates
  * (List/listLayoutUpdates.ts) leave that commit to the reorder. After it,
  * each row's old layout place is put back with an inverse offset that glides
- * to 0. For the dragged row, that is where its preview was dropped. If
+ * to 0. For the dragged row, that is where its preview was dropped. The
+ * commit reads every row before its first write, so it lays out once. If
  * `onReorder` does not commit a new order by the end of the task, nothing
  * moves. Reorder mode reports each key's move at once. Once it commits,
  * under a finger's presentation, the rows slide to their new places. The
@@ -204,6 +205,22 @@ function mountSession(
  */
 function shownY(element: HTMLElement, at: number): number {
   return animatorFor(element).get('y', at);
+}
+
+/**
+ * Puts a row at rest at 0 at once. A row already at rest there takes no
+ * write. The animator's `set` reads the row's style back after its write, so
+ * one `set` per row forces a style pass per row.
+ */
+function settleAtRest(
+  element: HTMLElement,
+  value: number,
+  moving: boolean,
+): void {
+  if (value !== 0 || moving) {
+    animatorFor(element).set({y: 0});
+  }
+  releaseMotion(element, 'translate');
 }
 
 /**
@@ -1558,19 +1575,22 @@ export class ListReorderController implements ListReorderSession {
     restore: RowRestore,
   ): void {
     const at = motionNow();
-    for (const element of rows) {
-      const value = shownY(element, at);
-      if (Math.abs(value) < MIN_MOVE_PX && !isMoving(element)) {
-        continue;
-      }
-      if (!this.animates) {
+    const away = rows.filter(
+      element =>
+        Math.abs(shownY(element, at)) >= MIN_MOVE_PX || isMoving(element),
+    );
+    // The spring is read once, before the first write.
+    const spring =
+      this.animates && away.length > 0 ? touchMotion.glideBase(list) : null;
+    for (const element of away) {
+      if (spring == null) {
         animatorFor(element).set({y: 0});
         releaseMotion(element, 'translate');
         continue;
       }
       // A row still in a drop's or a key move's glide goes on home. It plays
       // the shared settle role from where it is shown, at the speed it has.
-      touchMotion.home(element, touchMotion.glideBase(list), at, false);
+      touchMotion.home(element, spring, at, false);
     }
     clearReordering(list);
     this.restWhenDone(rows[dragged], restore);
@@ -1683,80 +1703,110 @@ export class ListReorderController implements ListReorderSession {
       this.announce(announcement.landed(), announcement.politeness);
     }
     const move = this.committedMove;
+    let slide: (() => void) | null = null;
     if (move != null && !sameOrder(rowsOf(list), move.rows)) {
       this.committedMove = null;
       if (this.moveFallback != null) {
         clearTimeout(this.moveFallback);
         this.moveFallback = null;
       }
-      this.slideCommitted(move);
+      slide = this.slideCommitted(move);
     }
     // A reorder mode move has landed (or nothing waits): its handle keeps
-    // the focus, and the insertion line marks the row's new place.
+    // the focus, and the insertion line marks the row's new place. Their
+    // reads come before the slide's first write, so a move lays out once.
     if (this.announcement == null) {
+      const placeLine = this.measureModeLine(list);
       this.restoreFocus();
-      this.placeModeLine(list);
+      slide?.();
+      placeLine();
+    } else {
+      slide?.();
     }
   }
 
-  /** A reorder mode move landed: each row slides from its old place to its new one. */
-  private slideCommitted(move: PendingMove): void {
+  /**
+   * A reorder mode move landed: each row slides from its old place to its new
+   * one. Measures the slides, and returns the writes that start them.
+   */
+  private slideCommitted(move: PendingMove): () => void {
     const {list} = move;
     const at = motionNow();
-    for (const [index, element] of move.rows.entries()) {
-      if (element.parentElement !== list) {
-        continue;
+    const shifts = move.rows.map((element, index) =>
+      element.parentElement === list
+        ? move.tops[index] - layoutTop(element, list)
+        : 0,
+    );
+    const spring = shifts.some(shift => Math.abs(shift) >= MIN_MOVE_PX)
+      ? touchMotion.glideBase(list)
+      : null;
+    return () => {
+      for (const [index, element] of move.rows.entries()) {
+        const shift = shifts[index];
+        if (spring == null || Math.abs(shift) < MIN_MOVE_PX) {
+          continue;
+        }
+        // A row still sliding from the previous move goes on from where it
+        // is shown, as a drop's rows do.
+        touchMotion.follow(element, shift, spring, at);
       }
-      const shift = move.tops[index] - layoutTop(element, list);
-      if (Math.abs(shift) < MIN_MOVE_PX) {
-        continue;
-      }
-      // A row still sliding from the previous move goes on from where it is
-      // shown, as a drop's rows do.
-      touchMotion.follow(element, shift, touchMotion.glideBase(list), at);
-    }
-    clearReordering(list);
+      clearReordering(list);
+    };
   }
 
   private rebase(pending: PendingDrop): void {
     const {list} = pending;
     const at = motionNow();
-    for (const [index, element] of pending.rows.entries()) {
+    // Every read comes before the first write, so the drop lays out once.
+    const rows = pending.rows.map((element, index) => {
       if (element.parentElement !== list) {
-        continue;
+        return null;
       }
       // The dragged row glides from where its preview was dropped, the rows
       // it passed from their old places.
       const from =
         index === pending.dragged ? pending.droppedTop : pending.tops[index];
-      const shift = from - layoutTop(element, list);
-      const value = shownY(element, at);
-      if (Math.abs(value + shift) < MIN_MOVE_PX && !isMoving(element)) {
-        animatorFor(element).set({y: 0});
-        releaseMotion(element, 'translate');
+      return {
+        element,
+        index,
+        shift: from - layoutTop(element, list),
+        value: shownY(element, at),
+        moving: isMoving(element),
+      };
+    });
+    // A row at rest where the drop leaves it settles there. A row the layout
+    // moved glides from its old place.
+    const settles = (row: {shift: number; value: number; moving: boolean}) =>
+      Math.abs(row.value + row.shift) < MIN_MOVE_PX && !row.moving;
+    const glides = (row: {shift: number; value: number; moving: boolean}) =>
+      !settles(row) && Math.abs(row.shift) >= MIN_MOVE_PX;
+    const spring =
+      this.animates && rows.some(row => row != null && glides(row))
+        ? touchMotion.glideBase(list)
+        : null;
+    for (const row of rows) {
+      if (row == null) {
         continue;
       }
-      if (Math.abs(shift) < MIN_MOVE_PX) {
+      const {element, index, shift, value, moving} = row;
+      if (settles(row)) {
+        settleAtRest(element, value, moving);
         continue;
       }
-      if (this.animates && index === pending.dragged) {
+      if (!glides(row)) {
+        continue;
+      }
+      if (spring != null && index === pending.dragged) {
         // The dragged row glides from where its preview was dropped into its
         // new layout place, starting at the release's velocity.
-        touchMotion.glide(
-          element,
-          shift,
-          touchMotion.glideBase(list),
-          at,
-          pending.velocity,
-        );
-      } else if (this.animates) {
+        touchMotion.glide(element, shift, spring, at, pending.velocity);
+      } else if (spring != null) {
         // Every other row's place after the drop is its new layout place. So
         // its running glide goes on to 0 from the shifted value. Otherwise the
         // glide starts from rest.
-        touchMotion.follow(element, shift, touchMotion.glideBase(list), at);
+        touchMotion.follow(element, shift, spring, at);
       } else {
-        animatorFor(element).set({y: 0});
-        releaseMotion(element, 'translate');
+        settleAtRest(element, value, moving);
       }
     }
     clearReordering(list);
@@ -1771,10 +1821,17 @@ export class ListReorderController implements ListReorderSession {
    * the row.
    */
   private placeModeLine(list: HTMLElement): void {
+    this.measureModeLine(list)();
+  }
+
+  /**
+   * Reads where reorder mode's insertion line goes, and returns the writes
+   * that place it there.
+   */
+  private measureModeLine(list: HTMLElement): () => void {
     const row = this.rowOf(this.modeHandle);
     if (row == null) {
-      this.clearModeLine();
-      return;
+      return () => this.clearModeLine();
     }
     const step = this.lastStep ?? -1;
     const rows = rowsOf(list);
@@ -1793,18 +1850,19 @@ export class ListReorderController implements ListReorderSession {
           : Math.max(0, layoutTop(neighbour, list) - bottom);
     const center = step < 0 ? top - gap / 2 : bottom + gap / 2;
     const span = lineSpanOf(row, list);
-    // Every read comes before the first write, so a move lays out once.
     const isNewList = this.modeLine?.list !== list;
     const isStatic = isNewList && getComputedStyle(list).position === 'static';
-    if (isNewList) {
-      this.clearModeLine();
-      const listPosition = list.style.position;
-      if (isStatic) {
-        list.style.position = 'relative';
+    return () => {
+      if (isNewList) {
+        this.clearModeLine();
+        const listPosition = list.style.position;
+        if (isStatic) {
+          list.style.position = 'relative';
+        }
+        this.modeLine = {list, listPosition};
       }
-      this.modeLine = {list, listPosition};
-    }
-    showLine(list, span, center);
+      showLine(list, span, center);
+    };
   }
 
   private clearModeLine(): void {
@@ -2013,6 +2071,10 @@ export class ListReorderController implements ListReorderSession {
     this.focusRow = null;
     const handle = this.handleIn(row);
     const active = row.ownerDocument.activeElement;
+    // The scroll reads layout, so it comes before the focus changes styles.
+    if (handle === this.modeHandle) {
+      row.scrollIntoView?.({block: 'nearest', inline: 'nearest'});
+    }
     // Focus that went elsewhere meanwhile stays there; focus in the hint
     // (a screen reader's) goes back to the handle.
     if (
@@ -2023,9 +2085,6 @@ export class ListReorderController implements ListReorderSession {
         this.hintElement?.contains(active) === true)
     ) {
       handle.focus({preventScroll: true});
-    }
-    if (handle === this.modeHandle) {
-      row.scrollIntoView?.({block: 'nearest', inline: 'nearest'});
     }
   }
 
