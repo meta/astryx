@@ -17,20 +17,46 @@ const {
   describeOwnerCommandProblem,
   newestGateRun,
   parseOwnerCommandIntent,
-  parseAuthority,
-  parseKind,
+  leadingAuthority,
+  recordApprovalGroups,
   parseOwnerFile,
   requiredApprovalGroups,
   resolveOwnerDecision,
 } = require('./spec-owner-decision.cjs');
 const {
   REVIEW_GATE_CONTEXT,
+  SPEC_MIRROR_PREFIX,
+  SPEC_TOO_LARGE_TEXT,
   SPEC_WAITING_TEXT,
   composeReviewGate,
   readCodeGate,
   readSpecGate,
 } = require('./review-signal-decision.cjs');
 /* eslint-enable @typescript-eslint/no-require-imports */
+
+// One run's GitHub API requests before it stops undecided. Reading a spec
+// change hundreds of files wide would otherwise spend the repository's shared
+// hourly budget that every workflow needs (spec:AST-030 FR15).
+const REQUEST_BUDGET = 300;
+
+class RequestBudgetExceeded extends Error {}
+
+/**
+ * Reconcile one pull request's spec gate. A run that reaches the request
+ * budget leaves the gate pending as too large to reconcile automatically; a
+ * maintainer's dispatch of the Review signal workflow is exempt and decides.
+ */
+async function reconcileSpecOwnerGate(options) {
+  const budget = {onExceeded: null};
+  try {
+    await reconcileWithinBudget({...options, budget});
+  } catch (error) {
+    if (!(error instanceof RequestBudgetExceeded) || !budget.onExceeded) {
+      throw error;
+    }
+    await budget.onExceeded();
+  }
+}
 
 function isCommandComment(eventName, payload) {
   if (eventName !== 'issue_comment') return true;
@@ -64,14 +90,38 @@ function isSettled(pr) {
   return Boolean(pr.merged_at) || pr.state === 'closed';
 }
 
-async function reconcileSpecOwnerGate({
+async function reconcileWithinBudget({
   github,
   context,
   core,
   workspace = process.env.GITHUB_WORKSPACE,
   env = process.env,
   now = () => new Date(),
+  budget,
+  // The job's request count (lib/rate-limit-backoff.cjs); no budget without it.
+  requestCounter,
+  requestBudget = REQUEST_BUDGET,
 }) {
+  // Read when the first budgeted call is made, never before the event checks.
+  const requestCount = () =>
+    (requestCounter ?? github.__rateLimitBackoff)?.requests ?? null;
+  // Checked before each file read and comparison, the calls that grow with
+  // the pull request. Reads start in parallel batches before the job's count
+  // sees them, so each checked call is also counted here as it starts.
+  let countAtFirstCheck = null;
+  let checkedCalls = 0;
+  function spendRequest() {
+    const observed = requestCount();
+    if (observed == null || context.eventName === 'workflow_dispatch') return;
+    countAtFirstCheck ??= observed;
+    const spent = Math.max(observed, countAtFirstCheck + checkedCalls);
+    if (spent >= requestBudget) {
+      throw new RequestBudgetExceeded(
+        `Stopped after ${spent} GitHub API requests (budget ${requestBudget}).`,
+      );
+    }
+    checkedCalls += 1;
+  }
   const {owner, repo} = context.repo;
   const repository = `${owner}/${repo}`;
   if (
@@ -288,6 +338,7 @@ async function reconcileSpecOwnerGate({
   }
 
   async function readText(fullName, ref, filePath) {
+    spendRequest();
     const [repoOwner, repoName] = fullName.split('/');
     try {
       const {data} = await github.rest.repos.getContent({
@@ -335,6 +386,7 @@ async function reconcileSpecOwnerGate({
 
   /** A spec path's text at `ref`, or null when the path is absent there. */
   async function readSpecContent(fullName, ref, filePath) {
+    spendRequest();
     const [repoOwner, repoName] = fullName.split('/');
     try {
       const {data} = await github.rest.repos.getContent({
@@ -403,31 +455,23 @@ async function reconcileSpecOwnerGate({
     commandProblem,
   }) {
     if (typeof core.summary?.addRaw !== 'function') return;
+    // The same per-record rule the decision uses, so the two never disagree.
     const groupFor = record => {
-      const current =
-        parseAuthority(record.headContent, record.path) === 'current' ||
-        parseAuthority(record.baseContent, record.previousPath) === 'current';
-      if (!current) return 'none (draft)';
-      const kind = parseKind(
-        record.headContent ?? record.baseContent,
-        record.path,
-      );
-      return kind === 'design' || kind === 'theme'
-        ? 'design or eng owner'
-        : 'eng owner';
+      const groups = recordApprovalGroups(record);
+      if (groups.size === 0) return 'none (draft)';
+      return groups.has('spec') ? 'eng owner' : 'design or eng owner';
     };
+    const authorityOf = content => leadingAuthority(content) ?? 'no authority';
     const rows = changedRecords.map(record => {
       const text = record.headContent ?? record.baseContent ?? '';
       const id = text.match(/^id:\s*(.+)$/m)?.[1]?.trim() ?? record.path;
       const title = text.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? '';
       const before =
-        record.baseContent == null
-          ? 'new'
-          : (parseAuthority(record.baseContent, record.previousPath) ?? '?');
+        record.baseContent == null ? 'new' : authorityOf(record.baseContent);
       const after =
         record.headContent == null
           ? 'removed'
-          : (parseAuthority(record.headContent, record.path) ?? '?');
+          : authorityOf(record.headContent);
       const change = before === after ? after : `${before} → ${after}`;
       return `| \`${id}\` | ${title} | ${change} | ${groupFor(record)} |`;
     });
@@ -722,6 +766,26 @@ async function reconcileSpecOwnerGate({
   // check, like the mirror, so a newer run's decision is restored over it.
   await publishReviewGate(initialHead, readSpecGate([]));
   if (await restoreNewerStatus(initialHead)) return;
+  // From here a run can reach the request budget. It then says so on both
+  // statuses, so an owner's command never reads as taken, and leaves the
+  // decision to a maintainer's dispatch.
+  budget.onExceeded = async () => {
+    core.warning(
+      `Stopped after ${requestCount()} GitHub API requests: this pull request is too large to reconcile automatically. Run the Review signal workflow with pr=${pullNumber} to decide it.`,
+    );
+    if (!(await isPublishable(initialHead))) return;
+    await createStatus({
+      sha: initialHead,
+      context: GATE_STATUS_CONTEXT,
+      state: 'pending',
+      description: `${SPEC_MIRROR_PREFIX}too large to reconcile automatically`,
+    });
+    if (await restoreNewerStatus(initialHead)) return;
+    await publishReviewGate(initialHead, {
+      satisfied: false,
+      text: SPEC_TOO_LARGE_TEXT,
+    });
+  };
 
   const commentAuthor = context.payload.comment?.user?.login?.toLowerCase();
   const snapshot = await fetchSnapshot();
@@ -867,6 +931,7 @@ async function reconcileSpecOwnerGate({
   // An approved commit's spec paths join the head's, so dropping an approved
   // change no longer matches. A failed comparison matches nothing.
   async function specChangesAt(sha) {
+    spendRequest();
     const {data} = await github.rest.repos.compareCommitsWithBasehead({
       owner,
       repo,
@@ -899,6 +964,7 @@ async function reconcileSpecOwnerGate({
       ]);
       return atHead.fingerprint === atShaContent.fingerprint;
     } catch (error) {
+      if (error instanceof RequestBudgetExceeded) throw error;
       core.warning(`Could not compare ${sha.slice(0, 7)}: ${error.message}`);
       return false;
     }

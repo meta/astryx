@@ -24,6 +24,7 @@
  */
 
 import React, {
+  use,
   useState,
   useCallback,
   useRef,
@@ -39,24 +40,34 @@ import {
   spacingVars,
   radiusVars,
   shadowVars,
-  durationVars,
   easeVars,
   borderVars,
   typeScaleVars,
   typographyVars,
 } from '../theme/tokens.stylex';
+import {inputWrapperStyles} from '../Field/inputStyles.stylex';
 import {mergeProps} from '../utils';
 import {Icon} from '../Icon';
 import {ChatComposerInput} from './ChatComposerInput';
 import {ChatComposerContext} from './ChatContext';
 import type {ChatComposerInputControl} from './ChatContext';
 import {ChatSendButton} from './ChatSendButton';
+import {
+  KeyboardSurfaceContext,
+  focusInKeyboardSurface,
+} from './keyboardSurface';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Chat/ChatComposer.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Types
@@ -161,7 +172,8 @@ const styles = stylex.create({
       default: 'text',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
-    transition: `box-shadow ${durationVars['--duration-fast']} ${easeVars['--ease-standard']}, border-color ${durationVars['--duration-fast']} ${easeVars['--ease-standard']}`,
+    transitionProperty: 'box-shadow, border-color',
+    transitionTimingFunction: easeVars['--ease-standard'],
   },
   header: {
     display: 'flex',
@@ -257,7 +269,7 @@ const styles = stylex.create({
     backgroundColor: colorVars['--color-error-muted'],
     color: colorVars['--color-on-error-muted'],
     // Forced colors replace status fills with Canvas; this boundary keeps the
-    // fill's shape visible (architecture:theme-tokens INV11).
+    // fill's shape visible.
     outlineWidth: {default: null, '@media (forced-colors: active)': '1px'},
     outlineStyle: {default: null, '@media (forced-colors: active)': 'solid'},
     outlineColor: {
@@ -270,7 +282,7 @@ const styles = stylex.create({
     backgroundColor: colorVars['--color-warning-muted'],
     color: colorVars['--color-on-warning-muted'],
     // Forced colors replace status fills with Canvas; this boundary keeps the
-    // fill's shape visible (architecture:theme-tokens INV11).
+    // fill's shape visible.
     outlineWidth: {default: null, '@media (forced-colors: active)': '1px'},
     outlineStyle: {default: null, '@media (forced-colors: active)': 'solid'},
     outlineColor: {
@@ -360,7 +372,7 @@ function isComposerEditor(target: EventTarget | null): target is HTMLElement {
  * ```
  */
 export function ChatComposer(props: ChatComposerProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const {
     ref,
     onSubmit,
@@ -427,31 +439,39 @@ export function ChatComposer(props: ChatComposerProps) {
   // drive it without knowing its DOM shape. Stable ref — safe in the memoized
   // context value.
   const inputControlRef = useRef<ChatComposerInputControl | null>(null);
+  // Inside ChatLayout's keyboard surface, a touch focus skips the browser's
+  // reveal. Elsewhere the browser's own focus applies.
+  const isKeyboardSurface = use(KeyboardSurfaceContext);
 
-  const handleBodyClick = useCallback((e: MouseEvent<HTMLDivElement>) => {
-    // Focus the input when clicking empty space in the body.
-    // Skip if the click target is a button, link, or interactive element.
-    const target = e.target as HTMLElement;
-    if (
-      target.closest(
-        'button, a, [role="button"], [contenteditable="true"], [data-astryx-token]',
-      )
-    ) {
-      return;
-    }
-    // Prefer the input's registered control (works for any input shape,
-    // including editors whose focusable node isn't a bare
-    // contenteditable/textarea). Fall back to a DOM query so uninstrumented
-    // custom inputs still get click-to-focus.
-    if (inputControlRef.current) {
-      inputControlRef.current.focus();
-      return;
-    }
-    const editable = bodyRef.current?.querySelector<HTMLElement>(
-      '[contenteditable="true"], textarea',
-    );
-    editable?.focus();
-  }, []);
+  const handleBodyClick = useCallback(
+    (e: MouseEvent<HTMLDivElement>) => {
+      // Focus the input when clicking empty space in the body.
+      // Skip if the click target is a button, link, or interactive element.
+      const target = e.target as HTMLElement;
+      if (
+        target.closest(
+          'button, a, [role="button"], [contenteditable="true"], [data-astryx-token]',
+        )
+      ) {
+        return;
+      }
+      // Prefer the input's registered control (works for any input shape,
+      // including editors whose focusable node isn't a bare
+      // contenteditable/textarea). Fall back to a DOM query so uninstrumented
+      // custom inputs still get click-to-focus.
+      if (inputControlRef.current) {
+        inputControlRef.current.focus();
+        return;
+      }
+      const editable = bodyRef.current?.querySelector<HTMLElement>(
+        '[contenteditable="true"], textarea',
+      );
+      if (editable) {
+        focusInKeyboardSurface(editable, isKeyboardSurface);
+      }
+    },
+    [isKeyboardSurface],
+  );
 
   const handleBodyFocusCapture = useCallback(
     (event: FocusEvent<HTMLDivElement>) => {
@@ -554,6 +574,7 @@ export function ChatComposer(props: ChatComposerProps) {
           onBlurCapture={handleBodyBlurCapture}
           {...stylex.props(
             styles.body,
+            inputWrapperStyles.textField,
             elevationStyles[elevation],
             hasKeyboardEditorFocus && focusOutlineStyles.focusWithin,
             density === 'compact' && styles.compact,

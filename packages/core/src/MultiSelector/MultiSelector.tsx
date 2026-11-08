@@ -31,6 +31,7 @@ import React, {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useTooltip} from '../Tooltip';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import type {IconName} from '../Icon';
@@ -41,6 +42,7 @@ import {
   inputWrapperStyles,
 } from '../Field';
 import {useKeepLayerOpenProps} from '../Layer/useLayer';
+import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {InternalInputClearButton} from '../Field/InputClearButton';
 import {Divider} from '../Divider';
 import {Spinner} from '../Spinner';
@@ -75,8 +77,10 @@ import {
 import {useMultiCombobox} from './hooks';
 import {getInputARIA, isImeKeyEvent, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {devWarn, warnOnce} from '../utils/devWarning';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {useKeyboardHighlight} from '../hooks/useKeyboardHighlight';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
@@ -101,12 +105,22 @@ import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {VisuallyHidden} from '../VisuallyHidden';
-import {useTranslator} from '../i18n';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
 import {SelectorBottomSheet} from '../Selector/SelectorBottomSheet';
 import {useSelectorPresentation} from '../Selector/useSelectorPresentation';
 import {selectorPresentationStyles} from '../Selector/selectorPresentation.stylex';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/MultiSelector/MultiSelector.generated';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
+
+registerEnglishFallback(english);
 
 // Sentinel value for the select-all item in keyboard navigation
 const SELECT_ALL_VALUE = '__xds_select_all__';
@@ -272,21 +286,6 @@ const styles = stylex.create({
       '[data-astryx-press="on"]': 'scale(0.98)',
     },
   },
-  // A disabled input-variant trigger keeps its tab stop (`spec:AST-085` FR1),
-  // and the shared disabled wrapper style drops the field focus ring, so the
-  // trigger shows keyboard focus here instead (FR6). It keys on the trigger
-  // itself, a direct child, so a focused status button keeps its own outline.
-  triggerDisabledFocus: {
-    borderColor: {
-      default: colorVars['--color-border-emphasized'],
-      ':has(> [aria-disabled="true"]:focus-visible)':
-        colorVars['--color-accent'],
-    },
-    boxShadow: {
-      default: 'none',
-      ':has(> [aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
-    },
-  },
   triggerGhostDisabled: {
     backgroundImage: 'none',
     transform: {
@@ -325,10 +324,31 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-element'],
   },
 
+  // A panel with a search field, capped as a whole.
+  searchPanel: {
+    display: 'flex',
+    flexDirection: 'column',
+    // No taller than its layer's block-size cap, which folds in the software
+    // keyboard's. The search field's row keeps its height, and the list takes
+    // what is left.
+    maxHeight: stylex.firstThatWorks(
+      `calc(${layerViewportInset.maxBlockSize})`,
+      `calc(${layerViewportInset.maxBlockSizeFallback})`,
+    ),
+  },
+
   // Dropdown container
   dropdown: {
     boxSizing: 'border-box',
-    maxHeight: '300px',
+    // In a search panel, the list shrinks below its content to fit the cap.
+    minHeight: 0,
+    // 300 px, and no taller than its layer's block-size cap, which folds in
+    // the software keyboard's: the list ends above the keyboard with the
+    // layer.
+    maxHeight: stylex.firstThatWorks(
+      `min(300px, ${layerViewportInset.maxBlockSize})`,
+      `min(300px, ${layerViewportInset.maxBlockSizeFallback})`,
+    ),
     overflowY: 'auto',
     padding: spacingVars['--spacing-1'],
   },
@@ -1156,7 +1176,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         controlClassName != null ||
         controlStyle != null),
   );
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const pressable = usePressFeedback();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
@@ -1858,23 +1878,12 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     ),
   });
 
-  const [isKeyboardHighlight, setIsKeyboardHighlight] = useState(
-    () => readModality() === 'keyboard',
-  );
-  const onKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLElement>) => {
-      onComboboxKeyDown(event);
-      setIsKeyboardHighlight(readModality() === 'keyboard');
-    },
-    [onComboboxKeyDown, readModality],
-  );
-  const onItemMouseEnter = useCallback(
-    (...args: Parameters<typeof onComboboxItemMouseEnter>) => {
-      onComboboxItemMouseEnter(...args);
-      setIsKeyboardHighlight(readModality() === 'keyboard');
-    },
-    [onComboboxItemMouseEnter, readModality],
-  );
+  const {isKeyboardHighlight, onKeyDown, onItemMouseEnter} =
+    useKeyboardHighlight(
+      readModality,
+      onComboboxKeyDown,
+      onComboboxItemMouseEnter,
+    );
 
   // The trigger button owns its click so a consumer `onClick`, which lands on
   // the button, composes after the built-in toggle. A press elsewhere in the
@@ -2411,7 +2420,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     surface.activePresentation === 'bottom-sheet' || hasExternalTrigger;
 
   const panelContent = hasSearch ? (
-    <div>
+    <div {...stylex.props(styles.searchPanel)}>
       {renderSearch()}
       <Divider />
       <div {...stylex.props(styles.dropdown)}>
@@ -2476,13 +2485,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   // A disabled trigger stays focusable but, like a natively disabled button,
   // runs no caller event handler other than focus and blur, and a press on it
   // reaches no handler at all (`spec:AST-085` FR2).
-  const callerProps = isDisabled
-    ? Object.fromEntries(
-        Object.entries(rest).filter(
-          ([key]) => !/^on[A-Z]/.test(key) || /^on(Focus|Blur)/.test(key),
-        ),
-      )
-    : rest;
+  const callerProps = withholdCallerHandlers(rest, isDisabled);
   const triggerSharedProps: React.HTMLAttributes<HTMLElement> = {
     ...callerProps,
     id: triggerId,
@@ -2630,7 +2633,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
             variant === 'input' &&
               isDisabled &&
               !surface.isTriggerFocusRingSuppressed &&
-              styles.triggerDisabledFocus,
+              inputDisabledFocusStyles.ring,
             isEffectivelyReadOnly && styles.triggerReadOnly,
             variant !== 'input' && isDisabled && styles.triggerGhostDisabled,
             variant !== 'input' &&

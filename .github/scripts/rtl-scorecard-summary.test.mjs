@@ -88,3 +88,33 @@ describe('RTL scorecard D1 exclusion disclosure', () => {
     expect(result.stdout).toContain('RTL-ready (D1 pass): —.');
   });
 });
+
+describe('RTL scorecard D5 physical-region disclosure', () => {
+  it('lists every declared physical region with its story and selector', () => {
+    const report = reportWith([]);
+    report.declaredD5PhysicalRegions = [
+      {
+        component: 'lab/charttheming-recharts',
+        storyId: 'lab-charttheming-recharts--theme-tokens',
+        physical: 'chart',
+        within: '[aria-label="Quarterly performance chart"]',
+      },
+    ];
+    const result = runSummary(report);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(
+      '### Declared D5 physical regions (human review required)',
+    );
+    expect(result.stdout).toContain(
+      '| lab/charttheming-recharts | lab-charttheming-recharts--theme-tokens | chart | [aria-label="Quarterly performance chart"] |',
+    );
+  });
+
+  it('says so when no physical region is declared', () => {
+    const result = runSummary(reportWith([]));
+    expect(result.stdout).toContain(
+      '_No declared D5 physical regions in this audit scope._',
+    );
+  });
+});

@@ -16,6 +16,7 @@ verified_by:
     packages/core/src/theme/themingTargets.test.ts,
     .github/visual-baseline/manifest.json,
     scripts/check-knowledge.mjs,
+    apps/storybook/rtl-audit/targets.json,
   ]
 modules: []
 families: []
@@ -172,6 +173,7 @@ here; the Title, value cell, and Disclosure carry no target.
 | FR5             | `MetadataList.test.tsx` root pass-through, event, and owned-metadata tests                                                                     | `aria-label`, `id`, data; click; colliding reflection      | A dropped attribute or handler, or a caller `data-columns` or `data-orientation` that wins, fails. Gap: no test covers `ref`, `className`, `style`, or the `xstyle` merge order.                                                                                                                                                  | `audit:MetadataList/api`      |
 | PR1             | Source review                                                                                                                                  | Every state                                                | Gap: no automated check fails if MetadataList adds a listener, timer, or measurement.                                                                                                                                                                                                                                             | `audit:MetadataList/behavior` |
 | Theming targets | `themingTargets.test.ts`                                                                                                                       | Root and item targets                                      | A renamed or undocumented target fails. Gap: no check fails if the side-by-side `dt` loses the `metadata-list-item` target.                                                                                                                                                                                                       | `audit:MetadataList/theming`  |
+| RTL relation    | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `MetadataList / Basic`                                                | Side labels; LTR and RTL                                   | A label column that is not at the inline start of the value column fails D2.                                                                                                                                                                                                                                                      | `audit:MetadataList/i18n-rtl` |
 
 ## Decision log
 

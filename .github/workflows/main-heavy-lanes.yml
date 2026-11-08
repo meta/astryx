@@ -1,14 +1,22 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
-# Visual, accessibility and RTL run on main, not on every pull request update
-# (spec:AST-030 FR12, DEC-7): this workflow dispatches ci.yml's canonical
-# release-check on main's tip; that run is main's visual/a11y/RTL result, and a
-# failure is fixed forward. A check covers every merge up to its commit, so
-# main is checked about once an hour (DEC-11): a push dispatches at once when
-# no check has started in the last 55 minutes, and a quarter-hourly schedule
-# picks up the tip a burst of merges left unchecked. Main's own fast checks
-# (deploy.yml) still run for every push. The release gate's exact-commit
-# release-check before a cut is dispatched separately and is unchanged.
+# Main's scheduled checks (spec:AST-030 FR12, FR21, FR24, DEC-11, DEC-15,
+# DEC-19). This workflow dispatches, for main's tip:
+#
+# - ci.yml's canonical release-check, about every three hours and once each
+#   weekday at about 06:30 Pacific, before the 08:00 release cut: main's
+#   visual/a11y/RTL result, fixed forward on failure (DEC-7, FR24);
+# - deploy.yml's full unit run, about hourly: every unit suite of every
+#   package, on that exact commit, never cancelled by a push (FR21).
+#
+# A check covers every merge up to its commit. A push dispatches at once when
+# its lane's window has passed, and a quarter-hourly schedule picks up the tip
+# a burst of merges left unchecked. A release-check always brings a
+# unit run of the same commit, so a release cut has both. A unit run that did
+# not complete is run again at once, and the guardian's issue says so. Main's
+# fast checks (deploy.yml typecheck, build and export sync) still run for
+# every push. The release gate's exact-commit checks are dispatched
+# separately and are unchanged.
 name: Main heavy lanes
 
 on:
@@ -32,8 +40,10 @@ jobs:
     permissions:
       actions: write
       contents: read
+      # The guardian's issue when a unit run did not complete.
+      issues: write
     steps:
-      - name: Dispatch the visual, accessibility and RTL release-check for main's tip
+      - name: Dispatch main's release-check and full unit run for its tip
         uses: actions/github-script@v9
         env:
           SHA: ${{ github.sha }}
@@ -60,58 +70,172 @@ jobs:
               );
               helperModule.exports.installRateLimitBackoff({github, core});
             }
-            // A check starts at most once in this window; the schedule's
-            // quarter-hour cadence adds up to 15 minutes to it.
-            const WINDOW_MINUTES = 55;
+            // Each lane starts at most once in its window; the schedule's
+            // quarter-hour cadence adds up to 15 minutes to it (FR24, FR21).
+            const HEAVY_WINDOW_MINUTES = 175;
+            const UNIT_WINDOW_MINUTES = 55;
+            const BOT = 'github-actions[bot]';
             const {data: branch} = await github.rest.repos.getBranch({...context.repo, branch: 'main'});
             const tip = branch.commit.sha;
+            const short = tip.slice(0, 7);
             if (context.eventName === 'push' && tip !== process.env.SHA) {
               core.notice(`main moved past ${process.env.SHA.slice(0, 7)}; the newer push's check covers it.`);
               return;
             }
-            // This workflow's checks: ci.yml runs dispatched on main by the
-            // workflow token, which stays a run's actor when a person re-runs
-            // it. A cancelled one was replaced while waiting and never ran.
-            const {data} = await github.rest.actions.listWorkflowRuns({
-              ...context.repo, workflow_id: 'ci.yml', event: 'workflow_dispatch', branch: 'main', per_page: 30,
-            });
-            const checks = data.workflow_runs.filter(run =>
-              run.actor?.login === 'github-actions[bot]' && run.conclusion !== 'cancelled');
-            // A run that checked out a newer commit than it was asked to check
-            // (a merge landed between the tip read and the dispatch) fails its
-            // release-authority job and is no check of that commit; it still
-            // holds the window. Any other run at the tip, failed included, is.
+            // A workflow's runs dispatched on main, newest first; the workflow
+            // token stays a run's actor when a person re-runs it.
+            const dispatchedRuns = async workflow => {
+              const {data} = await github.rest.actions.listWorkflowRuns({
+                ...context.repo, workflow_id: workflow, event: 'workflow_dispatch', branch: 'main', per_page: 30,
+              });
+              return data.workflow_runs;
+            };
+            const byBot = runs => runs.filter(run => run.actor?.login === BOT);
+            // Whether a lane is due for the tip. A cancelled run was replaced
+            // while waiting, or stopped by a release re-check of main's tip,
+            // which is itself a full check. A release-check that checked out a newer commit
+            // than it was asked to check (a merge landed between the tip read
+            // and the dispatch) fails its release-authority job and is no check
+            // of that commit; it still holds the window. A unit run counts only
+            // for the commit it names (FR21).
             const authorityRefused = async run => {
               const {data: {jobs}} = await github.rest.actions.listJobsForWorkflowRun({
                 ...context.repo, run_id: run.id, filter: 'latest', per_page: 100,
               });
               return jobs.some(job => job.name === 'release-authority' && job.conclusion === 'failure');
             };
-            let checked = false;
-            for (const run of checks.filter(item => item.head_sha === tip)) {
-              if (run.status !== 'completed' || run.conclusion === 'success' || !(await authorityRefused(run))) {
-                checked = true;
-                break;
+            // The commit a Main run names (`Main validation of <sha>`, a
+            // dispatch with `sha`; FR22).
+            // A run without one tests main's tip when it starts, which can be
+            // later than its event's commit, so it covers no commit; the
+            // release receipt reads the name the same way (FR21).
+            const tested = run => /^Main validation of ([0-9a-f]{40})$/.exec(run.display_title ?? '')?.[1] ?? null;
+            const covered = async (runs, checkAuthority) => {
+              // A release-check (checkAuthority) is of its event commit; a unit run of the commit it names.
+              for (const run of runs.filter(item => item.conclusion !== 'cancelled' && (checkAuthority ? item.head_sha : tested(item)) === tip)) {
+                // A unit run covers its commit while it runs, or once it passed
+                // or failed; a skipped, timed-out or unstarted one tested
+                // nothing, so the tip is due again (FR21).
+                if (!checkAuthority) {
+                  if (run.status !== 'completed' || ['success', 'failure'].includes(run.conclusion)) return true;
+                  continue;
+                }
+                if (run.status !== 'completed' || run.conclusion === 'success' || !(await authorityRefused(run))) return true;
+              }
+              return false;
+            };
+            const due = async (runs, label, WINDOW_MINUTES, checkAuthority, coverRuns = runs) => {
+              const counted = runs.filter(run => run.conclusion !== 'cancelled');
+              if (await covered(coverRuns, checkAuthority)) {
+                core.notice(`main's tip ${short} already has a ${label}.`);
+                return false;
+              }
+              const latest = counted.map(run => Date.parse(run.created_at)).sort((a, b) => b - a)[0];
+              const minutes = latest == null ? Infinity : (Date.now() - latest) / 60000;
+              if (minutes < WINDOW_MINUTES) {
+                core.notice(`A ${label} started ${Math.floor(minutes)} minutes ago; the next one, at most ${WINDOW_MINUTES - Math.floor(minutes) + 15} minutes from now, covers ${short}.`);
+                return false;
+              }
+              return true;
+            };
+            const allChecks = await dispatchedRuns('ci.yml');
+            const allUnits = await dispatchedRuns('deploy.yml');
+            const checks = byBot(allChecks);
+            const units = byBot(allUnits);
+            let heavy = await due(checks, 'release-check', HEAVY_WINDOW_MINUTES, true);
+            // A person's run of main's tip covers it too.
+            let unit = await due(units, 'full unit run', UNIT_WINDOW_MINUTES, false, allUnits);
+
+            // The weekday release cut is at 08:00 Pacific: one release-check
+            // starts at about 06:30, whatever the window, so it finishes about
+            // an hour before the cut (FR24). It is dispatched once a day, for
+            // the tip unless the tip already has a check.
+            const pacificParts = when => Object.fromEntries(
+              new Intl.DateTimeFormat('en-US', {
+                timeZone: 'America/Los_Angeles', weekday: 'short', hour: 'numeric', minute: 'numeric', hourCycle: 'h23',
+                year: 'numeric', month: '2-digit', day: '2-digit',
+              }).formatToParts(new Date(when)).map(part => [part.type, part.value]),
+            );
+            const pacific = pacificParts(Date.now());
+            const dayOf = parts => `${parts.year}-${parts.month}-${parts.day}`;
+            const minuteOf = parts => Number(parts.hour) * 60 + Number(parts.minute);
+            const PRE_CUT = 6 * 60 + 30;
+            if (!heavy && !['Sat', 'Sun'].includes(pacific.weekday) && minuteOf(pacific) >= PRE_CUT && minuteOf(pacific) < PRE_CUT + 60) {
+              const startedToday = checks.some(run => {
+                if (run.conclusion === 'cancelled') return false;
+                const parts = pacificParts(Date.parse(run.created_at));
+                return dayOf(parts) === dayOf(pacific) && minuteOf(parts) >= PRE_CUT;
+              });
+              if (!startedToday && !(await covered(checks, true))) {
+                core.notice(`The pre-cut release-check runs now for ${short}.`);
+                heavy = true;
               }
             }
-            if (checked) {
-              core.notice(`main's tip ${tip.slice(0, 7)} already has a release-check.`);
-              return;
-            }
-            const latest = checks.map(run => Date.parse(run.created_at)).sort((a, b) => b - a)[0];
-            const minutes = latest == null ? Infinity : (Date.now() - latest) / 60000;
-            if (minutes < WINDOW_MINUTES) {
-              core.notice(`A release-check started ${Math.floor(minutes)} minutes ago; the next one, at most ${WINDOW_MINUTES - Math.floor(minutes) + 15} minutes from now, covers ${tip.slice(0, 7)}.`);
-              return;
-            }
-            // ci.yml queues these dispatches in one group (one running, one
+
+            // A full unit run that did not complete (FR21): run the next one at
+            // once and tell the guardian, after the dispatches below. A newer
+            // run, such as a recheck that replaced it, leaves nothing to do.
+            const INCOMPLETE = ['cancelled', 'skipped', 'timed_out', 'startup_failure', 'stale', 'action_required'];
+            // The newest run in the unit-run group, which may have replaced it:
+            // every dispatched run but a person's that names a commit, which
+            // runs in a group of its own (deploy.yml).
+            const named = run => /^Main validation of /.test(run.display_title ?? '');
+            const newest = allUnits.find(run => !(named(run) && (run.triggering_actor ?? run.actor)?.login !== BOT));
+            // A tip that already has a run naming it is covered: nothing to redo.
+            const incomplete = newest?.status === 'completed' && INCOMPLETE.includes(newest.conclusion) && !(await covered(allUnits, false));
+            if (incomplete) unit = true;
+
+            // ci.yml queues release-checks in one group (one running, one
             // waiting; a newer one replaces the waiting one). A merge landing
             // between the tip read above and this call makes the run check out
-            // the newer commit and fail its exact-head check; the next
-            // dispatch checks that commit.
-            await github.rest.actions.createWorkflowDispatch({
-              ...context.repo,
-              workflow_id: 'ci.yml',
-              ref: 'main',
-              inputs: {operation: 'release-check', 'release-branch': 'main', 'expected-head': tip},
-            });
+            // the newer commit and fail its exact-head check; the next dispatch
+            // checks that commit.
+            if (heavy) {
+              await github.rest.actions.createWorkflowDispatch({
+                ...context.repo,
+                workflow_id: 'ci.yml',
+                ref: 'main',
+                inputs: {operation: 'release-check', 'release-branch': 'main', 'expected-head': tip},
+              });
+            }
+            // A release-check always brings a full unit run of the same commit,
+            // so a release cut from it has both: this one, or one a person
+            // dispatched for the tip, such as the release owner's own check,
+            // while that commit is still the tip. A maintenance capture runs
+            // no release-authority job and is not a release-check.
+            const unitAtTip = await covered(allUnits, false);
+            const isReleaseCheck = async run => {
+              const {data: {jobs}} = await github.rest.actions.listJobsForWorkflowRun({
+                ...context.repo, run_id: run.id, filter: 'latest', per_page: 100,
+              });
+              return jobs.some(job => job.name === 'release-authority' && job.conclusion !== 'skipped');
+            };
+            let personCheckAtTip = false;
+            if (!unitAtTip && !unit && !heavy) {
+              for (const run of allChecks.filter(item => item.actor?.login !== BOT && item.conclusion !== 'cancelled' && item.head_sha === tip)) {
+                if (await isReleaseCheck(run)) {
+                  personCheckAtTip = true;
+                  break;
+                }
+              }
+            }
+            if (unit || ((heavy || personCheckAtTip) && !unitAtTip)) {
+              // Named, so the run tests exactly this commit even if main moves
+              // before it starts.
+              await github.rest.actions.createWorkflowDispatch({...context.repo, workflow_id: 'deploy.yml', ref: 'main', inputs: {sha: tip}});
+            }
+
+            if (incomplete) {
+              const title = 'Main unit tests: an hourly run did not complete';
+              const note = `The full unit run ${newest.html_url} for ${newest.head_sha.slice(0, 7)} ended ${newest.conclusion}. The next run was dispatched for ${short}.`;
+              core.warning(note);
+              const {data: found} = await github.rest.search.issuesAndPullRequests({
+                q: `repo:${context.repo.owner}/${context.repo.repo} is:issue is:open in:title "${title}"`,
+              });
+              const issue = found.items.find(item => item.title === title);
+              if (issue) {
+                await github.rest.issues.createComment({...context.repo, issue_number: issue.number, body: note});
+              } else {
+                await github.rest.issues.create({...context.repo, title, body: `${note}\n\nClose this issue once main's full unit runs complete again (spec:AST-030 FR21).`});
+              }
+            }

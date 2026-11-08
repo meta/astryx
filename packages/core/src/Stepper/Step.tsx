@@ -63,10 +63,16 @@ import {usePressFeedback} from '../hooks/usePressFeedback';
 import type {BaseProps} from '../BaseProps';
 import {Icon} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
-import {useTranslator} from '../i18n';
 import {useStepperInternalContext} from './StepperContext';
 import {stepMarker} from './stepper.stylex';
 import type {StepStatus} from './StepStatus';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Stepper/Step.generated';
+
+registerEnglishFallback(english);
 
 /**
  * Built-in indicator presets. Anything other than these strings passed to
@@ -1012,7 +1018,7 @@ export function Step({
   ...rest
 }: StepProps) {
   const pressable = usePressFeedback();
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const ctx = useStepperInternalContext();
   const {
     activeStep,

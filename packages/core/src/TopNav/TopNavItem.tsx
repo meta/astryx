@@ -33,12 +33,15 @@ import type {LinkComponentType} from '../Link/types';
 import {useTopNavRenderMode} from './TopNavRenderContext';
 import {navItemStyles, type NavItemSize} from '../NavItem/navItemStyles.stylex';
 import {mergeProps} from '../utils';
-import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
+import {useCloseMobileDrawerOnActivate} from '../AppShell/useCloseMobileDrawerOnActivate';
 import {themeProps} from '../utils/themeProps';
-import {disabledInteractionProps} from '../utils/disabledInteraction';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
+import {
+  disabledInteractionProps,
+  withholdCallerHandlers,
+} from '../utils/disabledInteraction';
 
 /**
  * NavItem styles with hover/selected states
@@ -201,7 +204,9 @@ export function TopNavItem({
   const pressable = usePressFeedback();
   const LinkComponent = useLinkComponent(as);
   const renderMode = useTopNavRenderMode();
-  const {closeMobileNav} = useAppShellMobile();
+  const closeDrawerAfter = useCloseMobileDrawerOnActivate(
+    renderMode === 'drawer',
+  );
 
   // A disabled item renders as an <a> with no href, so Enter, AT activation
   // commands, and middle-click cannot navigate or fire the consumer onClick.
@@ -212,18 +217,21 @@ export function TopNavItem({
   // (Mirrors the disabled paths of Link and Token.)
   const Root = isDisabled ? 'a' : LinkComponent;
 
+  // A disabled item runs no caller handler except `onFocus` and `onBlur`, as a
+  // natively disabled control runs none.
+  const callerProps = withholdCallerHandlers(props, isDisabled);
+
   // =========================================================================
   // Drawer mode — render as a SideNavItem-style vertical list element
   // =========================================================================
   if (renderMode === 'drawer') {
+    const activate = closeDrawerAfter(onClick);
     const handleDrawerClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
       if (isDisabled) {
         preventDefaultClick(e);
         return;
       }
-      // Forward the original onClick if present
-      onClick?.(e);
-      closeMobileNav();
+      activate?.(e);
     };
 
     return (
@@ -253,8 +261,8 @@ export function TopNavItem({
           className,
           style,
         )}
-        {...props}
-        {...(isDisabled ? disabledInteractionProps(props.onKeyDown) : null)}
+        {...callerProps}
+        {...(isDisabled ? disabledInteractionProps() : null)}
         onClick={handleDrawerClick}>
         {icon}
         {!isIconOnly && (children ?? label)}
@@ -293,8 +301,8 @@ export function TopNavItem({
         className,
         style,
       )}
-      {...props}
-      {...(isDisabled ? disabledInteractionProps(props.onKeyDown) : null)}>
+      {...callerProps}
+      {...(isDisabled ? disabledInteractionProps() : null)}>
       {icon}
       {!isIconOnly && (children ?? label)}
     </Root>

@@ -21,12 +21,16 @@ import {
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Button} from './Button';
+import {Icon} from '../Icon/Icon';
 import * as stylex from '@stylexjs/stylex';
 import {
   hasPressedArm,
-  hasReleaseFade,
-  readsPressStrength,
+  keepsPressOutsideCoarse,
+  layerOnlyWhilePressed,
+  releasesOnLayer,
+  showsLayerPress,
 } from '../__tests__/pressState';
+import {PRESS_FADE_MS} from '../utils/pressGesture';
 import {Badge} from '../Badge/Badge';
 import {ButtonGroup} from '../ButtonGroup';
 import {InputGroup} from '../InputGroup';
@@ -144,7 +148,8 @@ describe('Button', () => {
   it('keeps the dimmed treatment for explicitly disabled buttons', () => {
     render(<Button label="Submit" isDisabled />);
     const button = screen.getByRole('button');
-    expect(button).toBeDisabled();
+    expect(button).not.toHaveAttribute('disabled');
+    expect(button).toHaveAttribute('aria-disabled', 'true');
     expect(button.className).toContain('styles.inactive');
     expect(button.className).toContain('styles.disabled');
   });
@@ -490,6 +495,143 @@ describe('Button', () => {
     expect(screen.getByRole('button')).toHaveAttribute('type', 'submit');
   });
 
+  it('withholds name while disabled so FormData omits the submitter (spec:AST-085 FR3)', () => {
+    const {rerender} = render(
+      <form data-testid="form">
+        <Button label="Save" type="submit" name="intent" value="save" />
+      </form>,
+    );
+    const form = screen.getByTestId<HTMLFormElement>('form');
+    const enabledButton = screen.getByRole('button', {name: 'Save'});
+    expect(enabledButton).toHaveAttribute('name', 'intent');
+    expect(new FormData(form, enabledButton).get('intent')).toBe('save');
+
+    rerender(
+      <form data-testid="form">
+        <Button
+          label="Save"
+          type="submit"
+          name="intent"
+          value="save"
+          isDisabled
+        />
+      </form>,
+    );
+    const disabledButton = screen.getByRole('button', {name: 'Save'});
+    expect(disabledButton).not.toHaveAttribute('name');
+    expect(disabledButton).toHaveAttribute('aria-disabled', 'true');
+    expect(disabledButton).not.toHaveAttribute('disabled');
+    expect(new FormData(form, disabledButton).get('intent')).toBeNull();
+
+    rerender(
+      <form data-testid="form">
+        <ButtonGroup label="Actions" isDisabled>
+          <Button label="Save" type="submit" name="intent" value="save" />
+        </ButtonGroup>
+      </form>,
+    );
+    const groupDisabledButton = screen.getByRole('button', {name: 'Save'});
+    expect(groupDisabledButton).not.toHaveAttribute('name');
+    expect(groupDisabledButton).toHaveAttribute('aria-disabled', 'true');
+    expect(groupDisabledButton).not.toHaveAttribute('disabled');
+    expect(new FormData(form, groupDisabledButton).get('intent')).toBeNull();
+  });
+
+  describe('tooltip as description (FR12)', () => {
+    it('describes the button by a tooltip that adds to its name', () => {
+      render(<Button label="Save" tooltip="Save your changes" />);
+      const button = screen.getByRole('button', {name: 'Save'});
+      expect(button).toHaveAccessibleDescription('Save your changes');
+    });
+
+    it('adds no description when the tooltip repeats the visible name', () => {
+      render(<Button label="Close" tooltip=" Close " />);
+      const button = screen.getByRole('button', {name: 'Close'});
+      expect(button).not.toHaveAttribute('aria-describedby');
+    });
+
+    it('adds no description when an icon-only tooltip repeats its label', () => {
+      render(
+        <Button
+          label="Close"
+          tooltip="Close"
+          icon={<span>x</span>}
+          isIconOnly
+        />,
+      );
+      const button = screen.getByRole('button', {name: 'Close'});
+      expect(button).not.toHaveAttribute('aria-describedby');
+    });
+
+    it('keeps a caller description when the tooltip repeats the name', () => {
+      render(
+        <>
+          <span id="hint">Closes the panel</span>
+          <Button label="Close" tooltip="Close" aria-describedby="hint" />
+        </>,
+      );
+      const button = screen.getByRole('button', {name: 'Close'});
+      expect(button).toHaveAttribute('aria-describedby', 'hint');
+    });
+
+    it('keeps the description when aria-labelledby names the button', () => {
+      render(
+        <>
+          <span id="close-name">Close the editor</span>
+          <Button
+            label="Close"
+            tooltip="Close"
+            icon={<span>x</span>}
+            isIconOnly
+            aria-labelledby="close-name"
+          />
+        </>,
+      );
+      const button = screen.getByRole('button', {name: 'Close the editor'});
+      expect(button).toHaveAccessibleDescription('Close');
+    });
+
+    it('adds no description when a decorative Icon sits beside a repeated label', () => {
+      render(
+        <Button label="Edit" icon={<Icon icon="close" />} tooltip="Edit" />,
+      );
+      const button = screen.getByRole('button', {name: 'Edit'});
+      expect(button).not.toHaveAttribute('aria-describedby');
+    });
+
+    it('adds no description when a decorative Icon ends a repeated label', () => {
+      render(
+        <Button
+          label="Sort"
+          endContent={<Icon icon="close" />}
+          tooltip="Sort"
+        />,
+      );
+      const button = screen.getByRole('button', {name: 'Sort'});
+      expect(button).not.toHaveAttribute('aria-describedby');
+    });
+
+    it('keeps the description when endContent adds to the name', () => {
+      render(
+        <Button
+          label="Messages"
+          tooltip="Messages"
+          endContent={<span>3</span>}
+        />,
+      );
+      const button = screen.getByRole('button', {name: 'Messages 3'});
+      expect(button).toHaveAccessibleDescription('Messages');
+    });
+
+    it('compares with a caller aria-label, not the visible text', () => {
+      render(
+        <Button label="Clear" aria-label="Clear Search" tooltip="Clear" />,
+      );
+      const button = screen.getByRole('button', {name: 'Clear Search'});
+      expect(button).toHaveAccessibleDescription('Clear');
+    });
+  });
+
   it('uses aria-disabled instead of disabled when tooltip is present and button is disabled', () => {
     render(<Button label="Test" tooltip="Reason disabled" isDisabled />);
     const button = screen.getByRole('button');
@@ -623,21 +765,18 @@ describe('Button', () => {
     expect(handleKeyDown).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps native disabled (not aria-disabled) when isDisabled and not busy, even without a tooltip', () => {
+  it('uses aria-disabled (not native disabled) when isDisabled, even without a tooltip (AST-085)', () => {
     render(<Button label="Save" isDisabled />);
     const button = screen.getByRole('button');
-    expect(button).toHaveAttribute('disabled');
-    expect(button).not.toHaveAttribute('aria-disabled');
+    expect(button).not.toHaveAttribute('disabled');
+    expect(button).toHaveAttribute('aria-disabled', 'true');
   });
 
-  it('keeps native disabled when isDisabled and isLoading are both true (isDisabled wins)', () => {
+  it('uses aria-disabled (not native disabled) when isDisabled and isLoading are both true', () => {
     render(<Button label="Save" isDisabled isLoading />);
     const button = screen.getByRole('button');
-    // "isDisabled behavior unchanged: that stays native disabled" — busy-only
-    // aria-disabled is only for the case where busy is the SOLE reason the
-    // button can't be clicked, not when it's also genuinely isDisabled.
-    expect(button).toHaveAttribute('disabled');
-    expect(button).not.toHaveAttribute('aria-disabled');
+    expect(button).not.toHaveAttribute('disabled');
+    expect(button).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('has a live region that announces loading state', () => {
@@ -676,6 +815,22 @@ describe('Button', () => {
     await waitFor(() => expect(liveRegion).toHaveTextContent('Chargement'));
   });
 
+  it('puts no display: contents element between the Button and its label', () => {
+    // WebKit before macOS 15 drops an accessible name computed through a
+    // `display: contents` element, so VoiceOver read the Button as unnamed.
+    render(
+      <Button label="Save" icon={<span>+</span>} endContent={<span>3</span>} />,
+    );
+    const button = screen.getByRole('button');
+    for (
+      let el = screen.getByText('Save').parentElement;
+      el != null && el !== button;
+      el = el.parentElement
+    ) {
+      expect(getComputedStyle(el).display).not.toBe('contents');
+    }
+  });
+
   describe('in a narrow row', () => {
     // jsdom has no layout, so these assert the computed declarations that
     // produce the behavior. The real-browser widths are in the PR evidence.
@@ -689,6 +844,16 @@ describe('Button', () => {
       );
       expect(getComputedStyle(label).textOverflow).toBe('ellipsis');
       expect(getComputedStyle(label).overflow).toBe('hidden');
+    });
+
+    it('lets the content box shrink too, so the label inside it truncates', () => {
+      render(<Button label="A very long button label that should truncate" />);
+      const box = screen.getByText(
+        'A very long button label that should truncate',
+      ).parentElement!;
+      const style = getComputedStyle(box);
+      expect(style.minWidth).toBe('0');
+      expect(style.flexShrink).toBe('1');
     });
 
     it('keeps the default flex-shrink so a row can shrink the button', () => {
@@ -840,25 +1005,42 @@ describe('Button', () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
-  it('falls back to <button disabled> for a truly disabled href Button', () => {
+  it('falls back to <button> with aria-disabled for a disabled href Button', () => {
     render(<Button label="Docs" href="https://example.com" isDisabled />);
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
     const button = screen.getByRole('button', {name: 'Docs'});
-    expect(button).toBeDisabled();
+    expect(button).not.toHaveAttribute('disabled');
+    expect(button).toHaveAttribute('aria-disabled', 'true');
   });
 });
 
 describe('Button pressed state (touch)', () => {
-  it('fades the touch press out over the release, painting the pressed token at its strength on both arms', () => {
+  it('paints the touch press on a compositor layer and releases it on the press clock', () => {
     render(<Button label="Save" />);
     const button = screen.getByRole('button', {name: 'Save'});
-    // The touch arms the controller writes: `on` paints the pressed token at
-    // strength 1 on the first frame; `fading` keeps the paint and runs the
-    // release animation on the machine's clock. A mouse keeps `:active`.
+    // The touch arms the controller writes, under a coarse primary pointer:
+    // `on` shows the pressed token on the button's `::before` layer on the
+    // first frame; `fading` runs the layer's opacity release on the press
+    // clock. A mouse keeps `:active`.
     expect(button).toHaveAttribute('data-astryx-pressable');
     expect(hasPressedArm(button)).toBe(true);
-    expect(readsPressStrength(button, '[data-astryx-press="on"]')).toBe(true);
-    expect(readsPressStrength(button)).toBe(true);
-    expect(hasReleaseFade(button)).toBe(true);
+    expect(showsLayerPress(button)).toBe(true);
+    expect(releasesOnLayer(button, '::before', PRESS_FADE_MS)).toBe(true);
+  });
+
+  it('has no press layer and no isolation at rest under a coarse pointer, only while a press is on or fading', () => {
+    render(<Button label="Save" />);
+    const button = screen.getByRole('button', {name: 'Save'});
+    // At rest the button is no stacking context, and a `::before` a caller
+    // styles through `xstyle` keeps its own opacity, z-index and position.
+    expect(layerOnlyWhilePressed(button, '::before')).toBe(true);
+  });
+
+  it('keeps the press it always had under any other pointer: no layer, no isolation, the strength’s release', () => {
+    render(<Button label="Save" />);
+    const button = screen.getByRole('button', {name: 'Save'});
+    // A finger on a touch screen beside a mouse, and the mouse itself, see
+    // what they always saw.
+    expect(keepsPressOutsideCoarse(button, '::before')).toBe(true);
   });
 });

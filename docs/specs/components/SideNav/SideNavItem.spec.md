@@ -13,7 +13,9 @@ review_triggers: [public-api, behavior, accessibility]
 verified_by:
   [
     packages/core/src/SideNav/SideNav.test.tsx,
+    packages/core/src/SideNav/__tests__/SideNavTextSize.interaction.browser.spec.ts,
     apps/storybook/stories/SideNav.stories.tsx,
+    apps/storybook/rtl-audit/targets.json,
   ]
 modules: []
 families: [family:navigation-destinations, family:overlay-dismissal]
@@ -107,8 +109,9 @@ Consumer migration instructions belong in consumer docs and release notes.
 - The rail's collapsed state — owned by SideNav and `component:SideNavCollapseButton`.
 - Each control placed in `actions` — owned by that control (name, keyboard,
   disabled state).
-- Row fill colors, radius, height, and padding per size — owned by the shared
-  nav item styles and the `side-nav-item` target.
+- Row fill colors, radius, minimum height, and padding per size — owned by the
+  shared nav item styles, which take the height as a minimum, and the
+  `side-nav-item` target.
 
 ## Public concepts
 
@@ -136,7 +139,10 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ### Allowed variation
 
-- **AV1 — Size.** `sm`, `md`, and `lg` change row height and padding.
+- **AV1 — Size.** `sm`, `md`, and `lg` change an expanded row's minimum
+  height and its padding; an expanded row grows with a larger text size, so its
+  label and end content stay inside it (`spec:AST-102` FR4). A collapsed rail
+  row keeps its square size.
 - **AV2 — Theme styling.** Themes restyle `side-nav-item` per size, selected,
   and disabled state.
 
@@ -197,15 +203,17 @@ is recorded. Row geometry visual intent is `component:SideNav` DD1.
 
 ## Verification map
 
-| Contract      | Verification                                                        | Representative states                                                                                                     | Mutation or failure expectation                                                   | Audit section                     |
-| ------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------- |
-| FR1–FR3, FR5  | `SideNav.test.tsx` SideNavItem suite                                | Link, button, `as`, provider, disabled                                                                                    | Wrong element, lost `aria-current`, or a disabled item that runs `onClick` fails. | `audit:SideNavItem/behavior`      |
-| FR4–FR7, AR3  | `SideNav.test.tsx` actions-slot suite                               | Actions with toggle, endContent, disabled; row-wrapper `data-testid`; `defaultIsCollapsed` with whole-row `aria-controls` | Actions inside the primary element or wrong order fails.                          | `audit:SideNavItem/behavior`      |
-| FR6, FR7, AR2 | `SideNav.test.tsx` collapsible + href suite                         | Split, whole-row, controlled                                                                                              | A link that toggles or duplicated `aria-expanded` fails.                          | `audit:SideNavItem/accessibility` |
-| FR8, FR9      | `SideNav.test.tsx` collapsed, hover-intent, and rail-tooltip suites | Leaf, parent, hover, click, keyboard, coarse                                                                              | Lost delay, focus restore, or tooltip anchor fails.                               | `audit:SideNavItem/behavior`      |
-| FR10          | `SideNav.test.tsx` mobile drawer close-on-activate suite            | Link, button, toggle, action, outside drawer                                                                              | Wrong close behavior fails.                                                       | `audit:SideNavItem/behavior`      |
-| FR11          | `SideNav.test.tsx` focus ring suite                                 | Plain, split, actions rows                                                                                                | Missing shared ring classes fail.                                                 | `audit:SideNavItem/accessibility` |
-| FR3, FR7, FR9 | `SideNav.test.tsx` keyboard operation and focus management suites   | Tab order, Enter/Space toggle, flyout Escape                                                                              | Lost order, a stranded focus, or no focus return fails.                           | `audit:SideNavItem/accessibility` |
+| Contract      | Verification                                                                                 | Representative states                                                                                                     | Mutation or failure expectation                                                   | Audit section                     |
+| ------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------- |
+| FR1–FR3, FR5  | `SideNav.test.tsx` SideNavItem suite                                                         | Link, button, `as`, provider, disabled                                                                                    | Wrong element, lost `aria-current`, or a disabled item that runs `onClick` fails. | `audit:SideNavItem/behavior`      |
+| FR4–FR7, AR3  | `SideNav.test.tsx` actions-slot suite                                                        | Actions with toggle, endContent, disabled; row-wrapper `data-testid`; `defaultIsCollapsed` with whole-row `aria-controls` | Actions inside the primary element or wrong order fails.                          | `audit:SideNavItem/behavior`      |
+| AV1 text size | `SideNavTextSize.interaction.browser.spec.ts` at a 200% and 250% default font size           | Default rows; end content                                                                                                 | A row whose label or end content leaves the row, or overlaps the next row, fails. | `audit:SideNavItem/behavior`      |
+| FR6, FR7, AR2 | `SideNav.test.tsx` collapsible + href suite                                                  | Split, whole-row, controlled                                                                                              | A link that toggles or duplicated `aria-expanded` fails.                          | `audit:SideNavItem/accessibility` |
+| FR8, FR9      | `SideNav.test.tsx` collapsed, hover-intent, and rail-tooltip suites                          | Leaf, parent, hover, click, keyboard, coarse                                                                              | Lost delay, focus restore, or tooltip anchor fails.                               | `audit:SideNavItem/behavior`      |
+| FR10          | `SideNav.test.tsx` mobile drawer close-on-activate suite                                     | Link, button, toggle, action, outside drawer                                                                              | Wrong close behavior fails.                                                       | `audit:SideNavItem/behavior`      |
+| FR11          | `SideNav.test.tsx` focus ring suite                                                          | Plain, split, actions rows                                                                                                | Missing shared ring classes fail.                                                 | `audit:SideNavItem/accessibility` |
+| FR3, FR7, FR9 | `SideNav.test.tsx` keyboard operation and focus management suites                            | Tab order, Enter/Space toggle, flyout Escape                                                                              | Lost order, a stranded focus, or no focus return fails.                           | `audit:SideNavItem/accessibility` |
+| RTL relation  | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `SideNav / Default` | Item icon and label; LTR and RTL                                                                                          | An icon that is not at the inline start of its label fails D2.                    | `audit:SideNavItem/i18n-rtl`      |
 
 Read from source, with no focused test yet:
 

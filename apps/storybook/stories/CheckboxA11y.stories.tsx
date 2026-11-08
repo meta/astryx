@@ -48,8 +48,8 @@ export const InputLoading = storyFor('input-loading');
 export const InputReadOnly = storyFor('input-read-only');
 export const InputHandlerlessReadOnly = storyFor('input-handlerless-read-only');
 export const InputRequired = storyFor('input-required');
-export const InputInheritedRequiredValid = storyFor(
-  'input-inherited-required-valid',
+export const InputUnderRequiredDefault = storyFor(
+  'input-under-required-default',
 );
 export const InputInvalid = storyFor('input-invalid');
 export const InputWarning = storyFor('input-warning');

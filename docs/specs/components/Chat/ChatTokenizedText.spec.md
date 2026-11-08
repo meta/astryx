@@ -1,13 +1,13 @@
 ---
 schema_version: 3
-template_version: 6
+template_version: 7
 kind: component
 id: component:ChatTokenizedText
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
+approved_by: cixzhang
+approved_at: 2026-11-01
 owners: [cixzhang]
 review_triggers: [public-api, behavior, layout, theming, accessibility, testing]
 verified_by:
@@ -38,18 +38,17 @@ system_specs: [spec:AST-002, spec:AST-020, spec:AST-029]
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                       |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | The exported component accepts required plain-text children, optional composer token definitions, and supported root span props and ref. No prop, export, or theme target is added or removed. |
-| Behavior                | Unmatched text is preserved. Non-empty token values match literally from left to right. Structured tokens delegate to Badge and custom tokens to callers.                                      |
-| End-user impact         | Tokenized messages finish rendering when a caller-supplied token definition has an empty serialized value.                                                                                     |
-| Builder impact          | Existing token arrays keep working, and empty serialized values are safely ignored instead of creating a non-advancing match.                                                                  |
-| Compatibility/readiness | Patch-compatible correctness repair and observational documentation. The pending inline-alignment change remains owned by its separate pull request.                                           |
-| Review checks           | Reject zero-width matching, lost unmatched text, execution of custom renderers without a match, dropped root inputs, or claims about caller-owned content.                                     |
-| Governing rules         | `architecture:public-component-api/INV1, INV5–INV6, INV8–INV9`; `architecture:component-test-sufficiency/INV1–INV7`; `spec:AST-029/FR3–FR7`; ECMAScript RegExp progress semantics.             |
+| Area                    | Contract                                                                                                                                                                                           |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `ChatTokenizedText` with required string `children`, optional `tokens` (the `ChatComposerToken` shapes), `ref`, `xstyle`, `className`, `style`, and root span props; target `chat-tokenized-text`. |
+| Behavior                | Unmatched text is preserved. Non-empty token values match literally from left to right. Structured tokens delegate to Badge and custom tokens to callers.                                          |
+| End-user impact         | Readers see mentions and other tokens in a sent message as the same chips they saw in the composer, in place, with the rest of the text unchanged.                                                 |
+| Builder impact          | None.                                                                                                                                                                                              |
+| Compatibility/readiness | Records shipped behavior; no public change. One owner question stays open; evidence is pending for the claims listed as read from source.                                                          |
+| Review checks           | Reject zero-width matching, lost unmatched text, execution of custom renderers without a match, dropped root inputs, or claims about caller-owned content.                                         |
+| Governing rules         | `architecture:public-component-api/INV1, INV5–INV6, INV8–INV9`; `architecture:component-test-sufficiency/INV1–INV7`; ECMAScript RegExp progress semantics.                                         |
 
-This table is a review projection. The draft body records verified current or
-remediated behavior and creates no new token grammar or visual policy.
+This table is a review projection; the body below is authoritative.
 
 ## Intent
 
@@ -59,12 +58,20 @@ surrounding text.
 
 ## Compatibility and migration
 
-- Released default preserved: yes; messages without matching non-empty tokens remain plain text.
-- Compatibility class: patch-compatible correctness repair for invalid zero-width matches.
-- Controlled/uncontrolled behavior: not applicable; the component owns no state.
-- Migration decision: none. No public type, prop, export, default, or theme target changes.
+- Released default preserved: `yes`
+- Compatibility class: records shipped behavior; no public change
+- Controlled/uncontrolled behavior: not applicable; the component owns no state
+- Migration decision: none
 
 Consumer migration instructions belong in consumer docs and release notes.
+
+## Current-state impact
+
+- **A shorter token can split a longer one.** When one token's value is a
+  prefix of another's and is listed first, the shorter value wins: with tokens
+  `@u1` then `@u12`, the text `@u12` renders the `@u1` chip followed by a
+  stray `2`. When two tokens share a value, the later definition renders
+  (OQ1).
 
 ## Ownership boundary
 
@@ -81,26 +88,25 @@ Consumer migration instructions belong in consumer docs and release notes.
 - Badge color, iconography, sizing, or accessibility semantics.
 - Semantics and interaction inside caller-provided custom token content.
 - Composer insertion, serialization, deletion, selection, or token-element alignment.
-- The inline-alignment change proposed independently in pull request #6418.
 
 ## Public concepts
 
-| Concept      | Closed values or states                         | Meaning                                                                   | Availability by variant/orientation/state | Default  | Owner                               | Stability                 | Invalid-value behavior               |
-| ------------ | ----------------------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------- | -------- | ----------------------------------- | ------------------------- | ------------------------------------ |
-| Message text | any string                                      | Plain text whose literal token values may be projected inline.            | Every render                              | required | `component:ChatTokenizedText`       | released observed surface | Empty text renders an empty span.    |
-| Token set    | omitted; empty; non-empty                       | Candidate serialized values and their structured or custom presentations. | Every render                              | omitted  | caller and component                | released observed surface | Empty token values are ignored.      |
-| Token form   | structured Badge config; custom render function | Selects delegated Badge content or caller-rendered content.               | Matching non-empty values                 | none     | caller and delegated component      | released observed surface | Type-invalid forms are rejected.     |
-| Root surface | ref; supported DOM/data/ARIA/class/style/xstyle | Extends the inline root without replacing its owned target.               | Every render                              | omitted  | `architecture:public-component-api` | released observed surface | Unsupported inputs stay unsupported. |
+| Concept      | Closed values or states                         | Meaning                                                                   | Availability by variant/orientation/state | Default  | Owner                               | Stability | Invalid-value behavior               |
+| ------------ | ----------------------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------- | -------- | ----------------------------------- | --------- | ------------------------------------ |
+| Message text | any string                                      | Plain text whose literal token values may be projected inline.            | Every render                              | required | `component:ChatTokenizedText`       | Stable    | Empty text renders an empty span.    |
+| Token set    | omitted; empty; non-empty                       | Candidate serialized values and their structured or custom presentations. | Every render                              | omitted  | caller and component                | Stable    | Empty token values are ignored.      |
+| Token form   | structured Badge config; custom render function | Selects delegated Badge content or caller-rendered content.               | Matching non-empty values                 | none     | caller and delegated component      | Stable    | Type-invalid forms are rejected.     |
+| Root surface | ref; supported DOM/data/ARIA/class/style/xstyle | Extends the inline root without replacing its owned target.               | Every render                              | omitted  | `architecture:public-component-api` | Stable    | Unsupported inputs stay unsupported. |
 
 ## Behavioral and layout contract
 
-| ID  | Candidate invariant                                                                                                                                             | Basis                                                                          | Draft review state      |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ----------------------- |
-| FR1 | The component MUST preserve unmatched text exactly and replace each matched non-empty serialized value at its original reading-order position.                  | Released consumer docs and implementation                                      | verified                |
-| FR2 | Empty token values MUST be ignored so the renderer always makes progress and never enters a zero-width global-match loop.                                       | Objective ECMAScript RegExp progress semantics and responsive rendering        | remediated and verified |
-| FR3 | Structured matches MUST delegate label, variant, and icon rendering to Badge; custom matches MUST invoke the caller renderer only for an actual match.          | Released token type, source, docs, and tests                                   | verified                |
-| FR4 | Supported ref, DOM/data/ARIA, className, style, and xstyle inputs MUST reach or compose on the root span while the `chat-tokenized-text` target remains intact. | `architecture:public-component-api/INV5–INV6, INV8`                            | verified                |
-| FR5 | The component MUST remain render-only, with no state, Effect, listener, observer, timer, or owned asynchronous resource.                                        | Current source and `architecture:component-test-sufficiency` evidence boundary | verified                |
+| ID  | Invariant                                                                                                                                                                                          | Basis                                               |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| FR1 | The component MUST preserve unmatched text exactly and replace each matched non-empty serialized value at its original reading-order position. How overlapping or duplicate values resolve is OQ1. | Current source, tests, and docs                     |
+| FR2 | Empty token values MUST be ignored so the renderer always makes progress and never enters a zero-width global-match loop.                                                                          | Current source and tests                            |
+| FR3 | Structured matches MUST delegate label, variant, and icon rendering to Badge; custom matches MUST invoke the caller renderer only for an actual match.                                             | Current source, tests, and docs                     |
+| FR4 | Supported ref, DOM/data/ARIA, className, style, and xstyle inputs MUST reach or compose on the root span while the `chat-tokenized-text` target remains intact.                                    | `architecture:public-component-api/INV5–INV6, INV8` |
+| FR5 | The component MUST remain render-only, with no state, Effect, listener, observer, timer, or owned asynchronous resource.                                                                           | Current source                                      |
 
 ### Allowed variation
 
@@ -144,15 +150,15 @@ Consumer migration instructions belong in consumer docs and release notes.
 | Tokenized text   | Inline root preserves surrounding text flow. | Current source and released docs | supporting     | FR1, FR5           |
 | Rendered token   | Delegates paint to Badge or caller content.  | `component:Badge` or caller      | supporting     | FR4, AR2           |
 
-This observational draft does not choose new spacing, alignment, token paint,
-proportion, or state representation.
+No component-local design decision is recorded.
 
 ### Theme ownership
 
 The Chat family document owns the shared anatomy and target inventory inherited by
 this subcomponent. The existing `chat-tokenized-text` target remains on the inline
 root. Structured token paint delegates to Badge, while custom rendered token content
-remains caller owned. This observational draft does not redefine the family map.
+remains caller owned. No anatomy-theming map is recorded yet; the block is
+optional during migration, so the map is deferred.
 
 ## Family and system relationships
 
@@ -161,30 +167,37 @@ remains caller owned. This observational draft does not redefine the family map.
 - `architecture:public-component-api` owns released exports, BaseProps reachability, styling composition, and refs.
 - `architecture:component-theming-surface` owns the target/anatomy mapping.
 - `architecture:component-test-sufficiency` owns bounded, mutation-sensitive evidence.
-- `spec:AST-029` owns this observational audit backfill and closed evidence receipt.
+- `spec:AST-029` owns the audit evidence inventory this record's verification
+  map follows.
 
 ## Verification map
 
-| Contract       | Verification                                                   | Representative states                            | Mutation or failure expectation                                                           | Audit section                         |
-| -------------- | -------------------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------- | ------------------------------------- |
-| FR1–FR3, PR1   | `ChatTokenizedText.test.tsx`                                   | plain, structured, custom, repeated, empty       | Lost text, zero-width nontermination, or the wrong render branch fails.                   | `audit:ChatTokenizedText/behavior`    |
-| FR4            | focused root passthrough/ref checks, theming target guard      | plain and tokenized roots                        | A supported root input or public target is dropped or replaced.                           | `audit:ChatTokenizedText/public-api`  |
-| FR5            | source inspection and strict lint                              | every render                                     | Hidden state or an owned external resource triggers runtime review.                       | `audit:ChatTokenizedText/code-health` |
-| RTL relation   | source-hashed verified-N/A record                              | all existing stories                             | Component-owned directional behavior invalidates the record.                              | `audit:ChatTokenizedText/i18n-rtl`    |
-| Browser matrix | Storybook stories, exact-head visual gate, and scoped a11y     | plain, multiple, mixed, edge, custom, narrow     | Missing text/token content, overflow, visual regression, or an a11y violation fails.      | `audit:ChatTokenizedText/rendered`    |
-| Docs / surface | docs, declarations, exports, `check:knowledge`, docs typecheck | public props, Chat subpath, target, draft record | Missing or stale docs, export, target map, or knowledge shape fails validation or review. | `audit:ChatTokenizedText/docs`        |
+| Contract     | Verification                                                                                                                             | Representative states                      | Mutation or failure expectation                                  | Audit section                        |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------- | ------------------------------------ |
+| FR1–FR3, PR1 | `ChatTokenizedText.test.tsx` plain, single, multiple, repeated, special-character, surrounding-text, empty-value, and custom-match tests | plain, structured, custom, repeated, empty | Lost text, zero-width nontermination, or the wrong branch fails. | `audit:ChatTokenizedText/behavior`   |
+| FR4          | `ChatTokenizedText.test.tsx` ref and rest-prop tests                                                                                     | plain and tokenized roots                  | A dropped ref or prop fails.                                     | `audit:ChatTokenizedText/public-api` |
+| FR1–FR4      | `ChatTokenizedText.a11y.chromium.spec.ts` rendered states                                                                                | plain, structured, custom                  | A missing or duplicated `chat-tokenized-text` target fails.      | `audit:ChatTokenizedText/theming`    |
+| RTL relation | `apps/storybook/rtl-audit/verified-not-applicable.json`                                                                                  | all stories                                | —                                                                | `audit:ChatTokenizedText/i18n-rtl`   |
+
+Read from source, with no focused test yet:
+
+- ORD2: values containing RegExp metacharacters matching literally.
+- FR3: `variant` and `icon` reaching the Badge.
+- FR4: `className`, `style`, and `xstyle` composition.
+- FR5, AR3: no state, Effect, or interaction of the component's own.
 
 ## Decision log
 
-No component-local product decision is created by this observational draft. The
-matching repair follows the component's released promise to replace supplied literal
-token values while preserving surrounding text.
+No component-local decision is recorded.
 
 ## Open questions
 
-None.
+- **OQ1 — How should overlapping or duplicate token values resolve?**
+  (`human-api`) Today the first-listed value wins at a position, so a shorter
+  prefix splits a longer value, and the later of two identical values renders.
+  Whether matching should prefer the longest value, and how duplicates resolve,
+  changes what readers see.
 
 ## Content boundary
 
-This file does not duplicate consumer examples, audit scores, screenshots, Badge
-policy, token grammar, or composer editing behavior.
+This file does not duplicate consumer examples, Badge policy, token grammar, or composer editing behavior.

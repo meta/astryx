@@ -12,28 +12,29 @@
  */
 
 import * as stylex from '@stylexjs/stylex';
-import {TEMPO_RANGE, expandThemeMotion} from '../theme/themeMotion';
 import {readFileSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
-  durationToMs,
   hasReleaseFade,
   readsPressStrength,
   declaresPressPaint,
   rulesDeclaredFor,
   rulesWithSelector,
 } from '../__tests__/pressState';
-import {
-  interactionOverlayStyles,
-  pressConsts,
-} from './interactionOverlay.stylex';
+import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
+import {interactionOverlayStyles} from './interactionOverlay.stylex';
 import {
   installPressFeedback,
   PRESSABLE_ATTRIBUTE,
   PRESSED_ATTRIBUTE,
+  pressFadeMs,
 } from './pressFeedback';
+import {
+  isTrackedByGroup,
+  pressGroupItemProps,
+} from '../privateAttributes/pressGroupItem.stylex';
 import {
   PRESS_FADE_MS,
   PRESS_FLASH_MS,
@@ -41,6 +42,7 @@ import {
   PRESS_SCROLL_BRAKE_MS,
   PRESS_SLOP_PX,
 } from './pressGesture';
+import {pointerQuery} from '../gestures/__tests__/pointerQuery';
 
 let release: () => void = () => undefined;
 let scroller: HTMLElement;
@@ -52,6 +54,7 @@ function press(
   x: number,
   y: number,
   pointerType = 'touch',
+  timeStamp?: number,
 ): void {
   const event = new Event(type, {bubbles: true, cancelable: true});
   Object.assign(event, {
@@ -61,6 +64,9 @@ function press(
     pointerId: 1,
     pointerType,
   });
+  if (timeStamp != null) {
+    Object.defineProperty(event, 'timeStamp', {value: timeStamp});
+  }
   element.dispatchEvent(event);
 }
 
@@ -72,6 +78,39 @@ function pressable(tag = 'div'): HTMLElement {
   element.setAttribute(PRESSABLE_ATTRIBUTE, '');
   return element;
 }
+
+/** Make `element` a scroller with content to scroll, as jsdom lays out nothing. */
+function makeScroller(element: HTMLElement): void {
+  element.style.overflowY = 'auto';
+  Object.defineProperty(element, 'clientHeight', {
+    configurable: true,
+    value: 100,
+  });
+  Object.defineProperty(element, 'scrollHeight', {
+    configurable: true,
+    value: 400,
+  });
+}
+/**
+ * The primary pointer is coarse (a phone, a tablet) until the returned
+ * restore runs: jsdom's matchMedia models a desktop, where touch work stays
+ * off (`spec:AST-094` FR19).
+ */
+function coarsePrimaryPointer(): () => void {
+  const matchMedia = window.matchMedia;
+  window.matchMedia = (query: string) => ({
+    ...matchMedia(query),
+    matches: query.includes('(pointer: coarse)') || matchMedia(query).matches,
+  });
+  const restore = (): void => {
+    window.matchMedia = matchMedia;
+  };
+  matchMediaRestorers.push(restore);
+  return restore;
+}
+
+/** Restores every pointer stub a test left, so none leaks into the next. */
+const matchMediaRestorers: (() => void)[] = [];
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -86,6 +125,9 @@ beforeEach(() => {
     scroller.appendChild(row);
     rows.push(row);
   }
+  // The rows sit in a list that scrolls, as on a phone: a finger's press
+  // waits the content-touch delay there (`spec:AST-094` FR11).
+  makeScroller(scroller);
   document.body.appendChild(scroller);
   release = installPressFeedback();
 });
@@ -93,9 +135,96 @@ beforeEach(() => {
 afterEach(() => {
   release();
   vi.useRealTimers();
+  for (const restore of matchMediaRestorers.splice(0).reverse()) {
+    restore();
+  }
 });
 
 describe('the press reaches the surface the finger landed on', () => {
+  it('keeps native long-press selection on the row and its switch input while a finger is held: the hold does nothing (spec:AST-094 FR41)', () => {
+    coarsePrimaryPointer();
+    const row = pressable('label');
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.setAttribute('role', 'switch');
+    row.appendChild(input);
+    document.body.appendChild(row);
+    press(input, 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(600);
+    expect(row.style.getPropertyValue('user-select')).toBe('');
+    expect(input.style.getPropertyValue('user-select')).toBe('');
+    press(input, 'pointerup', 10, 10);
+    expect(row.style.getPropertyValue('user-select')).toBe('');
+    expect(input.style.getPropertyValue('user-select')).toBe('');
+    // A mouse never locks anything.
+    press(input, 'pointerdown', 10, 10, 'mouse');
+    expect(row.style.getPropertyValue('user-select')).toBe('');
+    press(input, 'pointerup', 10, 10, 'mouse');
+  });
+
+  it('writes no selection or callout lock on any surface: a link keeps its native menu and a row its long-press selection (spec:AST-094 FR41)', () => {
+    coarsePrimaryPointer();
+    // jsdom drops -webkit-touch-callout, so every 'none' write is recorded.
+    const written: string[] = [];
+    const setProperty = CSSStyleDeclaration.prototype.setProperty;
+    const spy = vi
+      .spyOn(CSSStyleDeclaration.prototype, 'setProperty')
+      .mockImplementation(function (
+        this: CSSStyleDeclaration,
+        name: string,
+        value: string | null,
+        priority?: string,
+      ) {
+        if (value === 'none') {
+          written.push(name);
+        }
+        setProperty.call(this, name, value, priority);
+      });
+    const link = pressable('a');
+    link.setAttribute('href', '/next');
+    link.textContent = 'Next';
+    document.body.appendChild(link);
+    for (const surface of [link, rows[0]]) {
+      press(surface, 'pointerdown', 10, 10);
+      vi.advanceTimersByTime(600);
+      press(surface, 'pointerup', 10, 10);
+    }
+    expect(written).toEqual([]);
+    spy.mockRestore();
+  });
+
+  it('keeps selection under a mouse, a pen and a finger where the primary pointer is fine, as on main (spec:AST-094 FR19, spec:AST-017 FR59)', () => {
+    const row = rows[2];
+    press(row, 'pointerdown', 10, 10, 'mouse');
+    vi.advanceTimersByTime(600);
+    expect(row.style.getPropertyValue('user-select')).toBe('');
+    press(row, 'pointerup', 10, 10, 'mouse');
+    // A desktop pen tablet: a fine primary pointer.
+    press(row, 'pointerdown', 10, 10, 'pen');
+    vi.advanceTimersByTime(600);
+    expect(row.style.getPropertyValue('user-select')).toBe('');
+    press(row, 'pointerup', 10, 10, 'pen');
+    vi.advanceTimersByTime(600);
+    // A finger on a touchscreen laptop: the primary pointer is still fine.
+    press(row, 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(600);
+    expect(row.style.getPropertyValue('user-select')).toBe('');
+    press(row, 'pointerup', 10, 10);
+    vi.advanceTimersByTime(600);
+    // On a touch device a pen keeps it too: a row's hold does nothing
+    // (spec:AST-094 FR41).
+    const restore = coarsePrimaryPointer();
+    try {
+      press(row, 'pointerdown', 10, 10, 'pen');
+      vi.advanceTimersByTime(600);
+      expect(row.style.getPropertyValue('user-select')).toBe('');
+      press(row, 'pointerup', 10, 10, 'pen');
+      expect(row.style.getPropertyValue('user-select')).toBe('');
+    } finally {
+      restore();
+    }
+  });
+
   it('paints the row after the delay, not before', () => {
     const label = rows[1].firstElementChild;
     if (label == null) {
@@ -106,6 +235,20 @@ describe('the press reaches the surface the finger landed on', () => {
     expect(pressedRow()).toBe(-1);
     vi.advanceTimersByTime(1);
     expect(pressedRow()).toBe(1);
+  });
+
+  it('keeps the press painted through a drag on a surface that holds its drag, and still ends it on a cancel', () => {
+    const row = rows[0];
+    row.setAttribute('data-astryx-press-holds-drag', '');
+    press(row, 'pointerdown', 10, 10);
+    press(row, 'pointermove', 40, 10);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(row.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    press(row, 'pointermove', 80, 10);
+    expect(row.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    press(row, 'pointercancel', 80, 10);
+    expect(row.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    row.removeAttribute('data-astryx-press-holds-drag');
   });
 
   it('paints the innermost surface when they nest', () => {
@@ -125,6 +268,26 @@ describe('the press reaches the surface the finger landed on', () => {
     press(rows[0], 'pointerdown', 10, 10, 'mouse');
     vi.advanceTimersByTime(PRESS_ONSET_MS * 2);
     expect(pressedRow()).toBe(-1);
+  });
+
+  it('paints a Space press on a tracked action where the primary pointer is fine: a tracked action takes no `:active` paint', () => {
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
+    const button = pressable('button');
+    for (const [name, value] of Object.entries(
+      pressGroupItemProps(['touch', 'pen']),
+    )) {
+      button.setAttribute(name, value);
+    }
+    rows[0].appendChild(button);
+    button.focus();
+    button.dispatchEvent(
+      new KeyboardEvent('keydown', {key: ' ', bubbles: true, cancelable: true}),
+    );
+    expect(button.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    button.dispatchEvent(
+      new KeyboardEvent('keyup', {key: ' ', bubbles: true, cancelable: true}),
+    );
+    expect(button.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
   });
 
   it('leaves a Space press to `:active` where the primary pointer is fine', () => {
@@ -158,6 +321,67 @@ describe('the press reaches the surface the finger landed on', () => {
     press(ariaDisabled, 'pointerdown', 10, 10);
     vi.advanceTimersByTime(PRESS_ONSET_MS);
     expect(document.querySelectorAll(`[${PRESSED_ATTRIBUTE}]`)).toHaveLength(0);
+  });
+});
+
+describe('an action group whose own tracker paints its actions', () => {
+  // The group's tracker follows a held pointer across its actions and paints
+  // them. The controller must not write the press attribute there too.
+  function group(): {actions: HTMLElement[]; field: HTMLElement} {
+    const root = document.createElement('div');
+    const actions = [pressable('button'), pressable('button')];
+    for (const action of actions) {
+      for (const [name, value] of Object.entries(
+        pressGroupItemProps(['touch', 'pen']),
+      )) {
+        action.setAttribute(name, value);
+      }
+      root.appendChild(action);
+    }
+    // A member the tracker skips (a menu trigger) carries no marker.
+    const field = pressable('button');
+    root.appendChild(field);
+    document.body.appendChild(root);
+    return {actions, field};
+  }
+
+  it('paints nothing on an action its group tracks', () => {
+    const {actions} = group();
+    expect(isTrackedByGroup(actions[0])).toBe(true);
+    press(actions[0], 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    press(actions[0], 'pointerup', 10, 10);
+    vi.advanceTimersByTime(PRESS_FLASH_MS);
+    expect(actions[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('leaves the paint the group writes on it alone', () => {
+    const {actions} = group();
+    actions[1].setAttribute(PRESSED_ATTRIBUTE, 'on');
+    press(actions[1], 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    press(actions[1], 'pointercancel', 10, 10);
+    expect(actions[1].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('still paints a member the group does not track', () => {
+    const {field} = group();
+    press(field, 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(field.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('still records the touch, so a scroll it drives brakes the next one', () => {
+    const {actions} = group();
+    scroller.appendChild(actions[0].parentElement as HTMLElement);
+    press(actions[0], 'pointerdown', 10, 10);
+    // The browser takes the touch to scroll: the cancel records nothing, so
+    // the touch-down alone must have recorded the finger.
+    press(actions[0], 'pointercancel', 10, 10);
+    scroller.dispatchEvent(new Event('scroll'));
+    press(rows[1], 'pointerdown', 10, 100);
+    vi.advanceTimersByTime(PRESS_ONSET_MS * 2);
+    expect(pressedRow()).toBe(-1);
   });
 });
 
@@ -311,6 +535,226 @@ describe('a scroll takes it away and nothing brings it back', () => {
   });
 });
 
+describe('a finger waits only inside a scroller (spec:AST-094 FR11)', () => {
+  it('outside a scroller, paints in the frame the finger lands', () => {
+    const control = pressable('button');
+    document.body.appendChild(control);
+    press(control, 'pointerdown', 10, 10);
+    expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('inside a scroller, waits the content-touch delay', () => {
+    const control = pressable('button');
+    scroller.appendChild(control);
+    press(control, 'pointerdown', 10, 10);
+    expect(control.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it("counts the content-touch delay from the touch's own timestamp, so a listener that runs late still paints on time", () => {
+    const control = pressable('button');
+    scroller.appendChild(control);
+    // The page has run a while, so the touch's time is past zero.
+    vi.advanceTimersByTime(1000);
+    // A busy main thread runs the listener 60 ms after the touch.
+    press(control, 'pointerdown', 10, 10, 'touch', performance.now() - 60);
+    vi.advanceTimersByTime(PRESS_ONSET_MS - 60 - 1);
+    expect(control.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('paints at once when the listener runs later than the content-touch delay', () => {
+    const control = pressable('button');
+    scroller.appendChild(control);
+    vi.advanceTimersByTime(1000);
+    press(
+      control,
+      'pointerdown',
+      10,
+      10,
+      'touch',
+      performance.now() - PRESS_ONSET_MS - 40,
+    );
+    vi.advanceTimersByTime(0);
+    expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('waits the whole delay for a touch with no time, a time ahead of now, or an epoch time taken now', () => {
+    vi.advanceTimersByTime(1000);
+    const stamps = [() => 0, () => performance.now() + 500, () => Date.now()];
+    for (const stamp of stamps) {
+      const control = pressable('button');
+      scroller.appendChild(control);
+      press(control, 'pointerdown', 10, 10, 'touch', stamp());
+      vi.advanceTimersByTime(PRESS_ONSET_MS - 1);
+      expect(control.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+      vi.advanceTimersByTime(1);
+      expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+      press(control, 'pointerup', 10, 10, 'touch');
+      vi.advanceTimersByTime(PRESS_FADE_MS * 2);
+      control.remove();
+    }
+  });
+
+  it("keeps an epoch stamp's age, as the long-press hold does", () => {
+    const control = pressable('button');
+    scroller.appendChild(control);
+    vi.advanceTimersByTime(1000);
+    // jsdom stamps an event with Date.now(); this touch is 60 ms old.
+    press(control, 'pointerdown', 10, 10, 'touch', Date.now() - 60);
+    vi.advanceTimersByTime(PRESS_ONSET_MS - 60 - 1);
+    expect(control.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('is cancelled by travel past the slop, with no fade', () => {
+    const control = pressable('button');
+    document.body.appendChild(control);
+    press(control, 'pointerdown', 10, 10);
+    press(control, 'pointermove', 10, 10 + PRESS_SLOP_PX + 1);
+    expect(control.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('slotted into a scroller inside a shadow tree, waits the content-touch delay', () => {
+    // The browser scrolls the flat tree: a slotted pressable sits in the
+    // shadow tree's scroller, not beside it in the light tree.
+    const host = document.createElement('div');
+    const shadowScroller = document.createElement('div');
+    makeScroller(shadowScroller);
+    shadowScroller.appendChild(document.createElement('slot'));
+    host.attachShadow({mode: 'open'}).appendChild(shadowScroller);
+    const control = pressable('button');
+    host.appendChild(control);
+    document.body.appendChild(host);
+    expect(control.assignedSlot).not.toBeNull();
+    press(control, 'pointerdown', 10, 10);
+    expect(control.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('in a fixed bar above a scrolling list, paints in the frame the finger lands', () => {
+    const bar = document.createElement('div');
+    bar.style.position = 'fixed';
+    const control = pressable('button');
+    bar.appendChild(control);
+    scroller.appendChild(bar);
+    press(control, 'pointerdown', 10, 10);
+    expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('fades at the lift, then leaves no attribute behind', () => {
+    const control = pressable('button');
+    document.body.appendChild(control);
+    press(control, 'pointerdown', 10, 10);
+    press(control, 'pointerup', 10, 10);
+    expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+    vi.advanceTimersByTime(PRESS_FADE_MS);
+    expect(control.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('a menu row in a menu that cannot scroll highlights at once (DEC-14)', () => {
+    // A menu whose rows fit: overflow set, but nothing to scroll.
+    const menu = document.createElement('div');
+    menu.setAttribute('role', 'menu');
+    menu.style.overflowY = 'auto';
+    Object.defineProperty(menu, 'clientHeight', {
+      configurable: true,
+      value: 200,
+    });
+    Object.defineProperty(menu, 'scrollHeight', {
+      configurable: true,
+      value: 200,
+    });
+    const row = pressable('div');
+    row.setAttribute('role', 'menuitem');
+    menu.appendChild(row);
+    document.body.appendChild(menu);
+    press(row, 'pointerdown', 10, 10);
+    expect(row.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('a menu row in a menu that can scroll waits the content-touch delay (DEC-14)', () => {
+    const menu = document.createElement('div');
+    menu.setAttribute('role', 'menu');
+    makeScroller(menu);
+    const row = pressable('div');
+    row.setAttribute('role', 'menuitem');
+    menu.appendChild(row);
+    document.body.appendChild(menu);
+    press(row, 'pointerdown', 10, 10);
+    expect(row.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(row.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+});
+
+describe('the release clock without a theme', () => {
+  it("is the exit duration token's default, 175 ms (spec:AST-094 FR5)", () => {
+    expect(PRESS_FADE_MS).toBe(175);
+  });
+});
+
+describe('the release clock on the pressed element', () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
+  /** An element with `tokens` set on it, in the document. */
+  function pressed(tokens: Record<string, string> = {}): HTMLElement {
+    const element = document.createElement('div');
+    for (const [name, value] of Object.entries(tokens)) {
+      element.style.setProperty(name, value);
+    }
+    document.body.appendChild(element);
+    return element;
+  }
+
+  it('reads --duration-exit where the element is, a zero included', () => {
+    expect(pressFadeMs(pressed({'--duration-exit': '250ms'}))).toBe(250);
+    expect(pressFadeMs(pressed({'--duration-exit': '0ms'}))).toBe(0);
+  });
+
+  it("gives the token's default for no value or a value that is not a time", () => {
+    expect(pressFadeMs(pressed())).toBe(PRESS_FADE_MS);
+    expect(pressFadeMs(pressed({'--duration-exit': 'fast'}))).toBe(
+      PRESS_FADE_MS,
+    );
+  });
+});
+
+/** The Reduce Motion fade, ms: the longest a finger's release plays there. */
+const REDUCED_FADE_MS = Number.parseFloat(reducedMotionFadeConsts.duration);
+
+/** Stubs `prefers-reduced-motion: reduce` on; `vi.unstubAllGlobals` undoes it. */
+function stubReducedMotion(): void {
+  vi.stubGlobal(
+    'matchMedia',
+    (query: string): MediaQueryList =>
+      ({
+        matches: /prefers-reduced-motion:\s*reduce/.test(query),
+        media: query,
+        onchange: null,
+        addListener: () => undefined,
+        removeListener: () => undefined,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+        dispatchEvent: () => false,
+      }) as MediaQueryList,
+  );
+}
+
+/** Declares `css` for the test's duration and returns the remover. */
+function addRules(css: string): () => void {
+  const style = document.createElement('style');
+  style.textContent = css;
+  document.head.appendChild(style);
+  return () => style.remove();
+}
+
 describe('the release', () => {
   it('fades, then leaves no attribute behind', () => {
     press(rows[0], 'pointerdown', 10, 10);
@@ -321,68 +765,70 @@ describe('the release', () => {
     expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
   });
 
-  it('scales the fade by the tempo its stylesheet reads, a theme\u2019s or an adaptation rule\u2019s (spec:AST-108 FR4, component:Button FR15)', () => {
-    // A rule writes the tempo (a media-query adaptation, say); browsers
-    // inherit it from the theme, jsdom only reads it where it is declared.
-    const style = document.createElement('style');
-    style.textContent = '.slow-row { --_astryx-motion-tempo: 1.5; }';
-    document.head.appendChild(style);
+  it("plays the theme's exit duration, however a rule sets it (spec:AST-094 FR5)", () => {
+    // Browsers inherit the token from the theme; jsdom only reads it where
+    // it is declared.
+    const remove = addRules('.slow-row { --duration-exit: 333ms; }');
     rows[0].classList.add('slow-row');
     try {
       press(rows[0], 'pointerdown', 10, 10);
       vi.advanceTimersByTime(PRESS_ONSET_MS);
       press(rows[0], 'pointerup', 10, 10);
-      vi.advanceTimersByTime(PRESS_FADE_MS);
+      vi.advanceTimersByTime(332);
       expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
-      vi.advanceTimersByTime(PRESS_FADE_MS / 2);
+      vi.advanceTimersByTime(1);
       expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
     } finally {
-      style.remove();
+      rows[0].classList.remove('slow-row');
+      remove();
     }
   });
 
-  it('under Reduce Motion a tempo may shorten the fade but never lengthens it past 200 ms (spec:AST-108 FR4)', () => {
-    vi.stubGlobal(
-      'matchMedia',
-      (query: string): MediaQueryList =>
-        ({
-          matches: /prefers-reduced-motion:\s*reduce/.test(query),
-          media: query,
-          onchange: null,
-          addListener: () => undefined,
-          removeListener: () => undefined,
-          addEventListener: () => undefined,
-          removeEventListener: () => undefined,
-          dispatchEvent: () => false,
-        }) as MediaQueryList,
+  it('reads an exit duration written in seconds', () => {
+    const remove = addRules('.slow-row { --duration-exit: 0.3s; }');
+    rows[0].classList.add('slow-row');
+    try {
+      press(rows[0], 'pointerdown', 10, 10);
+      vi.advanceTimersByTime(PRESS_ONSET_MS);
+      press(rows[0], 'pointerup', 10, 10);
+      vi.advanceTimersByTime(299);
+      expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+      vi.advanceTimersByTime(1);
+      expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    } finally {
+      rows[0].classList.remove('slow-row');
+      remove();
+    }
+  });
+
+  it("under Reduce Motion a finger's release plays the exit duration, no longer than design:reduced-motion DR2's bound", () => {
+    stubReducedMotion();
+    const remove = addRules(
+      '.slow-row { --duration-exit: 333ms; } .quick-row { --duration-exit: 120ms; }',
     );
-    const style = document.createElement('style');
-    style.textContent =
-      '.slow-row { --_astryx-motion-tempo: 1.5; } .quick-row { --_astryx-motion-tempo: 0.75; }';
-    document.head.appendChild(style);
     try {
       rows[0].classList.add('slow-row');
       press(rows[0], 'pointerdown', 10, 10);
       vi.advanceTimersByTime(PRESS_ONSET_MS);
       press(rows[0], 'pointerup', 10, 10);
-      vi.advanceTimersByTime(PRESS_FADE_MS);
+      vi.advanceTimersByTime(REDUCED_FADE_MS - 1);
+      expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+      vi.advanceTimersByTime(1);
       expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
       rows[0].classList.replace('slow-row', 'quick-row');
       press(rows[0], 'pointerdown', 10, 10);
       vi.advanceTimersByTime(PRESS_ONSET_MS);
       press(rows[0], 'pointerup', 10, 10);
-      vi.advanceTimersByTime(PRESS_FADE_MS * 0.75);
+      vi.advanceTimersByTime(120);
       expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
     } finally {
       rows[0].classList.remove('slow-row', 'quick-row');
-      style.remove();
+      remove();
       vi.unstubAllGlobals();
     }
   });
 
-  it('bounds the release’s tempo at its own maximum, so the bound changes nothing', () => {
-    // The clock's 1.5 is TEMPO_RANGE.max, and every tempo a theme writes is
-    // clamped to it: a theme asking for 3 writes 1.5.
+  it("the stylesheet's release plays the exit tokens, with DR2's bound under Reduce Motion", () => {
     const source = readFileSync(
       join(
         dirname(fileURLToPath(import.meta.url)),
@@ -391,50 +837,17 @@ describe('the release', () => {
       'utf8',
     );
     expect(source).toContain(
-      `min(var(--_astryx-motion-tempo, 1), ${TEMPO_RANGE.max})`,
+      "const PRESS_RELEASE_DURATION = durationVars['--duration-exit'];",
     );
-    expect(expandThemeMotion({tempo: 3})['--_astryx-motion-tempo']).toBe(
-      String(TEMPO_RANGE.max),
+    expect(source).toContain(
+      "`min(${durationVars['--duration-exit']}, ${reducedMotionFadeConsts.duration})`",
     );
-  });
-
-  it('caps the stylesheet’s release fade under Reduce Motion', () => {
-    const source = readFileSync(
-      join(
-        dirname(fileURLToPath(import.meta.url)),
-        'interactionOverlay.stylex.ts',
-      ),
-      'utf8',
-    );
-    expect(source).toMatch(
-      /min\(\$\{pressConsts\.releaseMs\}ms, calc\(\$\{pressConsts\.releaseMs\}ms \* var\(--_astryx-motion-tempo, 1\)\)\)/,
-    );
+    expect(source).toContain("const RELEASE_EASE = easeVars['--ease-exit'];");
     expect(source).toMatch(
       /'@media \(prefers-reduced-motion: reduce\)': PRESS_RELEASE_DURATION_REDUCED/,
     );
-  });
-
-  it('keeps the 200 ms fade without a tempo', () => {
-    press(rows[0], 'pointerdown', 10, 10);
-    vi.advanceTimersByTime(PRESS_ONSET_MS);
-    press(rows[0], 'pointerup', 10, 10);
-    vi.advanceTimersByTime(PRESS_FADE_MS);
-    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
-  });
-
-  it('times the stylesheet’s release fade by the same tempo', () => {
-    // The animation the attribute drives, scaled by the custom property a
-    // theme with a tempo writes beside its duration tokens.
-    const source = readFileSync(
-      join(
-        dirname(fileURLToPath(import.meta.url)),
-        'interactionOverlay.stylex.ts',
-      ),
-      'utf8',
-    );
-    expect(source).toMatch(
-      /calc\(\$\{pressConsts\.releaseMs\}ms \* min\(var\(--_astryx-motion-tempo, 1\),/,
-    );
+    // No clock of its own: the tokens already follow the theme's tempo.
+    expect(source).not.toContain('--_astryx-motion-tempo');
   });
 
   it('answers a tap too quick for the delay, at the release', () => {
@@ -446,6 +859,164 @@ describe('the release', () => {
     expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
     vi.advanceTimersByTime(PRESS_FADE_MS);
     expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+});
+
+/**
+ * A CSS animation as a browser reports it from `getAnimations()` (jsdom runs
+ * none): by default the release the stylesheet starts on the surface's
+ * `::before` at the `fading` write, still waiting for its first frame.
+ * `end()` finishes it; `cancel()` cancels it, as unmounting or restyling the
+ * surface does.
+ */
+function cssAnimation(
+  element: Element,
+  {
+    target = element,
+    playState = 'running',
+    endTime = PRESS_FADE_MS,
+  }: {target?: Element; playState?: string; endTime?: number} = {},
+) {
+  let end: () => void = () => undefined;
+  let cancel: () => void = () => undefined;
+  const finished = new Promise<void>((resolve, reject) => {
+    end = resolve;
+    cancel = () => reject(new DOMException('cancelled', 'AbortError'));
+  });
+  finished.catch(() => undefined);
+  return {
+    animation: {
+      animationName: 'release',
+      playState,
+      finished,
+      effect: {
+        target,
+        pseudoElement: '::before',
+        getComputedTiming: () => ({endTime}),
+      },
+    },
+    end: () => end(),
+    cancel: () => cancel(),
+  };
+}
+
+/** The animations a browser would report running on `element` and its pseudo-elements. */
+function animate(element: Element, animations: ReadonlyArray<object>): void {
+  Object.defineProperty(element, 'getAnimations', {
+    configurable: true,
+    value: () => animations,
+  });
+}
+
+/** Let the callbacks a finished or cancelled animation queued run. */
+async function settled(): Promise<void> {
+  for (let i = 0; i < 4; i += 1) {
+    await Promise.resolve();
+  }
+}
+
+/** A finger's held press on the first row, lifted: the release is written. */
+function liftHeldPress(): void {
+  press(rows[0], 'pointerdown', 10, 10);
+  vi.advanceTimersByTime(PRESS_ONSET_MS);
+  press(rows[0], 'pointerup', 10, 10);
+  expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+}
+
+describe('the release ends with its animation, not its clock', () => {
+  it('keeps `fading` until the release animation ends, however late a busy main thread let its first frame come', async () => {
+    liftHeldPress();
+    // 150 ms of script held the main thread after the lift: the release
+    // started at the first frame after it, and is still running.
+    const release = cssAnimation(rows[0]);
+    animate(rows[0], [release.animation]);
+    vi.advanceTimersByTime(PRESS_FADE_MS);
+    await settled();
+    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+    release.end();
+    await settled();
+    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('waits for a release still waiting for its first frame when the clock ran out', async () => {
+    liftHeldPress();
+    const release = cssAnimation(rows[0], {playState: 'pending'});
+    animate(rows[0], [release.animation]);
+    vi.advanceTimersByTime(PRESS_FADE_MS * 3);
+    await settled();
+    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+    release.end();
+    await settled();
+    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('ends when the release animation is cancelled: the surface was unmounted or restyled', async () => {
+    liftHeldPress();
+    const release = cssAnimation(rows[0]);
+    animate(rows[0], [release.animation]);
+    vi.advanceTimersByTime(PRESS_FADE_MS);
+    release.cancel();
+    await settled();
+    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('ends on its clock where no release animation runs: an instant release, a surface without one, or an engine without Web Animations', async () => {
+    liftHeldPress();
+    animate(rows[0], []);
+    vi.advanceTimersByTime(PRESS_FADE_MS);
+    await settled();
+    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('waits for a release a component draws inside the surface, on a descendant whose nearest press owner is the surface', async () => {
+    liftHeldPress();
+    // The box wrapper's `::after` plays the release for the row's press,
+    // 50 ms longer than the row's clock.
+    const box = document.createElement('span');
+    rows[0].append(box);
+    const release = cssAnimation(rows[0], {
+      target: box,
+      endTime: PRESS_FADE_MS + 50,
+    });
+    animate(rows[0], [release.animation]);
+    vi.advanceTimersByTime(PRESS_FADE_MS);
+    await settled();
+    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+    release.end();
+    await settled();
+    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('waits for no animation that is not this press’s running release: a nested press owner’s (on it or inside it), an endless one, or one already finished', async () => {
+    liftHeldPress();
+    // A press owner inside the row: its release is its own press's, never
+    // the row's.
+    const nested = pressable('span');
+    const inside = document.createElement('span');
+    nested.append(inside);
+    rows[0].append(nested);
+    animate(rows[0], [
+      cssAnimation(rows[0], {target: nested}).animation,
+      cssAnimation(rows[0], {target: inside}).animation,
+      cssAnimation(rows[0], {endTime: Infinity}).animation,
+      cssAnimation(rows[0], {playState: 'finished'}).animation,
+    ]);
+    vi.advanceTimersByTime(PRESS_FADE_MS);
+    await settled();
+    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('a new press on the surface owns its paint: the old release ending later does not clear it', async () => {
+    liftHeldPress();
+    const release = cssAnimation(rows[0]);
+    animate(rows[0], [release.animation]);
+    vi.advanceTimersByTime(PRESS_FADE_MS);
+    press(rows[0], 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    release.end();
+    await settled();
+    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
   });
 });
 
@@ -538,22 +1109,57 @@ describe('a phone or tablet paints a mouse or Space press itself', () => {
     expect(rows[1].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
   });
 
-  it('fades a mouse press by the theme\u2019s tempo too (spec:AST-108 FR4, component:Button FR15)', () => {
-    const style = document.createElement('style');
-    style.textContent = '.slow-row { --_astryx-motion-tempo: 1.5; }';
-    document.head.appendChild(style);
+  it("fades a mouse press on the theme's exit duration too (spec:AST-094 FR5)", () => {
+    const remove = addRules('.slow-row { --duration-exit: 333ms; }');
     rows[1].classList.add('slow-row');
     try {
       press(rows[1], 'pointerdown', 10, 100, 'mouse');
       press(rows[1], 'pointerup', 10, 100, 'mouse');
-      vi.advanceTimersByTime(PRESS_FADE_MS);
+      vi.advanceTimersByTime(332);
       expect(rows[1].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
-      vi.advanceTimersByTime(PRESS_FADE_MS / 2);
+      vi.advanceTimersByTime(1);
       expect(rows[1].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
     } finally {
       rows[1].classList.remove('slow-row');
-      style.remove();
+      remove();
     }
+  });
+
+  function groupAction(
+    row: HTMLElement,
+    pointerTypes: ReadonlyArray<string> = ['touch', 'pen'],
+  ): HTMLButtonElement {
+    const action = focusedButton(row);
+    for (const [name, value] of Object.entries(
+      pressGroupItemProps(pointerTypes),
+    )) {
+      action.setAttribute(name, value);
+    }
+    return action;
+  }
+
+  it('leaves a mouse press to a tracker that follows a mouse: it paints its own action', () => {
+    const action = groupAction(rows[1], ['mouse', 'pen', 'touch']);
+    press(action, 'pointerdown', 10, 100, 'mouse');
+    expect(action.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    press(action, 'pointerup', 10, 100, 'mouse');
+    expect(action.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('paints a mouse press on an action whose tracker follows a finger and a pen only: that tracker takes no mouse press', () => {
+    const action = groupAction(rows[1]);
+    press(action, 'pointerdown', 10, 100, 'mouse');
+    expect(action.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    press(action, 'pointerup', 10, 100, 'mouse');
+    expect(action.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+  });
+
+  it('still paints a Space press on a focused action its group tracks: the group tracks pointers only', () => {
+    const action = groupAction(rows[1]);
+    key(action, 'keydown');
+    expect(action.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    key(action, 'keyup');
+    expect(action.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
   });
 
   it('keeps the paint while the mouse is dragged off the surface, as `:active` does', () => {
@@ -890,6 +1496,60 @@ describe('what the list pays for it', () => {
     expect(added).toEqual([]);
   });
 
+  it('registers no touch listener on the window or the document where the primary pointer is fine (spec:AST-094 FR24)', () => {
+    release();
+    matchMediaRestorers.push(pointerQuery(false).restore);
+    const added = [
+      vi.spyOn(window, 'addEventListener'),
+      vi.spyOn(document, 'addEventListener'),
+    ];
+    try {
+      release = installPressFeedback();
+      // A finger lands, as on a touchscreen laptop: still none.
+      press(rows[0], 'pointerdown', 10, 10);
+      press(rows[0], 'pointerup', 10, 10);
+      const types = added.flatMap(spy => spy.mock.calls.map(([type]) => type));
+      expect(types.filter(type => type.startsWith('touch'))).toEqual([]);
+      expect(types).toContain('pointerdown');
+    } finally {
+      for (const spy of added) {
+        spy.mockRestore();
+      }
+    }
+  });
+
+  it('asks no media query when it installs: a page no one touches never reads the pointer', () => {
+    release();
+    const matchMedia = vi.spyOn(window, 'matchMedia');
+    try {
+      release = installPressFeedback();
+      expect(matchMedia).not.toHaveBeenCalled();
+    } finally {
+      matchMedia.mockRestore();
+    }
+  });
+
+  it('hears touchcancel only while the primary pointer is coarse, and follows it', () => {
+    release();
+    const pointer = pointerQuery(false);
+    matchMediaRestorers.push(pointer.restore);
+    release = installPressFeedback();
+    // A tablet undocks its mouse: the browser's touchcancel ends a press.
+    pointer.set(true);
+    press(rows[0], 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(pressedRow()).toBe(0);
+    window.dispatchEvent(new Event('touchcancel'));
+    expect(pressedRow()).toBe(-1);
+    // It docks one again: the touch listener comes down.
+    pointer.set(false);
+    press(rows[1], 'pointerdown', 10, 100);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(pressedRow()).toBe(1);
+    window.dispatchEvent(new Event('touchcancel'));
+    expect(pressedRow()).toBe(1);
+  });
+
   it('installs once, however many times it is called, and stays while any holder remains', () => {
     const second = installPressFeedback();
     press(rows[0], 'pointerdown', 10, 10);
@@ -951,8 +1611,7 @@ describe('the release fades: the arms the controller writes to', () => {
     );
   });
 
-  it("the machine's clock is the stylesheet's constant: one number", () => {
-    expect(PRESS_FADE_MS).toBe(pressConsts.releaseMs);
+  it("without a theme, the stylesheet's release resolves to the machine's clock: the exit token's default", () => {
     expect(hasReleaseFade(surface(interactionOverlayStyles.pressedAlpha))).toBe(
       true,
     );

@@ -12,23 +12,40 @@
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {render, screen, waitFor} from '@testing-library/react';
+import {act, render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const sheetModule = vi.hoisted(() => {
   let release: () => void = () => {};
-  const loaded = new Promise<void>(resolve => {
+  const released = new Promise<void>(resolve => {
     release = resolve;
   });
-  return {loaded, release: () => release()};
+  let markReady: () => void = () => {};
+  const ready = new Promise<void>(resolve => {
+    markReady = resolve;
+  });
+  return {
+    released,
+    release: () => release(),
+    ready,
+    markReady: () => markReady(),
+  };
 });
 
 vi.mock('../BottomSheet/BottomSheet', async importOriginal => {
-  await sheetModule.loaded;
-  return importOriginal();
+  await sheetModule.released;
+  const module = await importOriginal();
+  sheetModule.markReady();
+  return module;
 });
 
 import {Selector} from './Selector';
+
+// Selector loads the sheet's module on demand, and its first load under the
+// test transform can take seconds on a busy machine. The file loads the real
+// module before any test runs, so that load counts against no wait or time
+// limit. The mock above still holds the module until the test releases it.
+await vi.importActual('../BottomSheet/BottomSheet');
 
 // jsdom has no modal dialogs or media queries; stand in for them the way
 // Selector.test.tsx does.
@@ -81,13 +98,15 @@ describe('Selector bottom-sheet active option', () => {
     expect(screen.queryByRole('option', {hidden: true})).toBeNull();
     expect(trigger).not.toHaveAttribute('aria-activedescendant');
 
-    // The first real load of the sheet module under the test transform can
-    // take a few seconds.
-    sheetModule.release();
-    await screen.findByRole('listbox', {hidden: true}, {timeout: 5_000});
-    await waitFor(() =>
-      expect(trigger).toHaveAttribute('aria-activedescendant'),
-    );
+    // The release lets the sheet's module resolve. `act` renders the sheet that
+    // resolution starts, however long that takes, so the checks below need no
+    // wait of their own.
+    await act(async () => {
+      sheetModule.release();
+      await sheetModule.ready;
+    });
+    expect(screen.getByRole('listbox', {hidden: true})).toBeInTheDocument();
+    expect(trigger).toHaveAttribute('aria-activedescendant');
     expect(
       document.getElementById(trigger.getAttribute('aria-activedescendant')!),
     ).toHaveAttribute('role', 'option');

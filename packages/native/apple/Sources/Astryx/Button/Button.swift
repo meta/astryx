@@ -82,27 +82,9 @@ public struct Button: View {
   /// disabled button, as core draws a disabled `<button>`.
   var link: URL? { isDisabled ? nil : destination }
 
-  /// A destination a link may open, normalized as core's shared rule does, or
-  /// nil for a script URL or an HTML document in a `data:` URL, which core's
-  /// navigation destinations refuse (`family:navigation-destinations` FR4).
-  /// Control characters are removed and whitespace trimmed; the scheme is
-  /// compared in lowercase without the spaces after its colon, which a data
-  /// URL's media type ignores (`data: text/html` is HTML).
-  nonisolated static func safeDestination(_ href: String) -> String? {
-    let normalized = String(String.UnicodeScalarView(
-      href.unicodeScalars.filter { $0.value > 0x1F && $0.value != 0x7F }
-    )).trimmingCharacters(in: .whitespacesAndNewlines)
-    var comparable = normalized.lowercased()
-    if let colon = comparable.firstIndex(of: ":"),
-       comparable[..<colon].range(of: "^[a-z][a-z0-9+.-]*$", options: .regularExpression) != nil {
-      let rest = comparable[comparable.index(after: colon)...].drop { $0 == " " }
-      comparable = String(comparable[...colon]) + rest
-    }
-    for blocked in ["javascript:", "vbscript:", "data:text/html"] where comparable.hasPrefix(blocked) {
-      return nil
-    }
-    return normalized
-  }
+  /// A destination a link may open, or nil when core's navigation
+  /// destinations refuse it (`astryxSafeDestination`).
+  nonisolated static func safeDestination(_ href: String) -> String? { astryxSafeDestination(href) }
 
   public var body: some View {
     control

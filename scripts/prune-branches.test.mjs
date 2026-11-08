@@ -14,6 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {afterEach, describe, expect, it} from 'vitest';
+import {createRepository} from './lib/git-fixture.mjs';
 
 const SCRIPT = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -28,22 +29,29 @@ afterEach(() => {
 function setup(prStates) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'prune-'));
   roots.push(root);
-  const git = (cwd, ...args) =>
-    execFileSync('git', args, {cwd, encoding: 'utf8'});
   const origin = path.join(root, 'origin.git');
   const work = path.join(root, 'work');
-  git(root, 'init', '-q', '--bare', origin);
-  git(root, 'init', '-q', '-b', 'main', work);
-  git(work, 'config', 'user.email', 'test@test.co');
-  git(work, 'config', 'user.name', 'Test');
-  git(work, 'commit', '-q', '--allow-empty', '-m', 'base');
-  git(work, 'remote', 'add', 'origin', origin);
-  // assets/pr-3 is pushed by hand: no marker.
-  git(work, 'push', '-q', 'origin', 'main', 'main:assets/pr-3');
-  fs.writeFileSync(path.join(work, '.pr-report-frames'), 'marker\n');
-  git(work, 'add', '.pr-report-frames');
-  git(work, 'commit', '-q', '-m', 'frames');
-  git(work, 'push', '-q', 'origin', 'HEAD:assets/pr-1', 'HEAD:assets/pr-2');
+  createRepository(
+    origin,
+    [
+      {ref: 'refs/heads/main', name: 'base'},
+      {
+        ref: 'refs/heads/assets/pr-1',
+        name: 'frames',
+        parent: 'base',
+        files: {'.pr-report-frames': 'marker\n'},
+      },
+    ],
+    {
+      bare: true,
+      // assets/pr-3 is pushed by hand: no marker.
+      refs: {
+        'refs/heads/assets/pr-2': 'frames',
+        'refs/heads/assets/pr-3': 'base',
+      },
+    },
+  );
+  execFileSync('git', ['clone', '-q', origin, work]);
   // A stand-in for gh: `pr view <n>` answers from prStates; `pr list` finds no PR.
   const bin = path.join(root, 'bin');
   fs.mkdirSync(bin);

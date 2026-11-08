@@ -3,11 +3,11 @@ schema_version: 3
 template_version: 7
 kind: component
 id: component:CommandPaletteItem
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
+approved_by: cixzhang
+approved_at: 2026-11-01
 owners: [cixzhang]
 review_triggers: [behavior, accessibility, public-api, compatibility, theming]
 verified_by:
@@ -42,8 +42,8 @@ system_specs: [spec:AST-017, spec:AST-020]
 | Public contract         | One result option with context-backed identity, highlight, selection, and close behavior; explicit standalone visual state and pointer activation remain available. |
 | Behavior                | Consumer click runs first; cancellation stops selection; successful activation reports locally, updates context, and closes; disabled items run no click callbacks. |
 | End-user impact         | Disabled commands cannot activate, and keyboard focus, selected value, and option identity remain distinct and consistently exposed.                                |
-| Builder impact          | Values stay unique; children stay non-interactive; CommandPalette owns composite keyboard navigation and reports keyboard selection through root `onValueChange`.   |
-| Compatibility/readiness | Victim-free `[fix]` restores promised disabled and native-passthrough behavior; the standalone keyboard contract remains unsettled.                                 |
+| Builder impact          | None.                                                                                                                                                               |
+| Compatibility/readiness | Records shipped behavior; no public change. Two implementation gaps, listed under Current-state impact; two owner questions stay open.                              |
 | Review checks           | Reject disabled activation, dropped standalone DOM identity, highlight-as-selection ARIA, nested interactive children, or a second context scroll owner.            |
 | Governing rules         | `architecture:public-component-api/INV5,INV7`; `architecture:interaction-modality`; `spec:AST-017/FR1,FR3,FR5`; `spec:AST-020/FR1,FR2`; WAI-ARIA 1.2 `option`.      |
 
@@ -59,20 +59,24 @@ standalone scroll behavior.
 ## Compatibility and migration
 
 - Released default preserved: `yes`
-- Compatibility class: victim-free contract restoration under
-  `spec:AST-017/FR1,FR3,FR5`; `isDisabled` already promises a non-interactive
-  item and the native `BaseProps` seam already promises standalone DOM props
+- Compatibility class: records shipped behavior; no public change
 - Controlled/uncontrolled behavior: explicit item state still precedes context
   state, then the existing false default
-- Migration decision: none for these corrections; OQ1 holds any change to the
-  standalone keyboard contract
-- Documentation compatibility: item `onSelect` reports pointer activation only.
-  No public runtime path delivers Enter to it — CommandPalette mints rows without
-  item callbacks and standalone items have no keyboard owner — so describing
-  keyboard selection through root `onValueChange` leaves no released consumer
-  behind (`spec:AST-017/FR1,FR5`). OQ1 owns any standalone keyboard path.
+- Migration decision: none; OQ1 holds any change to the standalone keyboard
+  contract. Item `onSelect` reports pointer activation only; keyboard selection
+  is reported through the root's `onValueChange`.
 
 Consumer migration instructions belong in consumer docs and release notes.
+
+## Current-state impact
+
+- **A standalone option has no keyboard model.** Outside CommandPalette the
+  item exposes `role=option` and pointer activation but no owning listbox
+  keyboard model, so a keyboard user cannot reach or activate it; WAI-ARIA 1.2
+  options belong to a composite that owns their keyboard interaction (AR5, OQ1).
+- **Selected paint hides keyboard highlight.** When an item is both highlighted
+  and selected, the selected background masks the highlighted one, so the
+  keyboard position is not visible on that item (AV2, OQ2).
 
 ## Ownership boundary
 
@@ -106,13 +110,13 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Behavioral and layout contract
 
-| ID  | Candidate invariant                                                                                                                                                                  | Basis                                                        | Draft review state                                                        |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| FR1 | Native props and `ref` reach the option root. CommandPalette context owns registered-item id, role, selected state, disabled state, and value marker; standalone caller id persists. | Released source and `architecture:public-component-api/INV5` | Verified by focused DOM tests                                             |
-| FR2 | Pointer activation runs consumer `onClick`, then stops when prevented; otherwise it calls item `onSelect`, then context selection and close. Disabled items run none of those paths. | Released callbacks and disabled promise                      | Verified; mutation-resistant                                              |
-| FR3 | Explicit `isHighlighted` and `isSelected` precede context-derived values, then false. Highlight paints active state only; selection alone drives `aria-selected`.                    | Released source, docs, and listbox semantics                 | State semantics tested; precedence tested; combined paint gap remains OQ2 |
-| FR4 | Context owns highlighted-item scrolling. Outside context, a highlighted item scrolls nearest, except an initially highlighted item inside an inline Dialog does not scroll.          | Released source and regression history                       | Verified by focused Effect tests                                          |
-| FR5 | Children provide the option's label and supporting presentation, without nested interactive descendants.                                                                             | Option semantics and `spec:AST-020/FR1,FR2`                  | Documented; exact-head a11y remains a gate                                |
+| ID  | Invariant                                                                                                                                                                                                                                                                                                                                                                                                              | Basis                                                         |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| FR1 | Native props and `ref` reach the option root. The `option` role, selected state, and disabled state replace a caller's: inside CommandPalette because composite semantics are component-owned and replace passthrough, as `component:CommandPaletteInput` AR3 records, and standalone by this record's own rule. CommandPalette context owns the registered-item id and value marker; a standalone caller id persists. | Current source and tests; `architecture:public-component-api` |
+| FR2 | Pointer activation runs consumer `onClick`, then stops when prevented; otherwise it calls item `onSelect`, then context selection and close. Disabled items run none of those paths.                                                                                                                                                                                                                                   | Current source and tests                                      |
+| FR3 | Explicit `isHighlighted` and `isSelected` precede context-derived values, then false. Highlight paints active state only; selection alone drives `aria-selected`.                                                                                                                                                                                                                                                      | Current source, tests, and docs                               |
+| FR4 | Context owns highlighted-item scrolling. Outside context, a highlighted item scrolls nearest, except an initially highlighted item inside an inline Dialog does not scroll.                                                                                                                                                                                                                                            | Current source and tests                                      |
+| FR5 | Children provide the option's label and supporting presentation, without nested interactive descendants.                                                                                                                                                                                                                                                                                                               | Option semantics and `spec:AST-020/FR1,FR2`                   |
 
 ### Allowed variation
 
@@ -151,29 +155,28 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Accessibility contract
 
-- **AR1 — Option semantics.** The root exposes `role=option`; its content or
+- **AR1 — Option semantics.** The root exposes `role=option` (FR1); its content or
   caller label provides the accessible name, and `aria-selected` reports chosen
   value rather than visual highlight.
 - **AR2 — Composite ownership.** Inside CommandPalette, the query field retains
   focus and points to the context-generated item id; CommandPalette owns arrow
   navigation and Enter selection under its adopted listbox/combobox model.
 - **AR3 — Disabled state.** Disabled items expose `aria-disabled=true` and
-  suppress every pointer activation callback. Source inspection confirms the
-  interaction overlay is omitted; exact-head browser evidence remains the paint
-  gate.
+  suppress every pointer activation callback, and the interaction overlay is
+  omitted.
 - **AR4 — Content.** Item children contain no nested button, link, or other
   interactive descendant whose semantics would be lost when the `option`
   role makes its descendants presentational, following WAI-ARIA 1.2 and
   `spec:AST-020/FR1,FR2`.
 - **AR5 — Standalone gap.** A standalone option has no owning composite keyboard
-  model. OQ1 must settle that public contract before runtime semantics change.
+  model (Current-state impact; OQ1).
 
 ## Design relationships
 
-| Anatomy | Design requirement                                                                                                                       | Representation authority       | Hierarchy role | Component contract |
-| ------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | -------------- | ------------------ |
-| Item    | Paints enabled, highlighted, selected, disabled, and press states on one root. Selected currently masks highlight when both apply (OQ2). | Current source and public docs | Prominent      | FR1–FR4, AR1–AR3   |
-| Content | Supplies the option name and non-interactive supporting presentation.                                                                    | Product callsite               | Supporting     | FR5, AR1, AR4      |
+| Anatomy | Design requirement                                                                                                             | Representation authority       | Hierarchy role | Component contract |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------ | -------------- | ------------------ |
+| Item    | Paints enabled, highlighted, selected, disabled, and press states on one root. Selected masks highlight when both apply (OQ2). | Current source and public docs | Prominent      | FR1–FR4, AR1–AR3   |
+| Content | Supplies the option name and non-interactive supporting presentation.                                                          | Product callsite               | Supporting     | FR5, AR1, AR4      |
 
 ## Family and system relationships
 
@@ -184,26 +187,31 @@ Consumer migration instructions belong in consumer docs and release notes.
   compatibility.
 - `architecture:component-theming-surface` owns the aggregate Item anatomy map
   and stable `command-palette-item` target.
-- `spec:AST-017` classifies the victim-free corrections and holds OQ1 against
-  silent released-contract changes.
+- `spec:AST-017` holds OQ1 against silent released-contract changes.
 - `spec:AST-020` supplies accessibility evidence and adopted-pattern boundaries.
 - WAI-ARIA 1.2 option semantics make descendants presentational, so interactive
   controls do not belong inside this option root.
 
 ## Verification map
 
-| Contract          | Verification                                                                           | Representative states                             | Mutation or failure expectation                                                                             | Audit section                       |
-| ----------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| FR1, FR3, AR1–AR2 | `CommandPaletteItem.test.tsx`, `CommandPalette.test.tsx`                               | standalone; context highlighted/selected          | Dropped id/ref/native prop, clobberable role/state, or highlight-as-selection fails focused DOM assertions. | `audit:CommandPaletteItem/a11y`     |
-| FR2, AR3          | `CommandPaletteItem.test.tsx`                                                          | enabled; disabled; consumer-cancelled; contextual | Disabled consumer activation, ignored cancellation, missing local report, selection, or close fails tests.  | `audit:CommandPaletteItem/behavior` |
-| FR4               | `CommandPaletteItem.test.tsx`, `CommandPalette.test.tsx`                               | standalone; inline initial; changed highlight     | Lost nearest scrolling, duplicate contextual scrolling, or initial inline scroll fails Effect assertions.   | `audit:CommandPaletteItem/behavior` |
-| FR5, AR4          | public docs, dedicated Storybook states, exact-head a11y/browser evidence              | label; shortcut; disabled                         | Interactive descendant guidance regresses or supported composition fails exact-head accessibility evidence. | `audit:CommandPaletteItem/a11y`     |
-| Theme/RTL         | focused class assertion, `themingTargets.test.ts`, Storybook fixture, RTL verified N/A | all visual states                                 | Target loss fails inventory/DOM tests; any new directional behavior requires a non-empty RTL dimension.     | `audit:CommandPaletteItem/theming`  |
+| Contract          | Verification                                                        | Representative states                             | Mutation or failure expectation                                                                             | Audit section                            |
+| ----------------- | ------------------------------------------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| FR1, FR3, AR1–AR2 | `CommandPaletteItem.test.tsx`, `CommandPalette.test.tsx`            | standalone; context highlighted/selected          | Dropped id/ref/native prop, clobberable role/state, or highlight-as-selection fails focused DOM assertions. | `audit:CommandPaletteItem/a11y`          |
+| FR2, AR3          | `CommandPaletteItem.test.tsx`                                       | enabled; disabled; consumer-cancelled; contextual | Disabled consumer activation, ignored cancellation, missing local report, selection, or close fails tests.  | `audit:CommandPaletteItem/behavior`      |
+| FR4, PR2          | `CommandPaletteItem.test.tsx`, `CommandPalette.test.tsx`            | standalone; inline initial; changed highlight     | Lost nearest scrolling, duplicate contextual scrolling, or initial inline scroll fails Effect assertions.   | `audit:CommandPaletteItem/behavior`      |
+| Theme/RTL         | focused class assertion, `themingTargets.test.ts`, RTL verified N/A | all visual states                                 | Target loss fails inventory/DOM tests; any new directional behavior requires a non-empty RTL dimension.     | `audit:CommandPaletteItem/theming`       |
+| FR5, AR4          | Source review                                                       | Item children                                     | Gap: no check fails if item children contain a nested interactive descendant.                               | `audit:CommandPaletteItem/accessibility` |
+| AR5               | Source review                                                       | Standalone item                                   | Gap: no standalone keyboard model exists to test (OQ1).                                                     | `audit:CommandPaletteItem/accessibility` |
+| PR1               | Source review                                                       | Inside CommandPalette                             | Gap: no automated check fails if context matching adds a listener, an observer, or per-item registry work.  | `audit:CommandPaletteItem/behavior`      |
+
+Read from source, with no focused test yet:
+
+- FR5, AR4: children carrying no interactive descendant.
+- AR3: the omitted interaction overlay on a disabled item.
 
 ## Decision log
 
-No component-local API, keyboard, or visual decision is settled in this draft.
-Objective corrections preserve the current public shape.
+No component-local decision is recorded.
 
 ## Open questions
 
@@ -214,10 +222,9 @@ Objective corrections preserve the current public shape.
   interaction contract, or standalone activation should enter a migration path.
 - **OQ2 — How should keyboard highlight remain visible when the item is also
   selected?** (`human-design`) Current selected background paint follows and
-  masks the highlighted background. Real-browser pixels must confirm the gap;
-  any appearance remedy requires owner direction and a separate visual change.
+  masks the highlighted background; any appearance remedy needs owner
+  direction.
 
 ## Content boundary
 
-This file does not duplicate consumer examples, audit scores, implementation
-steps, aggregate CommandPalette search/list behavior, or shared system rules.
+This file does not duplicate consumer examples, implementation steps, aggregate CommandPalette search/list behavior, or shared system rules.

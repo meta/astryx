@@ -14,6 +14,7 @@ verified_by:
   [
     packages/core/src/Stepper/Stepper.test.tsx,
     apps/storybook/stories/Stepper.stories.tsx,
+    apps/storybook/rtl-audit/targets.json,
   ]
 modules: []
 families: []
@@ -169,13 +170,14 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Verification map
 
-| Contract     | Verification                                                        | Representative states                 | Mutation or failure expectation                                                                                                                                         | Audit section              |
-| ------------ | ------------------------------------------------------------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
-| FR1          | `Stepper.test.tsx` list and aria-current tests                      | Each progress                         | Wrong current step fails.                                                                                                                                               | `audit:Step/accessibility` |
-| FR2, AR3–AR4 | `Stepper.test.tsx` onStepClick, keyboard, and accessible-name tests | Completed, active, upcoming, disabled | A missing button or wrong name fails, and so does a disabled step that leaves the tab order, loses focus when it becomes disabled, lacks `aria-disabled`, or activates. | `audit:Step/behavior`      |
-| FR3, FR4     | `Stepper.test.tsx` step-number, indicator, and status glyph tests   | Each indicator mode and status        | Wrong glyph or recolored bar fails.                                                                                                                                     | `audit:Step/behavior`      |
-| FR8          | `Stepper.test.tsx` compact content-mount tests                      | Both indicator positions              | Step content that loses its state while hidden in a compact Stepper fails.                                                                                              | `audit:Step/behavior`      |
-| FR5, AR2     | `Stepper.test.tsx` hidden status text tests                         | Separated and on-track                | Missing status text fails.                                                                                                                                              | `audit:Step/accessibility` |
+| Contract     | Verification                                                                                            | Representative states                 | Mutation or failure expectation                                                                                                                                         | Audit section              |
+| ------------ | ------------------------------------------------------------------------------------------------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| FR1          | `Stepper.test.tsx` list and aria-current tests                                                          | Each progress                         | Wrong current step fails.                                                                                                                                               | `audit:Step/accessibility` |
+| FR2, AR3–AR4 | `Stepper.test.tsx` onStepClick, keyboard, and accessible-name tests                                     | Completed, active, upcoming, disabled | A missing button or wrong name fails, and so does a disabled step that leaves the tab order, loses focus when it becomes disabled, lacks `aria-disabled`, or activates. | `audit:Step/behavior`      |
+| FR3, FR4     | `Stepper.test.tsx` step-number, indicator, and status glyph tests                                       | Each indicator mode and status        | Wrong glyph or recolored bar fails.                                                                                                                                     | `audit:Step/behavior`      |
+| FR8          | `Stepper.test.tsx` compact content-mount tests                                                          | Both indicator positions              | Step content that loses its state while hidden in a compact Stepper fails.                                                                                              | `audit:Step/behavior`      |
+| FR5, AR2     | `Stepper.test.tsx` hidden status text tests                                                             | Separated and on-track                | Missing status text fails.                                                                                                                                              | `audit:Step/accessibility` |
+| RTL relation | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `Stepper / Default horizontal` | Step indicator and label; LTR and RTL | An indicator that is not at the inline start of its label fails D2.                                                                                                     | `audit:Step/i18n-rtl`      |
 
 Read from source, with no focused test yet:
 

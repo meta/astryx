@@ -3,12 +3,13 @@
 /**
  * @file Compare API reports and render the pull request's API changes.
  *
- * @input  the merge base's committed reports, the reports generated from the
+ * @input  the merge base's reports (built from the merge base, or as committed
+ *         there when no build of it was kept), the reports generated from the
  *         head's build, and the head's committed reports, per package
  * @output added, changed, and removed rows per package, each with its
- *         signature and a usage example, plus whether the committed report is
- *         stale against the head's build; and the advisory Markdown the pull
- *         request report embeds
+ *         signature and a usage example, plus how many rows the committed
+ *         report is behind the head's build; and the advisory Markdown the
+ *         pull request report embeds
  * @position scripts/api-report — evidence only: nothing here fails a check or
  *           decides acceptance (architecture:public-component-api INV24, INV13)
  */
@@ -77,8 +78,12 @@ export function parseReport(text) {
       });
     }
   }
+  for (const [key, row] of rows) ROW_KEY.set(row, key);
   return rows;
 }
+
+/** Each parsed row's key in its report, for matching rows across two diffs. */
+const ROW_KEY = new WeakMap();
 
 function itemName(line) {
   if (/^[\w$]+ \(/.test(line)) return line.split(' ')[0]; // `Name (./entry)` in an also-exported list
@@ -117,12 +122,22 @@ export function diffReports(base, head) {
   const added = [];
   const changed = [];
   const removed = [];
+  // Every differing key before folding, so a caller can match single members.
+  const keys = new Set();
   for (const [k, row] of b) {
     if (!a.has(k)) added.push(row);
-    else if (a.get(k).line !== row.line)
-      changed.push({...row, before: a.get(k).line});
+    else if (a.get(k).line !== row.line) {
+      const change = {...row, before: a.get(k).line};
+      ROW_KEY.set(change, k);
+      changed.push(change);
+    } else continue;
+    keys.add(k);
   }
-  for (const [k, row] of a) if (!b.has(k)) removed.push(row);
+  for (const [k, row] of a)
+    if (!b.has(k)) {
+      removed.push(row);
+      keys.add(k);
+    }
   // A wholly added or removed item reports once, not once per member.
   const fold = rows => {
     const items = new Set(
@@ -134,7 +149,7 @@ export function diffReports(base, head) {
       r => !r.member || !items.has(`${r.entry}\0${r.section}\0${r.item}`),
     );
   };
-  return {added: fold(added), changed, removed: fold(removed)};
+  return {added: fold(added), changed, removed: fold(removed), keys};
 }
 
 /**
@@ -159,6 +174,8 @@ export function usageFor(pkg, row) {
       : `import '${spec}'`;
   if (kind === 'component') {
     if (!row.member || row.member === 'inherits') return `<${name} />`;
+    // An overload line is another call shape of the component, not a prop.
+    if (row.member.startsWith('overload ')) return `<${name} … />`;
     const literal = row.line.match(/'([^']+)'/);
     const value = literal
       ? `"${literal[1]}"`
@@ -179,22 +196,66 @@ export function usageFor(pkg, row) {
   return `import {${name}} from '${spec}'`;
 }
 
+/** The rows one report differs from another by, as the changes list them. */
+const rowCount = ({added, changed, removed}) =>
+  added.length + changed.length + removed.length;
+
+/** The rows of a `diffReports` result, in one list. */
+const rowsOf = ({added, changed, removed}) => [
+  ...added,
+  ...changed,
+  ...removed,
+];
+
 /**
- * @param {Array<{pkg: string, base: string|null, head: string, committed: string|null}>} packages
+ * How many of the pull request's rows its committed report does not show,
+ * counted as the pull request report counts them (a wholly added or removed
+ * item is one row). Rows a report on main already lacked are not the pull
+ * request's, and only a built surface of the merge base tells the two apart:
+ * against the merge base's committed report, this counts none.
+ */
+function staleOwnRowCount({base, head, committed, baseSource, stale}) {
+  if (!stale || base == null || baseSource === 'committed') return 0;
+  const behind = diffReports(committed, head).keys;
+  const own = diffReports(base, head);
+  const whole = new Set([...own.added, ...own.removed].filter(r => !r.member));
+  // A member or a changed item line matches by its own key; a wholly added
+  // or removed item matches when any of its keys is behind.
+  return rowsOf(own).filter(r => {
+    const key = ROW_KEY.get(r);
+    if (behind.has(key)) return true;
+    return whole.has(r) && [...behind].some(k => k.startsWith(`${key}\0`));
+  }).length;
+}
+
+/**
+ * @param {Array<{pkg: string, base: string|null, head: string,
+ *   committed: string|null, baseSource?: 'build'|'head'|'committed'}>} packages
  */
 export function computeChanges(packages) {
   return packages
-    .map(({pkg, base, head, committed}) => {
+    .map(({pkg, base, head, committed, baseSource = 'committed'}) => {
       // With no report at the merge base there is nothing to compare: the
       // package's report is new, and every row would read as added.
       const baseline = base == null;
       const d = baseline
         ? {added: [], changed: [], removed: []}
         : diffReports(base, head);
+      const stale = committed != null && committed !== head;
       return {
         pkg,
         baseline,
-        stale: committed != null && committed !== head,
+        baseSource,
+        stale,
+        // A stale report is one line in the PR report, not its rows.
+        staleRows: stale ? rowCount(diffReports(committed, head)) : 0,
+        staleOwnRows: staleOwnRowCount({
+          base,
+          head,
+          committed,
+          baseSource,
+          stale,
+        }),
         missing: committed == null,
         counts: {
           added: d.added.length,
@@ -209,6 +270,26 @@ export function computeChanges(packages) {
       };
     })
     .sort((x, y) => (x.pkg < y.pkg ? -1 : x.pkg > y.pkg ? 1 : 0));
+}
+
+/**
+ * A GitHub Actions warning for each package whose public API this pull
+ * request changed while its committed report stayed behind. It never fails
+ * the job (architecture:public-component-api INV24); a report that was stale
+ * before this pull request gets only the pull request report's line.
+ * @param {ReturnType<typeof computeChanges>} changes
+ * @param {(pkg: string) => string} reportFile the package's committed report path
+ * @returns {string[]}
+ */
+export function staleReportWarnings(changes, reportFile) {
+  return changes
+    .filter(c => c.staleOwnRows > 0)
+    .map(
+      c =>
+        `::warning file=${reportFile(c.pkg)},title=API report not regenerated::` +
+        `This pull request changes ${plural(c.staleOwnRows, 'row')} of ${c.pkg}'s public API ` +
+        `that its committed api-report.md does not show. Run pnpm api:report and commit the report.`,
+    );
 }
 
 // The pull request comment has a size limit; a wide change lists its first rows.
@@ -239,22 +320,32 @@ const where = r =>
   code([r.entry, r.section, r.item].filter(Boolean).join(' · '));
 const short = pkg => code(String(pkg ?? '').replace(/^@astryxdesign\//, ''));
 
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
 /**
  * The advisory API changes for the pull request report: one visible summary
  * line, with every row inside a closed disclosure.
+ *
+ * Changes from version 2 (each package carries `staleRows`) list only the
+ * rows the pull request changes; a stale committed report is one line naming
+ * how far behind it is. Version 1 changes render as they always did.
  * @param {ReturnType<typeof computeChanges>} changes
  * @returns {string} empty when nothing changed and every report is current
  */
 export function renderChanges(changes) {
-  const touched = (Array.isArray(changes) ? changes : [])
-    .map(c => ({...c, rows: Array.isArray(c?.rows) ? c.rows : []}))
-    .filter(
-      c =>
-        c.rows.length ||
-        c.stale === true ||
-        c.missing === true ||
-        c.baseline === true,
-    );
+  const list = (Array.isArray(changes) ? changes : []).map(c => ({
+    ...c,
+    rows: Array.isArray(c?.rows) ? c.rows : [],
+  }));
+  if (list.some(c => typeof c?.staleRows === 'number'))
+    return renderBuiltChanges(list);
+  const touched = list.filter(
+    c =>
+      c.rows.length ||
+      c.stale === true ||
+      c.missing === true ||
+      c.baseline === true,
+  );
   if (!touched.length) return '';
   const parts = touched.map(c => {
     if (c.baseline === true && c.missing !== true)
@@ -270,10 +361,18 @@ export function renderChanges(changes) {
           : '';
     return `${short(c.pkg)}${counts}${note}`;
   });
-  const rows = touched.flatMap(c =>
+  return (
+    [`**API changes:** ${parts.join('; ')}`, ...rowTable(touched)].join('\n') +
+    '\n'
+  );
+}
+
+/** The disclosure holding every row, or nothing without rows. */
+function rowTable(packages) {
+  const rows = packages.flatMap(c =>
     c.rows.map(r => ({...r, pkg: short(c.pkg)})),
   );
-  const L = [`**API changes:** ${parts.join('; ')}`];
+  const L = [];
   if (rows.length) {
     L.push(
       '',
@@ -300,5 +399,52 @@ export function renderChanges(changes) {
       '</details>',
     );
   }
+  return L;
+}
+
+/**
+ * Version 2: the summary names only the packages this pull request changes
+ * (or whose report is new or missing); stale committed reports share one line.
+ * @param {ReturnType<typeof computeChanges>} list
+ */
+function renderBuiltChanges(list) {
+  const touched = list.filter(
+    c => c.rows.length || c.missing === true || c.baseline === true,
+  );
+  const stale = list.filter(c => c.stale === true && c.missing !== true);
+  if (!touched.length && !stale.length) return '';
+  const parts = touched.map(c => {
+    if (c.baseline === true && c.missing !== true)
+      return `${short(c.pkg)} new report`;
+    const counts = c.rows.length
+      ? ` +${count(c.counts?.added)} · ~${count(c.counts?.changed)} · −${count(c.counts?.removed)}`
+      : ' no changes';
+    const missing =
+      c.missing === true
+        ? ' (report not committed: run `pnpm api:report`)'
+        : '';
+    // No build of the merge base was kept: rows a stale report at the merge
+    // base carried may show here too.
+    const committed =
+      c.rows.length && c.baseSource === 'committed'
+        ? " (against the merge base's committed report)"
+        : '';
+    return `${short(c.pkg)}${counts}${missing}${committed}`;
+  });
+  const L = [
+    `**API changes:** ${parts.length ? parts.join('; ') : 'none in this pull request'}`,
+  ];
+  if (stale.length) {
+    const behind = stale.map(c =>
+      count(c.staleRows)
+        ? `${short(c.pkg)} ${plural(count(c.staleRows), 'row')}`
+        : short(c.pkg),
+    );
+    L.push(
+      '',
+      `Committed API report behind this build: ${behind.join(', ')}; run \`pnpm api:report\`.`,
+    );
+  }
+  L.push(...rowTable(touched));
   return L.join('\n') + '\n';
 }

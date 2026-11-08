@@ -10,7 +10,11 @@ approved_by: cixzhang
 approved_at: 2026-10-25
 owners: [cixzhang]
 review_triggers: [public-api, behavior, accessibility]
-verified_by: [packages/core/src/TopNav/TopNavMegaMenu.test.tsx]
+verified_by:
+  [
+    packages/core/src/TopNav/TopNavMegaMenu.test.tsx,
+    apps/storybook/rtl-audit/targets.json,
+  ]
 modules: []
 families: [family:navigation-destinations]
 design_specs: [design:reduced-motion]
@@ -133,11 +137,12 @@ anatomy-theming map is recorded.
 
 ## Verification map
 
-| Contract | Verification                                                       | Representative states       | Mutation or failure expectation          | Audit section                            |
-| -------- | ------------------------------------------------------------------ | --------------------------- | ---------------------------------------- | ---------------------------------------- |
-| FR1, FR2 | `TopNavMegaMenu.test.tsx` TopNavMegaMenuItem and drawer-item tests | Desktop; drawer link/button | Wrong element or lost description fails. | `audit:TopNavMegaMenuItem/behavior`      |
-| FR3      | `TopNavMegaMenu.test.tsx` TopNavMegaMenuItem pass-through tests    | Both modes                  | Dropped props or styling fails.          | `audit:TopNavMegaMenuItem/behavior`      |
-| FR4      | `TopNavMegaMenu.test.tsx` drawer focus-ring test                   | Drawer item                 | Missing shared ring classes fail.        | `audit:TopNavMegaMenuItem/accessibility` |
+| Contract     | Verification                                                                                                     | Representative states           | Mutation or failure expectation                               | Audit section                            |
+| ------------ | ---------------------------------------------------------------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------- | ---------------------------------------- |
+| FR1, FR2     | `TopNavMegaMenu.test.tsx` TopNavMegaMenuItem and drawer-item tests                                               | Desktop; drawer link/button     | Wrong element or lost description fails.                      | `audit:TopNavMegaMenuItem/behavior`      |
+| FR3          | `TopNavMegaMenu.test.tsx` TopNavMegaMenuItem pass-through tests                                                  | Both modes                      | Dropped props or styling fails.                               | `audit:TopNavMegaMenuItem/behavior`      |
+| FR4          | `TopNavMegaMenu.test.tsx` drawer focus-ring test                                                                 | Drawer item                     | Missing shared ring classes fail.                             | `audit:TopNavMegaMenuItem/accessibility` |
+| RTL relation | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `TopNavMenu / Mega menu` (panel opened) | Item icon and text; LTR and RTL | An icon that is not at the inline start of its text fails D2. | `audit:TopNavMegaMenuItem/i18n-rtl`      |
 
 Read from source, with no focused test yet: the drawer button's `type="button"` (FR2); a desktop item's `onClick` and icon box (FR1); press feedback (FR4); the `div` for a desktop item without `href` (FR1); the desktop item's forwarded `tabIndex` (FR3); the forwarded `ref` and the `top-nav-mega-menu-item` target and its `mode` state (FR1–FR3); the `as` and `LinkProvider` precedence (FR1, ORD1); closing the drawer on activation (FR2) and the desktop focus outline (FR4).
 

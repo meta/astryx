@@ -152,6 +152,12 @@ export const categories: SandboxCategory[] = [
         description:
           'WCAG 2.5.8 AA touch-target sizes visualized on real components',
       },
+      {
+        name: 'Text Types',
+        href: '/pages/text-types/',
+        description:
+          'Every built-in Text type at the default size, on a bare page that scrolls',
+      },
     ],
   },
   {

@@ -49,6 +49,7 @@ export function toResult(
         ...base,
         import: c._import,
         command: c._command ?? `astryx component ${c.name}`,
+        ...(c._deprecated ? {deprecated: c._deprecated} : {}),
       };
       break;
     case 'hook':

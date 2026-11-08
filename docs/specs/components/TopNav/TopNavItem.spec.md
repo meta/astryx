@@ -14,6 +14,7 @@ verified_by:
   [
     packages/core/src/TopNav/TopNav.test.tsx,
     apps/storybook/stories/TopNav.stories.tsx,
+    apps/storybook/rtl-audit/targets.json,
   ]
 modules: []
 families: [family:navigation-destinations]
@@ -159,11 +160,12 @@ is recorded.
 
 ## Verification map
 
-| Contract         | Verification                                                  | Representative states         | Mutation or failure expectation                        | Audit section                    |
-| ---------------- | ------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------ | -------------------------------- |
-| FR1, ORD1        | `TopNav.test.tsx` TopNavItem anchor, `as`, LinkProvider tests | Default, `as`, provider       | Wrong element or lost precedence fails.                | `audit:TopNavItem/behavior`      |
-| FR2–FR4, AR1–AR3 | `TopNav.test.tsx` TopNavItem state tests                      | Selected, disabled, icon only | Missing attribute or a navigating disabled item fails. | `audit:TopNavItem/accessibility` |
-| FR5              | `TopNav.test.tsx` disabled-navigation tests in both modes     | Default and drawer            | Lost click forwarding or href handling fails.          | `audit:TopNavItem/behavior`      |
+| Contract           | Verification                                                                                     | Representative states                            | Mutation or failure expectation                                      | Audit section                    |
+| ------------------ | ------------------------------------------------------------------------------------------------ | ------------------------------------------------ | -------------------------------------------------------------------- | -------------------------------- |
+| FR1, ORD1          | `TopNav.test.tsx` TopNavItem anchor, `as`, LinkProvider tests                                    | Default, `as`, provider                          | Wrong element or lost precedence fails.                              | `audit:TopNavItem/behavior`      |
+| FR2–FR4, AR1–AR3   | `TopNav.test.tsx` TopNavItem state tests                                                         | Selected, disabled, icon only                    | Missing attribute or a navigating disabled item fails.               | `audit:TopNavItem/accessibility` |
+| FR5                | `TopNav.test.tsx` disabled-navigation tests in both modes                                        | Default and drawer                               | Lost click forwarding or href handling fails.                        | `audit:TopNavItem/behavior`      |
+| RTL relation (FR1) | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `TopNav / Full example` | The `Dashboard` item's leading icon; LTR and RTL | A leading icon that is not at the inline start of its item fails D2. | `audit:TopNavItem/i18n-rtl`      |
 
 Read from source, with no focused test yet: the disabled plain `<a>` taking precedence over `as` and `LinkProvider` (ORD1, FR3); other DOM props reaching the link (FR1); the `top-nav-item` target and its `mode` and `selected` states (FR5); the selected fill under hover and press (FR2); the drawer row size, `data-mode="drawer"`, and closing the drawer on activation (FR5); FR6; and FR7.
 

@@ -4,8 +4,9 @@
 
 /**
  * @file useTableRowExpansion.tsx
- * @input React, StyleX, Icon, Table types, table context (density), i18n
- *   (useTranslator)
+ * @input React, StyleX, Icon, the theme's `table-row-expand` icon slot, Table
+ *   types, table context (density), i18n
+ *   (useComponentTranslator)
  * @output Exports useTableRowExpansion hook + config type
  * @position Row-expansion plugin (detail panel); consumed by Table via plugins prop
  *
@@ -39,10 +40,11 @@ import {tableRowMarker} from '../../table.stylex';
 import {panelDividerFor} from '../../rowDivider';
 import {useTheme, useThemeName} from '../../../theme/useTheme';
 import {Icon} from '../../../Icon';
+import {ComponentIcon} from '../../../Icon/ComponentIcon';
+import {iconBoxSizeStyles} from '../../../Icon/IconSize.stylex';
 import {VisuallyHidden} from '../../../VisuallyHidden';
 import {resolveContextActions} from '../../tableContextMenu';
 import {useTableContext} from '../../useTableCellStyles';
-import {useTranslator} from '../../../i18n';
 import {rtlStyles} from '../../../utils';
 import {
   hasInteractiveAncestor,
@@ -66,12 +68,20 @@ import {
   type LayoutChange,
 } from '../../../motion/animatedLayout';
 import {
+  dividerOffset,
   GLIDING_ATTRIBUTE,
   glidingDividerStyles,
   markGlidingRows,
   rowEdge,
   type BottomEdge,
 } from '../../glidingDivider';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../../../i18n/useComponentTranslator';
+import english from '../../../i18n/generated-english/Table/plugins/rowExpansion/useTableRowExpansion.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Config
@@ -96,6 +106,17 @@ export interface UseTableRowExpansionConfig<T extends Record<string, unknown>> {
    * it is expanded. Receives the row's item.
    */
   renderExpanded: (item: T) => ReactNode;
+  /**
+   * Derive a human-readable row identity for the expansion control's accessible
+   * name. The plugin combines it with localized expand/collapse wording. Blank
+   * labels fall back to the generic row label.
+   *
+   * @example
+   * ```
+   * getRowLabel: item => item.name
+   * ```
+   */
+  getRowLabel?: (item: T) => string;
   /**
    * Control which rows are expandable. Non-expandable rows show no chevron, no
    * context-menu action, and never render a panel. @default all rows expandable
@@ -199,6 +220,21 @@ const expansionStyles = stylex.create({
       color: colorVars['--color-icon-primary'],
     },
   },
+  // The button takes its baseline from this fixed box. A theme's glyph size
+  // or a hidden glyph then keeps the row height. The box is the toggle's
+  // first child, which the glide gives its spring, so it carries the turn.
+  glyphBox: {
+    display: 'inline-block',
+    position: 'relative',
+    flexShrink: 0,
+  },
+  glyphCenter: {
+    position: 'absolute',
+    inset: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   chevron: {
     transitionProperty: 'transform',
     transitionDuration: durationVars['--duration-fast'],
@@ -219,7 +255,11 @@ const expansionStyles = stylex.create({
       ':is([dir="rtl"] *)': 'scaleX(-1) rotate(0deg)',
     },
   },
-  expandedRow: {
+  // The wash goes on the panel's cell, not on its row. A row that paints its
+  // own box plays in under a clip that moves with its edge. On iOS that clip
+  // can trail the rows that glide below it. The cell slides in with the
+  // panel's content.
+  mutedPanel: {
     backgroundColor: colorVars['--color-background-muted'],
   },
   expandedCell: {
@@ -339,13 +379,22 @@ const chevronOffsetStyles = stylex.create({
 // =============================================================================
 
 function ExpansionChevron({
+  rowLabel,
   isExpanded,
   onToggle,
 }: {
+  rowLabel?: string;
   isExpanded: boolean;
   onToggle: () => void;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
+  const ariaLabel = rowLabel
+    ? isExpanded
+      ? t('@astryx.tableRowExpansion.collapseRowNamed', {label: rowLabel})
+      : t('@astryx.tableRowExpansion.expandRowNamed', {label: rowLabel})
+    : isExpanded
+      ? t('@astryx.tableRowExpansion.collapseRow')
+      : t('@astryx.tableRowExpansion.expandRow');
   const ctx = useTableContext();
   return (
     <button
@@ -359,22 +408,25 @@ function ExpansionChevron({
         e.stopPropagation();
         onToggle();
       }}
-      aria-label={
-        isExpanded
-          ? t('@astryx.tableRowExpansion.collapseRow')
-          : t('@astryx.tableRowExpansion.expandRow')
-      }
+      aria-label={ariaLabel}
       aria-expanded={isExpanded}>
-      <Icon
-        icon="chevronRight"
-        size="xsm"
-        xstyle={[
+      <span
+        {...stylex.props(
+          expansionStyles.glyphBox,
+          iconBoxSizeStyles.xsm,
           expansionStyles.chevron,
           isExpanded
             ? expansionStyles.chevronExpanded
             : expansionStyles.chevronCollapsed,
-        ]}
-      />
+        )}>
+        <span {...stylex.props(expansionStyles.glyphCenter)}>
+          <ComponentIcon
+            slot="table-row-expand"
+            state={{expanded: isExpanded}}
+            fallback={{icon: 'chevronRight', size: 'xsm'}}
+          />
+        </span>
+      </span>
     </button>
   );
 }
@@ -433,6 +485,8 @@ function PanelDividerModeWatch({
   const {mode} = useTheme();
   const themeName = useThemeName();
   const lastRef = useRef({mode, themeName});
+  // Syncs the panel dividers with the computed theme CSS after a color mode or
+  // theme change.
   useLayoutEffect(() => {
     const last = lastRef.current;
     if (last.mode === mode && last.themeName === themeName) {
@@ -456,10 +510,12 @@ function PanelDividerModeWatch({
 function ExpansionPanelCell({
   colSpan,
   cellsRef,
+  isMuted,
   children,
 }: {
   colSpan: number;
   cellsRef: RefObject<Set<HTMLTableCellElement>>;
+  isMuted: boolean;
   children: ReactNode;
 }) {
   const ctx = useTableContext();
@@ -509,6 +565,7 @@ function ExpansionPanelCell({
       colSpan={colSpan}
       {...stylex.props(
         expansionStyles.expandedCell,
+        isMuted && expansionStyles.mutedPanel,
         panelIndentStyles[ctx?.density ?? 'balanced'],
         hasRowDividers && dividerStyles.panelCell,
         glidingDividerStyles.cell,
@@ -576,6 +633,7 @@ function ExpansionSnapshot({
  *       return next;
  *     }),
  *   getRowKey: item => item.id,
+ *   getRowLabel: item => item.name,
  *   renderExpanded: item => <OrderDetails order={item} />,
  * });
  * <Table data={data} columns={columns} idKey="id" plugins={{expansion}} />;
@@ -589,13 +647,14 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
     onToggle,
     getRowKey,
     renderExpanded,
+    getRowLabel,
     getIsItemExpandable,
     hasRowClickExpansion,
     panelVariant = 'transparent',
     animatedLayout,
   } = config;
 
-  const t = useTranslator();
+  const t = useComponentTranslator();
 
   // Final rendered column count, captured in transformColumns (pipeline step
   // 1) and read in transformBodyRow for the detail panel's colSpan.
@@ -697,6 +756,8 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
       }
     }
   }, []);
+  // Syncs the chevron transitions with the `animatedLayout` handle. Without a
+  // handle, the chevrons use the theme's turn.
   useLayoutEffect(() => {
     if (animatedLayout == null) {
       resetChevrons();
@@ -712,6 +773,7 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
       row: HTMLElement;
       panel: HTMLElement | null;
       entrance: Animation | null;
+      panelOffset: number | null;
       edges: Map<Element, BottomEdge>;
     }[] = [];
     for (const pending of pendings) {
@@ -731,6 +793,7 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
             ? next
             : null,
         entrance: null as Animation | null,
+        panelOffset: null as number | null,
         edges: new Map<Element, BottomEdge>(),
       };
       // Read where the glide reads the layout, before anything moves: the
@@ -751,6 +814,8 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
           const edge = rowEdge(record.panel);
           if (edge != null) {
             record.edges.set(record.panel, edge);
+            // Its entrance moves its cell: read where its line hangs first.
+            record.panelOffset = dividerOffset(record.panel, edge);
           }
           record.entrance = playLayoutChange(animatedLayout, record.panel);
         }
@@ -778,12 +843,12 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
     // one runs after it, before the frame paints, and only writes.
     queueMicrotask(() => {
       const stopped = Promise.all(
-        moved.map(async ({row, panel, entrance, edges}) =>
+        moved.map(async ({row, panel, entrance, panelOffset, edges}) =>
           markGlidingRows(
             row,
             edges,
             panel != null && entrance != null
-              ? {row: panel, animation: entrance}
+              ? {row: panel, animation: entrance, offset: panelOffset}
               : null,
             glideOf,
           ),
@@ -831,15 +896,17 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
           return null;
         }
         const key = getRowKey(item);
+        const isExpanded = expandedKeys.has(key);
         return (
           <ExpansionChevron
-            isExpanded={expandedKeys.has(key)}
+            rowLabel={getRowLabel?.(item)?.trim() || undefined}
+            isExpanded={isExpanded}
             onToggle={() => onToggle(key)}
           />
         );
       },
     }),
-    [expandedKeys, onToggle, getRowKey, getIsItemExpandable, t],
+    [expandedKeys, onToggle, getRowKey, getIsItemExpandable, getRowLabel, t],
   );
 
   return useMemo(
@@ -1044,12 +1111,12 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
               // Carries the marker so the panel cell's divider can ask whether
               // this row is the table's last, the same way TableCell does.
               tableRowMarker,
-              panelVariant === 'muted' && expansionStyles.expandedRow,
               glidingDividerStyles.row,
             )}>
             <ExpansionPanelCell
               colSpan={columnCountRef.current}
-              cellsRef={panelCellsRef}>
+              cellsRef={panelCellsRef}
+              isMuted={panelVariant === 'muted'}>
               {renderExpanded(item)}
             </ExpansionPanelCell>
           </tr>

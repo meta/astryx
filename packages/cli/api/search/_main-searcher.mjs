@@ -8,7 +8,7 @@
  * domain the query wants. Its weights are static numbers in
  * _main-searcher.weights.json.
  * @input {query, options} and the gathered catalog with its static data
- * @output the search response, the lexical response's shape and size
+ * @output the search response, the lexical response's shape and count
  * @position api/search; a child of the root dispatcher in tree.mjs
  */
 

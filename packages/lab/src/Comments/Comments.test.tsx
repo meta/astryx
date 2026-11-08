@@ -274,6 +274,10 @@ beforeAll(() => {
       if (selector === ':popover-open') {
         return popoverOpenState.get(this) ?? false;
       }
+      // showModal below marks the dialog open; jsdom has no modal top layer.
+      if (selector === ':modal') {
+        return this instanceof HTMLDialogElement && this.open;
+      }
       return originalMatches.call(this, selector);
     },
   });
@@ -501,7 +505,7 @@ describe('Comments rendering', () => {
     const article = articleByAuthor('Avery Kim');
     expect(
       within(article).getByRole('button', {name: 'Like: 2'}),
-    ).toBeDisabled();
+    ).toHaveAttribute('aria-disabled', 'true');
     expect(within(article).queryByRole('button', {name: 'Reply'})).toBeNull();
     expect(
       within(article).queryByRole('button', {
@@ -957,6 +961,38 @@ describe('Comments threads', () => {
     ).toBeTruthy();
   });
 
+  it('keeps the copied label for the full time after a second copy', async () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+    const wait = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
+    const copyButton = (name: string) => screen.getByRole('button', {name});
+    try {
+      render(
+        <Sized>
+          <Comments
+            comments={[{...COMMENTS[0], replies: []}]}
+            currentUser={OTHER}
+          />
+        </Sized>,
+      );
+      await click(copyButton('Copy comment link'));
+      await wait(0);
+      expect(copyButton('Comment link copied')).toBeTruthy();
+
+      await wait(1500);
+      await click(copyButton('Comment link copied'));
+      await wait(0);
+      // 2.5 s after the first copy and 1 s after the second one.
+      await wait(1000);
+      expect(writeText).toHaveBeenCalledTimes(2);
+      expect(copyButton('Comment link copied')).toBeTruthy();
+
+      await wait(1000);
+      expect(copyButton('Copy comment link')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('collapses header actions into the more menu when space runs low', async () => {
     overflowControl.collapsed = new Set(['reply', 'link']);
     const onSubmit = vi.fn();
@@ -1007,6 +1043,29 @@ describe('Comments threads', () => {
     expect(loadVersions).toHaveBeenCalledWith('root-1');
     expect(document.body.textContent).toContain('Previous wording');
     expect(document.body.textContent).toContain('Current version');
+  });
+
+  it('announces the history load through the shared dialog channel, then clears it (AST-086 FR8, FR14)', async () => {
+    const loadVersions = vi.fn(() => new Promise<never>(() => {}));
+    render(
+      <Sized>
+        <Comments comments={COMMENTS} loadVersions={loadVersions} />
+      </Sized>,
+    );
+    await click(screen.getByRole('button', {name: 'View edit history'}));
+    await flush();
+    const dialog = screen.getByRole('dialog');
+    const region = await waitFor(() => {
+      const regions = dialog.querySelectorAll(
+        ':scope > [data-astryx-modal-live-region="polite"]',
+      );
+      expect(regions).toHaveLength(1);
+      expect(regions[0]).toHaveTextContent('Loading edit history');
+      return regions[0];
+    });
+    await new Promise(resolve => setTimeout(resolve, 2100));
+    expect(region).toBeEmptyDOMElement();
+    expect(within(dialog).getByText('Loading edit history')).toBeVisible();
   });
 
   it('retries a comment that failed to send', async () => {

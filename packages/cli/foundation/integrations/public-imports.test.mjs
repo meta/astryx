@@ -83,16 +83,22 @@ const BLOCK = () =>
 };
 `;
 
-beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-public-imports-'));
-  // The fixture is a package with its own TypeScript config, scoped to its
-  // own files. Without one, the prop check reads the repository's root
-  // config, as `tsc` would for a folder inside it, and compiles every
-  // declaration in the repository for each check.
+/**
+ * The fixture's own TypeScript config, scoped to its own files. Without one,
+ * the prop check reads the repository's root config, as `tsc` would for a
+ * folder inside it, and compiles every declaration in the repository for
+ * each check.
+ */
+function writeTsconfig() {
   fs.writeFileSync(
     path.join(dir, 'tsconfig.json'),
     `${JSON.stringify({extends: '../tsconfig.json', include: ['**/*']})}\n`,
   );
+}
+
+beforeEach(() => {
+  dir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-public-imports-'));
+  writeTsconfig();
   write(
     'package.json',
     JSON.stringify({
@@ -1156,6 +1162,7 @@ describe('a fresh scaffold passes the checks', () => {
     it(`with ${exportsMap ? 'an' : 'no'} exports map`, async () => {
       fs.rmSync(dir, {recursive: true, force: true});
       fs.mkdirSync(dir);
+      writeTsconfig();
       write(
         'package.json',
         JSON.stringify({

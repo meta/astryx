@@ -22,7 +22,7 @@ export const docs = {
     {
       name: 'ButtonGroup',
       displayName: 'Button Group',
-      description: 'Groups multiple buttons together with connected styling: shared borders, proper border-radius handling (only on outer edges), and horizontal or vertical orientation.',
+      description: 'Groups multiple buttons together with connected styling: shared borders, proper border-radius handling (only on outer edges), and horizontal or vertical orientation. Under the touch presentation a press tracks like a menu: press a button and slide across the others, and the highlight follows. The button you lift on runs, and lifting outside the group runs nothing. A mouse press acts as a native button\'s. With a finger, each button\'s target grows toward 44 px, up to half the gap to a neighbour, without the buttons growing. A menu trigger in the group keeps its own opening.',
       props: [
         {name: 'children', type: 'ReactNode', description: 'Button or IconButton children.', required: true, slotElements: [{__element: 'Button', props: {label: 'Action'}}]},
         {name: 'label', type: 'string', description: 'Accessible label for the group (aria-label).', required: true},
@@ -94,8 +94,8 @@ export const docs = {
       {guidance: false, description: "Don't use ButtonGroup for navigation. Use SegmentedControl or TabList for switching between views."},
       {guidance: false, description: "Don't nest ButtonGroups. If you need multiple groups, place them side by side with a gap."},
       {guidance: true, description: 'Name the group for what its buttons act on. The label is the group\'s accessible name and a screen reader reads it before each member.'},
-      {guidance: true, description: 'Keep the group a single Tab stop. Arrow keys move between members along the orientation, Home/End jump to the ends, and disabled members are skipped. This is the WAI-ARIA APG roving tabindex technique: https://www.w3.org/WAI/ARIA/apg/practices/keyboard-interface/#kbd_roving_tabindex'},
-      {guidance: false, description: "Don't disable the group to show that an action is in flight. A disabled member drops focus, so a keyboard user loses their place; leave the group enabled and show progress on the button that started the work."},
+      {guidance: true, description: 'Keep the group a single Tab stop. Arrow keys move between members along the orientation, and Home/End jump to the ends. This is the WAI-ARIA APG roving tabindex technique: https://www.w3.org/WAI/ARIA/apg/practices/keyboard-interface/#kbd_roving_tabindex'},
+      {guidance: false, description: "Don't disable the group to show that an action is in flight. Leave the group enabled and show progress on the button that started the work."},
     ],
     anatomy: [
       {name: 'Button', required: true, description: 'One or more Button or IconButton children that form the connected group.'},
@@ -110,7 +110,7 @@ export const docsZh = {
     {
       name: 'ButtonGroup',
       displayName: 'Button Group',
-      description: '将多个按钮组合在一起，带有连接样式：共享边框、正确的圆角处理（仅外边缘），以及水平或垂直方向。',
+      description: '将多个按钮组合在一起，带有连接样式：共享边框、正确的圆角处理（仅外边缘），以及水平或垂直方向。在触摸呈现下（主要指针为粗指针时），按下时按钮组像菜单一样跟踪按压：按下一个按钮并滑过其他按钮，高亮随之移动。松开时所在的按钮执行，在组外松开则什么都不执行。鼠标按下与原生按钮相同。使用手指时，每个按钮的触控目标向 44 px 扩展，最多到与相邻按钮间距的一半，按钮本身不变大。组内的菜单触发器保留自己的打开方式。',
       propDescriptions: {
         children: 'Button 或 IconButton 子元素。',
         label: '按钮组的无障碍标签 (aria-label)。',
@@ -136,7 +136,7 @@ export const docsZh = {
       {guidance: false, description: '不要嵌套 ButtonGroup。如需多个组，请并排放置并留有间隔。'},
       {guidance: true, description: '按钮组的标签应说明这些按钮作用于什么。该标签是按钮组的无障碍名称，屏幕阅读器会在每个成员之前朗读它。'},
       {guidance: true, description: '按钮组是单个 Tab 停靠点。方向键沿排列方向在成员间移动焦点，Home/End 跳到首尾，禁用成员会被跳过——即 WAI-ARIA APG 的 roving tabindex 技术。'},
-      {guidance: false, description: '不要用禁用整个按钮组来表示操作进行中。禁用的成员会失去焦点，键盘用户会丢失位置；请保持按钮组可用，并在发起操作的按钮上显示进度。'},
+      {guidance: false, description: '不要用禁用整个按钮组来表示操作进行中。请保持按钮组可用，并在发起操作的按钮上显示进度。'},
     ],
     anatomy: [
       {name: '按钮', required: true, description: '一个或多个 Button 或 IconButton 子元素，形成连接的组。'},
@@ -159,8 +159,9 @@ export const docsDense = {
       {guidance: false, description: "Don't use for navigation. Use SegmentedControl or TabList."},
       {guidance: false, description: "Don't nest ButtonGroups."},
       {guidance: true, description: 'Label the group for what its buttons act on; it is the accessible name.'},
-      {guidance: true, description: 'Single Tab stop; arrows move between members, Home/End to ends, disabled skipped (APG roving tabindex).'},
-      {guidance: false, description: "Don't disable the group for an in-flight action; a disabled member drops focus."},
+      {guidance: true, description: 'Single Tab stop; arrows move between members, Home/End to ends (APG roving tabindex).'},
+      {guidance: true, description: 'Under the touch presentation a press tracks like a menu: slide across, the lifted button runs, a lift outside runs nothing. A mouse press acts as a native button\'s. Finger targets grow toward 44 px, up to half the gap to a neighbour; a menu trigger keeps its own opening.'},
+      {guidance: false, description: "Don't disable the group for an in-flight action; show progress on the active button instead."},
     ],
   },
   components: [

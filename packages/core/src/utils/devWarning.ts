@@ -6,20 +6,19 @@
  * @output Standardized `Component: message` console warnings and errors
  * @position Shared dev-logging utility used across components and hooks
  *
- * Standardizes how the design system surfaces information to the builder:
- * every message reads `Component: message` (e.g. `Field: isOptional and
- * isRequired are mutually exclusive.`), so the source is always obvious in
- * the console.
- *
- * Prefer the `useDevWarning` hook inside components — it guards against
- * repeating a warning on every render. These imperative helpers exist for
- * the non-render contexts a hook can't cover: plain functions, module
- * initialization, and inside effects.
+ * Every message reads `Component: message`, so the source is clear in the
+ * console. Prefer `useDevWarning` in components, because it does not repeat
+ * a warning on each render. These helpers are for plain functions, module
+ * initialization and effects.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/utils/index.ts
  * - /packages/core/src/hooks/useDevWarning.ts (the render-path counterpart)
  */
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 const isDev = process.env.NODE_ENV !== 'production';
 

@@ -18,6 +18,10 @@ import type {
   PowerSearchOperator,
 } from './types';
 import {resolveDateTimeRangePart} from './resolveDateTimeRangePart';
+import {registerEnglishFallback} from '../i18n/englishFallback';
+import english from '../i18n/generated-english/PowerSearch/usePowerSearchConfig.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Public Types

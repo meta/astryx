@@ -27,7 +27,7 @@ const BUDGET = 15;
 const EXEMPT = new Set(['test-native-swift']);
 // Jobs that only join results finish in seconds and need no limit of their
 // own; every job that installs, builds, or tests has one.
-const JOINS = new Set(['test', 'build', 'pr-rtl']);
+const JOINS = new Set(['test', 'build', 'docsite-test', 'pr-rtl']);
 
 /** The limit a pull-request run gets from a job's `timeout-minutes`. */
 function pullRequestLimit(value) {
