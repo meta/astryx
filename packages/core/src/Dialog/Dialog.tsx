@@ -69,6 +69,7 @@ import {
   spacingVars,
 } from '../theme/tokens.stylex';
 import {container} from '../Layout/container.stylex';
+import {containerCornerStyles} from '../Layout/containerCorners.stylex';
 import type {SpacingToken} from '../Layout/container.stylex';
 import {
   paddingStyles,
@@ -271,6 +272,7 @@ const styles = stylex.create({
     height: '100dvh',
     maxWidth: '100dvw',
     maxHeight: '100dvh',
+    '--_dialog-radius': '0px',
     borderRadius: 0,
     // Nothing of the page shows around a full-screen dialog: no edge.
     borderWidth: 0,
@@ -305,6 +307,10 @@ const styles = stylex.create({
     minHeight: 0,
     overflow: 'hidden',
     borderRadius: 'inherit',
+  },
+  innerCorners: {
+    '--_container-corner-block-start': 'var(--_dialog-radius)',
+    '--_container-corner-block-end': 'var(--_dialog-radius)',
   },
   // Inline wrapper mirrors the dialog's visual styles without <dialog> behavior
   inlineWrapper: {
@@ -826,6 +832,8 @@ export function Dialog({
           effectivePadding !== 4 &&
           containerPaddingBlockEndVarStyles[effectivePadding],
         isFullscreen && useThemeDefault && styles.fullscreenSafeArea,
+        styles.innerCorners,
+        containerCornerStyles.publish,
       )}>
       <DialogContext value={dialogContextValue}>{children}</DialogContext>
     </div>
