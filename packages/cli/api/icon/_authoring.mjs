@@ -13,6 +13,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
+import {logger} from '../logger.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
   assertWithin,
@@ -41,8 +42,13 @@ import {
   iconSetDataText,
   journalFile,
   librarySource,
+  everyLibraryIcon,
   libraryIcons,
+  libraryLooks,
+  lookPositions,
+  moduleNaming,
   nonIconExports,
+  packageRootMoves,
   resolveIconSource,
   peerNote,
   typecheckNote,
@@ -50,6 +56,16 @@ import {
   writeGeneratedIcons,
   writeIconSetData,
 } from '../../foundation/discovery/icon-set-writer.mjs';
+import {
+  describedLooks,
+  drawnLooks,
+  resolveDefaultLook,
+} from './_default-look.mjs';
+import {shellArg} from '../../foundation/text/shell-arg.mjs';
+import {
+  hasLicenseNotice,
+  licenseNoticeFix,
+} from '../../foundation/discovery/icon-set-discovery.mjs';
 import {astryxIconDefinitions} from '../../foundation/discovery/icon-definition-discovery.mjs';
 import {suggestedIcons} from '../../foundation/discovery/icon-set-checks.mjs';
 import {
@@ -99,7 +115,7 @@ function quoteJs(value) {
  */
 export async function addIconSet(name, options) {
   const {cwd = process.cwd(), dryRun = false, from} = options;
-  const looks = variantOptions(options);
+  const given = variantOptions(options);
   const exclude =
     typeof options.exclude === 'string'
       ? options.exclude
@@ -192,7 +208,30 @@ export async function addIconSet(name, options) {
       dryRun,
       from,
       exclude,
-      looks,
+      looks: given,
+      describe: {
+        displayName: options.displayName,
+        description: options.description,
+      },
+      packageDir,
+      rootPath,
+      manifestPath: projectPath(path.relative(packageDir, manifestFile)),
+    });
+  }
+  // Without --from, an existing set takes new variants, a default variant, a
+  // display name or a description in place, and nothing else changes.
+  if (
+    from == null &&
+    fs.existsSync(docFile) &&
+    fs.existsSync(dataFile) &&
+    (given != null ||
+      options.displayName?.trim() ||
+      options.description?.trim())
+  ) {
+    return redeclareIconSet(name, {
+      cwd,
+      dryRun,
+      looks: given,
       describe: {
         displayName: options.displayName,
         description: options.description,
@@ -227,14 +266,48 @@ export async function addIconSet(name, options) {
   let skipped = [];
   /** @type {ReturnType<typeof librarySource>} */
   let library = null;
+  /** @type {{summary: import('../../foundation/discovery/icon-set-writer.mjs').LibraryLookSummary | null}} */
+  const lookFound = {summary: null};
+  // Without --from the set has no icons yet, so no look to match.
+  let looks =
+    from == null
+      ? resolveDefaultLook({
+          name,
+          given,
+          current: undefined,
+          icons: 0,
+          drawn: null,
+          library: null,
+        }).looks
+      : null;
   if (from != null) {
     const source = await iconAuthoring(() =>
       resolveIconSource(from, {packageDir, pkg}),
     );
-    const found = libraryIcons(source.file, {exclude});
+    const found = libraryIcons(source.file, {
+      exclude,
+      // The library's look words decide the default before any glyph is
+      // picked, so each icon's export draws it.
+      prefer: positions => {
+        looks = resolveDefaultLook({
+          name,
+          given,
+          current: undefined,
+          icons: 0,
+          drawn: null,
+          library: {module: source.module, positions},
+        }).looks;
+        return looks ? [looks.default] : [];
+      },
+      module: source.module,
+      progress: line => logger.warn(line),
+      summary: each => {
+        lookFound.summary = each;
+      },
+    });
     if (found.length === 0) {
       throw new AstryxError(
-        `"${from}" exports no icon components this command can read. If its icons are data (objects or SVG strings), run \`astryx experimental icon new-set ${name}\`, declare an "adapter" in ${name}.icons.json, and run this command again; or add icons one at a time with \`astryx experimental icon add <Export> --from ${from}\`.`,
+        `"${from}" exports no icon components this command can read. If its icons are data (objects or SVG strings), run \`astryx experimental icon new-set ${name}\`, declare an "adapter" in ${name}.icons.json, and run this command again; or add icons one at a time with \`astryx experimental icon add <Export> --from ${from} --set ${name}\`.`,
         undefined,
         ERROR_CODES.ERR_NOT_FOUND,
       );
@@ -413,6 +486,11 @@ export async function addIconSet(name, options) {
     writtenFiles,
     dryRun,
   );
+  const missingNotice = noticeToAdd(
+    library,
+    packageDir,
+    projectPath(path.relative(packageDir, setDir)),
+  );
   {
     result.data.icons = icons.length;
     if (from != null) {
@@ -452,12 +530,218 @@ export async function addIconSet(name, options) {
             `Left out ${skipped.length} exports that are not icons: ${skipped.slice(0, 12).join(', ')}${skipped.length > 12 ? ', …' : ''}.`,
           ]
         : []),
-      ...mappedNotes(map),
-      ...suggestionNotes(suggestions),
+      ...(from != null && lookFound.summary == null
+        ? [`Found ${icons.length} icons in ${from}.`]
+        : []),
+      ...(from != null && lookFound.summary != null
+        ? lookNotes(lookFound.summary, icons.length, from, looks, name)
+        : []),
+      ...(missingNotice ? [missingNotice.note] : []),
+      ...mappedNotes(map, name),
+      ...suggestionNotes(suggestions, name),
       'Run `astryx integration check` to see the icon definitions still to map.',
     ];
+    if (missingNotice) {
+      result.data.licenseNoticeMissing = missingNotice.receipt;
+    }
   }
   return result;
+}
+
+/**
+ * The license notice the author must add when the wrapped library ships no
+ * license file to copy and the package root has none. The CLI never writes
+ * it: the license text is the author's to state. Null when nothing is
+ * missing.
+ * @param {{package: string, version: string, notices: string[]} | null} library
+ * @param {string} packageDir
+ * @param {string} setDir the set directory, from the package root
+ * @returns {{note: string, receipt: {library: string, path: string}} | null}
+ */
+function noticeToAdd(library, packageDir, setDir) {
+  if (!library || library.notices.length > 0) return null;
+  if (hasLicenseNotice(packageDir)) return null;
+  const named = `${library.package}@${library.version}`;
+  return {
+    note: `${named} ships no LICENSE or NOTICE file to copy, so the set has no license notice. ${licenseNoticeFix(setDir, named)}`,
+    receipt: {library: named, path: `${setDir}/NOTICE`},
+  };
+}
+
+/**
+ * A set descriptor's source with `--display-name` and `--description`
+ * written into its fields; the rest as it was.
+ * @param {string} source
+ * @param {{displayName?: string, description?: string}} describe
+ */
+function describedDoc(source, describe) {
+  let out = source;
+  for (const [field, value] of /** @type {const} */ ([
+    ['displayName', describe.displayName],
+    ['description', describe.description],
+  ])) {
+    if (!value?.trim()) continue;
+    out = out.replace(
+      new RegExp(`^(\\s*${field}:\\s*)(['"\`])(?:\\\\.|(?!\\2).)*\\2,?$`, 'mu'),
+      (_, lead) => `${lead}${quoteJs(value.trim())},`,
+    );
+  }
+  return out;
+}
+
+/**
+ * `new-set <name>` without `--from` over an existing set: declare its
+ * variants and default variant, and rewrite its display name and
+ * description, in place. Its icons, map and generated module stay as they
+ * are. A variant an icon still has must stay declared, and the default
+ * variant is one no icon lists as an extra look. A set with icons keeps its
+ * default variant: only a refresh with `--from` from a library whose names
+ * name its looks moves it. With none declared,
+ * its default is the look its icons' exports draw.
+ * @param {string} name
+ * @param {{cwd: string, dryRun: boolean, looks: Looks | null, describe: {displayName?: string, description?: string}, packageDir: string, rootPath: string, manifestPath: string}} options
+ */
+async function redeclareIconSet(
+  name,
+  {cwd, dryRun, looks: given, describe, packageDir, rootPath, manifestPath},
+) {
+  return iconAuthoring(async () => {
+    const where = await findLocalIconSet(cwd, name);
+    const {set} = where;
+    const current = set.data.default?.variant;
+    const drawn =
+      given && set.data.icons.length > 0
+        ? drawnLooks(set, packageDir, module =>
+            libraryPositions(module, where, Boolean(set.data.adapter)),
+          )
+        : null;
+    const {looks} = resolveDefaultLook({
+      name,
+      given,
+      current,
+      icons: set.data.icons.length,
+      drawn,
+      library: null,
+    });
+    if (looks) {
+      const declared = new Set(looks.variants);
+      const dropped = set.data.icons.flatMap(icon =>
+        (icon.variants ?? [])
+          .filter(each => !declared.has(each.variant))
+          .map(each => `${icon.id} (${each.variant})`),
+      );
+      if (dropped.length > 0) {
+        throw new AstryxError(
+          `These icons still have a variant --variants leaves out: ${dropped.slice(0, 8).join(', ')}${dropped.length > 8 ? ', …' : ''}. Keep it in --variants.`,
+          [
+            {
+              name: `--variants ${[...new Set([...looks.variants, ...set.data.icons.flatMap(icon => (icon.variants ?? []).map(each => each.variant))])].join(',')}`,
+              reason: 'keep every variant an icon has',
+            },
+          ],
+          ERROR_CODES.ERR_INVALID_ARGUMENT,
+        );
+      }
+      const asExtra = set.data.icons
+        .filter(icon =>
+          (icon.variants ?? []).some(each => each.variant === looks.default),
+        )
+        .map(icon => icon.id);
+      if (asExtra.length > 0) {
+        throw new AstryxError(
+          `"${looks.default}" can't be the default variant: ${asExtra.length} icons list it as another look (${asExtra.slice(0, 8).join(', ')}${asExtra.length > 8 ? ', …' : ''}), and each icon's own export draws the default.`,
+          undefined,
+          ERROR_CODES.ERR_INVALID_ARGUMENT,
+        );
+      }
+    }
+    const next = {
+      ...set.data,
+      ...(looks
+        ? {variants: looks.variants, default: {variant: looks.default}}
+        : {}),
+    };
+    const docFile = path.join(set.dir, `${set.name}.doc.mjs`);
+    const docBefore = fs.readFileSync(docFile, 'utf-8');
+    const docAfter = describedDoc(docBefore, describe);
+    const dataChanged =
+      iconSetDataText(next) !== fs.readFileSync(set.dataPath, 'utf-8');
+    /** @type {string[]} */
+    const files = [];
+    if (dataChanged) {
+      files.push(projectPath(path.relative(packageDir, set.dataPath)));
+    }
+    if (docAfter !== docBefore) {
+      files.push(projectPath(path.relative(packageDir, docFile)));
+    }
+    if (!dryRun) {
+      if (dataChanged) writeIconSetData(set, next);
+      if (docAfter !== docBefore) {
+        journalFile(docFile);
+        fs.writeFileSync(docFile, docAfter);
+      }
+    }
+    const result = receipt(
+      'icon-set',
+      name,
+      {path: rootPath, created: false},
+      manifestPath,
+      files,
+      dryRun,
+    );
+    result.data.icons = set.data.icons.length;
+    result.data.updated = true;
+    // A look the icons' own library draws comes from that library, so its
+    // command runs as printed; any other look comes from a module the
+    // author names.
+    /** @param {string} variant */
+    const fromFor = variant =>
+      drawn != null && drawn.positions.some(each => each.has(variant))
+        ? shellArg(drawn.module)
+        : '<module>';
+    const added = (looks?.variants ?? []).filter(
+      variant =>
+        variant !== looks?.default &&
+        !(set.data.variants ?? []).includes(variant),
+    );
+    result.data.notes = [
+      files.length === 0
+        ? `Icon set "${name}" already declares this; nothing changed.`
+        : `Updated icon set "${name}" in place; its icons, map and generated module are unchanged.`,
+      ...(added.length > 0
+        ? [
+            `Give each icon its ${added.join(', ')} look: ${added.map(variant => `\`astryx experimental icon add --variant ${variant} --from ${fromFor(variant)} --all --set ${name}\``).join(', ')}, or one icon with \`astryx experimental icon add <Export> --from <module> --id <icon> --variant <name> --set ${name}\`.`,
+          ]
+        : []),
+    ];
+    return result;
+  });
+}
+
+/**
+ * The receipt's notes for a library that draws each icon in several looks
+ * (a style, a size, a weight): what it found, the look the set took, and
+ * how to add another look as a variant.
+ * @param {import('../../foundation/discovery/icon-set-writer.mjs').LibraryLookSummary} summary
+ * @param {number} count icons in the set
+ * @param {string} from
+ * @param {{variants: string[], default: string} | null} looks
+ * @param {string} name the set's name
+ * @returns {string[]}
+ */
+function lookNotes(summary, count, from, looks, name) {
+  const described = describedLooks(summary.positions);
+  const taken = [...summary.preferred].reverse().join(' ');
+  const styles = new Set(summary.positions.flat());
+  const others = (looks?.variants ?? []).filter(
+    variant => variant !== looks?.default && styles.has(variant),
+  );
+  return [
+    `Found ${count} icons in ${from}, each drawn in several looks (${described}) by ${summary.exports} exports. The set wraps each icon once, in the ${taken} look, named without the look words (\`x\`, \`XIcon\`).`,
+    others.length > 0
+      ? `Add the ${others.join(', ')} look${others.length > 1 ? 's' : ''} as variant${others.length > 1 ? 's' : ''}: ${others.map(variant => `\`astryx experimental icon add --variant ${variant} --from ${from} --all --set ${name}\``).join(', ')}.`
+      : `To offer another look as a variant, declare it with \`astryx experimental icon new-set ${name} --variants ${[...summary.preferred].reverse()[0]},<look>\` (no --from: the set's icons stay as they are) and run \`astryx experimental icon add --variant <look> --from ${from} --all --set ${name}\`.`,
+  ];
 }
 
 /**
@@ -520,36 +804,40 @@ function definitionSuggestions(icons, map) {
 /**
  * The receipt's note for the suggestions, if any.
  * @param {Array<{definition: string, icon: string}>} suggestions
+ * @param {string} name the set's name
  */
-function suggestionNotes(suggestions) {
+function suggestionNotes(suggestions, name) {
   if (suggestions.length === 0) return [];
   const count = new Set(suggestions.map(each => each.definition)).size;
   return [
-    `${count} unmapped icon definitions have possible icons (listed under Suggestions; nothing was written for them). Check each meaning, then map the ones that fit: \`astryx experimental icon map <definition> <icon>\`.`,
+    `${count} unmapped icon definitions have possible icons (listed under Suggestions; nothing was written for them). Check each meaning, then map the ones that fit: \`astryx experimental icon map <definition> <icon> --set ${name}\`.`,
   ];
 }
 
 /**
  * The receipt's note for the entries an exact name wrote, if any.
  * @param {Record<string, string>} map
+ * @param {string} name the set's name
  */
-function mappedNotes(map) {
+function mappedNotes(map, name) {
   const count = Object.keys(map).length;
   if (count === 0) return [];
   return [
-    `${count} icon definitions were mapped because an icon has their exact name (listed under Mapped by name). A library can draw another meaning under the same name, such as a backspace key named delete: check each, and remap with \`astryx experimental icon map <definition> <icon>\`.`,
+    `${count} icon definitions were mapped because an icon has their exact name (listed under Mapped by name). A library can draw another meaning under the same name, such as a backspace key named delete: check each, and remap with \`astryx experimental icon map <definition> <icon> --set ${name}\`.`,
   ];
 }
+
+/** @typedef {import('./_default-look.mjs').Looks} Looks */
 
 /** A variant name: lower-kebab, such as `outline` or `mini-solid`. */
 const VARIANT_NAME_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
 
 /**
  * The variants and default variant `--variants` and `--default-variant`
- * declare, or
- * null when neither is given. The default is the first variant unless named.
+ * declare, or null when neither is given. Unless named, `default` is the
+ * first variant until {@link resolveDefaultLook} decides it.
  * @param {{variants?: string[] | string, defaultVariant?: string}} options
- * @returns {{variants: string[], default: string} | null}
+ * @returns {Looks | null}
  */
 function variantOptions(options) {
   const given =
@@ -594,7 +882,28 @@ function variantOptions(options) {
       ERROR_CODES.ERR_INVALID_ARGUMENT,
     );
   }
-  return {variants, default: chosen || variants[0]};
+  return {variants, default: chosen || variants[0], named: Boolean(chosen)};
+}
+
+/**
+ * The look positions of a library the set's generated module names, or
+ * null when it can't be read.
+ * @param {string} module
+ * @param {{packageDir: string, pkg: Record<string, any>}} where
+ * @param {boolean} adapter
+ * @returns {Array<Set<string>> | null}
+ */
+function libraryPositions(module, where, adapter) {
+  try {
+    const source = resolveIconSource(module, where);
+    return moduleNaming(source.file, {
+      adapter,
+      module,
+      progress: line => logger.warn(line),
+    }).positions;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -627,12 +936,76 @@ async function iconAuthoring(step) {
 }
 
 /**
+ * Whether an id is one an id rule derives from a library glyph: the glyph id,
+ * or its library export, broken into words another way (`squares-2-x2` for
+ * `squares-2x2`, `glyph-eye` for `glyphEye`). Any other id is the author's.
+ * @param {string} id
+ * @param {{id: string, export: string}} glyph
+ */
+function derivedId(id, glyph) {
+  const flat = (/** @type {string} */ text) =>
+    text.toLowerCase().replace(/[^a-z0-9]/gu, '');
+  return [glyph.id, glyph.export, glyph.export.replace(/Icon$/u, '')]
+    .map(flat)
+    .includes(flat(id));
+}
+
+/**
+ * Keep the root moves that give each root export to one export of the set.
+ * A root export that an export of the set already reads, or that an earlier
+ * move takes, stays where it is. The icon that would move keeps its own file,
+ * and its variants stay with it. Returns the kept moves and the ids of the
+ * icons that stay (with `(<variant>)` for a variant that stays).
+ * @param {{data: {module: string, icons: Array<{id: string, export: string, module?: string, variants?: Array<{variant: string, export: string}>}>}}} set
+ * @param {Map<string, {module: string, source: string}>} origins
+ * @param {string} root
+ * @param {Map<string, {source: string, from: string}>} moves
+ */
+function claimRootMoves(set, origins, root, moves) {
+  /** @type {Map<string, {source: string, from: string}>} */
+  const kept = new Map();
+  /** @type {string[]} */
+  const skipped = [];
+  const claimed = new Set(
+    [...origins.values()]
+      .filter(origin => sameIconModule(origin.module, root))
+      .map(origin => origin.source),
+  );
+  for (const icon of set.data.icons) {
+    if ((icon.module ?? set.data.module) !== set.data.module) continue;
+    const own = moves.get(icon.export);
+    const origin = origins.get(icon.export);
+    const readsRoot = origin != null && sameIconModule(origin.module, root);
+    if (own) {
+      if (claimed.has(own.source)) {
+        skipped.push(icon.id);
+        continue;
+      }
+      claimed.add(own.source);
+      kept.set(icon.export, own);
+    } else if (!readsRoot) continue;
+    for (const each of icon.variants ?? []) {
+      const move = moves.get(each.export);
+      if (!move) continue;
+      if (claimed.has(move.source)) {
+        skipped.push(`${icon.id} (${each.variant})`);
+        continue;
+      }
+      claimed.add(move.source);
+      kept.set(each.export, move);
+    }
+  }
+  skipped.sort();
+  return {moves: kept, skipped};
+}
+
+/**
  * Wrap a library into an existing set again: its icons are replaced by what
  * the library exports now (an icon whose words the author extended keeps
  * them), the generated module gains the new exports, `map` keeps every entry
  * whose icon still exists, and the receipt names the entries that lost theirs.
  * @param {string} name
- * @param {{cwd: string, dryRun: boolean, from: string, exclude: string[], looks: {variants: string[], default: string} | null, describe: {displayName?: string, description?: string}, packageDir: string, rootPath: string, manifestPath: string}} options
+ * @param {{cwd: string, dryRun: boolean, from: string, exclude: string[], looks: Looks | null, describe: {displayName?: string, description?: string}, packageDir: string, rootPath: string, manifestPath: string}} options
  */
 async function refreshIconSet(
   name,
@@ -641,7 +1014,7 @@ async function refreshIconSet(
     dryRun,
     from,
     exclude,
-    looks,
+    looks: given,
     describe,
     packageDir,
     rootPath,
@@ -651,24 +1024,73 @@ async function refreshIconSet(
   return iconAuthoring(async () => {
     const where = await findLocalIconSet(cwd, name);
     const {set} = where;
+    const current = set.data.default?.variant;
     const source = resolveIconSource(from, where);
     // Exports left out before stay out; --exclude adds to them.
     const excluded = [
       ...new Set([...(set.data.exclude ?? []), ...exclude]),
     ].sort();
-    const found = libraryIcons(source.file, {
+    const everyIcon = everyLibraryIcon(source.file, {
       adapter: Boolean(set.data.adapter),
       exclude: excluded,
+      module: source.module,
+      progress: line => logger.warn(line),
     });
+    const libraryLookPositions = lookPositions(everyIcon.map(icon => icon.id));
+    // The look the icons from this library draw now decides whether a named
+    // default moves them.
+    const {looks, moved} = resolveDefaultLook({
+      name,
+      given,
+      current,
+      icons: set.data.icons.length,
+      drawn: drawnLooks(set, packageDir, () => libraryLookPositions, {
+        module: source.module,
+      }),
+      library: {module: source.module, positions: libraryLookPositions},
+    });
+    if (looks) {
+      const asExtra = set.data.icons
+        .filter(icon =>
+          (icon.variants ?? []).some(each => each.variant === looks.default),
+        )
+        .map(icon => icon.id);
+      if (asExtra.length > 0) {
+        throw new AstryxError(
+          `"${looks.default}" can't be the default variant: ${asExtra.length} icons list it as another look (${asExtra.slice(0, 8).join(', ')}${asExtra.length > 8 ? ', …' : ''}), and each icon's own export draws the default.`,
+          undefined,
+          ERROR_CODES.ERR_INVALID_ARGUMENT,
+        );
+      }
+    }
+
     // A refresh changes only the icons the refreshed module supplies: those
     // the generated module re-exports or adapts from it. Every other icon
     // (your own `./` artwork, another library's) is kept as it is, with its
     // map entries and variants.
     const generatedBefore = generatedModulePath(set, packageDir);
     const origins = generatedOrigins(packageDir, generatedBefore);
+    // A refresh from a package root also supplies the exports that read one
+    // file of that package, when the root exports the same icon. They move to
+    // the root import, so the set has one import style.
+    const {moves: rootMoves, skipped: skippedMoves} = claimRootMoves(
+      set,
+      origins,
+      source.module,
+      packageRootMoves(
+        origins,
+        source,
+        everyIcon.map(icon => icon.export),
+        where,
+      ),
+    );
+    /** @param {string} name the set's export */
+    const libraryExportOf = name =>
+      rootMoves.get(name)?.source ?? origins.get(name)?.source;
     /** @param {{export: string, module?: string}} icon */
     const suppliedHere = icon => {
       if ((icon.module ?? set.data.module) !== set.data.module) return false;
+      if (rootMoves.has(icon.export)) return true;
       const origin = origins.get(icon.export);
       return origin != null && sameIconModule(origin.module, source.module);
     };
@@ -676,39 +1098,93 @@ async function refreshIconSet(
     const others = set.data.icons.filter(icon => !suppliedHere(icon));
     // An existing icon is the same icon when the library still exports it:
     // its identity is the library export its generated module re-exports
-    // (`HiSquares2X2Icon`), then its public export, then its id. Ids and
-    // public names are derived, and a newer rule may spell them differently
-    // (`squares-2-x2` is now `squares-2x2`); an icon matched this way keeps
-    // its public export byte for byte, every field it had (its variants, the
-    // words the author added, its module), and its map entries.
+    // (`HiSquares2X2Icon`, or the root export a per-file icon moves to), then
+    // its public export, then its id. Ids and public names are derived, and a
+    // newer rule may spell them differently (`squares-2-x2` is now
+    // `squares-2x2`); an icon matched this way keeps its public export byte
+    // for byte, every field it had (its variants, the words the author added,
+    // its module), and its map entries. The same rule holds on every refresh,
+    // so a second refresh changes nothing the first one wrote.
+    const moving = new Set(supplied.filter(icon => rootMoves.has(icon.export)));
     const byId = new Map(supplied.map(icon => [icon.id, icon]));
     const byExport = new Map(supplied.map(icon => [icon.export, icon]));
     const bySource = new Map(
-      supplied.map(icon => [origins.get(icon.export)?.source, icon]),
+      supplied.map(icon => [libraryExportOf(icon.export), icon]),
     );
-    /** @param {{export: string, name: string, id: string}} icon */
-    const priorOf = icon =>
-      bySource.get(icon.export) ??
-      byExport.get(icon.name) ??
-      byId.get(icon.id) ??
-      null;
-    const otherIds = new Set(others.map(icon => icon.id));
-    const otherExports = new Set(others.map(icon => icon.export));
-    /** @type {string[]} library icons left out: an icon of yours has the id or name */
+    // One icon per glyph. A look the set already wraps keeps its icon and id.
+    // A new glyph comes in once, in the preferred look. A new default variant
+    // moves each glyph's icon to that look.
+    const preferred = looks?.default ?? current;
+    const {icons: looksOf} = libraryLooks(
+      everyIcon,
+      preferred ? [preferred] : [],
+    );
+    const iconByExport = new Map(everyIcon.map(icon => [icon.export, icon]));
+    /** @type {string[]} the set's exports whose statement now names another look */
+    const repicked = [];
+    /** @type {Map<string, (typeof supplied)[number]>} the new look's export → the icon it now draws */
+    const repickedBy = new Map();
+    const found = looksOf.flatMap(icon => {
+      const wrapped = (icon.looks ?? []).filter(look => bySource.has(look));
+      if (wrapped.length === 0) return [icon];
+      return wrapped.map(look => {
+        const prior = /** @type {(typeof supplied)[number]} */ (
+          bySource.get(look)
+        );
+        // A moved icon is the glyph its root export draws, whatever its id.
+        const sameGlyph = moving.has(prior) || prior.id === icon.id;
+        if (moved && sameGlyph && !bySource.has(icon.export)) {
+          repicked.push(prior.export);
+          repickedBy.set(icon.export, prior);
+          return icon;
+        }
+        const own = /** @type {(typeof everyIcon)[number]} */ (
+          iconByExport.get(look)
+        );
+        // Read by the glyph's id when the set already names it so.
+        return prior.id === icon.id
+          ? {...own, id: icon.id, name: icon.name}
+          : own;
+      });
+    });
+    /** @param {{export: string}} glyph */
+    const resolvedPrior = glyph =>
+      repickedBy.get(glyph.export) ?? bySource.get(glyph.export) ?? null;
+    // An icon its library export already gives to one glyph is never given to
+    // a second glyph by name or id: that glyph is left out.
+    const resolved = new Set(found.map(resolvedPrior).filter(Boolean));
+    const takenIds = new Set(others.map(icon => icon.id));
+    const takenExports = new Set(others.map(icon => icon.export));
+    /** @type {string[]} library icons left out: an icon of the set has the id or name */
     const shadowed = [];
     /** @type {Map<string, string>} old id → new id */
     const renames = new Map();
     /** @type {Map<string, string>} the library export → the set's export */
     const publicName = new Map();
     const fromLibrary = found.flatMap(icon => {
-      const prior = priorOf(icon);
+      const byOrigin = resolvedPrior(icon);
+      const byName = byOrigin
+        ? null
+        : (byExport.get(icon.name) ?? byId.get(icon.id) ?? null);
+      const prior = byOrigin ?? (resolved.has(byName) ? null : byName);
       const name = prior?.export ?? icon.name;
-      if (!prior && (otherIds.has(icon.id) || otherExports.has(name))) {
+      if (
+        !prior &&
+        (byName || takenIds.has(icon.id) || takenExports.has(name))
+      ) {
         shadowed.push(icon.id);
         return [];
       }
-      if (prior && prior.id !== icon.id) renames.set(prior.id, icon.id);
       publicName.set(icon.export, name);
+      if (prior && byOrigin && !derivedId(prior.id, icon)) {
+        return [
+          {
+            ...prior,
+            words: [...new Set([...(prior.words ?? []), ...icon.aliases])],
+          },
+        ];
+      }
+      if (prior && prior.id !== icon.id) renames.set(prior.id, icon.id);
       // The words its old id gave are the old rule's, not the author's.
       const oldIdWords =
         prior && prior.id !== icon.id ? new Set(idWords(prior.id)) : new Set();
@@ -728,17 +1204,42 @@ async function refreshIconSet(
       ];
     });
     const icons = [...fromLibrary, ...others];
+    // An icon is listed under `moved` when it or one of its variants moves.
+    /** @type {Array<{id: string, from: string, to: string}>} */
+    const movedIcons = [];
+    /** @type {import('../../foundation/discovery/icon-set-writer.mjs').GeneratedIcon[]} */
+    const movedVariants = [];
+    for (const icon of fromLibrary) {
+      const variantMoves = (icon.variants ?? []).filter(each =>
+        rootMoves.has(each.export),
+      );
+      for (const each of variantMoves) {
+        const move = /** @type {{source: string, from: string}} */ (
+          rootMoves.get(each.export)
+        );
+        movedVariants.push({
+          name: each.export,
+          from: source.module,
+          source: move.source,
+          adapt: iconByExport.get(move.source)?.adapt ?? false,
+        });
+      }
+      const from = (
+        rootMoves.get(icon.export) ?? rootMoves.get(variantMoves[0]?.export)
+      )?.from;
+      if (from) movedIcons.push({id: icon.id, from, to: source.module});
+    }
+    movedIcons.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     // The icons this module supplied that it no longer exports: they leave
     // the set and its generated module, and the receipt names them.
     // Each is named for why it left: `--exclude` (or the data file's
     // `exclude`) names its library export, or the library no longer exports
     // it.
     const excludedNames = new Set(excluded);
-    const gone = supplied.filter(
-      icon => !fromLibrary.some(each => each.export === icon.export),
-    );
+    const keptExports = new Set(fromLibrary.map(each => each.export));
+    const gone = supplied.filter(icon => !keptExports.has(icon.export));
     const isExcluded = (/** @type {{export: string}} */ icon) =>
-      excludedNames.has(origins.get(icon.export)?.source ?? '') ||
+      excludedNames.has(libraryExportOf(icon.export) ?? '') ||
       excludedNames.has(icon.export);
     const goneExcluded = gone.filter(isExcluded);
     const goneMissing = gone.filter(icon => !isExcluded(icon));
@@ -782,20 +1283,7 @@ async function refreshIconSet(
     // --display-name and --description rewrite the descriptor's fields.
     const docFile = path.join(set.dir, `${set.name}.doc.mjs`);
     const docBefore = fs.readFileSync(docFile, 'utf-8');
-    let docAfter = docBefore;
-    for (const [field, value] of /** @type {const} */ ([
-      ['displayName', describe.displayName],
-      ['description', describe.description],
-    ])) {
-      if (!value?.trim()) continue;
-      docAfter = docAfter.replace(
-        new RegExp(
-          `^(\\s*${field}:\\s*)(['"\`])(?:\\\\.|(?!\\2).)*\\2,?$`,
-          'mu',
-        ),
-        (_, lead) => `${lead}${quoteJs(value.trim())},`,
-      );
-    }
+    let docAfter = describedDoc(docBefore, describe);
     // A refresh that first records the library as the set's source does what
     // `new-set --from` does: the descriptor takes the library's license, but
     // only over the value `new-set` wrote by default (the package's license,
@@ -840,21 +1328,31 @@ async function refreshIconSet(
       files.push(projectPath(path.relative(packageDir, target)));
     }
     if (!dryRun) {
+      const rewritten = found
+        .map(icon => ({
+          name: publicName.get(icon.export) ?? icon.name,
+          from: source.module,
+          source: icon.export,
+          adapt: icon.adapt,
+        }))
+        .filter(icon => publicName.has(icon.source))
+        .concat(movedVariants);
+      const rewrittenNames = new Set(rewritten.map(icon => icon.name));
       const written = writeGeneratedIcons(
         packageDir,
         generated,
         next,
-        found
-          .map(icon => ({
-            name: publicName.get(icon.export) ?? icon.name,
-            from: source.module,
-            source: icon.export,
-            adapt: icon.adapt,
-          }))
-          .filter(icon => publicName.has(icon.source)),
+        rewritten,
         // The icons the library no longer exports leave the module too; a
-        // renamed icon keeps its export.
-        gone.map(icon => icon.export),
+        // renamed icon keeps its export. An icon moved to the new default
+        // look keeps its export, which now names that look. An export moved
+        // to the root is written again with the root import. Every other
+        // export stays as it is, because the data file still lists it.
+        [
+          ...gone.map(icon => icon.export),
+          ...repicked,
+          ...[...rootMoves.keys()].filter(name => rewrittenNames.has(name)),
+        ],
       );
       files.push(...written.files);
       try {
@@ -906,15 +1404,32 @@ async function refreshIconSet(
     if (renames.size > 0) {
       result.data.renamed = [...renames].map(([from, to]) => ({from, to}));
     }
+    if (movedIcons.length > 0) result.data.moved = movedIcons;
+    const missingNotice = hasLicenseNotice(set.dir)
+      ? null
+      : noticeToAdd(
+          library,
+          packageDir,
+          projectPath(path.relative(packageDir, set.dir)),
+        );
+    if (missingNotice) {
+      result.data.licenseNoticeMissing = missingNotice.receipt;
+    }
     result.data.notes = [
       ...(licenseNote ? [licenseNote] : []),
+      ...(missingNotice ? [missingNotice.note] : []),
       ...(renames.size > 0
         ? [
             `${renames.size} icons have a new id under this release's id rule, and keep their map entries, variants, and words: ${[...renames].map(([from, to]) => `${from} -> ${to}`).join(', ')}.`,
           ]
         : []),
-      ...mappedNotes(byName),
-      ...suggestionNotes(suggestions),
+      ...(movedIcons.length > 0
+        ? [
+            `${movedIcons.length} icons now import from ${source.module} instead of one file each, and keep their ids, exports, map entries, variants, and words: ${movedIcons.map(each => each.id).join(', ')}.`,
+          ]
+        : []),
+      ...mappedNotes(byName, name),
+      ...suggestionNotes(suggestions, name),
       ...(goneMissing.length > 0
         ? [
             `${goneMissing.length} icons the library no longer exports were removed from the set: ${goneMissing.map(icon => icon.id).join(', ')}.`,
@@ -937,7 +1452,12 @@ async function refreshIconSet(
         : []),
       ...(shadowed.length > 0
         ? [
-            `Left out ${shadowed.length} library icons whose id or name an icon of yours from another module already has: ${shadowed.join(', ')}.`,
+            `Left out ${shadowed.length} library icons whose id or name an icon of the set already has: ${shadowed.join(', ')}.`,
+          ]
+        : []),
+      ...(skippedMoves.length > 0
+        ? [
+            `${skippedMoves.length} icons stay on their own file, because another icon of the set already reads the same export of ${source.module}: ${skippedMoves.join(', ')}.`,
           ]
         : []),
       astryxIconDefinitions().definitions.every(({doc}) => map[doc.name])

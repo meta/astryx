@@ -7,17 +7,9 @@ export const doc = {
   name: 'useKeyboardHint — Arrow-key Hint',
   displayName: 'useKeyboardHint — Arrow-key Hint',
   description:
-    'Toolbar shows an ephemeral "← → to navigate" hint on first keyboard focus via useKeyboardHint, teaching sighted keyboard users that arrows move within the group.',
+    'A custom five-star rating with one Tab stop calls useKeyboardHint directly: tabbing into it shows a "← → to navigate" hint, the first arrow press dismisses it, and tabbing back in does not show it again.',
   isReady: true,
   aspectRatio: 16 / 9,
-  componentsUsed: [
-    'Toolbar',
-    'Button',
-    'Icon',
-    'Card',
-    'Section',
-    'Text',
-    'Layout',
-  ],
-  icons: {BoldIcon: 'bold', ItalicIcon: 'italic', UnderlineIcon: 'underline'},
+  componentsUsed: ['Button', 'Icon', 'Card', 'Layout'],
+  icons: {StarIcon: 'star'},
 };

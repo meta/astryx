@@ -12,7 +12,7 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   DEFAULT_STORYBOOK_DIR,
@@ -135,7 +135,7 @@ async function capture(page: Page, scenario: Case) {
     await expect(
       subject
         .getByRole('region', {name: 'Pending command palette'})
-        .locator('.astryx-spinner[role="status"]'),
+        .locator('.astryx-spinner[role="progressbar"]'),
     ).toHaveCount(1);
     await page.waitForTimeout(200);
     await holdMotionStill(page);

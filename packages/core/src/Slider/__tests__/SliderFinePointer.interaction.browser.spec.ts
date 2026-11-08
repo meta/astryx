@@ -12,7 +12,12 @@
  *   which drives a finger under phone emulation.
  */
 
-import {expect, test, type Locator, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   openStory,
   WHEEL_SKIP,

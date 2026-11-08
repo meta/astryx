@@ -1,5 +1,27 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/** @type {import('@astryxdesign/cli/authoring').ComponentAnatomyElement[]} */
+const anatomy = [
+  {
+    name: 'Trigger button',
+    required: true,
+    description:
+      'Small round native button, named by `label`, that previews and pins the help.',
+  },
+  {
+    name: 'Info icon',
+    required: true,
+    description:
+      "The icon registry's `info` artwork at `size`; a theme may replace it.",
+  },
+  {
+    name: 'Help surface',
+    required: true,
+    description:
+      'Tooltip surface that shows `content` while the help is shown.',
+  },
+];
+
 /** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */
 
 export const docs = {
@@ -50,8 +72,9 @@ export const docs = {
     },
   ],
   usage: {
+    anatomy,
     description:
-      'An info icon that reveals help: a small "i" button. Hover and keyboard focus preview the help, and a click, tap, Enter, or Space pins it open until Escape, a second press, a press outside, or focus leaving. Use it next to labels, values, and metrics for permission notes, metric definitions, and field help. Its value over hand-composing Icon inside Tooltip is the pre-wired accessible trigger: a real button with an aria-label, Tab-reachable, tooltip on hover AND focus AND tap, and Escape dismissal.',
+      'An info icon that reveals help: a small "i" button. Hover and keyboard focus preview the help, and a click, tap, Enter, or Space pins it open until Escape, a second press, a press outside, or focus leaving. Use it next to labels, values, and metrics for permission notes, metric definitions, and field help. Its value over hand-composing Icon inside Tooltip is the pre-wired accessible trigger: a real button with an aria-label, Tab-reachable, tooltip on hover AND focus AND tap, and Escape dismissal. It follows the toggletip pattern: the button reports `aria-expanded="true"` while the help is pinned, and a screen reader hears the help once when it pins.',
     bestPractices: [
       {
         guidance: true,
@@ -115,6 +138,7 @@ export const docsZh = {
     },
   ],
   usage: {
+    anatomy,
     description:
       'An info icon that reveals help: a small "i" button. Hover and keyboard focus preview the help, and a click, tap, Enter, or Space pins it open until Escape, a second press, a press outside, or focus leaving. Use it next to labels, values, and metrics for permission notes, metric definitions, and field help.',
     bestPractices: [
@@ -153,7 +177,7 @@ export const docsDense = {
     'Inline info-icon help affordance: accessible "i" button trigger pre-wired into a Tooltip.',
   usage: {
     description:
-      'A small "i" button: hover and keyboard focus preview the help; a click, tap, Enter, or Space pins it open. Use next to labels, values, and metrics for permission notes, metric definitions, and field help. Pre-wired accessible trigger: real button, aria-label, Tab-reachable, tooltip on hover AND focus AND tap, Escape dismissal.',
+      'A small "i" button: hover and keyboard focus preview the help; a click, tap, Enter, or Space pins it open. Use next to labels, values, and metrics for permission notes, metric definitions, and field help. Pre-wired accessible trigger: real button, aria-label, Tab-reachable, tooltip on hover AND focus AND tap, Escape dismissal. Toggletip pattern: aria-expanded="true" while pinned; the help is announced once when it pins.',
     bestPractices: [
       {
         guidance: true,

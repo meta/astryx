@@ -155,7 +155,13 @@ async function docsRead(topic, section, options = {}) {
       // A namespace answers a section read from the one guide below it that
       // has the section (spec:AST-046 FR6). A typed doc is one read.
       if (found.node.kind === 'namespace') {
-        return namespaceSection(found.tree, found.node, section, options);
+        return namespaceSection(
+          found.catalog,
+          found.tree,
+          found.node,
+          section,
+          options,
+        );
       }
       throw new AstryxError(
         `"${found.node.route}" has no sections. Read it whole: ${formatCliCommand(`docs ${found.node.route}`)}.`,

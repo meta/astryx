@@ -40,6 +40,32 @@ function Trap({children}: {children: React.ReactNode}) {
   );
 }
 
+function InnerRegion() {
+  const {containerRef} = useFocusTrap<HTMLDivElement>({isActive: true});
+  return (
+    <div ref={containerRef} data-testid="inner-region">
+      <button type="button" data-testid="inner-first">
+        Inner first
+      </button>
+      <button type="button" data-testid="inner-last">
+        Inner last
+      </button>
+    </div>
+  );
+}
+
+function OuterRegion({showInner}: {showInner: boolean}) {
+  const {containerRef} = useFocusTrap<HTMLDivElement>({isActive: true});
+  return (
+    <div ref={containerRef} data-testid="outer-region">
+      <button type="button" data-testid="outer-first">
+        Outer first
+      </button>
+      {showInner && <InnerRegion />}
+    </div>
+  );
+}
+
 function EscapeTrap({
   isActive,
   onEscape,
@@ -296,6 +322,95 @@ describe('useFocusTrap tabbable model (infra-8)', () => {
     expect(screen.getByTestId('first')).toHaveFocus();
   });
 
+  it('leaves controls inside a closed dialog out of the Tab cycle', () => {
+    render(
+      <Trap>
+        <button type="button" data-testid="first">
+          First
+        </button>
+        <button type="button" data-testid="last">
+          Last
+        </button>
+        <dialog>
+          <button type="button" data-testid="hidden">
+            In a closed sheet
+          </button>
+        </dialog>
+      </Trap>,
+    );
+    const last = screen.getByTestId('last');
+    last.focus();
+
+    expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+    expect(screen.getByTestId('first')).toHaveFocus();
+  });
+
+  it('keeps controls inside a popover-open dialog in the Tab cycle', () => {
+    // A Popover opened inside a non-modal sheet: the sheet's <dialog> is shown
+    // with showPopover(), which never sets `open`.
+    render(
+      <dialog data-testid="sheet">
+        <Trap>
+          <button type="button" data-testid="first">
+            First
+          </button>
+          <button type="button" data-testid="second">
+            Second
+          </button>
+        </Trap>
+      </dialog>,
+    );
+    const sheet = screen.getByTestId('sheet');
+    const matches = vi
+      .spyOn(sheet, 'matches')
+      .mockImplementation((selector: string) => selector === ':popover-open');
+    const first = screen.getByTestId('first');
+    first.focus();
+
+    // First is not the last Tab stop, so the trap leaves the press to the
+    // browser instead of cancelling it for want of tabbable controls.
+    expect(fireEvent.keyDown(first, {key: 'Tab'})).toBe(true);
+    const second = screen.getByTestId('second');
+    second.focus();
+    expect(fireEvent.keyDown(second, {key: 'Tab'})).toBe(false);
+    expect(first).toHaveFocus();
+    matches.mockRestore();
+  });
+
+  it('lets the innermost region answer Tab when regions nest at the end', () => {
+    // A region (a Popover, say) opened at the end of an active region (an open
+    // Dialog): its last control is also the outer region's last Tab stop.
+    const {rerender} = render(<OuterRegion showInner={false} />);
+    rerender(<OuterRegion showInner />);
+    const innerLast = screen.getByTestId('inner-last');
+    innerLast.focus();
+
+    expect(fireEvent.keyDown(innerLast, {key: 'Tab'})).toBe(false);
+    expect(screen.getByTestId('inner-first')).toHaveFocus();
+  });
+
+  it('leaves Tab to an open dialog nested inside the trap', () => {
+    render(
+      <Trap>
+        <button type="button" data-testid="outer">
+          Outer
+        </button>
+        <dialog open>
+          <button type="button" data-testid="inner-last">
+            Continue
+          </button>
+        </dialog>
+      </Trap>,
+    );
+    const innerLast = screen.getByTestId('inner-last');
+    innerLast.focus();
+
+    // The nested dialog is its own focus context; the outer region does not
+    // cancel the press or pull focus to its own first control.
+    expect(fireEvent.keyDown(innerLast, {key: 'Tab'})).toBe(true);
+    expect(innerLast).toHaveFocus();
+  });
+
   it('pulls focus back in when a Tab from inside leaves the trap', () => {
     render(
       <Trap>
@@ -332,6 +447,103 @@ describe('useFocusTrap tabbable model (infra-8)', () => {
     outside.focus();
 
     expect(fireEvent.keyDown(outside, {key: 'Tab'})).toBe(true);
+  });
+
+  describe('a Tab that content inside has already handled', () => {
+    // Content that walks its own Tab stops, such as a menu with a footer,
+    // moves focus and cancels the default. When the React root is the
+    // document (a Next.js App Router app), React's listener and the trap's
+    // listener share that node, so stopPropagation does not keep the press
+    // from the trap. A document listener added before the trap stands in for
+    // React's root listener here.
+    let removeContentHandler: (() => void) | null = null;
+
+    function handleTabInContent(move: (event: KeyboardEvent) => void) {
+      const listener = (event: KeyboardEvent) => {
+        if (event.key === 'Tab') {
+          event.preventDefault();
+          event.stopPropagation();
+          move(event);
+        }
+      };
+      document.addEventListener('keydown', listener);
+      removeContentHandler = () =>
+        document.removeEventListener('keydown', listener);
+    }
+
+    afterEach(() => {
+      removeContentHandler?.();
+      removeContentHandler = null;
+    });
+
+    function renderThreeControls() {
+      render(
+        <Trap>
+          <button type="button" data-testid="first">
+            First
+          </button>
+          <button type="button" data-testid="middle">
+            Middle
+          </button>
+          <button type="button" data-testid="last">
+            Last
+          </button>
+        </Trap>,
+      );
+      return {
+        first: screen.getByTestId('first'),
+        middle: screen.getByTestId('middle'),
+        last: screen.getByTestId('last'),
+      };
+    }
+
+    it('still wraps a Tab nothing handled, at either end', () => {
+      const {first, last} = renderThreeControls();
+      last.focus();
+
+      expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+      expect(first).toHaveFocus();
+
+      expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(
+        false,
+      );
+      expect(last).toHaveFocus();
+    });
+
+    it('keeps focus where the content moved it on the last control', () => {
+      handleTabInContent(() => screen.getByTestId('last').focus());
+      const {middle, last} = renderThreeControls();
+      middle.focus();
+
+      fireEvent.keyDown(middle, {key: 'Tab'});
+
+      expect(last).toHaveFocus();
+    });
+
+    it('keeps focus where the content moved it on the first control by Shift+Tab', () => {
+      handleTabInContent(() => screen.getByTestId('first').focus());
+      const {first, middle} = renderThreeControls();
+      middle.focus();
+
+      fireEvent.keyDown(middle, {key: 'Tab', shiftKey: true});
+
+      expect(first).toHaveFocus();
+    });
+
+    it('does not pull in focus that moves outside after the handled press', () => {
+      handleTabInContent(() => screen.getByTestId('middle').focus());
+      const {first, middle} = renderThreeControls();
+      first.focus();
+      fireEvent.keyDown(first, {key: 'Tab'});
+      expect(middle).toHaveFocus();
+
+      // No Tab carried focus out, so a later move outside (a click on the
+      // page) is not an escape to redirect.
+      const outside = screen.getByTestId('outside');
+      outside.focus();
+
+      expect(outside).toHaveFocus();
+    });
   });
 });
 
@@ -631,5 +843,173 @@ describe('useFocusTrap in a second document', () => {
       createPortal(<RestoreFixture isActive={false} />, secondDocument.body),
     );
     expect(prev).toHaveFocus();
+  });
+});
+
+// A same-name native radio group is one Tab stop: its checked radio, or its
+// first when none is checked. Medium is checked and is neither first nor last.
+function SizeRadios({name}: {name: string}) {
+  return (
+    <fieldset>
+      <legend>Size</legend>
+      <input type="radio" name={name} value="s" aria-label="Small" />
+      <input
+        type="radio"
+        name={name}
+        value="m"
+        aria-label="Medium"
+        defaultChecked
+      />
+      <input type="radio" name={name} value="l" aria-label="Large" />
+    </fieldset>
+  );
+}
+
+function expectRadioGroupEndsTheCycle() {
+  const medium = screen.getByRole('radio', {name: 'Medium', hidden: true});
+  const first = screen.getByRole('button', {name: 'First', hidden: true});
+  medium.focus();
+  expect(fireEvent.keyDown(medium, {key: 'Tab'})).toBe(false);
+  expect(first).toHaveFocus();
+  expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(medium).toHaveFocus();
+}
+
+function expectRadioGroupStartsTheCycle() {
+  const medium = screen.getByRole('radio', {name: 'Medium', hidden: true});
+  const last = screen.getByRole('button', {name: 'Last', hidden: true});
+  medium.focus();
+  expect(fireEvent.keyDown(medium, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(last).toHaveFocus();
+  expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+  expect(medium).toHaveFocus();
+}
+
+describe('useFocusTrap radio-group Tab stops', () => {
+  it("ends the cycle at a trailing group's checked radio", () => {
+    render(
+      <Trap>
+        <button type="button">First</button>
+        <SizeRadios name="size" />
+      </Trap>,
+    );
+    expectRadioGroupEndsTheCycle();
+  });
+
+  it("starts the cycle at a leading group's checked radio", () => {
+    render(
+      <Trap>
+        <SizeRadios name="size" />
+        <button type="button">Last</button>
+      </Trap>,
+    );
+    expectRadioGroupStartsTheCycle();
+  });
+
+  it("uses a group's first radio when none is checked", () => {
+    render(
+      <Trap>
+        <button type="button">First</button>
+        <fieldset>
+          <legend>Plan</legend>
+          <input type="radio" name="plan" value="a" aria-label="Basic" />
+          <input type="radio" name="plan" value="b" aria-label="Pro" />
+        </fieldset>
+      </Trap>,
+    );
+    const basic = screen.getByRole('radio', {name: 'Basic'});
+    basic.focus();
+    expect(fireEvent.keyDown(basic, {key: 'Tab'})).toBe(false);
+    expect(screen.getByRole('button', {name: 'First'})).toHaveFocus();
+  });
+
+  it("wraps Shift+Tab onto an unchecked trailing group's last radio", () => {
+    render(
+      <Trap>
+        <button type="button">First</button>
+        <fieldset>
+          <legend>Plan</legend>
+          <input type="radio" name="plan" value="a" aria-label="Basic" />
+          <input type="radio" name="plan" value="b" aria-label="Pro" />
+        </fieldset>
+      </Trap>,
+    );
+    const first = screen.getByRole('button', {name: 'First'});
+    first.focus();
+    // Entering a group with nothing checked backward lands on its last radio,
+    // as the browser does.
+    expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+    expect(screen.getByRole('radio', {name: 'Pro'})).toHaveFocus();
+  });
+
+  it('keeps a checked radio at its own place when a control sits between the radios', () => {
+    // A RadioList whose first option's description holds a link builds this
+    // shape: the checked radio, not the link, is the region's last stop.
+    render(
+      <Trap>
+        <button type="button">First</button>
+        <input type="radio" name="tier" aria-label="Basic" />
+        <button type="button">Basic details</button>
+        <input type="radio" name="tier" aria-label="Pro" defaultChecked />
+      </Trap>,
+    );
+    const pro = screen.getByRole('radio', {name: 'Pro'});
+    const details = screen.getByRole('button', {name: 'Basic details'});
+    pro.focus();
+    expect(fireEvent.keyDown(pro, {key: 'Tab'})).toBe(false);
+    expect(screen.getByRole('button', {name: 'First'})).toHaveFocus();
+    // From the control between the radios, Tab goes on to the checked radio.
+    details.focus();
+    expect(fireEvent.keyDown(details, {key: 'Tab'})).toBe(true);
+  });
+
+  it('keeps every radio of an unchecked group split by a control a stop', () => {
+    render(
+      <Trap>
+        <button type="button">First</button>
+        <input type="radio" name="tier" aria-label="Basic" />
+        <button type="button">Basic details</button>
+        <input type="radio" name="tier" aria-label="Pro" />
+      </Trap>,
+    );
+    const details = screen.getByRole('button', {name: 'Basic details'});
+    details.focus();
+    // Pro is still ahead of the control, so Tab is left to the browser.
+    expect(fireEvent.keyDown(details, {key: 'Tab'})).toBe(true);
+    const pro = screen.getByRole('radio', {name: 'Pro'});
+    pro.focus();
+    expect(fireEvent.keyDown(pro, {key: 'Tab'})).toBe(false);
+    expect(screen.getByRole('button', {name: 'First'})).toHaveFocus();
+  });
+
+  it('keeps each unnamed radio its own Tab stop', () => {
+    render(
+      <Trap>
+        <button type="button">First</button>
+        <input type="radio" aria-label="One" defaultChecked />
+        <input type="radio" aria-label="Two" />
+      </Trap>,
+    );
+    const one = screen.getByRole('radio', {name: 'One'});
+    one.focus();
+    // "Two" is still ahead, so Tab is left to the browser.
+    expect(fireEvent.keyDown(one, {key: 'Tab'})).toBe(true);
+  });
+
+  it('treats same-name radios in different forms as different groups', () => {
+    render(
+      <Trap>
+        <button type="button">First</button>
+        <form aria-label="A">
+          <input type="radio" name="x" aria-label="A1" defaultChecked />
+        </form>
+        <form aria-label="B">
+          <input type="radio" name="x" aria-label="B1" defaultChecked />
+        </form>
+      </Trap>,
+    );
+    const a1 = screen.getByRole('radio', {name: 'A1'});
+    a1.focus();
+    expect(fireEvent.keyDown(a1, {key: 'Tab'})).toBe(true);
   });
 });

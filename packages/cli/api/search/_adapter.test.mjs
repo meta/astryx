@@ -4,7 +4,8 @@
  * @file Tests for search's adapter: a long-running caller reuses the gathered
  * candidates while their inputs are unchanged (gatherCandidatesReused), shares
  * a gather that is still running, and gathers again when an input changes or
- * for another folder or `type`.
+ * for another folder or `type`. The lexical ranker (searchCore) ranks from the
+ * same reused gather.
  *
  * Whether inputs changed is read-record's answer (tested in
  * read-record.test.mjs). Other tests running at the same time change shared
@@ -18,8 +19,11 @@ import {afterAll, beforeAll, describe, it, expect, vi} from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {Project} from '../../foundation/config/project.mjs';
 import * as readRecord from '../../foundation/fs/read-record.mjs';
 import {gatherCandidates, gatherCandidatesReused} from './_adapter.mjs';
+import {searchCore} from './search.mjs';
 
 vi.mock('../../foundation/fs/read-record.mjs', async original => {
   const real = /** @type {typeof readRecord} */ (await original());
@@ -28,6 +32,12 @@ vi.mock('../../foundation/fs/read-record.mjs', async original => {
 const unchangedSince = vi.mocked(readRecord.unchangedSince);
 
 const SLOW = 60_000;
+
+/** The repository root: Core's source is there, so every domain gathers. */
+const REPO = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../../..',
+);
 
 /** A folder with only a package.json: a docs search there reads the CLI's docs. */
 function scratchProject() {
@@ -217,6 +227,26 @@ describe('gatherCandidatesReused', () => {
       } finally {
         fs.rmSync(dir, {recursive: true, force: true});
         fs.rmSync(pkg, {recursive: true, force: true});
+      }
+    },
+    SLOW,
+  );
+});
+
+describe('searchCore', () => {
+  it(
+    'ranks from the reused gather: a second query in the same folder gathers nothing again',
+    async () => {
+      const first = await searchCore('Button', {cwd: REPO});
+      const load = vi.spyOn(Project, 'load');
+      try {
+        unchangedSince.mockReturnValueOnce(true);
+        const second = await searchCore('Button', {cwd: REPO});
+        // A gather loads the project for each domain; the reused one, none.
+        expect(load).not.toHaveBeenCalled();
+        expect(second).toEqual(first);
+      } finally {
+        load.mockRestore();
       }
     },
     SLOW,

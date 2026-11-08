@@ -624,9 +624,11 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
     });
 
     it('names the commit a named run tested', async () => {
+      // The run's event commit differs from the commit it names, as when a
+      // dispatch races a merge.
       const calls = await run({
         runs: [check(20, {head_sha: sha})],
-        units: [unitAt(20)],
+        units: [unitAt(20, {head_sha: 'e'.repeat(40)})],
         issue: {number: 42, title, user: bot},
       });
       expect(calls.comments[0].body).toContain(

@@ -203,6 +203,7 @@ function holdNodeDocument(
  * tracker of its own for modality.
  */
 export function useInteractionModalityTracking(): InteractionModalityTracking {
+  // Syncs the document's interaction-modality tracking with this mount.
   useEffect(() => trackInteractionModality(), []);
   const nodeRef = useRef<Element | null>(null);
   const holdRef = useRef<{release: (() => void) | null}>({release: null});
@@ -236,7 +237,10 @@ export function useInteractionModalityTracking(): InteractionModalityTracking {
 export function useInteractionModalityTrackingFor(
   elementRef: RefObject<Element | null>,
 ): () => InteractionModality {
+  // Syncs the document's interaction-modality tracking with this mount.
   useEffect(() => trackInteractionModality(), []);
+  // Syncs modality tracking in the element's second document, such as an iframe
+  // or a Picture-in-Picture window.
   useEffect(() => {
     const ownerDocument = elementRef.current?.ownerDocument;
     if (

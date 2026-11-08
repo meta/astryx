@@ -14,12 +14,14 @@
  * SYNC: When a module is added, export it here and describe it in README.md.
  */
 
+export * from './brightness';
 export * from './busy';
 export * from './curves';
 export * from './frames';
 export * from './freeze';
 export * from './math';
 export * from './output';
+export * from './pointer';
 export * from './scripts';
 export * from './story';
 export * from './storyboard';

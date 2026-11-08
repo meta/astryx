@@ -342,6 +342,37 @@ export const Disabled: Story = {
   ),
 };
 
+/**
+ * Each row state on one interactive row: rest, highlighted (the active row of
+ * a menu or a picker), selected, disabled, and selected while disabled. The
+ * row reflects each state on its `item` theme target.
+ */
+export const States: Story = {
+  render: () => (
+    <Stack gap={0}>
+      {(
+        [
+          ['Rest', {}],
+          ['Highlighted', {isHighlighted: true}],
+          ['Selected', {isSelected: true}],
+          ['Disabled', {isDisabled: true}],
+          ['Selected and disabled', {isSelected: true, isDisabled: true}],
+        ] as const
+      ).map(([label, state]) => (
+        <Item
+          key={label}
+          {...state}
+          startContent={<Icon icon={DocumentIcon} size="sm" />}
+          label={label}
+          description="Edited 2 hours ago"
+          endContent={<Badge label="Draft" />}
+          onClick={() => {}}
+        />
+      ))}
+    </Stack>
+  ),
+};
+
 /** Top-aligned layout for multi-line content. */
 export const AlignStart: Story = {
   render: () => (

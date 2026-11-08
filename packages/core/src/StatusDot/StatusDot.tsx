@@ -79,16 +79,16 @@ const styles = stylex.create({
  *
  * Each variant sets both the plate colour and an ink colour: a user-supplied
  * `icon` paints from `currentColor`, so plate and ink can never drift out of
- * contrast (same contract as AvatarStatusDot). The ink is each plate's
- * dedicated `--color-on-*` pairing (the Badge precedent), not the surface
- * colour: on-warning is a fixed dark ink, which keeps an icon legible on the
- * yellow plate (~9.6:1) where a light surface ink lands near 2:1. Neutral has
- * no `--color-on-*` token; its mid-grey plate takes the surface ink.
+ * contrast (same contract as AvatarStatusDot). A status dot is a mark on the
+ * page, so its plate is the status icon role, which holds 3:1 or more against
+ * the page and card surfaces; the strong fill does not (the warning fill lands
+ * near 1.8:1 on a muted card). The ink is the surface colour, the same pair
+ * the other way round, as the neutral dot's is. Accent keeps its own pair.
  */
 const variants = stylex.create({
   success: {
-    backgroundColor: colorVars['--color-success'],
-    color: colorVars['--color-on-success'],
+    backgroundColor: colorVars['--color-icon-success'],
+    color: colorVars['--color-background-surface'],
     // Forced colors replace status fills with Canvas; this boundary keeps the
     // fill's shape visible (architecture:theme-tokens INV11).
     outlineWidth: {default: null, '@media (forced-colors: active)': '1px'},
@@ -100,8 +100,8 @@ const variants = stylex.create({
     outlineOffset: {default: null, '@media (forced-colors: active)': '-1px'},
   },
   warning: {
-    backgroundColor: colorVars['--color-warning'],
-    color: colorVars['--color-on-warning'],
+    backgroundColor: colorVars['--color-icon-warning'],
+    color: colorVars['--color-background-surface'],
     // Forced colors replace status fills with Canvas; this boundary keeps the
     // fill's shape visible (architecture:theme-tokens INV11).
     outlineWidth: {default: null, '@media (forced-colors: active)': '1px'},
@@ -113,8 +113,8 @@ const variants = stylex.create({
     outlineOffset: {default: null, '@media (forced-colors: active)': '-1px'},
   },
   error: {
-    backgroundColor: colorVars['--color-error'],
-    color: colorVars['--color-on-error'],
+    backgroundColor: colorVars['--color-icon-error'],
+    color: colorVars['--color-background-surface'],
     // Forced colors replace status fills with Canvas; this boundary keeps the
     // fill's shape visible (architecture:theme-tokens INV11).
     outlineWidth: {default: null, '@media (forced-colors: active)': '1px'},

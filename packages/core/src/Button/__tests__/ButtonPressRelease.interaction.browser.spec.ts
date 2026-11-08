@@ -1,0 +1,892 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * @file ButtonPressRelease.interaction.browser.spec.ts
+ * @input The built press feedback Buttons story, real touch input (Chromium
+ *   CDP / WebKit's input command), the interaction harness, and the theme's
+ *   exit motion tokens as the story's page resolves them
+ * @output Animation proofs for a control's press release on the
+ *   compositor: it follows the exit curve on the button's layer (sampled
+ *   frame by frame, both engines), keeps fading on
+ *   every frame while the main thread is blocked, starts at the first frame
+ *   after a busy one and keeps its layer until the strength reaches 0 (both
+ *   engines), and does no Layout or Paint; a second tap 70 ms after the
+ *   first leaves nothing pressed (both engines); under reduced motion it is
+ *   one opacity cross-fade of 200 ms or less on a coarse pointer; a
+ *   storyboard of the release, its trace asserted
+ * @position Interaction evidence for privateAttributes/press.stylex.ts
+ *   (`control`) as Button composes it; the tracking itself is
+ *   proven in ButtonPress.interaction.browser.spec.ts
+ */
+
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
+import {
+  FRAME_STARVATION_MS,
+  FrameStarvationError,
+  animationStoryboard,
+  armHold,
+  blockMainThread,
+  busyWindowProof,
+  castStoryboard,
+  compareCurve,
+  countBetween,
+  cubicBezier,
+  freezeTimers,
+  installTimerGate,
+  openStory,
+  releaseAnimations,
+  requireFrames,
+  seekAnimations,
+  startBusyControl,
+  startScreencast,
+  tap,
+  thawTimers,
+  timeline,
+  touchDriver,
+  traceRendering,
+  trackBrightness,
+  trackControl,
+  waitForRest,
+  watchAnimations,
+  withStorybook,
+  writeEvidence,
+  type ArmedHold,
+  type CastFrame,
+  type TouchDriver,
+} from '@astryxdesign/interaction-harness';
+
+const storybook = withStorybook(test);
+
+/**
+ * The press release's clock and curve: the theme's `--duration-exit` and
+ * `--ease-exit`, the same on a control's layer as on the strength. Read once
+ * from the Buttons story's page (see `beforeAll` below), so a theme change
+ * does not break the proofs.
+ */
+let RELEASE_MS = 0;
+let RELEASE_CURVE: [number, number, number, number] = [0, 0, 1, 1];
+let releaseEase: (t: number) => number = t => t;
+/** The layer's opacity t ms into the release: the strength, 1 → 0. */
+const expectedStrength = (t: number) =>
+  1 - releaseEase(Math.min(1, Math.max(0, t / RELEASE_MS)));
+/**
+ * The most a frame within one frame of the release's end may still show:
+ * the exit curve leaves fastest at its end, so that frame is not near 0.
+ */
+const ONE_FRAME_FROM_REST = () =>
+  expectedStrength(RELEASE_MS - 1000 / 60) + 0.01;
+/** A held press, then the lift: the release starts at the lift. */
+const HOLD_MS = 400;
+
+/** The longest of the animations running: the release, not a shorter one. */
+function longestOf<T extends {durationMs: number}>(
+  running: ReadonlyArray<T>,
+): T {
+  let longest = running[0];
+  for (const animation of running) {
+    if (animation.durationMs > longest.durationMs) {
+      longest = animation;
+    }
+  }
+  return longest;
+}
+
+const BUTTONS = 'core-press-feedback-touch--buttons';
+
+test.beforeAll(async ({browser}) => {
+  const page = await browser.newPage();
+  try {
+    await openStory(page, storybook(), BUTTONS);
+    const tokens = await page
+      .locator('#storybook-root [data-astryx-pressable]')
+      .first()
+      .evaluate(el => {
+        const style = getComputedStyle(el);
+        return {
+          time: style.getPropertyValue('--duration-exit').trim(),
+          curve: style.getPropertyValue('--ease-exit').trim(),
+        };
+      });
+    RELEASE_MS = tokens.time.endsWith('ms')
+      ? Number.parseFloat(tokens.time)
+      : Number.parseFloat(tokens.time) * 1000;
+    const points = (tokens.curve.match(/-?\d*\.?\d+/g) ?? []).map(Number);
+    expect(points, tokens.curve).toHaveLength(4);
+    RELEASE_CURVE = points as [number, number, number, number];
+    releaseEase = cubicBezier(...RELEASE_CURVE);
+  } finally {
+    await page.close();
+  }
+});
+
+interface Opened {
+  driver: TouchDriver;
+  surface: Locator;
+  center: {x: number; y: number};
+  /** A point on the surface's fill, clear of its label, CSS px. */
+  probe: {x: number; y: number};
+  /** What the page saw, on its own clock (performance.now()). */
+  log: () => Promise<LogEntry[]>;
+}
+
+type LogEntry = [kind: string, t: number, value: string | null];
+
+/** A press state and what the button's own layer computes in it. */
+interface LayerState {
+  press: string | null;
+  layer: string;
+  isolation: string;
+}
+
+async function openSurface(
+  page: Page,
+  story: string,
+  surface: (page: Page) => Locator,
+  probeAt: (box: {width: number; height: number}) => {
+    x: number;
+    y: number;
+  } = box => ({
+    x: box.width - 6,
+    y: box.height / 2,
+  }),
+): Promise<Opened> {
+  await openStory(page, storybook(), story);
+  const driver = await touchDriver(page);
+  const element = surface(page);
+  await expect(element).toBeVisible();
+  const box = await element.boundingBox();
+  if (box == null) {
+    throw new Error(`${story}: the surface has no box`);
+  }
+  const offset = probeAt(box);
+  await element.evaluate(el => {
+    const entries: LogEntry[] = [];
+    (window as unknown as {__press: LogEntry[]}).__press = entries;
+    for (const type of ['pointerdown', 'pointerup', 'pointercancel', 'click']) {
+      document.addEventListener(
+        type,
+        () => entries.push([type, performance.now(), null]),
+        true,
+      );
+    }
+    new MutationObserver(records => {
+      for (const record of records) {
+        entries.push([
+          'press',
+          performance.now(),
+          (record.target as Element).getAttribute('data-astryx-press'),
+        ]);
+      }
+    }).observe(el, {attributes: true, attributeFilter: ['data-astryx-press']});
+  });
+  return {
+    driver,
+    surface: element,
+    center: {x: box.x + box.width / 2, y: box.y + box.height / 2},
+    probe: {x: Math.round(box.x + offset.x), y: Math.round(box.y + offset.y)},
+    log: async () =>
+      page.evaluate(() => (window as unknown as {__press: LogEntry[]}).__press),
+  };
+}
+
+const secondaryButton = (page: Page) =>
+  page.getByRole('button', {name: 'Secondary', exact: true});
+/** Opacity of a surface's press layer, as the engine presents it. */
+const layerOpacity = async (surface: Locator, pseudo: '::before' | '::after') =>
+  surface.evaluate(
+    (el, which) => Number(getComputedStyle(el, which).opacity),
+    pseudo,
+  );
+
+for (const [name, story, locate] of [
+  ['a button', BUTTONS, secondaryButton],
+] as const) {
+  test(`under reduced motion the release of ${name} is one opacity cross-fade of 200 ms or less (design:reduced-motion DR2)`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    const opened = await openSurface(page, story, locate);
+    await installTimerGate(page);
+    // The page holds the release itself as soon as it runs. A hold the test
+    // sends after the lift reaches the page later on a busy machine, and the
+    // release can end first. Under reduced motion the press runs no
+    // animation, so the first one is the release.
+    const hold = await armHold(page, opened.surface, {
+      judges: {
+        target: opened.surface,
+        property: 'opacity',
+        pseudoElement: '::before',
+      },
+    });
+    await opened.driver.play(tap(opened.center, {holdMs: HOLD_MS}));
+    expect(await opened.surface.getAttribute('data-astryx-press')).toBe(
+      'fading',
+    );
+    await freezeTimers(page);
+    const held = await hold.held();
+    await releaseAnimations(page, {finish: true});
+    await thawTimers(page);
+    // One animation, of opacity alone, finished within 200 ms; nothing
+    // else on the surface (no transform, no size) animates.
+    expect(held, JSON.stringify(held)).toHaveLength(1);
+    const [release] = held;
+    expect(release.kind).toBe('CSSAnimation');
+    // A cross-fade, not a jump: the policy's 200 ms.
+    expect(release.durationMs).toBeGreaterThan(0);
+    expect(release.durationMs).toBeLessThanOrEqual(200);
+    const animated = new Set(
+      release.keyframes.flatMap(frame =>
+        Object.keys(frame).filter(
+          key =>
+            !['offset', 'computedOffset', 'easing', 'composite'].includes(key),
+        ),
+      ),
+    );
+    expect([...animated]).toEqual(['opacity']);
+  });
+}
+
+for (const [name, story, locate, pseudo] of [
+  ['a button', BUTTONS, secondaryButton, '::before'],
+] as const) {
+  test(`with a fine primary pointer, a finger’s release of ${name} is the strength’s release it always had (the desktop rule)`, async ({
+    browser,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'a touch screen beside a fine primary pointer is emulated through CDP',
+    );
+    // `spec:AST-017` FR59/DEC-25: touch work leaves a fine pointer's behavior as it
+    // is. A laptop's touch screen: no touch emulation, so the primary pointer
+    // stays fine, and the touches arrive through CDP.
+    const context = await browser.newContext({
+      viewport: {width: 402, height: 714},
+      hasTouch: false,
+      isMobile: false,
+    });
+    const page = await context.newPage();
+    try {
+      const opened = await openSurface(page, story, locate);
+      expect(
+        await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+      ).toBe(false);
+      await installTimerGate(page);
+      // The page holds the release itself as soon as it runs. A hold the
+      // test sends after the lift reaches the page later on a busy machine,
+      // and the release can end first. The press runs the scale, and the
+      // release runs the strength's animation alone. So the hold is armed
+      // once the press is at rest, before the lift.
+      let hold: ArmedHold | undefined;
+      await opened.driver.play(tap(opened.center, {holdMs: HOLD_MS}), {
+        onEvent: async step => {
+          if (step.type === 'touchStart') {
+            await waitForRest(opened.surface);
+            hold = await armHold(page, opened.surface, {
+              judges: {
+                target: opened.surface,
+                property: '--astryx-press-alpha',
+              },
+            });
+          }
+        },
+      });
+      expect(await opened.surface.getAttribute('data-astryx-press')).toBe(
+        'fading',
+      );
+      await freezeTimers(page);
+      if (hold == null) {
+        throw new Error('the press started no hold');
+      }
+      const held = (await hold.held()).filter(
+        animation => animation.kind === 'CSSAnimation',
+      );
+      const layer = await opened.surface.evaluate(
+        el => getComputedStyle(el, '::before').content,
+      );
+      await releaseAnimations(page, {finish: true});
+      await thawTimers(page);
+      // One release, of the strength on the element (not a layer's
+      // opacity), on the exit clock and curve.
+      expect(held, JSON.stringify(held)).toHaveLength(1);
+      const [release] = held;
+      const animated = new Set(
+        release.keyframes.flatMap(frame =>
+          Object.keys(frame).filter(
+            key =>
+              !['offset', 'computedOffset', 'easing', 'composite'].includes(
+                key,
+              ),
+          ),
+        ),
+      );
+      expect(animated.has('opacity'), JSON.stringify(release)).toBe(false);
+      expect(release.durationMs).toBe(RELEASE_MS);
+      // A CSS animation's curve rides on its keyframes, not its timing.
+      expect(
+        (String(release.keyframes[0].easing).match(/-?\d*\.?\d+/g) ?? []).map(
+          Number,
+        ),
+      ).toEqual(RELEASE_CURVE);
+      expect(['none', 'normal']).toContain(layer);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test(`the release of ${name} follows the release curve, sampled frame by frame`, async ({
+    page,
+  }, testInfo) => {
+    const opened = await openSurface(page, story, locate);
+    if (pseudo === '::before') {
+      // At rest the button has no layer: it exists only while a press is on
+      // or fading.
+      expect(['none', 'normal']).toContain(
+        await opened.surface.evaluate(
+          el => getComputedStyle(el, '::before').content,
+        ),
+      );
+    }
+    // Gate the page's timers before the press, so the release timer (which
+    // removes the attribute when the clock runs out) holds while seeking.
+    await installTimerGate(page);
+    // The page holds the release itself as soon as it runs. A hold the test
+    // sends after the lift reaches the page later on a busy machine, and the
+    // release can end first. The press runs one animation (the scale) and the
+    // release runs two (the scale back and the layer's fade), so the hold
+    // waits for two.
+    const hold = await armHold(page, opened.surface, {
+      count: 2,
+      judges: {
+        target: opened.surface,
+        property: 'opacity',
+        pseudoElement: pseudo,
+      },
+    });
+    await opened.driver.play(tap(opened.center, {holdMs: HOLD_MS}));
+    expect(await opened.surface.getAttribute('data-astryx-press')).toBe(
+      'fading',
+    );
+    await freezeTimers(page);
+    const held = await hold.held();
+    const release = held.find(
+      a => a.kind === 'CSSAnimation' && a.durationMs === RELEASE_MS,
+    );
+    expect(release, JSON.stringify(held)).toBeDefined();
+    const samples: {t: number; value: number}[] = [];
+    for (const t of timeline(RELEASE_MS)) {
+      await seekAnimations(page, t);
+      samples.push({t, value: await layerOpacity(opened.surface, pseudo)});
+    }
+    await releaseAnimations(page, {finish: true});
+    await thawTimers(page);
+    const comparison = compareCurve(samples, expectedStrength, 0.005);
+    await writeEvidence(
+      `curves/${story}-press-release`,
+      {
+        [`${testInfo.project.name}.json`]: JSON.stringify(
+          {
+            releaseMs: RELEASE_MS,
+            curve: RELEASE_CURVE,
+            held,
+            samples,
+            comparison,
+          },
+          null,
+          2,
+        ),
+      },
+      testInfo,
+    );
+    expect(samples[0].value).toBeCloseTo(1, 2);
+    expect(
+      comparison.maxError,
+      JSON.stringify(comparison.worst),
+    ).toBeLessThanOrEqual(0.005);
+    await expect
+      .poll(async () => opened.surface.getAttribute('data-astryx-press'))
+      .toBeNull();
+  });
+}
+
+interface PixelFrame {
+  readonly t: number;
+  /** Mean of the RGB channels at the probe point, 0–255. */
+  readonly value: number;
+}
+
+/** The probe point's value in every frame, decoded in a scratch page. */
+test('with a fine primary pointer, a mouse press on a button adds no layer and no isolation (the desktop rule)', async ({
+  browser,
+}) => {
+  // `spec:AST-017` FR59/DEC-25: touch work leaves a fine pointer's behavior as it
+  // is. A desktop: no touch, a mouse.
+  const context = await browser.newContext({
+    viewport: {width: 402, height: 714},
+    hasTouch: false,
+    isMobile: false,
+  });
+  const page = await context.newPage();
+  try {
+    await openStory(page, storybook(), BUTTONS);
+    const surface = secondaryButton(page);
+    await expect(surface).toBeVisible();
+    expect(
+      await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+    ).toBe(false);
+    const read = async () =>
+      surface.evaluate(el => ({
+        layer: getComputedStyle(el, '::before').content,
+        isolation: getComputedStyle(el).isolation,
+        press: el.getAttribute('data-astryx-press'),
+      }));
+    const box = await surface.boundingBox();
+    if (box == null) {
+      throw new Error('the button has no box');
+    }
+    const states = [await read()];
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    states.push(await read());
+    await page.mouse.up();
+    states.push(await read());
+    for (const state of states) {
+      expect(['none', 'normal'], JSON.stringify(state)).toContain(state.layer);
+      expect(state.isolation).toBe('auto');
+      // A mouse's press is `:active`'s: the controller writes nothing.
+      // Button's record lists the controller's mouse and pen press (FR15)
+      // as not implemented; this pins today's behavior, not the record.
+      expect(state.press).toBeNull();
+    }
+  } finally {
+    await context.close();
+  }
+});
+
+test('with a coarse primary pointer, a button has no press layer and no isolation at rest, only while its press is on or fading', async ({
+  page,
+}) => {
+  const opened = await openSurface(page, BUTTONS, secondaryButton);
+  expect(
+    await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+  ).toBe(true);
+  // Every state the press passes through, read as the attribute changes. At
+  // rest the button is no stacking context and has no `::before` of its own,
+  // so a caller's `::before` keeps its styles.
+  await opened.surface.evaluate(el => {
+    const states: LayerState[] = [];
+    const read = () => {
+      states.push({
+        press: el.getAttribute('data-astryx-press'),
+        layer: getComputedStyle(el, '::before').content,
+        isolation: getComputedStyle(el).isolation,
+      });
+    };
+    read();
+    new MutationObserver(read).observe(el, {
+      attributes: true,
+      attributeFilter: ['data-astryx-press'],
+    });
+    (window as unknown as {__layer: LayerState[]}).__layer = states;
+  });
+  await opened.driver.play(tap(opened.center, {holdMs: HOLD_MS}));
+  await expect
+    .poll(async () => opened.surface.getAttribute('data-astryx-press'))
+    .toBeNull();
+  const states = await page.evaluate(
+    () => (window as unknown as {__layer: LayerState[]}).__layer,
+  );
+  const log = JSON.stringify(states);
+  const pressed = states.filter(state => state.press != null);
+  expect(
+    pressed.map(state => state.press),
+    log,
+  ).toEqual(['on', 'fading']);
+  for (const state of pressed) {
+    expect(state.layer, log).toBe('""');
+    expect(state.isolation, log).toBe('isolate');
+  }
+  const rest = states.filter(state => state.press == null);
+  // Before the press and after its release.
+  expect(rest.length, log).toBe(2);
+  for (const state of rest) {
+    expect(['none', 'normal'], log).toContain(state.layer);
+    expect(state.isolation, log).toBe('auto');
+  }
+});
+
+async function samplePixel(
+  page: Page,
+  frames: ReadonlyArray<CastFrame>,
+  probe: {x: number; y: number},
+): Promise<PixelFrame[]> {
+  const scratch = await page.context().newPage();
+  try {
+    const out: PixelFrame[] = [];
+    for (let i = 0; i < frames.length; i += 12) {
+      const batch = frames.slice(i, i + 12);
+      const values = await scratch.evaluate(
+        async ({items, at}) => {
+          const results: number[] = [];
+          for (const item of items) {
+            const bitmap = await createImageBitmap(
+              await (
+                await fetch(`data:image/${item.format};base64,${item.data}`)
+              ).blob(),
+            );
+            const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+            const context = canvas.getContext('2d');
+            if (context == null) {
+              throw new Error('no 2d context');
+            }
+            context.drawImage(bitmap, 0, 0);
+            const scale = bitmap.width / item.viewportWidth;
+            const px = context.getImageData(
+              Math.round(at.x * scale),
+              Math.round(at.y * scale),
+              1,
+              1,
+            ).data;
+            results.push((px[0] + px[1] + px[2]) / 3);
+          }
+          return results;
+        },
+        {
+          items: batch.map(f => ({
+            data: f.data,
+            format: f.format,
+            viewportWidth: f.viewportWidth,
+          })),
+          at: probe,
+        },
+      );
+      values.forEach((value, k) => out.push({t: batch[k].t, value}));
+    }
+    return out;
+  } finally {
+    await scratch.close();
+  }
+}
+
+test('the release of a button keeps fading on every frame while the main thread is blocked', async ({
+  page,
+  browserName,
+}, testInfo) => {
+  test.skip(
+    browserName !== 'chromium',
+    'screencast frame evidence is Chromium-only in Playwright; the iOS simulator covers Safari',
+  );
+  const opened = await openSurface(page, BUTTONS, secondaryButton);
+  // A long exit duration on the button, so the block spans enough delivered
+  // frames to judge whatever the theme's own value is.
+  await opened.surface.evaluate(el =>
+    (el as HTMLElement).style.setProperty('--duration-exit', '400ms'),
+  );
+  // The harness's busy-window control: a box the compositor moves, in the
+  // same screencast. The cast's frames are judged against what the compositor
+  // presented, not against a frame rate.
+  const busyControl = await startBusyControl(page);
+  const cast = await startScreencast(page);
+  const watch = await watchAnimations(opened.surface);
+  // A 1 s block, as spec:AST-094 FR5's verification names, covers the
+  // whole release. The page starts it itself once the layer's fade has run a
+  // frame. A block the test sends after the lift reaches the page later on a
+  // busy machine, and most of the release can be over first.
+  const blocked = blockMainThread(page, 1000, {
+    during: opened.surface,
+    pseudoElement: '::before',
+  });
+  await opened.driver.play(tap(opened.center, {holdMs: HOLD_MS}));
+  const block = await blocked;
+  // The release is the longest animation: the `::before` opacity fade, not
+  // the 125 ms press-scale transition that starts with it.
+  const running = await watch.started({minProgressMs: 16});
+  const release = longestOf(running);
+  await page.waitForTimeout(150);
+  const frames = await cast.stop();
+  await busyControl.remove();
+  const pixels = await samplePixel(page, frames, opened.probe);
+  const rest = pixels[0].value;
+  const pressed = Math.min(
+    ...pixels.filter(p => p.t < release.from).map(p => p.value),
+  );
+  const strength = (v: number) => (rest - v) / (rest - pressed);
+  const end = Math.min(block.to, release.to) - 10;
+  const during = pixels.filter(p => p.t > block.from && p.t <= end);
+  const strengths = during.map(p => ({
+    t: +(p.t - block.from).toFixed(1),
+    strength: +strength(p.value).toFixed(3),
+  }));
+  // The frames on which the compositor presented a new position of the
+  // control: each is a frame that the release had to show.
+  const controlFrames = await trackControl(
+    page,
+    frames.filter(f => f.t >= block.from - 100 && f.t <= end + 100),
+  );
+  const presented = controlFrames.filter((frame, i) => {
+    const before = controlFrames[i - 1]?.box;
+    return frame.box != null && before != null && frame.box.x !== before.x;
+  });
+  await writeEvidence(
+    'busy-main-thread/button-press-release',
+    {
+      [`${testInfo.project.name}.json`]: JSON.stringify(
+        {block, release, rest, pressed, strengths},
+        null,
+        1,
+      ),
+    },
+    testInfo,
+  );
+  const film = await castStoryboard(page, frames, {
+    name: 'button-press-release-busy-main-thread',
+    zero: block.from,
+    from: release.from - 40,
+    to: release.to + 40,
+    columns: 6,
+    cellScale: 0.45,
+    data: t => {
+      const p = pixels.find(f => f.t === t);
+      return {strength: p == null ? -1 : +strength(p.value).toFixed(3)};
+    },
+  });
+  await film.write(testInfo, {block, release});
+  expect(rest - pressed).toBeGreaterThan(10);
+  // A page starved of frames fails here by name, not on a bare count.
+  requireFrames(presented, {
+    min: 4,
+    during: 'the release faded under the block',
+    where: frame => frame.t > block.from && frame.t <= end,
+  });
+  // The release's colour in a 4 px square at the probe, each frame: a scalar
+  // on x. The square stays clear of the button's edge as the press scale
+  // moves it. Chromium's PNG cast shows the colour in whole levels, so its
+  // step is one level.
+  const tracked = (
+    await trackBrightness(page, frames, {
+      x: opened.probe.x - 2,
+      y: opened.probe.y - 2,
+      size: 4,
+    })
+  ).map(frame => ({...frame, step: {x: 1, y: 1}}));
+  // The fade moves about a level a frame, so a frame can show no change. The
+  // proof reads such runs against the cast's own step, and stops judging 2
+  // steps from rest. It starts at 80 ms of fade. The exit curve's first
+  // frames move under one level, which a frame by frame read cannot tell
+  // from a freeze. The block and the checks above still span the whole
+  // release.
+  const proof = busyWindowProof(
+    tracked,
+    {
+      ...block,
+      from: Math.max(block.from, release.from + 80),
+      to: Math.min(block.to, release.to),
+    },
+    {axis: 'x', settledWithinSteps: 2, control: controlFrames},
+  );
+  // A stall of the control is the machine's: the compositor or the recorder
+  // starved. Such a run fails here by name, with the numbers.
+  if (
+    proof.control != null &&
+    proof.control.longestStallMs > FRAME_STARVATION_MS
+  ) {
+    throw new FrameStarvationError({
+      during: 'the release faded under the block',
+      frames: proof.control.moved,
+      min: 4,
+      longestGapMs: proof.control.longestStallMs,
+    });
+  }
+  for (let i = 1; i < strengths.length; i++) {
+    expect(strengths[i].strength).toBeLessThanOrEqual(
+      strengths[i - 1].strength + 0.01,
+    );
+  }
+  const last = strengths.at(-1);
+  expect(last).toBeDefined();
+  expect(strengths[0].strength).toBeGreaterThan((last?.strength ?? 1) + 0.2);
+  // On every frame the control moved on, the release moved too, and it
+  // stalled no longer than the control. A fade that jumps, or that freezes,
+  // fails here.
+  testInfo.annotations.push({type: 'busy window', description: proof.summary});
+  expect(proof.verdict.failures, proof.summary).toEqual([]);
+});
+
+test('after a busy first frame, the release starts at that frame and keeps a button’s layer until its strength reaches 0', async ({
+  page,
+  browserName,
+}) => {
+  const opened = await openSurface(page, BUTTONS, secondaryButton);
+  // A release longer than the 150 ms block, so in both engines it is still
+  // running when the block ends, whatever the theme's own exit duration is.
+  const releaseMs = 400;
+  await opened.surface.evaluate(
+    (el, ms) =>
+      (el as HTMLElement).style.setProperty('--duration-exit', `${ms}ms`),
+    releaseMs,
+  );
+  const strengthAt = (t: number) =>
+    1 - releaseEase(Math.min(1, Math.max(0, t / releaseMs)));
+  // When the press controller writes the release, 150 ms of script hold the
+  // main thread before the first frame, so the release animation starts
+  // late. Each frame after that records whether the release is still
+  // written and the layer's strength, until the release is gone.
+  await opened.surface.evaluate(el => {
+    type Frame = [press: string | null, strength: number];
+    (window as unknown as {__release: Promise<Frame[]>}).__release =
+      new Promise(resolve => {
+        const frames: Frame[] = [];
+        const observer = new MutationObserver(() => {
+          if (el.getAttribute('data-astryx-press') !== 'fading') {
+            return;
+          }
+          observer.disconnect();
+          const until = performance.now() + 150;
+          while (performance.now() < until) {
+            // Busy: the main thread is held.
+          }
+          const sample = () => {
+            const press = el.getAttribute('data-astryx-press');
+            frames.push([
+              press,
+              Number(getComputedStyle(el, '::before').opacity),
+            ]);
+            if (press !== 'fading') {
+              resolve(frames);
+              return;
+            }
+            requestAnimationFrame(sample);
+          };
+          requestAnimationFrame(sample);
+        });
+        observer.observe(el, {attributeFilter: ['data-astryx-press']});
+      });
+  });
+  await opened.driver.play(tap(opened.center, {holdMs: HOLD_MS}));
+  const frames = await page.evaluate(
+    async () =>
+      (
+        window as unknown as {
+          __release: Promise<[string | null, number][]>;
+        }
+      ).__release,
+  );
+  const fading = frames.filter(([press]) => press === 'fading');
+  // Chromium starts the release when it first styles it, after the block:
+  // the first frame shows it at most two frames in. WebKit starts it at the
+  // time the busy script began, so its first frame shows it 150 ms in; the
+  // checks below still hold there.
+  if (browserName !== 'webkit') {
+    expect(fading[0]?.[1], JSON.stringify(frames)).toBeGreaterThan(
+      strengthAt((2 * 1000) / 60),
+    );
+  }
+  // It ran on frames after the block, and its last frame still written
+  // shows the layer at rest: the release went when its animation ended, not
+  // partway through it.
+  expect(fading.length, JSON.stringify(frames)).toBeGreaterThan(2);
+  expect(fading.at(-1)?.[1], JSON.stringify(frames)).toBeLessThanOrEqual(
+    strengthAt(releaseMs - 1000 / 60) + 0.01,
+  );
+});
+
+test('a second tap 70 ms after the first leaves nothing pressed', async ({
+  page,
+}) => {
+  const opened = await openSurface(page, BUTTONS, secondaryButton);
+  // Two quick taps, the second while the first one's release still runs:
+  // the second press is lifted too, so its release runs and the press goes.
+  await page.touchscreen.tap(opened.center.x, opened.center.y);
+  await page.waitForTimeout(70);
+  await page.touchscreen.tap(opened.center.x, opened.center.y);
+  await expect
+    .poll(async () => opened.surface.getAttribute('data-astryx-press'), {
+      timeout: 2000,
+    })
+    .toBeNull();
+});
+
+test('the release of a button does no Layout or Paint per frame', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'rendering traces are Chromium-only');
+  const opened = await openSurface(page, BUTTONS, secondaryButton);
+  let release = {from: 0, to: 0};
+  const trace = await traceRendering(page, async () => {
+    const watch = await watchAnimations(opened.surface);
+    await opened.driver.play(tap(opened.center, {holdMs: HOLD_MS}));
+    // The release is the longest animation running: the `::before`
+    // opacity fade, not the 125 ms press-scale transition that starts with it.
+    const running = await watch.started();
+    release = longestOf(running);
+    await page.waitForTimeout(RELEASE_MS + 100);
+  });
+  // The steady part of the release: its first and last frames may commit.
+  const during = countBetween(trace, release.from + 30, release.to - 30);
+  expect(during.Layout ?? 0, JSON.stringify(during)).toBe(0);
+  expect(during.Paint ?? 0, JSON.stringify(during)).toBe(0);
+});
+
+test(
+  'storyboard: a button released after a hold',
+  {tag: '@storyboard'},
+  async ({page}, testInfo) => {
+    const opened = await openSurface(page, BUTTONS, secondaryButton);
+    await installTimerGate(page);
+    const box = await opened.surface.boundingBox();
+    if (box == null) {
+      throw new Error('no button');
+    }
+    const clip = {
+      x: Math.max(0, box.x - 16),
+      y: Math.max(0, box.y - 16),
+      width: box.width + 32,
+      height: box.height + 32,
+    };
+    // The page holds the release itself as soon as it runs. A hold the test
+    // sends after the lift reaches the page later on a busy machine, and the
+    // release can end first. The press runs one animation (the scale) and the
+    // release runs two (the scale back and the layer's fade), so the hold
+    // waits for two.
+    const hold = await armHold(page, opened.surface, {
+      count: 2,
+      judges: {
+        target: opened.surface,
+        property: 'opacity',
+        pseudoElement: '::before',
+      },
+    });
+    await opened.driver.play(tap(opened.center, {holdMs: HOLD_MS}));
+    await freezeTimers(page);
+    const {storyboard} = await animationStoryboard(page, {
+      name: 'button-press-release',
+      clip,
+      held: await hold.held(),
+      times: timeline(RELEASE_MS),
+      measure: async () => ({
+        opacity: await layerOpacity(opened.surface, '::before'),
+        state: await opened.surface.getAttribute('data-astryx-press'),
+      }),
+      columns: 8,
+      cellScale: 0.6,
+    });
+    await releaseAnimations(page, {finish: true});
+    await thawTimers(page);
+    await storyboard.write(testInfo);
+    const opacities = storyboard.frames.map(f => f.data.opacity as number);
+    expect(opacities[0]).toBeCloseTo(1, 2);
+    expect(opacities.at(-1)).toBeLessThanOrEqual(ONE_FRAME_FROM_REST());
+    for (let i = 1; i < opacities.length; i++) {
+      expect(opacities[i]).toBeLessThanOrEqual(opacities[i - 1] + 1e-6);
+    }
+    storyboard.frames.forEach(f =>
+      expect(f.data.opacity as number).toBeCloseTo(expectedStrength(f.t), 2),
+    );
+  },
+);

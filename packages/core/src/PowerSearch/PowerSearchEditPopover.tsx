@@ -60,6 +60,12 @@ const styles = stylex.create({
   chipRow: {
     flexWrap: {default: 'nowrap', [CHIP_ROW_COLLAPSE]: 'wrap'},
   },
+  // A date-and-time control is two inputs wide. Beside the selectors it
+  // shrinks the field selector to nothing. The row wraps, so the control
+  // gets its own line.
+  chipRowWrapped: {
+    flexWrap: 'wrap',
+  },
   footer: {
     padding: spacingVars['--spacing-3'],
     paddingTop: 0,
@@ -79,6 +85,9 @@ const styles = stylex.create({
   valueEditor: {
     flexGrow: 2,
     minWidth: 0,
+  },
+  valueEditorFullWidth: {
+    flexBasis: '100%',
   },
   // Nested editor styles
   nestedRootLabel: {
@@ -118,6 +127,7 @@ export interface PowerSearchEditPopoverProps {
   saveButtonLabel?: string;
   /** Max suggestions in string and entity value typeaheads. */
   maxMenuItems?: number;
+  timezoneID?: string;
   /** Whether the filter is read-only. */
   isReadOnly?: boolean;
 }
@@ -261,6 +271,7 @@ interface NestedSubFilterRowProps {
   subFilter: EditablePartialFilter;
   onChange: (subFilter: EditablePartialFilter) => void;
   maxMenuItems?: number;
+  timezoneID?: string;
   isReadOnly: boolean;
 }
 
@@ -269,6 +280,7 @@ function NestedSubFilterRow({
   subFilter,
   onChange,
   maxMenuItems,
+  timezoneID,
   isReadOnly,
 }: NestedSubFilterRowProps) {
   const t = useComponentTranslator();
@@ -373,6 +385,7 @@ function NestedSubFilterRow({
             onChange={handleValueChange}
             config={config}
             maxMenuItems={maxMenuItems}
+            timezoneID={timezoneID}
             isDisabled={isReadOnly}
           />
         </div>
@@ -392,6 +405,7 @@ export interface NestedEditorProps {
   onOperatorChange: (operatorKey: string) => void;
   onPartialFilterChange: (filter: PartialFilter) => void;
   maxMenuItems?: number;
+  timezoneID?: string;
   isReadOnly: boolean;
   /** Styles for the editor's tree root (the sheet makes it a query container). */
   xstyle?: stylex.StyleXStyles;
@@ -418,6 +432,7 @@ export function NestedEditor({
   onOperatorChange,
   onPartialFilterChange,
   maxMenuItems,
+  timezoneID,
   isReadOnly,
   xstyle,
   hasRootOperatorPicker = true,
@@ -542,6 +557,7 @@ export function NestedEditor({
               subFilter={sf}
               onChange={updated => handleUpdate(itemPath, updated)}
               maxMenuItems={maxMenuItems}
+              timezoneID={timezoneID}
               isReadOnly={isReadOnly}
             />
           ),
@@ -569,6 +585,7 @@ export function NestedEditor({
             subFilter={sf}
             onChange={updated => handleUpdate(itemPath, updated)}
             maxMenuItems={maxMenuItems}
+            timezoneID={timezoneID}
             isReadOnly={isReadOnly}
           />
         ),
@@ -651,7 +668,10 @@ function valueEditorKey(filter: {field: string; operator?: string}): string {
 
 // Keyed on field + operator, so this also mounts on a field switch, not just
 // when the popover opens; the focus handoff below runs for both.
-function ValueEditorCell(props: PowerSearchValueEditorProps) {
+function ValueEditorCell({
+  isFullWidth = false,
+  ...props
+}: PowerSearchValueEditorProps & {isFullWidth?: boolean}) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -669,7 +689,12 @@ function ValueEditorCell(props: PowerSearchValueEditorProps) {
   }, []);
 
   return (
-    <div ref={ref} {...stylex.props(styles.valueEditor)}>
+    <div
+      ref={ref}
+      {...stylex.props(
+        styles.valueEditor,
+        isFullWidth && styles.valueEditorFullWidth,
+      )}>
       <PowerSearchValueEditor {...props} />
     </div>
   );
@@ -687,6 +712,7 @@ export function PowerSearchEditPopover({
   onCancel,
   saveButtonLabel: saveButtonLabelFromProps,
   maxMenuItems,
+  timezoneID,
   isReadOnly = false,
 }: PowerSearchEditPopoverProps) {
   const t = useComponentTranslator();
@@ -840,6 +866,9 @@ export function PowerSearchEditPopover({
 
   const operatorValue: OperatorValue | undefined = currentOperator?.value;
   const isEmptyType = operatorValue?.type === 'empty';
+  const hasDateTimeValue =
+    operatorValue?.type === 'date_absolute' &&
+    operatorValue.isDateOnly === false;
   const isNestedType = operatorValue?.type === 'nested';
 
   const showOperatorSelector = operatorOptions.length > 1 || !isEmptyType;
@@ -870,6 +899,7 @@ export function PowerSearchEditPopover({
               onOperatorChange={handleOperatorChange}
               onPartialFilterChange={setPartialFilter}
               maxMenuItems={maxMenuItems}
+              timezoneID={timezoneID}
               isReadOnly={isReadOnly}
             />
           </VStack>
@@ -910,7 +940,9 @@ export function PowerSearchEditPopover({
   return (
     <div {...stylex.props(styles.container)} onKeyDown={handleKeyDown}>
       <div {...stylex.props(styles.content)}>
-        <HStack gap={2} xstyle={styles.chipRow}>
+        <HStack
+          gap={2}
+          xstyle={[styles.chipRow, hasDateTimeValue && styles.chipRowWrapped]}>
           <div {...stylex.props(styles.fieldSelector)}>
             <Selector
               label={t('@astryx.powersearch.editor.field')}
@@ -938,12 +970,14 @@ export function PowerSearchEditPopover({
           {operatorValue && !isEmptyType && (
             <ValueEditorCell
               key={valueEditorKey(partialFilter)}
+              isFullWidth={hasDateTimeValue}
               operatorValue={operatorValue}
               filterValue={partialFilter.value}
               onChange={handleValueChange}
               onEnter={handleSave}
               config={config}
               maxMenuItems={maxMenuItems}
+              timezoneID={timezoneID}
               isDisabled={isReadOnly}
             />
           )}

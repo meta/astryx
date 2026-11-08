@@ -138,8 +138,7 @@ export interface HoverCardOptions {
   /**
    * Controlled open state. When provided, overrides the hover trigger:
    * - `true`: force-show the hover card (hover/focus hide is suppressed)
-   * - `false`: hide the hover card and keep hover from opening it; focus on
-   *   the trigger still opens it
+   * - `false`: hide the hover card and keep hover and focus from opening it
    * - `undefined`: uncontrolled — hover/focus triggers manage visibility
    *
    * A controlled hover card still takes Escape when it is the top-most layer,
@@ -177,7 +176,8 @@ export interface HoverCardReturn {
 
   /**
    * Ref for the positioning anchor element.
-   * Injects anchorName style for CSS anchor positioning.
+   * While the layer is shown, and until its exit animation ends, the trigger
+   * carries the layer's CSS anchor name.
    */
   positionRef: RefCallback<HTMLElement>;
 
@@ -191,6 +191,7 @@ export interface HoverCardReturn {
   /**
    * The CSS anchor name to use for positioning.
    * Use this when you need to set anchorName manually (e.g., display:contents wrapper).
+   * Set it only while the layer is shown or its exit animation runs.
    */
   anchorId: string;
 
@@ -401,7 +402,12 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
   // Tap-to-open on touch; on a mouse this does nothing and hover still rules.
   const handlePointerDown = useCallback(
     (event: PointerEvent) => {
-      handleTouchPointerDown(event);
+      // A pen in range starts the hover show before it lands. Left pending,
+      // that show opens the card during the press. The tap then closes it.
+      if (handleTouchPointerDown(event) && showTimeoutRef.current) {
+        clearTimeout(showTimeoutRef.current);
+        showTimeoutRef.current = null;
+      }
     },
     [handleTouchPointerDown],
   );
@@ -426,6 +432,10 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
         isEscapeDismissingRef.current = false;
         return;
       }
+      // The caller owns a controlled `false`, so no focus opens the card.
+      if (isOpen === false) {
+        return;
+      }
       clearTimeouts();
       showLayer();
     },
@@ -433,6 +443,7 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
       focusGate,
       focusTrigger,
       isEnabled,
+      isOpen,
       isTouchInteraction,
       clearTimeouts,
       showLayer,
@@ -585,7 +596,7 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
     [layerRef, interactionRef],
   );
 
-  // Cleanup on unmount
+  // Releases the hover-card timers on unmount.
   useEffect(() => {
     return () => {
       clearTimeouts();
@@ -600,7 +611,8 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
     // eslint-disable-next-line @eslint-react/exhaustive-deps -- intentionally only on mount
   }, []);
 
-  // Controlled open state — overrides hover/focus triggers
+  // Syncs the layer with the controlled `isOpen`. A close moves focus back to
+  // the trigger when the card holds it.
   useEffect(() => {
     if (isOpen === undefined) {
       return;
