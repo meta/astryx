@@ -216,6 +216,18 @@ for (const item of cases) {
       await row('List').click();
       await expect(row('List')).toHaveAttribute('aria-checked', 'true');
     } else if (item.interaction === 'disabled-hover') {
+      // The disabled row is inert: a click, Enter and Space neither check it
+      // nor reach the consumer's handler (the `checked` and
+      // `consumerHandlers` checks). ArrowUp then moves focus off it.
+      const box = await row('Archive').boundingBox();
+      if (box == null) {
+        throw new Error('the disabled row has no box');
+      }
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      await row('Archive').focus();
+      await page.keyboard.press('Enter');
+      await page.keyboard.press(' ');
+      await page.keyboard.press('ArrowUp');
       await row('Archive').hover();
     }
     await settle(page);
@@ -458,9 +470,10 @@ for (const item of cases) {
       rows: observed.rows.length === 5,
       checked:
         checked.length === 1 && checked[0].startsWith(expectedChecked(item)),
+      // A disabled row stays in the roving order, so the arrow keys reach it.
       disabledRow:
         observed.rows[4]?.disabled === 'true' &&
-        observed.rows[4]?.tabIndex === null,
+        observed.rows[4]?.tabIndex === '-1',
       activeRow:
         active === undefined
           ? true

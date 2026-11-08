@@ -1698,6 +1698,7 @@ const styles = stylex.create({
     fontSize: typeScaleVars['--text-body-size'],
     fontWeight: typeScaleVars['--text-body-weight'],
     height: 'auto',
+    minHeight: 0,
     lineHeight: typeScaleVars['--text-body-leading'],
     paddingBlock: 0,
     paddingInline: 0,

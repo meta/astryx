@@ -1291,8 +1291,8 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   const tracked = await trackMarker(page, castFrames);
   const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
   const proof = busyWindowProof(tracked, block, {
-    axis: 'height',
-    settledWithinSteps: ZOOM_SETTLED_STEPS,
+    axis: ZOOM_AXIS,
+    settledWithin: ZOOM_SETTLED_PX,
     control,
   });
   await writeEvidence(
@@ -1333,6 +1333,12 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   // animation presents fewer frames there, the control's too. The photo keeps
   // pace with the control, and a main-thread animation would not.
   expect(proof.verdict.failures).toEqual([]);
+  // The verdict, spelled out. The top edge takes a new position on every
+  // frame the control moves, with none excused as under a cast step. The
+  // control moves on at least the verdict's floor of four frames.
+  expect(proof.control?.movedWith).toBe(proof.control?.moved);
+  expect(proof.control?.belowStep).toBe(0);
+  expect(proof.control?.moved).toBeGreaterThanOrEqual(4);
   expect(proof.monotonic).toBe(true);
 });
 
@@ -1348,13 +1354,24 @@ const ZOOM_TEMPO = 5;
 const ZOOM_BLOCK_MS = 2500;
 
 /**
- * Where the busy zoom proof stops judging, in cast steps from the zoom's
- * end. Near the end, each 60 Hz frame moves the spring about 0.042 of what
- * remains (2π / 2.5 s, critically damped). So within about 23.9 cast steps
- * of its end a frame moves less than one step, and the cast shows plateaus
- * there.
+ * The photo's coordinate the busy zoom proof judges: its top edge. The zoom
+ * grows the photo at both edges, and the cast reads each edge in whole
+ * steps. So near the end the height can show no change for a frame while it
+ * grows almost two steps a frame. The proof's step rules expect one edge's
+ * travel, so the proof judges the top edge.
  */
-const ZOOM_SETTLED_STEPS = 24;
+const ZOOM_AXIS = 'y';
+
+/**
+ * Where the busy zoom proof stops judging, in px of the top edge from its
+ * end. There the edge's move between two cast frames falls under one cast
+ * step. Near the end, each 60 Hz frame moves the spring about 0.042 of what
+ * remains (2π / 2.5 s, critically damped). Chromium casts every frame in 1 px
+ * steps, so its moves fall under a step 23.9 px from the end. Blocked, WebKit
+ * casts a frame only every 116 ms or more, seven 60 Hz frames, in 2 px steps.
+ * Its moves stay over a step until about 8 px from the end, inside 24 px.
+ */
+const ZOOM_SETTLED_PX = 24;
 
 /** Each animated property's curve length, and whether it still runs. */
 function curvesByProperty(runs: ReadonlyArray<ActiveAnimation>) {
@@ -1430,8 +1447,8 @@ for (const pace of ['main-thread', 'frozen'] as const) {
     let failures: ReadonlyArray<string>;
     try {
       failures = busyWindowProof(tracked, block, {
-        axis: 'height',
-        settledWithinSteps: ZOOM_SETTLED_STEPS,
+        axis: ZOOM_AXIS,
+        settledWithin: ZOOM_SETTLED_PX,
         control,
       }).verdict.failures;
     } catch (error) {
