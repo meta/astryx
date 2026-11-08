@@ -677,6 +677,24 @@ describe('Lightbox', () => {
       }
     });
 
+    it('withholds autoplay while the viewer is mounted closed', () => {
+      const media = {src: '/clip.mp4', alt: 'A clip', type: 'video' as const};
+      const view = (isOpen: boolean) => (
+        <Lightbox
+          isOpen={isOpen}
+          onOpenChange={() => {}}
+          media={media}
+          hasAutoPlay
+        />
+      );
+      const {rerender} = render(view(false));
+      // The element stays mounted. The attribute would start playback once
+      // the file loads, after the close effect has already run.
+      expect(document.querySelector('video')).not.toHaveAttribute('autoplay');
+      rerender(view(true));
+      expect(document.querySelector('video')).toHaveAttribute('autoplay');
+    });
+
     it("keeps a paged-away video's element and time once the viewer pages back", () => {
       const items = [
         {src: '/clip.mp4', alt: 'A clip', type: 'video' as const},

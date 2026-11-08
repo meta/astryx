@@ -623,9 +623,8 @@ export function Lightbox({
   // A video left on another page stops: the pager keeps the neighbours
   // mounted, and a playing one would go on, with its sound, off screen. With
   // `hasAutoPlay`, the video paged to plays again, as a newly shown one does.
-  // Closing keeps those elements mounted in the closed dialog, so a playing
-  // video stops then too. Opening again plays the current one when
-  // `hasAutoPlay` is set. A single video has no page element.
+  // The closed dialog keeps them mounted too, so closing stops a playing
+  // video. A single video has no page element.
   useEffect(() => {
     const container = containerRef.current;
     if (container == null) {
@@ -1339,7 +1338,7 @@ export function Lightbox({
         src={src}
         aria-label={alt}
         controls
-        autoPlay={isCurrent && hasAutoPlay}
+        autoPlay={isOpen && isCurrent && hasAutoPlay}
         preload={isCurrent ? 'auto' : 'metadata'}
         {...stylex.props(styles.video)}
       />
