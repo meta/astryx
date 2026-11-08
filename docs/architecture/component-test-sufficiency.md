@@ -39,7 +39,8 @@ deciding_specs: []
       "INV6",
       "INV7",
       "INV10",
-      "INV11"
+      "INV11",
+      "INV12"
     ]
   }
 }
@@ -160,6 +161,13 @@ rows, or inventory entries.
   partition that existing evidence cannot detect at the correct layer. Otherwise
   the change cites existing evidence or uses the applicable non-test proof, such as
   typed documentation validation, source review, or rendered browser evidence.
+- **INV12 — Touch and scroll evidence uses the page's own scroll.** Evidence
+  and preview links for touch or scroll behavior (rubber-band, momentum,
+  keyboard reveal, browser chrome collapse, pull or swipe gestures) are taken on
+  an apps/sandbox page that scrolls the document, not in Storybook and not
+  inside an inner overflow container, unless the component under test is
+  itself a scroll container. The browser's own scroll physics are part of what
+  the evidence shows (DEC-1).
 
 ## Rational partitioning
 
@@ -338,11 +346,21 @@ it does not require unrelated full-suite expansion.
 
 ## Deciding specs
 
-None. `spec:AST-029` continues to own audit backfill, evidence receipts, mode, and
+`spec:AST-029` continues to own audit backfill, evidence receipts, mode, and
 Night Watch operation; it explicitly does not own the general component-test
 quality rubric. Applicable current component, module, family, architecture, system,
 design, and theme contracts plus objective standards remain the sources of expected
 behavior.
+
+### DEC-1 — Touch and scroll evidence uses the page's own scroll
+
+**Reference:** `architecture:component-test-sufficiency/DEC-1`
+**Decider:** `cixzhang`, `2026-11-07`
+
+Touch and scroll evidence is taken on an apps/sandbox page that scrolls the
+document (INV12). A page embedded in a viewer's chrome or an inner scroller
+changes iOS bounce, momentum and URL-bar behavior, so it cannot show what a
+real app does.
 
 ## Verification
 
@@ -356,4 +374,5 @@ behavior.
 | INV7              | Same-partition duplicates, justified multi-layer evidence, exhaustive Cartesian, and broad defensive matrix fixtures | Distinct required evidence layers are collapsed as duplicates, or volume without a named distinct risk is credited as sufficiency                                                                                                                                                                                                         |
 | INV8              | Verification-map relationship fixtures                                                                               | Every audit row mechanically becomes a test, evidence cannot be traced to authority, or one test cannot satisfy inseparable requirements                                                                                                                                                                                                  |
 | INV9              | Pull-request and audit-run red/green trace fixtures                                                                  | Audit-authored remediation lacks a failing pre-change case, production remediation precedes the new case, or horizontal test generation replaces one observable vertical slice                                                                                                                                                            |
+| INV12             | Review check: a touch or scroll pull request's evidence names an apps/sandbox route whose document scrolls           | Touch or scroll evidence comes from Storybook, an embedded viewer, or an inner overflow container while the component under test is not itself a scroll container                                                                                                                                                                         |
 | B1–B16 migration  | Rubric-version, section-ownership, and Behavior-slot migration fixture                                               | Generic B rules remain product authority, B12 is reactivated or reused, test evidence is double-scored in Behavior and Testing, B16 remains a Behavior check, unrelated IDs are renumbered, the Behavior weight disappears, or scoring changes without a minor-version bump                                                               |
