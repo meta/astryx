@@ -3419,6 +3419,27 @@ describe('Tokenizer sheet presentation: search cancellation', () => {
     expect(cancel).toHaveBeenCalledTimes(1);
   });
 
+  it('cancels the source that started a request, not a replacement source', async () => {
+    const first = pendingSource();
+    const second = pendingSource();
+    const {rerender} = renderSheet(first.source);
+    fireEvent.click(openTrigger());
+    const search = await screen.findByLabelText('Search Tags');
+    rerender(
+      <Tokenizer
+        label="Tags"
+        searchSource={second.source}
+        value={[]}
+        onChange={() => {}}
+        debounceMs={0}
+        presentation="bottom-sheet"
+      />,
+    );
+    fireEvent.change(search, {target: {value: 'en'}});
+    expect(first.cancel).toHaveBeenCalledTimes(1);
+    expect(second.cancel).not.toHaveBeenCalled();
+  });
+
   it('does not cancel when no work is pending', async () => {
     const cancel = vi.fn();
     const {unmount} = renderSheet({...source, cancel});
