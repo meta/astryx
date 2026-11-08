@@ -9,8 +9,9 @@
  * @output The on-screen keyboard module: measureKeyboardHeight,
  *   isKeyboardMeasurable, hasVirtualKeyboard, subscribeKeyboardHeight,
  *   getKeyboardHeight, getKeyboardPan, isTextEntryControl,
- *   findTextEntryControl, refuseFocusReveal and watchRevealPan. It also keeps
- *   whether a window's browser leaves a fixed dock covered (isDockLeftCovered)
+ *   findTextEntryControl, refuseFocusReveal, watchRevealPan and
+ *   subscribeViewportRest. It also keeps whether a window's browser leaves a
+ *   fixed dock covered (isDockLeftCovered)
  * @position Core's one source for the on-screen keyboard. It is internal to
  *   core and never exported from the package.
  *
@@ -511,6 +512,54 @@ export function refuseFocusReveal(
  */
 export function __focusTakeoverCallersForTest(doc: Document): number {
   return focusTakeovers.get(doc)?.callers.size ?? 0;
+}
+
+// One shared listener per window hears the visual viewport's scroll end, for
+// every caller. The first caller adds it, and the last removes it.
+const viewportRests = new WeakMap<
+  Window,
+  {stop: () => void; listeners: Set<() => void>}
+>();
+
+/**
+ * Calls `listener` when a scroll of `win`'s visual viewport comes to rest,
+ * such as the end of a pan's fling. A pan that moves no document scroller
+ * raises no document scroll end. Returns the unsubscribe function.
+ */
+export function subscribeViewportRest(
+  win: Window,
+  listener: () => void,
+): () => void {
+  let shared = viewportRests.get(win);
+  if (shared == null) {
+    const viewport = win.visualViewport;
+    if (viewport == null) {
+      return () => {};
+    }
+    const listeners = new Set<() => void>();
+    const onRest = () => {
+      for (const each of [...listeners]) {
+        each();
+      }
+    };
+    viewport.addEventListener('scrollend', onRest);
+    shared = {
+      stop: () => viewport.removeEventListener('scrollend', onRest),
+      listeners,
+    };
+    viewportRests.set(win, shared);
+  }
+  shared.listeners.add(listener);
+  return () => {
+    const current = viewportRests.get(win);
+    if (current == null || !current.listeners.delete(listener)) {
+      return;
+    }
+    if (current.listeners.size === 0) {
+      current.stop();
+      viewportRests.delete(win);
+    }
+  };
 }
 
 /** The caller's rules for watchRevealPan. */

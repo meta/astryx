@@ -38,6 +38,7 @@ import {
   refuseFocusReveal,
   subscribeDockReveal,
   subscribeKeyboardHeight,
+  subscribeViewportRest,
 } from '../keyboard/keyboardHeight';
 import {
   getKeyboardLayoutGuide,
@@ -391,31 +392,49 @@ export function useChatKeyboard({
     // so a ride claims the change first. Where the browser keeps the reveal,
     // a pan changes the lift too.
     let reportedHeight = getKeyboardHeight(win);
+    let reportedPan = getKeyboardPan(win);
     const unsubscribeHeight = subscribeKeyboardHeight(win, event => {
       if (event.type !== 'viewport') {
         return;
       }
       const changed = event.height !== reportedHeight;
+      const pan = getKeyboardPan(win);
+      const panned =
+        pan == null || reportedPan == null
+          ? pan !== reportedPan
+          : Math.abs(pan - reportedPan) >= 0.5;
       reportedHeight = event.height;
+      reportedPan = pan;
       if (leavesReveal && event.height > 0 && followsDockDeficit(win)) {
-        followPan(event.height);
+        // A report after the pan stopped moving: the pan is at rest.
+        if (!changed && !panned && panPendingRef.current) {
+          commit();
+        } else {
+          followPan(event.height);
+        }
       } else if (changed || leavesReveal) {
         commit();
       }
     });
-    // A scroll that comes to rest, or a lifted finger, hands a followed pan's
-    // lift to the layout.
-    const onRest = (event: Event) => {
-      const touches = (event as Partial<TouchEvent>).touches;
-      if (panPendingRef.current && !(touches != null && touches.length > 0)) {
+    // A scroll that comes to rest, the visual viewport's included, or a lifted
+    // finger hands a followed pan's lift to the layout.
+    const rest = () => {
+      if (panPendingRef.current) {
         commit();
+      }
+    };
+    const onTouchEnd = (event: Event) => {
+      const touches = (event as Partial<TouchEvent>).touches;
+      if (!(touches != null && touches.length > 0)) {
+        rest();
       }
     };
     const stopRest = leavesReveal
       ? [
-          subscribeInput(win, 'touchend', onRest),
-          subscribeInput(win, 'touchcancel', onRest),
-          subscribeInput(win, 'scrollend', onRest),
+          subscribeInput(win, 'touchend', onTouchEnd),
+          subscribeInput(win, 'touchcancel', onTouchEnd),
+          subscribeInput(win, 'scrollend', rest),
+          subscribeViewportRest(win, rest),
         ]
       : [];
     // Mounted under a keyboard that is already up: take its place at once.

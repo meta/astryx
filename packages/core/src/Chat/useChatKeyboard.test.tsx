@@ -919,6 +919,51 @@ describe('ChatLayout in a page that scrolls the document', () => {
     }
   });
 
+  it('lays out a followed pan once when a fling that pans only the visual viewport comes to rest, with no touch end', () => {
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 290);
+    wait(108);
+    pan(290);
+    act(() => {
+      document.dispatchEvent(touch('touchstart', [{x: 5, y: 300}]));
+    });
+    pan(200);
+    pan(100);
+    expect(dockOf(container).style.translate).toBe('0px -190px');
+    expect(layoutLift(dockOf(container))).toBe(0);
+    // The fling pans the visual viewport alone: no document scroll end, and
+    // the finger is still down.
+    act(() => {
+      viewport.dispatchEvent(new Event('scrollend'));
+    });
+    expect(layoutLift(dockOf(container))).toBe(190);
+    expect(dockOf(container).style.translate).toBe('');
+    // A later report with the pan unchanged lays out nothing more.
+    act(() => {
+      viewport.dispatchEvent(new Event('resize'));
+    });
+    expect(layoutLift(dockOf(container))).toBe(190);
+  });
+
+  it('lays out a followed pan at the first report after the pan stops moving', () => {
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 290);
+    wait(108);
+    pan(290);
+    act(() => {
+      document.dispatchEvent(touch('touchstart', [{x: 5, y: 300}]));
+    });
+    pan(150);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    expect(dockOf(container).style.translate).toBe('0px -140px');
+    // A report with the same pan and height, as a toolbar's resize raises.
+    act(() => {
+      viewport.dispatchEvent(new Event('resize'));
+    });
+    expect(layoutLift(dockOf(container))).toBe(140);
+    expect(dockOf(container).style.translate).toBe('');
+  });
+
   it('learns nothing from a composer show under a pinch zoom, whose pan is the reader\u2019s, and lifts the dock by the cover', () => {
     const {container} = renderDocumentLayout();
     viewport.scale = 2;

@@ -86,7 +86,9 @@ that times motion with it. Everything here is internal to
   viewport's height follows the pan, as in Safari on iOS, the dock holds for the
   rest of the show: the height and the pan then add up to the keyboard's cover
   of the initial containing block, which each report carries.
-  `getKeyboardPan(win)` gives the pan read with each report.
+  `getKeyboardPan(win)` gives the pan read with each report, and
+  `subscribeViewportRest(win, listener)` hears the visual viewport's scroll end
+  through one shared listener per window.
 - **Keyboard targets (`keyboardTarget.ts`):** a target keeps the focused field
   inside it above the keyboard, and registers so a field inside moves nothing
   itself (`registerKeyboardTarget`, `isInsideKeyboardTarget`).

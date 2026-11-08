@@ -34,6 +34,7 @@ import {
   measureKeyboardHeight,
   refuseFocusReveal,
   subscribeKeyboardHeight,
+  subscribeViewportRest,
   watchRevealPan,
   type KeyboardHeightEvent,
 } from './keyboardHeight';
@@ -965,6 +966,25 @@ describe('the browser\u2019s own reveal pan (FR4)', () => {
       'touchstart',
       'wheel',
     ]);
+  });
+});
+
+describe('the visual viewport\u2019s rest', () => {
+  it('shares one scroll-end listener on the visual viewport among its callers', () => {
+    const add = vi.spyOn(viewport, 'addEventListener');
+    const remove = vi.spyOn(viewport, 'removeEventListener');
+    const heard: string[] = [];
+    const stopFirst = subscribeViewportRest(window, () => heard.push('first'));
+    const stopSecond = subscribeViewportRest(window, () =>
+      heard.push('second'),
+    );
+    expect(add.mock.calls.map(([type]) => type)).toEqual(['scrollend']);
+    viewport.dispatchEvent(new Event('scrollend'));
+    expect(heard).toEqual(['first', 'second']);
+    stopFirst();
+    expect(remove).not.toHaveBeenCalled();
+    stopSecond();
+    expect(remove.mock.calls.map(([type]) => type)).toEqual(['scrollend']);
   });
 });
 
