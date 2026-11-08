@@ -225,8 +225,8 @@ importers:
         specifier: ^2.2.0
         version: 2.2.0(react@19.2.7)
       '@modelcontextprotocol/sdk':
-        specifier: ^1.30.0
-        version: 1.30.0(zod@4.4.3)
+        specifier: ^1.32.0
+        version: 1.32.2(zod@4.4.3)
       '@monaco-editor/react':
         specifier: ^4.8.0-rc.3
         version: 4.8.0-rc.3(monaco-editor@0.55.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -250,7 +250,7 @@ importers:
         version: 1.5.0
       mcp-handler:
         specifier: ^1.1.0
-        version: 1.1.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(next@16.3.6(@babel/core@7.29.7)(@playwright/test@1.61.1)(@types/node@25.9.4)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))
+        version: 1.1.0(@modelcontextprotocol/sdk@1.32.2(zod@4.4.3))(next@16.3.6(@babel/core@7.29.7)(@playwright/test@1.61.1)(@types/node@25.9.4)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))
       monaco-editor:
         specifier: ^0.55.1
         version: 0.55.1
@@ -2555,8 +2555,8 @@ packages:
       '@types/react': '>=16'
       react: '>=16'
 
-  '@modelcontextprotocol/sdk@1.30.0':
-    resolution: {integrity: sha512-xKd8OIzlqNzcqcNumGAa6g+PW2kjD5vrpcKOnfldAUPP3j7lnqMPwlTXQm8gF+UwH72z0lqaRbjr9hqGz0eITA==}
+  '@modelcontextprotocol/sdk@1.32.2':
+    resolution: {integrity: sha512-SWsVtH/0vULSQStoZ6xxH2K09Li8fXYTMC64ZeogCdpZ3XSi1eCPOByV1OpuJxuI3OcmHhosDWYyii07tpPsLw==}
     engines: {node: '>=18'}
     peerDependencies:
       '@cfworker/json-schema': ^4.1.1
@@ -8738,7 +8738,7 @@ snapshots:
       '@types/react': 19.2.17
       react: 19.2.7
 
-  '@modelcontextprotocol/sdk@1.30.0(zod@3.25.76)':
+  '@modelcontextprotocol/sdk@1.32.2(zod@3.25.76)':
     dependencies:
       '@hono/node-server': 2.1.0(hono@4.13.1)
       ajv: 8.20.0
@@ -8760,7 +8760,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@modelcontextprotocol/sdk@1.30.0(zod@4.4.3)':
+  '@modelcontextprotocol/sdk@1.32.2(zod@4.4.3)':
     dependencies:
       '@hono/node-server': 2.1.0(hono@4.13.1)
       ajv: 8.20.0
@@ -11918,9 +11918,9 @@ snapshots:
 
   math-intrinsics@1.1.0: {}
 
-  mcp-handler@1.1.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(next@16.3.6(@babel/core@7.29.7)(@playwright/test@1.61.1)(@types/node@25.9.4)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)):
+  mcp-handler@1.1.0(@modelcontextprotocol/sdk@1.32.2(zod@4.4.3))(next@16.3.6(@babel/core@7.29.7)(@playwright/test@1.61.1)(@types/node@25.9.4)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)):
     dependencies:
-      '@modelcontextprotocol/sdk': 1.30.0(zod@4.4.3)
+      '@modelcontextprotocol/sdk': 1.32.2(zod@4.4.3)
       chalk: 5.6.2
       commander: 11.1.0
       redis: 4.7.1
@@ -12661,7 +12661,7 @@ snapshots:
       '@babel/plugin-transform-typescript': 7.29.7(@babel/core@7.29.7)
       '@babel/preset-typescript': 7.29.7(@babel/core@7.29.7)
       '@dotenvx/dotenvx': 1.75.1
-      '@modelcontextprotocol/sdk': 1.30.0(zod@3.25.76)
+      '@modelcontextprotocol/sdk': 1.32.2(zod@3.25.76)
       '@types/validate-npm-package-name': 4.0.2
       browserslist: 4.28.4
       commander: 14.0.3
