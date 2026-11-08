@@ -308,6 +308,68 @@ describe('LineClamp', () => {
       expect(link).toHaveAttribute('inert');
     });
 
+    it('keeps a 0×0 focusable on a visible line reachable', () => {
+      const {rerender} = render(
+        <LineClamp maxLines={2} data-testid="clamp">
+          <label>
+            <input type="checkbox" data-testid="box" /> Notify me
+          </label>
+        </LineClamp>,
+      );
+      const container = screen.getByTestId('clamp');
+      const box = screen.getByTestId('box');
+      mockRects(
+        new Map([
+          [container, {top: 0, bottom: 40}],
+          [box, {top: 10, bottom: 10}], // 0×0, on the first line
+        ]),
+      );
+      vi.spyOn(Element.prototype, 'getClientRects').mockImplementation(
+        function (this: Element) {
+          return [this.getBoundingClientRect()] as unknown as DOMRectList;
+        },
+      );
+      rerender(
+        <LineClamp maxLines={2} data-testid="clamp">
+          <label>
+            <input type="checkbox" data-testid="box" /> Notify me
+          </label>
+        </LineClamp>,
+      );
+      expect(box).not.toHaveAttribute('inert');
+    });
+
+    it('leaves a display: contents focusable alone', () => {
+      const {rerender} = render(
+        <LineClamp maxLines={2} data-testid="clamp">
+          Some text{' '}
+          <span tabIndex={0} style={{display: 'contents'}} data-testid="wrap">
+            <a href="/more">Read more</a>
+          </span>
+        </LineClamp>,
+      );
+      const container = screen.getByTestId('clamp');
+      const wrap = screen.getByTestId('wrap');
+      const link = screen.getByText('Read more');
+      mockRects(
+        new Map([
+          [container, {top: 0, bottom: 40}],
+          [wrap, {top: 0, bottom: 0}], // no box of its own
+          [link, {top: 20, bottom: 36}],
+        ]),
+      );
+      rerender(
+        <LineClamp maxLines={2} data-testid="clamp">
+          Some text{' '}
+          <span tabIndex={0} style={{display: 'contents'}} data-testid="wrap">
+            <a href="/more">Read more</a>
+          </span>
+        </LineClamp>,
+      );
+      expect(wrap).not.toHaveAttribute('inert');
+      expect(link).not.toHaveAttribute('inert');
+    });
+
     it('hides a descendant a child re-enables past the fold after mount', async () => {
       // Only the late link is placed past the fold; everything else sits
       // above it. Enabling it changes an attribute only: no text change, no
