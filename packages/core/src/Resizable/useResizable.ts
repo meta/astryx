@@ -104,7 +104,11 @@ export interface ResizableConfig {
   defaultIsCollapsed?: boolean;
   /** Controlled collapse state. Pair with `onCollapseChange`. */
   isCollapsed?: boolean;
-  /** Called when collapse state changes (via drag or programmatic). */
+  /**
+   * Called once per collapse state change. A lift or a key step closes the
+   * region, and a drag or a key reopens it. Enter, a double-click,
+   * `collapse()`, `expand()` and `resize()` report too.
+   */
   onCollapseChange?: (isCollapsed: boolean) => void;
 }
 
@@ -134,14 +138,19 @@ export interface UseResizableSingleOptions {
    */
   defaultIsCollapsed?: boolean;
   /**
-   * Controlled collapse state. When set, the caller owns collapse:
-   * `collapse()`, `expand()` and a drag lifted past the collapse threshold
-   * report through `onCollapseChange` instead of changing state here.
+   * Controlled collapse state. When set, the caller owns collapse, and the
+   * hook reports instead of changing its state. `collapse()`, `expand()`, a
+   * lift or a key step past the collapse threshold, and a drag that reopens
+   * the region report through `onCollapseChange`.
    */
   isCollapsed?: boolean;
   /** Called when size changes during drag. */
   onSizeChange?: (size: number) => void;
-  /** Called when collapse state changes (via drag or programmatic). */
+  /**
+   * Called once per collapse state change. A lift or a key step closes the
+   * region, and a drag or a key reopens it. Enter, a double-click,
+   * `collapse()`, `expand()` and `resize()` report too.
+   */
   onCollapseChange?: (isCollapsed: boolean) => void;
 }
 
