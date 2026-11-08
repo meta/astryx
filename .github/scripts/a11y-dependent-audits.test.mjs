@@ -330,6 +330,10 @@ describe('the dependent-audits jobs', () => {
     // An undecided scope (a truncated diff) owes every audit; a decided
     // scope without its list stops.
     expect(run.run).toContain('changes=(--all)');
+    // Only a truncated file list asks for a split.
+    expect(run.env.TRUNCATED).toBe('${{ steps.scope.outputs.truncated }}');
+    expect(run.run).toContain('elif [ "$TRUNCATED" = true ]; then');
+    expect(run.run).toContain('changes=(--all --truncated)');
     expect(step(planJob, 'Require the changed-file list').if).toContain(
       "steps.scope.outputs.decided != 'false'",
     );
