@@ -368,10 +368,11 @@ export interface AnimatorOptions {
   /** Clock in ms on the document timeline's time base. */
   now?: () => number;
   /**
-   * Runs a callback in the next animation frame; `requestAnimationFrame` by
-   * default. A call from rest reads the start the browser gave it there.
+   * Runs a callback in the next animation frame, with the frame's timestamp;
+   * `requestAnimationFrame` by default. A call from rest reads the start the
+   * browser gave it there.
    */
-  requestFrame?: (callback: () => void) => void;
+  requestFrame?: (callback: (frame?: number) => void) => void;
 }
 
 /**
@@ -520,6 +521,11 @@ interface Segment {
   speed(t: number): number;
   /** Times (ms after the start) where the value jumps; `at` is right-continuous. */
   readonly jumps: ReadonlyArray<number>;
+  /**
+   * The curve a `play` call gave, which other calls in its task can share. A
+   * segment whose values move from that curve's has none.
+   */
+  readonly source?: MotionCurve;
   /** A Reduce Motion fade: an interruption finishes it instead of freezing it. */
   readonly isFade?: true;
   readonly owner: HandleState;
@@ -753,6 +759,92 @@ function markTask(time: number, clock: () => number): TaskMark {
   return openTask;
 }
 
+/** The first read of the time an animation frame runs, by its timestamp. */
+let frameRead: {readonly frame: number; readonly time: number} | null = null;
+
+/**
+ * The time the animation frame with timestamp `frame` runs, read once in
+ * that frame. Every animator's callback in the frame takes that read, so the
+ * calls from rest that one frame commits start together. A long callback
+ * before them does not move their start. A call on a moving element keeps
+ * its own clock. The read ends with the frame's task, so a frame
+ * source that repeats a timestamp still reads each frame anew. A frame
+ * source with no timestamp reads the clock.
+ */
+function frameTime(frame: number | undefined, clock: () => number): number {
+  if (frame == null) {
+    return clock();
+  }
+  if (frameRead?.frame === frame) {
+    return frameRead.time;
+  }
+  const read = {frame, time: clock()};
+  frameRead = read;
+  // A browser runs every callback of a frame before its next task.
+  setTimeout(() => {
+    if (frameRead === read) {
+      frameRead = null;
+    }
+  }, 0);
+  return read.time;
+}
+
+/**
+ * What the calls of the running task have baked. A call that plays the same
+ * curve objects reuses them: a row of items that one curve moves samples it
+ * once. Cleared at the next microtask checkpoint.
+ */
+interface TaskBakes {
+  /** Sample times, from the bake's start, by curve, offset and tolerance. */
+  readonly times: {readonly key: unknown[]; readonly times: number[]}[];
+  /** Keyframes, by curves, offsets and the channel's rest values. */
+  readonly keyframes: {
+    readonly key: unknown[];
+    readonly keyframes: Keyframe[];
+    effect: AnimationEffect | null;
+  }[];
+}
+
+let taskBakes: TaskBakes | null = null;
+
+function bakesOfTask(): TaskBakes {
+  if (taskBakes == null) {
+    const bakes: TaskBakes = {times: [], keyframes: []};
+    taskBakes = bakes;
+    queueMicrotask(() => {
+      if (taskBakes === bakes) {
+        taskBakes = null;
+      }
+    });
+  }
+  return taskBakes;
+}
+
+function isSameKey(a: unknown[], b: unknown[]): boolean {
+  return a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
+}
+
+/** Whether the engine can copy an effect with its parsed keyframes. */
+function isCopyable(effect: AnimationEffect | null): effect is KeyframeEffect {
+  return (
+    typeof KeyframeEffect === 'function' &&
+    typeof Animation === 'function' &&
+    effect instanceof KeyframeEffect
+  );
+}
+
+/**
+ * Plays a copy of `effect` on `element`, as `element.animate` would play the
+ * same keyframes and timing, without parsing them again.
+ */
+function copyAnimation(effect: KeyframeEffect, element: Element): Animation {
+  const copy = new KeyframeEffect(effect);
+  copy.target = element;
+  const animation = new Animation(copy, element.ownerDocument.timeline);
+  animation.play();
+  return animation;
+}
+
 /** Above this many keyframes the tolerance is relaxed. */
 const MAX_KEYFRAMES = 1200;
 /**
@@ -926,7 +1018,7 @@ const IDENTITY_TEXT: Record<Channel, string> = {
 };
 
 /** Whether a computed value (or an unset one) is the channel's identity. */
-function isIdentityText(channel: Channel, text: string): boolean {
+export function isIdentityText(channel: Channel, text: string): boolean {
   const value = text.trim();
   if (value === '' || value === 'none') {
     return true;
@@ -955,7 +1047,8 @@ function expand(values: MotionValues): Partial<Record<MotionProperty, number>> {
   return out;
 }
 
-function defaultNow(): number {
+/** The time the motion clock reads (`performance.now()`'s time base). */
+export function motionNow(): number {
   return typeof performance === 'undefined' ? Date.now() : performance.now();
 }
 
@@ -1012,12 +1105,12 @@ export function createMotionEngine(
   element: HTMLElement | null,
   options: AnimatorOptions = {},
 ): Animator {
-  const now = options.now ?? defaultNow;
+  const now = options.now ?? motionNow;
   const frameSource =
     options.requestFrame ??
     (typeof requestAnimationFrame === 'function'
-      ? (callback: () => void) => {
-          requestAnimationFrame(() => callback());
+      ? (callback: (frame?: number) => void) => {
+          requestAnimationFrame(frame => callback(frame));
         }
       : null);
   // Every frame callback of an animator's counts itself, so a call made in
@@ -1025,11 +1118,11 @@ export function createMotionEngine(
   const requestFrame =
     frameSource == null
       ? null
-      : (callback: () => void) => {
-          frameSource(() => {
+      : (callback: (frame?: number) => void) => {
+          frameSource(frame => {
             frameDepth += 1;
             try {
-              callback();
+              callback(frame);
             } finally {
               frameDepth -= 1;
             }
@@ -1374,6 +1467,62 @@ export function createMotionEngine(
     }
   };
 
+  /**
+   * What identifies a channel's keyframes across calls of one task: each
+   * moving property's curve object, offset and length, and each other
+   * property's rest value. Null when a moving property has no shared curve
+   * (a spring, a rebase, a jump).
+   */
+  const taskBakeKey = (
+    channel: Channel,
+    moving: MotionProperty[],
+    from: number,
+    end: number,
+    devicePixel: number,
+  ): unknown[] | null => {
+    const key: unknown[] = [channel, end - from, devicePixel];
+    for (const property of CHANNELS[channel]) {
+      const segment = segments.get(property);
+      if (!moving.includes(property)) {
+        key.push(property, resting[property]);
+      } else if (segment?.source != null && segment.jumps.length === 0) {
+        key.push(property, segment.source, segment.start - from);
+        key.push(segment.duration);
+      } else {
+        return null;
+      }
+    }
+    return key;
+  };
+
+  /** `sampleTimes`, shared by the calls of a task that play one curve. */
+  const sharedSampleTimes = (
+    property: MotionProperty,
+    from: number,
+    end: number,
+    tolerance: number,
+  ): number[] => {
+    const segment = segments.get(property);
+    if (segment?.source == null || segment.jumps.length > 0) {
+      return sampleTimes(property, from, end, tolerance);
+    }
+    const key: unknown[] = [
+      segment.source,
+      segment.start - from,
+      segment.duration,
+      end - from,
+      tolerance,
+    ];
+    const {times} = bakesOfTask();
+    const known = times.find(entry => isSameKey(entry.key, key));
+    if (known != null) {
+      return known.times.map(t => t + from);
+    }
+    const sampled = sampleTimes(property, from, end, tolerance);
+    times.push({key, times: sampled.map(t => t - from)});
+    return sampled;
+  };
+
   const sampleTimes = (
     property: MotionProperty,
     from: number,
@@ -1670,6 +1819,16 @@ export function createMotionEngine(
     // Read where the keyframes are baked: a page moved to another screen
     // bakes its next motion for that screen.
     const devicePixel = 1 / Math.max(1, globalThis.devicePixelRatio || 1);
+    // An earlier call of this task that played the same curves from the same
+    // offset, over the same rest values, baked these keyframes already.
+    const bakeKey =
+      pseudoElement == null
+        ? taskBakeKey(channel, moving, from, end, devicePixel)
+        : null;
+    const baked =
+      bakeKey == null
+        ? undefined
+        : bakesOfTask().keyframes.find(bake => isSameKey(bake.key, bakeKey));
     const collect = (scale: number) => {
       const times = new Set<number>([from, end]);
       for (const property of moving) {
@@ -1677,61 +1836,76 @@ export function createMotionEngine(
           SAMPLE_TOLERANCE[property] *
           scale *
           (property === 'x' || property === 'y' ? devicePixel : 1);
-        for (const t of sampleTimes(property, from, end, tolerance)) {
+        for (const t of sharedSampleTimes(property, from, end, tolerance)) {
           times.add(t);
         }
       }
       return times;
     };
-    let scale = 1;
-    let all = collect(scale);
-    while (all.size > MAX_KEYFRAMES && scale < 64) {
-      scale *= 2;
-      all = collect(scale);
-    }
-    // Jumps become two keyframes at one offset: the value just before, then
-    // the value after. A jump on the last frame (fade out, then move) too.
-    const jumpTimes = new Set<number>();
-    for (const property of moving) {
-      const segment = segments.get(property) as Segment;
-      for (const j of segment.jumps) {
-        const t = segment.start + j;
-        if (t > from && t <= end) {
-          jumpTimes.add(t);
-          all.add(t);
+    const span = end - from + END_HOLD_MS;
+    const bakeKeyframes = (): Keyframe[] => {
+      let scale = 1;
+      let all = collect(scale);
+      while (all.size > MAX_KEYFRAMES && scale < 64) {
+        scale *= 2;
+        all = collect(scale);
+      }
+      // Jumps become two keyframes at one offset: the value just before,
+      // then the value after. A jump on the last frame (fade out, then move)
+      // too.
+      const jumpTimes = new Set<number>();
+      for (const property of moving) {
+        const segment = segments.get(property) as Segment;
+        for (const j of segment.jumps) {
+          const t = segment.start + j;
+          if (t > from && t <= end) {
+            jumpTimes.add(t);
+            all.add(t);
+          }
         }
       }
-    }
-    const times = [...all].sort((a, b) => a - b);
-    const span = end - from + END_HOLD_MS;
-    const keyframes: Keyframe[] = [];
-    for (const t of times) {
-      const offset = (t - from) / span;
-      if (jumpTimes.has(t)) {
-        keyframes.push({
+      const times = [...all].sort((a, b) => a - b);
+      const frames: Keyframe[] = [];
+      for (const t of times) {
+        const offset = (t - from) / span;
+        if (jumpTimes.has(t)) {
+          frames.push({
+            offset,
+            [channel]: format(channel, p => valueBefore(p, t)),
+          });
+        }
+        frames.push({
           offset,
-          [channel]: format(channel, p => valueBefore(p, t)),
+          [channel]: format(channel, p =>
+            t >= end ? finalValue(p) : curveAt(p, t),
+          ),
         });
       }
-      keyframes.push({
-        offset,
-        [channel]: format(channel, p =>
-          t >= end ? finalValue(p) : curveAt(p, t),
-        ),
+      frames.push({offset: 1, [channel]: format(channel, finalValue)});
+      return frames;
+    };
+    const keyframes = baked?.keyframes ?? bakeKeyframes();
+    promote(channel);
+    const animation =
+      baked != null && isCopyable(baked.effect)
+        ? copyAnimation(baked.effect, target)
+        : target.animate(keyframes, {
+            duration: span,
+            // The last keyframes hold the end state (END_HOLD_MS); filling both
+            // ways also keeps it where an engine honors the fill on its compositor.
+            // The main thread retires the animation once it runs after the end,
+            // writing the end inline in that task, so that changes no pixel.
+            fill: 'both',
+            easing: 'linear',
+            ...(pseudoElement != null ? {pseudoElement} : {}),
+          });
+    if (bakeKey != null && baked == null) {
+      bakesOfTask().keyframes.push({
+        key: bakeKey,
+        keyframes,
+        effect: animation.effect,
       });
     }
-    keyframes.push({offset: 1, [channel]: format(channel, finalValue)});
-    promote(channel);
-    const animation = target.animate(keyframes, {
-      duration: span,
-      // The last keyframes hold the end state (END_HOLD_MS); filling both
-      // ways also keeps it where an engine honors the fill on its compositor.
-      // The main thread retires the animation once it runs after the end,
-      // writing the end inline in that task, so that changes no pixel.
-      fill: 'both',
-      easing: 'linear',
-      ...(pseudoElement != null ? {pseudoElement} : {}),
-    });
     if (waiting != null) {
       // From rest: no start time, so the browser starts the animation when
       // it commits it (StartGroup); the keyframes are sampled from `from`,
@@ -1743,14 +1917,14 @@ export function createMotionEngine(
       if (rebuiltAfterFirstFrame) {
         // The frame that commits it dates this channel's start again. The
         // call's other channels keep their own.
-        requestFrame?.(() => {
+        requestFrame?.(frame => {
           if (
             !waiting.resolved &&
             running.get(channel) === animation &&
             animation.startTime == null &&
             animation.playState === 'running'
           ) {
-            (waiting.latest ??= new Map()).set(channel, now());
+            (waiting.latest ??= new Map()).set(channel, frameTime(frame, now));
           }
         });
       }
@@ -2438,7 +2612,7 @@ export function createMotionEngine(
     // or when its compositor starts them (Chromium). Read it in that first
     // frame, ahead of anything that might pause or seek the animations, and
     // when `ready` settles.
-    requestFrame?.(() => {
+    requestFrame?.(frame => {
       syncGroup(group);
       group.framed = true;
       // Chromium's compositor starts a composited animation when the frame
@@ -2446,24 +2620,28 @@ export function createMotionEngine(
       // more later (longer under load). Until then the call would read as
       // not started while the screen moves it, and a retarget or a rebase
       // would replay its curve from the start. A call made in a task, still
-      // waiting in the first frame after it, starts now, which the compositor
-      // then takes as its start: the time this frame runs, not its timestamp,
+      // waiting in the first frame after it, starts when this frame runs. The
+      // compositor takes that time as its start. All calls the frame commits
+      // take one read of it (frameTime). That read is not the frame timestamp,
       // which after a block is the frame time from before the block. Only
       // when this frame is the one that commits it: not for a call made in a
       // frame callback, whose frame committed it already, nor when a block
       // ran between the call and this frame (more than LATE_START_MS), after
       // which this frame cannot tell a call made in a task from one a page's
       // own frame callback made; those keep the browser's start.
+      if (group.resolved) {
+        return;
+      }
+      const at = frameTime(frame, now);
       if (
-        !group.resolved &&
         group.madeInFrame !== true &&
-        now() - (group.task?.first ?? group.provisional) <= LATE_START_MS &&
+        at - (group.task?.first ?? group.provisional) <= LATE_START_MS &&
         group.animations.some(
           animation =>
             animation.startTime == null && animation.playState === 'running',
         )
       ) {
-        resolveGroup(group, now());
+        resolveGroup(group, at);
       }
       // The browser's start is still unread. The compositor starts the call
       // near this frame, so each moving channel's reads take the curve from
@@ -2477,7 +2655,7 @@ export function createMotionEngine(
             animation.startTime == null &&
             animation.playState === 'running'
           ) {
-            (group.latest ??= new Map()).set(channel, now());
+            (group.latest ??= new Map()).set(channel, at);
           }
         }
       }
@@ -3849,6 +4027,7 @@ export function createMotionEngine(
                 speed: t => curve.velocity(t / 1000),
                 jumps: [],
                 owner,
+                source: curve,
               };
       }
       const group = beginGroup(
@@ -4119,6 +4298,7 @@ export function createMotionEngine(
           }
           replace({
             ...segment,
+            source: undefined,
             target: segment.target + delta,
             at: t => segment.at(t) + delta,
           });

@@ -236,19 +236,6 @@ export function getAnchorClearFallbacks(placement: LayerPlacement): string {
 }
 
 /**
- * The attribute the runtime sets on a layer that keeps its anchor clear while
- * its content overflows the box it was given; only then does it scroll, so a
- * layer that fits stays a plain box and a wheel over it still scrolls the
- * page.
- */
-export const LAYER_SCROLLS_ATTRIBUTE = 'data-astryx-layer-scrolls';
-
-/** Lets a layer whose content overflows scroll it. */
-function scrollsCss(): string {
-  return `[${LAYER_SCROLLS_ATTRIBUTE}]{overflow-y:auto;overscroll-behavior-block:contain;}`;
-}
-
-/**
  * Every slide rule, for every placement and alignment, and the beside and fit
  * rules.
  */
@@ -264,7 +251,6 @@ export function slideRulesCss(): string {
     besideRule('start'),
     fitRule('above'),
     fitRule('below'),
-    scrollsCss(),
   ].join('');
 }
 

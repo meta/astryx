@@ -334,6 +334,11 @@
       "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/aria-conditional-attr?application=playwright"
     },
     {
+      "key": "core/tabletree::core-tabletree--compact-density::aria-conditional-attr",
+      "impact": "serious",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/aria-conditional-attr?application=playwright"
+    },
+    {
       "key": "Text::Color Variants::color-contrast",
       "impact": "serious",
       "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/color-contrast?application=playwright"

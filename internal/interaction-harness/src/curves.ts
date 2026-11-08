@@ -24,7 +24,9 @@
  */
 
 import type {Locator, Page} from '@playwright/test';
+import {defineAnimatedProperties} from './animated-properties';
 import {defineCurveEnd} from './curve-end';
+import {FRAME_STARVATION_MS, FrameStarvationError} from './frames';
 import {parseTransform, type TimedValue, type Transform2D} from './math';
 
 /** How far inside its end a seek past an animation's end lands, ms. */
@@ -496,10 +498,11 @@ async function installRecorder(page: Page): Promise<void> {
  */
 async function installCurveEnd(page: Page): Promise<void> {
   await installRecorder(page);
-  // The hold, installed with the curve end it reads: one round trip installs
-  // both, so a hold sent from the test costs no extra one.
+  // The hold is installed with the curve end it reads and the property match
+  // of its judged motions. One round trip installs all three, so a hold sent
+  // from the test costs no extra one.
   await page.evaluate(
-    `(${defineCurveEnd.toString()})();(${defineHold.toString()})();`,
+    `(${defineCurveEnd.toString()})();(${defineHold.toString()})();(${defineAnimatedProperties.toString()})();`,
   );
 }
 
@@ -986,61 +989,11 @@ async function expectJudgedMotionsHeld(
     ([armed, elements, wanted]) => {
       const w = window as unknown as {
         __harnessTook?: Record<number, Animation[]>;
+        __harnessAnimatedProperties: (animation: Animation) => string[];
+        __harnessAnimates: (animation: Animation, property: string) => boolean;
       };
       const animations = w.__harnessTook?.[armed] ?? [];
       delete w.__harnessTook?.[armed];
-      // `getKeyframes()` names a property in camel case, except a custom
-      // property.
-      const keyframeName = (property: string) =>
-        property.startsWith('--')
-          ? property
-          : property.replace(/-([a-z])/g, (_, letter: string) =>
-              letter.toUpperCase(),
-            );
-      // Chromium's `getKeyframes()` leaves out a custom property that a CSS
-      // animation animates. The `@keyframes` rule of that name lists it. The
-      // rule can sit inside a grouping rule (`@layer`, `@media`).
-      const keyframesRules = (rules: readonly CSSRule[]): CSSKeyframesRule[] =>
-        rules.flatMap(rule =>
-          rule instanceof CSSKeyframesRule
-            ? [rule]
-            : rule instanceof CSSGroupingRule
-              ? keyframesRules([...rule.cssRules])
-              : [],
-        );
-      const ruleProperties = (name: string) =>
-        [...document.styleSheets, ...document.adoptedStyleSheets].flatMap(
-          sheet => {
-            let rules: CSSRule[] = [];
-            try {
-              rules = [...sheet.cssRules];
-            } catch {
-              // A cross-origin sheet does not expose its rules.
-            }
-            return keyframesRules(rules)
-              .filter(rule => rule.name === name)
-              .flatMap(rule =>
-                [...rule.cssRules].flatMap(keyframe => [
-                  ...(keyframe as CSSKeyframeRule).style,
-                ]),
-              );
-          },
-        );
-      const properties = (animation: Animation) => [
-        ...new Set([
-          ...((animation.effect as KeyframeEffect | null)?.getKeyframes() ?? [])
-            .flatMap(keyframe => Object.keys(keyframe))
-            .filter(
-              name =>
-                !['offset', 'computedOffset', 'easing', 'composite'].includes(
-                  name,
-                ),
-            ),
-          ...(animation instanceof CSSAnimation
-            ? ruleProperties(animation.animationName).map(keyframeName)
-            : []),
-        ]),
-      ];
       const describe = (animation: Animation) => {
         const effect = animation.effect as KeyframeEffect | null;
         const target = effect?.target ?? null;
@@ -1052,7 +1005,7 @@ async function expectJudgedMotionsHeld(
               (target.classList.length
                 ? `.${[...target.classList].slice(0, 2).join('.')}`
                 : '');
-        return `${name}${effect?.pseudoElement ?? ''} ${properties(animation).join(' ')}`;
+        return `${name}${effect?.pseudoElement ?? ''} ${w.__harnessAnimatedProperties(animation).join(' ')}`;
       };
       return {
         missing: wanted.flatMap((motion, index) =>
@@ -1062,7 +1015,7 @@ async function expectJudgedMotionsHeld(
               effect != null &&
               effect.target === elements[index] &&
               (effect.pseudoElement ?? null) === motion.pseudoElement &&
-              properties(animation).includes(keyframeName(motion.property))
+              w.__harnessAnimates(animation, motion.property)
             );
           })
             ? []
@@ -2006,6 +1959,12 @@ export async function watchAnimations(
  * easing or direction, waitForRest waits the hold out, and a hold longer than
  * `timeout` rejects with "still moving".
  *
+ * It throws `FrameStarvationError` instead when the page drew too few frames
+ * to tell. Then, since the element last moved, no frame came for longer than
+ * `FRAME_STARVATION_MS`. It held still in its last frame, or no frame came
+ * after the deadline. So the still frames must come by `timeout` plus
+ * `FRAME_STARVATION_MS`.
+ *
  * While a rendering trace runs (`traceRendering`), it stands down as the
  * animation recorder does: a per-frame callback would make every frame a
  * main-thread frame, which the trace counts. It then waits on timers for the
@@ -2031,9 +1990,13 @@ export async function waitForRest(
     locator,
     Date.now() + timeout + 1_000,
     async evaluateTimeout => {
-      await locator.evaluate(
-        (element, {ms, need}) =>
-          new Promise<void>((resolve, reject) => {
+      const starved = await locator.evaluate(
+        (element, {ms, need, starvationMs}) =>
+          new Promise<{
+            frames: number;
+            spanMs: number;
+            longestGapMs: number;
+          } | null>((resolve, reject) => {
             // The deadline reads the real clock, which a page freeze does not
             // stop.
             const realNow =
@@ -2065,29 +2028,66 @@ export async function waitForRest(
                 __harnessTimerGate?: {
                   frame: typeof requestAnimationFrame;
                   timeout?: typeof setTimeout;
+                  clearTimeout?: typeof clearTimeout;
                 };
               }
             ).__harnessTimerGate;
             const frame = gate?.frame ?? requestAnimationFrame;
             const timeout = gate?.timeout ?? setTimeout;
+            const clearTimer = gate?.clearTimeout ?? clearTimeout;
             // Set by traceRendering while it traces (see the recorder above).
             const tracing = () =>
               (window as unknown as {__harnessRenderingTrace?: boolean})
                 .__harnessRenderingTrace === true;
+            // The deadline timer below holds this wait's scope, the element
+            // too, until it fires: every ending clears it.
+            const end = () => clearTimer(deadlineTimer);
             const settle = () => {
+              end();
               // Later waits count animations from here.
               (
                 window as unknown as {__harnessAnimations?: {arm: () => number}}
               ).__harnessAnimations?.arm();
-              resolve();
+              resolve(null);
             };
             let last = '';
             let still = 0;
+            // When each frame of the per-frame check came since the element
+            // last moved, on the real clock: only those can show it at rest.
+            let watchedFrom = realNow();
+            const drawn: number[] = [];
+            const shortfall = () => {
+              const times = [watchedFrom, ...drawn, realNow()];
+              let longestGapMs = 0;
+              for (let i = 1; i < times.length; i += 1) {
+                longestGapMs = Math.max(longestGapMs, times[i] - times[i - 1]);
+              }
+              return {
+                frames: drawn.length,
+                spanMs: realNow() - watchedFrom,
+                longestGapMs,
+              };
+            };
             const frames = () => {
               last = read();
               still = 0;
+              watchedFrom = realNow();
+              drawn.length = 0;
               frame(tick);
             };
+            // A frame that never comes cannot reach the deadline check in
+            // `tick`: a starved page is caught here.
+            let starvedOut = false;
+            const deadlineTimer = timeout(
+              () => {
+                const lastFrame = drawn[drawn.length - 1] ?? watchedFrom;
+                if (!tracing() && realNow() - lastFrame > starvationMs) {
+                  starvedOut = true;
+                  resolve(shortfall());
+                }
+              },
+              ms + starvationMs + 1,
+            );
             // While traced: one look at the animations, then a timer to the latest
             // scheduled curve end. One not started yet is looked at again a frame
             // later; a trace that has ended hands over to the per-frame check.
@@ -2134,6 +2134,7 @@ export async function waitForRest(
               timeout(
                 () => {
                   if (realNow() > deadline) {
+                    end();
                     reject(
                       new Error('waitForRest: still moving at the deadline'),
                     );
@@ -2147,6 +2148,9 @@ export async function waitForRest(
               );
             };
             const tick = () => {
+              if (starvedOut) {
+                return;
+              }
               const now = read();
               const moving = element.getAnimations({subtree: true}).some(
                 a =>
@@ -2159,12 +2163,25 @@ export async function waitForRest(
                         Number(a.effect?.getComputedTiming().delay ?? 0)
                       : Number(a.currentTime ?? 0) < curveEnd(a))),
               );
-              still = !moving && now === last ? still + 1 : 0;
+              const resting = !moving && now === last;
+              if (resting) {
+                drawn.push(realNow());
+              } else {
+                watchedFrom = realNow();
+                drawn.length = 0;
+              }
+              still = resting ? still + 1 : 0;
               last = now;
               if (still >= need) {
                 settle();
               } else if (realNow() > deadline) {
-                reject(new Error(`waitForRest: still moving (${now})`));
+                const short = shortfall();
+                end();
+                if (resting && short.longestGapMs > starvationMs) {
+                  resolve(short);
+                } else {
+                  reject(new Error(`waitForRest: still moving (${now})`));
+                }
               } else if (tracing()) {
                 scheduled();
               } else {
@@ -2177,9 +2194,18 @@ export async function waitForRest(
               frames();
             }
           }),
-        {ms: timeout, need: frames},
+        {ms: timeout, need: frames, starvationMs: FRAME_STARVATION_MS},
         {timeout: evaluateTimeout},
       );
+      if (starved != null) {
+        throw new FrameStarvationError({
+          by: 'waitForRest',
+          frames: starved.frames,
+          during: `it waited ${Math.round(starved.spanMs)} ms for the element to rest`,
+          min: frames,
+          longestGapMs: starved.longestGapMs,
+        });
+      }
       return true;
     },
   );

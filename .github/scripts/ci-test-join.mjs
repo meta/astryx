@@ -24,6 +24,7 @@ const requiredSuccess = [
     'pr-component-a11y-contracts',
     process.env.PR_COMPONENT_A11Y_CONTRACTS_RESULT,
   ],
+  ['pr-a11y-dependent-audits', process.env.PR_A11Y_DEPENDENT_AUDITS_RESULT],
 ];
 
 function fail(message) {

@@ -656,7 +656,7 @@ function onPointerUp(event: PointerEvent): void {
   if (event.target instanceof Node) {
     lastTouchTarget = event.target;
   }
-  if (contact?.pointerId === event.pointerId) {
+  if (contact != null && contact.pointerId === event.pointerId) {
     // Read before the release step: a press that travelled or that a scroll
     // took is dead or gone by now.
     const pressed = contact.live;
