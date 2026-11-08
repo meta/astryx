@@ -57,11 +57,19 @@ describe('Stepper', () => {
     expect(screen.getByTestId('step-2')).not.toHaveAttribute('aria-current');
   });
 
-  it.each(['horizontal', 'vertical'] as const)(
-    'keeps aria-current on the in-progress step over a caller’s (%s)',
-    orientation => {
+  it.each([
+    ['horizontal', 'separated'],
+    ['vertical', 'separated'],
+    ['horizontal', 'on-track'],
+    ['vertical', 'on-track'],
+  ] as const)(
+    'keeps aria-current on the in-progress step over a caller’s (%s, %s)',
+    (orientation, indicatorPosition) => {
       render(
-        <Stepper activeStep={1} orientation={orientation}>
+        <Stepper
+          activeStep={1}
+          orientation={orientation}
+          indicatorPosition={indicatorPosition}>
           <Step
             step={0}
             label="Step 1"

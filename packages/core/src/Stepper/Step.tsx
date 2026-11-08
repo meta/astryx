@@ -1626,8 +1626,7 @@ export function Step({
           )}
           data-testid={dataTestId}
           {...rest}
-          // The step state this component owns wins over a caller's
-          // `aria-current`: only the in-progress step carries it.
+          // Keep this after `{...rest}` so a caller's `aria-current` cannot replace it.
           aria-current={isActive ? 'step' : undefined}>
           {hasButton ? (
             <button
@@ -1724,8 +1723,7 @@ export function Step({
         )}
         data-testid={dataTestId}
         {...rest}
-        // The step state this component owns wins over a caller's
-        // `aria-current`: only the in-progress step carries it.
+        // Keep this after `{...rest}` so a caller's `aria-current` cannot replace it.
         aria-current={isActive ? 'step' : undefined}>
         {hasButton ? (
           <button
@@ -1775,8 +1773,7 @@ export function Step({
         )}
         data-testid={dataTestId}
         {...rest}
-        // The step state this component owns wins over a caller's
-        // `aria-current`: only the in-progress step carries it.
+        // Keep this after `{...rest}` so a caller's `aria-current` cannot replace it.
         aria-current={isActive ? 'step' : undefined}>
         {/* 4px progress bar */}
         <div
@@ -1845,8 +1842,7 @@ export function Step({
       )}
       data-testid={dataTestId}
       {...rest}
-      // The step state this component owns wins over a caller's
-      // `aria-current`: only the in-progress step carries it.
+      // Keep this after `{...rest}` so a caller's `aria-current` cannot replace it.
       aria-current={isActive ? 'step' : undefined}>
       {/* 4px progress bar segment for this step */}
       <div
