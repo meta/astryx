@@ -200,11 +200,15 @@ describe('LineClamp', () => {
     it('checks again when a link crosses the clip edge with no resize, mutation, render or font event', () => {
       const observers: Array<{
         callback: IntersectionObserverCallback;
+        options?: IntersectionObserverInit;
         targets: Set<Element>;
       }> = [];
       class FakeIntersectionObserver {
         targets = new Set<Element>();
-        constructor(public callback: IntersectionObserverCallback) {
+        constructor(
+          public callback: IntersectionObserverCallback,
+          public options?: IntersectionObserverInit,
+        ) {
           observers.push(this);
         }
         observe(el: Element) {
@@ -257,6 +261,15 @@ describe('LineClamp', () => {
         rectMap.set(link, {top: 10, bottom: 26});
         act(() => crossEdge(link));
         expect(link).not.toHaveAttribute('inert');
+
+        // A link whose top lands exactly on the edge intersects at ratio 0,
+        // so the observer must also report at a threshold just above 0.
+        const thresholds = [observers[0]?.options?.threshold ?? 0].flat();
+        expect(thresholds).toContain(0);
+        expect(thresholds.some(value => value > 0 && value < 0.01)).toBe(true);
+        rectMap.set(link, {top: 40, bottom: 56});
+        act(() => crossEdge(link));
+        expect(link).toHaveAttribute('inert');
       } finally {
         vi.unstubAllGlobals();
       }

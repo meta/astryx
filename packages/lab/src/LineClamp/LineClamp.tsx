@@ -138,16 +138,19 @@ function syncFocusableClipping(
 }
 
 /**
- * Lines can re-wrap at the same box size with no render, mutation or resize,
- * for example when a web font loads or an ancestor changes font. An
- * IntersectionObserver rooted at the clamp reports each managed focusable
- * that crosses the clip edge, whatever moved it.
+ * Lines can re-wrap at the same box size with no render, mutation or resize.
+ * An IntersectionObserver rooted at the clamp reports each managed focusable
+ * that crosses the clip edge. A link whose top touches the edge intersects at
+ * ratio 0 but is clipped, so a threshold just above 0 reports that move too.
  */
 function observeEdgeCrossings(container: HTMLElement, onCross: () => void) {
   if (typeof IntersectionObserver === 'undefined') {
     return {refresh: () => {}, disconnect: () => {}};
   }
-  const observer = new IntersectionObserver(onCross, {root: container});
+  const observer = new IntersectionObserver(onCross, {
+    root: container,
+    threshold: EDGE_THRESHOLDS,
+  });
   const refresh = () => {
     observer.disconnect();
     const candidates = container.querySelectorAll(
@@ -162,6 +165,8 @@ function observeEdgeCrossings(container: HTMLElement, onCross: () => void) {
   refresh();
   return {refresh, disconnect: () => observer.disconnect()};
 }
+
+const EDGE_THRESHOLDS = [0, 1e-6];
 
 /** A record that can change which descendants are focusable. */
 function changesFocusables(record: MutationRecord): boolean {
