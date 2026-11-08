@@ -1897,7 +1897,9 @@ jobs:
             package-size.json
             api-changes.json
             api-changes.md
-          retention-days: 1
+          # merge-guard reads this run's api-changes.json up to a day after the
+          # run, so the artifact outlives that.
+          retention-days: 3
 
   # Typechecks run beside build-storybook instead of before its Storybook
   # build, so the browser checks that wait on the Storybook artifact start

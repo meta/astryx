@@ -351,7 +351,7 @@ const styles = stylex.create({
   },
   touchResetButton: {
     minBlockSize: {
-      default: null,
+      default: sizeVars['--size-element-sm'],
       '@media (pointer: coarse)': dateInputTouchSizes.daySize,
     },
   },
