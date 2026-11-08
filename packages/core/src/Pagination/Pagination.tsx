@@ -182,22 +182,6 @@ export interface PaginationProps extends Omit<
 /** Width (px) of the page-size Selector field. */
 const PAGE_SIZE_SELECTOR_WIDTH = 80;
 
-// A page button takes its size as a minimum height, so a larger text size
-// grows it and a wrapped row's numbers never cover the row above. Without
-// block padding its label's line box decides the height above that minimum.
-const growStyles = stylex.create({
-  sm: {
-    height: 'auto',
-    minHeight: sizeVars['--size-element-sm'],
-    paddingBlock: 0,
-  },
-  md: {
-    height: 'auto',
-    minHeight: sizeVars['--size-element-md'],
-    paddingBlock: 0,
-  },
-});
-
 const styles = stylex.create({
   // Both rows wrap when their controls do not fit, as at a larger text size,
   // so no control leaves the screen.
@@ -668,10 +652,7 @@ export function Pagination({
                   onClick={() => handlePageChange(item)}
                   isDisabled={isDisabled}
                   aria-current={isActive ? 'page' : undefined}
-                  xstyle={[
-                    growStyles[buttonSize],
-                    isActive && styles.activePage,
-                  ]}>
+                  xstyle={isActive && styles.activePage}>
                   {item}
                 </Button>
               );
