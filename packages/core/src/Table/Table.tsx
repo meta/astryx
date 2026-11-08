@@ -214,6 +214,7 @@ function TableScrollWrapper({
     keyboardAccess: {owner: 'content'},
     overscroll: 'contain',
   });
+  // The spread below replaces className and style. Merge the plugin's instead.
   const {
     ref,
     className: pluginClassName,
@@ -242,7 +243,6 @@ function TableScrollWrapper({
         scrollWrapperStyles.focusRingInset,
         ...(pluginStyles ?? []),
       ),
-      // A plugin's class and style compose with the wrapper's own.
       pluginClassName,
       pluginStyle,
     ),
