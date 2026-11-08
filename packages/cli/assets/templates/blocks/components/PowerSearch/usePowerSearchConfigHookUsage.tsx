@@ -52,6 +52,7 @@ const columns: TableColumn<Person>[] = [
     header: 'Start Date',
     renderCell: (person: Person) =>
       new Date(person.startDate * 1000).toLocaleDateString('en-US', {
+        timeZone: 'UTC',
         year: 'numeric',
         month: 'short',
         day: 'numeric',
