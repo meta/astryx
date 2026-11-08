@@ -41,6 +41,7 @@ export type {
   HoverCardFocusTrigger,
   HoverCardTouchTrigger,
 } from './useHoverCard';
+import {mergeIds} from './mergeIds';
 
 // `aria-haspopup` and `aria-controls` are global, so any trigger may carry
 // them. `aria-expanded` is not. This is the ARIA 1.2 "Supported States and
@@ -257,14 +258,6 @@ function isTextOnly(children: ReactNode): boolean {
     hasText = true;
   }
   return hasText;
-}
-
-/**
- * Utility to merge ARIA ID strings
- */
-function mergeIds(...ids: (string | undefined | null)[]): string | undefined {
-  const filtered = ids.filter(Boolean);
-  return filtered.length > 0 ? filtered.join(' ') : undefined;
 }
 
 /**

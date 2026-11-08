@@ -35,7 +35,6 @@ import {useLocale} from '../i18n/useLocale';
 import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
-import {colorVars, spacingVars} from '../theme/tokens.stylex';
 import {formatInstant, formatZoneName} from './formatInstant';
 import {formatRelativeTime} from './formatRelativeTime';
 import {formatTooltipLines, resolveTimezoneID} from './tooltipEntries';
@@ -199,12 +198,6 @@ export interface TimestampProps extends BaseProps<HTMLTimeElement> {
 // =============================================================================
 
 const styles = stylex.create({
-  hoverIndication: {
-    textDecorationLine: 'underline',
-    textDecorationStyle: 'dashed',
-    textDecorationColor: colorVars['--color-border-emphasized'],
-    textUnderlineOffset: spacingVars['--spacing-0-5'],
-  },
   time: {
     display: 'inline',
     fontFamily: 'inherit',
@@ -474,7 +467,7 @@ export function Timestamp({
       ref={mergedTimeRef}
       dateTime={isoString}
       data-testid={testId}
-      {...stylex.props(styles.time, showTooltip && styles.hoverIndication)}
+      {...stylex.props(styles.time)}
       {...rest}
       // `ariaLabelText` is '' only for an invalid date, which bails out
       // before rendering — but keep the guard local: an empty aria-label
@@ -486,14 +479,8 @@ export function Timestamp({
       rest['aria-label'] == null
         ? {'aria-label': ariaLabelText}
         : {})}
-      // The hover card is anchored here with focusTrigger="always", which
-      // attaches focus listeners but does not itself make the anchor
-      // focusable. A bare <time> is not focusable, so without a tab stop
-      // sighted keyboard users could never reveal the card (WCAG 1.4.13 /
-      // 2.1.1). Add the tab stop only while a card is actually attached — no
-      // gratuitous tab stops otherwise. The card carries its own
-      // dashed-underline hover indication as the affordance, so the anchor
-      // needs no separate focus outline. A caller's own tabIndex wins.
+      // A bare <time> cannot take focus. Add the tab stop only while a card
+      // is attached, so keyboard users can open it. A caller's tabIndex wins.
       {...(showTooltip && rest.tabIndex == null ? {tabIndex: 0} : {})}>
       {displayText}
     </time>

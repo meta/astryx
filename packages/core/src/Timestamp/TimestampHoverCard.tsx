@@ -29,6 +29,7 @@
 import type {ReactNode, RefObject} from 'react';
 import {useCallback, useRef} from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {mergeIds} from '../HoverCard/mergeIds';
 import {useHoverCard} from '../HoverCard/useHoverCard';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {IconButton} from '../IconButton/IconButton';
@@ -265,6 +266,8 @@ export default function TimestampHoverCard({
     useHoverCard({placement: 'above', focusTrigger: 'always', label});
 
   const didAttachRef = useRef(false);
+  // Syncs the hover card's anchor and listeners with the <time> that
+  // Timestamp renders outside this lazy module.
   useIsomorphicLayoutEffect(() => {
     const trigger = triggerRef.current;
     if (!trigger) {
@@ -272,8 +275,8 @@ export default function TimestampHoverCard({
     }
     positionRef(trigger);
     interactionRef(trigger);
-    // Focus may precede the cold import. Only the still-focused trigger owns
-    // this pending opening; never reclaim focus after the user has moved on.
+    // Focus can reach the time before this module loads. Open the card only
+    // if the time still has focus.
     if (!didAttachRef.current) {
       didAttachRef.current = true;
       if (trigger.ownerDocument.activeElement === trigger) {
@@ -286,6 +289,7 @@ export default function TimestampHoverCard({
     };
   }, [triggerRef, positionRef, interactionRef, show]);
 
+  // Syncs the <time>'s aria-controls with the open card's id.
   useIsomorphicLayoutEffect(() => {
     const trigger = triggerRef.current;
     if (!trigger) {
@@ -295,10 +299,7 @@ export default function TimestampHoverCard({
       return;
     }
     const previousControls = trigger.getAttribute('aria-controls');
-    trigger.setAttribute(
-      'aria-controls',
-      [previousControls, id].filter(Boolean).join(' '),
-    );
+    trigger.setAttribute('aria-controls', mergeIds(previousControls, id) ?? '');
     // The time role supports neither aria-haspopup nor aria-expanded, so the
     // open card is named through aria-controls alone.
     return () => {

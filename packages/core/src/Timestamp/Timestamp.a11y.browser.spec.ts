@@ -109,13 +109,17 @@ test('an open card passes axe, and the time carries no unsupported popup attribu
   await page.goto(
     `${storybook.origin}/iframe.html?id=core-timestamp--relative-format&viewMode=story`,
   );
+  await expect(page.locator('#storybook-root time')).toHaveCount(7);
   const time = page.locator('#storybook-root time').first();
   await page.keyboard.press('Tab');
   await expect(time).toBeFocused();
   await expect(time).toHaveAttribute('aria-controls', /.+/);
   await expect(time).not.toHaveAttribute('aria-haspopup');
   await expect(time).not.toHaveAttribute('aria-expanded');
-  const results = await new AxeBuilder({page}).analyze();
+  // A story is a page fragment with no landmarks or heading.
+  const results = await new AxeBuilder({page})
+    .disableRules(['landmark-one-main', 'page-has-heading-one', 'region'])
+    .analyze();
   expect(
     results.violations.map(
       violation =>
