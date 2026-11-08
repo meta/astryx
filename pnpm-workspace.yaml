@@ -91,6 +91,9 @@ overrides:
   # consumer in the graph already resolves inside ^4 on its own.
   read-yaml-file: ^2.1.0
   read-yaml-file>js-yaml: ^4.3.1
+  # Holds next's optional sharp at 0.35.3, the version the docsite's host
+  # deploys; next 16.4 asks for ^0.35.5.
+  sharp: 0.35.3
 
 # pnpm 11 replaced the onlyBuiltDependencies allowlist with an allowBuilds map
 # (managed via `pnpm approve-builds`). These are the same packages previously
