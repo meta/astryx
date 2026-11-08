@@ -58,16 +58,24 @@ describe('usePowerSearchConfig example', () => {
   });
 
   it('formats start date in UTC so midnight timestamps do not shift in western timezones', () => {
+    act(() => root?.unmount());
     const originalTZ = process.env.TZ;
+    process.env.TZ = 'America/Los_Angeles';
     try {
-      process.env.TZ = 'America/Los_Angeles';
-      const rows = Array.from(container.querySelectorAll('tbody tr'));
-      // Evan Wright's startDate is 1704067200 (2024-01-01T00:00:00Z)
-      // In UTC, this is Jan 1, 2024. In America/Los_Angeles without timeZone: 'UTC', it would show Dec 31, 2023.
-      const evanRow = rows.find(r => r.textContent?.includes('Evan Wright'));
+      act(() => {
+        root = createRoot(container);
+        root.render(<UsePowerSearchConfigHookUsage />);
+      });
+      const evanRow = Array.from(container.querySelectorAll('tbody tr')).find(
+        row => row.textContent?.includes('Evan Wright'),
+      );
       expect(evanRow?.textContent).toContain('Jan 1, 2024');
     } finally {
-      process.env.TZ = originalTZ;
+      if (originalTZ === undefined) {
+        delete process.env.TZ;
+      } else {
+        process.env.TZ = originalTZ;
+      }
     }
   });
 });
