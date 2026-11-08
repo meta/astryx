@@ -229,7 +229,7 @@ describe.each(Object.entries(WORKFLOWS))(
           ].join('\n'),
         );
         expect(share.env.SCOPED).toBe(
-          "${{ github.event_name == 'pull_request' && steps.scope.outputs.full_suite == 'false' }}",
+          "${{ github.event_name == 'pull_request' && steps.scope.outputs.vitest_full_suite == 'false' }}",
         );
         // The Node lane runs the same scoped share, guards included.
         const node = workflow.jobs['test-node'].steps.find(
@@ -402,6 +402,29 @@ describe.each(Object.entries(WORKFLOWS))(
   },
 );
 
+describe('Vitest scoping for shared infrastructure the module graph reaches (spec:AST-030 FR13)', () => {
+  const workflow = load('ci.yml');
+  const scopedEnv = (job, name) =>
+    workflow.jobs[job].steps.find(step => step.name === name).env.SCOPED;
+
+  it('scopes the UI and Node Vitest lanes by vitest_full_suite', () => {
+    for (const [job, name] of [
+      ['test-ui', 'Run this shard of the UI tests'],
+      ['test-node', 'Run this shard of the Node tests'],
+    ]) {
+      expect(scopedEnv(job, name)).toBe(
+        "${{ github.event_name == 'pull_request' && steps.scope.outputs.vitest_full_suite == 'false' }}",
+      );
+    }
+  });
+
+  it('keeps every other owner on full_suite', () => {
+    const text = read('.github/workflows/ci.yml');
+    expect(text.match(/outputs\.vitest_full_suite/g)).toHaveLength(2);
+    expect(text).toContain("steps.scope.outputs.full_suite == 'false'");
+  });
+});
+
 describe('ci.yml pr-a11y browser specs', () => {
   const steps = load('ci.yml').jobs['pr-a11y-specs'].steps;
   const run = steps.find(
@@ -422,29 +445,45 @@ describe('ci.yml pr-a11y browser specs', () => {
   });
 
   it("runs the merge commit's runner against the PR head", () => {
+    const count = steps.find(
+      step => step.name === "Count this run's accessibility legs",
+    );
     expect(run.if).toBe(
-      "(!cancelled()) && steps.scope.outputs.has_components == 'true'",
+      "(!cancelled()) && steps.scope.outputs.has_components == 'true' && steps.legs.outputs.runs == 'true'",
     );
     // The merge commit the steps come from, not the PR's recorded base, which
-    // can lag main and predate the runner.
-    expect(run.env.WORKFLOW_SHA).toBe('${{ github.sha }}');
-    expect(run.env.BASE_SHA).toBe('${{ github.event.pull_request.base.sha }}');
-    expect(run.env.PR_TITLE).toBe('${{ github.event.pull_request.title }}');
+    // can lag main and predate the runner. The count step selects; the run
+    // step runs that leg's share with the same runner.
+    for (const step of [count, run]) {
+      expect(step.env.WORKFLOW_SHA).toBe('${{ github.sha }}');
+      expect(step.env.PR_TITLE).toBe('${{ github.event.pull_request.title }}');
+    }
+    // The base comes from the merge commit's first parent, not the event.
+    expect(count.env.BASE_SHA).toBeUndefined();
+    expect(count.run).toContain('BASE_SHA=$(git rev-parse "$WORKFLOW_SHA^1")');
+    expect(count.run).toContain(
+      'git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"',
+    );
+    expect(count.run).toContain(
+      '--share-out "$RUNNER_TEMP/a11y-leg-share.json"',
+    );
     expect(run.run).toContain(
       'git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"',
     );
-    expect(run.run).toContain('node "$runner"');
+    expect(run.run).toContain(
+      'node "$runner" --share "$RUNNER_TEMP/a11y-leg-share.json"',
+    );
     expect(
       JSON.parse(read('package.json')).scripts['test:a11y-contract:pr'],
     ).toBe('node .github/scripts/a11y-pr-contracts.mjs');
   });
 
-  it('uploads every spec receipt in one head-bound artifact', () => {
+  it('uploads every spec receipt in one head-bound artifact per leg', () => {
     expect(upload.if).toBe(
-      "(!cancelled()) && steps.scope.outputs.has_components == 'true'",
+      "(!cancelled()) && steps.scope.outputs.has_components == 'true' && steps.legs.outputs.runs == 'true'",
     );
     expect(upload.with.name).toBe(
-      'pr-a11y-evidence-${{ needs.build-storybook.outputs.short_hash }}',
+      'pr-a11y-evidence-${{ needs.build-storybook.outputs.short_hash }}-${{ matrix.leg }}',
     );
     for (const dir of [
       'pr-a11y-evidence/',
@@ -478,6 +517,7 @@ describe('ci.yml RTL package sharding', () => {
     );
     expect(readers.map(([name]) => name).sort()).toEqual(
       [
+        'a11y-dependent-audits-plan',
         'pr-a11y-guards',
         'pr-a11y-specs',
         'pr-component-a11y-contracts',
@@ -722,8 +762,10 @@ describe('full component typechecks', () => {
     name => {
       const {typecheck, 'typecheck:docs': docs} = scriptsOf(`packages/${name}`);
       expect(docs).toBe('tsc --project tsconfig.docs.json');
+      // Core's project runs in several programs (scripts/typecheck-sharded.mjs);
+      // each covers its whole tsconfig.json.
       expect(typecheck).toMatch(
-        /^tsc (--project tsconfig\.json )?--noEmit && pnpm typecheck:docs$/,
+        /^(tsc (--project tsconfig\.json )?--noEmit|node \.\.\/\.\.\/scripts\/typecheck-sharded\.mjs --project tsconfig\.json --shards \d+) && pnpm typecheck:docs$/,
       );
     },
   );
@@ -908,7 +950,7 @@ describe('scoped browser audits (spec:AST-030 FR9, FR13)', () => {
       'if [ -n "$DEPENDENTS" ]; then DEPENDENT_ARGS=(--dependents "$DEPENDENTS"); fi',
     );
     expect(visual.run).toContain(
-      'SCOPE_ARGS=(--tiers component --components "$COMPONENTS" "${DEPENDENT_ARGS[@]}" --no-scout)',
+      'SCOPE_ARGS=(--tiers component --components "$COMPONENTS" ${DEPENDENT_ARGS[@]+"${DEPENDENT_ARGS[@]}"} --no-scout)',
     );
     expect(visual.run).toContain(
       "FORCE_FULL_AUDITS=$(jq -r '.forceFullComponentAudits == true' analysis.json)",

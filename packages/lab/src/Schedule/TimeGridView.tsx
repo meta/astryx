@@ -257,6 +257,9 @@ export function TimeGridView({
     // Popover's own defaults, spelled out where the hook's differ.
     padding: 3,
     surfaceTarget: 'popover',
+    // The entrance runs on the surface: an anchored layer lays out again on
+    // each frame its own style animates.
+    xstyle: layerAnimations.below,
     onHide: useCallback(() => {
       setOpenBlock(null);
     }, []),
@@ -689,7 +692,6 @@ export function TimeGridView({
             placement: 'below',
             alignment: 'start',
             offset: spacingVars['--spacing-1'],
-            xstyle: layerAnimations.below,
           },
         )}
     </>

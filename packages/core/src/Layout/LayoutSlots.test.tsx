@@ -12,8 +12,8 @@
  * update tests to match new behavior
  */
 
-import {describe, it, expect} from 'vitest';
-import {render, screen} from '@testing-library/react';
+import {describe, it, expect, vi} from 'vitest';
+import {fireEvent, render, screen} from '@testing-library/react';
 import {createRef} from 'react';
 import {Layout} from './Layout';
 import {LayoutHeader} from './LayoutHeader';
@@ -247,6 +247,27 @@ describe('LayoutContent', () => {
     const el = container.querySelector('.astryx-layout-content') as HTMLElement;
     expect(el.className).toContain('body-custom');
     expect(el.style.color).toBe('rgb(1, 2, 3)');
+  });
+
+  it('exposes no role or name of its own when it does not scroll', () => {
+    const {container} = render(<LayoutContent>C</LayoutContent>);
+    const el = container.querySelector('.astryx-layout-content') as HTMLElement;
+    expect(el).not.toHaveAttribute('role');
+    expect(el).not.toHaveAttribute('aria-label');
+  });
+
+  it('forwards DOM, data, and event props to the root', () => {
+    const onClick = vi.fn();
+    const {container} = render(
+      <LayoutContent id="body" data-zone="admin" onClick={onClick}>
+        C
+      </LayoutContent>,
+    );
+    const el = container.querySelector('.astryx-layout-content') as HTMLElement;
+    expect(el).toHaveAttribute('id', 'body');
+    expect(el).toHaveAttribute('data-zone', 'admin');
+    fireEvent.click(el);
+    expect(onClick).toHaveBeenCalledTimes(1);
   });
 
   it('renders correctly as the content slot of a Layout (reads slot context)', () => {

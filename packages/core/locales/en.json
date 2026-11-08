@@ -387,6 +387,14 @@
     "defaultMessage": "{label} {value}",
     "description": "A Filters row's \"field operator\" text joined with its value, as the removal announcement reads it (for example \"Status is Open\"). Translators may reorder the two parts."
   },
+  "@astryx.powersearch.token.fieldOperator": {
+    "defaultMessage": "{field}: {operator}",
+    "description": "A filter token's field label joined with its operator label, before the token's value (for example \"Status: is\" in \"Status: is Open\"). Both parts are inserted text; translators may reorder them and change the punctuation."
+  },
+  "@astryx.powersearch.token.labelValue": {
+    "defaultMessage": "{label} {value}",
+    "description": "A filter token's \"field: operator\" text joined with its value, as the token's full text and the name of its controls read it (for example \"Status: is Open\"). Translators may reorder the two parts."
+  },
   "@astryx.alertDialog.cancel": {
     "defaultMessage": "Cancel",
     "description": "Button label on the secondary/dismiss button of an AlertDialog (modal confirmation). Imperative verb; consumers usually override with task-specific text."
@@ -943,6 +951,10 @@
     "defaultMessage": "Maximum value",
     "description": "Accessible name of the upper thumb of a range Slider (two thumbs), announced together with the Slider's own label, for example \"Price range, Maximum value, 80\". Never shown on screen."
   },
+  "@astryx.tabBar.badgedItem": {
+    "defaultMessage": "{label}, {badge}",
+    "description": "Screen-reader name of a bottom tab bar item that shows a badge (\"Library, 3\"). {label} is the tab's visible name; {badge} is the badge's count or its own label (\"3 unread\"). Translators may reorder the two or change the separator."
+  },
   "@astryx.tabList.label": {
     "defaultMessage": "Tabs",
     "description": "Screen-reader-only fallback name for a horizontal tab bar. Plural noun; \"Tabs\" here = UI tab panels, not browser tabs or the Tab key."
@@ -1423,6 +1435,10 @@
     "defaultMessage": "Copy code",
     "description": "\"Code\" = source code. Aria label AND tooltip on the CodeBlock copy button in its default state. Pairs with `codeBlock.copied` (post-click state)."
   },
+  "@astryx.codeBlock.copyFailed": {
+    "defaultMessage": "Failed to copy value to clipboard.",
+    "description": "Aria label, tooltip and screen-reader announcement on the CodeBlock copy button for ~2s after the clipboard write fails. Pairs with `codeBlock.copyCode` and `codeBlock.copied`."
+  },
   "@astryx.codeBlock.code": {
     "defaultMessage": "Code",
     "description": "Screen-reader-only fallback name for a code-snippet scroll container when the code's language is unknown. \"Code\" = source code, not secret code or code of conduct."
@@ -1430,6 +1446,10 @@
   "@astryx.field.optional": {
     "defaultMessage": "Optional",
     "description": "Visible indicator shown next to a form field's label when the field is optional (isOptional). Mutually exclusive with the required indicator. Very short — appears inline after the label text."
+  },
+  "@astryx.field.labelTooltip": {
+    "defaultMessage": "About {label}",
+    "description": "Screen-reader name of the small info button after a form field's label; the button shows help about the field. {label} is the field's visible label. Example: `About Auto-save`."
   },
   "@astryx.field.required": {
     "defaultMessage": "Required",
@@ -1495,6 +1515,10 @@
     "defaultMessage": "Alt",
     "description": "Spoken name of the Alt modifier key in a keyboard shortcut's accessible name."
   },
+  "@astryx.kbd.key.altShort": {
+    "defaultMessage": "Alt",
+    "description": "Abbreviated visible label of the Alt keycap on non-Apple platforms (Apple platforms show the Option symbol). Localize to the keyboard's conventional short label."
+  },
   "@astryx.kbd.key.backspace": {
     "defaultMessage": "Backspace",
     "description": "Spoken name of the Backspace key in a keyboard shortcut's accessible name."
@@ -1543,6 +1567,10 @@
     "defaultMessage": "Shift",
     "description": "Spoken name of the Shift modifier key in a keyboard shortcut's accessible name."
   },
+  "@astryx.kbd.key.shiftShort": {
+    "defaultMessage": "Shift",
+    "description": "Abbreviated visible label of the Shift keycap on non-Apple platforms (Apple platforms show the Shift symbol). Localize to the keyboard's conventional short label."
+  },
   "@astryx.kbd.key.tab": {
     "defaultMessage": "Tab",
     "description": "Spoken name of the Tab key in a keyboard shortcut's accessible name."
@@ -1550,6 +1578,10 @@
   "@astryx.kbd.key.up": {
     "defaultMessage": "Up arrow",
     "description": "Spoken name of the up arrow key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.windowsShort": {
+    "defaultMessage": "Win",
+    "description": "Abbreviated visible label of the Windows logo keycap, shown for the meta key on non-Apple platforms. Localize to the keyboard's conventional short label."
   },
   "@astryx.kbd.shortcut": {
     "defaultMessage": "{shortcut} + {key}",
@@ -2446,5 +2478,9 @@
   "@astryx.infoTip.label": {
     "defaultMessage": "More information",
     "description": "Default accessible name of an InfoTip, the small info-icon button whose press reveals help about the label, value, or metric beside it."
+  },
+  "@astryx.navigationStack.back": {
+    "defaultMessage": "Back",
+    "description": "Label of the back button in a lab NavigationStack's bar when the screen it returns to has no title of its own. Returns to the previous screen; keep it short, as on an iOS navigation bar."
   }
 }

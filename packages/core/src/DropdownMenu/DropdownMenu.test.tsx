@@ -38,6 +38,7 @@ import {spacingVars} from '../theme/tokens.stylex';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
 import {MENU_PRESS_LONG_PRESS_MS} from '../hooks/useMenuPress';
 import {MENU_PRESS_SETTLE_MS} from '../hooks/menuPressGesture';
+import {isInHeldLayer} from '../Layer/inputHold';
 import {TOUCH_QUERY} from '../utils/touchPresentation';
 import {UIKIT_GESTURES} from '../motion/uikit/gestures';
 
@@ -801,7 +802,7 @@ describe('DropdownMenu', () => {
         );
       });
       expect(menu).toHaveStyle(
-        'max-height: min(300px,calc(100dvb - calc(max(var(--spacing-4), env(safe-area-inset-top, 0px)) + var(--astryx-layer-inset-block-start, 0px)) - calc(max(var(--spacing-4), env(safe-area-inset-bottom, 0px)) + var(--astryx-layer-inset-block-end, 0px))))',
+        'max-height: min(300px,min(calc(100dvb - calc(max(var(--spacing-4), env(safe-area-inset-top, 0px)) + var(--astryx-layer-inset-block-start, 0px)) - calc(max(var(--spacing-4), env(safe-area-inset-bottom, 0px)) + var(--astryx-layer-inset-block-end, 0px))), var(--_layer-keyboard-max-block-size, 100dvb)))',
       );
       expect(menu).not.toHaveStyle({overflowY: 'auto'});
       expect(menu).toHaveAttribute('tabindex', '-1');
@@ -2448,7 +2449,7 @@ describe('DropdownMenu keyboard access for menuitemradio/menuitemcheckbox (#3829
     ).toHaveFocus();
   });
 
-  it('typeahead skips an aria-disabled item and matches the next enabled label', async () => {
+  it('typeahead reaches an aria-disabled item, which stays discoverable', async () => {
     const user = userEvent.setup();
     render(
       <DropdownMenu button={{label: 'Sort'}}>
@@ -2465,21 +2466,14 @@ describe('DropdownMenu keyboard access for menuitemradio/menuitemcheckbox (#3829
     await user.click(screen.getByRole('button', {name: /Sort/}));
     // Anchor the search on 'Edit' so typeahead scans forward and meets the
     // disabled 'Newest' (also an 'n' match) before the enabled 'Nightly'.
-    // This pins the `:not([aria-disabled="true"])` in MENU_ITEM_SELECTOR: the
-    // menus never pass useTypeahead's `isDisabled` option, so that clause is
-    // the only thing keeping disabled rows out of the typeahead list. An
-    // arrow-key test cannot cover it — useListFocus re-filters disabled items
-    // independently, so arrow navigation is guarded twice over.
-    // The disabled row keeps tabIndex={-1} on purpose: it stays focusable, so
-    // the selector clause is the sole reason focus skips it.
     screen.getByRole('menuitem', {name: 'Edit', hidden: true}).focus();
     fireEvent.keyDown(screen.getByRole('menu', {hidden: true}), {key: 'n'});
     expect(
-      screen.getByRole('menuitemcheckbox', {name: 'Nightly', hidden: true}),
+      screen.getByRole('menuitemradio', {name: 'Newest', hidden: true}),
     ).toHaveFocus();
   });
 
-  it('skips aria-disabled menuitemradio and menuitemcheckbox items during arrow navigation', async () => {
+  it('reaches aria-disabled menuitemradio and menuitemcheckbox items during arrow navigation', async () => {
     const user = userEvent.setup();
     render(
       <DropdownMenu button={{label: 'Sort'}}>
@@ -2502,7 +2496,86 @@ describe('DropdownMenu keyboard access for menuitemradio/menuitemcheckbox (#3829
 
     fireEvent.keyDown(menu, {key: 'ArrowDown'});
     expect(
-      screen.getByRole('menuitemradio', {name: 'Oldest', hidden: true}),
+      screen.getByRole('menuitemradio', {name: 'Newest', hidden: true}),
+    ).toHaveFocus();
+    fireEvent.keyDown(menu, {key: 'ArrowDown'});
+    expect(
+      screen.getByRole('menuitemcheckbox', {name: 'Archived', hidden: true}),
+    ).toHaveFocus();
+  });
+
+  it("a disabled row keeps a mouse press's focus off and still runs the caller's onMouseDown", async () => {
+    const user = userEvent.setup();
+    const onMouseDown = vi.fn();
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuItem label="Edit" onClick={() => {}} />
+        <DropdownMenuItem
+          label="Delete"
+          isDisabled
+          onClick={() => {}}
+          onMouseDown={onMouseDown}
+        />
+      </DropdownMenu>,
+    );
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    const del = screen.getByRole('menuitem', {name: 'Delete', hidden: true});
+    expect(fireEvent.mouseDown(del)).toBe(false);
+    expect(onMouseDown).toHaveBeenCalledOnce();
+  });
+
+  it('a disabled row takes focus from the keys, stays inert, and leaves the menu open', async () => {
+    const user = userEvent.setup();
+    const onDelete = vi.fn();
+    render(
+      <DropdownMenu
+        button={{label: 'Actions'}}
+        items={[
+          {label: 'Edit'},
+          {
+            label: 'Delete',
+            isDisabled: true,
+            description: 'Only the owner can delete',
+            onClick: onDelete,
+          },
+          {label: 'Print'},
+        ]}
+      />,
+    );
+
+    screen.getByRole('button', {name: /Actions/}).focus();
+    await user.keyboard('{Enter}');
+    const edit = screen.getByRole('menuitem', {name: 'Edit', hidden: true});
+    await waitFor(() => expect(edit).toHaveFocus());
+
+    const del = screen.getByRole('menuitem', {name: /Delete/, hidden: true});
+    expect(del).toHaveAttribute('aria-disabled', 'true');
+    expect(del).toHaveAttribute('tabindex', '-1');
+    await user.keyboard('{ArrowDown}');
+    expect(del).toHaveFocus();
+    await user.keyboard('{Enter}');
+    await user.keyboard(' ');
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', {name: /Actions/})).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(del).toHaveFocus();
+
+    // A mouse press on the disabled row does not focus or light it.
+    fireEvent.keyDown(screen.getByRole('menu', {hidden: true}), {
+      key: 'Home',
+    });
+    expect(fireEvent.mouseDown(del)).toBe(false);
+    expect(fireEvent.mouseDown(edit)).toBe(true);
+
+    // End and Home move to the first and last rows, as from any row.
+    const menu = screen.getByRole('menu', {hidden: true});
+    fireEvent.keyDown(menu, {key: 'Home'});
+    expect(edit).toHaveFocus();
+    fireEvent.keyDown(menu, {key: 'End'});
+    expect(
+      screen.getByRole('menuitem', {name: 'Print', hidden: true}),
     ).toHaveFocus();
   });
 
@@ -2601,6 +2674,10 @@ describe('DropdownMenu keyboard access for menuitemradio/menuitemcheckbox (#3829
 describe('DropdownMenu open focus follows input modality (#4477)', () => {
   const items = [{label: 'Edit'}, {label: 'Duplicate'}, {label: 'Delete'}];
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('pointer open focuses the menu container, not the first item (items mode)', async () => {
     const user = userEvent.setup();
     render(<DropdownMenu button={{label: 'Actions'}} items={items} />);
@@ -2633,6 +2710,71 @@ describe('DropdownMenu open focus follows input modality (#4477)', () => {
     ).not.toHaveFocus();
   });
 
+  it('a row the pointer lit before the open frame keeps focus after a pointer open', async () => {
+    // The open's frame waits until the test runs it, as on a loaded page
+    // where the pointer reaches a row first.
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const user = userEvent.setup();
+    render(<DropdownMenu button={{label: 'Actions'}} items={items} />);
+
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    const edit = screen.getByRole('menuitem', {name: 'Edit', hidden: true});
+    fireEvent.pointerMove(edit, {pointerType: 'mouse'});
+    expect(edit).toHaveFocus();
+    act(() => {
+      for (const callback of frames.splice(0)) {
+        callback(performance.now());
+      }
+    });
+
+    expect(edit).toHaveFocus();
+  });
+
+  it('a pointer open with no row lit before the open frame still focuses the menu container', async () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const user = userEvent.setup();
+    render(<DropdownMenu button={{label: 'Actions'}} items={items} />);
+
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    act(() => {
+      for (const callback of frames.splice(0)) {
+        callback(performance.now());
+      }
+    });
+
+    expect(screen.getByRole('menu', {hidden: true})).toHaveFocus();
+  });
+
+  it('a keyboard open via Space still focuses the first enabled item when its frame runs', async () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const user = userEvent.setup();
+    render(<DropdownMenu button={{label: 'Actions'}} items={items} />);
+
+    screen.getByRole('button', {name: /Actions/}).focus();
+    await user.keyboard(' ');
+    act(() => {
+      for (const callback of frames.splice(0)) {
+        callback(performance.now());
+      }
+    });
+
+    expect(
+      screen.getByRole('menuitem', {name: 'Edit', hidden: true}),
+    ).toHaveFocus();
+  });
+
   it('first ArrowDown after a pointer open moves focus to the first enabled item', async () => {
     const user = userEvent.setup();
     render(<DropdownMenu button={{label: 'Actions'}} items={items} />);
@@ -2647,7 +2789,7 @@ describe('DropdownMenu open focus follows input modality (#4477)', () => {
     ).toHaveFocus();
   });
 
-  it('ArrowDown after a pointer open skips a disabled leading item', async () => {
+  it('ArrowDown after a pointer open reaches a disabled leading item', async () => {
     const user = userEvent.setup();
     render(
       <DropdownMenu
@@ -2662,7 +2804,7 @@ describe('DropdownMenu open focus follows input modality (#4477)', () => {
 
     fireEvent.keyDown(menu, {key: 'ArrowDown'});
     expect(
-      screen.getByRole('menuitem', {name: 'Delete', hidden: true}),
+      screen.getByRole('menuitem', {name: 'Edit', hidden: true}),
     ).toHaveFocus();
   });
 
@@ -2929,6 +3071,120 @@ describe('DropdownMenu data/compound parity', () => {
     expect(item).toContainElement(screen.getByTestId('rich'));
     // Still typeahead- and screen-reader-addressable: both read text content.
     expect(item).toHaveAccessibleName('Rename');
+  });
+});
+
+describe('DropdownMenu entrance under a finger', () => {
+  function renderMenu(presentation?: 'popover') {
+    render(
+      <DropdownMenu
+        button={{label: 'Actions'}}
+        presentation={presentation}
+        items={[
+          {label: 'Edit', onClick: () => {}},
+          {label: 'Delete', onClick: () => {}},
+        ]}
+      />,
+    );
+    return screen.getByRole('button', {name: /Actions/});
+  }
+
+  const item = (name: string) =>
+    screen.getByRole('menuitem', {name, hidden: true});
+
+  // The primary pointer: a phone's finger, or a desktop's mouse.
+  function stubPointer(pointer: 'coarse' | 'fine') {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        matches: pointer === 'coarse' && query === TOUCH_QUERY,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+  }
+
+  /**
+   * Gives each popover's surface, the layer's first child where the entrance
+   * plays, a running entrance. Its end is the test's to decide, since jsdom
+   * lacks Web Animations' `getAnimations()`.
+   */
+  function stubEntrance() {
+    let end = () => {};
+    const finished = new Promise<void>(resolve => {
+      end = resolve;
+    });
+    const entrance = {
+      playState: 'running',
+      finished,
+      effect: {getComputedTiming: () => ({endTime: 165})},
+    };
+    Object.defineProperty(Element.prototype, 'getAnimations', {
+      configurable: true,
+      value(this: Element) {
+        const layer = this.parentElement;
+        return layer?.matches('[popover]') === true &&
+          layer.firstElementChild === this
+          ? [entrance]
+          : [];
+      },
+    });
+    return {
+      async end() {
+        await act(async () => {
+          end();
+        });
+      },
+    };
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(Element.prototype, 'getAnimations');
+  });
+
+  it('takes no touch while it enters: the layer is held until the entrance ends (spec:AST-094 FR35)', async () => {
+    stubPointer('coarse');
+    const entrance = stubEntrance();
+    const user = userEvent.setup();
+    await user.click(renderMenu());
+    expect(isInHeldLayer(item('Edit'))).toBe(true);
+
+    await entrance.end();
+    expect(isInHeldLayer(item('Edit'))).toBe(false);
+  });
+
+  it('lets go at once when it closes during its entrance', async () => {
+    stubPointer('coarse');
+    stubEntrance();
+    const user = userEvent.setup();
+    const trigger = renderMenu();
+    await user.click(trigger);
+    expect(isInHeldLayer(item('Edit'))).toBe(true);
+
+    await user.keyboard('{Escape}');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(isInHeldLayer(item('Edit'))).toBe(false);
+  });
+
+  it('under a fine primary pointer (a mouse, or a finger on a touchscreen laptop), holds nothing: the layer\u2019s own entrance plays', async () => {
+    stubPointer('fine');
+    stubEntrance();
+    const user = userEvent.setup();
+    await user.click(renderMenu());
+    expect(isInHeldLayer(item('Edit'))).toBe(false);
+  });
+
+  it('pinned to presentation="popover", holds nothing under a finger', async () => {
+    stubPointer('coarse');
+    stubEntrance();
+    const user = userEvent.setup();
+    await user.click(renderMenu('popover'));
+    expect(isInHeldLayer(item('Edit'))).toBe(false);
   });
 });
 
@@ -3486,11 +3742,13 @@ describe('DropdownMenu menuMaxHeight', () => {
     const menu = screen.getByRole('menu', {hidden: true});
     // The cap is lifted to the given height, still bounded by the viewport.
     expect(menu).toHaveStyle({maxHeight: 'var(--x-maxHeight)'});
-    expect(menu.getAttribute('style')).toContain('min(528px, calc(100dvb');
+    expect(menu.getAttribute('style')).toContain('min(528px, min(calc(100dvb');
     expect(menu.getAttribute('style')).not.toContain('min(300px');
     // The popover viewport that holds the menu lifts its cap with it.
     const popover = menu.closest('[popover]');
-    expect(popover?.getAttribute('style')).toContain('min(528px, calc(100dvb');
+    expect(popover?.getAttribute('style')).toContain(
+      'min(528px, min(calc(100dvb',
+    );
   });
 
   it('keeps the viewport bound below the raised cap', () => {
@@ -3505,7 +3763,7 @@ describe('DropdownMenu menuMaxHeight', () => {
       />,
     );
     const menu = screen.getByRole('menu', {hidden: true});
-    expect(menu.getAttribute('style')).toContain('min(720px, calc(100dvb');
+    expect(menu.getAttribute('style')).toContain('min(720px, min(calc(100dvb');
   });
 });
 

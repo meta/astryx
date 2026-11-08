@@ -19,10 +19,9 @@
  *
  * Expansion state flows through an external store (TreeStore) so each
  * row's expander subscribes independently — a toggle re-renders only the
- * affected cells, not the whole body. Row ARIA (aria-level,
- * aria-expanded) is applied imperatively via a ref callback on each
- * <tr>, exactly like selection's row styling; each subscription
- * self-cleans when the row disconnects.
+ * affected cells, not the whole body. A ref callback on each <tr> sets its
+ * aria-level, as selection's row styling does. Each subscription ends when
+ * its row disconnects.
  *
  * When `hasExpandableRows` is false (flat data), every transform is a
  * pass-through: adopting the plugin ahead of hierarchical data is a
@@ -30,7 +29,6 @@
  */
 
 import {
-  createContext,
   use,
   useCallback,
   useEffect,
@@ -40,7 +38,13 @@ import {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {colorVars, radiusVars, spacingVars} from '../../../theme/tokens.stylex';
+import {
+  colorVars,
+  focusVars,
+  radiusVars,
+  spacingVars,
+} from '../../../theme/tokens.stylex';
+import {focusOutlineProps} from '../../../utils/focusOutline.stylex';
 import {Icon} from '../../../Icon';
 import {mergeRefs} from '../../../utils';
 import {
@@ -58,8 +62,10 @@ import {
   useComponentTranslator,
 } from '../../../i18n/useComponentTranslator';
 import english from '../../../i18n/generated-english/Table/plugins/tree/useTableTreeData.generated';
+import {createSharedContext} from '../../../utils/sharedContext';
 
 registerEnglishFallback(english);
+import {TableContext} from '../../TableContext';
 
 // =============================================================================
 // Types
@@ -172,7 +178,11 @@ function createTreeStore<T extends Record<string, unknown>>(
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const TreeStoreContext = createContext<TreeStore<any> | null>(null);
+const TreeStoreContext = createSharedContext<TreeStore<any> | null>(
+  'TreeStoreContext',
+  1,
+  null,
+);
 TreeStoreContext.displayName = 'TreeStoreContext';
 
 /** Indent token -> index, for the primitive row snapshot. */
@@ -221,21 +231,18 @@ function useRowSnapshot<T extends Record<string, unknown>>(
 // Row ARIA (imperative, mirrors selection's row styling)
 // =============================================================================
 
+// aria-expanded is valid on a row only in a treegrid, so it stays on the
+// expander button. aria-level is also treegrid-only, but Chromium exposes it
+// as the row's depth, so rows keep it.
 function applyRowTreeAria(
   el: HTMLTableRowElement,
   meta: TableTreeRowMeta | undefined,
 ): void {
   if (!meta) {
     el.removeAttribute('aria-level');
-    el.removeAttribute('aria-expanded');
     return;
   }
   el.setAttribute('aria-level', String(meta.level + 1));
-  if (meta.hasChildren) {
-    el.setAttribute('aria-expanded', String(meta.isExpanded));
-  } else {
-    el.removeAttribute('aria-expanded');
-  }
 }
 
 // =============================================================================
@@ -258,6 +265,14 @@ const treeStyles = stylex.create({
   indent: (paddingInlineStart: string) => ({
     paddingInlineStart,
   }),
+  // A compact row is shorter than the ring around the 24px toggle, and the
+  // cell clips its overflow, so there the ring sits inside the toggle.
+  expanderFocusInset: {
+    outlineOffset: {
+      default: null,
+      ':focus-visible': `calc(-1 * ${focusVars['--focus-outline-width']})`,
+    },
+  },
   expanderButton: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -346,6 +361,7 @@ function TreeExpander({
   rowLabel?: string;
 }) {
   const t = useComponentTranslator();
+  const isCompact = use(TableContext)?.density === 'compact';
   const normalizedRowLabel = rowLabel?.trim();
   const ariaLabel = normalizedRowLabel
     ? isExpanded
@@ -358,7 +374,10 @@ function TreeExpander({
   return (
     <button
       type="button"
-      {...stylex.props(treeStyles.expanderButton)}
+      {...focusOutlineProps.focusVisible(
+        treeStyles.expanderButton,
+        isCompact && treeStyles.expanderFocusInset,
+      )}
       onClick={e => {
         e.stopPropagation();
         onToggle();
@@ -399,11 +418,15 @@ function TreeExpandAllToggle({
   onCollapseAll: () => void;
 }) {
   const t = useComponentTranslator();
+  const isCompact = use(TableContext)?.density === 'compact';
   const allExpanded = isAllExpanded === true;
   return (
     <button
       type="button"
-      {...stylex.props(treeStyles.expanderButton)}
+      {...focusOutlineProps.focusVisible(
+        treeStyles.expanderButton,
+        isCompact && treeStyles.expanderFocusInset,
+      )}
       onClick={e => {
         e.stopPropagation();
         if (allExpanded) {
