@@ -393,6 +393,85 @@ describe('interactionModality', () => {
     });
   });
 
+  describe('text entry since the last pointer press', () => {
+    async function trackIn(targetDocument: Document) {
+      vi.stubGlobal('document', targetDocument);
+      const tracker = await loadTracker();
+      tracker.__startInteractionModalityTrackingForTest();
+      const field = targetDocument.createElement('input');
+      field.type = 'text';
+      const button = targetDocument.createElement('button');
+      targetDocument.body.append(field, button);
+      const press = (target: Element, key: string) =>
+        target.dispatchEvent(
+          new KeyboardEvent('keydown', {key, bubbles: true}),
+        );
+      return {tracker, field, button, press};
+    }
+
+    it('is false before any input', async () => {
+      const {tracker} = await trackIn(
+        document.implementation.createHTMLDocument(),
+      );
+      expect(tracker.isTextEntrySincePointer()).toBe(false);
+    });
+
+    it.each(['a', ' ', 'Backspace', 'Delete', 'Enter', 'Unidentified'])(
+      'stays true while %s types into a text field, and the modality turns to keyboard',
+      async key => {
+        const {tracker, field, press} = await trackIn(
+          document.implementation.createHTMLDocument(),
+        );
+        field.ownerDocument.dispatchEvent(new Event('pointerdown'));
+        expect(tracker.isTextEntrySincePointer()).toBe(true);
+
+        press(field, key);
+
+        expect(tracker.getInteractionModality()).toBe('keyboard');
+        expect(tracker.isTextEntrySincePointer()).toBe(true);
+      },
+    );
+
+    it.each(['Tab', 'Escape', 'ArrowLeft', 'ArrowDown', 'Home'])(
+      'turns false when %s navigates from a text field',
+      async key => {
+        const {tracker, field, press} = await trackIn(
+          document.implementation.createHTMLDocument(),
+        );
+        field.ownerDocument.dispatchEvent(new Event('pointerdown'));
+        press(field, 'a');
+
+        press(field, key);
+
+        expect(tracker.isTextEntrySincePointer()).toBe(false);
+      },
+    );
+
+    it('turns false for a character key outside a text field', async () => {
+      const {tracker, button, press} = await trackIn(
+        document.implementation.createHTMLDocument(),
+      );
+      button.ownerDocument.dispatchEvent(new Event('pointerdown'));
+
+      press(button, ' ');
+
+      expect(tracker.isTextEntrySincePointer()).toBe(false);
+    });
+
+    it('stays false after navigation until the next pointer press', async () => {
+      const {tracker, field, press} = await trackIn(
+        document.implementation.createHTMLDocument(),
+      );
+      field.ownerDocument.dispatchEvent(new Event('pointerdown'));
+      press(field, 'Tab');
+      press(field, 'a');
+      expect(tracker.isTextEntrySincePointer()).toBe(false);
+
+      field.ownerDocument.dispatchEvent(new Event('pointerdown'));
+      expect(tracker.isTextEntrySincePointer()).toBe(true);
+    });
+  });
+
   it('uses the keyboard-safe default without a document', async () => {
     vi.stubGlobal('document', undefined);
     const serverModule = await loadTracker();
