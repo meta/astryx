@@ -979,7 +979,7 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     holdClock(performance.now());
     const growing = morph.present(
       lerpPath(from, lifted, {box: sourceRect, scale: 'uniform'}),
-      motion.lift,
+      {spring: motion.lift},
       {crossfadeAs: 'entrance'},
     );
     holdClock(null);
@@ -1162,9 +1162,11 @@ export function createLiftFromTrigger(): LiftFromTrigger {
       }),
     );
     const morph = createRectMorph(element);
-    const presenting = morph.present(path, current.motion.surfaceIn, {
-      crossfadeAs: 'entrance',
-    });
+    const presenting = morph.present(
+      path,
+      {spring: current.motion.surfaceIn},
+      {crossfadeAs: 'entrance'},
+    );
     void presenting.finished.then(surfaceSettled, surfaceSettled);
     current.surface = {
       element,
@@ -1237,7 +1239,7 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     }
     surface.dismissing = surface.morph.dismiss(
       surface.path,
-      current.motion.surfaceOut,
+      {spring: current.motion.surfaceOut},
       {target: copy, crossfadeAs: 'exit'},
     );
   };
@@ -1293,7 +1295,7 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     );
     const returning = current.morph.dismiss(
       lerpPath(sourceRect, lifted, {box: sourceRect, scale: 'uniform'}),
-      motion.drop,
+      {spring: motion.drop},
       {target: source, crossfadeAs: 'exit'},
     );
     current.holdClock(null);

@@ -724,11 +724,11 @@ test('the copy grows to the photo on the rect morph, a close mid-growth turns th
       }
     };
     requestAnimationFrame(sample);
-    morph.present(path, spring);
+    morph.present(path, {spring});
     await isMidway;
     // The close turns the opening around: the same copy, from where it is.
     phase = 'close';
-    const closing = morph.dismiss(path, spring, {target: element});
+    const closing = morph.dismiss(path, {spring}, {target: element});
     await closing.finished;
     sampling = false;
     const landed = element.getBoundingClientRect();
