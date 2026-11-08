@@ -197,7 +197,7 @@ table owns their semantic effect.
 | FR6 | Component anatomy contains the caller trigger and content, one painted Popover surface, and the optional fallback close control. Popover owns no Header, Body, or separate shared-hook surface part.                                                                                                                         | Current source, docs target inventory, and tests                                                      | Accepted anatomy; stale consumer anatomy corrected by this contract                         |
 | FR7 | The painted surface has one broad canonical target, `popover`; composed components may add one authoritative component-specific refinement target.                                                                                                                                                                           | Owner direction on 2026-08-31 plus current target inventory                                           | Accepted canonical contract; covered by focused target tests                                |
 | FR8 | The surface padding is one spacing-scale rung applied on the painted surface. Popover defaults to step 3 (the released inset); `0` paints a flush surface; a direct `usePopover` composition paints none unless it asks for a rung. The rung sits where a theme's `padding` on the `popover` target replaces it.             | PR #6683 and its Popover tests; `architecture:container-padding/INV8` (padding alone does not enroll) | Pending owner review (DEC-4); implemented and covered by the Popover surface-padding suite  |
-| FR9 | Under a finger, Popover grows from its trigger on `--duration-medium-min`, the Storybook step nearest iOS's 206 ms growth, with `--ease-entrance` (`spec:AST-094` FR45), and shrinks back on the theme's exit duration and easing. A touch while it grows is ignored (FR35). Dismissal and a mouse's entrance are unchanged. | `spec:AST-094` FR31, FR35                                                                             | Implemented; gap: the open-to-close latch waits for the shared presentation hold            |
+| FR9 | Under a finger, Popover grows from its trigger on `--duration-medium-min`, the Storybook step nearest iOS's 206 ms growth, with `--ease-entrance` (`spec:AST-094` FR45), and shrinks back on the theme's exit duration and easing. A touch while it grows is ignored (FR35). Dismissal and a mouse's entrance are unchanged. | `spec:AST-094` FR31, FR35                                                                             | Implemented                                                                                 |
 
 ### Allowed variation
 
@@ -460,7 +460,8 @@ light-dismisses: a tap outside it or a swipe down closes it, whatever
 `hasLightDismiss` says, so a finger always has a way out. Its fallback close
 stays hidden, as in an anchored popover. Everything else follows Popover's
 existing props. The sheet of DEC-6 is a modal BottomSheet at the sheet's tall
-height and inset by Popover's `padding`; `xstyle`, `className` and `style`
+height and inset by Popover's `padding`, below the grab bar's band at the top
+(`component:BottomSheet`, Content area inset); `xstyle`, `className` and `style`
 style its panel, and `placement`, `alignment` and `width` do not apply. The
 surface is chosen when the popover opens and stays until it closes, and the
 trigger's expanded state and controlled element follow whichever surface is

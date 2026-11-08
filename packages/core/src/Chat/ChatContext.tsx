@@ -12,8 +12,9 @@
  *   ChatComposerInput, ChatSendButton, and custom inputs.
  */
 
-import {createContext, use, type RefObject} from 'react';
+import {use, type RefObject} from 'react';
 import {createLayerScopedContext} from '../Layer/layerScopedContext';
+import {createSharedContext} from '../utils/sharedContext';
 
 export type ChatMessageSender = 'user' | 'assistant' | 'system';
 export type ChatDensity = 'compact' | 'balanced' | 'spacious';
@@ -24,7 +25,11 @@ export interface ChatMessageContextValue {
 }
 
 export const ChatMessageContext =
-  createLayerScopedContext<ChatMessageContextValue | null>(null);
+  createLayerScopedContext<ChatMessageContextValue | null>(
+    'ChatMessageContext',
+    1,
+    null,
+  );
 ChatMessageContext.displayName = 'ChatMessageContext';
 
 export function useChatMessageContext(): ChatMessageContextValue | null {
@@ -36,7 +41,11 @@ export interface ChatListContextValue {
 }
 
 export const ChatListContext =
-  createLayerScopedContext<ChatListContextValue | null>(null);
+  createLayerScopedContext<ChatListContextValue | null>(
+    'ChatListContext',
+    1,
+    null,
+  );
 ChatListContext.displayName = 'ChatListContext';
 
 export function useChatListContext(): ChatListContextValue | null {
@@ -83,7 +92,11 @@ export interface ChatComposerContextValue {
 }
 
 export const ChatComposerContext =
-  createContext<ChatComposerContextValue | null>(null);
+  createSharedContext<ChatComposerContextValue | null>(
+    'ChatComposerContext',
+    1,
+    null,
+  );
 ChatComposerContext.displayName = 'ChatComposerContext';
 
 export function useChatComposerContext(): ChatComposerContextValue | null {
@@ -101,9 +114,12 @@ export interface ChatLayoutContextValue {
   contentRef: (el: HTMLElement | null) => void;
 }
 
-export const ChatLayoutContext = createContext<ChatLayoutContextValue | null>(
-  null,
-);
+export const ChatLayoutContext =
+  createSharedContext<ChatLayoutContextValue | null>(
+    'ChatLayoutContext',
+    1,
+    null,
+  );
 ChatLayoutContext.displayName = 'ChatLayoutContext';
 
 export function useChatLayoutContext(): ChatLayoutContextValue | null {
