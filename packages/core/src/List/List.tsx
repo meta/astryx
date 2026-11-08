@@ -5,7 +5,8 @@
 /**
  * @file List.tsx
  * @input Uses React, ReactNode, StyleXStyles, theme tokens, useDevWarning,
- *   and ListContext with the row edge treatment
+ *   and ListContext with the row edge treatment. Numbered rows share one
+ *   intrinsic marker column, including when a counter changes digit count.
  * @output Exports List component, ListProps, ListDensity, ListEdge, ListStyle
  *   types
  * @position Core implementation; consumed by index.ts, tested by List.test.tsx
@@ -18,7 +19,7 @@
  * - /packages/cli/assets/templates/blocks/components/List/ (showcase blocks)
  */
 
-import {useId, useMemo, type ReactNode} from 'react';
+import {useId, useMemo, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
@@ -28,7 +29,11 @@ import {
   type ListEdge,
   type ListMarkerStyle,
 } from './ListContext';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useListLayoutUpdates} from './listLayoutUpdates';
+import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
+import type {AnimatedLayout} from '../motion/animatedLayout';
 import {themeProps} from '../utils/themeProps';
 import {useDevWarning} from '../hooks/useDevWarning';
 
@@ -58,6 +63,17 @@ export interface ListProps extends BaseProps<
   density?: ListDensity;
 
   /**
+   * The handle from `useAnimatedLayout({containerRef})`. With it, the list
+   * animates its row changes on one shared motion, under every pointer. An
+   * inserted row enters, and a removed row collapses in place. A row that
+   * crosses rows moving the other way rides above them. The rows after a
+   * change, and the content after the list up to that container, glide to
+   * their new places. A row's identity is its `itemKey`, so a row without one
+   * changes at once. Without a handle the list changes at once.
+   */
+  animatedLayout?: AnimatedLayout;
+
+  /**
    * Whether to show dividers between list items.
    * @default false
    */
@@ -75,8 +91,9 @@ export interface ListProps extends BaseProps<
    *   reach a little past it into the container's padding. Suits interactive
    *   rows in a container
    * - 'bleed': text sits on the heading's line, and dividers and backgrounds
-   *   reach the container's edges with square corners, like Table rows in a
-   *   Card
+   *   reach the container's edges, like Table rows in a Card. Rows are
+   *   square, except that the first or last row of a list that is a rounded
+   *   Card's or Dialog's first or last child takes its corner
    *
    * A row's first content is what lines up with the heading: its marker,
    * icon, or avatar when it has one, otherwise its label. 'outset' and
@@ -147,6 +164,27 @@ const styles = stylex.create({
     // `hidden`: hidden makes a scroll container, which fights the list's
     // vertical scroller. (StyleX emits the physical longhand of this axis.)
     overflowInline: 'clip',
+    // Under a finger, the isolation boundary for what rises inside the list.
+    // A row's touch band and a swipeable row order above the rows after them.
+    // They stay below a page-level sticky header at the same z-index. With a
+    // mouse nothing rises, so the list keeps its stacking.
+    isolation: {default: null, '@media (pointer: coarse)': 'isolate'},
+  },
+  // A list under an `animatedLayout` handle isolates for every pointer. A row
+  // that slides across others rides above them with a mouse too, and it must
+  // stay below a page-level sticky header.
+  animatedIsolation: {
+    isolation: 'isolate',
+  },
+  // Subgridded numbered rows contribute their marker's intrinsic width to
+  // one column, so text and nested lists never move with an individual number.
+  numberColumns: {
+    display: {
+      default: 'flex',
+      '@supports (grid-template-columns: subgrid)': 'grid',
+    },
+    gridTemplateColumns: 'max-content minmax(0, 1fr)',
+    columnGap: spacingVars['--spacing-2'],
   },
   // 'outset' and 'bleed' rows reach into the container's padding. The list
   // reaches the container's padding edge on each inline edge first, so its
@@ -159,6 +197,48 @@ const styles = stylex.create({
     marginInlineEnd: 'calc(-1 * var(--container-padding-inline-end, 0px))',
     width:
       'calc(100% + var(--container-padding-inline-start, 0px) + var(--container-padding-inline-end, 0px))',
+  },
+  // 'bleed' rows reach the container's padding edge inline, and keep its block
+  // padding. The list passes its first and last rows the corner a rounded
+  // container publishes, less that block padding. It is at a corner only as
+  // the container's first or last child.
+  bleedCorners: {
+    '--_list-corner-start-start': {
+      default: '0px',
+      ':first-child':
+        'max(0px, var(--container-corner-start-start, 0px) - var(--container-padding-block-start, 0px))',
+    },
+    '--_list-corner-start-end': {
+      default: '0px',
+      ':first-child':
+        'max(0px, var(--container-corner-start-end, 0px) - var(--container-padding-block-start, 0px))',
+    },
+    '--_list-corner-end-start': {
+      default: '0px',
+      ':last-child':
+        'max(0px, var(--container-corner-end-start, 0px) - var(--container-padding-block-end, 0px))',
+    },
+    '--_list-corner-end-end': {
+      default: '0px',
+      ':last-child':
+        'max(0px, var(--container-corner-end-end, 0px) - var(--container-padding-block-end, 0px))',
+    },
+  },
+  // With a header, the list's root is the container's child, and the header
+  // sits above the first row.
+  bleedCornersBelowHeader: {
+    '--_list-corner-start-start': '0px',
+    '--_list-corner-start-end': '0px',
+    '--_list-corner-end-start': {
+      default: '0px',
+      ':last-child':
+        'max(0px, var(--container-corner-end-start, 0px) - var(--container-padding-block-end, 0px))',
+    },
+    '--_list-corner-end-end': {
+      default: '0px',
+      ':last-child':
+        'max(0px, var(--container-corner-end-end, 0px) - var(--container-padding-block-end, 0px))',
+    },
   },
   withDividers: {
     gap: 0,
@@ -209,6 +289,7 @@ const dynamicStyles = stylex.create({
  */
 export function List({
   children,
+  animatedLayout,
   density = 'balanced',
   hasDividers = false,
   edge: edgeProp,
@@ -224,6 +305,12 @@ export function List({
   ...props
 }: ListProps) {
   const headerId = useId();
+  const listRef = useRef<HTMLUListElement & HTMLOListElement>(null);
+  const measureRows = useListLayoutUpdates(listRef, animatedLayout);
+  const mergedRef = useMergedRefs(
+    listRef,
+    ref as React.Ref<HTMLUListElement & HTMLOListElement>,
+  );
   const isOrdered = listStyle === 'decimal';
   const Tag = isOrdered ? 'ol' : 'ul';
   // Plain use of the deprecated prop is reported by its @deprecated type;
@@ -239,13 +326,19 @@ export function List({
   const reachesContainerPadding = edge === 'outset' || edge === 'bleed';
 
   const contextValue = useMemo(
-    () => ({density, hasDividers, edge, listStyle}),
-    [density, hasDividers, edge, listStyle],
+    () => ({
+      density,
+      hasDividers,
+      edge,
+      listStyle,
+      animatedLayout,
+    }),
+    [density, hasDividers, edge, listStyle, animatedLayout],
   );
 
   const listElement = (
     <Tag
-      ref={ref as React.Ref<HTMLUListElement & HTMLOListElement>}
+      ref={mergedRef}
       // Consumer props first: everything the component sets for itself below
       // is part of its contract and wins on conflict.
       {...props}
@@ -261,12 +354,20 @@ export function List({
       // role restores "list, N items" announcements for every listStyle
       // variant.
       role="list"
+      // A bleeding list reads the corner its container publishes. With a
+      // header, the root below is the container's child and reads it.
+      {...(edge === 'bleed' && header == null
+        ? {'data-container-corner': ''}
+        : null)}
       {...mergeProps(
         themeProps('list', {density, listStyle}),
         stylex.props(
           styles.list,
+          animatedLayout != null && styles.animatedIsolation,
+          isOrdered && styles.numberColumns,
           hasDividers && styles.withDividers,
           reachesContainerPadding && styles.reachesContainerPadding,
+          edge === 'bleed' && header == null && styles.bleedCorners,
           listStyle !== 'none' &&
             (start != null && start !== 1
               ? dynamicStyles.counterStart(start - 1)
@@ -280,13 +381,31 @@ export function List({
     </Tag>
   );
 
+  // Every change of the rows is measured before it lands. LayoutChangeSnapshot
+  // calls this in the commit, before the DOM changes.
+  const snapshot =
+    animatedLayout != null ? (
+      <LayoutChangeSnapshot value={children} onBeforeChange={measureRows} />
+    ) : null;
+
   if (header == null) {
-    return <ListContext value={contextValue}>{listElement}</ListContext>;
+    return (
+      <ListContext value={contextValue}>
+        {snapshot}
+        {listElement}
+      </ListContext>
+    );
   }
 
   return (
     <ListContext value={contextValue}>
-      <div {...stylex.props(styles.root)}>
+      {snapshot}
+      <div
+        {...(edge === 'bleed' ? {'data-container-corner': ''} : null)}
+        {...stylex.props(
+          styles.root,
+          edge === 'bleed' && styles.bleedCornersBelowHeader,
+        )}>
         <div id={headerId} {...stylex.props(styles.header)}>
           {header}
         </div>

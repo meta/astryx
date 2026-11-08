@@ -73,7 +73,9 @@ describe('ci.yml RTL D7 regression step', () => {
 
   it('runs only for the first core RTL shard, in the browser mode', () => {
     const step = d7Step();
-    expect(step.if).toBe("matrix.package == 'core' && matrix.part == 1");
+    expect(step.if).toBe(
+      "(matrix.package == 'core' && matrix.part == 1) && (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')",
+    );
     expect(step.env).toEqual({ASTRYX_RTL_BROWSER: '1'});
   });
 

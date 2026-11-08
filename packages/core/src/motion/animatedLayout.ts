@@ -2,17 +2,18 @@
 
 /**
  * @file animatedLayout.ts
- * @input The DOM (layout rectangles, computed style), Web Animations, the
- *   internal `springs.settle` motion role (motion/roles.ts) and the Reduce Motion
- *   cross-fade clock (uikit/timing.ts)
- * @output Exports `createAnimatedLayout` and the opaque `AnimatedLayout`
- *   handle, `reportLayoutChange`, `playLayoutChange`, `holdLayoutExit` /
- *   `releaseLayoutExit`, the in-place swap (`holdLayoutSwap` /
- *   `playLayoutSwap`), `playLayoutFrames` and `applyLayoutChangeTransition`:
- *   the one module
- *   that produces the
- *   size-change glide `spec:AST-105` defines
- *   (`architecture:react-component-runtime` INV12)
+ * @input The DOM (layout rectangles, computed style) and Web Animations. The
+ *   theme's move curve and duration (themeTiming.ts), the Reduce Motion
+ *   cross-fade clock (uikit/timing.ts) and the block measure (frameBlock.ts)
+ * @output Exports `createAnimatedLayout`, the opaque `AnimatedLayout` handle,
+ *   `reportLayoutChange`, `playLayoutChange` and `layoutStartFor`. It also
+ *   exports the exit hold (`holdLayoutExit`, `releaseLayoutExit`), the
+ *   in-place swap (`holdLayoutSwap`, `playLayoutSwap`), the edge reveal's
+ *   two-state form (`holdLayoutEdge`, `playLayoutEdge`), `playLayoutFrames`
+ *   and `applyLayoutChangeTransition`. It exports `glideOf` and the glide
+ *   landings (`landLayoutGlide`, `landLayoutGlideSideways`) too. It is the one
+ *   module that produces the size-change glide and the edge reveal
+ *   `spec:AST-105` defines (`architecture:react-component-runtime` INV12)
  * @position Motion foundation, internal to core. A handle comes from the
  *   public `useAnimatedLayout` hook; a component that takes it reports its
  *   size changes through this module.
@@ -37,16 +38,27 @@
  *   zero-size elements are skipped (an absolute child rides with its moving
  *   parent); a stuck sticky element does not change rectangle, so it stays.
  * - The move is a compositor-only `translate` (replace composition) from the
- *   old place to the new one, sampled from `springs.settle` into linear
- *   keyframes and corrected for a scaled ancestor. An element already gliding
+ *   old place to the new one. Its linear keyframes sample the theme's move
+ *   curve, corrected for a scaled ancestor. An element already gliding
  *   keeps that motion and adds the new move: the rest of its curve and the
- *   new move are summed into one new glide, velocity included. Nothing
+ *   new move are summed into one new glide, velocity included. Its place
+ *   before the change is read on the clock of every glide that carries it,
+ *   its own and its gliding ancestors' in the area (the box with each applied
+ *   `translate` taken out, plus each glide's offset at its current time), and
+ *   so is its place after the change, where only the glides the change leaves
+ *   running remain: the new glide starts where the old one is drawn, and a
+ *   glide the change leaves running cancels out of the move. Nothing
  *   animates height, and nothing scrolls the area.
  * - A measurement no commit claims by the next frame is dropped.
- * - The changed element plays its own entrance on the same spring, started in
- *   the same frame (`playLayoutChange`), or its exit: kept where it is while
- *   it gives up its space and conceals (`holdLayoutExit`). A disclosure's
- *   indicator turns on the same motion (`applyLayoutChangeTransition`).
+ * - The changed element plays its own entrance on the same curve, started in
+ *   the same frame (`playLayoutChange`). Or it exits, kept where it is while
+ *   it gives up its space and conceals (`holdLayoutExit`). Both are FR9's
+ *   edge reveal: from its block-end edge by default, or from the block-start
+ *   or an inline edge it is given. Once the content on that edge's side
+ *   glides, the edge rides that glide, frame by frame, so the two never part;
+ *   a reversal (a close while it opens) starts from what the element shows.
+ *   A disclosure's indicator turns on the same motion
+ *   (`applyLayoutChangeTransition`).
  * - A swap holds old content as one transient copy, inert and hidden from
  *   assistive technology, while new content enters in its place, on the same
  *   motion, and removes it when the swap ends (`holdLayoutSwap`,
@@ -54,6 +66,11 @@
  *   the swap's progress and, riding a gliding element, how far it has moved,
  *   so every part keeps to that glide; under Reduce Motion with a coarse
  *   pointer only opacity changes.
+ * - FR9's two-state form holds an element's old state as the swap's copy
+ *   while its edge rides a gliding element, such as a rail beside its
+ *   content (`holdLayoutEdge`, `playLayoutEdge`): the larger state is
+ *   clipped on that edge, from the extent the element shows, and the caller
+ *   adds only its own fades.
  * - Frames on elements the page renders can play on the same motion with no
  *   copy (`playLayoutFrames`), such as a surface reaching over a gap a glide
  *   opens, and are released when the motion ends.
@@ -64,7 +81,8 @@
  *   (`spec:AST-105` FR2).
  */
 
-import {motionRole} from './roles';
+import {LATE_START_MS} from './frameBlock';
+import {sharedKey} from '../utils/sharedRealm';
 import {
   inertCopy,
   isCopyable,
@@ -73,18 +91,27 @@ import {
   visiblePartCopy,
   wrapText,
 } from './transientCopy';
-import {isSpring} from './roleValue';
-import {solveSpring, toSpring, type SpringDescription} from './spring';
-import {registerSpringsTable, SETTLE_SPRING} from './uikit/springs';
+import {readThemeTiming, readThemeTokenText} from './themeTiming';
+import {
+  settlingDuration,
+  solveSpring,
+  toSpring,
+  type SpringDescription,
+} from './spring';
+import {themeReducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import {reducedMotionCrossFade} from './uikit/timing';
+import {
+  batchPresented,
+  clearPresentedResolve,
+  registerPresentedOffset,
+  writePresentedResolve,
+} from './presentation';
 
-/** The shared motion role (`spec:AST-105` FR4). */
-const ROLE_ID = 'springs.settle';
 /** Below this many pixels a shift is not worth a move. */
 const MIN_SHIFT_PX = 0.5;
 /** The touch cross-fade's cap (`design:reduced-motion` DR2). */
 const CROSS_FADE_CAP_MS = 200;
-/** Keyframes per second the spring is sampled at. */
+/** Keyframes per second the motion is sampled at. */
 const SAMPLES_PER_SECOND = 60;
 
 // ---------------------------------------------------------------------------
@@ -93,7 +120,7 @@ const SAMPLES_PER_SECOND = 60;
 
 /** How a change plays under the reader's settings. */
 type LayoutMotion =
-  | {readonly kind: 'spring'; readonly progress: SpringProgress}
+  | {readonly kind: 'glide'; readonly progress: GlideProgress}
   | {
       readonly kind: 'fade';
       readonly durationMs: number;
@@ -101,9 +128,11 @@ type LayoutMotion =
     }
   | {readonly kind: 'instant'};
 
-/** The settle spring as remaining distance (1 → 0) over its duration. */
-interface SpringProgress {
+/** The move curve as remaining distance (1 → 0) over its duration. */
+export interface GlideProgress {
   readonly durationMs: number;
+  /** The move curve's CSS text, as read where the area is. */
+  readonly easing: string;
   /** Remaining fraction of the move at `t` ms. */
   remaining(t: number): number;
 }
@@ -116,28 +145,91 @@ function matches(element: Element, query: string): boolean {
 }
 
 /**
- * `springs.settle` from the internal role registry: one shared value for the
- * glide, the changed element and the indicator. Motion roles are internal
- * (`spec:AST-094` DEC-11): no theme, scope or custom property changes it.
+ * The theme's move curve over its medium duration where `area` is:
+ * one value for the glide, the changed element and the indicator. The tokens
+ * carry the theme's `character` and `tempo`. Null when the duration is zero
+ * or the browser plays no such easing, and then the change lands at once.
  */
-function settleSpring(): SpringDescription {
-  registerSpringsTable();
-  const value = motionRole(ROLE_ID)?.value;
-  return isSpring(value) ? value : SETTLE_SPRING;
-}
-
-function springProgress(description: SpringDescription): SpringProgress {
-  const curve = solveSpring(toSpring(description), {from: 1, to: 0});
-  const durationMs = Math.max(1, curve.settleTime(0.001) * 1000);
+function glideProgress(area: Element): GlideProgress | null {
+  const curve = readThemeTiming(area, {
+    duration: '--duration-medium',
+    easing: '--ease-move',
+  });
+  const easing = readThemeTokenText(area, '--ease-move');
+  if (curve == null || easing == null) {
+    return null;
+  }
+  const durationMs = curve.duration * 1000;
   return {
     durationMs,
-    remaining: t => (t >= durationMs ? 0 : curve.value(t / 1000)),
+    easing,
+    remaining: t => (t >= durationMs ? 0 : 1 - curve.at(t / 1000)),
   };
+}
+
+// A glide a gesture's release asks for, for the changes in one area.
+const releaseGlides = new WeakMap<Element, GlideProgress>();
+
+/**
+ * Times the changes `area` and what it holds play in the next frame by
+ * `progress`, not the theme's move curve. A release settles on its spring.
+ * Reduce Motion still wins.
+ */
+export function glideNextChange(area: Element, progress: GlideProgress): void {
+  releaseGlides.set(area, progress);
+  const view = area.ownerDocument.defaultView;
+  view?.requestAnimationFrame(() => {
+    view.requestAnimationFrame(() => releaseGlides.delete(area));
+  });
+}
+
+/**
+ * `spring` from rest toward the end, released at `velocity` (fractions of
+ * the move per second, toward the end), as a glide's progress.
+ */
+export function springGlide(
+  spring: SpringDescription,
+  velocity: number,
+): GlideProgress {
+  const physics = toSpring(spring);
+  const curve = solveSpring(physics, {from: 0, to: 1, velocity});
+  const durationMs =
+    settlingDuration(physics, {initialVelocity: velocity}) * 1000;
+  const remaining = (t: number) =>
+    t >= durationMs ? 0 : 1 - curve.value(t / 1000);
+  return {durationMs, easing: linearEasing(durationMs, remaining), remaining};
+}
+
+/** A move's remaining fraction over time as CSS `linear()` easing text. */
+function linearEasing(
+  durationMs: number,
+  remaining: (t: number) => number,
+): string {
+  const count = sampleCount(durationMs);
+  const stops: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const done = 1 - remaining((i / (count - 1)) * durationMs);
+    stops.push(String(Math.round(done * 10000) / 10000));
+  }
+  return `linear(${stops.join(', ')})`;
+}
+
+function releaseGlideFor(area: Element): GlideProgress | undefined {
+  for (let at: Element | null = area; at != null; at = at.parentElement) {
+    const progress = releaseGlides.get(at);
+    if (progress != null) {
+      return progress;
+    }
+  }
+  return undefined;
 }
 
 /** The motion a change in `area` plays now. */
 function layoutMotion(area: Element): LayoutMotion {
-  if (matches(area, '(prefers-reduced-motion: reduce)')) {
+  if (
+    matches(area, '(prefers-reduced-motion: reduce)') ||
+    themeReducesMotion(area)
+  ) {
     if (!matches(area, '(pointer: coarse)')) {
       return {kind: 'instant'};
     }
@@ -151,7 +243,12 @@ function layoutMotion(area: Element): LayoutMotion {
       easing: `cubic-bezier(${x1}, ${y1}, ${x2}, ${y2})`,
     };
   }
-  return {kind: 'spring', progress: springProgress(settleSpring())};
+  const progress = releaseGlideFor(area) ?? glideProgress(area);
+  return progress == null ? {kind: 'instant'} : {kind: 'glide', progress};
+}
+
+function sampleCount(durationMs: number): number {
+  return Math.max(2, Math.ceil((durationMs / 1000) * SAMPLES_PER_SECOND) + 1);
 }
 
 /** Linear keyframes over `durationMs`, one per frame, from `frame(t ms)`. */
@@ -159,10 +256,7 @@ function sampleOver(
   durationMs: number,
   frame: (t: number) => Keyframe,
 ): Keyframe[] {
-  const count = Math.max(
-    2,
-    Math.ceil((durationMs / 1000) * SAMPLES_PER_SECOND) + 1,
-  );
+  const count = sampleCount(durationMs);
   const keyframes: Keyframe[] = [];
   for (let i = 0; i < count; i++) {
     const offset = i / (count - 1);
@@ -171,24 +265,12 @@ function sampleOver(
   return keyframes;
 }
 
-/** Linear keyframes sampled from the spring, one per frame. */
+/** Linear keyframes sampled from the move curve, one per frame. */
 function sampleKeyframes(
-  progress: SpringProgress,
+  progress: GlideProgress,
   frame: (remaining: number) => Keyframe,
 ): Keyframe[] {
   return sampleOver(progress.durationMs, t => frame(progress.remaining(t)));
-}
-
-/** The spring as a CSS `linear()` easing, for a CSS transition. */
-function linearEasing(progress: SpringProgress): string {
-  const stops: string[] = [];
-  const count = 24;
-  for (let i = 0; i <= count; i++) {
-    const fraction = i / count;
-    const value = 1 - progress.remaining(fraction * progress.durationMs);
-    stops.push(`${round(value)} ${round(fraction * 100)}%`);
-  }
-  return `linear(${stops.join(', ')})`;
 }
 
 function round(value: number): number {
@@ -199,15 +281,179 @@ function round(value: number): number {
 // Playing
 // ---------------------------------------------------------------------------
 
+/** The glide each element reports now, so that only its end clears it. */
+const presentedGlides = new WeakMap<Element, object>();
+
+/** A glide's report in the presented hit-test registry. */
+interface GlideReport {
+  readonly element: Element;
+  /** Removes the report. A second call does nothing. */
+  readonly remove: () => void;
+}
+
+const glideReports = new Set<GlideReport>();
+
+/** The reports of ended glides, removed together in a later task. */
+const endedReports: GlideReport[] = [];
+
+/**
+ * Removes the reports of ended glides with one notice to the registry's
+ * watchers. A glide in a closed window or out of its document never ends, so
+ * its report goes here too.
+ */
+function removeEndedReports(): void {
+  if (endedReports.length === 0) {
+    return;
+  }
+  batchPresented(() => {
+    for (const report of endedReports.splice(0)) {
+      report.remove();
+    }
+    for (const report of [...glideReports]) {
+      const {element} = report;
+      if (!element.isConnected || element.ownerDocument.defaultView == null) {
+        report.remove();
+      }
+    }
+  });
+}
+
+/** Each keyframe's `translate` in px at its offset, or null if one has none. */
+function translatesOf(
+  keyframes: Keyframe[],
+): {at: number; x: number; y: number}[] | null {
+  const points: {at: number; x: number; y: number}[] = [];
+  for (const [index, frame] of keyframes.entries()) {
+    const match = /^(-?[\d.e+-]+)px (-?[\d.e+-]+)px$/.exec(
+      String(frame.translate ?? ''),
+    );
+    if (match == null) {
+      return null;
+    }
+    points.push({
+      at: frame.offset ?? index / Math.max(1, keyframes.length - 1),
+      x: Number(match[1]),
+      y: Number(match[2]),
+    });
+  }
+  return points.length > 0 ? points : null;
+}
+
+/**
+ * Reports `element` to the presented hit-test registry while its `translate`
+ * glide runs. iOS WebKit hit-tests the element where the glide started. So
+ * the gesture host resolves it at touch-down and lands the touch on what is
+ * drawn. `scale` is its ancestors' scale. An inert element, such as a swap's
+ * copy or a closing element, takes no touch, so it is not reported.
+ */
+function presentGlide(
+  element: Element,
+  animation: Animation,
+  keyframes: Keyframe[],
+  options: KeyframeAnimationOptions,
+  scale: {readonly x: number; readonly y: number},
+): void {
+  const view = element.ownerDocument.defaultView;
+  const durationMs = Number(options.duration);
+  const points =
+    (options.easing ?? 'linear') === 'linear' && options.delay == null
+      ? translatesOf(keyframes)
+      : null;
+  if (
+    view == null ||
+    points == null ||
+    !(durationMs > 0) ||
+    !('style' in element) ||
+    element.closest('[inert]') != null
+  ) {
+    return;
+  }
+  const styled = element as Element & ElementCSSInlineStyle;
+  const now = () => view.performance.now();
+  // The translate drawn at `time`: the keyframes are linear between samples.
+  const drawnAt = (time: number) => {
+    const start = animation.startTime;
+    const progress =
+      start == null
+        ? 0
+        : Math.min(1, Math.max(0, (time - Number(start)) / durationMs));
+    let next = 1;
+    while (next < points.length - 1 && points[next].at < progress) {
+      next += 1;
+    }
+    const from = points[next - 1] ?? points[0];
+    const to = points[next] ?? from;
+    const span = to.at - from.at;
+    const part =
+      span > 0 ? Math.min(1, Math.max(0, (progress - from.at) / span)) : 1;
+    return {
+      x: (from.x + (to.x - from.x) * part) * scale.x,
+      y: (from.y + (to.y - from.y) * part) * scale.y,
+    };
+  };
+  let hitTested = drawnAt(now());
+  let isEnded = false;
+  let isRemoved = false;
+  const glide = {};
+  presentedGlides.set(element, glide);
+  const unregister = registerPresentedOffset(element, {
+    // At its end the engine hit-tests the element at its layout again.
+    offset: (time = now()) => {
+      if (isEnded) {
+        return {x: 0, y: 0};
+      }
+      const drawn = drawnAt(time);
+      return {x: drawn.x - hitTested.x, y: drawn.y - hitTested.y};
+    },
+    resolve: () => {
+      if (!isEnded) {
+        writePresentedResolve(styled);
+        hitTested = drawnAt(now());
+      }
+    },
+  });
+  const report: GlideReport = {
+    element,
+    remove: () => {
+      if (isRemoved) {
+        return;
+      }
+      isRemoved = true;
+      glideReports.delete(report);
+      unregister();
+      if (presentedGlides.get(element) === glide) {
+        presentedGlides.delete(element);
+        clearPresentedResolve(styled);
+      }
+    },
+  };
+  glideReports.add(report);
+  const end = () => {
+    if (isEnded) {
+      return;
+    }
+    isEnded = true;
+    endedReports.push(report);
+    // This module's own timer: a closed frame's timer never fires. The glides
+    // of one change end in one frame, so the first task removes them all.
+    setTimeout(removeEndedReports, 0);
+  };
+  animation.addEventListener?.('finish', end);
+  animation.addEventListener?.('cancel', end);
+}
+
 /**
  * Play `keyframes` on `element`. Every option here (linear easing over sampled
  * keyframes, replace composition) is one any Web Animations engine takes, so
  * a failure means no Web Animations at all: the change then lands at once.
+ * `scale` is the element's ancestors' scale, for a `translate` glide.
  */
 function safeAnimate(
   element: Element,
   keyframes: Keyframe[],
   options: KeyframeAnimationOptions,
+  change?: ChangeStart,
+  scale: {readonly x: number; readonly y: number} = {x: 1, y: 1},
 ): Animation | null {
   if (typeof (element as HTMLElement).animate !== 'function') {
     return null;
@@ -219,14 +465,153 @@ function safeAnimate(
     return null;
   }
   ours.add(animation);
-  // Started on the document timeline's current time, not on the next frame:
-  // a retargeted glide keeps moving through the frame it is replaced in, and
-  // every animation of one change shares the same start.
-  const now = element.ownerDocument.timeline?.currentTime;
+  // The animation starts on the document timeline's current time, not on the
+  // next frame. So a retargeted glide keeps moving through the frame it is
+  // replaced in. After a block since that frame, Chromium's timeline still
+  // reads the frame before the block. A motion started there would skip into
+  // its curve, or past all of it. So it starts at the moment of the change
+  // instead, and the block delays the motion (startFor). Every animation of
+  // one change, in one document, shares that start.
+  const doc = element.ownerDocument;
+  const now = doc.timeline?.currentTime;
   if (now != null) {
-    animation.startTime = now;
+    // The start of the change it is part of, captured when that change made
+    // its first animation (changeStartOf); otherwise the document's.
+    const start =
+      change != null && change.frame === Number(now)
+        ? change
+        : startFor(doc, Number(now));
+    start.last = clockOf(doc);
+    animation.startTime = start.at;
+    if (start.at !== Number(now)) {
+      // Started after the frame time the timeline still reads: until the
+      // timeline gets there it shows its first keyframe, not the element at
+      // rest.
+      const fill = animation.effect?.getTiming().fill;
+      animation.effect?.updateTiming({
+        fill: fill === 'forwards' || fill === 'both' ? 'both' : 'backwards',
+      });
+    }
+  }
+  if (options.pseudoElement == null) {
+    presentGlide(element, animation, keyframes, options, scale);
   }
   return animation;
+}
+
+/**
+ * The start a change's animations share. It is the timeline's frame time,
+ * unless a block ran more than LATE_START_MS past that frame before the first
+ * of them was made. Then they start at the moment the first of them is made.
+ * The frame time is from before the block, so a motion started on it would
+ * skip into its curve, or past all of it. Chromium holds the timeline at the
+ * frame before a long task once anything in the task reads it.
+ */
+interface ChangeStart {
+  /** The frame time the timeline read. */
+  readonly frame: number;
+  /** When the change's animations start. */
+  readonly at: number;
+  /** When the last of them was made, on the document's clock. */
+  last: number;
+}
+
+/**
+ * Each document's change start: an iframe or a Picture-in-Picture window
+ * keeps its own clock, with its own origin and frames.
+ */
+const changeStarts = new WeakMap<Document, ChangeStart>();
+
+/** The clock of the document whose timeline a start is read on. */
+function clockOf(doc: Document): number {
+  return (doc.defaultView?.performance ?? performance).now();
+}
+
+/**
+ * The start the current change's animations share. A change keeps one start
+ * from its first animation through the flush of its glides and the parts that
+ * ride them. That holds however long the work between them runs, such as the
+ * rest of a commit or a slow swap. The start holds while the timeline reads
+ * the same frame: through the task that made it and the microtasks after it.
+ * A change that begins after a block takes a start of its own (beginChange).
+ */
+function startFor(doc: Document, frame: number): ChangeStart {
+  const now = clockOf(doc);
+  const held = changeStarts.get(doc);
+  if (held != null && held.frame === frame) {
+    held.last = now;
+    return held;
+  }
+  const start: ChangeStart = {
+    frame,
+    at: now - frame <= LATE_START_MS ? frame : now,
+    last: now,
+  };
+  changeStarts.set(doc, start);
+  // Let go in a later task: every microtask of this one, where the glides
+  // flush and the parts riding them play, has run by then.
+  const view = doc.defaultView;
+  (view?.setTimeout ?? setTimeout)(() => {
+    if (changeStarts.get(doc) === start) {
+      changeStarts.delete(doc);
+    }
+  }, 0);
+  return start;
+}
+
+/**
+ * A change begins as its "before" is read. After a block since the last
+ * animation of the change before it, it takes a start of its own. So a change
+ * made after a block that follows an earlier layout motion still plays.
+ * Changes made together, with no block between them, share one start.
+ */
+function beginChange(doc: Document): void {
+  const held = changeStarts.get(doc);
+  if (held != null && clockOf(doc) - held.last > LATE_START_MS) {
+    changeStarts.delete(doc);
+  }
+}
+
+/**
+ * When the animations of the layout change being made start. Code that
+ * follows the change on its own clock reads it, such as a rail's width or a
+ * swap's fade. It is the document timeline's current time. After a block
+ * since that frame, it is the moment the change made its first animation.
+ * Until the timeline reaches it, the change has not started.
+ */
+export function layoutStartFor(document: Document): number {
+  const now = document.timeline?.currentTime;
+  return now == null ? 0 : startFor(document, Number(now)).at;
+}
+
+/**
+ * Where `element` shows at the timeline's time `at`: its layout box, moved by
+ * its glide's offset then. After a block, WebKit evaluates a running
+ * translate on the live clock. The timeline still reads the frame before the
+ * block, as every glide here does, so the evaluated box would sit ahead.
+ * Glides write px; a translate in percent is not ours, so the box stays.
+ */
+function shownBoxAt(element: Element, at: number): DOMRect {
+  const box = element.getBoundingClientRect();
+  const glide = glides.get(element);
+  const startTime = glide?.animation.startTime;
+  if (glide == null || startTime == null) {
+    return box;
+  }
+  const translate =
+    element.ownerDocument.defaultView?.getComputedStyle(element).translate ??
+    '';
+  if (translate.includes('%')) {
+    return box;
+  }
+  const [appliedX = 0, appliedY = 0] = numbersIn(translate);
+  const offset = glide.offsetAt(Math.max(0, at - Number(startTime)));
+  return new DOMRect(
+    box.x + (offset.x - appliedX) * glide.scale.x,
+    box.y + (offset.y - appliedY) * glide.scale.y,
+    box.width,
+    box.height,
+  );
 }
 
 /** Every animation this module started, so it can tell the app's apart. */
@@ -353,11 +738,37 @@ type OffsetCurve = (t: number) => {readonly x: number; readonly y: number};
 
 const AT_REST: OffsetCurve = () => ({x: 0, y: 0});
 
+/**
+ * `curve` as the browser draws it from `sampleOver`'s keyframes: a straight
+ * line between each two. A new glide then starts where the old one shows.
+ */
+function drawnCurve(durationMs: number, curve: OffsetCurve): OffsetCurve {
+  const count = sampleCount(durationMs);
+  const points = Array.from({length: count}, (_, i) =>
+    curve((i / (count - 1)) * durationMs),
+  );
+  return t => {
+    const at = Math.min(Math.max(t / durationMs, 0), 1) * (count - 1);
+    const i = Math.min(Math.floor(at), count - 2);
+    const f = at - i;
+    const a = points[i];
+    const b = points[i + 1];
+    return {x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f};
+  };
+}
+
 /** A glide an element is playing, so a new change can retarget it. */
 interface Glide {
   readonly animation: Animation;
   readonly offsetAt: OffsetCurve;
   readonly durationMs: number;
+  /**
+   * The offset where the element showed when its old place was read. After a
+   * block the glide starts further on, where the compositor has it.
+   */
+  readonly shownBefore: {readonly x: number; readonly y: number};
+  /** Its ancestors' scale: page px per px of its own offset. */
+  readonly scale: {readonly x: number; readonly y: number};
 }
 
 const glides = new WeakMap<Element, Glide>();
@@ -375,15 +786,26 @@ export function glideOf(element: Element): Animation | null {
 // Handles
 // ---------------------------------------------------------------------------
 
-const AREA = Symbol('astryx.animatedLayout.area');
+// A registered key, so a swizzled copy of this module reads a package handle.
+const AREA = sharedKey('animated-layout/area', 1);
 
 /**
- * The opaque handle `useAnimatedLayout` returns (`spec:AST-105` FR1): no
- * public members. A component that receives it reports its size changes to
- * the handle's container, the area the glide stays inside.
+ * The opaque handle `useAnimatedLayout` returns. A component that receives it
+ * reports its size changes to the handle's container, the area the glide
+ * stays inside.
  */
 export interface AnimatedLayout {
-  readonly [AREA]: () => Element | null;
+  /**
+   * A brand that is never present, so the handle types of the package and a
+   * swizzled copy match.
+   */
+  readonly '@astryxdesign/core/animated-layout/v1'?: never;
+}
+
+/** The container a handle reads, or null for a value that is not a handle. */
+function readArea(handle: AnimatedLayout): Element | null {
+  const read = (handle as {readonly [AREA]?: unknown})[AREA];
+  return typeof read === 'function' ? (read as () => Element | null)() : null;
 }
 
 /** A handle over `area` (the container element, read when a change runs). */
@@ -391,13 +813,11 @@ export function createAnimatedLayout(
   area: () => Element | null,
 ): AnimatedLayout {
   // Not enumerable and frozen: the handle shows no fields to a caller.
-  return Object.freeze(
-    Object.defineProperty({}, AREA, {value: area}),
-  ) as AnimatedLayout;
+  return Object.freeze(Object.defineProperty({}, AREA, {value: area}));
 }
 
 function areaOf(handle: AnimatedLayout, element: Element): Element | null {
-  const area = handle[AREA]();
+  const area = readArea(handle);
   return area != null && area !== element && area.contains(element)
     ? area
     : null;
@@ -552,6 +972,91 @@ function isStuck(element: Element, cache: WalkCache): boolean {
     (Number.isFinite(top) && Math.abs(rect.top - (edge.start + top)) < 1) ||
     (Number.isFinite(bottom) && Math.abs(rect.bottom - (edge.end - bottom)) < 1)
   );
+}
+
+/**
+ * `rect`, a box read before a change or after it (in the flush, once the
+ * glides the change retargets have stopped), with every running glide that
+ * carries the element put back on its glide's own clock: its own and those of
+ * its ancestors inside `area`. A glide the change retargets is read on its
+ * clock before the change and is gone after it; one the change leaves running
+ * (a card inside an absolutely positioned panel, which the change takes no
+ * ancestors from) is read on the same clock in both places, so it cancels out
+ * of the move. A box read samples a running `translate`
+ * wherever the engine evaluates it, and WebKit evaluates it at the moment of
+ * the read, while a glide's offset, and the glide a change retargets it into,
+ * run on the timeline's frame time: from the box alone, a change made `n` ms
+ * into a frame started the new glide `n` ms of motion ahead of the one drawn
+ * (up to about 3 px on a slow frame), and a row inside a gliding card took up
+ * the card's difference. The box is read between two readings of every
+ * carrier's applied `translate` that agree: WebKit samples a running
+ * animation at the moment of each read, in steps of about a millisecond, so
+ * a box read between two equal readings is of that same sample, while the
+ * walk's earlier box read, or one read across a step, is of another. Taken
+ * out of that
+ * box (each scaled by its node's ancestors, as its glide is), the `translate`s
+ * leave the element's place with no glide, and each glide's offset at its
+ * current time goes back in. A glide replaces any `translate` of the app's
+ * own while it runs, so each applied value is the glide's alone. Where the
+ * engine reports no applied `translate` at all (an environment without
+ * individual transform properties), the box is taken as it is.
+ */
+/**
+ * How many times `onGlideClock` reads a box and the applied translates around
+ * it to take all of them from one sample: it bounds the reads for one
+ * consistent snapshot (WebKit's samples step about once a millisecond, and a
+ * second reading lands inside one step), not a retry around a result.
+ */
+const SAMPLE_READS = 3;
+
+function onGlideClock(element: Element, rect: DOMRect, area: Element): DOMRect {
+  const carriers: {node: Element; glide: Glide; time: number}[] = [];
+  for (
+    let node: Element | null = element;
+    node != null && node !== area;
+    node = node.parentElement
+  ) {
+    const glide = glides.get(node);
+    const time = Number(glide?.animation.currentTime);
+    if (glide != null && Number.isFinite(time)) {
+      carriers.push({node, glide, time});
+    }
+  }
+  if (carriers.length === 0) {
+    return rect;
+  }
+  const view = element.ownerDocument.defaultView;
+  const appliedNow = () =>
+    carriers.map(({node}) => view?.getComputedStyle(node).translate);
+  let applied = appliedNow();
+  if (applied.some(translate => translate == null || translate === '')) {
+    return rect;
+  }
+  let box = element.getBoundingClientRect();
+  for (let read = 0; read < SAMPLE_READS; read++) {
+    const again = appliedNow();
+    if (again.every((translate, index) => translate === applied[index])) {
+      break;
+    }
+    applied = again;
+    box = element.getBoundingClientRect();
+  }
+  let dx = 0;
+  let dy = 0;
+  carriers.forEach(({node, glide, time}, index) => {
+    const [appliedX = 0, appliedY = 0] = numbersIn(applied[index] as string);
+    const offset = glide.offsetAt(
+      Math.min(Math.max(0, time), glide.durationMs),
+    );
+    const scale = scaleOf(
+      node,
+      node === element ? box : node.getBoundingClientRect(),
+      ownScaleOf(node),
+    );
+    dx += (offset.x - appliedX) * scale.x;
+    dy += (offset.y - appliedY) * scale.y;
+  });
+  return new DOMRect(box.x + dx, box.y + dy, box.width, box.height);
 }
 
 function rectOf(element: Element, cache: WalkCache): DOMRect {
@@ -718,6 +1223,12 @@ interface Batch {
   scheduled: boolean;
   /** Called after every reading and before any glide starts. */
   readonly beforeMove: ((candidates: ReadonlyArray<Element>) => void)[];
+  /**
+   * The start the change's animations share, taken by its first one: its
+   * entrance, or its glides at the flush. A change begun after a block,
+   * before this one flushes, takes its own and leaves this one's.
+   */
+  start: ChangeStart | null;
 }
 
 const batches = new Map<Element, Batch>();
@@ -740,6 +1251,7 @@ function batchFor(area: Element): Batch {
       cache: {rects: new Map(), parts: new Map()},
       scheduled: false,
       beforeMove: [],
+      start: null,
     };
     batches.set(area, created);
     // A measurement no commit claims by the next frame (a controlled owner
@@ -759,6 +1271,39 @@ function batchFor(area: Element): Batch {
     batch = created;
   }
   return batch;
+}
+
+/**
+ * The start `batch`'s change shares: taken by its first animation, from the
+ * document's (startFor), and kept with the batch through its flush.
+ */
+function changeStartOf(batch: Batch): ChangeStart | undefined {
+  const doc = batch.area.ownerDocument;
+  const now = doc.timeline?.currentTime;
+  if (now == null) {
+    return undefined;
+  }
+  if (batch.start == null || batch.start.frame !== Number(now)) {
+    batch.start = startFor(doc, Number(now));
+  }
+  return batch.start;
+}
+
+/**
+ * The start of the change being made in `area`, captured now for animations
+ * made later in the task, such as the parts riding a glide. It is its batch's
+ * when one is open there, otherwise the document's.
+ */
+function changeStartIn(
+  area: Element | null | undefined,
+  doc: Document,
+): ChangeStart | undefined {
+  const batch = area == null ? undefined : batches.get(area);
+  if (batch != null) {
+    return changeStartOf(batch);
+  }
+  const now = doc.timeline?.currentTime;
+  return now == null ? undefined : startFor(doc, Number(now));
 }
 
 function intersects(a: DOMRect, b: DOMRect): boolean {
@@ -879,6 +1424,9 @@ function flush(batch: Batch): void {
     notify([]);
     return;
   }
+  // The change's own start, taken by its entrance when it played one, even
+  // when another change has begun since.
+  const change = changeStartOf(batch);
   const visible = visibleRect(batch.area);
   // Every running glide stops first and every new place is read before any
   // glide starts, so no reading includes another's new motion.
@@ -887,6 +1435,8 @@ function flush(batch: Batch): void {
     readonly before: DOMRect;
     readonly carried: OffsetCurve;
     readonly carriedMs: number;
+    /** The running glide's offset inside `before`, read on the held frame. */
+    readonly held: {readonly x: number; readonly y: number};
     after?: DOMRect;
     rawX?: number;
     rawY?: number;
@@ -908,17 +1458,28 @@ function flush(batch: Batch): void {
     const running = glides.get(element);
     let carried = AT_REST;
     let carriedMs = 0;
+    let held = AT_REST(0);
     if (running != null) {
       const time = Number(running.animation.currentTime);
       const elapsed = Number.isFinite(time) ? Math.max(0, time) : 0;
       if (elapsed < running.durationMs) {
-        carried = t => running.offsetAt(elapsed + t);
-        carriedMs = running.durationMs - elapsed;
+        held = running.offsetAt(elapsed);
+      }
+      // The new glide starts at the change's start. After a block, the
+      // compositor kept this glide moving past the held frame until then.
+      const {startTime} = running.animation;
+      const shownAt =
+        change != null && startTime != null
+          ? Math.max(elapsed, change.at - Number(startTime))
+          : elapsed;
+      if (shownAt < running.durationMs) {
+        carried = t => running.offsetAt(shownAt + t);
+        carriedMs = running.durationMs - shownAt;
       }
       running.animation.cancel();
       glides.delete(element);
     }
-    entries.push({element, before, carried, carriedMs});
+    entries.push({element, before, carried, carriedMs, held});
   }
   // Every reading (places, transforms, scales) before any glide starts: a
   // glide started between two readings would make the next one lay the page
@@ -938,7 +1499,15 @@ function flush(batch: Batch): void {
   const nearer = (raw: number, shift: number) =>
     Math.abs(raw + shift) < Math.abs(raw) ? raw + shift : raw;
   for (const entry of entries) {
-    entry.after = entry.element.getBoundingClientRect();
+    // On the same clocks as the place before the change: only the glides this
+    // change does not retarget still run here (a card inside an absolutely
+    // positioned panel keeps its glide while the row in it moves), so each
+    // reads the same in both places and cancels out of the move.
+    entry.after = onGlideClock(
+      entry.element,
+      entry.element.getBoundingClientRect(),
+      batch.area,
+    );
     // The move is the inline-start edge's, by the container's direction (it
     // decides where the element sits): in a right-to-left container an
     // element that narrows keeps its left edge and moves its right one.
@@ -969,7 +1538,7 @@ function flush(batch: Batch): void {
   // An adopter's own readings join them here, before any glide starts.
   notify(entries.map(entry => entry.element));
   for (const entry of entries) {
-    const {element, before, carried, carriedMs} = entry;
+    const {element, before, carried, carriedMs, held} = entry;
     const after = entry.after as DOMRect;
     // Nested changes compose: an element inside another moving element moves
     // only by its own change, whatever order the changes were reported in.
@@ -995,10 +1564,12 @@ function flush(batch: Batch): void {
       continue;
     }
     if (motion.kind === 'fade') {
-      safeAnimate(element, [{opacity: 0}, {opacity: 1}], {
-        duration: motion.durationMs,
-        easing: motion.easing,
-      });
+      safeAnimate(
+        element,
+        [{opacity: 0}, {opacity: 1}],
+        {duration: motion.durationMs, easing: motion.easing},
+        change,
+      );
       continue;
     }
     if (entry.isMovedByApp === true) {
@@ -1006,19 +1577,18 @@ function flush(batch: Batch): void {
       // (`spec:AST-105` Coverage).
       continue;
     }
-    // Where it shows now, against its new place, in its own px; the part the
-    // carried glide does not cover is the new move.
+    // Where it showed before the change, against its new place, in its own
+    // px. The part the glide's offset then does not cover is the new move.
     const scale = entry.scale ?? {x: 1, y: 1};
-    const now = carried(0);
-    const moveX = dx / scale.x - now.x;
-    const moveY = dy / scale.y - now.y;
+    const moveX = dx / scale.x - held.x;
+    const moveY = dy / scale.y - held.y;
     const {progress} = motion;
-    const offsetAt: OffsetCurve = t => {
+    const durationMs = Math.max(progress.durationMs, carriedMs);
+    const offsetAt = drawnCurve(durationMs, t => {
       const remaining = progress.remaining(t);
       const carry = carried(t);
       return {x: carry.x + moveX * remaining, y: carry.y + moveY * remaining};
-    };
-    const durationMs = Math.max(progress.durationMs, carriedMs);
+    });
     // One replace-composited `translate`: the compositor runs it (INV12).
     const animation = safeAnimate(
       element,
@@ -1027,9 +1597,17 @@ function flush(batch: Batch): void {
         return {translate: `${offset.x}px ${offset.y}px`};
       }),
       {duration: durationMs, easing: 'linear'},
+      change,
+      scale,
     );
     if (animation != null) {
-      const glide: Glide = {animation, offsetAt, durationMs};
+      const glide: Glide = {
+        animation,
+        offsetAt,
+        durationMs,
+        shownBefore: {x: dx / scale.x, y: dy / scale.y},
+        scale,
+      };
       glides.set(element, glide);
       animation.addEventListener?.('finish', () => {
         if (glides.get(element) === glide) {
@@ -1083,6 +1661,7 @@ export function reportLayoutChange(
       if (area == null) {
         return;
       }
+      beginChange(element.ownerDocument);
       const batch = batchFor(area);
       if (batch.changed.has(element)) {
         return;
@@ -1118,7 +1697,7 @@ export function reportLayoutChange(
         );
         for (const [candidate, rect] of candidates) {
           if (!batch.before.has(candidate)) {
-            batch.before.set(candidate, rect);
+            batch.before.set(candidate, onGlideClock(candidate, rect, area));
           }
         }
         batch.candidates.set(changed, [...candidates.keys()]);
@@ -1139,23 +1718,535 @@ export function reportLayoutChange(
       }
       if (!batch.scheduled) {
         batch.scheduled = true;
-        // After every layout effect of this commit, before paint.
-        queueMicrotask(() => flush(batch));
+        // After every layout effect of this commit, before paint, with one
+        // registry notice for all the glides it starts.
+        queueMicrotask(() => batchPresented(() => flush(batch)));
       }
       return true;
     },
   };
 }
 
+// ---------------------------------------------------------------------------
+// The edge reveal (`spec:AST-105` FR9)
+// ---------------------------------------------------------------------------
+
+/**
+ * The edge an element reveals from or conceals to (`spec:AST-105` FR9): its
+ * block-end edge by default, or its block-start, inline-start or inline-end
+ * edge, such as a panel collapsing beside content. An inline edge follows
+ * the element's direction.
+ */
+export type LayoutEdge =
+  'block-end' | 'block-start' | 'inline-start' | 'inline-end';
+
+/** Whether `element` lays its inline axis out right to left. */
+function isRtl(element: Element): boolean {
+  return (
+    element.ownerDocument.defaultView?.getComputedStyle(element).direction ===
+    'rtl'
+  );
+}
+
+/**
+ * The `clip-path` that hides `side` of an element from `edge`: `inset()`'s
+ * sides are physical (top, right, bottom, left), so an inline edge is
+ * mirrored right to left. `zero` is how the other three are written.
+ */
+function edgeClip(
+  edge: LayoutEdge,
+  side: string,
+  zero: string,
+  rtl: boolean,
+): string {
+  const sides = [zero, zero, zero, zero];
+  const index =
+    edge === 'block-start'
+      ? 0
+      : edge === 'block-end'
+        ? 2
+        : (edge === 'inline-end') !== rtl
+          ? 1
+          : 3;
+  sides[index] = side;
+  return `inset(${sides.join(' ')})`;
+}
+
+/** A hidden fraction of the element, as a percentage clip on `edge`. */
+function fractionClip(edge: LayoutEdge, hidden: number, rtl: boolean): string {
+  return edgeClip(edge, `${round(hidden * 100)}%`, '0', rtl);
+}
+
+/** A hidden length of the element, in its own px, as a clip on `edge`. */
+function pxClip(edge: LayoutEdge, hidden: number, rtl: boolean): string {
+  return edgeClip(edge, `${hidden}px`, '0px', rtl);
+}
+
+/**
+ * The element's size along `edge`'s axis, in its own px (a scaled ancestor
+ * divided out), read from the layout the caller already laid out.
+ */
+function extentOf(element: Element, edge: LayoutEdge): number {
+  const rect = element.getBoundingClientRect();
+  const scale = scaleOf(element, rect);
+  return edge.startsWith('inline')
+    ? rect.width / scale.x
+    : rect.height / scale.y;
+}
+
+/** The parts that slide, and the still clip that holds them while they do. */
+interface Sliding {
+  readonly parts: ReadonlyArray<Element>;
+  /** Each part's ancestors' scale: page px per px of its own offset. */
+  readonly scales: ReadonlyArray<{readonly x: number; readonly y: number}>;
+  readonly clip: string;
+}
+
+/**
+ * The parts that slide inside an element revealed or concealed from a block
+ * edge by `extent` px. They are its child elements that the band can show:
+ * the area's visible part plus one viewport, or `extent` if larger, above and
+ * below. A part past the band cannot come into view while it moves, so it
+ * stays. The walk stops at the first child below the band, so its cost grows
+ * with the changed size, never with the length of a list. A translation
+ * cannot move text on its own, so an element with text of its own keeps the
+ * clip (null).
+ */
+function slidingParts(
+  element: Element,
+  edge: LayoutEdge,
+  area: Element,
+  extent: number,
+): Sliding | null {
+  if (!edge.startsWith('block') || !(extent > 0)) {
+    return null;
+  }
+  const view = element.ownerDocument.defaultView;
+  const style = view?.getComputedStyle(element);
+  // A box the element paints itself would show whole from the first frame
+  // under a still clip, so such an element keeps the moving clip. So does one
+  // with a generated box, which stays still while its parts slide.
+  if (
+    view == null ||
+    style == null ||
+    paintsOwnBox(style) ||
+    ['::before', '::after'].some(pseudo => {
+      const {content} = view.getComputedStyle(element, pseudo);
+      return content !== '' && content !== 'none' && content !== 'normal';
+    })
+  ) {
+    return null;
+  }
+  const visible = visibleRect(area);
+  const band = bandFor(visible, Math.max(view.innerHeight, extent));
+  const parts: Element[] = [];
+  const scales: {x: number; y: number}[] = [];
+  for (let node = element.firstChild; node != null; node = node.nextSibling) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      if ((node.textContent ?? '').trim() !== '') {
+        return null;
+      }
+      continue;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      continue;
+    }
+    // A translation moves neither an inline box nor a boxless one.
+    const {display} = view.getComputedStyle(node as Element);
+    if (display === 'inline' || display === 'contents') {
+      return null;
+    }
+    // Each part's place, read once per reveal, before anything moves.
+    const box = (node as Element).getBoundingClientRect();
+    if (box.top > band.end) {
+      break;
+    }
+    if (box.bottom >= band.start) {
+      // A part an earlier change still glides keeps that glide, which a slide
+      // would hide and then show again. The element keeps the moving clip.
+      if (glides.has(node as Element)) {
+        return null;
+      }
+      parts.push(node as Element);
+      scales.push(scaleOf(node as Element, box, ownScaleOf(node as Element)));
+    }
+  }
+  if (parts.length === 0) {
+    return null;
+  }
+  // The parts come in from one side. The clip holds them inside the content
+  // box there, off what the content before the element draws into its padding.
+  const inner = (side: 'top' | 'bottom') =>
+    (Number.parseFloat(style.getPropertyValue(`border-${side}-width`)) || 0) +
+    (Number.parseFloat(style.getPropertyValue(`padding-${side}`)) || 0);
+  return {
+    parts,
+    scales,
+    clip:
+      edge === 'block-end'
+        ? `inset(${inner('top')}px 0px 0px 0px)`
+        : `inset(0px 0px ${inner('bottom')}px 0px)`,
+  };
+}
+
+/**
+ * Whether a style paints a box of its own: a fill, a border, a shadow, an
+ * outline or a filter.
+ */
+function paintsOwnBox(style: CSSStyleDeclaration): boolean {
+  const isClear = (color: string) =>
+    color === '' || color === 'transparent' || /^rgba\(.*,\s*0\)$/.test(color);
+  return (
+    !isClear(style.backgroundColor) ||
+    (style.backgroundImage !== '' && style.backgroundImage !== 'none') ||
+    ['Top', 'Right', 'Bottom', 'Left'].some(
+      side =>
+        style.getPropertyValue(`border-${side.toLowerCase()}-style`) !==
+          'none' &&
+        Number.parseFloat(
+          style.getPropertyValue(`border-${side.toLowerCase()}-width`),
+        ) > 0,
+    ) ||
+    (style.boxShadow !== '' && style.boxShadow !== 'none') ||
+    (style.borderImageSource !== '' && style.borderImageSource !== 'none') ||
+    (style.filter !== '' && style.filter !== 'none') ||
+    (style.outlineStyle !== '' &&
+      style.outlineStyle !== 'none' &&
+      Number.parseFloat(style.outlineWidth) > 0)
+  );
+}
+
+/**
+ * Where the parts sit when the element hides `hidden` px from `edge`. They
+ * move that far towards it, so their far edge meets the content that rides
+ * the same edge.
+ */
+function slideFrame(edge: LayoutEdge, hidden: number): Keyframe {
+  return {translate: `0px ${edge === 'block-end' ? -hidden : hidden}px`};
+}
+
+/**
+ * Clips `element` with `clip` while its parts slide, and returns what puts
+ * its own `clip-path` back. The clip does not move, so it stays in step with
+ * the parts and the content beside them on every engine.
+ */
+function holdSlideClip(element: Element, clip: string): () => void {
+  const {style} = element as HTMLElement;
+  const value = style.getPropertyValue('clip-path');
+  const priority = style.getPropertyPriority('clip-path');
+  style.setProperty('clip-path', clip);
+  return () => {
+    if (value === '') {
+      style.removeProperty('clip-path');
+    } else {
+      style.setProperty('clip-path', value, priority);
+    }
+  };
+}
+
+/**
+ * The last element before `element` in the area that takes part in layout:
+ * its previous sibling, or its nearest ancestor's below the area (the mirror
+ * of `nextInFlow`, for a start edge).
+ */
+function previousInFlow(element: Element, area: Element): Element | null {
+  const view = element.ownerDocument.defaultView;
+  const lastBox = (from: Element): Element | null => {
+    const style = view?.getComputedStyle(from);
+    if (style == null) {
+      return from;
+    }
+    if (style.display === 'contents') {
+      for (
+        let child = from.lastElementChild;
+        child != null;
+        child = child.previousElementSibling
+      ) {
+        const box = lastBox(child);
+        if (box != null) {
+          return box;
+        }
+      }
+      return null;
+    }
+    return takesPart(from, style) ? from : null;
+  };
+  let node: Element | null = element;
+  while (node != null && node !== area) {
+    for (
+      let sibling = node.previousElementSibling;
+      sibling != null;
+      sibling = sibling.previousElementSibling
+    ) {
+      const box = lastBox(sibling);
+      if (box != null) {
+        return box;
+      }
+    }
+    node = node.parentElement;
+  }
+  return null;
+}
+
+/**
+ * The glide that moves `neighbour`: its own, or that of its nearest gliding
+ * ancestor below the area that does not also hold `element` (one that holds
+ * both moves the two together, so the edge does not ride it).
+ */
+function glideMoving(
+  neighbour: Element,
+  element: Element,
+  area: Element,
+): Glide | null {
+  for (
+    let node: Element | null = neighbour;
+    node != null && node !== area && !node.contains(element);
+    node = node.parentElement
+  ) {
+    const glide = glides.get(node);
+    if (glide != null) {
+      return glide;
+    }
+  }
+  return null;
+}
+
+/** A one-state reveal or conceal running on an element. */
+interface EdgeMotion {
+  readonly animation: Animation;
+  /** The fraction of the element it shows `t` ms in (1: all of it). */
+  shownAt: (t: number) => number;
+  /** The parts that slide under the element's clip, and their motions. */
+  readonly slides: ReadonlyArray<Animation>;
+  /** Puts back what the motion set on the element, once. */
+  readonly release: () => void;
+}
+
+/** Each element's running one-state reveal or conceal. */
+const edgeMotions = new WeakMap<Element, EdgeMotion>();
+
+/**
+ * What a one-state motion an adopter stopped (`releaseLayoutExit`) showed,
+ * and the timeline time it stopped at: a reveal started in the same frame,
+ * the reversal that stopped it, starts there.
+ */
+const stoppedShown = new WeakMap<
+  Element,
+  {readonly fraction: number; readonly at: number}
+>();
+
+function timelineNow(element: Element): number {
+  return Number(element.ownerDocument.timeline?.currentTime ?? Number.NaN);
+}
+
+/** What `motion` shows now, by its animation's own clock. */
+function shownNow(motion: EdgeMotion): number {
+  const time = Number(motion.animation.currentTime);
+  return motion.shownAt(Number.isFinite(time) ? Math.max(0, time) : 0);
+}
+
+/**
+ * What `element` shows as a reveal or conceal starts: where the one-state
+ * motion this one reverses had got to (it stops there), or `atRest`, all of
+ * it for a conceal and nothing for a reveal.
+ */
+function shownAtStart(element: Element, atRest: number): number {
+  const running = edgeMotions.get(element);
+  if (running != null) {
+    edgeMotions.delete(element);
+    const fraction = shownNow(running);
+    running.animation.cancel();
+    stopSlides(running);
+    return fraction;
+  }
+  const stopped = stoppedShown.get(element);
+  stoppedShown.delete(element);
+  if (stopped != null && stopped.at === timelineNow(element)) {
+    return stopped.fraction;
+  }
+  return atRest;
+}
+
+/** Stops `motion`'s sliding parts and puts back the element's clip, once. */
+function stopSlides(motion: EdgeMotion): void {
+  motion.release();
+}
+
+/** Records `animation` as `element`'s running one-state motion. */
+function trackEdgeMotion(
+  element: Element,
+  animation: Animation,
+  shownAt: (t: number) => number,
+  slides: ReadonlyArray<Animation> = [],
+  release: () => void = () => {},
+  isHeldToRelease = false,
+): EdgeMotion {
+  let isReleased = false;
+  const motion: EdgeMotion = {
+    animation,
+    shownAt,
+    slides,
+    release: () => {
+      if (!isReleased) {
+        isReleased = true;
+        for (const slide of slides) {
+          stopGlideOf(slide);
+        }
+        release();
+      }
+    },
+  };
+  edgeMotions.set(element, motion);
+  if (isHeldToRelease) {
+    heldSlides.set(element, motion);
+  }
+  // A reveal's parts have landed at its end. An exit's parts hold where they
+  // end until `releaseLayoutExit`.
+  animation.addEventListener?.('finish', () => {
+    if (edgeMotions.get(element) === motion) {
+      edgeMotions.delete(element);
+      if (!isHeldToRelease) {
+        motion.release();
+      }
+    }
+  });
+  return motion;
+}
+
+/** Each exit's motion, whose parts hold their slides until its release. */
+const heldSlides = new WeakMap<Element, EdgeMotion>();
+
+/**
+ * After this commit's glides start (the batch flushes in a microtask queued
+ * before this one), before the frame paints: once the content on `edge`'s
+ * side glides, the moving edge rides that glide, frame by frame, so the two
+ * never part, a reversal included (the glide carries its running motion).
+ * `hiddenAt` turns that content's offset towards the edge's side into the
+ * length the element hides; `frame` turns that length into a keyframe.
+ * Without that glide (nothing on that side in the area, or nothing that
+ * moves) the motion keeps its own curve. The animation is kept, its frames
+ * replaced; `onRide` hears the ridden hidden length over time.
+ */
+function rideNeighbour(
+  element: Element,
+  area: Element,
+  edge: LayoutEdge,
+  rtl: boolean,
+  animation: Animation,
+  isCurrent: () => boolean,
+  hiddenAt: (towards: number) => number,
+  frame: (hidden: number) => Keyframe,
+  onRide: (hidden: (t: number) => number, durationMs: number) => void,
+): void {
+  const effect = animation.effect as KeyframeEffect | null;
+  if (effect == null || typeof effect.setKeyframes !== 'function') {
+    return;
+  }
+  queueMicrotask(() => {
+    if (!isCurrent()) {
+      return;
+    }
+    const isEnd = edge.endsWith('end');
+    const neighbour = isEnd
+      ? nextInFlow(element, area)
+      : previousInFlow(element, area);
+    const glide =
+      neighbour == null ? null : glideMoving(neighbour, element, area);
+    if (neighbour == null || glide == null) {
+      return;
+    }
+    // A glide that moves the element itself in the same batch, short of what
+    // it shares with the neighbour (an item above them closing): the edge
+    // rides the neighbour's offset from the element, not from the page.
+    const own = glideMoving(element, neighbour, area);
+    // Each glide is read on its own clock. A glide an earlier change started,
+    // such as a part's slide, is already some way in.
+    const glideAt = startedBefore(glide, animation);
+    const ownAt = own == null ? 0 : startedBefore(own, animation);
+    const durationMs = Math.max(
+      glide.durationMs - glideAt,
+      own == null ? 0 : own.durationMs - ownAt,
+    );
+    // The neighbour's offset from its place relative to the element's,
+    // towards the edge's side.
+    const sign = isEnd ? 1 : -1;
+    const hidden = (t: number): number => {
+      const offset = glide.offsetAt(glideAt + t);
+      const moved = own?.offsetAt(ownAt + t) ?? {x: 0, y: 0};
+      return hiddenAt(
+        sign *
+          (edge.startsWith('inline')
+            ? (rtl ? -1 : 1) * (offset.x - moved.x)
+            : offset.y - moved.y),
+      );
+    };
+    effect.setKeyframes(sampleOver(durationMs, t => frame(hidden(t))));
+    effect.updateTiming?.({duration: durationMs});
+    onRide(hidden, durationMs);
+  });
+}
+
+/**
+ * The one-state reveal or conceal rides the content on its edge's side: the
+ * element shows what lies between its fixed edge and that content, a reveal
+ * less by however far the content still is from its place towards it, a
+ * conceal all of it less however far the content has come, fading with what
+ * it hides.
+ */
+function rideEdge(
+  element: Element,
+  area: Element,
+  edge: LayoutEdge,
+  rtl: boolean,
+  motion: EdgeMotion,
+  isConceal: boolean,
+): void {
+  const extent = extentOf(element, edge);
+  if (!(extent > 0)) {
+    return;
+  }
+  rideNeighbour(
+    element,
+    area,
+    edge,
+    rtl,
+    motion.animation,
+    () => edgeMotions.get(element) === motion,
+    towards =>
+      Math.min(extent, Math.max(0, isConceal ? extent - towards : -towards)),
+    hidden =>
+      motion.slides.length > 0
+        ? {opacity: 1 - hidden / extent}
+        : {opacity: 1 - hidden / extent, clipPath: pxClip(edge, hidden, rtl)},
+    (hiddenAt, durationMs) => {
+      motion.shownAt = t => 1 - hiddenAt(t) / extent;
+      // The parts ride the same frames, so their edge and the content's move
+      // on one clock.
+      for (const slide of motion.slides) {
+        const effect = slide.effect as KeyframeEffect | null;
+        effect?.setKeyframes?.(
+          sampleOver(durationMs, t => slideFrame(edge, hiddenAt(t))),
+        );
+        effect?.updateTiming?.({duration: durationMs});
+      }
+    },
+  );
+}
+
 /**
  * The changed element's own animation, on the same motion as the content
- * after it: content that appears reveals downward from its top edge. Plays
- * only with a handle, inside its area and in the area's visible part.
- * Returns the entrance it started, or null when it played none.
+ * after it (`spec:AST-105` FR4): content that appears reveals from its
+ * block-end edge downward, or from the `edge` it is given (FR9), and its edge
+ * rides the glide of the content on that side once it starts. A reveal that
+ * reverses a running conceal (an adopter opens it again mid-exit, after
+ * `releaseLayoutExit`) starts from what the element shows. Plays only with a
+ * handle, inside its area and in the area's visible part. Returns the
+ * entrance it started, or null when it played none.
  */
 export function playLayoutChange(
   handle: AnimatedLayout | null | undefined,
   element: Element,
+  {edge = 'block-end'}: {edge?: LayoutEdge} = {},
 ): Animation | null {
   if (handle == null) {
     return null;
@@ -1171,26 +2262,180 @@ export function playLayoutChange(
   if (motion.kind === 'instant') {
     return null;
   }
+  const from = shownAtStart(element, 0);
+  // The start of the change it enters with, which its glides then share.
+  const batch = batches.get(area);
+  const change =
+    batch != null &&
+    [...batch.changed].some(
+      changed => changed === element || changed.contains(element),
+    )
+      ? changeStartOf(batch)
+      : undefined;
   if (motion.kind === 'fade') {
-    return safeAnimate(element, [{opacity: 0}, {opacity: 1}], {
-      duration: motion.durationMs,
-      easing: motion.easing,
-    });
+    return safeAnimate(
+      element,
+      [{opacity: from}, {opacity: 1}],
+      {duration: motion.durationMs, easing: motion.easing},
+      change,
+    );
   }
-  return safeAnimate(
-    element,
-    sampleKeyframes(motion.progress, remaining => ({
-      opacity: 1 - remaining,
-      clipPath: `inset(0 0 ${round(remaining * 100)}% 0)`,
-    })),
-    {duration: motion.progress.durationMs, easing: 'linear'},
+  const {progress} = motion;
+  const rtl = edge.startsWith('inline') && isRtl(element);
+  // A block edge's parts slide in under the element's clip, on the frames the
+  // content after them glides on. A clip that moved would be painted on its
+  // own clock in WebKit, and the edge would part from that content.
+  const extent = edge.startsWith('block') ? extentOf(element, edge) : 0;
+  const sliding = slidingParts(element, edge, area, extent);
+  const partMotions = slideParts(sliding, progress, change, remaining =>
+    slideFrame(edge, (1 - from) * remaining * extent),
   );
+  const animation = safeAnimate(
+    element,
+    sampleKeyframes(progress, remaining => {
+      const hidden = (1 - from) * remaining;
+      return partMotions.length > 0
+        ? {opacity: 1 - hidden}
+        : {opacity: 1 - hidden, clipPath: fractionClip(edge, hidden, rtl)};
+    }),
+    {duration: progress.durationMs, easing: 'linear'},
+    change,
+  );
+  if (animation == null) {
+    for (const part of partMotions) {
+      part.cancel();
+    }
+  } else {
+    const tracked = trackEdgeMotion(
+      element,
+      animation,
+      t => 1 - (1 - from) * progress.remaining(t),
+      partMotions,
+      partMotions.length > 0 && sliding != null
+        ? holdSlideClip(element, sliding.clip)
+        : undefined,
+    );
+    rideEdge(element, area, edge, rtl, tracked, false);
+  }
+  return animation;
+}
+
+/**
+ * Plays each part's slide on the change's start, sampled like the glide.
+ * `frame` turns the share of the motion still to come into a keyframe.
+ */
+function slideParts(
+  sliding: Sliding | null,
+  progress: GlideProgress,
+  change: ChangeStart | undefined,
+  frame: (remaining: number) => Keyframe,
+  fill?: FillMode,
+): Animation[] {
+  const motions: Animation[] = [];
+  for (const [index, part] of (sliding?.parts ?? []).entries()) {
+    const motion = safeAnimate(
+      part,
+      sampleKeyframes(progress, frame),
+      {duration: progress.durationMs, easing: 'linear', fill},
+      change,
+    );
+    if (motion != null) {
+      motions.push(motion);
+      // A slide is the part's glide. A later change in the area then carries
+      // its rest into the part's next glide, as it carries any glide.
+      const glide: Glide = {
+        animation: motion,
+        offsetAt: t => drawnOffset(motion, t),
+        // A ride retimes the slide, so its length is read off the slide.
+        get durationMs() {
+          return liveDuration(motion, progress.durationMs);
+        },
+        // The part showed at its place when the parts were read.
+        shownBefore: {x: 0, y: 0},
+        scale: sliding?.scales[index] ?? {x: 1, y: 1},
+      };
+      glides.set(part, glide);
+      slideTargets.set(motion, part);
+      // An exit's slide then holds its end until the release. The element is
+      // inert and has given up its space by then.
+      motion.addEventListener?.('finish', () => {
+        if (glides.get(part) === glide) {
+          glides.delete(part);
+        }
+      });
+    }
+  }
+  return motions;
+}
+
+/**
+ * The offset `animation` draws `t` ms in, read off its keyframes, a straight
+ * line between each two. A slide that rides another glide reads that glide's
+ * frames, so this follows it.
+ */
+function drawnOffset(
+  animation: Animation,
+  t: number,
+): {readonly x: number; readonly y: number} {
+  const effect = animation.effect as KeyframeEffect | null;
+  if (effect == null || typeof effect.getKeyframes !== 'function') {
+    return {x: 0, y: 0};
+  }
+  const frames = effect.getKeyframes();
+  const duration = Number(effect.getTiming().duration);
+  const at = duration > 0 ? Math.min(1, Math.max(0, t / duration)) : 1;
+  const offsetOf = (frame: ComputedKeyframe | undefined) => {
+    const [x = 0, y = 0] = numbersIn(String(frame?.translate ?? ''));
+    return {x, y, offset: frame?.computedOffset ?? 0};
+  };
+  let from = offsetOf(frames[0]);
+  let to = offsetOf(frames[frames.length - 1]);
+  for (const frame of frames) {
+    const point = offsetOf(frame);
+    if (point.offset <= at) {
+      from = point;
+    }
+    if (point.offset >= at) {
+      to = point;
+      break;
+    }
+  }
+  const span = to.offset - from.offset;
+  const k = span > 0 ? (at - from.offset) / span : 0;
+  return {x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k};
+}
+
+/** How many ms before `animation` started `glide` started: 0 in one change. */
+function startedBefore(glide: Glide, animation: Animation): number {
+  const shift = Number(animation.startTime) - Number(glide.animation.startTime);
+  return Number.isFinite(shift) ? Math.max(0, shift) : 0;
+}
+
+/** `animation`'s length now, in ms, or `fallback` if it has none. */
+function liveDuration(animation: Animation, fallback: number): number {
+  const effect = animation.effect as KeyframeEffect | null;
+  const duration = Number(effect?.getTiming?.().duration);
+  return duration > 0 ? duration : fallback;
+}
+
+/** Each part's slide, by its motion: a stopped slide is no glide. */
+const slideTargets = new WeakMap<Animation, Element>();
+
+/** Cancels a part's slide, and forgets it as the part's glide. */
+function stopGlideOf(animation: Animation): void {
+  const part = slideTargets.get(animation);
+  if (part != null && glides.get(part)?.animation === animation) {
+    glides.delete(part);
+  }
+  animation.cancel();
 }
 
 /** The inline properties an exit sets, so a release removes exactly them. */
 const EXIT_PROPERTIES = [
   'margin-block-end',
   'margin-inline-end',
+  'margin-block-start',
+  'margin-inline-start',
   'pointer-events',
 ] as const;
 
@@ -1259,7 +2504,11 @@ function placeOf(
  * so a gap or collapsing margins come out exact. Returns false, setting
  * nothing, when no margin reaches that place.
  */
-function giveUpSpace(element: HTMLElement, area: Element): boolean {
+function giveUpSpace(
+  element: HTMLElement,
+  area: Element,
+  edge: LayoutEdge = 'block-end',
+): boolean {
   const view = element.ownerDocument.defaultView;
   const parent =
     element.parentElement == null
@@ -1270,24 +2519,43 @@ function giveUpSpace(element: HTMLElement, area: Element): boolean {
     parent.display.includes('flex') &&
     parent.flexDirection.startsWith('row');
   const rtl = view?.getComputedStyle(element).direction === 'rtl';
-  const property = isRow ? 'margin-inline-end' : 'margin-block-end';
-  const size = isRow ? element.offsetWidth : element.offsetHeight;
+  // The default block-end exit frees its space at its end, on the axis its
+  // container lays it out on; an exit by another edge frees it on that
+  // edge's side, so the element stays where it shows and the content beyond
+  // that edge moves (FR9).
+  const isStart = edge.endsWith('start');
+  const property =
+    edge === 'block-end'
+      ? isRow
+        ? 'margin-inline-end'
+        : 'margin-block-end'
+      : `margin-${edge}`;
+  const isInline = property.includes('inline');
+  const size = isInline ? element.offsetWidth : element.offsetHeight;
   const next = nextInFlow(element, area);
-  if (next == null) {
+  if (next == null && !isStart) {
     // Nothing after it in the area to land anywhere.
     element.style.setProperty(property, `${-size}px`);
     return true;
   }
   const own = element.style.getPropertyValue(property);
   const ownPriority = element.style.getPropertyPriority(property);
-  const axis = isRow ? 'inline' : 'block';
+  const axis = isInline ? 'inline' : 'block';
   // The content after its container must land too: a flex-row item that
   // sets its row's height moves what follows the row.
   const afterParent =
     element.parentElement == null || element.parentElement === area
       ? null
       : nextInFlow(element.parentElement, area);
-  const checked = afterParent == null ? [next] : [next, afterParent];
+  // By a start edge, what lies before it lands too, and the element itself
+  // stays where it shows.
+  const before = isStart ? previousInFlow(element, area) : null;
+  const checked = [next, afterParent, before, isStart ? element : null].filter(
+    (box): box is Element => box != null,
+  );
+  if (checked.length === 0) {
+    return false;
+  }
   // The element's scale, read in the layout the caller's visibility check
   // already laid out.
   const scale = scaleOf(element, element.getBoundingClientRect());
@@ -1296,8 +2564,11 @@ function giveUpSpace(element: HTMLElement, area: Element): boolean {
   // inside it).
   const position = element.style.getPropertyValue('position');
   const positionPriority = element.style.getPropertyPriority('position');
+  const shown = isStart ? placeOf(element, rtl) : null;
   element.style.setProperty('position', 'absolute', 'important');
-  const targets = checked.map(box => placeOf(box, rtl));
+  const targets = checked.map(box =>
+    box === element && shown != null ? shown : placeOf(box, rtl),
+  );
   const target = targets[0];
   if (position === '') {
     element.style.removeProperty('position');
@@ -1310,7 +2581,7 @@ function giveUpSpace(element: HTMLElement, area: Element): boolean {
   // A first guess (its box), then one correction from the measured result:
   // a gap, a collapsed margin or the element's own margins.
   element.style.setProperty(property, `${-size}px`);
-  const guess = placeOf(next, rtl)[axis];
+  const guess = placeOf(checked[0], rtl)[axis];
   const correction = (target[axis] - guess) / perPx;
   element.style.setProperty(property, `${-size + correction}px`);
   // Everything checked must land on both axes: a flex-row item that sets
@@ -1355,6 +2626,11 @@ const replaced = new WeakMap<Element, Replaced>();
  * element, after the change's `animate()` reported it measured, in the same
  * task: the glide reads the layout once the element has given up its space.
  *
+ * It conceals to its block-end edge by default, or to the `edge` it is given
+ * (`spec:AST-105` FR9), and its edge rides the glide of the content on that
+ * side once it starts; a conceal that reverses a running reveal (a close
+ * while it opens) starts from what the element shows.
+ *
  * Returns false, holding nothing, when the exit lands at once: no handle, a
  * close no change in the area measured, outside the area or its visible part,
  * Reduce Motion with a fine pointer, or a layout no end margin can free (a
@@ -1366,6 +2642,7 @@ export function holdLayoutExit(
   handle: AnimatedLayout | null | undefined,
   element: HTMLElement,
   done: () => void,
+  {edge = 'block-end'}: {edge?: LayoutEdge} = {},
 ): boolean {
   if (handle == null) {
     return false;
@@ -1403,7 +2680,7 @@ export function holdLayoutExit(
         ] as const,
     ),
   };
-  if (!giveUpSpace(element, area)) {
+  if (!giveUpSpace(element, area, edge)) {
     // A layout no end margin can free (a grid track and its gap, a flex-row
     // item that sets its row's height): it hides at once, and the content
     // after it takes its final place at once (`spec:AST-105` out of
@@ -1419,25 +2696,61 @@ export function holdLayoutExit(
   // Out of reach while it conceals: no focus, no pointer, nothing read.
   element.setAttribute('inert', '');
   element.style.setProperty('pointer-events', 'none');
-  const animation =
-    motion.kind === 'fade'
-      ? safeAnimate(element, [{opacity: 1}, {opacity: 0}], {
-          duration: motion.durationMs,
-          easing: motion.easing,
-          fill: 'forwards',
-        })
-      : safeAnimate(
-          element,
-          sampleKeyframes(motion.progress, remaining => ({
-            opacity: remaining,
-            clipPath: `inset(0 0 ${round((1 - remaining) * 100)}% 0)`,
-          })),
-          {
-            duration: motion.progress.durationMs,
-            easing: 'linear',
-            fill: 'forwards',
-          },
-        );
+  // A close while it opens: the reveal stops where it shows, and this starts
+  // there.
+  const from = shownAtStart(element, 1);
+  const rtl = edge.startsWith('inline') && isRtl(element);
+  // The start of the change it exits with, which its glides then share.
+  const change = changeStartOf(batch);
+  let animation: Animation | null;
+  if (motion.kind === 'fade') {
+    animation = safeAnimate(
+      element,
+      [{opacity: from}, {opacity: 0}],
+      {duration: motion.durationMs, easing: motion.easing, fill: 'forwards'},
+      change,
+    );
+  } else {
+    const {progress} = motion;
+    // As in a reveal, a block edge's parts slide out under its clip.
+    const extent = edge.startsWith('block') ? extentOf(element, edge) : 0;
+    const sliding = slidingParts(element, edge, area, extent);
+    const partMotions = slideParts(
+      sliding,
+      progress,
+      change,
+      remaining => slideFrame(edge, (1 - from * remaining) * extent),
+      'forwards',
+    );
+    animation = safeAnimate(
+      element,
+      sampleKeyframes(progress, remaining => {
+        const shown = from * remaining;
+        return partMotions.length > 0
+          ? {opacity: shown}
+          : {opacity: shown, clipPath: fractionClip(edge, 1 - shown, rtl)};
+      }),
+      {duration: progress.durationMs, easing: 'linear', fill: 'forwards'},
+      change,
+    );
+    if (animation == null) {
+      for (const part of partMotions) {
+        part.cancel();
+      }
+    } else {
+      const tracked = trackEdgeMotion(
+        element,
+        animation,
+        t => from * progress.remaining(t),
+        partMotions,
+        partMotions.length > 0 && sliding != null
+          ? holdSlideClip(element, sliding.clip)
+          : undefined,
+        true,
+      );
+      rideEdge(element, area, edge, rtl, tracked, true);
+    }
+  }
   exits.set(element, animation);
   if (animation == null) {
     // No Web Animations: nothing to wait for.
@@ -1461,6 +2774,22 @@ export function holdLayoutExit(
 export function releaseLayoutExit(element: HTMLElement): void {
   if (!exits.has(element)) {
     return;
+  }
+  // What the exit showed as it stopped: a reveal in the same frame (opened
+  // again mid-exit) starts there.
+  const running = edgeMotions.get(element);
+  if (running != null) {
+    edgeMotions.delete(element);
+    stoppedShown.set(element, {
+      fraction: shownNow(running),
+      at: timelineNow(element),
+    });
+    stopSlides(running);
+  }
+  const held = heldSlides.get(element);
+  heldSlides.delete(element);
+  if (held != null) {
+    stopSlides(held);
   }
   exits.get(element)?.cancel();
   exits.delete(element);
@@ -1511,8 +2840,17 @@ export interface LayoutSwapMotion {
   readonly copy: (p: number, ride: LayoutRide) => Keyframe;
   /** Its text's opacity, on its own curve, when that differs from the copy's. */
   readonly copyText?: (p: number) => number;
-  /** The copy paints above its neighbours, in the background it shows. */
+  /**
+   * The copy paints in the background it shows, above its neighbours: at
+   * `z-index: 1` as the host's last child, or at `copyBefore`'s level.
+   */
   readonly isOpaque?: boolean;
+  /**
+   * Place the copy just before this child of the host, at that child's
+   * level in the paint order, with no `z-index` of its own. Without it the
+   * opaque copy is the host's last child at `z-index: 1`.
+   */
+  readonly copyBefore?: Element;
   /**
    * An element the glide moves, such as the column the old content sat in.
    * Every part plays over its glide, frame by frame, and is told how far it
@@ -1559,6 +2897,7 @@ export function holdLayoutSwap(
   ) {
     return null;
   }
+  beginChange(element.ownerDocument);
   const box = element.getBoundingClientRect();
   if (!isVisiblePart) {
     const copy = inertCopy(element);
@@ -1584,9 +2923,14 @@ export function playLayoutSwap(
     return () => {};
   }
   const {copy} = swap;
-  placeOver(copy, how.host, swap.rect);
+  // Captured now: the parts riding a glide play a microtask later, on the
+  // start of the change they are part of.
+  const change = changeStartIn(swap.area, copy.ownerDocument);
+  placeOver(copy, how.host, swap.rect, how.copyBefore ?? null);
   if (how.isOpaque === true) {
-    copy.style.zIndex = '1';
+    if (how.copyBefore == null) {
+      copy.style.zIndex = '1';
+    }
     copy.style.backgroundColor = paintedBackground(copy);
   }
   const animations: Animation[] = [];
@@ -1602,10 +2946,10 @@ export function playLayoutSwap(
   };
   const {copyText, rideWith} = how;
   const fadedText =
-    copyText != null && motion.kind === 'spring' ? wrapText(copy) : [];
+    copyText != null && motion.kind === 'glide' ? wrapText(copy) : [];
   // Each part as a function of time: its frame, or the copy's with its ride.
   const parts: [Element, (p: number, ride: LayoutRide) => Keyframe][] = [];
-  if (motion.kind === 'spring') {
+  if (motion.kind === 'glide') {
     const moves = rideWith != null && rideWith.isCopyMoved !== false;
     parts.push([
       copy,
@@ -1639,6 +2983,7 @@ export function playLayoutSwap(
         element,
         sample(t => shape(progressAt(t), rideAt(t))),
         {duration: durationMs, fill: 'both', ...options},
+        change,
       );
       if (animation != null) {
         animations.push(animation);
@@ -1686,8 +3031,10 @@ export function playLayoutSwap(
       if (glide == null) {
         return {x: -rideWith.travel.x, y: -rideWith.travel.y};
       }
+      // The parts were read where the ridden element showed then. After a
+      // block it has moved on by the glide's start, so they move with it.
       const now = glide.offsetAt(t);
-      const start = glide.offsetAt(0);
+      const start = glide.shownBefore;
       return {x: now.x - start.x, y: now.y - start.y};
     };
     playAll(durationMs, progressAt, rideAt, {easing: 'linear'}, shape =>
@@ -1708,15 +3055,16 @@ export function playLayoutFrames(
   handle: AnimatedLayout | null | undefined,
   parts: LayoutSwapMotion['incoming'],
 ): () => void {
-  const area = handle?.[AREA]() ?? null;
+  const area = handle == null ? null : readArea(handle);
   const motion = area == null ? null : layoutMotion(area);
-  if (motion == null || motion.kind === 'instant') {
+  if (area == null || motion == null || motion.kind === 'instant') {
     return () => {};
   }
+  const change = changeStartIn(area, area.ownerDocument);
   const animations: Animation[] = [];
   for (const {element, frames: shape} of parts) {
     const animation =
-      motion.kind === 'spring'
+      motion.kind === 'glide'
         ? safeAnimate(
             element,
             sampleKeyframes(motion.progress, remaining =>
@@ -1727,11 +3075,14 @@ export function playLayoutFrames(
               easing: 'linear',
               fill: 'both',
             },
+            change,
           )
-        : safeAnimate(element, [{opacity: 0}, {opacity: 1}], {
-            duration: motion.durationMs,
-            easing: motion.easing,
-          });
+        : safeAnimate(
+            element,
+            [{opacity: 0}, {opacity: 1}],
+            {duration: motion.durationMs, easing: motion.easing},
+            change,
+          );
     if (animation != null) {
       animations.push(animation);
     }
@@ -1743,12 +3094,654 @@ export function playLayoutFrames(
   return end;
 }
 
+// ---------------------------------------------------------------------------
+// The edge reveal's two-state form (`spec:AST-105` FR9)
+// ---------------------------------------------------------------------------
+
+/**
+ * An element's old state, held before a change commits for FR9's two-state
+ * edge reveal.
+ */
+export interface LayoutEdgeHold {
+  readonly element: HTMLElement;
+  /** Where it showed, in viewport coordinates. */
+  readonly rect: DOMRect;
+  /**
+   * Its size along the edge's axis as it shows: what a running reveal shows
+   * mid-motion, or its box.
+   */
+  readonly extent: number;
+  /** Its old state as one transient copy, or null when it cannot be held. */
+  readonly swap: LayoutSwap | null;
+}
+
+/** A playing two-state edge reveal. */
+export interface LayoutEdgeMotion {
+  /** Ends it at once (a new change, an unmount). */
+  end(): void;
+  /**
+   * What it shows now: its extent along the edge's axis and the motion's
+   * progress (0 → 1), or null once it has settled.
+   */
+  shown(): {readonly extent: number; readonly progress: number} | null;
+}
+
+/** What the caller adds to a two-state edge reveal: only its own fades. */
+export interface LayoutEdgeParts {
+  /** The old state's copy's opacity over the progress (1 when absent). */
+  readonly copyOpacity?: (p: number) => number;
+  /** Its text's opacity, on its own curve, when that differs from the copy's. */
+  readonly copyText?: (p: number) => number;
+  /** Parts the page renders, playing with the reveal (the new state's text). */
+  readonly incoming?: ReadonlyArray<{
+    readonly element: Element;
+    readonly frames: (p: number) => Keyframe;
+  }>;
+}
+
+const SETTLED: LayoutEdgeMotion = {end: () => {}, shown: () => null};
+
+/**
+ * Before a change commits: hold `element`'s old state for FR9's two-state edge
+ * reveal, its box and the extent it shows along `edge`'s axis (`shown`, from a
+ * running reveal, or its box), and its old state as one transient copy (null
+ * when it cannot be copied, or under an immediate change). Returns null
+ * without the element or without Web Animations.
+ */
+export function holdLayoutEdge(
+  handle: AnimatedLayout | null | undefined,
+  element: HTMLElement | null,
+  {
+    edge = 'block-end',
+    shown = null,
+  }: {edge?: LayoutEdge; shown?: number | null} = {},
+): LayoutEdgeHold | null {
+  if (element == null || typeof element.animate !== 'function') {
+    return null;
+  }
+  beginChange(element.ownerDocument);
+  const rect = element.getBoundingClientRect();
+  return {
+    element,
+    rect,
+    extent: shown ?? (edge.startsWith('inline') ? rect.width : rect.height),
+    swap: holdLayoutSwap(handle, element),
+  };
+}
+
+/**
+ * After the change commits, before paint: FR9's two-state edge reveal, on
+ * FR4's one motion. The state that is larger along `edge`'s axis is clipped
+ * on that edge, from the extent the element showed to the new one: a conceal
+ * covers the old state, held as the swap's copy, with the element raised
+ * above it; a reveal opens the element, under the old state. With
+ * `rideWith`, an element the glide moves after that edge (a rail's content
+ * column), the edge rides its glide, frame by frame, so the two never part,
+ * also when this reverses a running reveal; without it the edge follows the
+ * motion's curve. `parts` gives the caller's own fades, told whether the edge
+ * conceals and the element as it is now. Under Reduce Motion it follows
+ * `design:reduced-motion`: opacity only under a coarse primary pointer (DR2),
+ * an immediate change otherwise (DR3). `current` is the element after the
+ * commit, when it remounted.
+ */
+export function playLayoutEdge(
+  hold: LayoutEdgeHold,
+  current: HTMLElement | null,
+  handle: AnimatedLayout,
+  {
+    edge = 'block-end',
+    rideWith = null,
+    parts,
+  }: {
+    edge?: LayoutEdge;
+    rideWith?: Element | null;
+    parts?: (isConceal: boolean, element: HTMLElement) => LayoutEdgeParts;
+  } = {},
+): LayoutEdgeMotion {
+  const {rect: before, swap, extent: from} = hold;
+  const element = current?.isConnected === true ? current : hold.element;
+  if (!element.isConnected) {
+    return SETTLED;
+  }
+  const motion = layoutMotion(element);
+  const next = element.getBoundingClientRect();
+  const isInline = edge.startsWith('inline');
+  const extentOfBox = (box: DOMRect) => (isInline ? box.width : box.height);
+  const to = extentOfBox(next);
+  if (motion.kind === 'instant' || Math.abs(to - from) < 0.5) {
+    return SETTLED;
+  }
+  const isConceal = to < from;
+  const isEnd = edge.endsWith('end');
+  const rtl = isInline && isRtl(element);
+  // The row that holds the element and the ridden element, or its parent.
+  const host =
+    rideWith?.parentElement != null && rideWith.parentElement.contains(element)
+      ? rideWith.parentElement
+      : element.parentElement;
+  // Riding needs the swap: its frames carry the ridden element's travel.
+  // Without one (old state that cannot be copied) the edge follows the
+  // motion's curve.
+  const rides =
+    host != null &&
+    rideWith != null &&
+    rideWith.parentElement === host &&
+    swap != null;
+  // The ridden element's travel so far, towards the edge's side.
+  const sign = isEnd ? 1 : -1;
+  const towards = (ride: LayoutRide) =>
+    sign * (isInline ? (rtl ? -ride.x : ride.x) : ride.y);
+  const extentAt = (p: number, ride: LayoutRide) =>
+    rides ? from + towards(ride) : from + (to - from) * p;
+  const clip = (hidden: number) => pxClip(edge, hidden, rtl);
+  const now = () => Number(element.ownerDocument.timeline?.currentTime ?? 0);
+  // The start this change's animations share, which after a block is later
+  // than the frame time the timeline still reads (startFor).
+  const startedAt =
+    changeStartIn(areaOf(handle, element), element.ownerDocument)?.at ?? 0;
+  const durationMs =
+    motion.kind === 'glide' ? motion.progress.durationMs : motion.durationMs;
+  const progressAt = (ms: number) =>
+    motion.kind === 'glide'
+      ? 1 - motion.progress.remaining(Math.min(ms, durationMs))
+      : 0;
+  const shown = (): {extent: number; progress: number} | null => {
+    const elapsed = Math.max(0, now() - startedAt);
+    if (elapsed >= durationMs) {
+      return null;
+    }
+    // The fades are read at the change's start, where the glide it retargets
+    // carries on. The extent stays on the timeline's frame, the frame a ride
+    // is measured from.
+    const progress = progressAt(
+      Math.max(elapsed, layoutStartFor(element.ownerDocument) - startedAt),
+    );
+    let extent = from + (to - from) * progressAt(elapsed);
+    if (rides && rideWith != null) {
+      // The edge is the ridden element's: read it where it shows, on the
+      // timeline's clock.
+      const ridden = shownBoxAt(rideWith, now());
+      const own = element.getBoundingClientRect();
+      extent = !isInline
+        ? isEnd
+          ? ridden.top - own.top
+          : own.bottom - ridden.bottom
+        : isEnd !== rtl
+          ? ridden.left - own.left
+          : own.right - ridden.right;
+    }
+    return {extent, progress};
+  };
+  // The ride, when the ridden element does not glide: its whole travel at
+  // once, physical (its old place less its new).
+  const travel = sign * (from - to);
+  const rideSpec =
+    rides && rideWith != null
+      ? {
+          element: rideWith,
+          travel: isInline
+            ? {x: rtl ? -travel : travel, y: 0}
+            : {x: 0, y: travel},
+          isCopyMoved: false,
+        }
+      : undefined;
+  // The copy keeps the element's fixed edge (the one opposite `edge`) where
+  // the element is now, so it meets the element wherever it sits.
+  const fixedAtStart = isEnd !== (isInline && rtl);
+  const at = new DOMRect(
+    isInline && !fixedAtStart ? next.right - before.width : next.left,
+    !isInline && !isEnd ? next.bottom - before.height : next.top,
+    before.width,
+    before.height,
+  );
+  const own = parts?.(isConceal, element) ?? {};
+  const copyOpacity = own.copyOpacity ?? (() => 1);
+
+  if (isConceal) {
+    // A conceal covers the old state, held by the swap, from the extent it
+    // shows down to the new one; the element, raised above it, shows through.
+    if (swap == null || host == null) {
+      return SETTLED;
+    }
+    let raised: HTMLElement | null = element;
+    while (raised != null && raised.parentElement !== host) {
+      raised = raised.parentElement;
+    }
+    const restore = raised == null ? null : {position: raised.style.position};
+    // The copy paints at the element's own level: just before it in the
+    // host, with no z-index, so page content stacks against the pair as it
+    // does against the element alone. The element, positioned, paints above
+    // the copy by tree order.
+    if (raised != null && getComputedStyle(raised).position === 'static') {
+      raised.style.position = 'relative';
+    }
+    const end = playLayoutSwap(
+      {...swap, rect: at},
+      {
+        host,
+        isOpaque: true,
+        copyBefore: raised ?? undefined,
+        copy: (p, ride) => ({
+          clipPath: clip(extentOfBox(before) - extentAt(p, ride)),
+          opacity: copyOpacity(p),
+        }),
+        copyText: own.copyText,
+        rideWith: rideSpec,
+        onEnd: () => {
+          if (raised != null && restore != null) {
+            raised.style.position = restore.position;
+          }
+        },
+        incoming: own.incoming ?? [],
+      },
+    );
+    return {end, shown};
+  }
+
+  // A reveal opens the element from the extent it showed, under the old
+  // state held by the same swap.
+  const incoming = [
+    {
+      element,
+      frames: (p: number, ride: LayoutRide) => ({
+        clipPath: clip(to - extentAt(p, ride)),
+      }),
+    },
+    ...(own.incoming ?? []),
+  ];
+  const end =
+    swap != null && host != null
+      ? playLayoutSwap(
+          {...swap, rect: at},
+          {
+            host,
+            isOpaque: true,
+            copy: p => ({opacity: copyOpacity(p)}),
+            copyText: own.copyText,
+            rideWith: rideSpec,
+            incoming,
+          },
+        )
+      : playLayoutFrames(handle, incoming);
+  return {end, shown};
+}
+
+// ---------------------------------------------------------------------------
+// The edge reveal of a resized element (`spec:AST-105` FR9, no copy)
+// ---------------------------------------------------------------------------
+
+/** A resized element's edge reveal, reported around its change. */
+export interface LayoutEdgeReport {
+  /** Before the change commits: measures the element and what moves. */
+  measureBefore(): void;
+  /**
+   * After the new size is applied, before paint: the element reveals or
+   * conceals by its edge, from the extent it showed to its new one, and the
+   * content beside it glides on the same motion.
+   */
+  animate(): void;
+  /** Ends a running reveal or conceal at once, removing what it holds. */
+  cancel(): void;
+}
+
+/** A running edge reveal of a resized element. */
+interface ResizeReveal {
+  readonly animation: Animation | null;
+  /** The extent it shows `t` ms in, in its own px. */
+  shownAt: (t: number) => number;
+  /** Its extent along the edge's axis as laid out, held or not. */
+  readonly box: number;
+  /** Ends it, putting back what it replaced. */
+  release(): void;
+}
+
+const resizeReveals = new WeakMap<Element, ResizeReveal>();
+
+/** The inline properties a size hold sets, by axis. */
+const HOLD_PROPERTIES = {
+  inline: [
+    'inline-size',
+    'min-inline-size',
+    'max-inline-size',
+    'flex-basis',
+    'flex-grow',
+    'flex-shrink',
+  ],
+  block: [
+    'block-size',
+    'min-block-size',
+    'max-block-size',
+    'flex-basis',
+    'flex-grow',
+    'flex-shrink',
+  ],
+} as const;
+
+/**
+ * The inside of an element as it was laid out: its padding along an axis, its
+ * overflow and its scroll offset. A size change can change them in the same
+ * commit, as a LayoutPanel at width 0 drops its padding and stops scrolling.
+ */
+interface LaidOutInside {
+  /** Its padding at the axis's start and end. */
+  readonly gutters: readonly [string, string];
+  /** Its overflow across and down. */
+  readonly overflow: readonly [string, string];
+  /** Its scroll offset across and down. */
+  readonly scroll: readonly [number, number];
+}
+
+function insideOf(
+  element: HTMLElement,
+  axis: 'inline' | 'block',
+): LaidOutInside {
+  const style = getComputedStyle(element);
+  return {
+    gutters: [
+      style.getPropertyValue(`padding-${axis}-start`),
+      style.getPropertyValue(`padding-${axis}-end`),
+    ],
+    overflow: [
+      style.getPropertyValue('overflow-x'),
+      style.getPropertyValue('overflow-y'),
+    ],
+    scroll: [element.scrollLeft, element.scrollTop],
+  };
+}
+
+function restoreScroll(element: HTMLElement, inside: LaidOutInside): void {
+  const [across, down] = inside.scroll;
+  if (element.scrollLeft !== across) {
+    element.scrollLeft = across;
+  }
+  if (element.scrollTop !== down) {
+    element.scrollTop = down;
+  }
+}
+
+/**
+ * Holds `element` at `extent` own px along `edge`'s axis while it conceals to
+ * `keep`, freeing the difference by the margin on that edge's side, so what
+ * lies beyond the edge stays where the new size puts it. Its padding,
+ * overflow and scroll offset stay as `inside` measured them, so nothing in it
+ * moves while it is clipped. Returns what puts back every value it set.
+ * When no margin frees it, as the content on that side did not stay put, it
+ * sets nothing and returns null.
+ */
+function holdExtent(
+  element: HTMLElement,
+  area: Element,
+  edge: LayoutEdge,
+  extent: number,
+  keep: number,
+  inside: LaidOutInside,
+): (() => void) | null {
+  const axis = edge.startsWith('inline') ? 'inline' : 'block';
+  const margin = `margin-${edge}`;
+  const insideProperties = [
+    [`padding-${axis}-start`, inside.gutters[0]],
+    [`padding-${axis}-end`, inside.gutters[1]],
+    ['overflow-x', inside.overflow[0]],
+    ['overflow-y', inside.overflow[1]],
+  ] as const;
+  const properties = [
+    ...HOLD_PROPERTIES[axis],
+    margin,
+    ...insideProperties.map(([property]) => property),
+  ];
+  const prior = properties.map(
+    property =>
+      [
+        property,
+        element.style.getPropertyValue(property),
+        element.style.getPropertyPriority(property),
+      ] as const,
+  );
+  const restore = () => {
+    for (const [property, value, priority] of prior) {
+      if (value === '') {
+        element.style.removeProperty(property);
+      } else {
+        element.style.setProperty(property, value, priority);
+      }
+    }
+  };
+  const isEnd = edge.endsWith('end');
+  const rtl = axis === 'inline' && isRtl(element);
+  const beyond = isEnd
+    ? nextInFlow(element, area)
+    : previousInFlow(element, area);
+  const before = beyond == null ? null : placeOf(beyond, rtl);
+  const size = `${extent}px`;
+  element.style.setProperty(`${axis}-size`, size, 'important');
+  element.style.setProperty(`min-${axis}-size`, size, 'important');
+  element.style.setProperty(`max-${axis}-size`, size, 'important');
+  element.style.setProperty('flex-basis', 'auto', 'important');
+  element.style.setProperty('flex-grow', '0', 'important');
+  element.style.setProperty('flex-shrink', '0', 'important');
+  for (const [property, value] of insideProperties) {
+    if (value !== '') {
+      element.style.setProperty(property, value, 'important');
+    }
+  }
+  element.style.setProperty(margin, `${keep - extent}px`, 'important');
+  if (beyond != null && before != null) {
+    // One correction from the measured result (a gap, the element's own
+    // margin), then everything beyond the edge must be where it was.
+    const landed = placeOf(beyond, rtl);
+    const scale = scaleOf(element, element.getBoundingClientRect());
+    const perPx = axis === 'inline' ? scale.x : scale.y;
+    const sign = isEnd ? 1 : -1;
+    const drift = (landed[axis] - before[axis]) * sign;
+    if (Math.abs(drift) > 0.5) {
+      element.style.setProperty(
+        margin,
+        `${keep - extent - drift / perPx}px`,
+        'important',
+      );
+    }
+    const settled = placeOf(beyond, rtl);
+    if (
+      Math.abs(settled.block - before.block) > 1 ||
+      Math.abs(settled.inline - before.inline) > 1
+    ) {
+      restore();
+      return null;
+    }
+  }
+  restoreScroll(element, inside);
+  return restore;
+}
+
+/**
+ * Reports a resized element's edge reveal (`spec:AST-105` FR9) with no copy:
+ * a resize controller's pane collapsing or opening beside the content it
+ * shares a row with (`component:Resizable` FR8, `component:LayoutPanel`
+ * FR7). Measure before the change commits and animate after the
+ * new size is applied, as `reportLayoutChange` does; the content beside the
+ * element glides through that report. A larger extent reveals by `edge` from
+ * the extent the element showed. A smaller one conceals: the element is held
+ * at the extent it was laid out at, the difference freed by the margin on
+ * that edge's side so the content beyond it stays where the new size puts it,
+ * and clipped down to its new extent; the hold goes when the motion ends.
+ * Its padding, overflow and scroll offset stay as laid out while it is held,
+ * so nothing inside it jumps when the new size changes them. The
+ * moving edge rides the glide of the content on that side, frame by frame,
+ * and a change made while it runs starts from the extent it shows. It slides:
+ * nothing fades. Under Reduce Motion with a coarse primary pointer a reveal
+ * fades in and a conceal lands at once (`design:reduced-motion` DR2); with a
+ * fine one every change lands at once (DR3).
+ */
+export function reportLayoutEdge(
+  handle: AnimatedLayout | null | undefined,
+  getElement: () => HTMLElement | null,
+  {edge = 'block-end'}: {edge?: LayoutEdge} = {},
+): LayoutEdgeReport {
+  const report = reportLayoutChange(handle, getElement);
+  /**
+   * What the element showed, its laid-out extent and its box, before the
+   * change.
+   */
+  let measured: {
+    shown: number;
+    box: number;
+    rect: DOMRect;
+    inside: LaidOutInside;
+  } | null = null;
+  const axis = edge.startsWith('inline') ? 'inline' : 'block';
+  const release = (element: HTMLElement | null) => {
+    if (element == null) {
+      return;
+    }
+    resizeReveals.get(element)?.release();
+  };
+  return {
+    measureBefore() {
+      const element = getElement();
+      measured = null;
+      if (element != null) {
+        beginChange(element.ownerDocument);
+        const running = resizeReveals.get(element);
+        const elapsed = Number(running?.animation?.currentTime);
+        const rect = element.getBoundingClientRect();
+        // A running conceal holds the inside as it was laid out.
+        const inside = insideOf(element, axis);
+        measured =
+          running == null
+            ? {
+                shown: extentOf(element, edge),
+                box: extentOf(element, edge),
+                rect,
+                inside,
+              }
+            : {
+                shown: running.shownAt(
+                  Number.isFinite(elapsed) ? Math.max(0, elapsed) : 0,
+                ),
+                box: running.box,
+                rect,
+                inside,
+              };
+        running?.release();
+      }
+      report.measureBefore();
+    },
+    animate() {
+      report.animate();
+      const element = getElement();
+      const before = measured;
+      measured = null;
+      if (handle == null || element == null || before == null) {
+        return;
+      }
+      // A conceal released to reverse can drop the scroll offset.
+      restoreScroll(element, before.inside);
+      const area = areaOf(handle, element);
+      if (area == null) {
+        return;
+      }
+      const after = extentOf(element, edge);
+      if (Math.abs(after - before.shown) < 0.5) {
+        return;
+      }
+      // In the area's visible part before or after: a pane collapsing to
+      // nothing has no box after.
+      const visible = visibleRect(area);
+      if (
+        !intersects(element.getBoundingClientRect(), visible) &&
+        !intersects(before.rect, visible)
+      ) {
+        return;
+      }
+      const motion = layoutMotion(area);
+      if (motion.kind === 'instant') {
+        return;
+      }
+      const isConceal = after < before.shown;
+      const change = changeStartIn(area, element.ownerDocument);
+      if (motion.kind === 'fade') {
+        if (!isConceal) {
+          safeAnimate(
+            element,
+            [{opacity: 0}, {opacity: 1}],
+            {duration: motion.durationMs, easing: motion.easing},
+            change,
+          );
+        }
+        return;
+      }
+      const {progress} = motion;
+      const rtl = edge.startsWith('inline') && isRtl(element);
+      // The box the clip works in: the new one for a reveal; for a conceal,
+      // the one it was laid out at, held while it runs.
+      const box = isConceal ? Math.max(before.box, before.shown) : after;
+      const restore = isConceal
+        ? holdExtent(element, area, edge, box, after, before.inside)
+        : () => {};
+      if (restore == null) {
+        return;
+      }
+      // Hidden at the start and at the end, in the box's own px.
+      const from = box - before.shown;
+      const to = box - after;
+      const curve = (t: number) => to + (from - to) * progress.remaining(t);
+      const animation = safeAnimate(
+        element,
+        sampleOver(progress.durationMs, t => ({
+          clipPath: pxClip(edge, curve(t), rtl),
+        })),
+        {duration: progress.durationMs, easing: 'linear'},
+        change,
+      );
+      const reveal: ResizeReveal = {
+        animation,
+        shownAt: t => box - curve(t),
+        box,
+        release: () => {
+          if (resizeReveals.get(element) !== reveal) {
+            return;
+          }
+          resizeReveals.delete(element);
+          animation?.cancel();
+          restore();
+        },
+      };
+      if (animation == null) {
+        restore();
+        return;
+      }
+      resizeReveals.set(element, reveal);
+      animation.addEventListener?.('finish', reveal.release);
+      rideNeighbour(
+        element,
+        area,
+        edge,
+        rtl,
+        animation,
+        () => resizeReveals.get(element) === reveal,
+        // Anywhere in its box: the content beside it may carry a running
+        // motion past where this one starts or ends, and the edge follows.
+        towards =>
+          Math.min(box, Math.max(0, isConceal ? to - towards : -towards)),
+        hidden => ({clipPath: pxClip(edge, hidden, rtl)}),
+        hiddenAt => {
+          reveal.shownAt = t => box - hiddenAt(t);
+        },
+      );
+    },
+    cancel() {
+      measured = null;
+      release(getElement());
+    },
+  };
+}
+
 /**
  * A disclosure's indicator (its chevron) turns on the same motion as the
- * glide: its CSS transition takes the spring as a `linear()` easing, and an
- * immediate change under Reduce Motion. Without a handle the inline values are
- * cleared, so the component's own transition applies. An engine without
- * `linear()` drops that value and keeps the component's easing.
+ * glide. Its CSS transition takes the theme's move curve and duration as the
+ * glide reads them where the area is, and is immediate under Reduce Motion.
+ * Without a handle the inline values are cleared, so the component's own
+ * transition applies.
  */
 export function applyLayoutChangeTransition(
   handle: AnimatedLayout | null | undefined,
@@ -1764,18 +3757,18 @@ export function applyLayoutChangeTransition(
     return;
   }
   const motion = layoutMotion(area);
-  if (motion.kind !== 'spring') {
+  if (motion.kind !== 'glide') {
     element.style.setProperty('transition-duration', '0s');
     element.style.removeProperty('transition-timing-function');
     return;
   }
-  element.style.setProperty(
-    'transition-duration',
-    `${Math.round(motion.progress.durationMs)}ms`,
-  );
+  // Values, not the tokens: a theme scope between the area and the indicator
+  // would retime a token that the indicator reads where it is.
+  const ms = Math.round(motion.progress.durationMs * 1000) / 1000;
+  element.style.setProperty('transition-duration', `${ms}ms`);
   element.style.setProperty(
     'transition-timing-function',
-    linearEasing(motion.progress),
+    motion.progress.easing,
   );
 }
 
@@ -1790,6 +3783,46 @@ export function landLayoutGlide(element: Element): void {
     glides.delete(element);
     glide.animation.cancel();
   }
+}
+
+/**
+ * Lands the sideways part of `element`'s running glide at once and keeps its
+ * vertical move. It changes the glide's frames, and what a later change
+ * carries from it, together. It is for an adopter that moves the element's
+ * own sideways translation onto its children between the two reads. A list
+ * row that a swipe left open is one.
+ */
+export function landLayoutGlideSideways(element: Element): void {
+  const glide = glides.get(element);
+  const effect = glide?.animation.effect as KeyframeEffect | null | undefined;
+  if (
+    glide == null ||
+    effect == null ||
+    typeof effect.setKeyframes !== 'function'
+  ) {
+    return;
+  }
+  effect.setKeyframes(
+    effect.getKeyframes().map(({computedOffset: _, translate, ...frame}) => {
+      const [, y = '0px'] = String(translate ?? '').split(/\s+/);
+      return {...frame, translate: `0px ${y}`};
+    }),
+  );
+  const vertical: Glide = {
+    animation: glide.animation,
+    offsetAt: t => ({x: 0, y: glide.offsetAt(t).y}),
+    get durationMs() {
+      return glide.durationMs;
+    },
+    shownBefore: {x: 0, y: glide.shownBefore.y},
+    scale: glide.scale,
+  };
+  glides.set(element, vertical);
+  glide.animation.addEventListener?.('finish', () => {
+    if (glides.get(element) === vertical) {
+      glides.delete(element);
+    }
+  });
 }
 
 /**

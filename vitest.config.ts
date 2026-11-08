@@ -3,9 +3,10 @@
 /**
  * @file vitest.config.ts
  * @input Uses vitest/config, @vitejs/plugin-react
- * @output Vitest configuration with jsdom, coverage, test setup, and the two
- *   test projects (`ui`, `node`)
- * @position Root test config and the actual test entry point. The two projects
+ * @output Vitest configuration with jsdom, coverage, test setup, the three
+ *   test projects (`ui`, `perf`, `node`), and the sequencer that splits
+ *   `--shard` legs
+ * @position Root test config and the actual test entry point. The projects
  *   under `test.projects` decide which files run where via their per-project
  *   include lists. The root-level `test` options (globals, environment,
  *   coverage, setupFiles, pool sizing) are inherited by projects that set
@@ -22,9 +23,15 @@ import path from 'node:path';
 import {configDefaults, defineConfig} from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import stylexResolution from './scripts/stylex-module-resolution.cjs';
+import DurationShardSequencer from './scripts/vitest-shard-sequencer.mjs';
 
 const rootDir = path.resolve(__dirname, '.');
 const coreSrc = path.resolve(__dirname, 'packages/core/src');
+// Times the Markdown helper pipeline against the empty one on the CPU clock.
+// CPU time still includes cache and memory-bandwidth contention from other
+// work, so this file runs alone in the `perf` project.
+const helperOverheadBenchmark =
+  'packages/core/src/Markdown/Markdown.fr23.perf.test.ts';
 
 export default defineConfig({
   plugins: [
@@ -36,7 +43,12 @@ export default defineConfig({
             {
               dev: true,
               enableDebugDataProp: false,
-              runtimeInjection: true,
+              // StyleX's runtime injection, plus each rule its dev runtime drops
+              // under a prelude with more than one condition (StyleX 0.19.0).
+              runtimeInjection: path.join(
+                rootDir,
+                'internal/test-utils/src/stylexInject.ts',
+              ),
               genConditionalClasses: true,
               treeshakeCompensation: true,
               aliases: {
@@ -85,12 +97,19 @@ export default defineConfig({
     // (e.g. Chat composer tests with contentEditable + popover portals in
     // jsdom). Vitest 4 removed `poolOptions`; per-worker argv is now top-level.
     execArgv: ['--max-old-space-size=4096'],
+    // A `--shard` leg of the `node` project runs files chosen by their
+    // recorded time, not by count, so the slowest files never share a leg
+    // (scripts/vitest-shard-sequencer.mjs, spec:AST-030 FR22).
+    sequence: {sequencer: DurationShardSequencer},
     // Test projects (migrated from vitest.workspace.ts). Partitioning rule
     // (nothing can fall through):
     //   - `ui`   = packages/core + packages/lab + packages/charts + packages/richtext
-    //              + packages/vega — need jsdom, the StyleX babel
+    //              + packages/vega and the Theme Showcase DOM suite — need
+    //              jsdom, the StyleX babel
     //              transform, and the jest-dom setup; inherit all of that from
     //              the root config via `extends: true`.
+    //   - `perf` = the helper-overhead benchmark, which `ui` excludes. It
+    //              inherits the root config too, and runs in a later group.
     //   - `node` = everything else (CLI, build tooling, scripts, internal
     //              utils, and app-level suites that need no DOM) — no DOM, no
     //              StyleX/babel transform, no jest-dom
@@ -122,7 +141,21 @@ export default defineConfig({
             'packages/charts/src/**/*.test.{ts,tsx,mjs}',
             'packages/richtext/src/**/*.test.{ts,tsx,mjs}',
             'packages/vega/src/**/*.test.{ts,tsx,mjs}',
+            'apps/docsite/src/__tests__/theme-showcase/**/*.test.{ts,tsx,mjs}',
           ],
+          exclude: [...configDefaults.exclude, helperOverheadBenchmark],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'perf',
+          // Groups run in order, so this one starts only after the other
+          // projects' files finish.
+          sequence: {groupOrder: 1},
+          testTimeout: 30_000,
+          hookTimeout: 30_000,
+          include: [helperOverheadBenchmark],
         },
       },
       {
@@ -132,6 +165,15 @@ export default defineConfig({
         // `resolve` — the root's aliases do not reach it.
         resolve: {
           alias: [
+            // Catalog templates import docs-only demo content from the
+            // docsite. The docsite tsconfig maps the same specifier.
+            {
+              find: /^@astryx-docs\/demo-content$/,
+              replacement: path.join(
+                rootDir,
+                'apps/docsite/src/templateDemoContent/demoContent.tsx',
+              ),
+            },
             // Theme packages resolve to `dist/`, which no test run builds. The
             // sandbox palette suite reads their palettes as a reference corpus,
             // so point the BARE specifier at the authored source. Subpath

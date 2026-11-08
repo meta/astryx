@@ -4,8 +4,8 @@
  * @file MCP server tests.
  *
  * Validates the keyword-based search resolution and branding for the
- * MCP server route handler. Uses the same generated registries as the
- * actual server.
+ * MCP server route handler. Uses the same generated registries and keyword
+ * index as the actual server.
  *
  * Run: pnpm -F @astryxdesign/docsite test
  */
@@ -14,44 +14,25 @@ import {describe, it, expect} from 'vitest';
 import {components} from '../generated/componentRegistry';
 import {docTopics} from '../generated/docsRegistry';
 import {templates} from '../generated/templateRegistry';
+import {blocks} from '../generated/blockRegistry';
+import {
+  DEMO_CONTENT_MODULE,
+  replaceDemoContent,
+} from '../../../../packages/cli/foundation/discovery/template-adapter.mjs';
 
 import type {ComponentEntry} from '../generated/componentRegistry';
+import {buildKeywordIndex, resolveKeywords} from '../app/mcp/keywordIndex';
 
 // ── Replicate MCP server logic for testing ─────────────────────────────
-// These mirror the runtime logic in apps/docsite/src/app/mcp/route.ts
-// without importing the Next.js route handler directly.
+// The keyword index and its resolution are the route's own (keywordIndex.ts).
+// The scoring below mirrors the runtime logic in
+// apps/docsite/src/app/mcp/route.ts without importing the Next.js route
+// handler directly.
 
 const allComponents: ComponentEntry[] = Object.values(components).flat();
 const visibleComponents = allComponents.filter(c => !c.hidden);
 
-function buildKeywordIndex(): Record<string, string[]> {
-  const index: Record<string, string[]> = {};
-  for (const comp of visibleComponents) {
-    for (const kw of comp.keywords) {
-      const lower = kw.toLowerCase();
-      if (!index[lower]) {
-        index[lower] = [];
-      }
-      if (!index[lower].includes(comp.name)) {
-        index[lower].push(comp.name);
-      }
-    }
-  }
-  return index;
-}
-
-const keywordIndex = buildKeywordIndex();
-
-function resolveKeywords(query: string): string[] {
-  const lower = query.toLowerCase();
-  const resolved: string[] = [];
-  for (const [keyword, componentNames] of Object.entries(keywordIndex)) {
-    if (lower.includes(keyword) || keyword.includes(lower)) {
-      resolved.push(...componentNames);
-    }
-  }
-  return [...new Set(resolved)];
-}
+const keywordIndex = buildKeywordIndex(visibleComponents);
 
 function score(text: string, query: string): number {
   const lower = text.toLowerCase();
@@ -89,7 +70,7 @@ function score(text: string, query: string): number {
 }
 
 function simulateSearch(query: string, limit = 8) {
-  const keywordMatches = resolveKeywords(query);
+  const keywordMatches = resolveKeywords(keywordIndex, query);
   const scored: Array<{name: string; score: number; type: string}> = [];
 
   for (const comp of visibleComponents) {
@@ -137,34 +118,33 @@ function simulateSearch(query: string, limit = 8) {
 
 describe('MCP keyword index', () => {
   it('builds a non-empty keyword index from component docs', () => {
-    const keys = Object.keys(keywordIndex);
-    expect(keys.length).toBeGreaterThan(50);
+    expect(keywordIndex.size).toBeGreaterThan(50);
   });
 
   it('Toast is indexed under "snackbar"', () => {
-    expect(keywordIndex['snackbar']).toBeDefined();
-    expect(keywordIndex['snackbar']).toContain('Toast');
+    expect(keywordIndex.get('snackbar')).toBeDefined();
+    expect(keywordIndex.get('snackbar')).toContain('Toast');
   });
 
   it('Selector is indexed under "dropdown"', () => {
-    expect(keywordIndex['dropdown']).toBeDefined();
-    expect(keywordIndex['dropdown']).toContain('Selector');
+    expect(keywordIndex.get('dropdown')).toBeDefined();
+    expect(keywordIndex.get('dropdown')).toContain('Selector');
   });
 
   it('Dialog is indexed under "modal"', () => {
-    expect(keywordIndex['modal']).toBeDefined();
-    expect(keywordIndex['modal']).toContain('Dialog');
+    expect(keywordIndex.get('modal')).toBeDefined();
+    expect(keywordIndex.get('modal')).toContain('Dialog');
   });
 
   it('no duplicate component names within a keyword entry', () => {
-    for (const [, names] of Object.entries(keywordIndex)) {
+    for (const names of keywordIndex.values()) {
       expect(new Set(names).size).toBe(names.length);
     }
   });
 
   it('hidden components are excluded from the index', () => {
     const hiddenNames = allComponents.filter(c => c.hidden).map(c => c.name);
-    const indexedNames = new Set(Object.values(keywordIndex).flat());
+    const indexedNames = new Set([...keywordIndex.values()].flat());
     for (const name of hiddenNames) {
       expect(indexedNames.has(name)).toBe(false);
     }
@@ -173,33 +153,33 @@ describe('MCP keyword index', () => {
 
 describe('MCP keyword resolution', () => {
   it('resolves "snackbar" to Toast', () => {
-    const results = resolveKeywords('snackbar');
+    const results = resolveKeywords(keywordIndex, 'snackbar');
     expect(results).toContain('Toast');
   });
 
   it('resolves "dropdown" to Selector', () => {
-    const results = resolveKeywords('dropdown');
+    const results = resolveKeywords(keywordIndex, 'dropdown');
     expect(results).toContain('Selector');
   });
 
   it('resolves "modal" to Dialog', () => {
-    const results = resolveKeywords('modal');
+    const results = resolveKeywords(keywordIndex, 'modal');
     expect(results).toContain('Dialog');
   });
 
   it('resolves multi-word queries by substring matching', () => {
-    const results = resolveKeywords('toast notification');
+    const results = resolveKeywords(keywordIndex, 'toast notification');
     expect(results).toContain('Toast');
   });
 
   it('returns empty for nonsense queries', () => {
-    const results = resolveKeywords('xyzzy12345');
+    const results = resolveKeywords(keywordIndex, 'xyzzy12345');
     expect(results).toEqual([]);
   });
 
   it('deduplicates results', () => {
     // A query that matches multiple keywords for the same component
-    const results = resolveKeywords('select dropdown');
+    const results = resolveKeywords(keywordIndex, 'select dropdown');
     const selectorCount = results.filter(r => r === 'Selector').length;
     expect(selectorCount).toBeLessThanOrEqual(1);
   });
@@ -283,5 +263,24 @@ describe('MCP branding', () => {
     const source = fs.readFileSync(routePath, 'utf-8');
     expect(source).not.toContain('const ALIASES');
     expect(source).toContain('keywordIndex');
+  });
+});
+
+describe('MCP get() example source (spec:AST-033 FR23)', () => {
+  // get() returns `source` from these registries: a component's showcase and
+  // one more example, and a template's examples or else its page source.
+  it('hands out each block and template after the demo-content replacement', () => {
+    const sources = [
+      ...blocks.map(block => block.source),
+      ...templates.map(template => template.source),
+    ];
+    expect(sources.length).toBeGreaterThan(0);
+    for (const source of sources) {
+      expect(source).not.toContain(DEMO_CONTENT_MODULE);
+      expect(replaceDemoContent(source)).toEqual({
+        source,
+        demoContentReplaced: 0,
+      });
+    }
   });
 });

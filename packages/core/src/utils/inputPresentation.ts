@@ -2,18 +2,19 @@
 
 /**
  * @file inputPresentation.ts
- * @input A presentation policy, the deprecated nativePicker value, and pointer type
+ * @input A presentation policy, the deprecated nativePicker value, whether the
+ *   native date control can show the calendar, and pointer type
  * @output The resolved picker surface for DateInput, DateTimeInput, and TimeInput
- * @position Shared presentation vocabulary owned by spec:AST-043
+ * @position Shared presentation vocabulary (AST-043)
  *
  * SYNC: When modified, update these files to stay in sync:
- * - /docs/specs/AST-043-input-presentation/spec.md (FR1–FR3 tables)
+ * - /docs/specs/AST-043-input-presentation/spec.md
  * - /packages/core/src/DateInput/DateInput.tsx
  * - /packages/core/src/DateTimeInput/DateTimeInput.tsx
  * - /packages/core/src/TimeInput/TimeInput.tsx
  */
 
-/** Picker-surface policy for date/time inputs (`spec:AST-043` FR1). */
+/** Picker-surface policy for date/time inputs. */
 export type InputPresentation =
   | 'text-input'
   | 'popover'
@@ -22,7 +23,7 @@ export type InputPresentation =
   | 'adaptive-bottom-sheet'
   | 'adaptive-native';
 
-/** `presentation` for components without a text-only surface: all except `TimeInput` exclude `text-input` (AST-043). */
+/** `presentation` for components without a text-only surface: all except `TimeInput` exclude `text-input`. */
 export type PickerPresentation = Exclude<InputPresentation, 'text-input'>;
 
 /** The surface a resolved `InputPresentation` actually renders. */
@@ -35,7 +36,7 @@ export type PickerPresentationSurface = Exclude<
   'text-input'
 >;
 
-/** Deprecated picker policy (`spec:AST-043` FR3). */
+/** Deprecated picker policy. */
 export type LegacyNativePicker = 'touch' | 'always' | 'never';
 
 /**
@@ -111,6 +112,25 @@ export function effectiveInputPresentation(
     return presentationFromNativePicker(nativePicker, component);
   }
   return DEFAULT_INPUT_PRESENTATION;
+}
+
+/**
+ * The policy a date picker follows in its calendar. `<input type="date">` is
+ * Gregorian, so in a calendar it cannot show, the policies that use it
+ * (`native` and `adaptive-native`) use the Astryx popover on a fine pointer and
+ * the bottom sheet on a coarse one instead.
+ */
+export function calendarPickerPresentation(
+  presentation: PickerPresentation,
+  isNativeCalendar: boolean,
+): PickerPresentation {
+  if (
+    !isNativeCalendar &&
+    (presentation === 'native' || presentation === 'adaptive-native')
+  ) {
+    return 'adaptive-bottom-sheet';
+  }
+  return presentation;
 }
 
 /** Resolve a picker-only policy to the surface rendered for the current pointer. */

@@ -5,18 +5,27 @@
  * @input The animated-layout module bundled with esbuild onto fixture pages
  *   written inline, real Chromium and WebKit (the interaction projects: a
  *   phone with a coarse pointer) plus a fine-pointer describe
- * @output One proof per `spec:AST-105` Coverage row, and FR2–FR4: which
- *   elements glide after a reported size change, by how much, on one shared
- *   start and spring, never past the area and never scrolling it; nothing
- *   without a handle; Reduce Motion by pointer
+ * @output Proof of which elements glide after a reported size change, by how
+ *   much, and on one shared start and the theme's move curve. That curve may
+ *   be a `linear()` or `steps()` easing. A disclosure's indicator turns on the
+ *   timing read where the area is, through a nested theme scope. It checks that
+ *   the glide never passes the area or scrolls it, and that nothing moves
+ *   without a handle. It checks Reduce Motion by pointer, and the edge reveal:
+ *   a block-end and an inline-edge reveal and conceal, and the two-state form.
+ *   Each element's moving edge sits on the content beside it on every frame, a
+ *   reversal included
  * @position Real-browser verification of `spec:AST-105` and
  *   `architecture:react-component-runtime` INV12
  */
 
 import {fileURLToPath} from 'node:url';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
+import {requireFrames} from '@astryxdesign/interaction-harness';
 import {build} from 'esbuild';
+import {cubicBezier} from '../bezier';
+import {LATE_START_MS} from '../frameBlock';
 import type * as Bundle from './animatedLayoutBundle';
+import {stylexDeclarations} from './stylexDeclarationsPlugin';
 
 /** One animation on an element: its first frame and its timing. */
 interface MotionRead {
@@ -39,6 +48,55 @@ declare global {
     }) => Promise<void>;
     /** Animations on an element: their first transform and timing. */
     motionOf: (selector: string) => MotionRead[];
+    /** The first animation's keyframes: each one's time in ms and its y. */
+    curveOf: (selector: string) => {t: number; y: number}[];
+    /**
+     * Pauses every animation `ms` into its motion: the page as it shows then,
+     * however far apart the browser draws its frames.
+     */
+    holdAt: (ms: number) => void;
+    /** Plays on every animation `holdAt` left paused. */
+    resumeAll: () => void;
+    /**
+     * An element's box where its glide's own keyframes put it at the glide's
+     * current time. WebKit evaluates a compositor-run translate a little
+     * ahead of the frame (measured: up to 1.6 px at a fast glide's peak
+     * speed, 0 in some frames) while a clip on the main thread reads exactly
+     * its keyframes, so the edge proofs place what the edge rides by its
+     * keyframes: the same clock the module rides on.
+     */
+    glideBoxOf: (element: Element) => DOMRect;
+    /**
+     * A glide's translate at `time` ms of its own clock, from its keyframes.
+     * `glideBoxOf` reads it at the glide's current time. A retarget proof
+     * reads a replaced glide at the change's start, where it would show then.
+     */
+    glideOffsetAt: (
+      animation: Animation,
+      time: number,
+    ) => {x: number; y: number};
+    /**
+     * The px an element's `inset()` clip hides from each side, from its clip
+     * animation's own keyframes at its current time (the computed clip when
+     * nothing animates it). With `glideBoxOf`, the edge proofs read both
+     * sides of a ride on the module's own clock; `computedInsetOf` and the
+     * rect read what the engine evaluates, which in WebKit runs a little
+     * apart (a compositor translate ahead of the frame, a main-thread clip a
+     * frame behind on a late first frame) and is reported beside them.
+     */
+    insetOf: (element: Element) => {
+      top: number;
+      right: number;
+      bottom: number;
+      left: number;
+    };
+    /** The px an element's computed `inset()` clip hides from each side. */
+    computedInsetOf: (element: Element) => {
+      top: number;
+      right: number;
+      bottom: number;
+      left: number;
+    };
   }
 }
 
@@ -49,6 +107,7 @@ test.beforeAll(async () => {
     entryPoints: [
       fileURLToPath(new URL('./animatedLayoutBundle.ts', import.meta.url)),
     ],
+    plugins: [stylexDeclarations],
     bundle: true,
     write: false,
     format: 'iife',
@@ -80,6 +139,105 @@ window.change = async ({changed, mutate, area = '#area', handle = true}) => {
   AnimatedLayout.playLayoutChange(layout, target);
   await new Promise(resolve => queueMicrotask(resolve));
 };
+window.holdAt = ms => {
+  for (const animation of document.getAnimations()) {
+    animation.pause();
+    animation.currentTime = ms;
+  }
+};
+window.resumeAll = () => {
+  for (const animation of document.getAnimations()) {
+    if (animation.playState === 'paused') {
+      animation.play();
+    }
+  }
+};
+window.glideOffsetAt = (animation, time) => {
+  const numbers = value =>
+    [...String(value).matchAll(/(-?[\\d.e+-]+)px/g)].map(m => Number(m[1]));
+  const frames = animation.effect.getKeyframes();
+  const duration = Number(animation.effect.getTiming().duration);
+  const at = Math.min(1, Math.max(0, time / duration));
+  let i = 0;
+  while (i < frames.length - 2 && frames[i + 1].computedOffset < at) {
+    i += 1;
+  }
+  const [x0 = 0, y0 = 0] = numbers(frames[i].translate);
+  const [x1 = 0, y1 = 0] = numbers(frames[i + 1].translate);
+  const span = frames[i + 1].computedOffset - frames[i].computedOffset;
+  const f = span > 0 ? (at - frames[i].computedOffset) / span : 1;
+  return {x: x0 + (x1 - x0) * f, y: y0 + (y1 - y0) * f};
+};
+window.glideBoxOf = element => {
+  // Where layout puts it (offsets ignore transforms; this page lays out on
+  // whole pixels), plus its glide's translate from the glide's keyframes at
+  // its current time: no evaluated transform is read at all.
+  let x = 0;
+  let y = 0;
+  for (let node = element; node != null; node = node.offsetParent) {
+    x += node.offsetLeft + (node === element ? 0 : node.clientLeft);
+    y += node.offsetTop + (node === element ? 0 : node.clientTop);
+  }
+  x -= window.scrollX;
+  y -= window.scrollY;
+  const animation = element
+    .getAnimations()
+    .filter(a => a.effect.getKeyframes().some(k => k.translate != null))
+    .at(-1);
+  if (animation != null) {
+    const offset = window.glideOffsetAt(animation, Number(animation.currentTime));
+    x += offset.x;
+    y += offset.y;
+  }
+  return new DOMRect(x, y, element.offsetWidth, element.offsetHeight);
+};
+const parseInset = (value, box) => {
+  const out = {top: 0, right: 0, bottom: 0, left: 0};
+  const match = /^inset\\(([^)]*?)(?:\\s+round\\s[^)]*)?\\)$/.exec(
+    String(value ?? ''),
+  );
+  if (match == null) {
+    return out;
+  }
+  const [t, r = t, b = t, l = r] = match[1].trim().split(/\\s+/);
+  const px = (value, size) =>
+    value.endsWith('%') ? (parseFloat(value) / 100) * size : parseFloat(value);
+  return {
+    top: px(t, box.height),
+    right: px(r, box.width),
+    bottom: px(b, box.height),
+    left: px(l, box.width),
+  };
+};
+window.computedInsetOf = element =>
+  parseInset(getComputedStyle(element).clipPath, element.getBoundingClientRect());
+window.insetOf = element => {
+  const box = element.getBoundingClientRect();
+  const animation = element
+    .getAnimations()
+    .filter(a => a.effect.getKeyframes().some(k => k.clipPath != null))
+    .at(-1);
+  if (animation == null) {
+    return window.computedInsetOf(element);
+  }
+  const frames = animation.effect.getKeyframes();
+  const duration = Number(animation.effect.getTiming().duration);
+  const at = Math.min(1, Math.max(0, Number(animation.currentTime) / duration));
+  let i = 0;
+  while (i < frames.length - 2 && frames[i + 1].computedOffset < at) {
+    i += 1;
+  }
+  const a = parseInset(frames[i].clipPath, box);
+  const b = parseInset(frames[i + 1].clipPath, box);
+  const span = frames[i + 1].computedOffset - frames[i].computedOffset;
+  const f = span > 0 ? (at - frames[i].computedOffset) / span : 1;
+  return {
+    top: a.top + (b.top - a.top) * f,
+    right: a.right + (b.right - a.right) * f,
+    bottom: a.bottom + (b.bottom - a.bottom) * f,
+    left: a.left + (b.left - a.left) * f,
+  };
+};
 window.motionOf = selector => {
   const element = document.querySelector(selector);
   return element.getAnimations({subtree: false}).map(animation => {
@@ -92,6 +250,21 @@ window.motionOf = selector => {
       composite: effect.composite,
       duration: Number(timing.duration),
       startTime: animation.startTime == null ? null : Number(animation.startTime),
+    };
+  });
+};
+window.curveOf = selector => {
+  const [animation] = document
+    .querySelector(selector)
+    .getAnimations({subtree: false});
+  const duration = Number(animation.effect.getTiming().duration);
+  return animation.effect.getKeyframes().map(frame => {
+    const match = /^(-?[\\d.e+-]+)px(?:\\s+(-?[\\d.e+-]+)px)?/.exec(
+      frame.translate ?? '',
+    );
+    return {
+      t: frame.computedOffset * duration,
+      y: match == null || match[2] == null ? 0 : Number(match[2]),
     };
   });
 };
@@ -128,6 +301,25 @@ async function change(
   });
 }
 
+/**
+ * A change starts at its frame's time. One made more than LATE_START_MS past
+ * its frame starts on the live clock, while the change runs. The no-jump
+ * checks read the old place at that start, so a start the module dates
+ * anywhere else fails here first.
+ */
+function expectStartInChange(run: {
+  start: number;
+  frameTime: number;
+  changeFrom: number;
+  changedBy: number;
+}) {
+  if (run.start !== run.frameTime) {
+    expect(run.start - run.frameTime).toBeGreaterThan(LATE_START_MS);
+    expect(run.start).toBeGreaterThanOrEqual(run.changeFrom);
+    expect(run.start).toBeLessThanOrEqual(run.changedBy);
+  }
+}
+
 /** Until every animation on the page has finished. */
 async function settle(page: Page) {
   await expect
@@ -135,6 +327,34 @@ async function settle(page: Page) {
       timeout: 5000,
     })
     .toBe(0);
+}
+
+/** Every keyframe sits on `points` over `ms`, from the first one's offset. */
+function expectOnCurve(
+  curve: {t: number; y: number}[],
+  points: readonly [number, number, number, number],
+  ms: number,
+) {
+  expectOnEase(
+    curve,
+    cubicBezier([...points] as [number, number, number, number]),
+    ms,
+  );
+}
+
+/** Every keyframe sits on `ease` over `ms`, from the first one's offset. */
+function expectOnEase(
+  curve: {t: number; y: number}[],
+  ease: (x: number) => number,
+  ms: number,
+) {
+  const from = curve[0].y;
+  // The glide moves the row: a curve read as all zeros proves nothing.
+  expect(curve.length).toBeGreaterThan(2);
+  expect(Math.abs(from)).toBeGreaterThan(10);
+  for (const {t, y} of curve) {
+    expect(y, `${t} ms`).toBeCloseTo(from * (1 - ease(Math.min(1, t / ms))), 2);
+  }
 }
 
 /** The translate an animation starts from, in px. */
@@ -286,28 +506,43 @@ test.describe('spec:AST-105 Coverage', () => {
     const t2Before = await page.evaluate(
       () => document.querySelector('#t2')?.getBoundingClientRect().top ?? 0,
     );
-    await change(page, {
-      changed: '#chip',
-      mutate: `document.querySelector('#chip').style.width = '120px'`,
+    // Read in the change's own task, before any frame. A read a round trip
+    // later lands after however many frames the browser drew meanwhile: under
+    // load WebKit's first frame after the change comes 44-101 ms later, by
+    // which time the glide is that far along its curve, and a round trip can
+    // outlast the whole glide.
+    const wrap = await page.evaluate(async () => {
+      await window.change({
+        changed: '#chip',
+        mutate: `document.querySelector('#chip').style.width = '120px'`,
+      });
+      return {
+        top: document.querySelector('#t2')?.getBoundingClientRect().top ?? 0,
+        motion: window.motionOf('#t2'),
+      };
     });
-    const t2After = await page.evaluate(
-      () => document.querySelector('#t2')?.getBoundingClientRect().top ?? 0,
-    );
-    const [wrapped] = await page.evaluate(() => window.motionOf('#t2'));
+    const [wrapped] = wrap.motion;
     expect(wrapped).toBeDefined();
     // It wrapped: its layout moved down a line, and it starts where it was.
     expect(startOffset(wrapped.first).y).toBeLessThan(-20);
-    // A round trip after the change: it has barely left its old place.
-    expect(Math.abs(t2After - t2Before)).toBeLessThan(4);
+    // In the commit's own task, before anything paints, it is still where it
+    // was.
+    expect(Math.abs(wrap.top - t2Before)).toBeLessThan(0.5);
     await settle(page);
     // An item grows taller: its row-direction neighbor keeps its rectangle and
     // stays; the content after the row glides.
-    await change(page, {
-      changed: '#tall',
-      mutate: `document.querySelector('#tall').style.height = '110px'`,
+    const taller = await page.evaluate(async () => {
+      await window.change({
+        changed: '#tall',
+        mutate: `document.querySelector('#tall').style.height = '110px'`,
+      });
+      return {
+        neighbor: window.motionOf('#neighbor'),
+        below: window.motionOf('#below'),
+      };
     });
-    expect(await page.evaluate(() => window.motionOf('#neighbor'))).toEqual([]);
-    const [below] = await page.evaluate(() => window.motionOf('#below'));
+    expect(taller.neighbor).toEqual([]);
+    const [below] = taller.below;
     expect(startOffset(below.first).y).toBeCloseTo(-80, 0);
   });
 
@@ -421,43 +656,111 @@ test.describe('spec:AST-105 Coverage', () => {
     expect(await page.evaluate(() => window.motionOf('#pop'))).toEqual([]);
   });
 
-  test('an element already moving keeps its motion and adds the new move: no jump, no lost speed', async ({
-    page,
-  }) => {
+  /**
+   * Opens a row gliding after #grow's change, then retargets its glide with
+   * a second change (#second) made `lateMs` into a frame, as a change in a
+   * slow frame is. Reads the row on the glides' own clock (`glideBoxOf`, at
+   * each frame's time): WebKit evaluates a running transform for
+   * `getBoundingClientRect` at the moment of the read, so a box read late in
+   * its frame places the row further on, and over one short frame read up to
+   * 1.8 times its speed.
+   */
+  async function retarget(page: Page, lateMs: number) {
+    // The row glides longer than the setup below can be late, so it still
+    // moves at the second change on a loaded runner.
     await open(
       page,
       `<div id="area" class="area"><div id="grow" class="grow"></div>
         <div id="second" class="grow"></div><div id="after" class="row"></div></div>`,
+      '#area { --duration-medium: 1000ms; }',
     );
-    await change(page);
-    await page.waitForTimeout(100);
-    const [first] = await page.evaluate(() => window.motionOf('#after'));
-    // The row's on-screen speed over the frame before the second change and
-    // the frame after it, and its place either side of the change.
-    const run = await page.evaluate(async mutate => {
-      const row = document.querySelector('#after') as HTMLElement;
-      const frame = async () =>
-        new Promise<number>(resolve => requestAnimationFrame(resolve));
-      const t0 = await frame();
-      const y0 = row.getBoundingClientRect().top;
-      const t1 = await frame();
-      const y1 = row.getBoundingClientRect().top;
-      await window.change({changed: '#second', mutate});
-      const y1After = row.getBoundingClientRect().top;
-      const t2 = await frame();
-      const y2 = row.getBoundingClientRect().top;
-      return {
-        before: (y1 - y0) / (t1 - t0),
-        after: (y2 - y1After) / (t2 - t1),
-        y1,
-        y1After,
-      };
-    }, `document.querySelector('#second').classList.add('open')`);
+    // The row's speed over the frame before the second change and from the
+    // change's start to the frame after it, and its place either side.
+    return page.evaluate(
+      async ({opening, mutate, late}) => {
+        const row = document.querySelector('#after') as HTMLElement;
+        const frame = async () =>
+          new Promise<number>(resolve => requestAnimationFrame(resolve));
+        await window.change({changed: '#grow', mutate: opening});
+        const [first] = window.motionOf('#after');
+        await new Promise<void>(resolve => {
+          setTimeout(resolve, 100);
+        });
+        const t0 = await frame();
+        const y0 = window.glideBoxOf(row).top;
+        const t1 = await frame();
+        const y1 = window.glideBoxOf(row).top;
+        const glide = row
+          .getAnimations()
+          .filter(a =>
+            (a.effect as KeyframeEffect)
+              .getKeyframes()
+              .some(k => k.translate != null),
+          )
+          .at(-1);
+        // Its clock as read now: a glide the change replaces loses both.
+        const time = Number(glide?.currentTime);
+        const startTime = Number(glide?.startTime);
+        const frameTime = Number(document.timeline.currentTime);
+        const until = performance.now() + late;
+        while (performance.now() < until) {
+          // The change comes `late` ms into the frame.
+        }
+        const changeFrom = performance.now();
+        await window.change({changed: '#second', mutate});
+        const changedBy = performance.now();
+        const y1After = window.glideBoxOf(row).top;
+        // A change made late in its frame starts on the live clock. The
+        // glide it replaces moved on until then, so the new one starts there.
+        const start = window.AnimatedLayout.layoutStartFor(document);
+        const shownAt = Math.max(time, start - startTime);
+        const y1AtStart =
+          glide?.playState === 'idle'
+            ? y1 +
+              window.glideOffsetAt(glide, shownAt).y -
+              window.glideOffsetAt(glide, time).y
+            : y1;
+        // The first frame after the new glide's start: a late change starts it
+        // after the frame its task ran in.
+        let t2 = await frame();
+        while (t2 <= start) {
+          t2 = await frame();
+        }
+        const y2 = window.glideBoxOf(row).top;
+        return {
+          first,
+          run: {
+            before: (y1 - y0) / (t1 - t0),
+            after: (y2 - y1After) / (t2 - start),
+            y1AtStart,
+            y1After,
+            start,
+            frameTime,
+            changeFrom,
+            changedBy,
+          },
+        };
+      },
+      {
+        opening: OPEN_GROW,
+        mutate: `document.querySelector('#second').classList.add('open')`,
+        late: lateMs,
+      },
+    );
+  }
+
+  test('an element already moving keeps its motion and adds the new move: no jump, no lost speed', async ({
+    page,
+  }) => {
+    const {first, run} = await retarget(page, 0);
     const motions = await page.evaluate(() => window.motionOf('#after'));
     expect(motions).toHaveLength(1);
     expect(motions[0].composite).toBe('replace');
     expect(motions[0].startTime).not.toBe(first.startTime);
-    expect(run.y1After).toBeCloseTo(run.y1, 0);
+    // No jump: the new glide starts where the old one is drawn, which is a
+    // straight line between two of its keyframes.
+    expectStartInChange(run);
+    expect(Math.abs(run.y1After - run.y1AtStart)).toBeLessThan(0.01);
     // Still gliding down at least as fast: the new move adds to the motion.
     expect(run.before).toBeGreaterThan(0);
     expect(run.after).toBeGreaterThan(run.before * 0.9);
@@ -469,6 +772,627 @@ test.describe('spec:AST-105 Coverage', () => {
       return (row?.top ?? 0) - (area?.top ?? 0);
     });
     expect(landed).toBeCloseTo(160, 0);
+  });
+
+  for (const lateMs of [1, 9, 40, 100]) {
+    test(`a change made ${lateMs} ms into its frame retargets a glide where it is drawn`, async ({
+      page,
+    }) => {
+      // In WebKit the box read before the change sampled the old glide at
+      // that moment, while the new glide ran on the frame's time, so it
+      // started that many ms of motion ahead (0.3 px at 1 ms, about 3 px at
+      // 9 ms).
+      const {run} = await retarget(page, lateMs);
+      expectStartInChange(run);
+      expect(Math.abs(run.y1After - run.y1AtStart)).toBeLessThan(0.01);
+      expect(run.after).toBeGreaterThan(run.before * 0.9);
+    });
+  }
+
+  /**
+   * As `retarget`, for a row inside a card that the first change sets
+   * gliding: the second change, inside the card and `lateMs` ms into a frame,
+   * moves the row within the card while the card's glide is retargeted. The
+   * row is read where it is drawn: its layout place plus every glide on it
+   * and on its ancestors, each from its keyframes at its current time.
+   */
+  async function nestedRetarget(
+    page: Page,
+    lateMs: number,
+    body = `<div id="area" class="area"><div id="grow" class="grow"></div>
+        <div id="card"><div id="inner" class="grow"></div><div id="row" class="row"></div></div></div>`,
+  ) {
+    // The card glides longer than the setup below can be late, so it still
+    // moves at the second change on a loaded runner.
+    await open(page, body, '#area { --duration-medium: 1000ms; }');
+    return page.evaluate(
+      async ({first, mutate, late}) => {
+        const card = document.querySelector('#card') as HTMLElement;
+        const row = document.querySelector('#row') as HTMLElement;
+        const layoutTop = (element: HTMLElement) => {
+          let y = 0;
+          for (
+            let node: HTMLElement | null = element;
+            node != null;
+            node = node.offsetParent as HTMLElement | null
+          ) {
+            y += node.offsetTop + (node === element ? 0 : node.clientTop);
+          }
+          return y - window.scrollY;
+        };
+        const drawnTop = (element: HTMLElement) => {
+          let y = window.glideBoxOf(element).top;
+          for (
+            let node = element.parentElement;
+            node != null && node !== document.body;
+            node = node.parentElement
+          ) {
+            y += window.glideBoxOf(node).top - layoutTop(node);
+          }
+          return y;
+        };
+        const frame = async () =>
+          new Promise<number>(resolve => requestAnimationFrame(resolve));
+        // The first change sets the card gliding, then its glide runs 100 ms.
+        await window.change({changed: '#grow', mutate: first});
+        await new Promise<void>(resolve => {
+          setTimeout(resolve, 100);
+        });
+        await frame();
+        await frame();
+        const cardGlidingBefore = card.getAnimations().length > 0;
+        const cardGlide = card.getAnimations().at(-1) ?? null;
+        const y1 = drawnTop(row);
+        // Each glide that carries the row, with its clock as read now: a
+        // glide the change replaces loses both.
+        const carriers: {
+          glide: Animation;
+          time: number;
+          startTime: number;
+        }[] = [];
+        for (
+          let node: HTMLElement | null = row;
+          node != null && node !== document.body;
+          node = node.parentElement
+        ) {
+          const glide = node
+            .getAnimations()
+            .filter(a =>
+              (a.effect as KeyframeEffect)
+                .getKeyframes()
+                .some(k => k.translate != null),
+            )
+            .at(-1);
+          if (glide != null) {
+            carriers.push({
+              glide,
+              time: Number(glide.currentTime),
+              startTime: Number(glide.startTime),
+            });
+          }
+        }
+        const frameTime = Number(document.timeline.currentTime);
+        const until = performance.now() + late;
+        while (performance.now() < until) {
+          // The change comes `late` ms into the frame.
+        }
+        const changeFrom = performance.now();
+        await window.change({changed: '#inner', mutate});
+        const changedBy = performance.now();
+        const y1After = drawnTop(row);
+        // A change made late in its frame starts on the live clock. A glide
+        // it replaces moved on until then, while one it keeps reads the same
+        // on both sides of the change.
+        const start = window.AnimatedLayout.layoutStartFor(document);
+        let y1AtStart = y1;
+        for (const {glide, time, startTime} of carriers) {
+          if (glide.playState === 'idle') {
+            const shownAt = Math.max(time, start - startTime);
+            y1AtStart +=
+              window.glideOffsetAt(glide, shownAt).y -
+              window.glideOffsetAt(glide, time).y;
+          }
+        }
+        return {
+          cardGlidingBefore,
+          cardGlidingAfter: card.getAnimations().length > 0,
+          cardRetargeted: card.getAnimations().at(-1) !== cardGlide,
+          rowGlidingAfter: row.getAnimations().length > 0,
+          y1AtStart,
+          y1After,
+          start,
+          frameTime,
+          changeFrom,
+          changedBy,
+        };
+      },
+      {
+        first: OPEN_GROW,
+        mutate: `document.querySelector('#inner').classList.add('open')`,
+        late: lateMs,
+      },
+    );
+  }
+
+  for (const lateMs of [0, 1, 9, 30, 40, 60, 100]) {
+    test(`a row inside a gliding card, moved by a change in the card ${lateMs} ms into its frame, starts where it is drawn`, async ({
+      page,
+    }) => {
+      // The row's recorded place carried the card's glide as WebKit sampled
+      // it at the read, while the card's own place is on its glide's clock:
+      // the row's new glide took up the difference (about 2.3 px at 9 ms).
+      const run = await nestedRetarget(page, lateMs);
+      expect(run.cardGlidingBefore).toBe(true);
+      expect(run.cardGlidingAfter).toBe(true);
+      expect(run.cardRetargeted).toBe(true);
+      expect(run.rowGlidingAfter).toBe(true);
+      expectStartInChange(run);
+      expect(Math.abs(run.y1After - run.y1AtStart)).toBeLessThan(0.01);
+    });
+  }
+
+  for (const lateMs of [0, 1, 9, 30, 40, 60, 100]) {
+    test(`a row inside a gliding card that keeps its glide (an absolutely positioned panel), moved by a change in the card ${lateMs} ms into its frame, starts where it is drawn`, async ({
+      page,
+    }) => {
+      // Inside an absolutely positioned panel the change takes no ancestors,
+      // so the card keeps its glide through the change while the row moves:
+      // the row's places before and after the change both carry the card's
+      // glide, and both must read it on the same clock.
+      const run = await nestedRetarget(
+        page,
+        lateMs,
+        `<div id="area" class="area"><div id="panel" style="position: absolute; inset: 0 0 auto 0"><div id="grow" class="grow"></div>
+          <div id="card"><div id="inner" class="grow"></div><div id="row" class="row"></div></div></div></div>`,
+      );
+      expect(run.cardGlidingBefore).toBe(true);
+      expect(run.cardGlidingAfter).toBe(true);
+      expect(run.cardRetargeted).toBe(false);
+      expect(run.rowGlidingAfter).toBe(true);
+      expectStartInChange(run);
+      expect(Math.abs(run.y1After - run.y1AtStart)).toBeLessThan(0.01);
+    });
+  }
+
+  test('a change made after a block longer than its motion still shows its motion: the block delays it instead of skipping past it', async ({
+    page,
+  }) => {
+    await open(
+      page,
+      `<div id="area" class="area"><div id="grow" class="grow"></div>
+        <div id="after" class="row"></div></div>`,
+    );
+    const run = await page.evaluate(async mutate => {
+      const frame = async () =>
+        new Promise<number>(resolve => requestAnimationFrame(resolve));
+      await frame();
+      // In a task after that frame, something reads the timeline first, as
+      // any animation started there does. That holds its time for the rest of
+      // the task. Then the page is busy for 1000 ms and makes the change.
+      await new Promise<void>(resolve => {
+        setTimeout(resolve, 0);
+      });
+      const early = document.timeline.currentTime;
+      const end = performance.now() + 1000;
+      while (performance.now() < end) {
+        // the page's main thread is busy
+      }
+      const held = document.timeline.currentTime === early;
+      await window.change({changed: '#grow', mutate});
+      const [animation] = (
+        document.querySelector('#after') as HTMLElement
+      ).getAnimations();
+      const duration = Number(animation.effect?.getComputedTiming().endTime);
+      await frame();
+      await frame();
+      return {
+        duration,
+        held,
+        playState: animation.playState,
+        currentTime: Number(animation.currentTime),
+      };
+    }, OPEN_GROW);
+    test.info().annotations.push({
+      type: 'after a block',
+      description: JSON.stringify(run),
+    });
+    // The timeline still read the time from before the block, and the glide
+    // is shorter than the block. Started on that time, it would be over by the
+    // first frame after the block.
+    expect(run.held).toBe(true);
+    expect(run.duration).toBeLessThan(1000);
+    expect(run.playState).toBe('running');
+    expect(run.currentTime).toBeLessThan(run.duration / 2);
+  });
+
+  test('a change made after a block retargets a running glide from where the compositor has it, not from before the block', async ({
+    page,
+  }) => {
+    // A glide long enough to still run when the 400 ms block ends.
+    await open(
+      page,
+      `<div id="area" class="area"><div id="grow" class="grow"></div>
+        <div id="second" class="grow"></div><div id="after" class="row"></div></div>`,
+      '#area { --duration-medium: 1000ms; }',
+    );
+    await change(page);
+    await page.waitForTimeout(100);
+    const run = await page.evaluate(async mutate => {
+      const row = document.querySelector('#after') as HTMLElement;
+      const frame = async () =>
+        new Promise<number>(resolve => requestAnimationFrame(resolve));
+      await frame();
+      await new Promise<void>(resolve => {
+        setTimeout(resolve, 0);
+      });
+      // Reading the glide reads the timeline, which then holds its time for
+      // the rest of this task.
+      const [first] = row.getAnimations();
+      const heldElapsed = Number(first.currentTime);
+      const yHeld = window.glideBoxOf(row).top;
+      const keyframes =
+        (first.effect as KeyframeEffect | null)?.getKeyframes() ?? [];
+      const duration = Number(first.effect?.getComputedTiming().duration);
+      // The glide's y offset `elapsed` ms after its start, from its keyframes.
+      const yAt = (elapsed: number) => {
+        const p = Math.min(1, Math.max(0, elapsed / duration));
+        for (let i = 0; i + 1 < keyframes.length; i++) {
+          const a = keyframes[i].computedOffset;
+          const b = keyframes[i + 1].computedOffset;
+          if (p >= a && p <= b) {
+            const ya = parseFloat(String(keyframes[i].translate).split(' ')[1]);
+            const yb = parseFloat(
+              String(keyframes[i + 1].translate).split(' ')[1],
+            );
+            return ya + ((yb - ya) * (p - a)) / Math.max(b - a, 1e-9);
+          }
+        }
+        return 0;
+      };
+      const end = performance.now() + 400;
+      while (performance.now() < end) {
+        // the page's main thread is busy
+      }
+      // Where the compositor has the row as the block ends.
+      const reached =
+        yHeld +
+        yAt(performance.now() - Number(first.startTime)) -
+        yAt(heldElapsed);
+      await window.change({changed: '#second', mutate});
+      await frame();
+      await frame();
+      return {yHeld, reached, shown: window.glideBoxOf(row).top};
+    }, `document.querySelector('#second').classList.add('open')`);
+    test.info().annotations.push({
+      type: 'a retarget after a block',
+      description: JSON.stringify(run),
+    });
+    // The row glides down. Two frames after the block it is past where the
+    // compositor had it as the block ended, not back near its place before.
+    expect(run.reached).toBeGreaterThan(run.yHeld + 20);
+    expect(run.shown).toBeGreaterThanOrEqual(run.reached - 1);
+  });
+
+  test('a change made after a block that follows an earlier layout motion in the same task still shows its motion', async ({
+    page,
+  }) => {
+    await open(
+      page,
+      `<div id="area" class="area" style="height: 200px"><div id="grow" class="grow"></div>
+        <div id="after" class="row"></div></div>
+        <div id="area2" class="area" style="height: 200px"><div id="grow2" class="grow"></div>
+        <div id="after2" class="row"></div></div>`,
+    );
+    const run = await page.evaluate(async () => {
+      const frame = async () =>
+        new Promise<number>(resolve => requestAnimationFrame(resolve));
+      await frame();
+      // In one task after that frame: a layout motion, then the page busy
+      // for 1000 ms, then a second change.
+      await new Promise<void>(resolve => {
+        setTimeout(resolve, 0);
+      });
+      const early = document.timeline.currentTime;
+      await window.change({
+        changed: '#grow',
+        area: '#area',
+        mutate: `document.querySelector('#grow').classList.add('open')`,
+      });
+      const end = performance.now() + 1000;
+      while (performance.now() < end) {
+        // the page's main thread is busy
+      }
+      const blockEnd = performance.now();
+      const held = document.timeline.currentTime === early;
+      await window.change({
+        changed: '#grow2',
+        area: '#area2',
+        mutate: `document.querySelector('#grow2').classList.add('open')`,
+      });
+      const [animation] = (
+        document.querySelector('#after2') as HTMLElement
+      ).getAnimations();
+      const duration = Number(animation.effect?.getComputedTiming().endTime);
+      return {
+        duration,
+        held,
+        blockEnd,
+        startTime: Number(animation.startTime),
+        early: Number(early),
+      };
+    });
+    test.info().annotations.push({
+      type: 'a second change after a block',
+      description: JSON.stringify(run),
+    });
+    // The timeline still read the time from before the block, and the second
+    // change's glide is shorter than the block. Started on that time, as the
+    // first change's was, it would be over by the first frame after the block.
+    // It starts at the change instead, after the block, whenever the frames
+    // after it come.
+    expect(run.held).toBe(true);
+    expect(run.duration).toBeLessThan(1000);
+    // A start read back can sit a round-off below an equal clock reading.
+    expect(run.startTime).toBeGreaterThanOrEqual(run.blockEnd - 5e-7);
+  });
+
+  test('a swap whose parts ride the glide starts them with the glide, on the start read for the change, however late in its frame the change is made', async ({
+    page,
+  }) => {
+    await open(
+      page,
+      `<div id="area" class="area" style="height: 300px"><div id="grow" class="grow"></div>
+        <div id="after" class="row"></div></div>`,
+    );
+    const run = await page.evaluate(async () => {
+      await new Promise<number>(resolve => requestAnimationFrame(resolve));
+      const container = document.querySelector('#area') as HTMLElement;
+      const target = document.querySelector('#grow') as HTMLElement;
+      const row = document.querySelector('#after') as HTMLElement;
+      const layout = window.AnimatedLayout.createAnimatedLayout(
+        () => container,
+      );
+      const report = window.AnimatedLayout.reportLayoutChange(
+        layout,
+        () => target,
+      );
+      report.measureBefore();
+      const swap = window.AnimatedLayout.holdLayoutSwap(layout, row, {
+        isVisiblePart: true,
+      });
+      target.classList.add('open');
+      // Late in the frame: the change's start is the moment it is made.
+      const end = performance.now() + 50;
+      while (performance.now() < end) {
+        // the page's main thread is busy
+      }
+      report.animate();
+      // As a shell does, it reads the change's start for its own clock. Then
+      // it plays a swap whose parts ride the row's glide, which flushes first.
+      const startedAt = window.AnimatedLayout.layoutStartFor(document);
+      if (swap != null) {
+        window.AnimatedLayout.playLayoutSwap(swap, {
+          host: container,
+          copy: p => ({opacity: 1 - p}),
+          rideWith: {element: row, travel: {x: 0, y: 80}},
+          incoming: [],
+        });
+      }
+      await new Promise<void>(resolve => {
+        setTimeout(resolve, 0);
+      });
+      const glide = row
+        .getAnimations()
+        .find(animation => animation.playState !== 'finished');
+      const copy = swap?.copy.getAnimations()[0];
+      return {
+        startedAt,
+        glide: glide == null ? null : Number(glide.startTime),
+        copy: copy == null ? null : Number(copy.startTime),
+      };
+    });
+    test.info().annotations.push({
+      type: 'the starts of a riding swap',
+      description: JSON.stringify(run),
+    });
+    expect(run.glide).not.toBeNull();
+    expect(run.copy).not.toBeNull();
+    // The browser keeps a start time in its own units, so the one read back
+    // can differ from the one written by round-off. Another start differs by
+    // a clock step or more.
+    expect(run.glide).toBeCloseTo(run.startedAt, 6);
+    expect(run.copy).toBeCloseTo(run.startedAt, 6);
+  });
+
+  test('a change begun after a block that follows an earlier layout motion, with nothing run between them, still shows its motion', async ({
+    page,
+  }) => {
+    await open(
+      page,
+      `<div id="area" class="area" style="height: 200px"><div id="grow" class="grow"></div>
+        <div id="after" class="row"></div></div>
+        <div id="area2" class="area" style="height: 200px"><div id="grow2" class="grow"></div>
+        <div id="after2" class="row"></div></div>`,
+    );
+    const run = await page.evaluate(async () => {
+      await new Promise<number>(resolve => requestAnimationFrame(resolve));
+      await new Promise<void>(resolve => {
+        setTimeout(resolve, 0);
+      });
+      const early = document.timeline.currentTime;
+      const make = (area: string, changed: string) => {
+        const container = document.querySelector(area);
+        const target = document.querySelector(changed) as HTMLElement;
+        const layout = window.AnimatedLayout.createAnimatedLayout(
+          () => container,
+        );
+        const report = window.AnimatedLayout.reportLayoutChange(
+          layout,
+          () => target,
+        );
+        report.measureBefore();
+        target.classList.add('open');
+        report.animate();
+        return window.AnimatedLayout.playLayoutChange(layout, target);
+      };
+      // In one run of script, with no microtask between: a layout change,
+      // the page busy for 1000 ms, then a second change.
+      const firstEntrance = make('#area', '#grow');
+      const end = performance.now() + 1000;
+      while (performance.now() < end) {
+        // the page's main thread is busy
+      }
+      const blockEnd = performance.now();
+      const held = document.timeline.currentTime === early;
+      const entrance = make('#area2', '#grow2');
+      await new Promise<void>(resolve => {
+        queueMicrotask(resolve);
+      });
+      const [glide] = (
+        document.querySelector('#after2') as HTMLElement
+      ).getAnimations();
+      const [firstGlide] = (
+        document.querySelector('#after') as HTMLElement
+      ).getAnimations();
+      return {
+        held,
+        blockEnd,
+        entrance: entrance == null ? null : Number(entrance.startTime),
+        glide: glide == null ? null : Number(glide.startTime),
+        firstEntrance:
+          firstEntrance == null ? null : Number(firstEntrance.startTime),
+        firstGlide: firstGlide == null ? null : Number(firstGlide.startTime),
+      };
+    });
+    test.info().annotations.push({
+      type: 'a change begun after a block',
+      description: JSON.stringify(run),
+    });
+    // The second change takes a start of its own, after the block, and its
+    // entrance and glide share it. The first change's glide, made at its flush
+    // after the block, keeps the start its own entrance took. Two starts there
+    // would leave its rows over the content it reveals.
+    expect(run.held).toBe(true);
+    expect(run.entrance).not.toBeNull();
+    expect(Number(run.entrance)).toBeGreaterThanOrEqual(run.blockEnd);
+    expect(run.glide).toBe(run.entrance);
+    expect(run.firstEntrance).not.toBeNull();
+    expect(run.firstGlide).toBe(run.firstEntrance);
+  });
+
+  test('a change\u2019s own entrance and the glide of the content after it share one start, however long the rest of its commit runs', async ({
+    page,
+  }) => {
+    await open(
+      page,
+      `<div id="area" class="area" style="height: 300px"><div id="grow" class="grow"></div>
+        <div id="after" class="row"></div></div>`,
+    );
+    const run = await page.evaluate(async () => {
+      await new Promise<number>(resolve => requestAnimationFrame(resolve));
+      const container = document.querySelector('#area');
+      const target = document.querySelector('#grow') as HTMLElement;
+      const layout = window.AnimatedLayout.createAnimatedLayout(
+        () => container,
+      );
+      const report = window.AnimatedLayout.reportLayoutChange(
+        layout,
+        () => target,
+      );
+      report.measureBefore();
+      target.classList.add('open');
+      report.animate();
+      // The entrance plays in the adopter's layout effect. The glide of the
+      // row after it is made once the commit's other layout effects have run,
+      // here 60 ms of them.
+      const entrance = window.AnimatedLayout.playLayoutChange(layout, target);
+      const end = performance.now() + 60;
+      while (performance.now() < end) {
+        // the rest of the commit
+      }
+      await new Promise<void>(resolve => {
+        queueMicrotask(resolve);
+      });
+      const [glide] = (
+        document.querySelector('#after') as HTMLElement
+      ).getAnimations();
+      return {
+        entrance: entrance == null ? null : Number(entrance.startTime),
+        glide: glide == null ? null : Number(glide.startTime),
+      };
+    });
+    test.info().annotations.push({
+      type: 'the starts of one change',
+      description: JSON.stringify(run),
+    });
+    // Two starts would put the revealed edge ahead of the row after it for
+    // the whole motion.
+    expect(run.entrance).not.toBeNull();
+    expect(run.glide).not.toBeNull();
+    expect(run.glide).toBe(run.entrance);
+  });
+
+  test('in a same-origin frame made after the page, a change glides at once, on that frame\u2019s own clock', async ({
+    page,
+  }) => {
+    await open(page, '<div id="host"></div>');
+    const run = await page.evaluate(async style => {
+      const frame = async (view: Window) =>
+        new Promise<number>(resolve => view.requestAnimationFrame(resolve));
+      // Frames first, so the frame's clock starts well after the page's.
+      for (let i = 0; i < 30; i++) {
+        await frame(window);
+      }
+      const iframe = document.createElement('iframe');
+      iframe.style.cssText = 'width: 400px; height: 600px; border: 0';
+      iframe.srcdoc = `<!doctype html><style>${style}</style>
+        <div id="area" class="area"><div id="grow" class="grow"></div>
+        <div id="after" class="row"></div></div>`;
+      const loaded = new Promise(resolve => {
+        iframe.addEventListener('load', resolve, {once: true});
+      });
+      document.getElementById('host')?.appendChild(iframe);
+      await loaded;
+      const doc = iframe.contentDocument as Document;
+      const view = iframe.contentWindow as Window;
+      await frame(view);
+      await frame(view);
+      const area = doc.getElementById('area') as HTMLElement;
+      const grow = doc.getElementById('grow') as HTMLElement;
+      const layout = window.AnimatedLayout.createAnimatedLayout(() => area);
+      const report = window.AnimatedLayout.reportLayoutChange(
+        layout,
+        () => grow,
+      );
+      report.measureBefore();
+      grow.classList.add('open');
+      report.animate();
+      window.AnimatedLayout.playLayoutChange(layout, grow);
+      await new Promise<void>(resolve => {
+        queueMicrotask(resolve);
+      });
+      const [animation] = (
+        doc.getElementById('after') as HTMLElement
+      ).getAnimations();
+      await frame(view);
+      await frame(view);
+      return {
+        gap: performance.now() - view.performance.now(),
+        playState: animation.playState,
+        currentTime: Number(animation.currentTime),
+      };
+    }, BASE_STYLE);
+    test.info().annotations.push({
+      type: 'a change in a frame',
+      description: JSON.stringify(run),
+    });
+    // The frame's clock started well after the page's...
+    expect(run.gap).toBeGreaterThan(100);
+    // ...and the row after the change glides from the first frames, rather
+    // than holding its old place until the page's clock comes round.
+    expect(run.playState).toBe('running');
+    expect(run.currentTime).toBeGreaterThanOrEqual(0);
+    expect(run.currentTime).toBeLessThan(200);
   });
 
   test('nested areas: motion stops at the inner area; an inner area moves as one unit', async ({
@@ -1157,7 +2081,7 @@ test.describe('spec:AST-105 FR2–FR4', () => {
     expect(withHandle).toEqual(without);
   });
 
-  test('the changed element and its followers start on one frame on springs.settle (FR4)', async ({
+  test("the changed element and its followers start on one frame on the theme's move curve (FR4)", async ({
     page,
   }) => {
     await open(page, PAGE);
@@ -1169,10 +2093,13 @@ test.describe('spec:AST-105 FR2–FR4', () => {
     expect(follower).toHaveLength(1);
     expect(grow[0].startTime).toBe(follower[0].startTime);
     expect(grow[0].duration).toBeCloseTo(follower[0].duration, 3);
-    // springs.settle is SwiftUI's smooth spring (duration 0.5 s, no bounce):
-    // it settles within a second.
-    expect(follower[0].duration).toBeGreaterThan(300);
-    expect(follower[0].duration).toBeLessThan(1200);
+    // With no stylesheet, the tokens read core's declared values.
+    expect(follower[0].duration).toBeCloseTo(410, 3);
+    expectOnCurve(
+      await page.evaluate(() => window.curveOf('#a')),
+      [0.24, 1, 0.4, 1],
+      410,
+    );
   });
 
   for (const layout of [
@@ -1552,16 +2479,105 @@ test.describe('spec:AST-105 FR2–FR4', () => {
     );
   });
 
-  test("a scope's --motion-springs-settle changes nothing: the role is internal (FR4)", async ({
+  for (const theme of [
+    {
+      name: 'at tempo 0.75',
+      style: '--duration-medium: 307.5ms',
+      ms: 307.5,
+      points: [0.24, 1, 0.4, 1],
+    },
+    {
+      name: 'at tempo 1.5',
+      style: '--duration-medium: 615ms',
+      ms: 615,
+      points: [0.24, 1, 0.4, 1],
+    },
+    {
+      name: "at character 'crisp'",
+      style: '--ease-move: cubic-bezier(0, 0, 0.2, 1)',
+      ms: 410,
+      points: [0, 0, 0.2, 1],
+    },
+    {
+      name: "at character 'expressive'",
+      style: '--ease-move: cubic-bezier(0.3, 1.2, 0.5, 1)',
+      ms: 410,
+      points: [0.3, 1.2, 0.5, 1],
+    },
+  ] as const) {
+    test(`a theme ${theme.name}: the glide plays its --ease-move over its --duration-medium (FR4)`, async ({
+      page,
+    }) => {
+      // The tokens a theme with that knob writes on its scope.
+      await open(page, PAGE, `#area { ${theme.style}; }`);
+      await change(page);
+      const [motion] = await page.evaluate(() => window.motionOf('#a'));
+      expect(motion.duration).toBeCloseTo(theme.ms, 3);
+      expectOnCurve(
+        await page.evaluate(() => window.curveOf('#a')),
+        theme.points,
+        theme.ms,
+      );
+    });
+  }
+
+  for (const theme of [
+    {
+      easing: 'linear(0, 0.8 50%, 1)',
+      // Two straight runs: to 0.8 at half the time, then on to 1.
+      ease: (x: number) => (x < 0.5 ? 1.6 * x : 0.8 + 0.4 * (x - 0.5)),
+    },
+    {
+      easing: 'steps(4, jump-end)',
+      ease: (x: number) => Math.floor(4 * x) / 4,
+    },
+  ]) {
+    test(`a theme whose --ease-move is ${theme.easing}: the glide plays it as the browser plays it (FR4)`, async ({
+      page,
+    }) => {
+      // The motion scale's easing option writes such an easing.
+      await open(page, PAGE, `#area { --ease-move: ${theme.easing}; }`);
+      await change(page);
+      const motions = await page.evaluate(() => window.motionOf('#a'));
+      expect(motions, 'the content after the change glides').toHaveLength(1);
+      expect(motions[0].duration).toBeCloseTo(410, 3);
+      expectOnEase(
+        await page.evaluate(() => window.curveOf('#a')),
+        theme.ease,
+        410,
+      );
+    });
+  }
+
+  test("a disclosure's indicator turns on the timing read where the area is, whatever theme scope sits between them (FR4)", async ({
     page,
   }) => {
-    await open(page, PAGE);
+    // The area's tokens, and a nested scope with others around the indicator.
+    await open(
+      page,
+      PAGE,
+      `#area { --duration-medium: 310ms; --ease-move: cubic-bezier(0.24, 1, 0.4, 1); }
+       #grow { --duration-medium: 620ms; --ease-move: cubic-bezier(0, 0, 0.2, 1); }`,
+    );
     await change(page);
-    const [shared] = await page.evaluate(() => window.motionOf('#a'));
-    await open(page, PAGE, '#area { --motion-springs-settle: 0.2s 0; }');
-    await change(page);
-    const [scoped] = await page.evaluate(() => window.motionOf('#a'));
-    expect(scoped.duration).toBeCloseTo(shared.duration, 3);
+    const [motion] = await page.evaluate(() => window.motionOf('#a'));
+    const indicator = await page.evaluate(() => {
+      const area = document.getElementById('area') as HTMLElement;
+      const chevron = document.createElement('span');
+      document.getElementById('grow')?.append(chevron);
+      window.AnimatedLayout.applyLayoutChangeTransition(
+        window.AnimatedLayout.createAnimatedLayout(() => area),
+        chevron,
+      );
+      const style = getComputedStyle(chevron);
+      return {
+        ms: parseFloat(style.transitionDuration) * 1000,
+        easing: style.transitionTimingFunction,
+      };
+    });
+    expect(motion.duration).toBeCloseTo(310, 3);
+    expect(indicator.ms).toBeCloseTo(motion.duration, 3);
+    expect(indicator.easing).toBe('cubic-bezier(0.24, 1, 0.4, 1)');
   });
 
   test('under Reduce Motion with a coarse pointer, both cross-fade with no travel (FR4)', async ({
@@ -1580,6 +2596,851 @@ test.describe('spec:AST-105 FR2–FR4', () => {
       expect(motion.duration, id).toBeLessThanOrEqual(200);
     }
   });
+});
+
+/** One frame of an edge reveal: the moving edge, the content beside it. */
+interface EdgeFrame {
+  phase: string;
+  /** Where the element's moving edge shows (its box less its clip). */
+  edge: number;
+  /** Where the facing edge of the content beside it shows. */
+  beside: number;
+  /** How much of the element shows along the edge's axis. */
+  shown: number;
+  /**
+   * How far the engine's evaluated clip and rect stand from the keyframes'
+   * values at the animations' current time, both sides summed.
+   */
+  skew: number;
+}
+
+/**
+ * The edge proofs read both sides of a ride on the module's clock. Chromium
+ * evaluates exactly that (its skew stays under half a px); WebKit's skew is
+ * reported, an engine clock the module cannot reach.
+ */
+function reportSkew(frames: EdgeFrame[], browserName: string) {
+  const skew = Math.max(0, ...frames.map(f => f.skew));
+  test.info().annotations.push({
+    type: 'evaluation skew (px)',
+    description: String(skew),
+  });
+  if (browserName === 'chromium') {
+    expect(skew).toBeLessThan(0.5);
+  }
+}
+
+test.describe('spec:AST-105 FR9 (the edge reveal)', () => {
+  test('a block-start reveal and conceal, in a column that stacks from its end, keep the moving edge on the content before it on every frame, and the conceal leaves the element where it shows', async ({
+    page,
+    browserName,
+  }) => {
+    await open(
+      page,
+      `<div id="area" class="area" style="display: flex; flex-direction: column; justify-content: flex-end; height: 420px">
+        <div class="row"></div><div id="a" class="row"></div>
+        <div id="content" style="height: 80px; flex: none; background: #fd9; display: none">Details</div>
+        <div class="row"></div></div>`,
+    );
+    const result = await page.evaluate(async () => {
+      const AL = window.AnimatedLayout;
+      const area = document.querySelector('#area');
+      const content = document.querySelector('#content') as HTMLElement;
+      const a = document.querySelector('#a') as HTMLElement;
+      const layout = AL.createAnimatedLayout(() => area);
+      const frames: (EdgeFrame & {t: number})[] = [];
+      const bottoms: number[] = [];
+      const read = (phase: string) => {
+        const box = content.getBoundingClientRect();
+        const inset = window.insetOf(content);
+        const beside = window.glideBoxOf(a);
+        frames.push({
+          phase,
+          t: performance.timeOrigin + performance.now(),
+          edge: box.top + inset.top,
+          beside: beside.bottom,
+          shown: box.height - inset.top - inset.bottom,
+          skew:
+            Math.abs(window.computedInsetOf(content).top - inset.top) +
+            Math.abs(a.getBoundingClientRect().top - beside.top),
+        });
+        if (phase.startsWith('closing')) {
+          bottoms.push(box.bottom);
+        }
+      };
+      const frame = async () =>
+        new Promise<void>(resolve => {
+          requestAnimationFrame(() => resolve());
+        });
+      await frame();
+      // Shown: the content before it glides up out of its way, and its top
+      // edge comes down with it.
+      const opening = AL.reportLayoutChange(layout, () => content);
+      opening.measureBefore();
+      content.style.display = 'block';
+      opening.animate();
+      AL.playLayoutChange(layout, content, {edge: 'block-start'});
+      await new Promise<void>(resolve => {
+        queueMicrotask(resolve);
+      });
+      // Held at fixed times on its own clock, once it rides, so the reads
+      // judge the curve however late the frames come. Then the reveal plays
+      // again from its start on real frames.
+      for (const ms of [20, 40, 60, 80, 100]) {
+        window.holdAt(ms);
+        read('opening held');
+      }
+      window.holdAt(0);
+      window.resumeAll();
+      // A frame after the reveal has ended shows it fully open, so it does
+      // not count as a frame of the motion.
+      const revealing = () =>
+        content
+          .getAnimations({subtree: true})
+          .some(animation => animation.playState === 'running');
+      for (let i = 0; i < 60; i++) {
+        await frame();
+        read(revealing() ? 'opening' : 'opening ended');
+      }
+      const openBottom = content.getBoundingClientRect().bottom;
+      // The gap the layout leaves between them at rest (the rows' margins).
+      const restGap =
+        content.getBoundingClientRect().top - a.getBoundingClientRect().bottom;
+      // Hidden again: the content before it glides back down over it, its
+      // top edge on that content, while it stays where it shows.
+      const closing = AL.reportLayoutChange(layout, () => content);
+      const before = new Set(document.getAnimations());
+      closing.measureBefore();
+      closing.animate();
+      const isHeld = AL.holdLayoutExit(layout, content, () => {}, {
+        edge: 'block-start',
+      });
+      await new Promise<void>(resolve => {
+        queueMicrotask(resolve);
+      });
+      // The conceal's own animations, held and played as the reveal's were.
+      const concealing = document.getAnimations().filter(a => !before.has(a));
+      const seek = (ms: number) => {
+        for (const animation of concealing) {
+          animation.pause();
+          animation.currentTime = ms;
+        }
+      };
+      for (const ms of [20, 40, 60, 80, 100]) {
+        seek(ms);
+        read('closing held');
+      }
+      seek(0);
+      window.resumeAll();
+      for (let i = 0; i < 60; i++) {
+        await frame();
+        read('closing');
+      }
+      return {frames, bottoms, openBottom, restGap, isHeld};
+    });
+    expect(result.isHeld).toBe(true);
+    const shown = result.frames.filter(f => f.shown > 0.5);
+    for (const f of shown) {
+      expect(
+        Math.abs(f.edge - f.beside - result.restGap),
+        JSON.stringify({...f, restGap: result.restGap}),
+      ).toBeLessThan(1.5);
+    }
+    // It stays where it shows while it conceals: no jump by its own size.
+    for (const bottom of result.bottoms) {
+      expect(Math.abs(bottom - result.openBottom)).toBeLessThan(1);
+    }
+    reportSkew(shown, browserName);
+    // The held reads judge the curves. These prove the page drew both. Each
+    // phase is judged on its own reads, so a gap in the other phase cannot
+    // name it starved.
+    for (const phase of ['opening', 'closing']) {
+      requireFrames(
+        result.frames.filter(f => f.phase.startsWith(phase)),
+        {
+          min: 5,
+          during: `the ${phase === 'opening' ? 'reveal' : 'conceal'} plays`,
+          where: f => f.phase === phase && f.shown > 0.5,
+        },
+      );
+    }
+  });
+
+  test('a block-end reveal keeps its edge on the content after it on every frame, and a conceal that reverses it starts from what it shows', async ({
+    page,
+    browserName,
+  }) => {
+    await open(
+      page,
+      `<div id="area" class="area"><div class="row"></div>
+        <div id="content" style="height: 80px; background: #fd9; display: none">Details</div>
+        <div id="a" class="row"></div><div class="row"></div></div>`,
+    );
+    const frames = await page.evaluate(async () => {
+      const area = document.querySelector('#area');
+      const content = document.querySelector('#content') as HTMLElement;
+      const a = document.querySelector('#a') as HTMLElement;
+      const layout = window.AnimatedLayout.createAnimatedLayout(() => area);
+      const out: EdgeFrame[] = [];
+      const read = (phase: string) => {
+        const box = content.getBoundingClientRect();
+        const inset = window.insetOf(content);
+        out.push({
+          phase,
+          edge: box.bottom - inset.bottom,
+          beside: window.glideBoxOf(a).top,
+          shown: box.height - inset.top - inset.bottom,
+          skew:
+            Math.abs(window.computedInsetOf(content).bottom - inset.bottom) +
+            Math.abs(a.getBoundingClientRect().top - window.glideBoxOf(a).top),
+        });
+      };
+      const frame = async () =>
+        new Promise<void>(resolve => {
+          requestAnimationFrame(() => resolve());
+        });
+      await frame();
+      const opening = window.AnimatedLayout.reportLayoutChange(
+        layout,
+        () => content,
+      );
+      opening.measureBefore();
+      content.style.display = '';
+      opening.animate();
+      window.AnimatedLayout.playLayoutChange(layout, content);
+      await new Promise<void>(resolve => {
+        queueMicrotask(resolve);
+      });
+      // Hold the reveal at fixed times on its own clock, once it rides. Late
+      // frames then cannot end it before these reads.
+      for (const ms of [20, 40, 60, 80, 100]) {
+        window.holdAt(ms);
+        read('opening');
+      }
+      // Closed again 120 ms into the reveal, as the page shows it then.
+      window.holdAt(120);
+      read('reversed');
+      const closing = window.AnimatedLayout.reportLayoutChange(
+        layout,
+        () => content,
+      );
+      closing.measureBefore();
+      closing.animate();
+      window.AnimatedLayout.holdLayoutExit(layout, content, () => {});
+      await new Promise<void>(resolve => {
+        queueMicrotask(resolve);
+      });
+      // Where the conceal starts, on its own clock, before any frame.
+      read('restart');
+      // Hold the conceal at fixed times too, so late frames cannot skip it.
+      for (const ms of [20, 40, 60, 80, 100]) {
+        window.holdAt(ms);
+        read('closing held');
+      }
+      window.resumeAll();
+      for (let i = 0; i < 60; i++) {
+        await frame();
+        read('closing');
+      }
+      return out;
+    });
+    const shown = frames.filter(f => f.shown > 0.5);
+    expect(shown.length).toBeGreaterThan(10);
+    // Wherever the row after it shows, the content shows down to it.
+    for (const f of shown) {
+      expect(Math.abs(f.beside - f.edge), JSON.stringify(f)).toBeLessThan(1.5);
+    }
+    reportSkew(shown, browserName);
+    // It closes from what it showed: no jump back to its whole height.
+    const reversed = frames.find(f => f.phase === 'reversed') as EdgeFrame;
+    const restart = frames.find(f => f.phase === 'restart') as EdgeFrame;
+    expect(reversed.shown).toBeGreaterThan(5);
+    expect(reversed.shown).toBeLessThan(75);
+    expect(Math.abs(restart.shown - reversed.shown)).toBeLessThan(1.5);
+  });
+
+  for (const direction of ['ltr', 'rtl'] as const) {
+    test(`an inline-end reveal and conceal keep its edge on the item after it on every frame (${direction})`, async ({
+      page,
+      browserName,
+    }) => {
+      await open(
+        page,
+        `<div id="area" class="area" dir="${direction}"><div style="display: flex; align-items: flex-start">
+          <div style="width: 60px; height: 40px; flex: none; background: #ddd"></div>
+          <div id="content" style="width: 120px; height: 40px; flex: none; background: #fd9; display: none">Panel</div>
+          <div id="a" style="width: 100px; height: 40px; flex: none; background: #eef"></div>
+        </div></div>`,
+      );
+      const frames = await page.evaluate(async rtl => {
+        const area = document.querySelector('#area');
+        const content = document.querySelector('#content') as HTMLElement;
+        const a = document.querySelector('#a') as HTMLElement;
+        const layout = window.AnimatedLayout.createAnimatedLayout(() => area);
+        const out: EdgeFrame[] = [];
+        const read = (phase: string) => {
+          const box = content.getBoundingClientRect();
+          const next = window.glideBoxOf(a);
+          const inset = window.insetOf(content);
+          const computed = window.computedInsetOf(content);
+          out.push({
+            phase,
+            edge: rtl ? box.left + inset.left : box.right - inset.right,
+            beside: rtl ? next.right : next.left,
+            shown: box.width - inset.left - inset.right,
+            skew:
+              Math.abs(computed.left - inset.left) +
+              Math.abs(computed.right - inset.right) +
+              Math.abs(a.getBoundingClientRect().left - next.left),
+          });
+        };
+        const frame = async () =>
+          new Promise<void>(resolve => {
+            requestAnimationFrame(() => resolve());
+          });
+        await frame();
+        const opening = window.AnimatedLayout.reportLayoutChange(
+          layout,
+          () => content,
+        );
+        opening.measureBefore();
+        content.style.display = '';
+        opening.animate();
+        window.AnimatedLayout.playLayoutChange(layout, content, {
+          edge: 'inline-end',
+        });
+        await new Promise<void>(resolve => {
+          queueMicrotask(resolve);
+        });
+        // Hold the reveal at fixed times on its own clock, once it rides.
+        // Late frames then cannot end it before these reads.
+        for (const ms of [20, 40, 60, 80, 100]) {
+          window.holdAt(ms);
+          read('opening');
+        }
+        // Closed again 120 ms into the reveal, as the page shows it then:
+        // held, so the module's reading of the item after it and this
+        // test's read the same time (a running transform is evaluated at a
+        // time of its own in WebKit).
+        window.holdAt(120);
+        read('reversed');
+        const closing = window.AnimatedLayout.reportLayoutChange(
+          layout,
+          () => content,
+        );
+        closing.measureBefore();
+        closing.animate();
+        window.AnimatedLayout.holdLayoutExit(layout, content, () => {}, {
+          edge: 'inline-end',
+        });
+        await new Promise<void>(resolve => {
+          queueMicrotask(resolve);
+        });
+        // Where the conceal starts, on its own clock, once it rides.
+        read('restart');
+        // Hold the conceal at fixed times too, so late frames cannot skip it.
+        for (const ms of [20, 40, 60, 80, 100]) {
+          window.holdAt(ms);
+          read('closing held');
+        }
+        window.resumeAll();
+        for (let i = 0; i < 60; i++) {
+          await frame();
+          read('closing');
+        }
+        return out;
+      }, direction === 'rtl');
+      const shown = frames.filter(f => f.shown > 0.5);
+      expect(shown.length).toBeGreaterThan(10);
+      for (const f of shown) {
+        expect(Math.abs(f.beside - f.edge), JSON.stringify(f)).toBeLessThan(
+          1.5,
+        );
+      }
+      reportSkew(shown, browserName);
+      const reversed = frames.find(f => f.phase === 'reversed') as EdgeFrame;
+      const restart = frames.find(f => f.phase === 'restart') as EdgeFrame;
+      expect(reversed.shown).toBeGreaterThan(5);
+      expect(reversed.shown).toBeLessThan(115);
+      expect(Math.abs(restart.shown - reversed.shown)).toBeLessThan(1.5);
+    });
+  }
+
+  for (const direction of ['ltr', 'rtl'] as const) {
+    test(`the two-state form holds the old state as one copy and keeps the edge on the column it rides, a reversal included (${direction})`, async ({
+      page,
+      browserName,
+    }) => {
+      await open(
+        page,
+        `<div id="area" class="area" dir="${direction}"><div id="row" style="display: flex; height: 300px">
+          <nav id="panel" style="width: 260px; flex: none; background: #ccf"><span>Projects</span></nav>
+          <div id="column" style="flex: 1; background: #efe">The page</div>
+        </div></div>`,
+        '#panel.narrow { width: 48px !important; }',
+      );
+      const result = await page.evaluate(async rtl => {
+        const area = document.querySelector('#area');
+        const row = document.querySelector('#row') as HTMLElement;
+        const panel = document.querySelector('#panel') as HTMLElement;
+        const column = document.querySelector('#column') as HTMLElement;
+        const AL = window.AnimatedLayout;
+        const layout = AL.createAnimatedLayout(() => area);
+        const frames: EdgeFrame[] = [];
+        let copies = 0;
+        const read = (phase: string, element: Element) => {
+          const box = element.getBoundingClientRect();
+          const next = window.glideBoxOf(column);
+          const inset = window.insetOf(element);
+          const computed = window.computedInsetOf(element);
+          frames.push({
+            phase,
+            edge: rtl ? box.left + inset.left : box.right - inset.right,
+            beside: rtl ? next.right : next.left,
+            shown: box.width - inset.left - inset.right,
+            skew:
+              Math.abs(computed.left - inset.left) +
+              Math.abs(computed.right - inset.right) +
+              Math.abs(column.getBoundingClientRect().left - next.left),
+          });
+        };
+        const copyOf = () =>
+          row.querySelector<HTMLElement>(
+            ':scope > [inert][aria-hidden="true"]',
+          );
+        const frame = async () =>
+          new Promise<void>(resolve => {
+            requestAnimationFrame(() => resolve());
+          });
+        await frame();
+        // Collapse: the old, wide panel is held and covered on its edge.
+        let hold = AL.holdLayoutEdge(layout, panel, {edge: 'inline-end'});
+        let report = AL.reportLayoutChange(layout, () => panel);
+        report.measureBefore();
+        panel.classList.add('narrow');
+        report.animate();
+        const motion = AL.playLayoutEdge(hold!, panel, layout, {
+          edge: 'inline-end',
+          rideWith: column,
+        });
+        await new Promise<void>(resolve => {
+          queueMicrotask(resolve);
+        });
+        // Hold the collapse at fixed times on its own clock, once it rides.
+        // Late frames then cannot end it before these reads or move it
+        // between them.
+        for (const ms of [20, 40, 60, 80, 100, 120]) {
+          window.holdAt(ms);
+          const copy = copyOf();
+          copies = Math.max(copies, copy == null ? 0 : 1);
+          if (copy != null) {
+            read('collapsing', copy);
+          }
+        }
+        // Expanded again 120 ms into the collapse, from the width it shows
+        // then.
+        const shown = motion.shown()?.extent ?? null;
+        motion.end();
+        hold = AL.holdLayoutEdge(layout, panel, {
+          edge: 'inline-end',
+          shown,
+        });
+        report = AL.reportLayoutChange(layout, () => panel);
+        report.measureBefore();
+        panel.classList.remove('narrow');
+        report.animate();
+        AL.playLayoutEdge(hold!, panel, layout, {
+          edge: 'inline-end',
+          rideWith: column,
+        });
+        await new Promise<void>(resolve => {
+          queueMicrotask(resolve);
+        });
+        window.resumeAll();
+        // Read where the expand starts in the task that makes it, before any
+        // frame.
+        read('expand start', panel);
+        // Hold the expand at fixed times too, so late frames cannot skip its
+        // edge check.
+        for (const ms of [20, 40, 60, 80, 100, 120]) {
+          window.holdAt(ms);
+          read('expand held', panel);
+        }
+        window.resumeAll();
+        for (let i = 0; i < 60; i++) {
+          await frame();
+          read('expanding', panel);
+        }
+        return {frames, copies, left: row.querySelectorAll('[inert]').length};
+      }, direction === 'rtl');
+      expect(result.copies).toBe(1);
+      // The copy is gone once the motion ends.
+      expect(result.left).toBe(0);
+      // The case reads the collapse six times and the expand six times on
+      // their own clock, plus the expand's start. It also judges every drawn
+      // expanding frame, however many the page draws.
+      const count = (phase: string) =>
+        result.frames.filter(f => f.phase === phase).length;
+      expect(count('collapsing')).toBe(6);
+      expect(count('expand start')).toBe(1);
+      expect(count('expand held')).toBe(6);
+      const moving = result.frames.filter(
+        f => f.shown > 48.5 && f.shown < 259.5,
+      );
+      // Every read on the motion's own clock is in mid-motion.
+      expect(moving.filter(f => f.phase !== 'expanding')).toHaveLength(13);
+      for (const f of moving) {
+        expect(Math.abs(f.beside - f.edge), JSON.stringify(f)).toBeLessThan(
+          1.5,
+        );
+      }
+      reportSkew(moving, browserName);
+      // The expand starts where the collapse got to. Read in that task, the
+      // two match to 0.0 px.
+      const lastCollapse = result.frames
+        .filter(f => f.phase === 'collapsing')
+        .at(-1) as EdgeFrame;
+      const expandStart = result.frames.find(
+        f => f.phase === 'expand start',
+      ) as EdgeFrame;
+      expect(Math.abs(expandStart.shown - lastCollapse.shown)).toBeLessThan(
+        1.5,
+      );
+    });
+  }
+
+  test('the two-state form reversed after a block keeps the edge on the column it rides: the edge starts where the column shows, not where it showed before the block', async ({
+    page,
+    browserName,
+  }) => {
+    await open(
+      page,
+      `<div id="area" class="area"><div id="row" style="display: flex; height: 300px">
+        <nav id="panel" style="width: 260px; flex: none; background: #ccf"><span>Projects</span></nav>
+        <div id="column" style="flex: 1; background: #efe">The page</div>
+      </div></div>`,
+      '#panel.narrow { width: 48px !important; }',
+    );
+    const result = await page.evaluate(async () => {
+      const area = document.querySelector('#area');
+      const panel = document.querySelector('#panel') as HTMLElement;
+      const column = document.querySelector('#column') as HTMLElement;
+      const AL = window.AnimatedLayout;
+      const layout = AL.createAnimatedLayout(() => area);
+      const frames: EdgeFrame[] = [];
+      const read = (phase: string) => {
+        const box = panel.getBoundingClientRect();
+        const next = window.glideBoxOf(column);
+        const inset = window.insetOf(panel);
+        const computed = window.computedInsetOf(panel);
+        frames.push({
+          phase,
+          edge: box.right - inset.right,
+          beside: next.left,
+          shown: box.width - inset.left - inset.right,
+          skew:
+            Math.abs(computed.left - inset.left) +
+            Math.abs(computed.right - inset.right) +
+            Math.abs(column.getBoundingClientRect().left - next.left),
+        });
+      };
+      const frame = async () =>
+        new Promise<void>(resolve => {
+          requestAnimationFrame(() => resolve());
+        });
+      await frame();
+      // A collapse, left to run for 120 ms.
+      let hold = AL.holdLayoutEdge(layout, panel, {edge: 'inline-end'});
+      let report = AL.reportLayoutChange(layout, () => panel);
+      report.measureBefore();
+      panel.classList.add('narrow');
+      report.animate();
+      const motion = AL.playLayoutEdge(hold!, panel, layout, {
+        edge: 'inline-end',
+        rideWith: column,
+      });
+      const start = performance.now();
+      while (performance.now() - start < 120) {
+        await frame();
+      }
+      await new Promise<void>(resolve => {
+        setTimeout(resolve, 0);
+      });
+      // The toggle back runs late in its task, after 50 ms of other work.
+      // It reads what the panel shows, then its own work runs for 400 ms.
+      const late = performance.now() + 50;
+      while (performance.now() < late) {
+        // the page's main thread is busy
+      }
+      const shownBefore = motion.shown()?.extent ?? null;
+      const end = performance.now() + 400;
+      while (performance.now() < end) {
+        // the page's main thread is busy
+      }
+      motion.end();
+      hold = AL.holdLayoutEdge(layout, panel, {
+        edge: 'inline-end',
+        shown: shownBefore,
+      });
+      report = AL.reportLayoutChange(layout, () => panel);
+      report.measureBefore();
+      panel.classList.remove('narrow');
+      report.animate();
+      AL.playLayoutEdge(hold!, panel, layout, {
+        edge: 'inline-end',
+        rideWith: column,
+      });
+      await new Promise<void>(resolve => {
+        queueMicrotask(resolve);
+      });
+      // Hold the expand at fixed times on its own clock, once it rides. Late
+      // frames then cannot end it before these reads.
+      for (const ms of [20, 40, 60, 80, 100, 120]) {
+        window.holdAt(ms);
+        read('expanding held');
+      }
+      window.resumeAll();
+      for (let i = 0; i < 60; i++) {
+        await frame();
+        read('expanding');
+      }
+      return {frames, shownBefore};
+    });
+    test.info().annotations.push({
+      type: 'a two-state reversal after a block',
+      description: JSON.stringify({
+        shownBefore: result.shownBefore,
+        first: result.frames[0],
+      }),
+    });
+    const moving = result.frames.filter(f => f.shown > 48.5 && f.shown < 259.5);
+    expect(moving.length).toBeGreaterThan(5);
+    for (const f of moving) {
+      expect(Math.abs(f.beside - f.edge), JSON.stringify(f)).toBeLessThan(1.5);
+    }
+    reportSkew(moving, browserName);
+  });
+
+  test('a copy carries on the CSS animations and transitions running in the old state, from where they were', async ({
+    page,
+  }) => {
+    await open(
+      page,
+      `<div id="area" class="area"><div id="row" style="display: flex; height: 300px">
+        <nav id="panel" style="width: 260px; flex: none; background: #ccf">
+          <span class="pulse">Projects</span>
+          <span class="fade">Inbox</span>
+          <span class="entered">Done</span>
+          <span class="entered-backwards">Later</span>
+          <span class="entered-unfilled">Archive</span>
+          <span class="arrived">Sent</span>
+        </nav>
+        <div id="column" style="flex: 1; background: #efe">The page</div>
+      </div></div>`,
+      `#panel.narrow { width: 48px !important; }
+      @keyframes copy-pulse { from { opacity: 1; } to { opacity: 0.2; } }
+      .pulse { animation: copy-pulse 1000ms linear infinite; }
+      .fade { display: inline-block; transition: opacity 1000ms linear; }
+      .fade.out { opacity: 0; }
+      @keyframes copy-enter { from { translate: 0 20px; } to { translate: 0 0; } }
+      .entered { display: inline-block; animation: copy-enter 100s linear both; }
+      .entered-backwards { display: inline-block; animation: copy-enter 100s linear backwards; }
+      .entered-unfilled { display: inline-block; animation: copy-enter 100s linear; }
+      .arrived { display: inline-block; transition: opacity 1000ms linear; }
+      @starting-style { .arrived { opacity: 0; } }`,
+    );
+    const result = await page.evaluate(async () => {
+      const area = document.querySelector('#area');
+      const row = document.querySelector('#row') as HTMLElement;
+      const panel = document.querySelector('#panel') as HTMLElement;
+      const column = document.querySelector('#column') as HTMLElement;
+      const AL = window.AnimatedLayout;
+      const layout = AL.createAnimatedLayout(() => area);
+      await new Promise<void>(resolve => {
+        requestAnimationFrame(() => resolve());
+      });
+      const pick = (root: ParentNode, name: string) =>
+        root.querySelector(`.${name}`) as HTMLElement;
+      // The old state runs a looping animation 400 ms in, and a transition
+      // 400 ms into its second. Three entrances have played. One holds its
+      // end, and two (backwards-filled and unfilled) have left the element.
+      // Each entrance lasts 100 s, so it still runs here on a loaded machine,
+      // and finish() ends it.
+      const [pulse] = pick(panel, 'pulse').getAnimations();
+      pulse.currentTime = 400;
+      pick(panel, 'fade').classList.add('out');
+      const [fade] = pick(panel, 'fade').getAnimations();
+      fade.currentTime = 400;
+      for (const name of ['entered', 'entered-backwards', 'entered-unfilled']) {
+        pick(panel, name).getAnimations()[0].finish();
+      }
+      // A `@starting-style` fade-in has ended too, and a clone starts it again.
+      for (const animation of pick(panel, 'arrived').getAnimations()) {
+        animation.finish();
+      }
+      // Collapse: the old, wide panel is held as a copy.
+      const hold = AL.holdLayoutEdge(layout, panel, {edge: 'inline-end'});
+      const report = AL.reportLayoutChange(layout, () => panel);
+      report.measureBefore();
+      panel.classList.add('narrow');
+      report.animate();
+      if (hold == null) {
+        throw new Error('the collapse held nothing');
+      }
+      AL.playLayoutEdge(hold, panel, layout, {
+        edge: 'inline-end',
+        rideWith: column,
+      });
+      const copy = row.querySelector<HTMLElement>(
+        ':scope > [inert][aria-hidden="true"]',
+      );
+      if (copy == null) {
+        throw new Error('the collapse held no copy');
+      }
+      const [copiedPulse] = pick(copy, 'pulse').getAnimations();
+      return {
+        pulse: pulse.currentTime,
+        copiedPulse: copiedPulse?.currentTime ?? null,
+        fade: Number(getComputedStyle(pick(panel, 'fade')).opacity),
+        copiedFade: Number(getComputedStyle(pick(copy, 'fade')).opacity),
+        entered: ['entered', 'entered-backwards', 'entered-unfilled'].map(
+          name => getComputedStyle(pick(panel, name)).translate,
+        ),
+        copiedEntered: ['entered', 'entered-backwards', 'entered-unfilled'].map(
+          name => getComputedStyle(pick(copy, name)).translate,
+        ),
+        arrived: Number(getComputedStyle(pick(panel, 'arrived')).opacity),
+        copiedArrived: Number(getComputedStyle(pick(copy, 'arrived')).opacity),
+      };
+    });
+    // Each runs on in the copy from where it was. A clone would start a CSS
+    // animation again and show a transition's end. No entrance plays again,
+    // whether it holds its end or not, a `@starting-style` fade-in included.
+    expect(result.copiedPulse).not.toBeNull();
+    expect(Math.abs(Number(result.copiedPulse) - result.pulse)).toBeLessThan(1);
+    expect(result.fade).toBeGreaterThan(0.1);
+    expect(Math.abs(result.copiedFade - result.fade)).toBeLessThan(0.01);
+    expect(result.copiedEntered).toEqual(result.entered);
+    expect(result.arrived).toBe(1);
+    expect(result.copiedArrived).toBe(1);
+  });
+
+  for (const [side, direction, collapsed] of [
+    ['start', 'ltr', 48],
+    ['start', 'rtl', 0],
+    ['end', 'ltr', 48],
+  ] as const) {
+    test(`a resized pane with no copy collapses and opens by the edge facing its handle, that edge on the handle on every frame, a reversal included (${side} pane, ${direction}, to ${collapsed} px)`, async ({
+      page,
+      browserName,
+    }) => {
+      const pane = `<aside id="pane" style="width: 260px; flex: none; background: #ccf"><div style="width: 220px">Files</div></aside>`;
+      const grip = `<div id="grip" style="width: 8px; flex: none; background: #888"></div>`;
+      const content = `<main id="content" style="flex: 1; background: #efe">The page</main>`;
+      await open(
+        page,
+        `<div id="area" class="area" dir="${direction}"><div id="row" style="display: flex; height: 300px">${
+          side === 'start' ? pane + grip + content : content + grip + pane
+        }</div></div>`,
+        `#pane.collapsed { width: ${collapsed}px !important; }`,
+      );
+      const result = await page.evaluate(
+        async ({atStart, rtl}) => {
+          const area = document.querySelector('#area');
+          const paneEl = document.querySelector('#pane') as HTMLElement;
+          const gripEl = document.querySelector('#grip') as HTMLElement;
+          const AL = window.AnimatedLayout;
+          const layout = AL.createAnimatedLayout(() => area);
+          // The edge facing the handle, and the handle's side facing it.
+          const edge = atStart ? 'inline-end' : 'inline-start';
+          const physicalRight = atStart !== rtl;
+          const frames: EdgeFrame[] = [];
+          const read = (phase: string) => {
+            const box = paneEl.getBoundingClientRect();
+            const next = window.glideBoxOf(gripEl);
+            const inset = window.insetOf(paneEl);
+            const computed = window.computedInsetOf(paneEl);
+            frames.push({
+              phase,
+              edge: physicalRight
+                ? box.right - inset.right
+                : box.left + inset.left,
+              beside: physicalRight ? next.left : next.right,
+              shown: box.width - inset.left - inset.right,
+              skew:
+                Math.abs(computed.left - inset.left) +
+                Math.abs(computed.right - inset.right) +
+                Math.abs(gripEl.getBoundingClientRect().left - next.left),
+            });
+          };
+          const frame = async () =>
+            new Promise<void>(resolve => {
+              requestAnimationFrame(() => resolve());
+            });
+          const change = (collapse: boolean) => {
+            const report = AL.reportLayoutEdge(layout, () => paneEl, {edge});
+            report.measureBefore();
+            paneEl.classList.toggle('collapsed', collapse);
+            report.animate();
+          };
+          await frame();
+          change(true);
+          await new Promise<void>(resolve => {
+            queueMicrotask(resolve);
+          });
+          // Hold the collapse at fixed times on its own clock, once it rides.
+          // Late frames then cannot end it before these reads or move it
+          // between them.
+          for (const ms of [20, 40, 60, 80, 100]) {
+            window.holdAt(ms);
+            read('collapsing');
+          }
+          // Opened again 120 ms into the collapse, as the page shows it then.
+          window.holdAt(120);
+          read('reversed');
+          change(false);
+          await new Promise<void>(resolve => {
+            queueMicrotask(resolve);
+          });
+          // Where the open starts, on its own clock, before any frame.
+          read('restart');
+          window.resumeAll();
+          for (let i = 0; i < 60; i++) {
+            await frame();
+            read('opening');
+          }
+          return {
+            frames,
+            held: paneEl.style.getPropertyValue('inline-size'),
+            rest: paneEl.getBoundingClientRect().width,
+          };
+        },
+        {atStart: side === 'start', rtl: direction === 'rtl'},
+      );
+      const moving = result.frames.filter(f => f.shown > 0.5);
+      expect(moving.length).toBeGreaterThan(10);
+      // Wherever the handle shows, the pane shows up to it: no gap opens.
+      for (const f of moving) {
+        expect(Math.abs(f.beside - f.edge), JSON.stringify(f)).toBeLessThan(
+          1.5,
+        );
+      }
+      reportSkew(moving, browserName);
+      // The open starts where the collapse got to.
+      const reversed = result.frames.find(
+        f => f.phase === 'reversed',
+      ) as EdgeFrame;
+      const restart = result.frames.find(
+        f => f.phase === 'restart',
+      ) as EdgeFrame;
+      expect(reversed.shown).toBeGreaterThan(collapsed + 2);
+      expect(reversed.shown).toBeLessThan(258);
+      expect(Math.abs(restart.shown - reversed.shown)).toBeLessThan(1.5);
+      // It lands open at its own size, holding nothing.
+      expect(result.held).toBe('');
+      expect(result.rest).toBeCloseTo(260, 0);
+    });
+  }
 });
 
 test.describe('spec:AST-105 FR5 and FR4 under a fine pointer', () => {

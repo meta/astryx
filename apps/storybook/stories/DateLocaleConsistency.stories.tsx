@@ -21,7 +21,7 @@ import {Timestamp} from '@astryxdesign/core/Timestamp';
 import {spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
 
 const meta = {
-  title: 'Foundations/Internationalization/Date consistency',
+  title: 'Core/Internationalization/Date consistency',
   parameters: {
     layout: 'padded',
   },

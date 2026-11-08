@@ -26,6 +26,7 @@ import React, {
   useEffect,
   useMemo,
   useRef,
+  useState,
   type AriaRole,
   type ReactNode,
 } from 'react';
@@ -54,11 +55,21 @@ import {Icon} from '../Icon';
 import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {themeProps} from '../utils/themeProps';
 import {observeResize} from '../utils/sharedResizeObserver';
-import {devWarn} from '../utils/devWarning';
+import {createDevWarnings} from '../utils/devWarning';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/TabList/TabList.generated';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
+
+registerEnglishFallback(english);
 /**
  * Selector matching the focusable stops in the tab strip: every Tab
  * (`[data-tab-value]`) and every TabMenu trigger (`[data-tab-menu]`),
@@ -413,7 +424,7 @@ export function TabList({
   [EDGE_COMP_ATTR]: _edgeCompAttr,
   ...restProps
 }: TabListProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const ariaLabel = ariaLabelFromProps ?? t('@astryx.tabList.label');
   const size = useSize(sizeProp, 'md');
   const hasScroll = overflow !== 'visible';
@@ -442,6 +453,7 @@ export function TabList({
   // the first enabled stop when none is tabbable.
   const {listRef, handleKeyDown, handleFocus} = useListFocus<HTMLElement>({
     itemSelector: TAB_STOP_SELECTOR,
+    boundarySelector: '.astryx-tab-list, [popover]',
     orientation: isTabList ? 'horizontal' : 'both',
     hasRovingTabIndex: true,
   });
@@ -515,6 +527,10 @@ export function TabList({
     revealSelectedTabRef.current = revealSelectedTab;
   }, [revealSelectedTab]);
 
+  // The tab whose focus revealed it (see `handleRootFocus`), while it keeps
+  // focus.
+  const focusRevealedValueRef = useRef<string | null>(null);
+
   // The tab you are on has to be visible. Selection can move without focus —
   // on mount, or when the host sets `value` itself — and neither scrolls the
   // strip the way clicking or arrowing to a tab does. The check is what makes
@@ -525,6 +541,14 @@ export function TabList({
       return;
     }
     revealedValueRef.current = value;
+    if (value != null && focusRevealedValueRef.current === value) {
+      // A press or an arrow focused this tab first, and focusing it revealed
+      // it. Measuring now would force the new selection's style and layout
+      // inside the press, before it can paint. The next frame lays them out
+      // anyway, so finish there: the selected weight can still widen the tab.
+      const frame = requestAnimationFrame(() => revealSelectedTabRef.current());
+      return () => cancelAnimationFrame(frame);
+    }
     revealSelectedTabRef.current();
   }, [value]);
 
@@ -595,7 +619,9 @@ export function TabList({
       // The browser scrolls a focused element into view only when it is
       // entirely outside the scrollport, so arrowing onto a half-visible stop
       // leaves it cut off under the fade. Finish the job it started.
-      revealStop(e.target.closest(TAB_STOP_SELECTOR));
+      const stop = e.target.closest<HTMLElement>(TAB_STOP_SELECTOR);
+      revealStop(stop);
+      focusRevealedValueRef.current = stop?.dataset.tabValue ?? null;
     },
     [onFocusProp, onHintFocus, handleFocus, revealStop],
   );
@@ -603,6 +629,7 @@ export function TabList({
   const handleRootBlur = useCallback(
     (e: React.FocusEvent<HTMLElement>) => {
       onBlurProp?.(e);
+      focusRevealedValueRef.current = null;
       if (e.defaultPrevented) {
         return;
       }
@@ -614,26 +641,21 @@ export function TabList({
   // `role="tablist"` owns only tabs, so anything else in the strip is invalid
   // markup. Dev-only, and only under the asserted role — nothing else in the
   // component reads the rendered DOM.
-  const hasWarnedContentRef = useRef(false);
+  const [warn] = useState(createDevWarnings);
   useEffect(() => {
     const strip = stripRef.current;
-    if (
-      process.env.NODE_ENV === 'production' ||
-      !isTabList ||
-      !strip ||
-      hasWarnedContentRef.current
-    ) {
+    if (process.env.NODE_ENV === 'production' || !isTabList || !strip) {
       return;
     }
     const stranger = Array.from(strip.children).find(
       child => child.getAttribute('role') !== 'tab',
     );
     if (stranger) {
-      hasWarnedContentRef.current = true;
-      devWarn(
+      warn(
         'TabList',
         `role="tablist" owns only tabs, but the strip contains a <${stranger.tagName.toLowerCase()}> that is not one. ` +
           'Render menus and other controls outside the strip, or drop the role for the navigation pattern.',
+        'content',
       );
     }
     // No dependency list: the check is on rendered DOM, which can change

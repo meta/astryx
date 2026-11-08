@@ -7,6 +7,8 @@
  * <Package>/<Component>/(Default | Theme Sheet | …)
  * <Package>/Hooks/<hook>
  * <Package>/Themes/<theme feature>
+ * <Package>/Internationalization/<page>
+ * A11y/<pattern or component>
  * ```
  *
  * Conventions that live only in a README drift: `Hooks/useClipboard` and
@@ -16,7 +18,9 @@
  * source appears to say.
  *
  * Requires a built Storybook; skips itself when there is none, because a
- * fresh clone has no dist and this must not be the test that fails there.
+ * fresh clone has no dist and this must not be the test that fails there. CI
+ * runs it in `build-storybook`, right after the build, so a title outside the
+ * shape fails the pull request that adds it.
  */
 
 import fs from 'node:fs';
@@ -31,8 +35,16 @@ const INDEX = path.join(ROOT, 'dist', 'index.json');
 /** The packages a story can ship from. Not categories — packages. */
 const PACKAGES = ['Core', 'Lab', 'Charts', 'Vega', 'RichText'];
 
+/**
+ * The root of the accessibility contract fixtures: test fixtures the a11y
+ * audit and its browser specs open by story id, not component docs. Compared
+ * without case: Storybook ids lowercase titles, so `A11y/` and `a11y/` already
+ * share ids.
+ */
+const FIXTURE_ROOT = 'a11y';
+
 /** Groups that are deliberately not components. */
-const NON_COMPONENT_GROUPS = ['Hooks', 'Themes'];
+const NON_COMPONENT_GROUPS = ['Hooks', 'Themes', 'Internationalization'];
 
 type StoryIndex = {entries: Record<string, {title: string}>};
 
@@ -53,10 +65,14 @@ describe.skipIf(!built)('story tree shape', () => {
   });
 
   it('files every story under a package, never a category', () => {
-    const stray = titles.filter(
-      title => !PACKAGES.includes(title.split('/')[0]),
-    );
-    expect(stray, `not under one of ${PACKAGES.join(', ')}`).toEqual([]);
+    const stray = titles.filter(title => {
+      const root = title.split('/')[0];
+      return !PACKAGES.includes(root) && root.toLowerCase() !== FIXTURE_ROOT;
+    });
+    expect(
+      stray,
+      `not under one of ${PACKAGES.join(', ')}, or A11y/ for a11y fixtures`,
+    ).toEqual([]);
   });
 
   it('keeps hooks under <Package>/Hooks/, not beside components', () => {
@@ -95,13 +111,15 @@ describe.skipIf(!built)('story tree shape', () => {
   });
 
   it('never nests a component deeper than <Package>/<Component>', () => {
-    // Charts/Chrome/* and Lab/3DChart/* are deliberate sub-grouping; anything
-    // else three deep is a story name that leaked into the title.
+    // Charts/Chrome/*, Lab/3DChart/* and Lab/ChartTheming/* (one feature in
+    // four renderers) are deliberate sub-grouping; anything else three deep is
+    // a story name that leaked into the title.
     const allowedGroups = [
       ...NON_COMPONENT_GROUPS,
       'Chrome',
       '3DChart',
       'Chart Interactions',
+      'ChartTheming',
     ];
     const tooDeep = titles.filter(title => {
       const segments = title.split('/');
