@@ -54,7 +54,7 @@ export const doc = {
       name: 'topic',
       type: 'string',
       description:
-        "Doc topic to load (e.g. 'principles'), or a docs-tree route (e.g. 'cli/api/functions/search'). Omit to list all topics.",
+        "Doc topic to load (e.g. 'principles'), a docs-tree route (e.g. 'cli/api/functions/search'), or the name of one node of the docs tree: its own name (e.g. 'tokens-color'), or its route without the prefix its name repeats (e.g. 'tokens/color'), where exactly one node answers to it. Omit to list all topics.",
     },
     {
       name: 'section',
@@ -141,7 +141,7 @@ export const doc = {
     },
     {
       code: 'ERR_UNKNOWN_TOPIC',
-      when: 'the topic is not a string, or matches no topic and no docs-tree route',
+      when: 'the topic is not a string, or matches no topic, no docs-tree route, and no one node of the docs tree by its own name or by its route without the prefix its name repeats; a name more than one node answers to opens none of them, and the suggestions list them',
     },
     {
       code: 'ERR_UNKNOWN_SECTION',
