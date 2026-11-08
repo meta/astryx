@@ -1123,6 +1123,12 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   // animation presents fewer frames there, the control's too. The photo keeps
   // pace with the control, and a main-thread animation would not.
   expect(proof.verdict.failures).toEqual([]);
+  // The verdict, spelled out. The top edge takes a new position on every
+  // frame the control moves, with none excused as under a cast step. The
+  // control moves on at least the verdict's floor of four frames.
+  expect(proof.control?.movedWith).toBe(proof.control?.moved);
+  expect(proof.control?.belowStep).toBe(0);
+  expect(proof.control?.moved).toBeGreaterThanOrEqual(4);
   expect(proof.monotonic).toBe(true);
 });
 
