@@ -401,6 +401,29 @@ async function seekThroughGlide(
   return points;
 }
 
+/**
+ * The glide's duration in the two cases that record every frame, ms. WebKit
+ * can present no frame for about 70 ms while it first composites a newly
+ * animated layer, longer on a loaded runner. The stock 300 ms glide eases out
+ * and is mid-travel for only about 113 ms, so one such stall can leave a
+ * single frame there. At 1200 ms the same curve is mid-travel for about
+ * 450 ms. A theme may set any duration; the stock one is checked on its own.
+ */
+const RECORDED_GLIDE_MS = 1200;
+
+/** Sets the glide's duration where the tree reads it, as a theme does. */
+const lengthenGlide = async (page: Page, ms: number) =>
+  page
+    .locator('[role="tree"]')
+    .evaluate(
+      (tree, duration) =>
+        (tree as HTMLElement).style.setProperty(
+          '--duration-medium',
+          `${duration}ms`,
+        ),
+      ms,
+    );
+
 /** Waits until nothing in the tree animates. */
 const treeAtRest = async (page: Page) =>
   expect
@@ -455,8 +478,13 @@ test('expand under a finger: the rows below glide while the group fades in, and 
   page,
 }) => {
   await open(page);
+  await lengthenGlide(page, RECORDED_GLIDE_MS);
   const before = (await parts(page).below.boundingBox())?.y ?? 0;
-  const frames = await recordFrames(page, async () => tapToggle(page));
+  const frames = await recordFrames(
+    page,
+    async () => tapToggle(page),
+    RECORDED_GLIDE_MS + 400,
+  );
   const moving = frames.filter(frame => frame.group != null);
   expect(moving.length, 'frames with the group').toBeGreaterThan(4);
   const height = moving[0].group?.height ?? 0;
@@ -512,9 +540,14 @@ test('collapse under a finger: the group fades out as the rows below glide up, w
   await tapToggle(page);
   await expect(parts(page).child).toBeVisible();
   await page.waitForTimeout(700);
+  await lengthenGlide(page, RECORDED_GLIDE_MS);
   const expanded = (await parts(page).below.boundingBox())?.y ?? 0;
   const height = (await parts(page).group.boundingBox())?.height ?? Number.NaN;
-  const frames = await recordFrames(page, async () => tapToggle(page));
+  const frames = await recordFrames(
+    page,
+    async () => tapToggle(page),
+    RECORDED_GLIDE_MS + 400,
+  );
   // The checks below judge at least two frames of the glide, three of the
   // fade and five of the leaving group. A page starved of frames fails by name.
   requireFrames(frames, {
