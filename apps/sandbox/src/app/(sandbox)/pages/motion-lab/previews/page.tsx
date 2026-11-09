@@ -397,9 +397,10 @@ function OutlinePreview() {
       <DemoBody>
         <Text type="supporting" color="secondary">
           The proposed marker uses a CSS transition on transform, so a move that
-          starts mid-slide begins from where the marker is. Keeping its velocity
-          through an interrupted move needs Astryx's animator, which the sandbox
-          can use only once it has a public API.
+          starts mid-slide begins from where the marker is. The public
+          useAnimator keeps each channel's velocity through an interrupted move,
+          but it drives one scale, not scaleY, so it can move this 1px marker
+          but not stretch it to the item's height.
         </Text>
       </DemoBody>
     </DemoCard>
