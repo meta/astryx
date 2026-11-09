@@ -43,7 +43,7 @@ stable package is built from an immutable release tag and published with provena
    After that generated PR, the branch admits one additional class only when its
    exact gate exposes a test or harness defect: one commit whose stable patch id
    and exact changed-line digest equal a non-merge commit still present in `main`,
-   and whose changed files are only tests or `internal/interaction-harness/`. It
+   and whose changed files are only non-docsite tests or `internal/interaction-harness/`. It
    may not change product code, packages, Changesets, assertions, test controls,
    timeouts, retries, or snapshots. The rule that admits it must first land on
    `main` through normal review and CI. If the active branch predates that rule,
@@ -51,7 +51,10 @@ stable package is built from an immutable release tag and published with provena
    `validate-policy-carry` proves that the policy-only file set and resulting
    contents exactly equal the branch-specific bundle reviewed in the validator
    commit already merged on `main`. The bundle starts from the active release
-   head, so it carries no later `main` workflow or product work. The sync is not
+   head. It carries this validator and scope change plus the existing
+   undecided-scope contract fallback that treats every file as changed when
+   GitHub truncates the file list; it carries no other later `main` workflow or
+   product work. The sync is not
    a pull request, uses no force or admin operation, marks no check, and grants no release state. The repair branch then rebases onto the new release
    head, and its required checks run under that trusted base. The repair itself needs exact-head CodeBunny approval and every normal product
    and test lane; after merge, the full exact-head release gate runs again and

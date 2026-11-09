@@ -808,7 +808,7 @@ one removal merged ahead of the decision to allow it.
   version pull request has merged, one repair commit may move that branch only when its
   stable patch id and exact changed-line digest equal one non-merge commit still present
   in current `main`. Every changed path is a test under `__tests__`, a `*.spec.*` or
-  `*.test.*` file, or the interaction harness; snapshots are excluded. The repair
+  `*.test.*` file, or the interaction harness; docsite paths and snapshots are excluded. The repair
   changes no package, product, Changeset, assertion, test control, timeout, retry, or
   snapshot. The validator that recognizes this class first lands on `main` through
   ordinary review and green CI, then judges the release pull request from its trusted
@@ -816,7 +816,9 @@ one removal merged ahead of the decision to allow it.
   one normal fast-forward policy synchronization commit after `validate-policy-carry`
   proves that its policy-only file set and resulting file contents exactly equal the
   branch-specific bundle reviewed in the validator commit already merged on `main`. The
-  bundle is based on the active release head, so it carries no later `main` workflow or
+  bundle is based on the active release head. It carries this validator and scope change
+  plus the existing undecided-scope contract fallback that treats every file as changed
+  when GitHub truncates the file list; it carries no other later `main` workflow or
   product work. This sync is not a pull request, uses no force or admin operation, marks no check, grants no release state, and changes no
   package, product, Changeset, or release output. The repair branch rebases onto it, so
   every required check runs under the new trusted base before the repair can merge. The

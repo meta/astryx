@@ -525,6 +525,20 @@ describe('active release branch authority', () => {
     ).toContain(
       'release test repair contains a non-test path: packages/core/src/Button/__snapshots__/Button.snap',
     );
+    expect(
+      repair({
+        entries: ['M\tapps/docsite/e2e/theme-showcase.spec.ts'],
+      }),
+    ).toContain(
+      'release test repair contains a non-test path: apps/docsite/e2e/theme-showcase.spec.ts',
+    );
+    expect(
+      repair({
+        entries: ['M\tapps/docsite/src/__tests__/routing.test.ts'],
+      }),
+    ).toContain(
+      'release test repair contains a non-test path: apps/docsite/src/__tests__/routing.test.ts',
+    );
     for (const line of [
       'expect(dialog).toBeHidden();',
       '.toBeHidden({visible: false});',
@@ -544,7 +558,9 @@ describe('active release branch authority', () => {
         `release test repair changes an assertion, test control, timeout, retry, or snapshot: ${line}`,
       );
     }
-    const changedStatements = changedStatementsFromDiff(`diff --git a/test.mjs b/test.mjs
+    const statementCases = [
+      {
+        diff: `diff --git a/test.mjs b/test.mjs
 --- a/test.mjs
 +++ b/test.mjs
 @@ -1,5 +1,5 @@
@@ -552,13 +568,43 @@ describe('active release branch authority', () => {
 -  0,
 +  1,
  );
- after();`);
-    expect(changedStatements).toContain(
-      'await expect.poll(() => count).toBeGreaterThan(\n  1,\n);',
-    );
-    expect(repair({changedLines: undefined, changedStatements})).toContain(
-      'release test repair changes an assertion, test control, timeout, retry, or snapshot: await expect.poll(() => count).toBeGreaterThan(\n  1,\n);',
-    );
+ after();`,
+        expected:
+          'await expect.poll(() => count).toBeGreaterThan(\n  1,\n);',
+      },
+      {
+        diff: `diff --git a/test.mjs b/test.mjs
+--- a/test.mjs
++++ b/test.mjs
+@@ -1,5 +1,5 @@
+ await expect(result).toEqual({
+-  value: 1,
++  value: 2,
+ });
+ after();`,
+        expected: 'await expect(result).toEqual({\n  value: 2,\n});',
+      },
+      {
+        diff: `diff --git a/test.mjs b/test.mjs
+--- a/test.mjs
++++ b/test.mjs
+@@ -1,6 +1,6 @@
+ await expect.poll(() => {
+-  return ready;
++  return settled;
+ }).toBe(true);
+ after();`,
+        expected:
+          'await expect.poll(() => {\n  return settled;\n}).toBe(true);',
+      },
+    ];
+    for (const {diff, expected} of statementCases) {
+      const changedStatements = changedStatementsFromDiff(diff);
+      expect(changedStatements).toContain(expected);
+      expect(repair({changedLines: undefined, changedStatements})).toContain(
+        `release test repair changes an assertion, test control, timeout, retry, or snapshot: ${expected}`,
+      );
+    }
     expect(repair({commitCount: 2})).toContain(
       'release test repair must contain exactly one non-merge commit',
     );
@@ -605,8 +651,9 @@ describe('active release branch authority', () => {
     roots.push(root);
     const testFile =
       'packages/core/src/BottomSheet/__tests__/BottomSheetRelease.a11y.chromium.spec.ts';
-    const before = 'await page.mouse.move(0, 150);\n';
-    const after = 'await mouseDrag(page);\n';
+    const before =
+      'const ready = true;\nawait page.mouse.move(0, 150);\n\n';
+    const after = 'const ready = true;\nawait mouseDrag(page);\n\n';
     const {cut} = createRepository(root, [
       {
         ref: 'refs/heads/main',
@@ -663,7 +710,10 @@ describe('active release branch authority', () => {
         ref: 'refs/heads/whitespace-repair',
         name: 'whitespaceRepair',
         parent: 'releaseBase',
-        files: {[testFile]: 'await mouse Drag(page);\n'},
+        files: {
+          [testFile]:
+            'const ready = true;\nawait mouse Drag(page);\n\n',
+        },
       },
       {
         ref: 'refs/heads/reverted-main',

@@ -367,8 +367,12 @@ function validateReleaseState({
   return errors;
 }
 
+function gitRaw(root, args) {
+  return execFileSync('git', args, {cwd: root, encoding: 'utf8'});
+}
+
 function git(root, args) {
-  return execFileSync('git', args, {cwd: root, encoding: 'utf8'}).trim();
+  return gitRaw(root, args).trim();
 }
 
 /** The highest local stable vX.Y.Z tag, or null when none exists. */
@@ -721,29 +725,103 @@ function changedStatementsFromDiff(diff) {
   let oldLines = [];
   let newLines = [];
 
+  const statementData = text => {
+    const masked = [...text];
+    const stack = [];
+    const pairs = [];
+    let quote = null;
+    let escaped = false;
+    let lineComment = false;
+    let blockComment = false;
+    for (let index = 0; index < text.length; index += 1) {
+      const character = text[index];
+      const next = text[index + 1];
+      if (lineComment) {
+        masked[index] = ' ';
+        if (character === '\n') lineComment = false;
+        continue;
+      }
+      if (blockComment) {
+        masked[index] = ' ';
+        if (character === '*' && next === '/') {
+          masked[index + 1] = ' ';
+          blockComment = false;
+          index += 1;
+        }
+        continue;
+      }
+      if (quote) {
+        masked[index] = ' ';
+        if (escaped) escaped = false;
+        else if (character === '\\') escaped = true;
+        else if (character === quote) quote = null;
+        continue;
+      }
+      if (character === '/' && next === '/') {
+        masked[index] = ' ';
+        masked[index + 1] = ' ';
+        lineComment = true;
+        index += 1;
+        continue;
+      }
+      if (character === '/' && next === '*') {
+        masked[index] = ' ';
+        masked[index + 1] = ' ';
+        blockComment = true;
+        index += 1;
+        continue;
+      }
+      if (character === "'" || character === '"' || character === '`') {
+        masked[index] = ' ';
+        quote = character;
+        continue;
+      }
+      if ('([{'.includes(character)) {
+        stack.push({character, index});
+        continue;
+      }
+      if (')]}'.includes(character)) {
+        const expected = {')': '(', ']': '[', '}': '{'}[character];
+        const opening = stack.at(-1);
+        if (opening?.character === expected) {
+          stack.pop();
+          pairs.push({
+            close: index,
+            open: opening.index,
+            type: opening.character,
+          });
+        }
+      }
+    }
+    return {masked: masked.join(''), pairs};
+  };
+
   const addChangedStatements = lines => {
+    const text = lines.map(line => line.text).join('\n');
+    const ranges = [];
+    let offset = 0;
+    for (const line of lines) {
+      ranges.push({end: offset + line.text.length, start: offset});
+      offset += line.text.length + 1;
+    }
+    const {masked, pairs} = statementData(text);
     for (let index = 0; index < lines.length; index += 1) {
       if (!lines[index].changed) continue;
-      let start = index;
-      while (
-        start > 0 &&
-        !/[;{}]\s*(?:\/\/.*)?$/.test(lines[start - 1].text)
-      ) {
-        start -= 1;
-      }
-      let end = index;
-      while (
-        end + 1 < lines.length &&
-        !/[;{}]\s*(?:\/\/.*)?$/.test(lines[end].text)
-      ) {
-        end += 1;
-      }
-      statements.push(
-        lines
-          .slice(start, end + 1)
-          .map(line => line.text)
-          .join('\n'),
-      );
+      const range = ranges[index];
+      const enclosingCall = pairs
+        .filter(
+          pair =>
+            pair.type === '(' &&
+            pair.open <= range.start &&
+            pair.close >= range.end,
+        )
+        .sort((a, b) => a.close - a.open - (b.close - b.open))[0];
+      const anchorStart = enclosingCall?.open ?? range.start;
+      const anchorEnd = enclosingCall?.close ?? range.end;
+      const start = masked.lastIndexOf(';', anchorStart - 1) + 1;
+      const semicolon = masked.indexOf(';', anchorEnd);
+      const end = semicolon === -1 ? text.length : semicolon + 1;
+      statements.push(text.slice(start, end).trim());
     }
   };
   const flush = () => {
@@ -895,7 +973,11 @@ function validateReleaseTestRepairAtRef(
   ])
     .split('\n')
     .filter(Boolean);
-  const diff = git(root, ['diff', '--binary', `${mergeBase}..${head}`]);
+  const diff = gitRaw(root, [
+    'diff',
+    '--binary',
+    `${mergeBase}..${head}`,
+  ]);
   const changedStatements = changedStatementsFromDiff(
     git(root, ['diff', '--unified=20', `${mergeBase}..${head}`]),
   );
@@ -917,7 +999,7 @@ function validateReleaseTestRepairAtRef(
       .split('\n')
       .filter(Boolean);
     for (const commit of candidates) {
-      const candidateDiff = git(root, [
+      const candidateDiff = gitRaw(root, [
         'show',
         '--format=',
         '--binary',

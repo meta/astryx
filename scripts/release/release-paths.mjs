@@ -31,6 +31,7 @@ function isReleaseOutputPath(file) {
 
 function isReleaseTestRepairPath(file) {
   return (
+    !file.startsWith('apps/docsite/') &&
     !isReleaseOutputPath(file) &&
     RELEASE_TEST_REPAIR_PATTERNS.some(pattern => pattern.test(file)) &&
     !file.includes('/__snapshots__/') &&

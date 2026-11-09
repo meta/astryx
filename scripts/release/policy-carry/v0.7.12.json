@@ -3,12 +3,12 @@
   "releaseBranch": "release/v0.7.12",
   "base": "b4266ddfb453e8572c4453dcef8d0470fc18545b",
   "patch": "scripts/release/policy-carry/v0.7.12.diff",
-  "patchSha256": "9292ceef0857d27698bb20ca1b7735d7fe1b74da3d2d65cbe31f91f45b4ab74b",
+  "patchSha256": "b30e0d5c1b682e139c2fe71239f6f648b46f9cb6fbe05b37a009d8efafc788d6",
   "targets": {
-    ".github/actions/test-scope/action.yml": "e4f86c1c900647d1f83fea3f71ac4d780e712797322c4dc0ff357b6444cc7916",
-    ".github/scripts/test-scope-action.test.mjs": "980183e5ac6213ec6e902a1d2af53ebb08402b5f759d7a8b5ed718b6f5a46b18",
+    ".github/actions/test-scope/action.yml": "d713990cb1c5133ee7a47c6566d28862664ebfab2003121a757b95f16828e94c",
+    ".github/scripts/test-scope-action.test.mjs": "02e0029694e3f692c5ae76788dda607d517d912c28ffc4cb90968e2028df26da",
     ".github/workflows/ci.yml": "237fee543e4933bc85e8bad889d3b90e3310ebbc5e0e418cb50d70f45d74dba9",
-    "scripts/release/active-release.mjs": "e8669b9c8071fba57e541cc7bf081aa0b0c6259f3afca6fee5a46b947b88f242",
-    "scripts/release/release-paths.mjs": "f88a69e1f061d0bd31ce41d927f451c9ad128d9460700544c85c06bc9042a623"
+    "scripts/release/active-release.mjs": "3de5a8ccd074d9685c1e33e65de2ec8116638759f0352c639a299ea4a6e490e1",
+    "scripts/release/release-paths.mjs": "5ec851b4c242265a7b2f2daf3dbefb6bf2d8137991179bb648a06616e2bc93ae"
   }
 }

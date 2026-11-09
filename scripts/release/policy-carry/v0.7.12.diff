@@ -1,46 +1,16 @@
 diff --git a/.github/actions/test-scope/action.yml b/.github/actions/test-scope/action.yml
-index eb8aa34cfb0..20cea1c4423 100644
+index eb8aa34cfb0..dc9f8e45a8d 100644
 --- a/.github/actions/test-scope/action.yml
 +++ b/.github/actions/test-scope/action.yml
-@@ -20,2 +20,3 @@
--# - A release-branch pull request is the generated version bump: spec-only and
--#   tooling-only, with `release_bump` true.
-+# - A release-branch generated bump keeps its narrow lane. Any other candidate
-+#   runs every test lane; the trusted release validator then admits only the
-+#   proven test-repair class and rejects every broader change.
-@@ -55,0 +57,7 @@ inputs:
-+  lab-only-specs:
-+    description: >-
-+      Optional pattern over changed paths. On a Lab-only change, a changed file
-+      that matches it is still this job's work: `applies` holds, and
-+      `lab_specs_path` lists those files, so the job runs only them.
-+    required: false
-+    default: ''
-@@ -82 +90 @@ outputs:
--    description: The PR targets a release branch (the generated version bump).
-+    description: The PR targets a release branch and must pass release validation.
-@@ -89,0 +98,5 @@ outputs:
+@@ -89,0 +90,5 @@ outputs:
 +  truncated:
 +    description: >-
 +      `true` when the step could not decide because GitHub truncated the pull
 +      request's file list (3,000 files); a re-run cannot decide such a scope.
 +    value: ${{ steps.scope.outputs.truncated }}
-@@ -114,0 +128,5 @@ outputs:
-+  lab_specs_path:
-+    description: >-
-+      With `lab-only-specs`: on a Lab-only change, a file listing the changed
-+      files that match it, one per line; empty otherwise.
-+    value: ${{ steps.scope.outputs.lab_specs_path }}
-@@ -118 +136,2 @@ outputs:
--      Lab only), `touches` holds, and any `requires-head-file` is present.
-+      Lab only), `touches` holds, and any `requires-head-file` is present. On a
-+      Lab-only change it also holds when `lab_specs_path` lists a file.
-@@ -130,0 +150 @@ runs:
-+        SCOPE_LAB_ONLY_SPECS: ${{ inputs.lab-only-specs }}
-@@ -150,0 +171,2 @@ runs:
+@@ -150,0 +156 @@ runs:
 +            truncated: 'false',
-+            lab_specs_path: '',
-@@ -171,0 +194,15 @@ runs:
+@@ -171,0 +178,15 @@ runs:
 +          const writeChangedFiles = files => {
 +            const changedFilesPath = path.join(
 +              process.env.RUNNER_TEMP || os.tmpdir(),
@@ -56,7 +26,7 @@ index eb8aa34cfb0..20cea1c4423 100644
 +            fs.writeFileSync(changedFilesPath, `${changed.join('\n')}\n`);
 +            return changedFilesPath;
 +          };
-@@ -179,14 +215,0 @@ runs:
+@@ -179,14 +199,0 @@ runs:
 -          if (pr.base.ref.startsWith('release/v')) {
 -            core.info('Release-branch pull request: the generated version bump.');
 -            report({
@@ -71,9 +41,9 @@ index eb8aa34cfb0..20cea1c4423 100644
 -            return;
 -          }
 -
-@@ -214,0 +238 @@ runs:
+@@ -214,0 +222 @@ runs:
 +                'scripts/release/release-paths.mjs',
-@@ -238 +262,6 @@ runs:
+@@ -238 +246,6 @@ runs:
 -              report({...everything, decided: 'false'});
 +              report({
 +                ...everything,
@@ -81,7 +51,7 @@ index eb8aa34cfb0..20cea1c4423 100644
 +                decided: 'false',
 +                truncated: String(/truncated the file list/.test(error.message)),
 +              });
-@@ -247,0 +277,34 @@ runs:
+@@ -247,0 +261,34 @@ runs:
 +
 +            if (pr.base.ref.startsWith('release/v')) {
 +              const releaseKind = execFileSync(
@@ -116,55 +86,18 @@ index eb8aa34cfb0..20cea1c4423 100644
 +              }
 +              return;
 +            }
-@@ -284 +347,17 @@ runs:
--            let applies = String(!specialized && touches === 'true');
-+            // A Lab-only change skips Lab source, but a changed file the job
-+            // names (an interaction spec) still runs, alone.
-+            const labOnly =
-+              classified.lab_only === 'true' &&
-+              !['spec_only', 'docsite_only', 'tooling_only'].some(key => classified[key] === 'true');
-+            const labSpecs =
-+              labOnly && process.env.SCOPE_LAB_ONLY_SPECS
-+                ? files
-+                    .filter(f => f.status !== 'removed' && new RegExp(process.env.SCOPE_LAB_ONLY_SPECS).test(f.filename))
-+                    .map(f => f.filename)
-+                : [];
-+            let labSpecsPath = '';
-+            if (labSpecs.length > 0) {
-+              labSpecsPath = path.join(process.env.RUNNER_TEMP || os.tmpdir(), 'test-scope-lab-specs.txt');
-+              fs.writeFileSync(labSpecsPath, `${labSpecs.join('\n')}\n`);
-+            }
-+            let applies = String((!specialized && touches === 'true') || labSpecs.length > 0);
-@@ -289 +368 @@ runs:
--            if (!specialized && headFile && !files.some(f => f.filename === headFile || f.previous_filename === headFile)) {
-+            if ((!specialized || labSpecs.length > 0) && headFile && !files.some(f => f.filename === headFile || f.previous_filename === headFile)) {
-@@ -325,6 +404 @@ runs:
--              // A file, not an output value: a large pull request's list would
--              // not fit an environment variable.
--              const changedFilesPath = path.join(process.env.RUNNER_TEMP || os.tmpdir(), 'test-scope-changed-files.txt');
--              const changed = [...new Set(files.flatMap(f => [f.filename, f.previous_filename].filter(Boolean)))];
--              fs.writeFileSync(changedFilesPath, `${changed.join('\n')}\n`);
--              componentScope.changed_files_path = changedFilesPath;
-+              componentScope.changed_files_path = writeChangedFiles(files);
-@@ -332 +406 @@ runs:
--            report({...everything, ...classified, ...componentScope, release_bump: 'false', touches, applies, head_file_present: headFilePresent});
-+            report({...everything, ...classified, ...componentScope, release_bump: 'false', touches, applies, head_file_present: headFilePresent, lab_specs_path: labSpecsPath});
 diff --git a/.github/scripts/test-scope-action.test.mjs b/.github/scripts/test-scope-action.test.mjs
-index caa564da490..cf3f20c1493 100644
+index caa564da490..9cec353c355 100644
 --- a/.github/scripts/test-scope-action.test.mjs
 +++ b/.github/scripts/test-scope-action.test.mjs
 @@ -41,0 +42 @@ const CLASSIFIER_FILES = new Set([
 +  'scripts/release/release-paths.mjs',
-@@ -139,0 +141 @@ async function decide({
-+    SCOPE_LAB_ONLY_SPECS: inputs['lab-only-specs'] ?? '',
-@@ -179,0 +182 @@ describe('per-job scope step', () => {
-+        'lab_specs_path',
-@@ -183,0 +187 @@ describe('per-job scope step', () => {
+@@ -183,0 +185 @@ describe('per-job scope step', () => {
 +        'truncated',
-@@ -206 +210 @@ describe('per-job scope step', () => {
+@@ -206 +208 @@ describe('per-job scope step', () => {
 -  it('marks a release-branch pull request as the generated version bump', async () => {
 +  it('keeps a generated release-branch pull request on the narrow bump lane', async () => {
-@@ -208,0 +213,7 @@ describe('per-job scope step', () => {
+@@ -208,0 +211,7 @@ describe('per-job scope step', () => {
 +      files: changed(
 +        '.changeset/frozen.md',
 +        'packages/core/CHANGELOG.md',
@@ -172,7 +105,7 @@ index caa564da490..cf3f20c1493 100644
 +        'packages/cli/assets/codemods/__tests__/registry.test.mjs',
 +        'packages/cli/assets/codemods/transforms/v1.2.3/__tests__/upgrade.test.mjs',
 +      ),
-@@ -217,0 +229,49 @@ describe('per-job scope step', () => {
+@@ -217,0 +227,49 @@ describe('per-job scope step', () => {
 +  it('runs every lane for a release-branch test-repair candidate', async () => {
 +    const {outputs} = await decide({
 +      context: pullRequestContext('release/v1.2.3'),
@@ -222,82 +155,30 @@ index caa564da490..cf3f20c1493 100644
 +    });
 +  });
 +
-@@ -248,2 +308,3 @@ describe('per-job scope step', () => {
+@@ -248,2 +306,3 @@ describe('per-job scope step', () => {
 -      f3: `${BASE_SHA}:${AUDIT_FILE}`,
 -      f4: `${BASE_SHA}:${OFFICIAL_PACKAGES}`,
 +      f3: `${BASE_SHA}:scripts/release/release-paths.mjs`,
 +      f4: `${BASE_SHA}:${AUDIT_FILE}`,
 +      f5: `${BASE_SHA}:${OFFICIAL_PACKAGES}`,
-@@ -324,0 +386,51 @@ describe('per-job scope step', () => {
-+  it('still runs a changed interaction spec on the Lab-only lane, alone (spec:AST-030 FR26)', async () => {
-+    const spec =
-+      'packages/lab/src/NavigationStack/__tests__/NavigationStack.interaction.browser.spec.ts';
-+    const inputs = {
-+      paths: INTERACTION_PATHS,
-+      'lab-only-specs': '\\.interaction\\.browser\\.spec\\.ts$',
-+      'requires-head-file': 'playwright.interaction.config.ts',
-+    };
-+    const headFiles = ['playwright.interaction.config.ts'];
-+    const {outputs} = await decide({files: changed(spec), inputs, headFiles});
-+    expect(outputs).toMatchObject({lab_only: 'true', applies: 'true'});
-+    expect(fs.readFileSync(outputs.lab_specs_path, 'utf8')).toBe(`${spec}\n`);
-+    // Lab source beside the spec adds nothing: only the spec runs.
-+    const both = await decide({
-+      files: changed(
-+        'packages/lab/src/NavigationStack/NavigationStack.tsx',
-+        spec,
-+      ),
-+      inputs,
-+      headFiles,
-+    });
-+    expect(both.outputs.applies).toBe('true');
-+    expect(fs.readFileSync(both.outputs.lab_specs_path, 'utf8')).toBe(
-+      `${spec}\n`,
-+    );
-+    // Lab source alone runs none.
-+    const source = await decide({
-+      files: changed('packages/lab/src/NavigationStack/NavigationStack.tsx'),
-+      inputs,
-+      headFiles,
-+    });
-+    expect(source.outputs).toMatchObject({
-+      lab_only: 'true',
-+      applies: 'false',
-+      lab_specs_path: '',
-+    });
-+    // A deleted spec has nothing to run.
-+    const removed = await decide({
-+      files: [{filename: spec, status: 'removed'}],
-+      inputs,
-+      headFiles,
-+    });
-+    expect(removed.outputs).toMatchObject({
-+      applies: 'false',
-+      lab_specs_path: '',
-+    });
-+    // A head cut before the interaction config still skips.
-+    const old = await decide({files: changed(spec), inputs});
-+    expect(old.outputs.applies).toBe('false');
-+  });
-+
-@@ -382 +494 @@ describe('per-job scope step', () => {
+@@ -382 +441 @@ describe('per-job scope step', () => {
 -  ])('puts everything in scope when %s', async (_, options) => {
 +  ])('puts everything in scope when %s', async (name, options) => {
-@@ -386,0 +499,4 @@ describe('per-job scope step', () => {
+@@ -386,0 +446,4 @@ describe('per-job scope step', () => {
 +    // Only a truncated file list is one a re-run cannot decide.
 +    expect(outputs.truncated).toBe(
 +      name === 'GitHub truncates the file list' ? 'true' : 'false',
 +    );
-@@ -543 +659 @@ describe('per-job scope step', () => {
+@@ -543 +606 @@ describe('per-job scope step', () => {
 -    it('applies no audit to a release-branch pull request', async () => {
 +    it('applies no audit to the generated release-branch pull request', async () => {
-@@ -545,0 +662,5 @@ describe('per-job scope step', () => {
+@@ -545,0 +609,5 @@ describe('per-job scope step', () => {
 +        files: changed(
 +          '.changeset/frozen.md',
 +          'packages/core/CHANGELOG.md',
 +          'packages/core/package.json',
 +        ),
-@@ -836,0 +958,39 @@ describe('the temporary policy folder', () => {
+@@ -836,0 +905,39 @@ describe('the temporary policy folder', () => {
 +
 +describe('the contract job on a pull request GitHub truncates', () => {
 +  it('lists every file and runs, never fails, on an undecided scope', async () => {
@@ -387,7 +268,7 @@ index 06d9db55411..f824d6ca219 100644
 -          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
 +          FILES_PATH: ${{ steps.scope.outputs.changed_files_path || steps.everything.outputs.path }}
 diff --git a/scripts/release/active-release.mjs b/scripts/release/active-release.mjs
-index 7eae88e71bd..cd22ea481b8 100644
+index 7eae88e71bd..d408ba6500a 100644
 --- a/scripts/release/active-release.mjs
 +++ b/scripts/release/active-release.mjs
 @@ -14,2 +14,2 @@
@@ -404,7 +285,15 @@ index 7eae88e71bd..cd22ea481b8 100644
 +  isReleaseOutputPath,
 +  isReleaseTestRepairPath,
 +} from './release-paths.mjs';
-@@ -709,7 +716,247 @@ function listActiveBranches(root) {
+@@ -362,0 +370,4 @@ function validateReleaseState({
++function gitRaw(root, args) {
++  return execFileSync('git', args, {cwd: root, encoding: 'utf8'});
++}
++
+@@ -364 +375 @@ function git(root, args) {
+-  return execFileSync('git', args, {cwd: root, encoding: 'utf8'}).trim();
++  return gitRaw(root, args).trim();
+@@ -709,7 +720,325 @@ function listActiveBranches(root) {
 -const RELEASE_OUTPUT_PATTERNS = [
 -  /^packages\/(?:[^/]+|themes\/[^/]+)\/package\.json$/,
 -  /^packages\/(?:[^/]+|themes\/[^/]+)\/CHANGELOG\.md$/,
@@ -420,29 +309,103 @@ index 7eae88e71bd..cd22ea481b8 100644
 +  let oldLines = [];
 +  let newLines = [];
 +
++  const statementData = text => {
++    const masked = [...text];
++    const stack = [];
++    const pairs = [];
++    let quote = null;
++    let escaped = false;
++    let lineComment = false;
++    let blockComment = false;
++    for (let index = 0; index < text.length; index += 1) {
++      const character = text[index];
++      const next = text[index + 1];
++      if (lineComment) {
++        masked[index] = ' ';
++        if (character === '\n') lineComment = false;
++        continue;
++      }
++      if (blockComment) {
++        masked[index] = ' ';
++        if (character === '*' && next === '/') {
++          masked[index + 1] = ' ';
++          blockComment = false;
++          index += 1;
++        }
++        continue;
++      }
++      if (quote) {
++        masked[index] = ' ';
++        if (escaped) escaped = false;
++        else if (character === '\\') escaped = true;
++        else if (character === quote) quote = null;
++        continue;
++      }
++      if (character === '/' && next === '/') {
++        masked[index] = ' ';
++        masked[index + 1] = ' ';
++        lineComment = true;
++        index += 1;
++        continue;
++      }
++      if (character === '/' && next === '*') {
++        masked[index] = ' ';
++        masked[index + 1] = ' ';
++        blockComment = true;
++        index += 1;
++        continue;
++      }
++      if (character === "'" || character === '"' || character === '`') {
++        masked[index] = ' ';
++        quote = character;
++        continue;
++      }
++      if ('([{'.includes(character)) {
++        stack.push({character, index});
++        continue;
++      }
++      if (')]}'.includes(character)) {
++        const expected = {')': '(', ']': '[', '}': '{'}[character];
++        const opening = stack.at(-1);
++        if (opening?.character === expected) {
++          stack.pop();
++          pairs.push({
++            close: index,
++            open: opening.index,
++            type: opening.character,
++          });
++        }
++      }
++    }
++    return {masked: masked.join(''), pairs};
++  };
++
 +  const addChangedStatements = lines => {
++    const text = lines.map(line => line.text).join('\n');
++    const ranges = [];
++    let offset = 0;
++    for (const line of lines) {
++      ranges.push({end: offset + line.text.length, start: offset});
++      offset += line.text.length + 1;
++    }
++    const {masked, pairs} = statementData(text);
 +    for (let index = 0; index < lines.length; index += 1) {
 +      if (!lines[index].changed) continue;
-+      let start = index;
-+      while (
-+        start > 0 &&
-+        !/[;{}]\s*(?:\/\/.*)?$/.test(lines[start - 1].text)
-+      ) {
-+        start -= 1;
-+      }
-+      let end = index;
-+      while (
-+        end + 1 < lines.length &&
-+        !/[;{}]\s*(?:\/\/.*)?$/.test(lines[end].text)
-+      ) {
-+        end += 1;
-+      }
-+      statements.push(
-+        lines
-+          .slice(start, end + 1)
-+          .map(line => line.text)
-+          .join('\n'),
-+      );
++      const range = ranges[index];
++      const enclosingCall = pairs
++        .filter(
++          pair =>
++            pair.type === '(' &&
++            pair.open <= range.start &&
++            pair.close >= range.end,
++        )
++        .sort((a, b) => a.close - a.open - (b.close - b.open))[0];
++      const anchorStart = enclosingCall?.open ?? range.start;
++      const anchorEnd = enclosingCall?.close ?? range.end;
++      const start = masked.lastIndexOf(';', anchorStart - 1) + 1;
++      const semicolon = masked.indexOf(';', anchorEnd);
++      const end = semicolon === -1 ? text.length : semicolon + 1;
++      statements.push(text.slice(start, end).trim());
 +    }
 +  };
 +  const flush = () => {
@@ -594,7 +557,11 @@ index 7eae88e71bd..cd22ea481b8 100644
 +  ])
 +    .split('\n')
 +    .filter(Boolean);
-+  const diff = git(root, ['diff', '--binary', `${mergeBase}..${head}`]);
++  const diff = gitRaw(root, [
++    'diff',
++    '--binary',
++    `${mergeBase}..${head}`,
++  ]);
 +  const changedStatements = changedStatementsFromDiff(
 +    git(root, ['diff', '--unified=20', `${mergeBase}..${head}`]),
 +  );
@@ -616,7 +583,7 @@ index 7eae88e71bd..cd22ea481b8 100644
 +      .split('\n')
 +      .filter(Boolean);
 +    for (const commit of candidates) {
-+      const candidateDiff = git(root, [
++      const candidateDiff = gitRaw(root, [
 +        'show',
 +        '--format=',
 +        '--binary',
@@ -659,7 +626,7 @@ index 7eae88e71bd..cd22ea481b8 100644
 +  /^\.github\/workflows\/ci\.yml$/,
 +  /^docs\/release\.md$/,
 +  /^docs\/specs\/AST-(?:017|030)\/spec\.md$/,
-@@ -718,2 +965,157 @@ const RELEASE_OUTPUT_PATTERNS = [
+@@ -718,2 +1047,157 @@ const RELEASE_OUTPUT_PATTERNS = [
 -function isReleaseOutputPath(file) {
 -  return RELEASE_OUTPUT_PATTERNS.some(pattern => pattern.test(file));
 +function isAncestor(root, ancestor, descendant) {
@@ -819,7 +786,7 @@ index 7eae88e71bd..cd22ea481b8 100644
 +    files: candidateEntries.length,
 +    bundleDigest: manifest ? sha256(canonicalJson(manifest)) : null,
 +  };
-@@ -1265,0 +1668,29 @@ async function main() {
+@@ -1265,0 +1750,29 @@ async function main() {
 +  if (command === 'validate-policy-carry') {
 +    const base = required(values, 'base');
 +    const head = required(values, 'head');
@@ -849,7 +816,7 @@ index 7eae88e71bd..cd22ea481b8 100644
 +    );
 +    return;
 +  }
-@@ -1274,7 +1705,25 @@ async function main() {
+@@ -1274,7 +1787,25 @@ async function main() {
 -    const errors = [
 -      ...validateIdentity(marker, plan),
 -      ...validateReleaseDiff(raw ? raw.split('\n') : [], {
@@ -882,24 +849,24 @@ index 7eae88e71bd..cd22ea481b8 100644
 +      ];
 +    }
 +    const errors = [...validateIdentity(marker, plan), ...diffErrors];
-@@ -1285,0 +1735 @@ async function main() {
+@@ -1285,0 +1817 @@ async function main() {
 +        kind,
-@@ -1287 +1737,2 @@ async function main() {
+@@ -1287 +1819,2 @@ async function main() {
 -        files: raw ? raw.split('\n').length : 0,
 +        files: entries.length,
 +        ...(sourceCommit ? {sourceCommit, patchId} : {}),
-@@ -1399,0 +1851 @@ export {
+@@ -1399,0 +1933 @@ export {
 +  changedStatementsFromDiff,
-@@ -1404,0 +1857 @@ export {
+@@ -1404,0 +1939 @@ export {
 +  isReleaseTestRepairPath,
-@@ -1411,0 +1865 @@ export {
+@@ -1411,0 +1947 @@ export {
 +  validateReleaseTestRepair,
 diff --git a/scripts/release/release-paths.mjs b/scripts/release/release-paths.mjs
 new file mode 100644
-index 00000000000..2b6fecf2694
+index 00000000000..8ede431dd48
 --- /dev/null
 +++ b/scripts/release/release-paths.mjs
-@@ -0,0 +1,79 @@
+@@ -0,0 +1,80 @@
 +// Copyright (c) Meta Platforms, Inc. and affiliates.
 +
 +/**
@@ -933,6 +900,7 @@ index 00000000000..2b6fecf2694
 +
 +function isReleaseTestRepairPath(file) {
 +  return (
++    !file.startsWith('apps/docsite/') &&
 +    !isReleaseOutputPath(file) &&
 +    RELEASE_TEST_REPAIR_PATTERNS.some(pattern => pattern.test(file)) &&
 +    !file.includes('/__snapshots__/') &&
