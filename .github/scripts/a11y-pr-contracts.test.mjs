@@ -1279,6 +1279,10 @@ describe('repository specs', () => {
       'packages/lab/src/TransferList/TransferList.tsx',
       'packages/core/src/List/listReorderEngine.tsx',
       'packages/core/src/internal/reorder.ts',
+      'packages/core/src/reorderable/createReorderable.ts',
+      'packages/core/src/gestures/GestureHost.ts',
+      'packages/core/src/gestures/LongPressGestureRecognizer.ts',
+      'packages/core/src/motion/uikit/reorder.ts',
       'apps/storybook/stories/TransferListA11y.stories.tsx',
       'apps/storybook/stories/ListInput.stories.tsx',
     ]) {
