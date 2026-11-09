@@ -435,53 +435,6 @@ interface Scroller {
   position: number;
 }
 
-/** A scroller around the list's own, and its offset as last read. */
-interface OuterScroller {
-  readonly element: Element;
-  position: number;
-}
-
-/**
- * Whether `element`, or an ancestor of it below `until`, is fixed. A fixed
- * element inside a transformed, filtered or contained ancestor still scrolls
- * with the page. The walk stops at it too, so a drag there does not follow
- * the page's scroll.
- */
-function isFixedBelow(element: Element, until: Element): boolean {
-  const view = element.ownerDocument.defaultView;
-  for (
-    let node: Element | null = element;
-    node != null && node !== until;
-    node = node.parentElement
-  ) {
-    if (view?.getComputedStyle(node).position === 'fixed') {
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
- * The scrollers around `inner`, out to the page, whose scrolls move `inner`
- * on screen. A fixed element ends the walk: what is outside it scrolls without
- * moving it. Empty when `inner` is the page.
- */
-function outerScrollersOf(inner: Element): OuterScroller[] {
-  const doc = inner.ownerDocument;
-  const page = doc.scrollingElement ?? doc.documentElement;
-  const outer: OuterScroller[] = [];
-  let element = inner;
-  while (element !== page && element.parentElement != null) {
-    const next = nearestScroller(element);
-    if (isFixedBelow(element, next)) {
-      break;
-    }
-    element = next;
-    outer.push({element, position: element.scrollTop});
-  }
-  return outer;
-}
-
 function scrollerOf(list: HTMLElement): Scroller {
   const doc = list.ownerDocument;
   const element = nearestScroller(list);
@@ -526,8 +479,6 @@ interface DragSession {
   /** The finger's distance from the dragged row's top. */
   readonly grabOffset: number;
   readonly scroller: Scroller;
-  /** The scrollers around the scroller, out to the page. */
-  readonly outer: ReadonlyArray<OuterScroller>;
   /**
    * How far the list has moved up on screen since the begin. Autoscroll moves
    * it, and so does any scroll of its scroller or of one around it.
@@ -1228,7 +1179,6 @@ export class ListReorderController implements ListReorderSession {
     const shown = shownY(row, at);
     const origin = row.getBoundingClientRect().top - shown - tops[dragged];
     const scroller = scrollerOf(list);
-    const outer = outerScrollersOf(scroller.element);
     // Every row gets an identity offset for the session. Otherwise a row's
     // first offset changes how it paints in the middle of the drag, with a
     // layout and a paint. With one in place, neither a move nor a slide lays
@@ -1303,7 +1253,6 @@ export class ListReorderController implements ListReorderSession {
       wrote: true,
       foldArmed: false,
       stopScrollWatch: () => {},
-      outer,
     };
     this.session = session;
     session.stopScrollWatch = this.watchScroll(session);
@@ -1458,25 +1407,28 @@ export class ListReorderController implements ListReorderSession {
     if (view == null) {
       return () => {};
     }
+    const {element} = session.scroller;
     const page = doc.scrollingElement ?? doc.documentElement;
     // The page's own scroll is reported on the document.
-    const targetOf = (element: Element) => (element === page ? doc : element);
-    const own = targetOf(session.scroller.element);
-    // A scroller around the list's own moves the list on screen too, as when
+    const own = element === page ? doc : element;
+    // A scroll around the list's scroller can move it on screen too, as when
     // a wheel at the end of a box scrolls the page.
-    const targets = new Set<EventTarget>([
-      own,
-      ...session.outer.map(around => targetOf(around.element)),
-    ]);
+    const isAround = (target: EventTarget) =>
+      own !== doc &&
+      (target === doc ||
+        (target instanceof Element &&
+          target !== element &&
+          target.contains(element)));
     return subscribeInput(view, 'scroll', event => {
+      const {target} = event;
       if (
-        event.target == null ||
-        !targets.has(event.target) ||
-        this.session !== session
+        target == null ||
+        this.session !== session ||
+        (target !== own && !isAround(target))
       ) {
         return;
       }
-      if (event.target === own && session.ownScroll) {
+      if (target === own && session.ownScroll) {
         session.ownScroll = false;
         return;
       }
@@ -1517,26 +1469,28 @@ export class ListReorderController implements ListReorderSession {
   }
 
   /**
-   * Reads each scroller's offset once and adds what a scroll the engine did
+   * Reads the scroller's offset once and adds what a scroll the engine did
    * not cause moved to the drag. It runs before any write in its frame or
    * task.
    */
   private syncScroll(session: DragSession): void {
     session.scrollStale = false;
     const {scroller} = session;
-    const position = scroller.element.scrollTop;
+    const {element} = scroller;
+    const position = element.scrollTop;
     session.scrolled += position - scroller.position;
     scroller.position = position;
-    for (const around of session.outer) {
-      const offset = around.element.scrollTop;
-      const moved = offset - around.position;
-      around.position = offset;
-      // An outer scroll moves the list and its scroller's band on screen by
-      // the same amount.
-      session.scrolled += moved;
-      scroller.top -= moved;
-      scroller.bottom -= moved;
+    const doc = element.ownerDocument;
+    if (element === (doc.scrollingElement ?? doc.documentElement)) {
+      return;
     }
+    // A scroll around the scroller moves it on screen by what it measures,
+    // nothing when it is fixed or stuck. The list moves with it.
+    const top = element.getBoundingClientRect().top + element.clientTop;
+    const moved = scroller.top - top;
+    session.scrolled += moved;
+    scroller.top = top;
+    scroller.bottom -= moved;
   }
 
   private stopAutoscroll(session: DragSession): void {
