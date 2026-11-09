@@ -99,7 +99,10 @@ and the repository proves it before a change that could break it merges.
   is never shared across two Reacts in one process, so one request never reads
   another's provided value. A symbol that identifies objects across modules, such as a
   brand or a context key, is registered under the same kind of key, so a copy
-  and the package agree on it. The rule holds in both directions: a copy inside
+  and the package agree on it. Such state is held through Core's shared-realm
+  helpers, so a copy and the package resolve the same slot; a module-scope
+  registry, counter or brand outside them fails the source check unless the
+  allowlist names it with a reason. The rule holds in both directions: a copy inside
   a package overlay, and package components inside a copied Dialog or other
   overlay. A package component inside an open copied modal delivers its
   announcements inside that modal (`spec:AST-086` FR14), and package group and
