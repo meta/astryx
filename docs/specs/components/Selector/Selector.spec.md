@@ -32,6 +32,7 @@ architecture:
     architecture:icon-resolution-and-component-slots,
     architecture:interaction-modality,
     architecture:layer-runtime,
+    architecture:list-windowing,
     architecture:public-component-api,
   ]
 contributing: []
@@ -119,9 +120,10 @@ connection between the closed trigger and its selection surface.
 
 ## Current-state impact
 
-- **A long option list renders every option on open (PR4).** The open freezes
-  the page longer as the option count grows. A list of more than 40 options
-  renders all of its rows.
+- **PR4 gap:** a list of more than 40 options renders every option on open, so
+  the open freezes the page longer as the option count grows.
+- **PR5 gap:** the listbox doesn't window through the shared windowing engine;
+  it renders every option, whether or not the listbox scrolls.
 - **The bottom sheet misses the 100 ms freeze budget at every option count.**
   The cause is a fixed cost of opening the sheet, not its rows, so windowing
   does not remove it. It is a separate gap; no requirement in this record
@@ -249,7 +251,26 @@ These requirements describe shipped behavior on current `main`.
     the bottom sheet reaches them depends on the screen reader scrolling the
     list in time (`spec:AST-009` FR8); the per-frame coverage checks are the
     nearest browser evidence (FR19).
-  - Implementation gap: not built (Current-state impact).
+- **PR5 — The listbox windows through the shared engine.** Selector's listbox
+  windows through the shared windowing engine in
+  `packages/core/src/virtualization/` (`architecture:list-windowing` INV1) and
+  keeps no windowing code of its own. In the engine's terms:
+  - **Scroll area.** The listbox windows only when it actually scrolls. When
+    every option fits in the listbox, every option renders, whatever the count
+    (`architecture:list-windowing`).
+  - **Anchor at each open.** Each open sets one anchor before the first paint:
+    the selected option for an open with a value, the last option for an open
+    by ArrowUp, and the first option otherwise (PR4).
+  - **Overscan.** The overscan is a distance in pixels, set separately before
+    and after the scrollport.
+  - **Item size.** When every option row has one fixed height, the listbox
+    gives the engine that height as an exact item size, and rows aren't
+    measured. Otherwise it gives an estimated item size: the engine measures
+    rendered rows, and the scroll range follows the measured heights. When a
+    text-size change makes an exact size wrong by more than 1 px, the list
+    measures its rows instead, so rows never clip or overlap.
+  - The anchor, overscan and item size are internal to Selector and add no prop
+    (`architecture:list-windowing` INV3).
 
 ## Accessibility contract
 
@@ -421,6 +442,9 @@ new theming target.
 | PR4, AR3                           | Real screen reader, `spec:AST-009` FR8 (evidence gap: not yet checked)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | an option deep in a 249-option list                                                                                            | The option is announced with a position or total other than its place in the full list                                                                                                                                                                           | `audit:Selector/accessibility`   |
 | PR4, AR3                           | Real screen reader browse and touch swipe, `spec:AST-009` FR8 (evidence gap: not yet checked)                                                                                                                                                                                                                                                                                                                                                                                                                                                               | virtual cursor in the popover, swipe in the bottom sheet, 249 options                                                          | The screen reader stops at the last rendered option or skips an option                                                                                                                                                                                           | `audit:Selector/accessibility`   |
 | PR4, AR3                           | Grid popup windowing (evidence gap: `spec:AST-058` is not current)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | grid popup (options with an action)                                                                                            | A windowed grid lacks the full `aria-rowcount`, or a rendered row lacks its full-list `aria-rowindex`                                                                                                                                                            | `audit:Selector/accessibility`   |
+| PR5                                | `Selector.test.tsx` windowing suite                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | more than 40 options in a listbox tall enough to fit them all, and in one that scrolls                                         | An option is left unrendered while every option fits, or every option renders while the listbox scrolls                                                                                                                                                          | `audit:Selector/behavior`        |
+| PR5                                | Import review of the Selector folder against `architecture:list-windowing` INV1                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | the listbox's window computation                                                                                               | Selector computes its window outside `packages/core/src/virtualization/`, or adds a prop for the anchor, overscan or item size                                                                                                                                   | `audit:Selector/code-health`     |
+| PR5                                | Chromium text-size checks with an exact item size                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | 200% text size, browser minimum font size, a late web-font load                                                                | A row clips or overlaps its neighbour, or the scroll range differs from the measured rows by more than 1 px                                                                                                                                                      | `audit:Selector/behavior`        |
 | source-build contract              | `Selector.source-build.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | package source compiled by consumer Babel                                                                                      | Moving evaluated StyleX values outside the supported source form fails compilation                                                                                                                                                                               | `audit:Selector/code-health`     |
 
 ## Decision log
