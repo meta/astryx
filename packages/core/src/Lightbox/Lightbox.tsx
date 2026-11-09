@@ -27,13 +27,11 @@
 import {
   useCallback,
   useEffect,
-  useImperativeHandle,
   useMemo,
   useReducer,
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
-  type Ref,
   type PointerEvent as ReactPointerEvent,
   type ComponentProps,
   type ReactNode,
@@ -49,7 +47,7 @@ import {
 } from '../theme/tokens.stylex';
 import {Icon} from '../Icon';
 import {IconButton} from '../IconButton';
-import {useAnnounce, type AnnounceFn} from '../hooks/useAnnounce';
+import {announceInModal} from '../hooks/useAnnounce';
 import {useScrollLock} from '../hooks/useScrollLock';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useAttachment} from '../hooks/useAttachment';
@@ -473,16 +471,6 @@ const KEYBOARD_PAN_OFFSETS: Record<string, [number, number]> = {
 const VIDEO_CONTROLS_BAND = 48;
 
 /**
- * Gives Lightbox an announce function inside its dialog. While the modal
- * viewer is open, a screen reader reads only messages inside it.
- */
-function ViewerAnnouncer({ref}: {ref: Ref<AnnounceFn>}) {
-  const announce = useAnnounce();
-  useImperativeHandle(ref, () => announce, [announce]);
-  return null;
-}
-
-/**
  * A fullscreen overlay for viewing images and videos at full resolution.
  *
  * Supports single image and gallery modes. In gallery mode, it provides
@@ -614,9 +602,13 @@ export function Lightbox({
   // already-open session — not on mount, not when opening (even at a new
   // index, since the dialog's aria-label already names the current image), and
   // not on close.
-  const viewerAnnounceRef = useRef<AnnounceFn | null>(null);
+  // While the modal viewer is open, a screen reader reads only messages
+  // inside it.
   const announce = useCallback((message: string) => {
-    viewerAnnounceRef.current?.(message);
+    const dialog = dialogRef.current;
+    if (dialog != null) {
+      announceInModal(dialog, message);
+    }
   }, []);
   const prevIndexRef = useRef(index);
   const wasOpenRef = useRef(isOpen);
@@ -1399,7 +1391,6 @@ export function Lightbox({
       })}>
       <LayerDepthProvider>
         <ModalAnnounceProvider dialogRef={dialogRef} isOpen={isOpen}>
-          <ViewerAnnouncer ref={viewerAnnounceRef} />
           <LayerContentBoundary>
             <div
               ref={containerRef}
