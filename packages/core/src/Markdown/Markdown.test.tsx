@@ -1339,26 +1339,30 @@ describe('Markdown contentWidth', () => {
       .filter(style => style.includes('--x-maxWidth'));
   }
 
-  it('defaults prose width to the published --markdown-content-width variable', () => {
+  it('caps default prose at the 680px measure', () => {
     const {container} = render(
       <Markdown>{'Hello world paragraph.\n\n```\ncode\n```'}</Markdown>,
     );
-    const proseStyles = maxWidthStyles(container);
-    // Prose carriers (headings, paragraphs, lists, blockquotes) resolve the
-    // variable; the old hardcoded 680px default is gone.
     expect(
-      proseStyles.some(style =>
-        style.includes('--x-maxWidth: var(--markdown-content-width, 680px)'),
+      maxWidthStyles(container).some(style =>
+        style.includes('--x-maxWidth: 680px'),
       ),
     ).toBe(true);
-    expect(
-      proseStyles.some(style => style.includes('--x-maxWidth: 680px')),
-    ).toBe(false);
-    // Code blocks are unconstrained but keep the published width as their
-    // floor, so a short block still spans the same width as the prose above.
+    // A code block spans the column, with the prose measure as its floor.
     expect(container.querySelector('pre')?.getAttribute('style')).toContain(
-      '--x-minWidth: min(var(--markdown-content-width, 680px), 100%)',
+      '--x-minWidth: min(680px, 100%)',
     );
+  });
+
+  it('lets prose span the column with contentWidth="100%"', () => {
+    const {container} = render(
+      <Markdown contentWidth="100%">{'Hello world paragraph.'}</Markdown>,
+    );
+    const proseStyles = maxWidthStyles(container);
+    expect(proseStyles.length).toBeGreaterThan(0);
+    for (const style of proseStyles) {
+      expect(style).toContain('--x-maxWidth: 100%');
+    }
   });
 
   it('keeps an explicit numeric contentWidth in pixels', () => {

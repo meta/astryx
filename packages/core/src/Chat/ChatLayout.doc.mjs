@@ -76,6 +76,10 @@ export const docs = {
         description: 'Use scrollRef when the chat is embedded in a page where a parent element handles scrolling.',
       },
       {
+        guidance: true,
+        description: 'Markdown prose keeps its 680px measure, while code blocks and tables span the message column. To give a reply one right edge, pass contentWidth="100%" to its Markdown.',
+      },
+      {
         guidance: false,
         description: "Don't apply a fixed height on the layout; let it fill its container with flex: 1.",
       },
@@ -137,6 +141,7 @@ export const docsDense = {
       {guidance: true, description: 'Pass ChatMessageList as children and ChatComposer as composer prop for complete chat.'},
       {guidance: true, description: 'Provide emptyState so new conversations show a prompt, not blank screen.'},
       {guidance: true, description: 'Use scrollRef when chat is embedded in a page where a parent element handles scrolling.'},
+      {guidance: true, description: 'Markdown prose keeps 680px measure; code/tables span column. One right edge: pass contentWidth="100%" to Markdown.'},
       {guidance: false, description: 'Apply fixed height on layout; let it fill container with flex: 1.'},
       {guidance: false, description: 'Render multiple ChatLayout instances in same scroll container; each expects to own its scroll context.'},
     ],
