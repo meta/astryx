@@ -213,6 +213,36 @@ async function lensCenterX(page: Page) {
   return box.x + box.width / 2;
 }
 
+/**
+ * The opacity keyframes of each animation the animator made on the lens
+ * itself since `since` (a document time), from the page's own log. The log
+ * holds script animations only, not CSS transitions. The lens's glass and
+ * shadow are its pseudo-elements, with animations of their own.
+ */
+async function lensFades(page: Page, since: number) {
+  return lensBody(page).evaluate((body, from) => {
+    const made =
+      (
+        window as unknown as {
+          __tabBarMade?: {animation: Animation; at: number}[];
+        }
+      ).__tabBarMade ?? [];
+    return made
+      .filter(({animation, at}) => {
+        const effect = animation.effect as KeyframeEffect | null;
+        return (
+          at >= from && effect?.target === body && effect.pseudoElement == null
+        );
+      })
+      .map(({animation}) =>
+        (animation.effect as KeyframeEffect)
+          .getKeyframes()
+          .map(frame => frame.opacity),
+      )
+      .filter(opacities => opacities.some(opacity => opacity != null));
+  }, since);
+}
+
 /** How strongly a tab's press paint shows: its layer's opacity, 0 when off. */
 async function itemPaint(page: Page, name: string) {
   return tab(page, name)
@@ -2062,12 +2092,10 @@ test.describe('with Reduce Motion (design:reduced-motion)', () => {
     await page.emulateMedia({reducedMotion: 'reduce'});
     const {driver} = await openBar(page);
     const to = await itemCenter(page, 'Profile');
-    // Every frame from here: the lens's own opacity, and how many opacity
-    // animations run on the lens itself. Its glass and shadow are
-    // pseudo-elements, with animations of their own.
+    // Every frame from here: the lens's own opacity.
     await lensBody(page).evaluate(body => {
       const w = window as unknown as {
-        __lensFrames: {t: number; opacity: number; fades: number}[];
+        __lensFrames: {t: number; opacity: number}[];
         __lensDown: number;
       };
       w.__lensFrames = [];
@@ -2083,13 +2111,6 @@ test.describe('with Reduce Motion (design:reduced-motion)', () => {
         w.__lensFrames.push({
           t: performance.now(),
           opacity: Number(getComputedStyle(body).opacity),
-          fades: body
-            .getAnimations()
-            .filter(animation =>
-              (animation.effect as KeyframeEffect)
-                .getKeyframes()
-                .some(frame => frame.opacity != null),
-            ).length,
         });
         if (w.__lensFrames.length < 600) {
           requestAnimationFrame(step);
@@ -2097,26 +2118,57 @@ test.describe('with Reduce Motion (design:reduced-motion)', () => {
       };
       requestAnimationFrame(step);
     });
+    const since = await timelineNow(page);
     await driver.play(tapScript(to, {holdMs: 150}));
     await expect(tab(page, 'Profile')).toHaveAttribute('aria-selected', 'true');
     await waitForRest(lensBody(page));
+    // The first frame after the touch must come while one starvation
+    // threshold of a fade is still left to draw. The tap's window runs
+    // 350 ms from that frame: its 150 ms hold and the 200 ms a settle takes.
+    const latest = REDUCED_MOTION_FADE.ms - FRAME_STARVATION_MS;
+    // The lens can rest before that window ends. Wait until the trace
+    // passes the latest end of the window.
+    await page.waitForFunction(end => {
+      const w = window as unknown as {
+        __lensFrames: {t: number}[];
+        __lensDown: number;
+      };
+      const last = w.__lensFrames[w.__lensFrames.length - 1];
+      return w.__lensDown > 0 && last != null && last.t > w.__lensDown + end;
+    }, latest + 350);
     const {frames, down} = await page.evaluate(() => {
       const w = window as unknown as {
-        __lensFrames: {t: number; opacity: number; fades: number}[];
+        __lensFrames: {t: number; opacity: number}[];
         __lensDown: number;
       };
       return {frames: w.__lensFrames, down: w.__lensDown};
     });
     expect(down, 'no touch reached the page').toBeGreaterThan(0);
-    // The tap's own window: its 150 ms hold and the 200 ms a settle takes.
+    const [first] = requireFrames(frames, {
+      min: 1,
+      during: 'the frame after the touch',
+      where: frame => frame.t > down && frame.t <= down + latest,
+    });
+    // The page drew no frame before it, so the window starts there. Every
+    // frame in it shows the lens.
     const tap = requireFrames(frames, {
       min: 12,
       during: 'the tap and its settle',
-      where: frame => frame.t >= down && frame.t <= down + 350,
+      where: frame => frame.t >= first.t && frame.t <= first.t + 350,
     });
     expect(
-      tap.filter(frame => frame.opacity < 0.9 || frame.fades > 0),
-      'a frame with the lens faded, or fading',
+      tap
+        .filter(frame => frame.opacity < 0.9)
+        .map(frame => Math.round(frame.t - down)),
+      'ms after the touch of each frame with the lens faded',
+    ).toEqual([]);
+    // Under Reduce Motion or on a touch screen the lens has no CSS
+    // transition. So the page's log shows every animation on it, even one
+    // that ends between two frames. A CSS transition would show only in
+    // frames.
+    expect(
+      await lensFades(page, since),
+      'opacity keyframes of each animation on the lens itself',
     ).toEqual([]);
     expect(Math.abs((await lensCenterX(page)) - to.x)).toBeLessThan(0.5);
   });
