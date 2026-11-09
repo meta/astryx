@@ -129,6 +129,7 @@ import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
+import {setInputValue} from '../utils/setInputValue';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 import {
   registerEnglishFallback,
@@ -454,19 +455,13 @@ export function TextInput({
     }
   };
 
-  // Handle clear button click. The clear goes through the input's own change
-  // handler, as typing does: a native value set plus an `input` event gives
-  // `onChange` and `changeAction` a real change event, runs `onChange` first,
-  // and lets `onChange` cancel the Action with `preventDefault`.
+  // A native value set and an `input` event run the input's own change handler.
+  // So the clear gets a real change event and the same callback order and
+  // cancellation as typing.
   const handleClear = useCallback((e?: React.MouseEvent<HTMLButtonElement>) => {
     const input = inputRef.current;
     if (input != null && input.value !== '') {
-      const setNativeValue = Object.getOwnPropertyDescriptor(
-        window.HTMLInputElement.prototype,
-        'value',
-      )?.set;
-      setNativeValue?.call(input, '');
-      input.dispatchEvent(new Event('input', {bubbles: true}));
+      setInputValue(input, '');
     }
     if (!e || e.detail === 0) {
       inputRef.current?.focus();
