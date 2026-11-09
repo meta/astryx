@@ -58,8 +58,102 @@ export const GAP_SECTIONS = [
 /** A claim id that a gap line must name. */
 const CLAIM_ID = /\b(?:FR|INV)\d+[a-z]?\b/;
 
-/** Words a gap line keeps after its claim ids and phrases go: the mismatch. */
-const MISMATCH_MIN_WORDS = 4;
+/**
+ * Words that describe build status or work order. A gap line made only of
+ * these, a claim id, and filler states no mismatch.
+ */
+export const STATUS_VOCABULARY = [
+  'adopt',
+  'adopts',
+  'adoption',
+  'after',
+  'before',
+  'build',
+  'built',
+  'code',
+  'consumer',
+  'consumers',
+  'engine',
+  'eventually',
+  'exist',
+  'exists',
+  'first',
+  'follow-up',
+  'implement',
+  'implementation',
+  'implemented',
+  'land',
+  'landed',
+  'lands',
+  'later',
+  'merge',
+  'merged',
+  'milestone',
+  'module',
+  'modules',
+  'next',
+  'once',
+  'order',
+  'pending',
+  'phase',
+  'plan',
+  'planned',
+  'release',
+  'second',
+  'ship',
+  'shipped',
+  'ships',
+  'soon',
+  'start',
+  'started',
+  'step',
+  'stub',
+  'then',
+  'third',
+  'todo',
+  'until',
+  'wired',
+  'work',
+  'yet',
+];
+
+const FILLER = new Set([
+  'a',
+  'an',
+  'and',
+  'are',
+  'as',
+  'at',
+  'be',
+  'been',
+  'by',
+  'for',
+  'gap',
+  'gaps',
+  'had',
+  'has',
+  'have',
+  'in',
+  'is',
+  'it',
+  'its',
+  'no',
+  'not',
+  'of',
+  'on',
+  'or',
+  'that',
+  'the',
+  'these',
+  'this',
+  'those',
+  'to',
+  'with',
+]);
+const STATUS_WORDS = new Set(STATUS_VOCABULARY);
+
+/** Words that state what a reader sees, beyond status and filler: the mismatch. */
+const MISMATCH_MIN_WORDS = 3;
 
 const escape = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const wordPattern = phrase =>
@@ -99,8 +193,11 @@ function statesMismatch(text) {
   if (!CLAIM_ID.test(text)) return false;
   let rest = text.replace(new RegExp(CLAIM_ID.source, 'g'), ' ');
   for (const [, pattern] of STATUS_PATTERNS) rest = rest.replace(pattern, ' ');
-  const words = rest.replace(/\bgaps?\b/gi, ' ').match(/[A-Za-z][\w'-]*/g);
-  return (words?.length ?? 0) >= MISMATCH_MIN_WORDS;
+  const observed = (rest.match(/[A-Za-z][\w'-]*/g) ?? []).filter(word => {
+    const lower = word.toLowerCase();
+    return !FILLER.has(lower) && !STATUS_WORDS.has(lower);
+  });
+  return observed.length >= MISMATCH_MIN_WORDS;
 }
 
 /**
