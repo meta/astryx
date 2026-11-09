@@ -35,13 +35,17 @@ const STRONG_RTL = new RegExp(
 /**
  * The weak number characters of the right-to-left scripts: Bidi_Class `AN`,
  * `EN` or `ET`, so the scan skips them. The Arabic digits, the number signs
- * before them, the currency and per-cent marks beside them, and the Rumi,
- * Indic Siyaq and Ottoman Siyaq blocks, which sit inside the ranges above
- * and would otherwise read as strong. NKo and Adlam digits are Bidi_Class
- * `R` and are not here.
+ * before them, the currency and per-cent marks beside them, and the Rumi
+ * numerals, which sit inside the strong range above and would otherwise read
+ * as strong.
+ *
+ * The Indic Siyaq and Ottoman Siyaq numerals look like company for Rumi and
+ * are not: they are Bidi_Class `AL`, so they stay strong and keep the
+ * direction they take from the range above. NKo and Adlam digits are `R`,
+ * and are not here either.
  */
 const WEAK_RTL_NUMBER =
-  /[\u0600-\u0605\u0609\u060A\u0660-\u0669\u066A-\u066C\u06DD\u06F0-\u06F9\u0890\u0891\u08E2\u{10E60}-\u{10E7F}\u{1EC70}-\u{1ECBF}\u{1ED00}-\u{1ED4F}]/u;
+  /[\u0600-\u0605\u0609\u060A\u0660-\u0669\u066A-\u066C\u06DD\u06F0-\u06F9\u0890\u0891\u08E2\u{10E60}-\u{10E7F}]/u;
 
 /**
  * Bidi_Class `L`: every other letter, the letter numbers (`\p{Letter}` does

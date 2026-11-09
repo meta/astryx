@@ -13,14 +13,21 @@
  */
 
 import {describe, it, expect} from 'vitest';
-import {createEditor, $getRoot, $createTextNode, type TextNode} from 'lexical';
+import {
+  createEditor,
+  $getRoot,
+  $createTextNode,
+  $createParagraphNode,
+  type ParagraphNode,
+  type TextNode,
+} from 'lexical';
 import {
   ListNode,
   ListItemNode,
   $createListNode,
   $createListItemNode,
 } from '@lexical/list';
-import {HeadingNode, QuoteNode} from '@lexical/rich-text';
+import {$createQuoteNode, HeadingNode, QuoteNode} from '@lexical/rich-text';
 import {CodeNode} from '@lexical/code';
 import {TableCellNode, TableNode, TableRowNode} from '@lexical/table';
 import {render, waitFor} from '@testing-library/react';
@@ -223,32 +230,35 @@ describe('a top-level block carries its own direction (spec:AST-061 FR6)', () =>
     });
     const teardown = registerBlockDirection(editor);
 
-    let wrapper: ListItemNode | null = null;
+    let item: ListItemNode | null = null;
     let leaf: TextNode | null = null;
     editor.update(
       () => {
         const outer = $createListNode('bullet');
-        wrapper = $createListItemNode();
+        const parent = $createListItemNode();
+        parent.append($createTextNode('Parent'));
+        const holder = $createListItemNode();
         const inner = $createListNode('bullet');
-        const item = $createListItemNode();
+        item = $createListItemNode();
         leaf = $createTextNode('a');
         item.append(leaf);
         inner.append(item);
-        wrapper.append(inner);
-        outer.append(wrapper);
+        holder.append(inner);
+        outer.append(parent, holder);
         $getRoot().clear().append(outer);
       },
       {discrete: true},
     );
 
     // One edit: the nested item's text becomes strongly right-to-left. The
-    // wrapper has to be right-to-left in this update's own state.
-    const states: Array<{tags: Set<string>; wrapperDir: string | null}> = [];
+    // item is an ancestor of the text node that changed, so it has to be
+    // right-to-left in this update's own state, not a history step later.
+    const states: Array<{tags: Set<string>; itemDir: string | null}> = [];
     const stop = editor.registerUpdateListener(({editorState, tags}) => {
       editorState.read(() => {
         states.push({
           tags: new Set(tags),
-          wrapperDir: wrapper?.getLatest().getDirection() ?? null,
+          itemDir: item?.getLatest().getDirection() ?? null,
         });
       });
     });
@@ -261,7 +271,7 @@ describe('a top-level block carries its own direction (spec:AST-061 FR6)', () =>
 
     const typed = states.find(s => !s.tags.has('history-merge'));
     expect(typed).toBeDefined();
-    expect(typed?.wrapperDir).toBe('rtl');
+    expect(typed?.itemDir).toBe('rtl');
 
     stop();
     teardown();
@@ -285,7 +295,68 @@ describe('a top-level block carries its own direction (spec:AST-061 FR6)', () =>
     ).toEqual(['ltr', 'ltr', 'ltr', 'ltr', 'ltr']);
   });
 
-  it('settles a wrapper when a nested item is removed, in the same update', async () => {
+  it('writes a grandparent block when only its leaf text changes', async () => {
+    const editor = createEditor({
+      namespace: 'block-direction-grandparent',
+      nodes: [
+        ListNode,
+        ListItemNode,
+        HeadingNode,
+        QuoteNode,
+        CodeNode,
+        TableNode,
+        TableRowNode,
+        TableCellNode,
+      ],
+      onError: error => {
+        throw error;
+      },
+    });
+    const teardown = registerBlockDirection(editor);
+
+    let quote: QuoteNode | null = null;
+    let leaf: TextNode | null = null;
+    editor.update(
+      () => {
+        quote = $createQuoteNode();
+        const paragraph = $createParagraphNode();
+        leaf = $createTextNode('a');
+        paragraph.append(leaf);
+        quote.append(paragraph);
+        $getRoot().clear().append(quote);
+      },
+      {discrete: true},
+    );
+
+    // The quote is two levels above the text that changes, and a transform
+    // on the nearest block alone leaves it reading left-to-right. The walk
+    // up the prose ancestors is what settles it, and it has to land in the
+    // keystroke's own update so undo does not bounce off a later step.
+    const states: Array<{tags: Set<string>; dir: string | null}> = [];
+    const stop = editor.registerUpdateListener(({editorState, tags}) => {
+      editorState.read(() => {
+        states.push({
+          tags: new Set(tags),
+          dir: quote?.getLatest().getDirection() ?? null,
+        });
+      });
+    });
+    editor.update(
+      () => {
+        leaf?.setTextContent('\u05e9');
+      },
+      {discrete: true},
+    );
+
+    const typed = states.find(state => !state.tags.has('history-merge'));
+    expect(typed).toBeDefined();
+    expect(typed?.dir).toBe('rtl');
+
+    stop();
+    teardown();
+  });
+
+  it('settles a prose ancestor when a block is removed, in the same update', async () => {
     const editor = createEditor({
       namespace: 'block-direction-removal',
       nodes: [
@@ -304,39 +375,36 @@ describe('a top-level block carries its own direction (spec:AST-061 FR6)', () =>
     });
     const teardown = registerBlockDirection(editor);
 
-    let wrapper: ListItemNode | null = null;
-    let hebrew: ListItemNode | null = null;
+    let quote: QuoteNode | null = null;
+    let hebrew: ParagraphNode | null = null;
     editor.update(
       () => {
-        const outer = $createListNode('bullet');
-        wrapper = $createListItemNode();
-        const inner = $createListNode('bullet');
-        hebrew = $createListItemNode();
+        quote = $createQuoteNode();
+        hebrew = $createParagraphNode();
         hebrew.append($createTextNode('\u05e9'));
-        const english = $createListItemNode();
+        const english = $createParagraphNode();
         english.append($createTextNode('a'));
-        inner.append(hebrew, english);
-        wrapper.append(inner);
-        outer.append(wrapper);
-        $getRoot().clear().append(outer);
+        quote.append(hebrew, english);
+        $getRoot().clear().append(quote);
       },
       {discrete: true},
     );
 
-    // The Hebrew item came first, so the wrapper reads right-to-left.
+    // The Hebrew paragraph came first, so the quote reads right-to-left.
     editor.getEditorState().read(() => {
-      expect(wrapper?.getLatest().getDirection()).toBe('rtl');
+      expect(quote?.getLatest().getDirection()).toBe('rtl');
     });
 
-    // Removing it leaves only English under the wrapper. Removing a node
-    // dirties its parent, not the wrapper, so the wrapper has to be settled
-    // by the walk rather than by the history-merge sweep a step later.
+    // Removing it leaves only English under the quote. Removing a node
+    // dirties its parent, not every prose ancestor, so the quote has to be
+    // settled by the walk rather than by the history-merge sweep a step
+    // later.
     const states: Array<{tags: Set<string>; dir: string | null}> = [];
     const stop = editor.registerUpdateListener(({editorState, tags}) => {
       editorState.read(() => {
         states.push({
           tags: new Set(tags),
-          dir: wrapper?.getLatest().getDirection() ?? null,
+          dir: quote?.getLatest().getDirection() ?? null,
         });
       });
     });
