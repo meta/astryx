@@ -124,6 +124,19 @@ export interface UseLayerDismissalReturn {
 export function useLayerDismissal(
   options: UseLayerDismissalOptions,
 ): UseLayerDismissalReturn {
+  return useKeyedLayerDismissal(options, null);
+}
+
+/**
+ * `useLayerDismissal` that registers again whenever `registrationKey`
+ * changes. A layer whose container can move to another document passes a key
+ * that changes with the document, so the stack listens where the layer now is.
+ * Internal: not exported from the package.
+ */
+export function useKeyedLayerDismissal(
+  options: UseLayerDismissalOptions,
+  registrationKey: unknown,
+): UseLayerDismissalReturn {
   const {
     isActive,
     onDismiss,
@@ -174,7 +187,7 @@ export function useLayerDismissal(
       isPresent: () => isPresentRef.current?.() ?? true,
       dismiss: () => onDismissRef.current(),
     });
-  }, [isRegistered, depth, escapeBehavior]);
+  }, [isRegistered, depth, escapeBehavior, registrationKey]);
 
   const shouldDismissOnCloseRequest = useCallback(
     () =>

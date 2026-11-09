@@ -1208,6 +1208,53 @@ describe('HoverCard', () => {
         await waitFor(() => expect(state).toHaveTextContent('closed'));
       });
 
+      it('takes Escape where its trigger is after the trigger moves into the frame and back', async () => {
+        const frameDocument = frame.contentDocument!;
+        function MovingTrigger() {
+          const card = useHoverCard({delay: 0, hideDelay: 0});
+          const [isInFrame, setIsInFrame] = useState(false);
+          return (
+            <>
+              <button type="button" onClick={() => setIsInFrame(x => !x)}>
+                Move trigger
+              </button>
+              <output data-testid="state">
+                {card.isOpen ? 'open' : 'closed'}
+              </output>
+              {createPortal(
+                <>
+                  <span ref={card.ref}>Moving trigger</span>
+                  {card.renderHoverCard(<span>Card</span>)}
+                </>,
+                isInFrame ? frameDocument.body : document.body,
+              )}
+            </>
+          );
+        }
+        render(<MovingTrigger />);
+        const state = screen.getByTestId('state');
+        const move = () =>
+          fireEvent.click(screen.getByRole('button', {name: 'Move trigger'}));
+        const openIn = async (doc: Document) => {
+          fireEvent.mouseEnter(within(doc.body).getByText('Moving trigger'));
+          await waitFor(() => expect(state).toHaveTextContent('open'));
+        };
+
+        move();
+        await openIn(frameDocument);
+        fireEvent.keyDown(document.body, {key: 'Escape'});
+        expect(state).toHaveTextContent('open');
+        fireEvent.keyDown(frameDocument.body, {key: 'Escape'});
+        await waitFor(() => expect(state).toHaveTextContent('closed'));
+
+        move();
+        await openIn(document);
+        fireEvent.keyDown(frameDocument.body, {key: 'Escape'});
+        expect(state).toHaveTextContent('open');
+        fireEvent.keyDown(document.body, {key: 'Escape'});
+        await waitFor(() => expect(state).toHaveTextContent('closed'));
+      });
+
       it('stays open when focus moves from the trigger into the card', async () => {
         const onOpenChange = vi.fn();
         const frameDocument = frame.contentDocument!;

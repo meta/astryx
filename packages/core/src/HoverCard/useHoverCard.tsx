@@ -34,7 +34,7 @@ import {
 } from '../Layer/useTouchTrigger';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {registerLayerSurface} from '../Layer/layerSurfacePress';
-import {useLayerDismissal} from '../Layer/useLayerDismissal';
+import {useKeyedLayerDismissal} from '../Layer/useLayerDismissal';
 import {
   colorVars,
   shadowVars,
@@ -311,9 +311,11 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
   const showTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
-  // The trigger's document. The dismissal stack listens in the document a
-  // layer registers with, so the card registers once its trigger is attached.
-  const [triggerDocument, setTriggerDocument] = useState<Document | null>(null);
+  // The dismissal stack listens in the document a layer registers with, so
+  // the card registers when its trigger attaches, and again when the trigger
+  // attaches in another document. The key counts those documents.
+  const triggerDocumentRef = useRef<Document | null>(null);
+  const [triggerDocumentKey, setTriggerDocumentKey] = useState(0);
   const isHoveringContentRef = useRef(false);
   // Track when we're dismissing via Escape to prevent re-show on refocus
   const isEscapeDismissingRef = useRef(false);
@@ -497,58 +499,61 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
   // other layer, but answers it by reporting instead of hiding: `isOpen` is
   // the consumer's value, so only their update may change it. Same contract as
   // a controlled Dialog.
-  useLayerDismissal({
-    // Registered from the trigger's attach for the hook's lifetime, in the
-    // trigger's document, rather than gated on `layer.isOpen`:
-    // that state can lag a frame behind the DOM, so a press arriving right after
-    // the layer appears would find nothing registered. Because this layer
-    // CONSUMES the press, a stale registration would be worse than a missed one
-    // — it would silently eat Escapes meant for the dialog underneath — so
-    // presence is answered from the DOM at press time instead of from state.
-    isActive: triggerDocument != null,
-    // The stack listens for Escape in the trigger's own document, which may be
-    // an iframe or a Picture-in-Picture window rather than this page.
-    getContainer: () => triggerRef.current,
-    isPresent: () => {
-      const el = ownerDocumentOf(triggerRef.current)?.getElementById(layerId);
-      if (el == null) {
-        return false;
-      }
-      try {
-        return el.matches(':popover-open');
-      } catch {
-        // Browsers without the Popover API (and some test environments) cannot
-        // answer the selector; fall back to the hook's own state.
-        return isLayerOpen;
-      }
+  useKeyedLayerDismissal(
+    {
+      // Registered from the trigger's attach for the hook's lifetime, in the
+      // trigger's document, rather than gated on `layer.isOpen`:
+      // that state can lag a frame behind the DOM, so a press arriving right after
+      // the layer appears would find nothing registered. Because this layer
+      // CONSUMES the press, a stale registration would be worse than a missed one
+      // — it would silently eat Escapes meant for the dialog underneath — so
+      // presence is answered from the DOM at press time instead of from state.
+      isActive: triggerDocumentKey > 0,
+      // The stack listens for Escape in the trigger's own document, which may be
+      // an iframe or a Picture-in-Picture window rather than this page.
+      getContainer: () => triggerRef.current,
+      isPresent: () => {
+        const el = ownerDocumentOf(triggerRef.current)?.getElementById(layerId);
+        if (el == null) {
+          return false;
+        }
+        try {
+          return el.matches(':popover-open');
+        } catch {
+          // Browsers without the Popover API (and some test environments) cannot
+          // answer the selector; fall back to the hook's own state.
+          return isLayerOpen;
+        }
+      },
+      onDismiss: () => {
+        clearTimeouts();
+        clearTapOpen();
+        // Controlled: report and stop. The close — and the focus restore that
+        // goes with it — happens in the controlled effect if and when the
+        // consumer flips `isOpen`.
+        if (isOpen !== undefined) {
+          onHide?.();
+          return;
+        }
+        // Only when the card itself held focus, which is the one case the
+        // content-level handler this replaced could run in. Refocusing
+        // unconditionally would drag the caret out of a field the user was
+        // typing in while a hover card happened to be up; arming the re-show
+        // guard unconditionally would swallow their next focus on the trigger,
+        // because a focus() on the already-focused trigger fires no focusin to
+        // clear it.
+        const doc = ownerDocumentOf(triggerRef.current);
+        const card = doc?.getElementById(layerId);
+        const hadFocus = card?.contains(doc?.activeElement ?? null) ?? false;
+        hide();
+        if (hadFocus) {
+          isEscapeDismissingRef.current = true;
+          triggerRef.current?.focus();
+        }
+      },
     },
-    onDismiss: () => {
-      clearTimeouts();
-      clearTapOpen();
-      // Controlled: report and stop. The close — and the focus restore that
-      // goes with it — happens in the controlled effect if and when the
-      // consumer flips `isOpen`.
-      if (isOpen !== undefined) {
-        onHide?.();
-        return;
-      }
-      // Only when the card itself held focus, which is the one case the
-      // content-level handler this replaced could run in. Refocusing
-      // unconditionally would drag the caret out of a field the user was
-      // typing in while a hover card happened to be up; arming the re-show
-      // guard unconditionally would swallow their next focus on the trigger,
-      // because a focus() on the already-focused trigger fires no focusin to
-      // clear it.
-      const doc = ownerDocumentOf(triggerRef.current);
-      const card = doc?.getElementById(layerId);
-      const hadFocus = card?.contains(doc?.activeElement ?? null) ?? false;
-      hide();
-      if (hadFocus) {
-        isEscapeDismissingRef.current = true;
-        triggerRef.current?.focus();
-      }
-    },
-  });
+    triggerDocumentKey,
+  );
 
   // Interaction ref that handles event listeners only
   const interactionRef: RefCallback<HTMLElement> = useCallback(
@@ -590,8 +595,9 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
       }
 
       triggerRef.current = el;
-      if (el != null) {
-        setTriggerDocument(el.ownerDocument);
+      if (el != null && el.ownerDocument !== triggerDocumentRef.current) {
+        triggerDocumentRef.current = el.ownerDocument;
+        setTriggerDocumentKey(key => key + 1);
       }
     },
     [
