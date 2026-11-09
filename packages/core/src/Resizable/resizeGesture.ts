@@ -11,6 +11,7 @@
  *   events to it. No React, and no DOM work on import
  */
 
+import {VelocityTracker} from '../gestures/VelocityTracker';
 import type {ResizableDirection} from './resizableModel';
 
 /** Pixels an arrow key moves the separator; Shift moves it further. */
@@ -37,8 +38,11 @@ export interface ResizeGestureModel {
   start(): void;
   /** The gesture has moved `delta` px from where it began. */
   move(delta: number): void;
-  /** The gesture ends as completed. */
-  end(): void;
+  /**
+   * The gesture ends as completed. A pointer's lift passes its velocity along
+   * the resize axis, in px per second, signed as `move`'s delta.
+   */
+  end(velocity?: number): void;
   /** The gesture ends without completing. */
   cancel(): void;
   /**
@@ -62,6 +66,7 @@ export interface ResizeGesturePointerEvent {
   readonly pointerId: number;
   readonly clientX: number;
   readonly clientY: number;
+  readonly timeStamp?: number;
   readonly currentTarget: EventTarget | null;
   preventDefault(): void;
   stopPropagation(): void;
@@ -177,6 +182,8 @@ export function createResizeGesture(
     rtl: number;
     target: Element | null;
   } | null = null;
+  // The pointer's velocity at its lift, for the region's release.
+  const tracker = new VelocityTracker();
 
   const rtlMultiplier = (): number => {
     const handle = getHandle();
@@ -229,6 +236,8 @@ export function createResizeGesture(
         rtl: isHorizontal ? rtlMultiplier() : 1,
         target,
       };
+      tracker.reset();
+      tracker.add(event.clientX, event.clientY, event.timeStamp ?? 0);
       onDraggingChange?.(true);
       model.start();
       applyBodyDragStyles(isHorizontal);
@@ -242,6 +251,7 @@ export function createResizeGesture(
       const position =
         config.direction === 'horizontal' ? event.clientX : event.clientY;
       const sign = config.isReversed ? -1 : 1;
+      tracker.add(event.clientX, event.clientY, event.timeStamp ?? 0);
       model.move((position - drag.startPos) * drag.rtl * sign);
     },
 
@@ -249,8 +259,13 @@ export function createResizeGesture(
       if (drag?.pointerId !== event.pointerId) {
         return;
       }
+      const config = getConfig();
+      const {x, y} = tracker.velocity(event.timeStamp ?? 0);
+      const sign = config.isReversed ? -1 : 1;
+      const velocity =
+        (config.direction === 'horizontal' ? x : y) * drag.rtl * sign;
       clearDrag();
-      model.end();
+      model.end(velocity);
     },
 
     // Serves pointercancel and lostpointercapture alike: an interrupted drag

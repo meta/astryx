@@ -68,6 +68,10 @@ export const docs = {
             [
               "--duration-slow-max",
               "1300ms"
+            ],
+            [
+              "--duration-exit",
+              "var(--duration-fast)"
             ]
           ]
         }

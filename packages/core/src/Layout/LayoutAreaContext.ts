@@ -4,7 +4,7 @@
 
 /**
  * @file LayoutAreaContext.ts
- * @input Uses React createContext
+ * @input Uses createSharedContext
  * @output Exports LayoutAreaContext and LayoutArea type
  * @position Context for layout slot detection
  *
@@ -12,19 +12,14 @@
  * - /packages/core/src/Layout/Layout.doc.mjs
  */
 
-import {createContext} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 
 /**
  * Layout area type representing which slot a component is rendered in.
  * Used by content area components to detect their position and adjust styling.
  */
 export type LayoutArea =
-  | 'header'
-  | 'footer'
-  | 'content'
-  | 'start'
-  | 'end'
-  | null;
+  'header' | 'footer' | 'content' | 'start' | 'end' | null;
 
 /**
  * Context for detecting which layout area a component is rendered in.
@@ -33,5 +28,9 @@ export type LayoutArea =
  * - Apply correct semantic elements
  * - Adjust internal spacing
  */
-export const LayoutAreaContext = createContext<LayoutArea>(null);
+export const LayoutAreaContext = createSharedContext<LayoutArea>(
+  'LayoutAreaContext',
+  1,
+  null,
+);
 LayoutAreaContext.displayName = 'LayoutAreaContext';

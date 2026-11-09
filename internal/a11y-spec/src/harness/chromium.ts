@@ -28,7 +28,6 @@
  *   to ../harness/jsdom.ts — both implement Harness in ../harness.ts.
  */
 
-import {errors as playwrightErrors} from '@playwright/test';
 import type {CDPSession, Locator, Page} from '@playwright/test';
 import {
   MissingHarnessRelation,
@@ -48,33 +47,144 @@ export const CHROMIUM_OBSERVES: readonly EvidenceLayer[] = [
 ];
 
 /**
- * How long a pointer gets to reach a control before the attempt is a failure.
+ * How many frames the page renders while a pointer waits to reach a control,
+ * before the attempt is a failure.
  *
- * Generous for a control that is reachable at all — Playwright's actionability
- * check normally settles in single-digit milliseconds — and short enough that a
- * control a pointer can never reach reports why instead of hanging.
+ * The count is in the page's own frames, not in milliseconds. A page that
+ * stalls and then resumes, or a page that stays busy and renders slowly, gets
+ * the same 120 frames as an idle page. On an idle page, 120 frames take 2 s.
  */
-const POINTER_REACH_BUDGET_MS = 2_000;
+const POINTER_REACH_FRAMES = 120;
+
+/** Whether a pointer can reach an element and, if it cannot, what stops it. */
+type PointerReach =
+  {readonly reached: true} | {readonly reached: false; readonly why: string};
 
 /**
- * Playwright's own timeout type, rather than a regex over the message: the
- * message is prose that can be reworded in any release, and matching it would
- * turn a wording change into a mystery failure.
+ * Waits, frame by frame, until a pointer can reach the element. The element
+ * must be visible and hold still from one frame to the next. It must be enabled
+ * when `enabled` is set. The page must hit-test it at the centre of its first
+ * part in view. The check sends no input, so it cannot dismiss a popover or
+ * move focus, as a trial click can. It may scroll the element into view, as a
+ * click does. It gives up after POINTER_REACH_FRAMES frames.
  */
-function isTimeout(error: unknown): boolean {
-  return error instanceof playwrightErrors.TimeoutError;
+function waitForPointerReach(
+  locator: Locator,
+  {enabled}: {readonly enabled: boolean},
+): Promise<PointerReach> {
+  return locator.evaluate(
+    (element, {frames, needsEnabled}) =>
+      new Promise<PointerReach>(resolve => {
+        const document = element.ownerDocument;
+        const view = document.defaultView ?? window;
+        const describe = (node: Element | null) =>
+          node == null
+            ? 'nothing'
+            : `<${node.localName}${node.id === '' ? '' : `#${node.id}`}>`;
+        const hitAt = (x: number, y: number) => {
+          let hit = document.elementFromPoint(x, y);
+          while (hit?.shadowRoot != null) {
+            const inner = hit.shadowRoot.elementFromPoint(x, y);
+            if (inner == null || inner === hit) {
+              break;
+            }
+            hit = inner;
+          }
+          return hit;
+        };
+        const isElementOrInside = (hit: Element | null) => {
+          for (let node: Node | null = hit; node != null;) {
+            if (node === element) {
+              return true;
+            }
+            node =
+              node.parentNode instanceof ShadowRoot
+                ? node.parentNode.host
+                : node.parentNode;
+          }
+          return false;
+        };
+        // The centre of the first part of the element in view. A link that
+        // wraps onto two lines has a box per line. The space between them is
+        // not the link.
+        const firstPartInView = () => {
+          for (const rect of element.getClientRects()) {
+            const left = Math.max(rect.left, 0);
+            const top = Math.max(rect.top, 0);
+            const right = Math.min(rect.right, view.innerWidth);
+            const bottom = Math.min(rect.bottom, view.innerHeight);
+            if (right > left && bottom > top) {
+              return {x: (left + right) / 2, y: (top + bottom) / 2};
+            }
+          }
+          return null;
+        };
+        // Like a click, a check that finds the element covered scrolls it to
+        // another place in view and looks again, as under a sticky header.
+        const alignments: ScrollLogicalPosition[] = ['end', 'center', 'start'];
+        let nextAlignment = 0;
+        const scrollToNextPlace = () => {
+          const alignment = alignments[nextAlignment % alignments.length];
+          nextAlignment += 1;
+          element.scrollIntoView({block: alignment, inline: alignment});
+        };
+        let previous: DOMRect | null = null;
+        let rendered = 0;
+        let why = 'it was never visible';
+        const look = () => {
+          rendered += 1;
+          const box = element.getBoundingClientRect();
+          const still =
+            previous != null &&
+            box.x === previous.x &&
+            box.y === previous.y &&
+            box.width === previous.width &&
+            box.height === previous.height;
+          previous = box;
+          const point = firstPartInView();
+          if (!element.isConnected) {
+            why = 'it left the document';
+          } else if (
+            box.width === 0 ||
+            box.height === 0 ||
+            !element.checkVisibility({visibilityProperty: true})
+          ) {
+            why = 'it was never visible';
+          } else if (
+            needsEnabled &&
+            (element.matches(':disabled') ||
+              element.closest('[aria-disabled="true"]') != null)
+          ) {
+            why = 'it stayed disabled';
+          } else if (point == null) {
+            element.scrollIntoView({block: 'center', inline: 'center'});
+            why = 'it never came into view';
+          } else if (!still) {
+            why = 'it never held still from one frame to the next';
+          } else {
+            const hit = hitAt(point.x, point.y);
+            if (isElementOrInside(hit)) {
+              resolve({reached: true});
+              return;
+            }
+            why = `${describe(hit)} takes the pointer at the centre of its first part in view, not the element or anything inside it`;
+            scrollToNextPlace();
+          }
+          if (rendered >= frames) {
+            resolve({reached: false, why});
+            return;
+          }
+          requestAnimationFrame(look);
+        };
+        requestAnimationFrame(look);
+      }),
+    {frames: POINTER_REACH_FRAMES, needsEnabled: enabled},
+  );
 }
 
 async function canReceivePointer(locator: Locator): Promise<boolean> {
-  try {
-    await locator.click({trial: true, timeout: POINTER_REACH_BUDGET_MS});
-    return true;
-  } catch (error) {
-    if (isTimeout(error)) {
-      return false;
-    }
-    throw error;
-  }
+  const reach = await waitForPointerReach(locator, {enabled: true});
+  return reach.reached;
 }
 
 const KEYS: Record<Key, string> = {
@@ -1085,24 +1195,22 @@ export function createChromiumHarness(
       // `ignoreAvailability` skips that judgement, which is the only way to ask
       // a control the browser calls unavailable what it does when clicked
       // anyway.
-      try {
-        await target.click({
-          force: options?.ignoreAvailability === true,
-          // Bounded, and short. A control a pointer cannot reach — one covered
-          // by something else, or clipped to nothing — otherwise sits here
-          // until the whole test times out, and a timeout says nothing about
-          // WHY. This turns that into a legible failure the report can carry.
-          timeout: POINTER_REACH_BUDGET_MS,
-        });
-      } catch (error) {
-        if (isTimeout(error)) {
-          throw new Error(
-            `a pointer could not reach this control within ${POINTER_REACH_BUDGET_MS}ms: the browser never found it visible, stable, and able to receive a pointer event. Something is covering it, or it is clipped to nothing.`,
-            {cause: error},
-          );
-        }
-        throw error;
+      if (options?.ignoreAvailability === true) {
+        await target.click({force: true});
+        return;
       }
+      // A control a pointer cannot reach, covered by something else or
+      // clipped to nothing, otherwise waits until the whole test times out.
+      // That timeout says nothing about why, so the reach is checked first.
+      const reach = await waitForPointerReach(target, {enabled: true});
+      if (!reach.reached) {
+        throw new Error(
+          `a pointer could not reach this control within ${POINTER_REACH_FRAMES} rendered frames: ${reach.why}.`,
+        );
+      }
+      // The check above is the judge, so Playwright only performs the click.
+      // Without `force` it would judge the control again, with no bound.
+      await target.click({force: true});
     },
     clickBeside: async targetSubject => {
       const target = pointerTargets.get(targetSubject);
@@ -1212,17 +1320,15 @@ export function createChromiumHarness(
       }
       // The same bounded reach as `click`: a subject a pointer can never rest
       // on reports why instead of sitting out the whole test timeout.
-      try {
-        await target.hover({timeout: POINTER_REACH_BUDGET_MS});
-      } catch (error) {
-        if (isTimeout(error)) {
-          throw new Error(
-            `a pointer could not reach this subject within ${POINTER_REACH_BUDGET_MS}ms: the browser never found it visible, stable, and able to receive a pointer event. Something is covering it, or it is clipped to nothing.`,
-            {cause: error},
-          );
-        }
-        throw error;
+      const reach = await waitForPointerReach(target, {enabled: false});
+      if (!reach.reached) {
+        throw new Error(
+          `a pointer could not reach this subject within ${POINTER_REACH_FRAMES} rendered frames: ${reach.why}.`,
+        );
       }
+      // As for `click`: the check above is the judge. A subject that vanishes
+      // as the pointer moves onto it then fails the contract's own check.
+      await target.hover({force: true});
     },
     pointerAway: async () => {
       const viewport = await page.evaluate(() => ({

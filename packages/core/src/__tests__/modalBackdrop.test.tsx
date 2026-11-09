@@ -17,33 +17,26 @@
 import {render} from '@testing-library/react';
 import type {ReactElement} from 'react';
 import {beforeAll, describe, expect, it} from 'vitest';
-import type {BottomSheet as BottomSheetComponent} from '../BottomSheet/BottomSheet';
-import type {Dialog as DialogComponent} from '../Dialog/Dialog';
-import type {Drawer as DrawerComponent} from '../Drawer/Drawer';
-import type {MobileNav as MobileNavComponent} from '../MobileNav/MobileNav';
 
-let BottomSheet: typeof BottomSheetComponent;
-let Dialog: typeof DialogComponent;
-let Drawer: typeof DrawerComponent;
-let MobileNav: typeof MobileNavComponent;
+/** Every rule StyleX inserted, as the raw text it handed to `insertRule`. */
+const rawRules: string[] = [];
 
 // StyleX injects a component's rules when its module loads: record them
-// first, then load the modals.
-beforeAll(async () => {
-  const insertRule = CSSStyleSheet.prototype.insertRule;
-  CSSStyleSheet.prototype.insertRule = function (
-    this: CSSStyleSheet,
-    rule: string,
-    index?: number,
-  ) {
-    rawRules.push(rule);
-    return insertRule.call(this, rule, index);
-  };
-  ({BottomSheet} = await import('../BottomSheet/BottomSheet'));
-  ({Dialog} = await import('../Dialog/Dialog'));
-  ({Drawer} = await import('../Drawer/Drawer'));
-  ({MobileNav} = await import('../MobileNav/MobileNav'));
-});
+// first, then load the modals. The file loads them before any test runs, so
+// no hook's time limit covers the load.
+const insertRule = CSSStyleSheet.prototype.insertRule;
+CSSStyleSheet.prototype.insertRule = function (
+  this: CSSStyleSheet,
+  rule: string,
+  index?: number,
+) {
+  rawRules.push(rule);
+  return insertRule.call(this, rule, index);
+};
+const {BottomSheet} = await import('../BottomSheet/BottomSheet');
+const {Dialog} = await import('../Dialog/Dialog');
+const {Drawer} = await import('../Drawer/Drawer');
+const {MobileNav} = await import('../MobileNav/MobileNav');
 
 // jsdom does not implement showModal/close on <dialog>.
 beforeAll(() => {
@@ -58,9 +51,6 @@ beforeAll(() => {
       this.removeAttribute('open');
     };
 });
-
-/** Every rule StyleX inserted, as the raw text it handed to `insertRule`. */
-const rawRules: string[] = [];
 
 /**
  * The declarations that the element's StyleX classes make on its `::backdrop`,

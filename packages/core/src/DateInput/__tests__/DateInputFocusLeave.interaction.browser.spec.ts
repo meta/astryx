@@ -11,7 +11,7 @@
  *   interaction lane; jsdom has neither light dismiss nor real focus order.
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {openStory, withStorybook} from '@astryxdesign/interaction-harness';
 
 const storybook = withStorybook(test);

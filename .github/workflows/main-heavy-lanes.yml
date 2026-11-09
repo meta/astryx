@@ -225,8 +225,9 @@ jobs:
               await github.rest.actions.createWorkflowDispatch({...context.repo, workflow_id: 'deploy.yml', ref: 'main', inputs: {sha: tip}});
             }
 
+            const UNIT_ISSUE_TITLE = 'Main unit tests: an hourly run did not complete';
             if (incomplete) {
-              const title = 'Main unit tests: an hourly run did not complete';
+              const title = UNIT_ISSUE_TITLE;
               const note = `The full unit run ${newest.html_url} for ${newest.head_sha.slice(0, 7)} ended ${newest.conclusion}. The next run was dispatched for ${short}.`;
               core.warning(note);
               const {data: found} = await github.rest.search.issuesAndPullRequests({
@@ -237,5 +238,29 @@ jobs:
                 await github.rest.issues.createComment({...context.repo, issue_number: issue.number, body: note});
               } else {
                 await github.rest.issues.create({...context.repo, title, body: `${note}\n\nClose this issue once main's full unit runs complete again (spec:AST-030 FR21).`});
+              }
+            }
+
+            // A later full unit run that succeeded closes this job's own open
+            // issue, with a comment naming that run. An issue a person opened
+            // stays open. A failed lookup leaves the issue for the next tick.
+            if (newest?.status === 'completed' && newest.conclusion === 'success') {
+              try {
+                const {data: found} = await github.rest.search.issuesAndPullRequests({
+                  q: `repo:${context.repo.owner}/${context.repo.repo} is:issue is:open in:title "${UNIT_ISSUE_TITLE}"`,
+                });
+                const issue = found.items.find(item => item.title === UNIT_ISSUE_TITLE && item.user?.login === BOT);
+                if (issue) {
+                  await github.rest.issues.createComment({
+                    ...context.repo,
+                    issue_number: issue.number,
+                    // The commit the run tested: the one it names, or none for an
+                    // unnamed run, which tested main's tip when it started (FR21).
+                    body: `The full unit run ${newest.html_url}${tested(newest) ? ` for ${tested(newest).slice(0, 7)}` : ''} succeeded, so main's full unit runs complete again. Closing.`,
+                  });
+                  await github.rest.issues.update({...context.repo, issue_number: issue.number, state: 'closed', state_reason: 'completed'});
+                }
+              } catch (error) {
+                core.warning(`Could not close the unit-run issue: ${error.message}`);
               }
             }

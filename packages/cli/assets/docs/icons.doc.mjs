@@ -214,5 +214,34 @@ export const brandTheme = defineTheme({
         },
       ],
     },
+    {
+      title: 'Component Icon Slots',
+      category: 'foundations',
+      content: [
+        {
+          type: 'prose',
+          text: "A component icon slot names why an icon appears in one component, such as `code-block-copy` for CodeBlock's copy button. `defineTheme({componentIcons})` maps a slot to one of the shared icon names. A theme can then change the icon one component uses without changing that name's artwork everywhere; `icons` still chooses the artwork for each name. Each component's docs list its slots, their state, and their fallbacks (`astryx component CodeBlock`).",
+        },
+        {
+          type: 'code',
+          lang: 'tsx',
+          label: 'Mapping a slot, with its state',
+          code: `export const brandTheme = defineTheme({
+  name: 'brand',
+  componentIcons: {
+    'code-block-copy': ({copied}) => ({icon: copied ? 'checkDouble' : 'copy'}),
+  },
+});`,
+        },
+        {
+          type: 'prose',
+          text: "A slot value is a shared icon name, `null` to hide the icon, or a partial request of `icon`, `variant`, and `size`. A field the request leaves out keeps the component's own value. A slot with state also accepts a pure, synchronous function of that state that returns a request: returning `null` hides the icon, and returning `undefined` changes nothing. A request `size` changes only the icon, never the control around it. Icon content a component's caller passes wins over the slot.",
+        },
+        {
+          type: 'prose',
+          text: "An unknown icon name, a variant the theme does not list, or a size other than `xsm`, `sm`, `md`, or `lg` is ignored for that field, with one development warning. A theme that extends another merges `componentIcons` by slot ({@link generic:author-a-theme}). `theme.componentIcons` reads back names, `null` values, and static requests, and leaves out the slots a function resolves.",
+        },
+      ],
+    },
   ],
 };

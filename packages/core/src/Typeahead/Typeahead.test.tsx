@@ -38,6 +38,8 @@ import {
   startTransition,
   StrictMode,
   Suspense,
+  useLayoutEffect,
+  useRef,
   useState,
   type ProfilerOnRenderCallback,
 } from 'react';
@@ -769,12 +771,14 @@ describe('Typeahead', () => {
       const input = screen.getByRole('combobox');
       fireEvent.change(input, {target: {value: 'a'}});
       fireEvent.change(input, {target: {value: 'ap'}});
+      expect(input).toHaveAttribute('aria-busy', 'true');
 
       // The newer query resolves first…
       await act(async () => {
         resolvers.get('ap')!([{id: 'apple', label: 'Apple'}]);
       });
       expect(screen.getByText('Apple')).toBeInTheDocument();
+      expect(input).not.toHaveAttribute('aria-busy');
 
       // …then the abandoned query's slow response arrives and must be
       // discarded rather than overwriting the current results.
@@ -786,6 +790,7 @@ describe('Typeahead', () => {
       });
       expect(screen.getByText('Apple')).toBeInTheDocument();
       expect(screen.queryByText('Avocado')).not.toBeInTheDocument();
+      expect(input).not.toHaveAttribute('aria-busy');
     });
 
     it('discards a response from a source that was replaced while it was in flight', async () => {
@@ -1464,6 +1469,154 @@ describe('BaseTypeahead hasEntriesOnFocus', () => {
     // The combobox must not keep aria-busy and the spinner must be gone
     expect(input).not.toHaveAttribute('aria-busy');
     expect(queryBusySpinner()).not.toBeInTheDocument();
+  });
+
+  it('keeps the in-flight search when a replacement source renders in a transition that never commits', async () => {
+    let settleSearch: (items: SearchableItem[]) => void = () => {};
+    const committedSource: SearchSource = {
+      search: async () =>
+        new Promise<SearchableItem[]>(resolve => {
+          settleSearch = resolve;
+        }),
+      bootstrap: () => [],
+    };
+    const discardedSource: SearchSource = {
+      search: async () => [],
+      bootstrap: () => [],
+    };
+    const neverSettles = new Promise<void>(() => {});
+
+    function SuspendingSibling({shouldSuspend}: {shouldSuspend: boolean}) {
+      if (shouldSuspend) {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        throw neverSettles;
+      }
+      return null;
+    }
+
+    let updateState!: (source: SearchSource, shouldSuspend: boolean) => void;
+
+    function TransitionContainer() {
+      const [source, setSource] = useState<SearchSource>(committedSource);
+      const [shouldSuspend, setShouldSuspend] = useState(false);
+      updateState = (newSource, suspend) => {
+        setSource(newSource);
+        setShouldSuspend(suspend);
+      };
+
+      return (
+        <Suspense fallback={<div>Suspended...</div>}>
+          <Typeahead
+            label="Test"
+            searchSource={source}
+            value={null}
+            onChange={() => {}}
+            debounceMs={0}
+          />
+          <SuspendingSibling shouldSuspend={shouldSuspend} />
+        </Suspense>
+      );
+    }
+
+    render(<TransitionContainer />);
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: 'query'}});
+    expect(input).toHaveAttribute('aria-busy', 'true');
+
+    // React renders the replacement source, the render suspends, and a newer
+    // transition replaces it before it commits: the committed source stays.
+    act(() => {
+      startTransition(() => {
+        updateState(discardedSource, true);
+      });
+    });
+    act(() => {
+      startTransition(() => {
+        updateState(committedSource, false);
+      });
+    });
+    expect(input).toHaveAttribute('aria-busy', 'true');
+
+    // The search still belongs to the committed source, so its answer lists
+    // and settles the busy state.
+    await act(async () => {
+      settleSearch([{id: 'q', label: 'Query result'}]);
+      await Promise.resolve();
+    });
+    expect(input).not.toHaveAttribute('aria-busy');
+    expect(queryBusySpinner()).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('option', {name: 'Query result', hidden: true}),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps a read that the replacement source starts earlier in the commit that replaces it', async () => {
+    let settleBootstrap: (items: SearchableItem[]) => void = () => {};
+    // Both sources share one request controller, so cancelling the replaced
+    // source aborts whatever request is pending.
+    let abortPending: (() => void) | null = null;
+    const cancel = () => {
+      abortPending?.();
+      abortPending = null;
+    };
+    const firstSource: SearchSource = {
+      search: () => [],
+      bootstrap: () => [],
+      cancel,
+    };
+    const replacementSource: SearchSource = {
+      search: () => [],
+      bootstrap: async () =>
+        new Promise<SearchableItem[]>((resolve, reject) => {
+          settleBootstrap = resolve;
+          abortPending = () => reject(new Error('aborted'));
+        }),
+      cancel,
+    };
+
+    // A component committed before the field focuses it when the scope
+    // changes, in the same commit that hands the field its new source.
+    function FocusOnScopeChange({scope}: {scope: string}) {
+      const isFirstRef = useRef(true);
+      useLayoutEffect(() => {
+        if (isFirstRef.current) {
+          isFirstRef.current = false;
+          return;
+        }
+        screen.getByRole('combobox').focus();
+      }, [scope]);
+      return null;
+    }
+    function ScopedField({scope}: {scope: string}) {
+      return (
+        <>
+          <FocusOnScopeChange scope={scope} />
+          <Typeahead
+            label="Test"
+            searchSource={scope === 'first' ? firstSource : replacementSource}
+            value={null}
+            onChange={() => {}}
+            hasEntriesOnFocus
+          />
+        </>
+      );
+    }
+
+    const {rerender} = render(<ScopedField scope="first" />);
+    const input = screen.getByRole('combobox');
+    rerender(<ScopedField scope="replacement" />);
+    expect(input).toHaveFocus();
+    expect(input).toHaveAttribute('aria-busy', 'true');
+
+    await act(async () => {
+      settleBootstrap([{id: 'entry', label: 'Entry'}]);
+      await Promise.resolve();
+    });
+    expect(input).not.toHaveAttribute('aria-busy');
+    expect(queryBusySpinner()).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('option', {name: 'Entry', hidden: true}),
+    ).toBeInTheDocument();
   });
 
   it('shows bootstrap results on mouse click', async () => {

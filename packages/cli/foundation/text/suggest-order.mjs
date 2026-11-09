@@ -19,6 +19,12 @@
 
 import {levenshteinDistance} from './levenshtein.mjs';
 
+/**
+ * The score of a near name (nearNameSlips), less a little per slip: above any
+ * name that carries only some of the typed words, below one that carries all
+ * of them.
+ */
+const NEAR_NAME_SCORE = 19.6;
 /** The score a synonym match gets: an exact keyword's. */
 const SYNONYM_SCORE = 90;
 /** The score a name with exactly the typed words gets: an exact name's. */
@@ -59,17 +65,22 @@ export function nameWords(text) {
  * closer. Tiers, best first: the same words; every typed word present; some
  * typed word present; none. Within a tier, more of the typed words and more of
  * the candidate's own words matched rank higher, and a name that starts with
- * the typed name (or the reverse) gets a small lift.
+ * the typed name (or the reverse) gets a small lift. With `typos`, a near name
+ * (one or two slips from the typed name) ranks just below the names that
+ * carry every typed word.
  * @param {string[]} typed - {@link nameWords} of the typed name
  * @param {string} name
+ * @param {{typos?: boolean}} [options]
  * @returns {number}
  */
-function affinityOf(typed, name) {
+function affinityOf(typed, name, {typos = false} = {}) {
   const words = nameWords(name);
   if (typed.length === 0 || words.length === 0) return 0;
   const typedJoined = typed.join('');
   const joined = words.join('');
   if (joined === typedJoined) return 40;
+  const slips = typos ? nearNameSlips(typedJoined, joined) : 0;
+  const near = slips > 0 ? NEAR_NAME_SCORE - slips * 0.2 : 0;
   const have = new Set(words);
   const want = new Set(typed);
   const covered = typed.filter(w => have.has(w)).length / typed.length;
@@ -77,7 +88,29 @@ function affinityOf(typed, name) {
   const prefix =
     joined.startsWith(typedJoined) || typedJoined.startsWith(joined) ? 1 : 0;
   const tier = covered === 1 ? 2 : covered > 0 ? 1 : 0;
-  return tier * 10 + covered * 4 + precise * 2 + prefix + precise * 0.01;
+  // A near name keeps its word score when that is higher: a name that also
+  // carries every typed word ranks among the other full matches.
+  return Math.max(
+    near,
+    tier * 10 + covered * 4 + precise * 2 + prefix + precise * 0.01,
+  );
+}
+
+/**
+ * How many slips separate a typed name from a candidate, both with their
+ * words joined, when it is a near name: an edit or two adjacent letters
+ * swapped count as one slip, one slip is allowed from five letters and two from
+ * eight. Zero when it is not a near name.
+ * @param {string} typed
+ * @param {string} name
+ * @returns {number}
+ */
+function nearNameSlips(typed, name) {
+  const shorter = Math.min(typed.length, name.length);
+  const cap = shorter >= 8 ? 2 : shorter >= 5 ? 1 : 0;
+  if (cap === 0 || Math.abs(typed.length - name.length) > cap) return 0;
+  const slips = levenshteinDistance(typed, name, cap, {swaps: true});
+  return slips <= cap ? slips : 0;
 }
 
 /**
@@ -87,14 +120,15 @@ function affinityOf(typed, name) {
  * @param {string} typedName
  * @param {T[]} items
  * @param {(item: T) => Array<string | undefined>} namesOf
+ * @param {{typos?: boolean}} [options]
  * @returns {Array<{item: T, best: number}>}
  */
-function scoreByAffinity(typedName, items, namesOf) {
+function scoreByAffinity(typedName, items, namesOf, options = {}) {
   const typed = nameWords(typedName);
   const scored = items.map((item, index) => {
     let best = 0;
     for (const name of namesOf(item)) {
-      if (name) best = Math.max(best, affinityOf(typed, name));
+      if (name) best = Math.max(best, affinityOf(typed, name, options));
     }
     return {item, index, best};
   });
@@ -112,14 +146,46 @@ function scoreByAffinity(typedName, items, namesOf) {
  * when it carries some of them, the items that carry none are left out. When
  * no item carries one, nothing is left out. The list only ever gets shorter,
  * and its order does not change.
+ *
+ * With `typos`, a near name (one or two slips from the typed name, as
+ * `ButonGroup` or `ButtonGorup` for ButtonGroup) ranks just below the names
+ * that carry every typed word and above the rest. With `closest` too, near
+ * names stay in the list whatever the cut leaves out, and the list is never
+ * longer than it is without `typos`.
  * @template T
  * @param {string} typedName
  * @param {T[]} items
  * @param {(item: T) => Array<string | undefined>} namesOf
- * @param {{closest?: boolean}} [options]
+ * @param {{closest?: boolean, typos?: boolean}} [options]
  * @returns {T[]}
  */
 export function orderByAffinity(typedName, items, namesOf, options = {}) {
+  if (!options.typos) return orderByWords(typedName, items, namesOf, options);
+  const scored = scoreByAffinity(typedName, items, namesOf, {typos: true});
+  if (!options.closest) return scored.map(s => s.item);
+  const kept = new Set(orderByWords(typedName, items, namesOf, options));
+  return scored
+    .filter(s => kept.has(s.item) || isNearScore(s.best))
+    .slice(0, kept.size)
+    .map(s => s.item);
+}
+
+/**
+ * Whether a score is a near name's.
+ * @param {number} score
+ */
+const isNearScore = score => score < 20 && score > NEAR_NAME_SCORE - 1;
+
+/**
+ * {@link orderByAffinity} without `typos`.
+ * @template T
+ * @param {string} typedName
+ * @param {T[]} items
+ * @param {(item: T) => Array<string | undefined>} namesOf
+ * @param {{closest?: boolean}} options
+ * @returns {T[]}
+ */
+function orderByWords(typedName, items, namesOf, options) {
   const scored = scoreByAffinity(typedName, items, namesOf);
   if (!options.closest) return scored.map(s => s.item);
   // One-letter words (`a` in `a11y`, `use-a-theme`) say nothing about which
