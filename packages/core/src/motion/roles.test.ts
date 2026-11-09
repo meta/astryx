@@ -2,13 +2,17 @@
 
 /**
  * @file roles.test.ts
- * @input roles.ts and the shared UIKit tables (registered on import)
- * @output Proof that each spring, duration and curve of a registered table is
- *   a role named by its path, that non-motion values are not, and that a
- *   role's CSS value reads back as the same motion
+ * @input roles.ts and the shared UIKit tables (registered by this test)
+ * @output Proof that the registered roles are every role spec:AST-094 FR4
+ *   names plus the ones the generated motion role table lists, each by its
+ *   table path and each named by FR4 or a component's own record (DEC-5);
+ *   that the generated table is in step with the registered tables; that
+ *   every other table value, a component's measured spring included, is no
+ *   role; and that a role's CSS value reads back as the same motion
  * @position Testing for /packages/core/src/motion/roles.ts
  */
 
+import {spawnSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {describe, expect, it} from 'vitest';
@@ -19,6 +23,7 @@ import {
   motionRoleIn,
   motionRoleOf,
   motionRoleVariable,
+  parseCssEasing,
   parseMotionRoleValue,
   registerMotionTable,
 } from './roles';
@@ -28,6 +33,13 @@ import {
   motionTableFiles,
   REGISTER_EXPORT,
 } from '../../../../scripts/motion-table-files.mjs';
+import {
+  fr4RoleIds,
+  MOTION_ROLE_TABLE,
+  tableRoleIds,
+} from '../../../../scripts/motion-roles-table.mjs';
+
+const ROOT = resolve(__dirname, '../../../..');
 
 // Every table the role list is generated from, registered the way the
 // generator does: through each module's register<Name>Table.
@@ -43,6 +55,9 @@ for (const file of motionTableFiles(resolve(__dirname, '..'))) {
 const DISCOVERED = new Set(
   listMotionRoles().map(role => role.id.split('.')[0]),
 );
+/** The roles of the tables discovery registered (tests here add fixtures). */
+const discoveredRoles = () =>
+  listMotionRoles().filter(role => DISCOVERED.has(role.id.split('.')[0]));
 
 describe('motion roles', () => {
   it('names a role by its table path, and its CSS variable in kebab case', () => {
@@ -78,24 +93,36 @@ describe('motion roles', () => {
     );
   });
 
-  it('has exactly the roles spec:AST-094 FR4 names', () => {
-    const spec = readFileSync(
-      resolve(
-        __dirname,
-        '../../../../docs/specs/AST-094-touch-presentations/spec.md',
+  it('has every role spec:AST-094 FR4 names, and exactly the roles the generated motion role table lists', () => {
+    const named = fr4RoleIds(
+      readFileSync(
+        resolve(ROOT, 'docs/specs/AST-094-touch-presentations/spec.md'),
+        'utf8',
       ),
-      'utf8',
-    );
-    const fr4 = spec.slice(spec.indexOf('**FR4'), spec.indexOf('**FR5'));
-    const named = [...fr4.matchAll(/^\s*\| `([a-z][\w.]*)`\s*\|/gm)].map(
-      match => match[1],
     );
     expect(named.length).toBeGreaterThan(0);
-    // Every table registered, the roles are exactly FR4's (other tests
-    // here register a fixture, which lists none).
-    expect(new Set(listMotionRoles().map(role => role.id))).toEqual(
-      new Set(named),
+    const registered = new Set(discoveredRoles().map(role => role.id));
+    for (const id of named) {
+      expect(registered.has(id), id).toBe(true);
+    }
+    // FR4's roles and the ones a component's record measures (DEC-5).
+    expect(registered).toEqual(
+      new Set(
+        tableRoleIds(readFileSync(resolve(ROOT, MOTION_ROLE_TABLE), 'utf8')),
+      ),
     );
+  });
+
+  it('keeps the generated motion role table in step with the registered tables, each role named by FR4 or a component record (spec:AST-094 DEC-5)', () => {
+    // The generator registers every table itself, in its own Node process:
+    // it reads the knowledge records, which this environment cannot load.
+    const run = spawnSync(
+      process.execPath,
+      [resolve(ROOT, 'scripts/generate-motion-roles.mjs'), '--check'],
+      {cwd: ROOT, encoding: 'utf8'},
+    );
+    expect(run.stderr).toBe('');
+    expect(run.status).toBe(0);
   });
 
   it('names the shared roles for their use, as spec:AST-094 FR4 does', () => {
@@ -175,6 +202,10 @@ describe('motion roles', () => {
     // thresholds and the arbitration timings are not motion roles either.
     expect(motionRoleIn(timing, 'reducedMotionCrossFadeMs')).toBeUndefined();
     expect(motionRoleOf(springs.menuReducedMotion)).toBeUndefined();
+    // Nor is the keyboard's motion: it rides the keyboard's own spring and
+    // notification duration, not a role (spec:AST-094 FR4).
+    expect(motionRoleIn(springs, 'keyboard')).toBeUndefined();
+    expect(motionRoleIn(timing, 'keyboardNotificationMs')).toBeUndefined();
     expect(motionRoleIn(timing.press, 'scrollBrakeMs')).toBeUndefined();
     expect(motionRoleIn(scroll, 'delaysContentTouchesMs')).toBeUndefined();
     expect(motionRoleIn(navigation, 'parallax')).toBeUndefined();
@@ -185,14 +216,14 @@ describe('motion roles', () => {
     expect(new Set(variables).size).toBe(variables.length);
   });
 
-  it('registers exactly the roles spec:AST-094 FR4 names, internally', () => {
-    // Every table discovery registered (other tests here add fixtures).
-    const discovered = listMotionRoles().filter(role =>
-      DISCOVERED.has(role.id.split('.')[0]),
-    );
+  it('registers the roles spec:AST-094 FR4 names internally, each of its kind', () => {
     expect(
-      Object.fromEntries(discovered.map(role => [role.id, role.kind])),
-    ).toEqual({
+      Object.fromEntries(discoveredRoles().map(role => [role.id, role.kind])),
+    ).toMatchObject({
+      'segmented.selectionSpring': 'spring',
+      'springs.contextMenuDismiss': 'spring',
+      'springs.contextMenuLift': 'spring',
+      'springs.contextMenuMorph': 'spring',
       'springs.directChange': 'spring',
       'springs.emphasis': 'spring',
       'springs.fingerTracking': 'spring',
@@ -244,6 +275,18 @@ describe('motion roles', () => {
     expect(() => formatMotionRoleValue('spring', {response: 0.5})).toThrow(
       /spring is/,
     );
+    // A spring with no damping never settles.
+    for (const never of [
+      {duration: 0.5, bounce: 1},
+      {duration: 0.5, bounce: 1.5},
+      {response: 0.5, dampingRatio: 0},
+      {mass: 1, stiffness: 100, damping: 0},
+    ]) {
+      expect(() => formatMotionRoleValue('spring', never)).toThrow(
+        /must settle/,
+      );
+    }
+    expect(parseMotionRoleValue('spring', '0.5s 1')).toBeNull();
     expect(parseMotionRoleValue('spring', '')).toBeNull();
     expect(parseMotionRoleValue('spring', 'fast')).toBeNull();
     expect(parseMotionRoleValue('spring', '0.4s 0.2')).toEqual({
@@ -252,5 +295,21 @@ describe('motion roles', () => {
     });
     expect(parseMotionRoleValue('duration', ' 0.3s ')).toBe(300);
     expect(parseMotionRoleValue('curve', 'ease-in')).toBeNull();
+  });
+});
+
+describe('parseCssEasing', () => {
+  it('reads a keyword as the control points CSS gives it, and a cubic-bezier() as a curve role does', () => {
+    expect(parseCssEasing('linear')).toEqual([0, 0, 1, 1]);
+    expect(parseCssEasing(' ease-out ')).toEqual([0, 0, 0.58, 1]);
+    expect(parseCssEasing('cubic-bezier(0.24, 1, 0.4, 1)')).toEqual([
+      0.24, 1, 0.4, 1,
+    ]);
+  });
+
+  it('gives null for an easing it cannot read as one curve', () => {
+    expect(parseCssEasing('steps(4)')).toBeNull();
+    expect(parseCssEasing('')).toBeNull();
+    expect(parseCssEasing('cubic-bezier(2, 0, 0.5, 1)')).toBeNull();
   });
 });

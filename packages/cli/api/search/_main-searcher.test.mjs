@@ -2,9 +2,9 @@
 
 /**
  * @file Tests for the main searcher (_main-searcher.mjs) through search():
- * it ranks by plain signals, answers the same every time, never grows the
- * response past the lexical ranker's, and touches no network. Run against the
- * real @astryxdesign/core.
+ * it ranks by plain signals, answers the same every time, answers only with
+ * lexical matches and never more of them, and touches no network. Run against
+ * the real @astryxdesign/core.
  */
 
 import {describe, it, expect, vi, afterEach} from 'vitest';
@@ -13,7 +13,11 @@ import http from 'node:http';
 import https from 'node:https';
 import net from 'node:net';
 import {fileURLToPath} from 'node:url';
-import {search, searchCore} from './search.mjs';
+import {requireNatively} from '../../test-utils/native-require.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('./search.mjs')} */
+const {search, searchCore} = require('./search.mjs');
 
 const REPO = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -32,6 +36,8 @@ const QUERIES = [
 /** @param {unknown} r */
 const top = r =>
   /** @type {any} */ (r).data.results.map(x => `${x.domain}:${x.name}`);
+/** @param {any} r */
+const keyOf = r => `${r.domain}:${r.name}:${r.command}`;
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -70,23 +76,26 @@ describe('main searcher', () => {
   });
 
   it(
-    'never returns more results or more bytes than the lexical ranker',
+    'answers each query with lexical matches, never more of them',
     {timeout: 120_000},
     async () => {
-      let mine = 0;
-      let core = 0;
       for (const q of QUERIES) {
-        const [a, b] = [
+        const [mine, lexical, every] = [
           await search(q, {cwd: REPO}),
           await searchCore(q, {cwd: REPO}),
+          await searchCore(q, {cwd: REPO, limit: Number.MAX_SAFE_INTEGER}),
         ];
-        expect(a.data.results.length).toBeLessThanOrEqual(
-          b.data.results.length,
+        expect(mine.data.results.length).toBeLessThanOrEqual(
+          lexical.data.results.length,
         );
-        mine += JSON.stringify(a).length;
-        core += JSON.stringify(b).length;
+        expect(mine.data.matchCount).toBe(lexical.data.matchCount);
+        const byKey = new Map(every.data.results.map(r => [keyOf(r), r]));
+        for (const r of mine.data.results) {
+          const own = byKey.get(keyOf(r));
+          expect(own, `${q}: ${keyOf(r)} is a lexical match`).toBeDefined();
+          expect([r.score, r.reason]).toEqual([own?.score, own?.reason]);
+        }
       }
-      expect(mine).toBeLessThanOrEqual(core);
     },
   );
 

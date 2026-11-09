@@ -28,7 +28,7 @@ import {saysInOrder, spokenWords} from '../spoken';
 const APG_URL = 'https://www.w3.org/WAI/ARIA/apg/patterns/button/';
 const UNDERSTANDING = 'https://www.w3.org/WAI/WCAG22/Understanding';
 const FAMILY_BUTTONS =
-  'https://github.com/facebook/astryx/blob/e86aa19ecb7e8204c8b5b430bb61a971b813d137/docs/families/buttons.md';
+  'https://github.com/meta/astryx/blob/e86aa19ecb7e8204c8b5b430bb61a971b813d137/docs/families/buttons.md';
 
 const WCAG_1_3_1: WcagCriterion = {
   standard: 'wcag',

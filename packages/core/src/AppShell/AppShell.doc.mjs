@@ -46,6 +46,11 @@ export const docs = {
           'Start the page heading inside `children`. AppShell owns the skip link, the banner landmark and the main landmark, but it renders no heading, so the first heading in the content area is the page h1.',
       },
       {
+        guidance: true,
+        description:
+          'On phones, opt the page into the full screen with `viewport-fit=cover` in the viewport meta tag (`width=device-width, initial-scale=1, viewport-fit=cover`). AppShell then extends its header under the status bar and out to the screen sides, and keeps the header\'s items and the end of the content inside the device\'s safe area. An installed web app can also draw under the status bar with `<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">`. In landscape only the header is inset: an inline SideNav and the content\'s sides still reach under a notch, so keep content padding there. A shell with no header region or phone top bar keeps no top inset; keep top padding there.',
+      },
+      {
         guidance: false,
         description:
           "Nest one AppShell inside another; it's the outermost layout frame.",
@@ -96,7 +101,7 @@ export const docs = {
         name: 'Main content',
         required: true,
         description:
-          'children, rendered in the main landmark. Scrolls internally when height is fill, and with the page when it is auto.',
+          'children, rendered in the main landmark. Scrolls internally when height is fill, and with the page when it is auto. While it scrolls content that overflows, it is a stop in the tab order; Tab entry moves on when its first focusable element is a plain link or button, and otherwise main is one stop before it.',
       },
       {
         name: 'Mobile nav drawer',
@@ -342,6 +347,11 @@ export const docsDense = {
         guidance: true,
         description:
           'Give every nav slot an accessible name: TopNav and SideNav are separate navigation landmarks, so pass `label` to each.',
+      },
+      {
+        guidance: true,
+        description:
+          'Phones: add `viewport-fit=cover` to the viewport meta; the header then reaches under the status bar while its items and the content end stay in the safe area. Landscape: only the header is inset (not an inline SideNav or the content sides). No header region or phone top bar: no top inset, so keep top padding. Installed web apps: `apple-mobile-web-app-status-bar-style` `black-translucent`.',
       },
       {
         guidance: true,

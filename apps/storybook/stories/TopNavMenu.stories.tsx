@@ -102,6 +102,37 @@ export const Default: Story = {
 };
 
 /**
+ * A nav menu of action items (no destinations): each runs its `onClick`.
+ */
+export const ActionItems: Story = {
+  render: () => (
+    <TopNav
+      label="Main navigation"
+      heading={<TopNavHeading heading="My App" headingHref="#" />}
+      startContent={
+        <TopNavMenu
+          label="Actions"
+          items={[
+            {
+              title: 'Invite teammates',
+              description: 'Send an invite by email',
+              icon: <UserCircleIcon style={{width: 20, height: 20}} />,
+              onClick: () => {},
+            },
+            {
+              title: 'Run automation',
+              description: 'Start the default workflow',
+              icon: <BoltIcon style={{width: 20, height: 20}} />,
+              onClick: () => {},
+            },
+          ]}
+        />
+      }
+    />
+  ),
+};
+
+/**
  * Multiple nav menus side by side. Hovering one closes the other
  * (standard hover-menu behavior).
  */
@@ -277,6 +308,24 @@ export const MegaMenuSimple: Story = {
           </>
         }
         endContent={<Button label="Sign in" variant="primary" />}
+      />
+    </div>
+  ),
+};
+
+/**
+ * Fixture for the RTL audit: a featured card shrink-wrapped to its link, so the
+ * link box is the label and its arrow, and the arrow's side of the label can be
+ * measured in both directions.
+ */
+export const FeaturedCardLinkArrow: Story = {
+  name: 'Featured card / Link arrow',
+  render: () => (
+    <div style={{width: 'max-content'}}>
+      <TopNavMegaMenuFeaturedCard
+        title="New"
+        linkLabel="Read the announcement"
+        linkHref="#announcement"
       />
     </div>
   ),

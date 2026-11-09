@@ -3,6 +3,8 @@
 import {describe, expect, it, vi} from 'vitest';
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import * as stylex from '@stylexjs/stylex';
+import {colorVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {CommentPin} from './CommentPin';
 
 const ADA = {id: 'ada', name: 'Ada Lovelace'};
@@ -229,7 +231,8 @@ describe('CommentPin', () => {
       name: 'Resolved selected annotation',
     });
     expect(marker).toHaveAttribute('aria-pressed', 'true');
-    expect(marker).toBeDisabled();
+    expect(marker).not.toBeDisabled();
+    expect(marker).toHaveAttribute('aria-disabled', 'true');
     expect(marker).toHaveAttribute('data-selected', 'selected');
     expect(marker).toHaveAttribute('data-resolved', 'resolved');
     expect(marker).toHaveAttribute('data-disabled', 'disabled');
@@ -313,6 +316,33 @@ describe('CommentPin', () => {
     expect(onClick).toHaveBeenCalledTimes(2);
   });
 
+  it('exposes aria-disabled instead of the native attribute when disabled', () => {
+    render(
+      <CommentPin label="Pending annotation" participants={[ADA]} isDisabled />,
+    );
+
+    const pin = screen.getByRole('button', {name: 'Pending annotation'});
+    expect(pin).not.toBeDisabled();
+    expect(pin).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('keeps a disabled pin in the tab order (spec:AST-085 FR1)', async () => {
+    const user = userEvent.setup();
+    render(<CommentPin label="Open annotation" participants={[ADA]} />);
+    render(
+      <CommentPin label="Pending annotation" participants={[LIN]} isDisabled />,
+    );
+    render(<CommentPin label="Another annotation" participants={[MIRA]} />);
+
+    await user.tab();
+    // The first tab stop is the enabled pin; the disabled one keeps its place
+    // right after it rather than being skipped.
+    await user.tab();
+    expect(
+      screen.getByRole('button', {name: 'Pending annotation'}),
+    ).toHaveFocus();
+  });
+
   it('does not call the click handler when disabled', () => {
     const onClick = vi.fn();
     render(
@@ -326,6 +356,152 @@ describe('CommentPin', () => {
 
     fireEvent.click(screen.getByRole('button', {name: 'Pending annotation'}));
     expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('blocks Enter and Space on a disabled pin (spec:AST-085 FR2)', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <CommentPin
+        label="Pending annotation"
+        participants={[ADA]}
+        isDisabled
+        onClick={onClick}
+      />,
+    );
+
+    // user-event only synthesizes the button's Enter/Space click when the
+    // keydown was not defaultPrevented, and a native listener on the pin sees
+    // any click that does reach the DOM. No click at all is what proves the
+    // keydown guard blocked activation itself, not just the click guard.
+    const nativeClicks = vi.fn();
+    const pin = screen.getByRole('button', {name: 'Pending annotation'});
+    pin.addEventListener('click', nativeClicks);
+
+    pin.focus();
+    await user.keyboard('{Enter}');
+    await user.keyboard(' ');
+    pin.removeEventListener('click', nativeClicks);
+
+    expect(onClick).not.toHaveBeenCalled();
+    expect(nativeClicks).not.toHaveBeenCalled();
+  });
+
+  it('does not let a disabled pin activate a clickable ancestor (spec:AST-085 FR2)', () => {
+    const surfaceClick = vi.fn();
+    const onClick = vi.fn();
+    render(
+      <div role="button" onClick={surfaceClick} aria-label="Annotation surface">
+        <CommentPin
+          label="Pending annotation"
+          participants={[ADA]}
+          isDisabled
+          onClick={onClick}
+        />
+      </div>,
+    );
+
+    fireEvent.click(screen.getByRole('button', {name: 'Pending annotation'}));
+    expect(onClick).not.toHaveBeenCalled();
+    expect(surfaceClick).not.toHaveBeenCalled();
+  });
+
+  it('keeps focus when the pin becomes disabled while focused (spec:AST-085 FR4)', () => {
+    // jsdom keeps focus on a natively disabled button too, so on its own this
+    // cannot tell the two apart; the FR1 tests above pin the mechanism (no
+    // native `disabled`), which is what keeps focus here. A real-browser
+    // probe would be needed to prove FR4 independently.
+    const {rerender} = render(
+      <CommentPin label="Open annotation" participants={[ADA]} />,
+    );
+
+    const pin = screen.getByRole('button', {name: 'Open annotation'});
+    pin.focus();
+    expect(pin).toHaveFocus();
+
+    rerender(
+      <CommentPin label="Open annotation" participants={[ADA]} isDisabled />,
+    );
+    expect(pin).toHaveFocus();
+    expect(pin).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('paints an unselected disabled pin GrayText in forced colors (AST-085 FR6)', () => {
+    // The same declarations as the component's styles compile to the same
+    // atomic classes. Null defaults emit no atom of their own, so these are
+    // exactly the forced-colors arms — the shared default-mode atoms
+    // (borderColor: transparent) cannot make this check pass vacuously.
+    const atoms = (style: stylex.StyleXStyles) =>
+      stylex
+        .props(style)
+        .className!.split(' ')
+        .filter(name => name.includes('x') && !name.includes('__'));
+    const forced = stylex.create({
+      disabled: {
+        borderColor: {
+          default: null,
+          '@media (forced-colors: active)': 'GrayText',
+        },
+        color: {default: null, '@media (forced-colors: active)': 'GrayText'},
+      },
+    });
+    const forcedAtoms = atoms(forced.disabled);
+    expect(forcedAtoms.length).toBeGreaterThan(0);
+
+    const {rerender} = render(
+      <CommentPin label="Pending annotation" participants={[ADA]} isDisabled />,
+    );
+
+    const pin = screen.getByRole('button', {name: 'Pending annotation'});
+    for (const name of forcedAtoms) {
+      expect(pin).toHaveClass(name);
+    }
+
+    // A selected pin keeps its forced-colors Highlight treatment instead; the
+    // disabled affordance rides on the selected presentation staying intact.
+    rerender(
+      <CommentPin
+        label="Pending annotation"
+        participants={[ADA]}
+        isDisabled
+        isSelected
+      />,
+    );
+    for (const name of forcedAtoms) {
+      expect(pin).not.toHaveClass(name);
+    }
+  });
+
+  it('keeps the root text colour on an unselected disabled pin outside forced colors', () => {
+    // disabledUnselected must repeat the root's colour token as its default:
+    // a null default would replace it under StyleX's per-property merge and
+    // the count would fall back to the raw theme text colour.
+    const atoms = (style: stylex.StyleXStyles) =>
+      stylex
+        .props(style)
+        .className!.split(' ')
+        .filter(name => name.includes('x') && !name.includes('__'));
+    const rootColor = stylex.create({
+      color: {color: colorVars['--color-text-secondary']},
+    });
+    const colorAtoms = atoms(rootColor.color);
+    expect(colorAtoms.length).toBeGreaterThan(0);
+
+    render(
+      <CommentPin
+        label="Open 3 grouped annotations"
+        participants={[ADA]}
+        threadCount={3}
+        isDisabled
+      />,
+    );
+
+    const pin = screen.getByRole('button', {
+      name: 'Open 3 grouped annotations',
+    });
+    for (const name of colorAtoms) {
+      expect(pin).toHaveClass(name);
+    }
   });
 
   it('forwards the ref and neutral button props', () => {

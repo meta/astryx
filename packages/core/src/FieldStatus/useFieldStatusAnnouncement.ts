@@ -36,6 +36,7 @@ export function useFieldStatusAnnouncement(
   type: InputStatusType | undefined,
 ): void {
   const announce = useAnnounce();
+  // Syncs the live region with the status message.
   useEffect(() => {
     if (message) {
       announce(message, type === 'error' ? 'assertive' : 'polite');

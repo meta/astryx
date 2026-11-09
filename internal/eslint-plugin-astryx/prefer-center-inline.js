@@ -21,7 +21,7 @@ const rule = {
         'Prefer rtlStyles.centerInline() for fixed 50% centering instead of a hand-rolled logical anchor and RTL transform pair',
       category: 'Consistency',
       recommended: true,
-      url: 'https://github.com/facebook/astryx/issues/5170',
+      url: 'https://github.com/meta/astryx/issues/5170',
     },
     messages: {
       preferCenterInline:

@@ -37,7 +37,12 @@
  * @position packages/cli/foundation/discovery — read by template show/copy
  */
 
-import {parse} from '@babel/parser';
+import {
+  isReference,
+  parseTemplateSource as parseSource,
+  walk,
+  writtenNames,
+} from './template-source-tree.mjs';
 import {definitionsByIcon} from './icon-set-discovery.mjs';
 import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
 
@@ -219,86 +224,6 @@ function targetExport(icon, set, variant) {
   return {module, export: icon.export};
 }
 
-/** @param {string} source */
-function parseSource(source) {
-  return parse(source, {
-    sourceType: 'module',
-    plugins: ['jsx', 'typescript'],
-    errorRecovery: false,
-  });
-}
-
-/**
- * Every node in the tree, with its parent and the key it sits under.
- * @param {any} node
- * @param {(node: any, parent: any, key: string) => void} visit
- * @param {any} [parent]
- * @param {string} [key]
- */
-function walk(node, visit, parent = null, key = '') {
-  if (Array.isArray(node)) {
-    for (const child of node) walk(child, visit, parent, key);
-    return;
-  }
-  if (
-    node == null ||
-    typeof node !== 'object' ||
-    typeof node.type !== 'string'
-  ) {
-    return;
-  }
-  visit(node, parent, key);
-  for (const childKey of Object.keys(node)) {
-    if (
-      childKey === 'loc' ||
-      childKey === 'extra' ||
-      childKey.endsWith('Comments') ||
-      childKey === 'comments' ||
-      childKey === 'tokens'
-    ) {
-      continue;
-    }
-    const child = node[childKey];
-    if (child != null && typeof child === 'object') {
-      walk(child, visit, node, childKey);
-    }
-  }
-}
-
-/**
- * Whether an identifier node is a reference to a binding, not a property
- * name or a JSX attribute name.
- * @param {any} node
- * @param {any} parent
- * @param {string} key
- */
-function isReference(node, parent, key) {
-  if (!parent) return true;
-  switch (parent.type) {
-    case 'ImportSpecifier':
-    case 'ImportDefaultSpecifier':
-    case 'ImportNamespaceSpecifier':
-      return false;
-    case 'MemberExpression':
-    case 'OptionalMemberExpression':
-      return key !== 'property' || parent.computed;
-    case 'ObjectProperty':
-      return key === 'value' || parent.computed;
-    case 'ObjectMethod':
-    case 'ClassMethod':
-    case 'ClassProperty':
-      return key !== 'key' || parent.computed;
-    case 'JSXAttribute':
-      return false;
-    case 'JSXMemberExpression':
-      return key === 'object';
-    case 'TSPropertySignature':
-      return key !== 'key';
-    default:
-      return true;
-  }
-}
-
 /**
  * Whether a module is one of Astryx's own packages (`@astryxdesign/core`,
  * its subpaths, and every other `@astryxdesign/` package).
@@ -453,14 +378,7 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
   );
 
   /** Every name the file writes, to keep aliases collision-free. */
-  const written = new Set();
-  walk(ast.program, (node, parent, key) => {
-    // The name an import specifier reads from its module binds nothing here.
-    if (parent?.type === 'ImportSpecifier' && key === 'imported') return;
-    if (node.type === 'Identifier' || node.type === 'JSXIdentifier') {
-      written.add(node.name);
-    }
-  });
+  const written = writtenNames(ast);
 
   /** @type {Array<{start: number, end: number, text: string}>} */
   const edits = [];
