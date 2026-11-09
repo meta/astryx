@@ -310,8 +310,8 @@ export function useChatKeyboard({
     };
     // While the dock follows the cover a pan leaves, a report moves only the
     // dock's translate, from the keyboard module's numbers. The layout takes
-    // the lift when the last finger lifts, and again when a fling comes to
-    // rest.
+    // the lift when the last finger lifts. After a fling, it takes it again
+    // when the fling comes to rest.
     const followPan = (height: number) => {
       const target = liftRef.current - liftFor(height);
       if (Math.abs(target) < 0.5) {

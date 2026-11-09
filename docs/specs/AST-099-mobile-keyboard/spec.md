@@ -110,13 +110,15 @@ app to turn on.
   While the browser's own reveal runs, the dock does not move (Gap 16). Then the
   dock rises by the part of the keyboard's cover that the visual viewport's pan
   leaves. A pan to the dock leaves none, so the dock rises nothing. After a
-  touch or a wheel, the dock follows that part on its translate as a scroll
-  moves the pan. The layout takes the lift when the last finger lifts, and again
-  when a fling comes to rest. Where the layout viewport's height follows the pan
-  instead, as in Safari on iOS, the dock does not move for the rest of that show
-  (Gap 17). Once a show finds the dock covered, the composer is a keyboard-aware
-  surface there, as elsewhere. FR9's docked ride is the one exception: Core
-  moves an app's docked bar as FR9 sets
+  touch or a wheel, the dock follows that part as a scroll moves the pan. It
+  follows on its compositor translate, with no layout work at each change of the
+  visual viewport. The layout takes the lift when the last finger lifts. After a
+  fling, the layout takes it again when the fling comes to rest. Where the
+  layout viewport's height follows the pan instead, as in Safari on iOS, the
+  dock does not move for the rest of that show (Gap 17). Once a show finds the
+  dock covered, the composer is a keyboard-aware surface there, as elsewhere.
+  FR9's docked ride is the one exception: Core moves an app's docked bar as FR9
+  sets
   out. How the value reaches styles is `architecture:react-component-runtime`
   INV11. Riding the keyboard's motion layers on top of that layout, so layout
   never depends on it; FR8 requires it where it applies. When surfaces ride it,
