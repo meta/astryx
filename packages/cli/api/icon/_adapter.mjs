@@ -6,8 +6,8 @@
  *
  * @position api/icon — adapter for api/icon/{search,detail,list,use,map,add,
  *   new-set,new-definition}; it also carries the icon ranking, the icon-set
- *   writer, the set and definition authoring writes, and the config writer
- *   the leaves use
+ *   writer, the set and definition authoring writes, the default-look
+ *   rule, and the config writer the leaves use
  */
 
 import * as fs from 'node:fs';
@@ -28,6 +28,7 @@ export {
   importLine,
   leadingReading,
   matchIcon,
+  answeringMatches,
   rankIcons,
   scoreIcon,
 } from '../../foundation/discovery/icon-ranking.mjs';
@@ -37,6 +38,7 @@ export {setConfigString} from '../../foundation/config/config-writer.mjs';
 export {
   assertIconExport,
   checkNewDefinition,
+  definitionNameFromInput,
   definitionFile,
   findLocalIconSet,
   writeDefinitionFile,
@@ -53,6 +55,9 @@ export {
   iconExportName,
   iconNaming,
   modulePrefix,
+  moduleNaming,
+  iconNamingWithoutLook,
+  splitLook,
   setModuleNote,
   variantExportName,
   writeGeneratedIcons,
@@ -65,6 +70,7 @@ export {
 } from '../../foundation/discovery/icon-set-writer.mjs';
 export {exportValueKind} from '../../foundation/discovery/module-exports.mjs';
 export {addIconDefinition, addIconSet} from './_authoring.mjs';
+export {checkVariantLook, drawnLooks} from './_default-look.mjs';
 
 /**
  * Refuse a command that writes to a project or package when `cwd` is outside

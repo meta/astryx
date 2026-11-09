@@ -12,7 +12,7 @@
  */
 
 // Shared types
-export type {SearchableItem, SearchSource} from './types';
+export type {SearchableItem, SearchContext, SearchSource} from './types';
 
 // Search source utilities
 export {createStaticSource} from './createStaticSource';

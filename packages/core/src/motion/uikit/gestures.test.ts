@@ -57,6 +57,7 @@ describe('UIKIT_GESTURES', () => {
     expect(UIKIT_GESTURES.pinch.hysteresis.value).toBe(8);
     expect(UIKIT_GESTURES.control.trackingExpansion.value).toBe(70);
     expect(UIKIT_GESTURES.velocity.currentWeight.value).toBe(0.2);
+    expect(UIKIT_GESTURES.velocity.scrollReleaseWeight.value).toBe(0.25);
   });
 
   it('holds the press entries to the press model, one value per use', () => {

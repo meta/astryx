@@ -9,8 +9,9 @@
  * SYNC: When TabList components change, update tests to match new behavior
  */
 
+import {useState} from 'react';
 import {describe, it, expect, vi, beforeAll, afterAll} from 'vitest';
-import {render, screen, fireEvent} from '@testing-library/react';
+import {act, render, screen, fireEvent, waitFor} from '@testing-library/react';
 import {__resetMenuPressForTest} from '../hooks/useMenuPress';
 import userEvent from '@testing-library/user-event';
 import {
@@ -933,14 +934,59 @@ describe('TabMenu keyboard navigation (roving tabindex)', () => {
       hidden: true,
     });
 
-    fireEvent.keyDown(menu, {key: 'ArrowDown'});
-    expect(analytics).toHaveFocus();
+    // Opening moves focus to the first item a frame later (APG menu-button
+    // focus-on-open): wait for it, since a key pressed before that frame
+    // starts from no item and one pressed after it starts from the first.
+    await waitFor(() => expect(analytics).toHaveFocus());
 
     fireEvent.keyDown(menu, {key: 'ArrowDown'});
     expect(reports).toHaveFocus();
 
     fireEvent.keyDown(menu, {key: 'ArrowUp'});
     expect(analytics).toHaveFocus();
+  });
+
+  it('still navigates when the tablist is inside a popover', async () => {
+    const user = userEvent.setup();
+    render(
+      <div popover="manual">
+        <TabList value="home" onChange={() => {}} role="tablist">
+          <Tab value="home" label="Home" panelId="home-panel" />
+          <Tab value="settings" label="Settings" panelId="settings-panel" />
+        </TabList>
+      </div>,
+    );
+
+    screen.getByRole('tab', {name: 'Home', hidden: true}).focus();
+    await user.keyboard('{ArrowRight}');
+    expect(
+      screen.getByRole('tab', {name: 'Settings', hidden: true}),
+    ).toHaveFocus();
+  });
+
+  it('leaves horizontal arrows to the open menu', async () => {
+    const user = userEvent.setup();
+    render(
+      <TabList value="home" onChange={() => {}}>
+        <Tab value="home" label="Home" />
+        <TabMenu label="More" options={menuOptions} />
+      </TabList>,
+    );
+
+    const trigger = screen.getByRole('button', {name: 'More'});
+    await user.click(trigger);
+    const item = screen.getByRole('menuitemradio', {
+      name: 'Reports',
+      hidden: true,
+    });
+    item.focus();
+
+    fireEvent.keyDown(item, {key: 'ArrowRight'});
+    expect(item).toHaveFocus();
+
+    fireEvent.keyDown(item, {key: 'ArrowLeft'});
+    expect(item).toHaveFocus();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('moves the roving tab stop with arrow navigation', async () => {
@@ -963,7 +1009,8 @@ describe('TabMenu keyboard navigation (roving tabindex)', () => {
       hidden: true,
     });
 
-    fireEvent.keyDown(menu, {key: 'ArrowDown'}); // focus analytics
+    // Focus lands on the first item a frame after opening (see above).
+    await waitFor(() => expect(analytics).toHaveFocus());
     fireEvent.keyDown(menu, {key: 'ArrowDown'}); // focus reports
 
     // The tab stop follows focus, so it is still a single stop after moving.
@@ -1235,6 +1282,56 @@ describe('TabList overflow (scroll)', () => {
     );
 
     expect(scrollBy).not.toHaveBeenCalled();
+  });
+
+  it('measures a pressed tab after the press, in the next frame, and still shows it whole', async () => {
+    function Controlled() {
+      const [value, setValue] = useState('a');
+      return (
+        <TabList value={value} onChange={setValue}>
+          <Tab value="a" label="Alpha" />
+          <Tab value="b" label="Beta" />
+          <Tab value="c" label="Gamma" />
+        </TabList>
+      );
+    }
+    const {container} = render(<Controlled />);
+    const strip = container.querySelector<HTMLElement>(STRIP);
+    const tab = container.querySelector<HTMLElement>('[data-tab-value="c"]');
+    if (!strip || !tab) {
+      throw new Error('no tab strip');
+    }
+    const scrollBy = vi.fn();
+    strip.scrollBy = scrollBy;
+    const stripRect = vi.fn(
+      () => ({left: 0, right: 300, width: 300}) as DOMRect,
+    );
+    strip.getBoundingClientRect = stripRect;
+    tab.getBoundingClientRect = () =>
+      ({left: 240, right: 320, width: 80}) as DOMRect;
+
+    // Pressing a tab focuses it first, and focusing it reveals it.
+    fireEvent.focus(tab);
+    expect(scrollBy).toHaveBeenCalledTimes(1);
+    expect(scrollBy.mock.calls[0][0].left).toBe(20);
+    const readsBeforePress = stripRect.mock.calls.length;
+
+    // The selection itself reads no geometry inside the press...
+    fireEvent.click(tab);
+    expect(tab).toHaveAttribute('aria-current', 'true');
+    expect(stripRect.mock.calls.length).toBe(readsBeforePress);
+    expect(scrollBy).toHaveBeenCalledTimes(1);
+
+    // ...and the next frame measures the selected tab, now wider, so it still
+    // ends fully inside the strip.
+    tab.getBoundingClientRect = () =>
+      ({left: 220, right: 306, width: 86}) as DOMRect;
+    await act(
+      async () =>
+        new Promise<void>(resolve => requestAnimationFrame(() => resolve())),
+    );
+    expect(scrollBy).toHaveBeenCalledTimes(2);
+    expect(scrollBy.mock.calls[1][0].left).toBe(6);
   });
 
   it('reveals on a selection change, not on an unrelated overflow change', () => {
@@ -1652,6 +1749,91 @@ describe('pressed state', () => {
     await user.click(tab);
     expect(onClick).not.toHaveBeenCalled();
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('does not run a disabled tab’s caller handlers other than focus and blur', () => {
+    const onKeyDown = vi.fn();
+    const onPointerDown = vi.fn();
+    const onMouseDown = vi.fn();
+    const onFocus = vi.fn();
+    const onBlur = vi.fn();
+    render(
+      <TabList value="home" onChange={() => {}}>
+        <Tab value="home" label="Home" />
+        <Tab
+          value="settings"
+          label="Settings"
+          aria-disabled="true"
+          onKeyDown={onKeyDown}
+          onPointerDown={onPointerDown}
+          onMouseDown={onMouseDown}
+          onFocus={onFocus}
+          onBlur={onBlur}
+        />
+      </TabList>,
+    );
+    const tab = screen.getByRole('button', {name: 'Settings'});
+    fireEvent.pointerDown(tab);
+    fireEvent.mouseDown(tab);
+    fireEvent.keyDown(tab, {key: 'x'});
+    expect(onPointerDown).not.toHaveBeenCalled();
+    expect(onMouseDown).not.toHaveBeenCalled();
+    expect(onKeyDown).not.toHaveBeenCalled();
+    fireEvent.focus(tab);
+    fireEvent.blur(tab);
+    expect(onFocus).toHaveBeenCalledTimes(1);
+    expect(onBlur).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not run a disabled link tab’s caller handlers', () => {
+    const onKeyDown = vi.fn();
+    const onPointerDown = vi.fn();
+    const onMouseDown = vi.fn();
+    const {container} = render(
+      <TabList value="home" onChange={() => {}}>
+        <Tab value="home" label="Home" />
+        <Tab
+          value="settings"
+          label="Settings"
+          href="/settings"
+          aria-disabled="true"
+          onKeyDown={onKeyDown}
+          onPointerDown={onPointerDown}
+          onMouseDown={onMouseDown}
+        />
+      </TabList>,
+    );
+    const tab = container.querySelector('a[aria-disabled="true"]');
+    if (tab == null) {
+      throw new Error('the disabled link tab did not render an anchor');
+    }
+    fireEvent.pointerDown(tab);
+    fireEvent.mouseDown(tab);
+    fireEvent.keyDown(tab, {key: 'x'});
+    expect(onPointerDown).not.toHaveBeenCalled();
+    expect(onMouseDown).not.toHaveBeenCalled();
+    expect(onKeyDown).not.toHaveBeenCalled();
+  });
+
+  it('still runs an enabled tab’s caller handlers', () => {
+    const onKeyDown = vi.fn();
+    const onPointerDown = vi.fn();
+    render(
+      <TabList value="home" onChange={() => {}}>
+        <Tab value="home" label="Home" />
+        <Tab
+          value="settings"
+          label="Settings"
+          onKeyDown={onKeyDown}
+          onPointerDown={onPointerDown}
+        />
+      </TabList>,
+    );
+    const tab = screen.getByRole('button', {name: 'Settings'});
+    fireEvent.pointerDown(tab);
+    fireEvent.keyDown(tab, {key: 'x'});
+    expect(onPointerDown).toHaveBeenCalledTimes(1);
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
   });
 
   it('removes navigation from a disabled link tab', () => {

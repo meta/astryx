@@ -17,17 +17,17 @@ const neutralSyntax = defineSyntaxTheme({
   tokens: {
     keyword: [purple.light[30], purple.light[80]],
     string: [green.light[30], green.light[80]],
-    comment: [neutral.light[45], neutral.dark[65]],
+    comment: [neutral.light[35], neutral.dark[75]],
     number: [orange.light[30], orange.dark[80]],
     function: [blue.light[30], blue.dark[80]],
     type: [purple.light[30], purple.light[80]],
     variable: [neutral.light[5], neutral.dark[90]],
-    operator: [neutral.light[45], neutral.dark[65]],
+    operator: [neutral.light[35], neutral.dark[75]],
     constant: [orange.light[30], orange.dark[80]],
     tag: [red.light[30], red.dark[80]],
     attribute: [yellow.light[30], yellow.light[80]],
     property: [teal.light[30], teal.light[80]],
-    punctuation: [neutral.light[45], neutral.dark[65]],
+    punctuation: [neutral.light[35], neutral.dark[75]],
     background: [neutral.light[100], neutral.dark[5]],
   },
 });
@@ -94,7 +94,7 @@ export const neutralTheme = defineTheme({
     '--color-background-muted': [neutral.light[95], neutral.dark[10]],
 
     '--color-accent': [neutral.light[10], neutral.dark[95]],
-    '--color-accent-muted': [neutral.light[95], neutral.dark[15]],
+    '--color-accent-muted': [neutral.light[85], neutral.dark[30]],
     '--color-neutral': [
       withAlpha(neutral.light[0], '0F'),
       withAlpha(neutral.dark[100], '1A'),
@@ -273,6 +273,32 @@ export const neutralTheme = defineTheme({
   },
 
   components: {
+    // In dark mode, secondary text falls under 4.5:1 on the selected fill
+    // and under its hover. Selected rows use the next stop that clears both.
+    item: {
+      selected: {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[80]})`,
+      },
+    },
+    'tree-list-item': {
+      selected: {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[80]})`,
+      },
+    },
+    // A dropzone's hint sits on the same fill while a file is dragged over.
+    // That state has no target, so the dropzone takes the lift at rest too.
+    'file-input': {
+      'mode:dropzone': {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[80]})`,
+      },
+    },
+    // A numbered citation is a pill on the same fill.
+    citation: {
+      'variant:number': {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[80]})`,
+      },
+    },
+
     button: {
       'variant:destructive': {
         backgroundColor: 'var(--color-error-muted)',

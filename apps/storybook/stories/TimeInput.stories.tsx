@@ -224,6 +224,44 @@ export const WithMinMax: Story = {
   },
 };
 
+/**
+ * The bottom-sheet wheels with bounds: hours outside 9 AM - 5 PM stay on the
+ * wheel, greyed out, and a wheel that stops on one goes on to the nearest
+ * hour inside the bounds.
+ */
+export const BottomSheetWithMinMax: Story = {
+  render: args => {
+    const [value, setValue] = useState<ISOTimeString | undefined>(
+      '10:00' as ISOTimeString,
+    );
+    return <TimeInput {...args} value={value} onChange={setValue} />;
+  },
+  args: {
+    label: 'Appointment time',
+    presentation: 'bottom-sheet',
+    min: '09:00' as ISOTimeString,
+    max: '17:00' as ISOTimeString,
+    description: 'Business hours: 9 AM - 5 PM',
+  },
+};
+
+/**
+ * The bottom-sheet wheels as iOS's date picker turns them: from 11:58 AM, one
+ * row down on the hour gives 12:58 PM and the AM/PM column turns with it.
+ */
+export const BottomSheetWheels: Story = {
+  render: args => {
+    const [value, setValue] = useState<ISOTimeString | undefined>(
+      '11:58' as ISOTimeString,
+    );
+    return <TimeInput {...args} value={value} onChange={setValue} />;
+  },
+  args: {
+    label: 'Alarm',
+    presentation: 'bottom-sheet',
+  },
+};
+
 export const WithIncrement: Story = {
   render: args => {
     const [value, setValue] = useState<ISOTimeString | undefined>(

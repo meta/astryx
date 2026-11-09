@@ -16,7 +16,7 @@
  * this file is that evidence; the ledger's own slice is untouched.
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test} from '@astryxdesign/a11y-spec/playwright';
 import {
   serveStorybook,
   DEFAULT_STORYBOOK_DIR,

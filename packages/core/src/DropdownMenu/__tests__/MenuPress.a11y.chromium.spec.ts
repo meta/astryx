@@ -15,7 +15,12 @@
  *   paths jsdom cannot exercise (hit testing, touch synthesis, scrolling)
  */
 
-import {expect, test, type Page, type CDPSession} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Page,
+  type CDPSession,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -40,6 +45,25 @@ const SELECTOR_STORY = 'core-selector--default';
 async function mount(page: Page, story: string) {
   await page.goto(`${storybook.origin}/iframe.html?id=${story}&viewMode=story`);
   await expect(page.locator('#storybook-root')).toBeVisible();
+}
+
+/**
+ * Waits until the open menu has finished entering. Under a finger, input that
+ * lands during the entrance is held, as UIMenu takes none until it is shown.
+ * The entrance runs on the surface, the layer's child.
+ */
+async function presented(page: Page) {
+  const layer = page.locator('[popover]:has([role="menu"])').first();
+  await expect
+    .poll(async () =>
+      layer.evaluate(
+        element =>
+          [element, element.firstElementChild]
+            .flatMap(node => node?.getAnimations() ?? [])
+            .filter(animation => animation.playState === 'running').length,
+      ),
+    )
+    .toBe(0);
 }
 
 /** The story items log `<label> clicked`; that line is the activation. */
@@ -301,6 +325,7 @@ test.describe('DropdownMenu press model (Chromium)', () => {
     await touch.tap(cdp, await center(page, TRIGGER));
     const menu = page.getByRole('menu');
     await expect(menu).toBeVisible();
+    await presented(page);
 
     const edit = await center(page, 'menuitem', 'Edit');
     const del = await center(page, 'menuitem', 'Delete');
@@ -323,6 +348,7 @@ test.describe('DropdownMenu press model (Chromium)', () => {
     await mount(page, MENU_STORY);
     await touch.tap(cdp, await center(page, TRIGGER));
     await expect(page.getByRole('menu')).toBeVisible();
+    await presented(page);
     await touch.tap(cdp, await center(page, 'menuitem', 'Duplicate'));
     await page.waitForTimeout(500);
     expect(activations).toEqual(['Duplicate clicked']);
@@ -337,6 +363,7 @@ test.describe('DropdownMenu press model (Chromium)', () => {
     await touch.tap(cdp, await center(page, TRIGGER));
     const menu = page.getByRole('menu');
     await expect(menu).toBeVisible();
+    await presented(page);
     const edit = await center(page, 'menuitem', 'Edit');
     await touch.start(cdp, edit);
     await touch.slide(cdp, edit, {x: edit.x + 400, y: edit.y + 200});
@@ -373,6 +400,7 @@ test.describe('DropdownMenu press model (Chromium)', () => {
     await touch.tap(cdp, await center(page, TRIGGER));
     const menu = page.getByRole('menu');
     await expect(menu).toBeVisible();
+    await presented(page);
     await expect
       .poll(async () =>
         menu.evaluate(el => el.scrollHeight > el.clientHeight + 1),

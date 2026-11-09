@@ -44,15 +44,26 @@ import {menuTouchActionStyles} from '../DropdownMenu/menuTouchAction.stylex';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {NavHeadingCloseContext} from '../NavMenu/NavMenuContext';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/TopNav/TopNavHeading.generated';
+import {isRenderable} from '../utils/isRenderable';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Styles
 // =============================================================================
 
 const styles = stylex.create({
+  // The text track can shrink to zero. The logo and the chevron row keep
+  // their width.
   root: {
-    display: 'flex',
+    display: 'grid',
+    gridAutoFlow: 'column',
+    justifyContent: 'start',
     alignItems: 'center',
     gap: spacingVars['--spacing-2'],
     minHeight: spacingVars['--spacing-8'],
@@ -67,6 +78,29 @@ const styles = stylex.create({
     textDecoration: 'none',
     color: colorVars['--color-text-primary'],
     cursor: 'default',
+  },
+  // The text track takes the free space, so end content sits at the inline end.
+  columnsWithLogo: {
+    gridTemplateColumns: 'auto minmax(0, 1fr)',
+  },
+  columnsText: {
+    gridTemplateColumns: 'minmax(0, 1fr)',
+  },
+  // Linked lines wrap, so the text track keeps its longest word: a link is
+  // never clipped to nothing, and no hidden words grow the bar.
+  columnsWithLogoAndLinks: {
+    gridTemplateColumns: 'auto minmax(min-content, 1fr)',
+  },
+  columnsWithLinks: {
+    gridTemplateColumns: 'minmax(min-content, 1fr)',
+  },
+  // The chevron box plus the gap before it. The track stops there, so a
+  // crowded bar cannot cover the chevron.
+  columnsWithLogoAndMenu: {
+    gridTemplateColumns: `auto minmax(calc(${spacingVars['--spacing-7']} + ${spacingVars['--spacing-1']}), 1fr)`,
+  },
+  columnsWithMenu: {
+    gridTemplateColumns: `minmax(calc(${spacingVars['--spacing-7']} + ${spacingVars['--spacing-1']}), 1fr)`,
   },
   interactive: {
     cursor: {
@@ -151,6 +185,13 @@ const styles = stylex.create({
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
+  },
+  // Clip the link itself. The column stays overflow visible, so the link's
+  // own focus ring is not cut off.
+  linkedLine: {
+    minWidth: 0,
+    maxWidth: '100%',
+    overflow: 'hidden',
   },
   chevron: {
     flexShrink: 0,
@@ -333,7 +374,7 @@ export function TopNavHeading({
   ref,
   ...props
 }: TopNavHeadingProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const LinkComponent = useLinkComponent(as);
   // When the logo is wrapped in a link it needs its own accessible name (the
   // logo image itself is decorative). Prefer an explicit logoLabel, fall back
@@ -399,6 +440,18 @@ export function TopNavHeading({
 
   const showChevron = !!menu;
   const hasAnyHref = !!(headingHref || superheadingHref || subheadingHref);
+  // Logo-only has no text column. An empty second track would add the column
+  // gap and widen the heading.
+  const rootColumns =
+    !heading && !menu
+      ? null
+      : isRenderable(logo)
+        ? menu
+          ? styles.columnsWithLogoAndMenu
+          : styles.columnsWithLogo
+        : menu
+          ? styles.columnsWithMenu
+          : styles.columnsText;
 
   // Determine interaction mode
   const isWholeHeadingTrigger = !!menu && !hasAnyHref;
@@ -414,7 +467,8 @@ export function TopNavHeading({
             href={superheadingHref}
             onClick={(e: React.MouseEvent) => e.stopPropagation()}
             color="secondary"
-            size="xsm">
+            size="xsm"
+            xstyle={styles.linkedLine}>
             {superheading}
           </Link>
         ) : (
@@ -439,7 +493,8 @@ export function TopNavHeading({
             href={subheadingHref}
             onClick={(e: React.MouseEvent) => e.stopPropagation()}
             color="secondary"
-            size="xsm">
+            size="xsm"
+            xstyle={styles.linkedLine}>
             {subheading}
           </Link>
         ) : (
@@ -457,7 +512,7 @@ export function TopNavHeading({
     />
   );
 
-  const headerEndContentElement = headerEndContent && (
+  const headerEndContentElement = isRenderable(headerEndContent) && (
     <span {...stylex.props(styles.headerEndContent)}>{headerEndContent}</span>
   );
 
@@ -469,7 +524,7 @@ export function TopNavHeading({
       {...stylex.props(styles.popoverHeading)}
       // A close affordance, not the trigger: dismiss only.
       onClick={closeMenu}>
-      {logo && <span {...stylex.props(styles.logo)}>{logo}</span>}
+      {isRenderable(logo) && <span {...stylex.props(styles.logo)}>{logo}</span>}
       {renderTextContent(
         <Icon
           icon="chevronDown"
@@ -494,6 +549,7 @@ export function TopNavHeading({
           themeProps('top-nav-heading'),
           stylex.props(
             styles.root,
+            rootColumns,
             !!headingHref && styles.menuTrigger,
             xstyle,
           ),
@@ -501,7 +557,9 @@ export function TopNavHeading({
           style,
         )}
         {...props}>
-        {logo && <span {...stylex.props(styles.logo)}>{logo}</span>}
+        {isRenderable(logo) && (
+          <span {...stylex.props(styles.logo)}>{logo}</span>
+        )}
       </Element>
     );
   }
@@ -515,12 +573,14 @@ export function TopNavHeading({
         data-testid={testId}
         {...mergeProps(
           themeProps('top-nav-heading'),
-          stylex.props(styles.root, styles.menuTrigger, xstyle),
+          stylex.props(styles.root, rootColumns, styles.menuTrigger, xstyle),
           className,
           style,
         )}
         {...(props as React.AnchorHTMLAttributes<HTMLAnchorElement>)}>
-        {logo && <span {...stylex.props(styles.logo)}>{logo}</span>}
+        {isRenderable(logo) && (
+          <span {...stylex.props(styles.logo)}>{logo}</span>
+        )}
         {renderTextContent()}
         {headerEndContentElement}
         {chevronElement}
@@ -538,18 +598,23 @@ export function TopNavHeading({
           {...triggerProps}
           {...mergeProps(
             themeProps('top-nav-heading'),
-            stylex.props(styles.root, styles.menuTrigger, xstyle),
+            stylex.props(styles.root, rootColumns, styles.menuTrigger, xstyle),
             className,
             style,
           )}>
-          {logo && <span {...stylex.props(styles.logo)}>{logo}</span>}
+          {isRenderable(logo) && (
+            <span {...stylex.props(styles.logo)}>{logo}</span>
+          )}
           {renderTextContent(
             // Stays a <button>: this box is the popover trigger, so it carries
             // the accessible name and handlers — only the glyph moves to Icon.
             <button
               ref={setTriggerEl}
               type="button"
-              aria-label={t('@astryx.topNav.heading.openMenu')}
+              aria-label={t('@astryx.topNav.heading.openMenu', {
+                heading: heading ?? '',
+                hasHeading: heading ? 'true' : 'false',
+              })}
               onClick={e => {
                 e.stopPropagation();
                 triggerProps.onClick();
@@ -607,11 +672,11 @@ export function TopNavHeading({
           {...triggerProps}
           {...mergeProps(
             themeProps('top-nav-heading'),
-            stylex.props(styles.root, xstyle),
+            stylex.props(styles.root, rootColumns, xstyle),
             className,
             style,
           )}>
-          {logo &&
+          {isRenderable(logo) &&
             (headingHref ? (
               <LinkComponent
                 href={headingHref}
@@ -631,7 +696,10 @@ export function TopNavHeading({
               <button
                 ref={setTriggerEl}
                 type="button"
-                aria-label={t('@astryx.topNav.heading.openMenu')}
+                aria-label={t('@astryx.topNav.heading.openMenu', {
+                  heading: heading ?? '',
+                  hasHeading: heading ? 'true' : 'false',
+                })}
                 onClick={e => {
                   e.stopPropagation();
                   triggerProps.onClick();
@@ -682,18 +750,21 @@ export function TopNavHeading({
 
   // Static heading with independent links (no menu)
   if (hasAnyHref && !isWholeHeadingLink) {
+    const linkColumns = isRenderable(logo)
+      ? styles.columnsWithLogoAndLinks
+      : styles.columnsWithLinks;
     return (
       <div
         ref={ref as React.Ref<HTMLDivElement>}
         data-testid={testId}
         {...mergeProps(
           themeProps('top-nav-heading'),
-          stylex.props(styles.root, xstyle),
+          stylex.props(styles.root, linkColumns, xstyle),
           className,
           style,
         )}
         {...props}>
-        {logo &&
+        {isRenderable(logo) &&
           (headingHref ? (
             <LinkComponent
               href={headingHref}
@@ -707,14 +778,22 @@ export function TopNavHeading({
         <span {...stylex.props(styles.textContainer)}>
           {superheading &&
             (superheadingHref ? (
-              <Link href={superheadingHref} color="secondary" size="xsm">
+              <Link
+                href={superheadingHref}
+                color="secondary"
+                size="xsm"
+                xstyle={styles.linkedLine}>
                 {superheading}
               </Link>
             ) : (
               <span {...stylex.props(styles.superheading)}>{superheading}</span>
             ))}
           {headingHref ? (
-            <Link href={headingHref} color="primary" weight="semibold">
+            <Link
+              href={headingHref}
+              color="primary"
+              weight="semibold"
+              xstyle={styles.linkedLine}>
               {heading}
             </Link>
           ) : (
@@ -722,7 +801,11 @@ export function TopNavHeading({
           )}
           {subheading &&
             (subheadingHref ? (
-              <Link href={subheadingHref} color="secondary" size="xsm">
+              <Link
+                href={subheadingHref}
+                color="secondary"
+                size="xsm"
+                xstyle={styles.linkedLine}>
                 {subheading}
               </Link>
             ) : (
@@ -742,12 +825,12 @@ export function TopNavHeading({
       data-testid={testId}
       {...mergeProps(
         themeProps('top-nav-heading'),
-        stylex.props(styles.root, xstyle),
+        stylex.props(styles.root, rootColumns, xstyle),
         className,
         style,
       )}
       {...props}>
-      {logo && <span {...stylex.props(styles.logo)}>{logo}</span>}
+      {isRenderable(logo) && <span {...stylex.props(styles.logo)}>{logo}</span>}
       {renderTextContent()}
       {headerEndContentElement}
       {chevronElement}

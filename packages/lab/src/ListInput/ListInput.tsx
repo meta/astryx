@@ -6,7 +6,7 @@
  * @file ListInput.tsx
  * @input React, StyleX, Astryx field/list/button/icon/layer/empty-state primitives, the container-reveal hook, compact size context, browser scroll geometry, programmatic theme tokens, and shared Lab reorder styles
  * @output Exports ListInput and its controlled data, column, renderer, and change types
- * @position Lab experiment (RFC facebook/astryx#4531) for editing compact repeated records
+ * @position Lab experiment (RFC meta/astryx#4531) for editing compact repeated records
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/lab/src/ListInput/ListInput.doc.mjs
@@ -59,6 +59,10 @@ import {
   themeProps,
 } from '@astryxdesign/core/utils';
 import {reorderStyles} from '../reorderStyles';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 export type ListInputChange<T> =
   | {type: 'add'; item: T; index: number}

@@ -176,7 +176,7 @@ describe('parseDesignDecisionsBlock', () => {
 });
 
 describe('classifyDesignDecisionChange', () => {
-  const path = 'packages/core/src/Button/Button.spec.md';
+  const path = 'docs/specs/components/Button/Button.spec.md';
 
   it('stays dependency-free for trusted workflow loading', () => {
     const source = readFileSync(
@@ -226,7 +226,7 @@ describe('classifyDesignDecisionChange', () => {
 
   it('classifies a valid current module block edit as DD-only', () => {
     const modulePath =
-      'packages/core/src/Table/plugins/rowStatus/useTableRowStatus.spec.md';
+      'docs/specs/components/Table/plugins/rowStatus/useTableRowStatus.spec.md';
     expect(
       classifyDesignDecisionChange({
         basePath: modulePath,

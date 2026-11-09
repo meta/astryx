@@ -65,8 +65,8 @@ the person's device.
   value, so components pick it up without change (FR1).
 
 - **FR3 — A text size the person set wins; otherwise the theme's.** When the
-  person has set a text size, through iOS Dynamic Type, the Android font scale,
-  the browser's default font size, or zoom, Core and Lab web text follows it in
+  person has set a text size, through iOS Dynamic Type, the browser's default
+  font size, or zoom, Core and Lab web text follows it in
   every theme, branded included: the theme's sizes scale from the person's
   size, each role keeps its order, and the family stays the theme's. When the
   person has not set one, or the platform gives no signal, text uses exactly
@@ -76,7 +76,12 @@ the person's device.
   replaces the mobile reading base of `design:mobile-typography` DR1, smaller
   or larger, and DR2's pin does not apply: every role scales from that size;
   DR1 and DR2 apply when none is set, and the iOS text-entry floor of
-  `family:input-fields` FR9 still holds.
+  `family:input-fields` FR9 still holds. On Android, the system font scale reaches the
+  page's root font size only with `<meta name="text-scale" content="scale">`;
+  Astryx sizes from the root, so with it the whole scale follows (verified on
+  Chromium 159.0.8142.0 on Android; Chrome on Android is unverified on current
+  stable). Without it the root stays 16 px, and the browser's own zoom setting
+  magnifies the page instead.
 - **FR4 — Larger text stays usable.** Up to 200% of the theme's sizes, every
   component keeps all of its content and function (WCAG 2.2 success criterion
   1.4.4). Above 200%, reading text keeps growing; a label inside a dense control, such
@@ -94,8 +99,8 @@ the person's device.
 - Unsupported behavior: none beyond the font fallback above.
 - Browser evidence (`spec:AST-013` FR10): Safari on iOS proves an FR2 theme's
   body text in the system body font and FR3 across Dynamic Type categories;
-  Chrome on Android in the emulator proves FR3 with the system font scale; a
-  desktop browser proves FR3 with its default font size and zoom, and FR4 at
+  Chromium 159.0.8142.0 on Android in the emulator proves FR3's Android
+  behavior with the system font scale, with and without the text-scale meta; a desktop browser proves FR3 with its default font size and zoom, and FR4 at
   200% and above; token and source checks prove FR1.
 
 ## Current-state impact
@@ -106,30 +111,30 @@ the person's device.
   Sankey labels using `system-ui` directly and several Core and Lab components
   setting their own sizes or line heights; under FR1 those are conformance
   gaps.
-- `architecture:theme-tokens`: text size tokens stay rem; Butter, Stone, and
-  Y2K's 12 px supporting-size token is the token-level gap below. Spacing and
+- `architecture:theme-tokens`: text size tokens stay rem, in every
+  first-party theme. Spacing and
   element size tokens keep their values when a size is set; a control grows
   with its text under FR4.
 - Defects under FR3 and FR4:
-  - On iOS and iPadOS, text ignores Dynamic Type in every theme.
-  - Butter, Stone, and Y2K fix supporting text at 12 px, so it does not follow
-    a larger browser or Android text size.
+  - Safari on iPhone follows Dynamic Type in every theme, recorded in the iOS
+    simulator at the current implementation. Safari on iPad and other iOS
+    browsers are unverified, and macOS Safari at its default text size is a
+    recorded follow-up verification.
   - Controls hold fixed heights, such as 40 px elements, `component:Badge`
-    FR1's block size, `component:Button` FR4's and `component:Token` FR1's
-    element sizes, and InputGroup's row height in `family:input-fields`, so a
-    larger label can overflow; those records treat their sizes as minimums
-    under FR4.
-  - Whether Chrome on Android carries the system font scale to Astryx text is
-    unverified until the emulator check FR3 names.
+    FR1's block size, `component:Token` FR1's element size, and InputGroup's
+    row height in `family:input-fields`, so a larger label can overflow; those
+    records treat their sizes as minimums under FR4.
+  - Android's system font scale reaches Astryx text only through the
+    text-scale meta; Core does not read `env(preferred-text-scale)`.
 
 ## Verification
 
-| Contract | Verification                                                                                                                                                                   | Representative states                                                                                                                                                                 | Mutation or failure expectation                                                                                                                                                                                                                                                                            |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | Source check over Core and Lab component styles plus token review                                                                                                              | family, size, and line height of rendered text in component styles; an inherited value; a `1em` icon size; coarse and fine pointer; a platform font keyword; the iOS text-entry floor | A Core or Lab web component sets the family, size, or line height of text it renders outside typography tokens and not by inheritance, or applies a platform font keyword directly; icon sizing, the family floor, and a hidden internal element that only measures a platform text style are not failures |
-| FR2      | Theme token review plus Safari on iOS, top-level document                                                                                                                      | an unbranded shipped theme using the system body font family; a branded theme; the default theme                                                                                      | A branded theme's body font replaced by the system font, or a system body font applied by a component instead of a theme token                                                                                                                                                                             |
-| FR3      | Safari on iOS across Dynamic Type categories; Chrome on Android in the emulator with font scale; a desktop browser with a larger default font size and with zoom; theme review | a branded and an unbranded theme; no size set; default category; a size set on each platform; macOS Safari                                                                            | Text that ignores a size the person set; text that differs from the theme's family or size when none is set, other than the `family:input-fields` FR9 iOS text-entry floor; a theme family replaced; a public option, prop, or document attribute; a changed root font size                                |
-| FR4      | Desktop browser at 200%, 250%, and 300% text size, plus Safari on iOS at accessibility categories                                                                              | reading text; a button, text input, tab, badge, table cell, and segmented control                                                                                                     | Lost content or function at 200% or less; a label clipped by its control's height at any size; a control that keeps a fixed height while its text grows                                                                                                                                                    |
+| Contract | Verification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Representative states                                                                                                                                                                                                                                                                                                  | Mutation or failure expectation                                                                                                                                                                                                                                                                            |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | Source check over Core and Lab component styles plus token review                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | family, size, and line height of rendered text in component styles; an inherited value; a `1em` icon size; coarse and fine pointer; a platform font keyword; the iOS text-entry floor                                                                                                                                  | A Core or Lab web component sets the family, size, or line height of text it renders outside typography tokens and not by inheritance, or applies a platform font keyword directly; icon sizing, the family floor, and a hidden internal element that only measures a platform text style are not failures |
+| FR2      | Theme token review plus Safari on iOS, top-level document                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | an unbranded shipped theme using the system body font family; a branded theme; the default theme                                                                                                                                                                                                                       | A branded theme's body font replaced by the system font, or a system body font applied by a component instead of a theme token                                                                                                                                                                             |
+| FR3      | Safari on iOS across Dynamic Type categories; Chromium 159.0.8142.0 on Android in the emulator at system font scale 1.3, with `<meta name="text-scale" content="scale">` (root 21 px as measured; rem sizes scale with it), without it (root 16 px), and without it at Default zoom 133% (root 16 px, page zoom); Chrome on Android unverified on current stable; a desktop browser with a larger default font size and with zoom; theme review; `scripts/check-theme-text-size-units.test.mjs` (no first-party theme sets a text or font size in px) | a branded and an unbranded theme; no size set; default category; a size set on each platform; Android with and without the text-scale meta; macOS Safari at its default text size, whose fixed 13 px Body names no category, so every scale stays 1 (`dynamicType.test.ts`; a browser reading is a recorded follow-up) | Text that ignores a size the person set; text that differs from the theme's family or size when none is set, other than the `family:input-fields` FR9 iOS text-entry floor; a theme family replaced; a public option, prop, or document attribute; a changed root font size                                |
+| FR4      | Desktop browser at 200%, 250%, and 300% text size, plus Safari on iOS at accessibility categories                                                                                                                                                                                                                                                                                                                                                                                                                                                     | reading text; a button, text input, tab, badge, table cell, and segmented control                                                                                                                                                                                                                                      | Lost content or function at 200% or less; a label clipped by its control's height at any size; a control that keeps a fixed height while its text grows                                                                                                                                                    |
 
 ## Decision log
 

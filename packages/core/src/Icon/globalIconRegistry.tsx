@@ -5,9 +5,10 @@
  * @input Theme icon entries (a DefinedTheme or a registered theme name), the
  *   process-wide registry, and built-in defaults
  * @output Exports registerIcons, getIconRegistry, getIcon, getExtendedIcon,
- *   resetIcons, resolveIcon (internal), IconName, IconRegistry, IconEntry,
- *   IconRequest
- * @position Global and theme-scoped icon registry; works in server and client environments
+ *   resetIcons, resolveIcon and resolveComponentIcon (internal), IconName,
+ *   IconRegistry, IconEntry, IconRequest
+ * @position Global and theme-scoped icon registry and component icon slot
+ *   resolution; works in server and client environments
  *
  * This module has NO 'use client' directive — it's importable from RSC.
  * Components resolve semantic icons through getIcon() or the client useIcon() hook.
@@ -19,12 +20,21 @@
  * its resolved size and a variant the entry can receive (listed by the active
  * theme and, for a theme entry, by the theme that defined it), otherwise
  * `undefined`; the public reads below pass `{size: 'md'}`.
+ *
+ * `resolveComponentIcon` is the only caller of a theme's `componentIcons`
+ * slot functions. It turns a slot, its state, and the component's own
+ * fallback into the request the component renders through `Icon`.
  */
 
 import type {ReactNode} from 'react';
 import {defaultIcons} from './defaultIcons';
 import type {IconSize} from './IconSize.stylex';
-import type {IconVariant} from './index';
+import type {
+  ComponentIconRequest,
+  ComponentIconSlotMap,
+  ComponentIconSlotName,
+  IconVariant,
+} from './index';
 import type {DefinedTheme} from '../theme/defineTheme';
 import {getRegisteredTheme} from '../theme/themeRegistry';
 import {warnOnce} from '../utils/devWarning';
@@ -390,6 +400,173 @@ export function getExtendedIcon(
     selectIconEntry(name, source, fallback),
     PUBLIC_READ_REQUEST,
   );
+}
+
+// =============================================================================
+// Component icon slots
+// =============================================================================
+
+/**
+ * A theme's stored value for a slot, function included. A function was typed
+ * for its slot's state; resolution passes it the state of that slot only.
+ */
+export type StoredComponentIconValue =
+  | IconName
+  | null
+  | ComponentIconRequest<string>
+  | ((state: never) => ComponentIconRequest<string> | null | undefined);
+
+/** The state a slot's component passes: `undefined` for a stateless slot. */
+export type ComponentIconSlotState<Slot extends ComponentIconSlotName> =
+  ComponentIconSlotMap[Slot] extends true
+    ? undefined
+    : Readonly<ComponentIconSlotMap[Slot]>;
+
+/**
+ * What a component renders for a slot when the theme maps nothing: its own
+ * icon name (or `null` for none), and optionally its own variant and size.
+ */
+export type ComponentIconFallback =
+  | IconName
+  | null
+  | Readonly<{icon: IconName | null; variant?: IconVariant; size?: IconSize}>;
+
+/** A slot resolved to what the component renders through `Icon`. */
+export type ResolvedComponentIcon = Readonly<{
+  icon: IconName | null;
+  variant?: string;
+  size?: IconSize;
+}>;
+
+const ICON_SIZES: ReadonlySet<unknown> = new Set(['xsm', 'sm', 'md', 'lg']);
+
+function isIconName(value: unknown): value is IconName {
+  return (
+    typeof value === 'string' &&
+    !isNamespacedKey(value) &&
+    Object.hasOwn(defaultIcons, value)
+  );
+}
+
+/**
+ * The theme's slot values, functions included. A theme from `defineTheme`
+ * keeps them in `__componentIcons` when any value is a function (its public
+ * `componentIcons` is the static view); otherwise `componentIcons` holds them.
+ */
+function getThemeComponentIcons(
+  theme: DefinedTheme | null,
+): Readonly<Record<string, StoredComponentIconValue | undefined>> | null {
+  if (theme == null) {
+    return null;
+  }
+  return theme.__componentIcons ?? theme.componentIcons ?? null;
+}
+
+function warnMalformedRequest(slot: string, problem: string): void {
+  warnOnce(
+    `component-icons:${slot}:${problem}`,
+    'Icon',
+    `componentIcons["${slot}"] ${problem}. The component keeps its own value for that field.`,
+  );
+}
+
+/**
+ * Apply a theme's request to the component's fallback, field by field. A
+ * missing field keeps the fallback. An unknown icon, a variant the active
+ * theme does not list, or an unsupported size is ignored with one
+ * development-only warning.
+ */
+function applyComponentIconRequest(
+  slot: string,
+  fallback: ResolvedComponentIcon,
+  request: unknown,
+  theme: DefinedTheme | null,
+): ResolvedComponentIcon {
+  if (request === undefined) {
+    return fallback;
+  }
+  if (request === null) {
+    return {...fallback, icon: null};
+  }
+  if (typeof request !== 'object' || Array.isArray(request)) {
+    warnMalformedRequest(
+      slot,
+      `returned ${JSON.stringify(request)}, which is not a request`,
+    );
+    return fallback;
+  }
+  const {icon, variant, size} = request as Record<string, unknown>;
+  let resolved = fallback;
+  if (icon === null || isIconName(icon)) {
+    resolved = {...resolved, icon};
+  } else if (icon !== undefined) {
+    warnMalformedRequest(
+      slot,
+      `requests the unknown icon ${JSON.stringify(icon)}`,
+    );
+  }
+  if (typeof variant === 'string' && theme?.iconVariants?.includes(variant)) {
+    resolved = {...resolved, variant};
+  } else if (variant !== undefined) {
+    warnMalformedRequest(
+      slot,
+      `requests the variant ${JSON.stringify(variant)}, which the theme does not list`,
+    );
+  }
+  if (ICON_SIZES.has(size)) {
+    resolved = {...resolved, size: size as IconSize};
+  } else if (size !== undefined) {
+    warnMalformedRequest(
+      slot,
+      `requests the unsupported size ${JSON.stringify(size)}`,
+    );
+  }
+  return resolved;
+}
+
+/**
+ * Resolve a component's icon slot. The component passes its slot state and
+ * its own fallback; the active theme's `componentIcons[slot]` adjusts that
+ * fallback. A shared icon name replaces the fallback icon, `null` hides the
+ * icon, a request applies field by field, and a slot function receives the
+ * state and returns a request whose result is final: `null` hides the icon,
+ * `undefined` changes nothing.
+ *
+ * This is the only caller of a theme's slot functions. Caller-supplied icon
+ * content wins before resolution, so a component does not resolve the slot
+ * when its caller passed content.
+ * @internal
+ */
+export function resolveComponentIcon<Slot extends ComponentIconSlotName>(
+  slot: Slot,
+  state: ComponentIconSlotState<Slot>,
+  fallback: ComponentIconFallback,
+  source: IconRegistrySource,
+): ResolvedComponentIcon {
+  const own: ResolvedComponentIcon =
+    fallback === null || typeof fallback === 'string'
+      ? {icon: fallback}
+      : fallback;
+  const theme = getTheme(source);
+  const value = getThemeComponentIcons(theme)?.[slot];
+  if (value === undefined) {
+    return own;
+  }
+  if (typeof value === 'function') {
+    const result: unknown = (value as (state: unknown) => unknown)(state);
+    if (typeof result === 'string') {
+      warnMalformedRequest(
+        slot,
+        `returned ${JSON.stringify(result)}, which is not a request`,
+      );
+      return own;
+    }
+    return applyComponentIconRequest(slot, own, result, theme);
+  }
+  if (typeof value === 'string') {
+    return applyComponentIconRequest(slot, own, {icon: value}, theme);
+  }
+  return applyComponentIconRequest(slot, own, value, theme);
 }
 
 /**

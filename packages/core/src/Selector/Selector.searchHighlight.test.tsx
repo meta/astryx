@@ -6,8 +6,8 @@
  * @output Tests which option a searchable Selector or MultiSelector highlights
  *   as the query changes: the first enabled match of the new list, so
  *   `aria-activedescendant` always names a rendered option and Enter picks
- *   the option the user sees highlighted (component:Selector FR9); a
- *   MultiSelector clears it (component:MultiSelector FR11)
+ *   the option the user sees highlighted; a
+ *   MultiSelector clears it
  * @position Colocated behavior test for search in Selector and MultiSelector
  */
 
@@ -34,7 +34,7 @@ function activeOption(search: HTMLElement): HTMLElement | null {
   return id == null ? null : document.getElementById(id);
 }
 
-describe('Selector: the highlight follows the query (component:Selector FR9)', () => {
+describe('Selector: the highlight follows the query', () => {
   it('moves the highlight to the first match when typing after arrowing', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
@@ -159,7 +159,7 @@ describe('Selector: the highlight follows the query (component:Selector FR9)', (
   });
 });
 
-describe('MultiSelector: a query change clears the highlight (component:MultiSelector FR11)', () => {
+describe('MultiSelector: a query change clears the highlight', () => {
   it('clears a highlight left from before the query, so Enter picks nothing unseen', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

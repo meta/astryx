@@ -54,6 +54,7 @@ import {
   TYPESCRIPT_FIX,
   unusableTypeScriptReason,
 } from './project-typescript.mjs';
+import {keepSourceFiles} from './source-file-cache.mjs';
 import {judgeType} from './type-match.mjs';
 import {typeTextTooOld} from './type-text.mjs';
 import {
@@ -1802,6 +1803,10 @@ export function comparePropTables(tables, options) {
       typesNotCompared: [],
     };
   }
+  // Parsed once per process for these options: every check reads the same
+  // library and package declarations.
+  const host = ts.createCompilerHost(project.options);
+  host.getSourceFile = keepSourceFiles(ts, host, project.options);
   const program = ts.createProgram({
     rootNames: [
       ...new Set([
@@ -1810,6 +1815,7 @@ export function comparePropTables(tables, options) {
       ]),
     ],
     options: project.options,
+    host,
   });
   const checker = program.getTypeChecker();
   const isOwnFile = ownFileTest(root);

@@ -7,31 +7,6 @@
  * @input Image source URL
  * @output Detected mode luminance: 'dark' | 'light' | null
  * @position Hook; used alongside MediaTheme for auto-detection
- *
- * Detects whether an image is predominantly dark or light by sampling
- * its pixels via OffscreenCanvas. Runs entirely off the paint path —
- * no visible canvas element, no layout thrash.
- *
- * Uses APCA perceptual lightness (sRGB linearization + power curve)
- * which handles saturated colors better than BT.709 gamma-luma or
- * WCAG 2 relative luminance.
- *
- * For regional detection (e.g. "what's the luminance where the text
- * overlay sits"), pass a `region` option to sample a specific area.
- *
- * @example
- * ```tsx
- * function ImageCard({ src }: { src: string }) {
- *   const mode = useImageMode(src);
- *   return (
- *     <div style={{ backgroundImage: `url(${src})` }}>
- *       <MediaTheme mode={mode ?? 'dark'}>
- *         <Text>Auto-detected text color</Text>
- *       </MediaTheme>
- *     </div>
- *   );
- * }
- * ```
  */
 
 import {useState, useEffect} from 'react';
@@ -72,18 +47,9 @@ export interface UseImageModeOptions {
 }
 
 /**
- * APCA perceptual lightness from sRGB values (0-255).
- *
- * Linearizes sRGB with a 2.4 exponent, computes luminance Y using
- * APCA coefficients (slightly refined from BT.709), then applies a
- * perceptual power curve (Y^0.56) that maps linear light to a scale
- * where 0.5 ≈ perceptual mid-gray.
- *
- * This outperforms both raw BT.709 gamma-luma and WCAG 2 relative
- * luminance for dark/light surface detection — especially on saturated
- * colors (reds, blues) where gamma-encoded luma overestimates brightness.
- *
- * Returns 0–1 where 0 is black, 1 is white.
+ * APCA perceptual lightness from sRGB values (0-255), from 0 (black) to 1
+ * (white). It handles saturated colors better than BT.709 gamma-luma or WCAG
+ * 2 relative luminance, which overestimate the brightness of reds and blues.
  */
 function perceptualLightness(r: number, g: number, b: number): number {
   const lin = (c: number) => Math.pow(c / 255, 2.4);
@@ -102,11 +68,20 @@ export function useImageMode(
   options: UseImageModeOptions = {},
 ): 'dark' | 'light' | null {
   const {region, threshold = 0.5, fallback = null} = options;
+  // Depend on the region's numbers, not its identity: callers write the
+  // region inline, and a new object each render would re-fetch and re-sample
+  // the image on every render — forever, since the result itself re-renders.
+  const regionX = region?.x;
+  const regionY = region?.y;
+  const regionWidth = region?.width;
+  const regionHeight = region?.height;
   const [detectedResult, setDetectedResult] = useState<{
     src: string;
     mode: 'dark' | 'light' | null;
   } | null>(null);
 
+  // Syncs the mode with the image at `src`. It fetches and decodes the image,
+  // then samples its pixels.
   useEffect(() => {
     if (!src) {
       return;
@@ -117,7 +92,6 @@ export function useImageMode(
 
     async function detect() {
       try {
-        // Load image as bitmap (async, doesn't block rendering)
         const response = await fetch(srcUrl, {mode: 'cors'});
         const blob = await response.blob();
         const bitmap = await createImageBitmap(blob);
@@ -126,19 +100,23 @@ export function useImageMode(
           return;
         }
 
-        // Determine source region
-        const sx = region ? Math.round(region.x * bitmap.width) : 0;
-        const sy = region ? Math.round(region.y * bitmap.height) : 0;
-        const sw = region
-          ? Math.round(region.width * bitmap.width)
+        const hasRegion =
+          regionX !== undefined &&
+          regionY !== undefined &&
+          regionWidth !== undefined &&
+          regionHeight !== undefined;
+        const sx = hasRegion ? Math.round(regionX * bitmap.width) : 0;
+        const sy = hasRegion ? Math.round(regionY * bitmap.height) : 0;
+        const sw = hasRegion
+          ? Math.round(regionWidth * bitmap.width)
           : bitmap.width;
-        const sh = region
-          ? Math.round(region.height * bitmap.height)
+        const sh = hasRegion
+          ? Math.round(regionHeight * bitmap.height)
           : bitmap.height;
 
-        // Sample at a small size and average all pixels manually.
-        // OffscreenCanvas 1×1 drawImage can produce inaccurate results
-        // depending on the browser's resampling algorithm.
+        // Sample at a small size and average the pixels here. A 1×1
+        // OffscreenCanvas drawImage can be inaccurate, because browsers
+        // resample in different ways.
         const sampleSize = 10;
         const canvas = new OffscreenCanvas(sampleSize, sampleSize);
         const ctx = canvas.getContext('2d');
@@ -149,7 +127,6 @@ export function useImageMode(
         ctx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, sampleSize, sampleSize);
         const imageData = ctx.getImageData(0, 0, sampleSize, sampleSize).data;
 
-        // Average all sampled pixels
         let totalR = 0,
           totalG = 0,
           totalB = 0;
@@ -185,7 +162,7 @@ export function useImageMode(
     return () => {
       cancelled = true;
     };
-  }, [src, region, threshold, fallback]);
+  }, [src, regionX, regionY, regionWidth, regionHeight, threshold, fallback]);
 
   if (!src || detectedResult?.src !== src) {
     return fallback;

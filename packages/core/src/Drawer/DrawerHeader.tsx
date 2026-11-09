@@ -34,8 +34,14 @@ import {Heading} from '../Heading';
 import {Icon} from '../Icon';
 import {LayoutHeader} from '../Layout';
 import {Text} from '../Text';
-import {useTranslator} from '../i18n';
 import {isRenderable, mergeProps, themeProps} from '../utils';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Drawer/DrawerHeader.generated';
+
+registerEnglishFallback(english);
 
 const styles = stylex.create({
   container: {
@@ -147,7 +153,7 @@ export function DrawerHeader({
   ref,
   ...rest
 }: DrawerHeaderProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const hasSubtitle = isRenderable(subtitle);
   const hasStartContent = isRenderable(startContent);
   const hasEndContent = isRenderable(endContent);
