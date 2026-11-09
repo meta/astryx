@@ -1323,7 +1323,7 @@ function motionStepPx(values: readonly number[]): number {
  * compositor animation presents fewer frames there, the control too. The
  * component passes when:
  * - the control moved on at least `minJudgedFrames` frames of the judged part
- *   (fewer: the machine presented too little to judge, which fails);
+ *   (fewer: the compositor presented too little to judge, as below);
  * - the component moved on every frame the control moved: both are read from
  *   the same screencast frames, so a compositor animation misses none;
  * - its longest stall is no longer than the control's.
@@ -1366,13 +1366,19 @@ function motionStepPx(values: readonly number[]): number {
  * apart, so it judges no 30 Hz cadence. A note in the summary says so, with
  * the count of such pairs.
  *
- * With a control, a run the machine starved of frames proves nothing. So it
- * throws `FrameStarvationError` with its numbers and returns no verdict. A
- * starved run has two marks. Its control moved on fewer than
- * `minJudgedFrames` frames, and the cast showed no frame for longer than
- * `FRAME_STARVATION_MS` in the block. Without a control, a block with no
- * frame is a frozen animation's, and it fails the verdict. `pooledBusyProof`
- * reads each run without the throw and judges the runs together.
+ * With a control, a window whose control moved on fewer than
+ * `minJudgedFrames` frames of the judged part is under the floor. Under the
+ * floor, a run with no component failure on the frames shown is too little to
+ * judge. It throws `FrameStarvationError` and returns no verdict. The error
+ * names the control's moves, the floor, the cast's frames in the block and its
+ * longest gap. A component that missed a frame the control moved on, or
+ * stalled longer than it, failed on frames the compositor presented. The
+ * verdict keeps that red, unless the machine starved the run: no frame for
+ * longer than `FRAME_STARVATION_MS`. `maxMedianFrameMs` judges the cast's
+ * pace, not the component, so under the floor it keeps no red. Without a
+ * control, a block with no frame is a frozen animation's, and it fails the
+ * verdict. `pooledBusyProof` reads each run without the throw and judges the
+ * runs together.
  *
  * With `judgeEveryFrame`, a frame the cast could not show the component's
  * step on is too little to judge (the frames `belowStep` counts). When the
@@ -1383,8 +1389,15 @@ function motionStepPx(values: readonly number[]): number {
 export function busyWindowProof(
   ...args: Parameters<typeof readBusyWindow>
 ): BusyProof {
-  const {proof, starvation, unjudged} = readBusyWindow(...args);
-  if (starvation != null) {
+  const {proof, starvation, unjudged, componentFailed} = readBusyWindow(
+    ...args,
+  );
+  // Under the control's floor, a cast that kept pace still shows a missed
+  // frame or a longer stall. That failure is the component's red.
+  if (
+    starvation != null &&
+    (starvation.longestGapMs > FRAME_STARVATION_MS || !componentFailed)
+  ) {
     throw new FrameStarvationError(starvation);
   }
   // A failed verdict is the component's red, whatever else the cast hid.
@@ -1439,10 +1452,12 @@ function readBusyWindow(
     return judgeBusyWindow(tracked, window, options);
   }
   const shown = atDisplayRate(dated);
-  const read = judgeBusyWindow(shown.tracked, window, {
-    ...options,
-    control: shown.control,
-  });
+  const read = judgeBusyWindow(
+    shown.tracked,
+    window,
+    {...options, control: shown.control},
+    dated.tracked,
+  );
   // A WebKit cast rarely shows two frames one interval apart, so the proof
   // cannot judge a 30 Hz cadence there. It says so, with the count.
   const {pairs, unmatched} = displayIntervalPairs(
@@ -1560,10 +1575,23 @@ function judgeBusyWindow(
      */
     judgeEveryFrame?: boolean;
   } = {},
+  /**
+   * The frames the cast drew, dated. In WebKit they are the frames before the
+   * display-rate keep, so a frame left out never lengthens the cast's gap.
+   */
+  drawn: readonly TrackedFrame[] = tracked,
 ): {
   proof: BusyProof;
   starvation: FrameShortfall | null;
   unjudged: readonly UnjudgedFrame[];
+  /**
+   * The component failed on frames the control moved on: it missed one, or
+   * stalled longer than the control. The cast's median interval is no part
+   * of it.
+   */
+  componentFailed: boolean;
+  /** The frames the cast drew in the block, and its longest gap there, ms. */
+  cast: {frames: number; longestGapMs: number};
 } {
   let end = window.to - marginMs;
   if (settledWithin != null && settledWithinSteps != null) {
@@ -2144,6 +2172,7 @@ function judgeBusyWindow(
   }
   const failures: string[] = [];
   let starvation: FrameShortfall | null = null;
+  const cast = castFramesIn(drawn, window);
   if (stats.frames === 0 && controlRead == null) {
     failures.push('no frame presented in the judged part');
   } else if (stats.medianFrameMs > maxMedianFrameMs) {
@@ -2152,34 +2181,25 @@ function judgeBusyWindow(
     );
   }
   if (controlRead != null) {
-    if (controlRead.moved < minJudgedFrames) {
-      // How starved the cast was over the whole block, as the pacing and
-      // frame errors say it. Every frame the cast delivered counts, with the
-      // component on screen or not.
-      const blockFrames = tracked
-        .filter(f => f.t > window.from && f.t < window.to)
-        .map(f => f.t);
-      const castEdges = [window.from, ...blockFrames, window.to];
-      const castGapMs = Math.max(
-        ...castEdges.slice(1).map((t, k) => t - castEdges[k]),
-      );
-      // The control is a compositor animation: when it moved too little and
-      // no frame came for that long, the machine starved the run.
-      if (castGapMs > FRAME_STARVATION_MS) {
-        starvation = {
-          by: 'busyWindowProof',
-          during: `a ${Math.round(window.to - window.from)} ms block held the main thread, and the control moved on ${controlRead.moved} of them`,
-          frames: blockFrames.length,
-          min: minJudgedFrames,
-          longestGapMs: castGapMs,
-        };
-      }
-      failures.push(
-        `the control moved on ${controlRead.moved} frames in the judged part, under ${minJudgedFrames}: the compositor presented too little in this window to judge (the cast delivered ${blockFrames.length} frame${blockFrames.length === 1 ? '' : 's'} in the ${Math.round(window.to - window.from)} ms block, none for ${Math.round(castGapMs)} ms)`,
-      );
-    }
     const visible = controlRead.movedWith - controlRead.belowStep;
-    if (visible < minJudgedFrames) {
+    if (controlRead.moved < minJudgedFrames) {
+      // The control is a compositor animation. When it moved on too few
+      // frames, the compositor presented too little to judge the component,
+      // however long the cast's longest gap was.
+      starvation = {
+        by: 'busyWindowProof',
+        during: `a ${Math.round(window.to - window.from)} ms block held the main thread, and the control moved on ${controlRead.moved} of them`,
+        frames: cast.frames,
+        min: minJudgedFrames,
+        longestGapMs: cast.longestGapMs,
+        ...(cast.longestGapMs > FRAME_STARVATION_MS
+          ? {}
+          : {
+              cause:
+                'the compositor presented too little in this window to judge, so the run proves nothing about the motion',
+            }),
+      };
+    } else if (visible < minJudgedFrames) {
       failures.push(
         `the component showed a new position on ${visible} of the control's frames, under ${minJudgedFrames}: too little motion in this window to judge`,
       );
@@ -2260,7 +2280,29 @@ function judgeBusyWindow(
     verdict: {pass: failures.length === 0, failures},
     summary,
   };
-  return {proof, starvation, unjudged};
+  const componentFailed =
+    controlRead != null &&
+    (controlRead.movedWith < controlRead.moved ||
+      controlRead.componentStallMs > controlRead.longestStallMs);
+  return {proof, starvation, unjudged, componentFailed, cast};
+}
+
+/**
+ * The frames the cast delivered inside `window`, with the component on screen
+ * or not, and the longest gap between them and the window's edges, ms.
+ */
+function castFramesIn(
+  tracked: readonly TrackedFrame[],
+  window: {readonly from: number; readonly to: number},
+): {frames: number; longestGapMs: number} {
+  const inside = tracked
+    .filter(f => f.t > window.from && f.t < window.to)
+    .map(f => f.t);
+  const edges = [window.from, ...inside, window.to];
+  return {
+    frames: inside.length,
+    longestGapMs: Math.max(...edges.slice(1).map((t, k) => t - edges[k])),
+  };
 }
 
 /** One run of a pooled busy proof (see `pooledBusyProof`). */
@@ -2328,6 +2370,13 @@ export interface PooledBusyProof {
  *   control's.
  * `maxMedianFrameMs`, when given, applies to every run. A main-thread
  * animation still fails: in every run the control moves and it does not.
+ *
+ * With fewer judged runs than `minJudgedRuns`, or a control that moved on
+ * fewer than `minJudgedFrames` frames over them, the pool is under the floor.
+ * Under the floor, a pool with no component failure on the frames shown is too
+ * little to judge, and it throws `FrameStarvationError`. A pool left short of
+ * judged runs by a run that began too late keeps its failure instead. So does a
+ * pool whose judged runs show a component red.
  */
 export function pooledBusyProof(
   runs: readonly BusyRun[],
@@ -2360,21 +2409,31 @@ export function pooledBusyProof(
     );
   }
   const late: (BusyWindowTooLateError | null)[] = [];
+  const failedRuns: boolean[] = [];
+  const runCasts: ({frames: number; longestGapMs: number} | null)[] = [];
   const proofs = runs.map(run => {
     try {
-      const {proof} = readBusyWindow(run.tracked, run.window, {
-        ...windowOptions,
-        control: run.control,
-        ahead: run.ahead,
-        controlStarts: run.controlStarts,
-      });
+      const {proof, componentFailed, cast} = readBusyWindow(
+        run.tracked,
+        run.window,
+        {
+          ...windowOptions,
+          control: run.control,
+          ahead: run.ahead,
+          controlStarts: run.controlStarts,
+        },
+      );
       late.push(null);
+      failedRuns.push(componentFailed);
+      runCasts.push(cast);
       return proof;
     } catch (error) {
       if (!(error instanceof BusyWindowTooLateError)) {
         throw error;
       }
       late.push(error);
+      failedRuns.push(false);
+      runCasts.push(null);
       return null;
     }
   });
@@ -2395,20 +2454,17 @@ export function pooledBusyProof(
       ? `${runs.length} runs`
       : `the ${judgedReads.length} judged runs of ${runs.length}`;
   const failures: string[] = [];
-  if (judgedReads.length < minJudgedRuns) {
+  if (judgedReads.length < minJudgedRuns && lateRuns > 0) {
     failures.push(
-      lateRuns === 0
-        ? `${judgedReads.length} of ${runs.length} runs judged, under ${minJudgedRuns}: the compositor presented too little in the others to judge`
-        : `${judgedReads.length} of ${runs.length} runs judged, under ${minJudgedRuns}: ${lateRuns} began too late for their motion, and the compositor presented too little in any other to judge`,
+      `${judgedReads.length} of ${runs.length} runs judged, under ${minJudgedRuns}: ${lateRuns} began too late for their motion, and the compositor presented too little in any other to judge`,
     );
   }
-  if (judgedReads.length > 0 && moved < minJudgedFrames) {
-    failures.push(
-      `the control moved on ${moved} frames over ${over}, under ${minJudgedFrames}: the compositor presented too little in these windows to judge`,
-    );
-  }
+  // Too few control frames or judged runs is too little to judge. A judged
+  // run's component red still fails: a frame it missed, or a longer stall.
+  const tooFewFrames = judgedReads.length > 0 && moved < minJudgedFrames;
+  const tooFewRuns = judgedReads.length < minJudgedRuns && lateRuns === 0;
   const visible = movedWith - total('belowStep');
-  if (judgedReads.length > 0 && visible < minJudgedFrames) {
+  if (!tooFewFrames && judgedReads.length > 0 && visible < minJudgedFrames) {
     failures.push(
       `the component showed a new position on ${visible} of the control's frames over ${over}, under ${minJudgedFrames}: too little motion in these windows to judge`,
     );
@@ -2442,6 +2498,43 @@ export function pooledBusyProof(
       );
     }
   });
+  // A pool whose compositor presented too little proves nothing about the
+  // motion, as one starved window does. A run that began too late keeps the
+  // pool's failure. So does a judged run's component red.
+  const lateFailure = judgedReads.length < minJudgedRuns && lateRuns > 0;
+  const componentFailed = failedRuns.some((failed, i) => judged[i] && failed);
+  if ((tooFewFrames || tooFewRuns) && !lateFailure && !componentFailed) {
+    const casts = runCasts.filter(
+      (cast, i): cast is {frames: number; longestGapMs: number} =>
+        cast != null && (tooFewRuns || judged[i]),
+    );
+    const frames = casts.reduce((sum, cast) => sum + cast.frames, 0);
+    const longestGapMs = Math.max(...casts.map(cast => cast.longestGapMs));
+    throw new FrameStarvationError(
+      tooFewRuns
+        ? {
+            by: 'pooledBusyProof',
+            during: `${runs.length} blocks held the main thread, and ${judgedReads.length} of them had enough control frames to judge`,
+            frames,
+            min: minJudgedRuns,
+            longestGapMs,
+            cause: `${judgedReads.length} of ${runs.length} runs judged, under ${minJudgedRuns}, and the control moved on ${moved} frames over them: the compositor presented too little in the others to judge, so the pool proves nothing about the motion`,
+          }
+        : {
+            by: 'pooledBusyProof',
+            during: `the blocks of ${over} held the main thread, and the control moved on ${moved} of them`,
+            frames,
+            min: minJudgedFrames,
+            longestGapMs,
+            ...(longestGapMs > FRAME_STARVATION_MS
+              ? {}
+              : {
+                  cause:
+                    'the compositor presented too little in these windows to judge, so the pool proves nothing about the motion',
+                }),
+          },
+    );
+  }
   const summary =
     `${runs.length} runs pooled` +
     (judgedReads.length === runs.length
