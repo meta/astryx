@@ -266,7 +266,7 @@ index 06d9db55411..f824d6ca219 100644
 -          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
 +          FILES_PATH: ${{ steps.scope.outputs.changed_files_path || steps.everything.outputs.path }}
 diff --git a/scripts/release/active-release.mjs b/scripts/release/active-release.mjs
-index 7eae88e71bd..e3868831682 100644
+index 7eae88e71bd..a6f1732c5c5 100644
 --- a/scripts/release/active-release.mjs
 +++ b/scripts/release/active-release.mjs
 @@ -14,2 +14,2 @@
@@ -291,7 +291,7 @@ index 7eae88e71bd..e3868831682 100644
 @@ -364 +375 @@ function git(root, args) {
 -  return execFileSync('git', args, {cwd: root, encoding: 'utf8'}).trim();
 +  return gitRaw(root, args).trim();
-@@ -709,7 +720,338 @@ function listActiveBranches(root) {
+@@ -709,7 +720,352 @@ function listActiveBranches(root) {
 -const RELEASE_OUTPUT_PATTERNS = [
 -  /^packages\/(?:[^/]+|themes\/[^/]+)\/package\.json$/,
 -  /^packages\/(?:[^/]+|themes\/[^/]+)\/CHANGELOG\.md$/,
@@ -398,19 +398,33 @@ index 7eae88e71bd..e3868831682 100644
 +            pair.close >= range.end,
 +        )
 +        .sort((a, b) => a.close - a.open - (b.close - b.open))[0];
++      const changedCode = masked.slice(range.start, range.end).trim();
++      if (!changedCode || /^[{}()[\],]*$/.test(changedCode)) {
++        if (
++          /@(?:vitest-environment|jest-environment|ts-check|ts-nocheck)|(?:eslint|prettier)-(?:disable|enable)/i.test(
++            lines[index].text,
++          )
++        ) {
++          statements.push('<unbounded changed statement>');
++        }
++        continue;
++      }
 +      if (!enclosingCall) {
-+        const changedCode = masked.slice(range.start, range.end);
-+        const semicolon = changedCode.indexOf(';');
-+        if (semicolon === -1) {
++        if (!changedCode.includes(';')) {
 +          statements.push('<unbounded changed statement>');
 +          continue;
 +        }
-+        statements.push(
-+          text.slice(range.start, range.start + semicolon + 1).trim(),
-+        );
++        for (const statement of changedCode.split(';')) {
++          if (statement.trim()) statements.push(`${statement.trim()};`);
++        }
 +        continue;
 +      }
-+      const start = masked.lastIndexOf(';', enclosingCall.open - 1) + 1;
++      const previousSemicolon = masked.lastIndexOf(';', enclosingCall.open - 1);
++      if (previousSemicolon === -1) {
++        statements.push('<unbounded changed statement>');
++        continue;
++      }
++      const start = previousSemicolon + 1;
 +      const semicolon = masked.indexOf(';', enclosingCall.close);
 +      if (semicolon === -1) {
 +        statements.push('<unbounded changed statement>');
@@ -637,7 +651,7 @@ index 7eae88e71bd..e3868831682 100644
 +  /^\.github\/workflows\/ci\.yml$/,
 +  /^docs\/release\.md$/,
 +  /^docs\/specs\/AST-(?:017|030)\/spec\.md$/,
-@@ -718,2 +1060,157 @@ const RELEASE_OUTPUT_PATTERNS = [
+@@ -718,2 +1074,157 @@ const RELEASE_OUTPUT_PATTERNS = [
 -function isReleaseOutputPath(file) {
 -  return RELEASE_OUTPUT_PATTERNS.some(pattern => pattern.test(file));
 +function isAncestor(root, ancestor, descendant) {
@@ -797,7 +811,7 @@ index 7eae88e71bd..e3868831682 100644
 +    files: candidateEntries.length,
 +    bundleDigest: manifest ? sha256(canonicalJson(manifest)) : null,
 +  };
-@@ -729,8 +1226,3 @@ function validateReleaseDiff(entries, {plan, baseChangesets} = {}) {
+@@ -729,8 +1240,3 @@ function validateReleaseDiff(entries, {plan, baseChangesets} = {}) {
 -    const [status, ...files] = entry.split('\t');
 -    const isMove = status?.startsWith('R') || status?.startsWith('C');
 -    const expectedPaths = isMove ? 2 : 1;
@@ -809,7 +823,7 @@ index 7eae88e71bd..e3868831682 100644
 +    const [status] = entry.split('\t');
 +    const files = diffEntryFiles(entry);
 +    if (files === null) {
-@@ -1265,0 +1758,29 @@ async function main() {
+@@ -1265,0 +1772,29 @@ async function main() {
 +  if (command === 'validate-policy-carry') {
 +    const base = required(values, 'base');
 +    const head = required(values, 'head');
@@ -839,7 +853,7 @@ index 7eae88e71bd..e3868831682 100644
 +    );
 +    return;
 +  }
-@@ -1274,7 +1795,25 @@ async function main() {
+@@ -1274,7 +1809,25 @@ async function main() {
 -    const errors = [
 -      ...validateIdentity(marker, plan),
 -      ...validateReleaseDiff(raw ? raw.split('\n') : [], {
@@ -872,17 +886,17 @@ index 7eae88e71bd..e3868831682 100644
 +      ];
 +    }
 +    const errors = [...validateIdentity(marker, plan), ...diffErrors];
-@@ -1285,0 +1825 @@ async function main() {
+@@ -1285,0 +1839 @@ async function main() {
 +        kind,
-@@ -1287 +1827,2 @@ async function main() {
+@@ -1287 +1841,2 @@ async function main() {
 -        files: raw ? raw.split('\n').length : 0,
 +        files: entries.length,
 +        ...(sourceCommit ? {sourceCommit, patchId} : {}),
-@@ -1399,0 +1941 @@ export {
+@@ -1399,0 +1955 @@ export {
 +  changedStatementsFromDiff,
-@@ -1404,0 +1947 @@ export {
+@@ -1404,0 +1961 @@ export {
 +  isReleaseTestRepairPath,
-@@ -1411,0 +1955 @@ export {
+@@ -1411,0 +1969 @@ export {
 +  validateReleaseTestRepair,
 diff --git a/scripts/release/release-paths.mjs b/scripts/release/release-paths.mjs
 new file mode 100644

@@ -816,19 +816,33 @@ function changedStatementsFromDiff(diff) {
             pair.close >= range.end,
         )
         .sort((a, b) => a.close - a.open - (b.close - b.open))[0];
+      const changedCode = masked.slice(range.start, range.end).trim();
+      if (!changedCode || /^[{}()[\],]*$/.test(changedCode)) {
+        if (
+          /@(?:vitest-environment|jest-environment|ts-check|ts-nocheck)|(?:eslint|prettier)-(?:disable|enable)/i.test(
+            lines[index].text,
+          )
+        ) {
+          statements.push('<unbounded changed statement>');
+        }
+        continue;
+      }
       if (!enclosingCall) {
-        const changedCode = masked.slice(range.start, range.end);
-        const semicolon = changedCode.indexOf(';');
-        if (semicolon === -1) {
+        if (!changedCode.includes(';')) {
           statements.push('<unbounded changed statement>');
           continue;
         }
-        statements.push(
-          text.slice(range.start, range.start + semicolon + 1).trim(),
-        );
+        for (const statement of changedCode.split(';')) {
+          if (statement.trim()) statements.push(`${statement.trim()};`);
+        }
         continue;
       }
-      const start = masked.lastIndexOf(';', enclosingCall.open - 1) + 1;
+      const previousSemicolon = masked.lastIndexOf(';', enclosingCall.open - 1);
+      if (previousSemicolon === -1) {
+        statements.push('<unbounded changed statement>');
+        continue;
+      }
+      const start = previousSemicolon + 1;
       const semicolon = masked.indexOf(';', enclosingCall.close);
       if (semicolon === -1) {
         statements.push('<unbounded changed statement>');

@@ -563,7 +563,8 @@ describe('active release branch authority', () => {
         diff: `diff --git a/test.mjs b/test.mjs
 --- a/test.mjs
 +++ b/test.mjs
-@@ -1,5 +1,5 @@
+@@ -1,6 +1,6 @@
+ before();
  await expect.poll(() => count).toBeGreaterThan(
 -  0,
 +  1,
@@ -576,7 +577,8 @@ describe('active release branch authority', () => {
         diff: `diff --git a/test.mjs b/test.mjs
 --- a/test.mjs
 +++ b/test.mjs
-@@ -1,5 +1,5 @@
+@@ -1,6 +1,6 @@
+ before();
  await expect(result).toEqual({
 -  value: 1,
 +  value: 2,
@@ -588,7 +590,8 @@ describe('active release branch authority', () => {
         diff: `diff --git a/test.mjs b/test.mjs
 --- a/test.mjs
 +++ b/test.mjs
-@@ -1,6 +1,6 @@
+@@ -1,7 +1,7 @@
+ before();
  await expect.poll(() => {
 -  return ready;
 +  return settled;
@@ -610,6 +613,19 @@ describe('active release branch authority', () => {
      });`,
         expected: '<unbounded changed statement>',
       },
+      {
+        diff: `diff --git a/test.mjs b/test.mjs
+--- a/test.mjs
++++ b/test.mjs
+@@ -493,5 +493,5 @@
+       brand: {
+         light: {
+-          accent: neutralPalettes.green.light[25],
++          accent: neutralPalettes.green.light[30],
+         },
+       },`,
+        expected: '<unbounded changed statement>',
+      },
     ];
     for (const {diff, expected} of statementCases) {
       const changedStatements = changedStatementsFromDiff(diff);
@@ -618,6 +634,49 @@ describe('active release branch authority', () => {
         `release test repair changes an assertion, test control, timeout, retry, or snapshot: ${expected}`,
       );
     }
+    const portStatements = changedStatementsFromDiff(`diff --git a/test.mjs b/test.mjs
+--- a/test.mjs
++++ b/test.mjs
+@@ -1,7 +1,7 @@
+ /**
+  * @file BottomSheetRelease.a11y.chromium.spec.ts
+- * @input Built BottomSheet stories and real Chromium touch input (CDP), each
+- *   event with its own timestamp
++ * @input Built BottomSheet stories and real Chromium touch and mouse input
++ *   (CDP), each event with its own timestamp
+  * @output Browser evidence for the touch release.
+  */
+@@ -20,5 +20,8 @@
+ setup();
++const cdp = await page.context().newCDPSession(page);
++// 150 px in 50 ms is 3,000 px/s, so the mouse release projects past the
++// dismiss line even when event delivery is slow.
++await mouseDrag(cdp, sheet, 150, 50);
+ cleanup();`);
+    expect(portStatements).not.toContain('<unbounded changed statement>');
+
+    const multiStatementChange = changedStatementsFromDiff(`diff --git a/test.mjs b/test.mjs
+--- a/test.mjs
++++ b/test.mjs
+@@ -1 +1 @@
+-safe(); expect(value).toBe(true);
++safe(); expect(value).toBe(false);`);
+    expect(multiStatementChange).toContain('expect(value).toBe(false);');
+    expect(
+      repair({changedLines: undefined, changedStatements: multiStatementChange}),
+    ).toContain(
+      'release test repair changes an assertion, test control, timeout, retry, or snapshot: expect(value).toBe(false);',
+    );
+
+    expect(
+      changedStatementsFromDiff(`diff --git a/test.mjs b/test.mjs
+--- a/test.mjs
++++ b/test.mjs
+@@ -1 +1 @@
+-// @vitest-environment node
++// @vitest-environment jsdom`),
+    ).toContain('<unbounded changed statement>');
+
     expect(repair({commitCount: 2})).toContain(
       'release test repair must contain exactly one non-merge commit',
     );
