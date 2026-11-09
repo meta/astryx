@@ -27,6 +27,7 @@
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Toast/ToastViewport.modalHost.test.tsx
+ * - /packages/core/src/Layer/modalOutlet.shared.test.ts
  * - /docs/architecture/layer-runtime.md
  */
 
@@ -38,6 +39,7 @@ import {
   type RefCallback,
   type RefObject,
 } from 'react';
+import {realmValue, sharedKey} from '../utils/sharedRealm';
 
 const outlets: HTMLDialogElement[] = [];
 // Outlets whose order among themselves is decided by their caller (a stack of
@@ -58,7 +60,13 @@ const listeners = new Set<(change: ModalOutletChange) => void>();
 
 // The global hosts that move into the latest open modal. Each host removes
 // its own mark when it goes, so the set keeps no node past its host.
-const hosts = new Set<Element>();
+// Registered, so the input hold of a swizzled copy leaves the package's hosts
+// live, as the package's own hold does.
+const hosts = realmValue(
+  sharedKey('layer/modal-outlet-hosts', 1),
+  () => new Set<Element>(),
+  value => value instanceof Set,
+);
 
 function notify(change: ModalOutletChange): void {
   for (const listener of listeners) {
