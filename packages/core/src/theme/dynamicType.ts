@@ -21,8 +21,14 @@
  * and gives the page that category's scales in an adopted stylesheet. It
  * reads again when the probe resizes. Each theme writes a font size as its
  * own value times the scale of the text style it plays, so only sizes move.
- * Every scale is 1 at the default category and in every other browser.
- * macOS Safari knows the keyword, but its fixed 13px Body names no category.
+ * Every scale is 1 at the default category. macOS Safari knows the keyword,
+ * but its fixed 13px Body names no category.
+ *
+ * Elsewhere every scale reads `env(preferred-text-scale)`, with 1 as the
+ * fallback, so an engine without it changes nothing. Chromium on Android sets
+ * it from the system font scale. A page that carries
+ * `<meta name="text-scale" content="scale">` already scales its root font
+ * size, so it gets no scales: rem sizes follow the root once.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/theme/dynamicType.test.ts
@@ -166,12 +172,29 @@ function scaleRuleForColumn(column: number): string {
   if (column < 0 || column === LARGE) {
     return '';
   }
+  return scaleRule(style =>
+    formatScale(typography[style][column] / typography[style][LARGE]),
+  );
+}
+
+/** The value every scale takes where the engine reports one text scale. */
+export const PREFERRED_TEXT_SCALE = 'env(preferred-text-scale, 1)';
+
+/**
+ * The rule that gives every scaled style the engine's one text scale. The
+ * system font scale on Android grows all text by the same factor.
+ */
+export function preferredTextScaleRule(): string {
+  return scaleRule(() => PREFERRED_TEXT_SCALE);
+}
+
+function scaleRule(scaleOf: (style: DynamicTypeStyle) => string): string {
   const declarations = (entries: [string, string][]) =>
     entries.map(([name, value]) => `  ${name}: ${value};`).join('\n');
   return `@layer astryx-base {\n:root {\n${declarations(scaledFontSizeEntries(textSizeDefaults))}\n}\n}\n:root {\n${declarations(
     SCALED_STYLES.map(style => [
       dynamicTypeScaleProperty(style),
-      formatScale(typography[style][column] / typography[style][LARGE]),
+      scaleOf(style),
     ]),
   )}\n}`;
 }
@@ -334,10 +357,11 @@ function lengthInPx(value: string | undefined): number | null {
 
 /**
  * Measure the reader's text size and give the page its scales; returns the
- * cleanup. Does nothing where the engine has no `font: -apple-system-body` or
- * cannot construct a stylesheet (every supported browser that has the keyword
- * can); where its Body size names no category (macOS Safari's fixed 13px),
- * every scale stays 1.
+ * cleanup. Where the engine has no `font: -apple-system-body`, every scale
+ * reads `env(preferred-text-scale)` instead, unless the page carries the
+ * text-scale meta. Does nothing where the engine cannot construct a
+ * stylesheet; where its Body size names no category (macOS Safari's fixed
+ * 13px), every scale stays 1.
  *
  * The probe is a hidden, empty `font: -apple-system-body` box, 1em square,
  * appended to `<body>` outside every app subtree: it renders no text, and it
@@ -382,11 +406,14 @@ const sharedSyncs = new WeakMap<
 function startReaderTextSizeSync(doc: Document): (() => void) | undefined {
   const view = doc.defaultView;
   if (
-    !view?.CSS?.supports?.('font', '-apple-system-body') ||
+    view == null ||
     typeof view.CSSStyleSheet !== 'function' ||
     !Array.isArray(doc.adoptedStyleSheets)
   ) {
     return undefined;
+  }
+  if (!view.CSS?.supports?.('font', '-apple-system-body')) {
+    return startPreferredTextScale(doc, view);
   }
 
   const probe = doc.createElement('span');
@@ -412,6 +439,28 @@ function startReaderTextSizeSync(doc: Document): (() => void) | undefined {
   return () => {
     stopObserving();
     probe.remove();
+    doc.adoptedStyleSheets = doc.adoptedStyleSheets.filter(
+      adopted => adopted !== sheet,
+    );
+  };
+}
+
+/**
+ * Give every scale `env(preferred-text-scale)`, which the engine keeps
+ * current, so nothing is measured or observed. Does nothing on a page whose
+ * text-scale meta already scales the root font size.
+ */
+function startPreferredTextScale(
+  doc: Document,
+  view: Window & typeof globalThis,
+): (() => void) | undefined {
+  if (doc.querySelector('meta[name="text-scale"][content="scale" i]') != null) {
+    return undefined;
+  }
+  const sheet = new view.CSSStyleSheet();
+  sheet.replaceSync(preferredTextScaleRule());
+  doc.adoptedStyleSheets = [...doc.adoptedStyleSheets, sheet];
+  return () => {
     doc.adoptedStyleSheets = doc.adoptedStyleSheets.filter(
       adopted => adopted !== sheet,
     );
