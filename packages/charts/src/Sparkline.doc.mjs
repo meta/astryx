@@ -7,13 +7,7 @@ export const docs = {
   displayName: 'Sparkline',
   group: 'Charts',
   category: 'Data Visualization',
-  keywords: [
-    'sparkline',
-    'mini chart',
-    'trend',
-    'inline chart',
-    'kpi',
-  ],
+  keywords: ['sparkline', 'mini chart', 'trend', 'inline chart', 'kpi'],
 
   usage: {
     description:
