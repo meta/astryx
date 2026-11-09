@@ -1,8 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect, afterEach, beforeEach, vi} from 'vitest';
+import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
 import {
   focusForLastInput,
+  focusForLastInputTemporarily,
+  releaseTemporaryFocus,
   isFocusLost,
   moveFocusLeftBehind,
   noteFocusWithin,
@@ -194,6 +197,129 @@ describe('focusForLastInput in a second document', () => {
   });
 });
 
+describe('temporary programmatic focus', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    document.body.innerHTML = '';
+  });
+
+  it('uses the canonical focusable selector before acquiring a temporary tab stop', () => {
+    const target = document.createElement('div');
+    document.body.append(target);
+    const matches = vi.spyOn(target, 'matches');
+    const dispose = focusForLastInputTemporarily(target);
+    expect(matches).toHaveBeenCalledWith(FOCUSABLE_SELECTOR);
+    expect(target).toHaveAttribute('tabindex', '-1');
+    dispose();
+    expect(target).not.toHaveAttribute('tabindex');
+  });
+
+  it('passes options and modality through and releases its attribute and listener on dispose', () => {
+    const target = document.createElement('div');
+    document.body.append(target);
+    const focus = vi.spyOn(target, 'focus');
+    const remove = vi.spyOn(target, 'removeEventListener');
+    const dispose = focusForLastInputTemporarily(
+      target,
+      {preventScroll: true},
+      'pointer',
+    );
+    expect(target).toHaveFocus();
+    expect(focus).toHaveBeenLastCalledWith({
+      preventScroll: true,
+      focusVisible: false,
+    });
+    expect(target).toHaveAttribute('tabindex', '-1');
+    dispose();
+    dispose();
+    expect(target).not.toHaveAttribute('tabindex');
+    expect(remove).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['button', 'input', 'textarea', 'select'])(
+    'preserves native %s focusability',
+    tag => {
+      const target = document.createElement(tag);
+      document.body.append(target);
+      const dispose = focusForLastInputTemporarily(target);
+      expect(target).toHaveFocus();
+      expect(target).not.toHaveAttribute('tabindex');
+      dispose();
+      expect(target).not.toHaveAttribute('tabindex');
+    },
+  );
+
+  it.each(['-1', '0', '3'])('preserves authored tabindex %s', value => {
+    const target = document.createElement('div');
+    target.setAttribute('tabindex', value);
+    document.body.append(target);
+    const dispose = focusForLastInputTemporarily(target);
+    expect(target).toHaveFocus();
+    target.blur();
+    dispose();
+    releaseTemporaryFocus(target);
+    expect(target).toHaveAttribute('tabindex', value);
+  });
+
+  it('keeps later authored changes and lets a newer focus owner survive old cleanup', () => {
+    const target = document.createElement('div');
+    document.body.append(target);
+    const first = focusForLastInputTemporarily(target);
+    const second = focusForLastInputTemporarily(
+      target,
+      {preventScroll: true},
+      'pointer',
+    );
+    first();
+    expect(target).toHaveFocus();
+    expect(target).toHaveAttribute('tabindex', '-1');
+    target.setAttribute('tabindex', '2');
+    second();
+    expect(target).toHaveAttribute('tabindex', '2');
+  });
+
+  it('explicitly releases ownership after removal and can refocus with keyboard options', () => {
+    const target = document.createElement('div');
+    document.body.append(target);
+    const focus = vi.spyOn(target, 'focus');
+    focusForLastInputTemporarily(target, {preventScroll: true}, 'keyboard');
+    expect(focus).toHaveBeenLastCalledWith({preventScroll: true});
+    target.remove();
+    releaseTemporaryFocus(target);
+    expect(target).not.toHaveAttribute('tabindex');
+    document.body.append(target);
+    const dispose = focusForLastInputTemporarily(target);
+    expect(target).toHaveFocus();
+    dispose();
+  });
+
+  it('cleans a target that cannot take focus and explicit release is idempotent', () => {
+    const target = document.createElement('div');
+    const dispose = focusForLastInputTemporarily(target);
+    expect(target).not.toHaveAttribute('tabindex');
+    releaseTemporaryFocus(target);
+    dispose();
+    expect(target).not.toHaveAttribute('tabindex');
+  });
+
+  it('lets a removal caller preserve scroll through the optional focus options', () => {
+    const container = document.createElement('div');
+    const inside = document.createElement('button');
+    container.append(inside);
+    document.body.append(container);
+    inside.focus();
+    const note = noteFocusWithin(container);
+    inside.remove();
+    const focus = vi.spyOn(container, 'focus');
+    expect(
+      moveFocusLeftBehind(note, container, null, {preventScroll: true}),
+    ).toBe(true);
+    expect(focus.mock.calls.at(-1)?.[0]).toMatchObject({preventScroll: true});
+    releaseTemporaryFocus(container);
+    expect(container).not.toHaveAttribute('tabindex');
+  });
+});
+
 describe('isFocusLost', () => {
   afterEach(() => {
     document.body.innerHTML = '';
@@ -254,6 +380,28 @@ describe('noteFocusWithin and moveFocusLeftBehind', () => {
     content.style.display = 'none';
     expect(moveFocusLeftBehind(note, target, content)).toBe(true);
     expect(target).toHaveFocus();
+  });
+
+  it('returns focus to an otherwise unfocusable container after removal', () => {
+    const {container, inside, outside} = setUp();
+    inside.focus();
+    const note = noteFocusWithin(container);
+    inside.remove();
+    expect(moveFocusLeftBehind(note, container)).toBe(true);
+    expect(container).toHaveFocus();
+    expect(container).toHaveAttribute('tabindex', '-1');
+    outside.focus();
+    expect(container).not.toHaveAttribute('tabindex');
+  });
+
+  it('preserves focus the caller chose after the noted element was removed', () => {
+    const {container, inside, target, outside} = setUp();
+    inside.focus();
+    const note = noteFocusWithin(container);
+    inside.remove();
+    outside.focus();
+    expect(moveFocusLeftBehind(note, target)).toBe(false);
+    expect(outside).toHaveFocus();
   });
 
   it('moves no focus that survived the change or was never inside', () => {

@@ -91,7 +91,9 @@ const styles = stylex.create({
     height: '100%',
     minHeight: 0,
     paddingInline: spacingVars['--spacing-3'],
-    paddingBlockStart: spacingVars['--spacing-8'],
+    // With the sheet's band under its grab bar (--spacing-6), this keeps the
+    // first row --spacing-8 below the sheet's top edge.
+    paddingBlockStart: spacingVars['--spacing-2'],
     paddingBlockEnd: spacingVars['--spacing-3'],
   },
   // The sheet has no dedicated close button; it keeps BottomSheet's gesture,

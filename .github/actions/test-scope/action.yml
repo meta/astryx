@@ -87,6 +87,11 @@ outputs:
       not decide; a job that must do work on a lane it cannot recognize (spec
       validation) reads this.
     value: ${{ steps.scope.outputs.decided }}
+  truncated:
+    description: >-
+      `true` when the step could not decide because GitHub truncated the pull
+      request's file list (3,000 files); a re-run cannot decide such a scope.
+    value: ${{ steps.scope.outputs.truncated }}
   touches:
     description: A changed path matches `paths` (true when `paths` is empty or undecidable).
     value: ${{ steps.scope.outputs.touches }}
@@ -148,6 +153,7 @@ runs:
             applies: 'true',
             head_file_present: 'true',
             decided: 'true',
+            truncated: 'false',
           };
           // Outside a pull request, or when undecidable, every component audit
           // applies in full; a specialized lane has none.
@@ -235,7 +241,11 @@ runs:
               }
             } catch (error) {
               core.warning(`Scope could not be decided (${error.message}); everything is in scope.`);
-              report({...everything, decided: 'false'});
+              report({
+                ...everything,
+                decided: 'false',
+                truncated: String(/truncated the file list/.test(error.message)),
+              });
               return;
             }
 

@@ -3079,7 +3079,11 @@ describe('Tokenizer sheet draft, Save and dismissal (FR18, FR23, FR24, FR26, FR2
     const input = screen.getByLabelText('Search Tags');
     const field = input.parentElement!;
     for (const name of atoms(
-      stylex.props(inputWrapperStyles.base, own.field).className,
+      stylex.props(
+        inputWrapperStyles.base,
+        inputWrapperStyles.textField,
+        own.field,
+      ).className,
     )) {
       expect(field).toHaveClass(name);
     }
