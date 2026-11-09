@@ -90,6 +90,7 @@ row-position accuracy (DEC-3).
 - **INV4 — Container and page scroll.** Every virtualizer, the shared engine
   and each consumer, works both inside a container scroll area and with page
   (document) scroll.
+- **INV5 — Size budget.** The shared windowing engine stays at or under 4.9 KB minified and gzipped, the size of the smallest comparable full-featured library (virtua's Virtualizer plus WindowVirtualizer) built with the same settings (esbuild, ESM, minified, React external, gzip -9). Each component's adapter stays at or under 2 KB on the same measure. A change over either budget needs the owner's decision.
 
 ## Current-state impact
 
@@ -99,6 +100,8 @@ row-position accuracy (DEC-3).
   message.
 - **INV4 gap:** Table windows only inside its own bounded viewport; on a
   scrolling page or inside an outer scroll container it renders every row.
+- **INV5 gap:** Table's adapter (controller and wiring) measures about 5.3 KB.
+- **INV5 gap:** the chat virtualizer's own code measures 4.7 KB, with no split between shared engine and chat adapter.
 
 ## Change coupling
 
@@ -153,6 +156,15 @@ scroll (INV4, FR4). No scroll-ref API is required.
 engine is chosen by a measured comparison of candidates on performance and
 row-position accuracy.
 
+### DEC-4 — The windowing engine and its adapters have a size budget
+
+**Reference:** `architecture:list-windowing/DEC-4`
+**Decider:** `cixzhang`, `2026-11-09`
+
+> Size budget ok
+
+The owner approved the budget in INV5. It is set from the 2026-11-09 measurement of virtua's Virtualizer plus WindowVirtualizer, 4.9 KB with the same build settings.
+
 ## Open questions
 
 - **OQ1 — Is the windowing module public (a hook) or internal only?** Not
@@ -166,3 +178,4 @@ row-position accuracy.
 | INV2      | Public export review of every package entry point (evidence gap: no module exists yet)                                                          | The module, or a type only it uses, is reachable from a public entry point                        |
 | INV3      | The public-API report for `useTableRowsVirtualization` and each consumer (evidence gap: the hook is not built yet)                              | Adopting the module changes a consumer's public props, types, or exports                          |
 | INV4      | Each consumer's windowed list inside a container scroll area and on a scrolling page (evidence gap: Table windows only inside its own viewport) | A consumer renders every row, or places rows wrongly, when the page or an outer container scrolls |
+| INV5      | the size check's dedicated budget entries for the engine and each adapter                                                                       | The engine measures over 4.9 KB, or an adapter over 2 KB, without the owner's decision            |
