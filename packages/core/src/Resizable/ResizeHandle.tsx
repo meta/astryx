@@ -438,14 +438,21 @@ export function ResizeHandle({
   // --- The region a `resizable` prop describes ---
 
   // The gesture reads the latest props at each input. A drag sees the region
-  // as it is now, not as it was at the press.
+  // as it is now, not as it was at the press. The refs are written at commit:
+  // a render React discards must not leave its props for the gesture.
   const resizableRef = useRef(resizable);
-  resizableRef.current = resizable;
+  // Syncs the gesture's region with the committed props.
+  useIsomorphicLayoutEffect(() => {
+    resizableRef.current = resizable;
+  });
   // The region a drag in flight started on: told the gesture is over even
   // after the prop has gone.
   const dragRegionRef = useRef<ResizableProps | undefined>(undefined);
   const configRef = useRef({direction, isReversed, isDisabled});
-  configRef.current = {direction, isReversed, isDisabled};
+  // Syncs the gesture's direction and state with the committed props.
+  useIsomorphicLayoutEffect(() => {
+    configRef.current = {direction, isReversed, isDisabled};
+  });
   const [isDragging, setIsDragging] = useState(false);
   const [regionGesture] = useState<ResizeGesture>(() => {
     const model: ResizeGestureModel = {

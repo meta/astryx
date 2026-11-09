@@ -572,7 +572,10 @@ function useResizableController(
   regionSlot?: RegionPaneSlot,
 ): ResizableReading {
   const optionsRef = useRef(options);
-  optionsRef.current = options;
+  // Syncs the options the factory starts from with the committed ones.
+  useIsomorphicLayoutEffect(() => {
+    optionsRef.current = options;
+  });
   const [slot] = useState(() => createSlot(readInitialResizableState(options)));
   const [serverInitial] = useState(() =>
     readInitialResizableState(options, 'server'),
