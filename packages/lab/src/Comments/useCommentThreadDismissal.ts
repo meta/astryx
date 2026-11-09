@@ -324,16 +324,15 @@ export function useCommentThreadDismissal({
   // through this ref, as the composer's own listeners do. The ref is written
   // at commit: a render React discards, as a suspended transition does, must
   // not leave its draft for the listeners.
+  const wouldGuard = () =>
+    draft != null && guardedSignatureRef.current !== draft.signature;
   const latestRef = useRef<{
     request: () => RequestOutcome;
     wouldGuard: () => boolean;
   } | null>(null);
+  // Syncs the document listeners' draft with the committed render.
   useLayoutEffect(() => {
-    latestRef.current = {
-      request,
-      wouldGuard: () =>
-        draft != null && guardedSignatureRef.current !== draft.signature,
-    };
+    latestRef.current = {request, wouldGuard};
   });
 
   const {shouldDismissOnCloseRequest} = useLayerDismissal({
