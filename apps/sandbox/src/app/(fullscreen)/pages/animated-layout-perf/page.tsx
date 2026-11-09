@@ -44,6 +44,12 @@ import {Heading, Text} from '@astryxdesign/core/Text';
 import type {AnimatedLayout} from '@astryxdesign/core/hooks';
 
 type Rendering = 'full' | 'virtualized';
+import {
+  formatCount,
+  formatDuration,
+  watchLongTasks,
+} from '../diffviewer-perf/benchmark';
+import {formatBenchmarkChange} from '../markdown-perf/benchmark';
 
 interface RunMetrics {
   /** From the change to the glide starting: React's commit and the walk. */
@@ -97,28 +103,11 @@ const styles = stylex.create({
   spacer: (height: number) => ({height}),
 });
 
-function formatMs(value: number | null): string {
-  return value == null ? '—' : `${value.toFixed(1)} ms`;
-}
-
-function formatCount(value: number | null): string {
-  return value == null ? '—' : value.toLocaleString();
-}
-
-/** A value's change from its baseline, as the other perf pages show it. */
-function formatChange(value: number | null, base: number | null): string {
-  if (base == null) {
-    return 'no baseline';
-  }
-  if (value == null) {
-    return 'baseline saved';
-  }
-  if (base === 0) {
-    return value === 0 ? '±0%' : 'new';
-  }
-  const change = ((value - base) / base) * 100;
-  return `${change >= 0 ? '+' : ''}${change.toFixed(0)}%`;
-}
+/** The change column's text before a baseline, and before a run after one. */
+const CHANGE_EMPTY_LABELS = {
+  noBaseline: 'no baseline',
+  noValue: 'baseline saved',
+};
 
 /** The median: with an even count, the mean of the two middle values. */
 function median(values: number[]): number | null {
@@ -233,8 +222,9 @@ export default function AnimatedLayoutPerfPage() {
   const handle = glide === 'on' ? animatedLayout : undefined;
   const baseline = baselines[key];
 
-  // Virtualized: only the rows in (and just around) the viewport render; the
-  // middle item always renders, so the change always happens in the DOM.
+  // Virtualized: only the rows in (and just around) the viewport render, so
+  // the middle item is in the DOM only while it is in that window. Each run
+  // scrolls to it before the first toggle.
   const windowRange = useMemo(() => {
     if (rendering === 'full') {
       return {start: 0, end: count};
@@ -288,19 +278,7 @@ export default function AnimatedLayoutPerfPage() {
       rects += 1;
       return original.call(this);
     };
-    let longTasks = 0;
-    let longTaskMs = 0;
-    const observer =
-      typeof PerformanceObserver !== 'undefined' &&
-      PerformanceObserver.supportedEntryTypes?.includes('longtask')
-        ? new PerformanceObserver(list => {
-            for (const entry of list.getEntries()) {
-              longTasks += 1;
-              longTaskMs += entry.duration;
-            }
-          })
-        : null;
-    observer?.observe({type: 'longtask', buffered: false});
+    const stopLongTasks = watchLongTasks();
     let frames = 0;
     let dropped = 0;
     let previous = performance.now();
@@ -315,6 +293,7 @@ export default function AnimatedLayoutPerfPage() {
     };
     frameId = requestAnimationFrame(onFrame);
 
+    let longTaskReading: ReturnType<typeof stopLongTasks>;
     const walks: number[] = [];
     const reads: number[] = [];
     const animations: number[] = [];
@@ -348,7 +327,7 @@ export default function AnimatedLayoutPerfPage() {
       }
     } finally {
       prototype.getBoundingClientRect = original;
-      observer?.disconnect();
+      longTaskReading = stopLongTasks();
       cancelAnimationFrame(frameId);
     }
     // A stopped run publishes nothing: its totals would read as a full run's.
@@ -362,9 +341,8 @@ export default function AnimatedLayoutPerfPage() {
       walkMs: median(walks),
       rectsRead: median(reads),
       animated: median(animations),
-      // Without the Long Tasks API (Firefox), show no reading, not zero.
-      longTasks: observer ? longTasks : null,
-      longTaskMs: observer ? longTaskMs : null,
+      longTasks: longTaskReading?.count ?? null,
+      longTaskMs: longTaskReading?.totalMs ?? null,
       frames,
       droppedFrames: dropped,
       firstFrameMs: median(firstFrames),
@@ -495,12 +473,12 @@ export default function AnimatedLayoutPerfPage() {
               <Grid columns={2} gap={3}>
                 {(
                   [
-                    ['Commit + walk', formatMs, 'walkMs'],
+                    ['Commit + walk', formatDuration, 'walkMs'],
                     ['Rectangles read', formatCount, 'rectsRead'],
                     ['Elements animated', formatCount, 'animated'],
-                    ['Time to first frame', formatMs, 'firstFrameMs'],
+                    ['Time to first frame', formatDuration, 'firstFrameMs'],
                     ['Long tasks', formatCount, 'longTasks'],
-                    ['Long task time', formatMs, 'longTaskMs'],
+                    ['Long task time', formatDuration, 'longTaskMs'],
                     ['Frames', formatCount, 'frames'],
                     ['Dropped frames', formatCount, 'droppedFrames'],
                   ] as const
@@ -509,7 +487,11 @@ export default function AnimatedLayoutPerfPage() {
                     <Text type="label">{label}</Text>
                     <Text type="code">
                       {format(metrics[field])} ·{' '}
-                      {formatChange(metrics[field], baseline?.[field] ?? null)}
+                      {formatBenchmarkChange(
+                        metrics[field],
+                        baseline?.[field] ?? null,
+                        CHANGE_EMPTY_LABELS,
+                      )}
                     </Text>
                   </VStack>
                 ))}
