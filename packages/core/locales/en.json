@@ -661,7 +661,7 @@
   },
   "@astryx.list.reorderPickedUp": {
     "defaultMessage": "Picked up, position {position, number} of {total, number}.",
-    "description": "Screen-reader announcement when a row of a List is picked up to be reordered, from its handle's keys or by a drag. `{position}` is the row's 1-based place, `{total}` the number of rows."
+    "description": "Screen-reader announcement when a drag picks up a row of a List to reorder it. `{position}` is the row's 1-based place, `{total}` the number of rows."
   },
   "@astryx.list.reorderDropped": {
     "defaultMessage": "Dropped, position {position, number} of {total, number}",
