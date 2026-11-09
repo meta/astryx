@@ -311,6 +311,9 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
   const showTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
+  // The trigger's document. The dismissal stack listens in the document a
+  // layer registers with, so the card registers once its trigger is attached.
+  const [triggerDocument, setTriggerDocument] = useState<Document | null>(null);
   const isHoveringContentRef = useRef(false);
   // Track when we're dismissing via Escape to prevent re-show on refocus
   const isEscapeDismissingRef = useRef(false);
@@ -495,13 +498,14 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
   // the consumer's value, so only their update may change it. Same contract as
   // a controlled Dialog.
   useLayerDismissal({
-    // Registered for the hook's lifetime rather than gated on `layer.isOpen`:
+    // Registered from the trigger's attach for the hook's lifetime, in the
+    // trigger's document, rather than gated on `layer.isOpen`:
     // that state can lag a frame behind the DOM, so a press arriving right after
     // the layer appears would find nothing registered. Because this layer
     // CONSUMES the press, a stale registration would be worse than a missed one
     // — it would silently eat Escapes meant for the dialog underneath — so
     // presence is answered from the DOM at press time instead of from state.
-    isActive: true,
+    isActive: triggerDocument != null,
     // The stack listens for Escape in the trigger's own document, which may be
     // an iframe or a Picture-in-Picture window rather than this page.
     getContainer: () => triggerRef.current,
@@ -586,6 +590,9 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
       }
 
       triggerRef.current = el;
+      if (el != null) {
+        setTriggerDocument(el.ownerDocument);
+      }
     },
     [
       focusTrigger,

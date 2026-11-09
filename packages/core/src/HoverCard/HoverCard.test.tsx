@@ -39,6 +39,7 @@ import {ClickableCard} from '../ClickableCard/ClickableCard';
 import {Theme, defineTheme} from '../theme';
 import {HoverCard} from './HoverCard';
 import {useHoverCard} from './useHoverCard';
+import {useFocusTrap} from '../hooks/useFocusTrap';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 
 // Store original matches to restore later
@@ -1071,6 +1072,35 @@ describe('HoverCard', () => {
   });
 
   describe('Escape key behavior', () => {
+    it('takes Escape before a focus-trap container its trigger sits in', async () => {
+      const onOpenChange = vi.fn();
+      const onEscape = vi.fn();
+      function Trap() {
+        const {containerRef} = useFocusTrap<HTMLDivElement>({
+          isActive: true,
+          onEscape,
+        });
+        return (
+          <div ref={containerRef}>
+            <HoverCard
+              content={<span>Card content</span>}
+              onOpenChange={onOpenChange}
+              delay={0}
+              hideDelay={0}>
+              <button type="button">Trigger</button>
+            </HoverCard>
+          </div>
+        );
+      }
+      render(<Trap />);
+      fireEvent.mouseEnter(screen.getByRole('button', {name: 'Trigger'}));
+      await waitFor(() => expect(onOpenChange).toHaveBeenLastCalledWith(true));
+
+      fireEvent.keyDown(document.body, {key: 'Escape'});
+      await waitFor(() => expect(onOpenChange).toHaveBeenLastCalledWith(false));
+      expect(onEscape).not.toHaveBeenCalled();
+    });
+
     describe('in a second document', () => {
       // A same-origin iframe stands in for any second document an app renders
       // into through a portal, Document Picture-in-Picture included. A key
@@ -1135,6 +1165,47 @@ describe('HoverCard', () => {
         await waitFor(() =>
           expect(onOpenChange).toHaveBeenLastCalledWith(false),
         );
+      });
+
+      it('takes Escape in the second document when its trigger appears there after the hook mounts', async () => {
+        const frameDocument = frame.contentDocument!;
+        function LateTrigger() {
+          const card = useHoverCard({delay: 0, hideDelay: 0});
+          const [isShown, setIsShown] = useState(false);
+          return (
+            <>
+              <button type="button" onClick={() => setIsShown(true)}>
+                Show trigger
+              </button>
+              <output data-testid="state">
+                {card.isOpen ? 'open' : 'closed'}
+              </output>
+              {isShown
+                ? createPortal(
+                    <>
+                      <span ref={card.ref}>Late trigger</span>
+                      {card.renderHoverCard(<span>Card</span>)}
+                    </>,
+                    frameDocument.body,
+                  )
+                : null}
+            </>
+          );
+        }
+        render(<LateTrigger />);
+        fireEvent.click(screen.getByRole('button', {name: 'Show trigger'}));
+        const state = screen.getByTestId('state');
+        fireEvent.mouseEnter(
+          within(frameDocument.body).getByText('Late trigger'),
+        );
+        await waitFor(() => expect(state).toHaveTextContent('open'));
+
+        // A press in the page is not the card's.
+        fireEvent.keyDown(document.body, {key: 'Escape'});
+        expect(state).toHaveTextContent('open');
+
+        fireEvent.keyDown(frameDocument.body, {key: 'Escape'});
+        await waitFor(() => expect(state).toHaveTextContent('closed'));
       });
 
       it('stays open when focus moves from the trigger into the card', async () => {
