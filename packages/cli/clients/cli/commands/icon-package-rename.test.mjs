@@ -1,0 +1,170 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * @file Icon sets after the package is renamed in package.json: the next
+ * command that writes the set gives the data file's `module` the new name,
+ * so `integration check` passes without a hand edit.
+ */
+
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import {afterEach, beforeEach, describe, expect, it} from 'vitest';
+import {runCli} from '../../../test-utils/run-cli.mjs';
+import {ICON_NAMES} from '../../../authoring/doctypes/icon-set/icon-names.mjs';
+
+/** @type {string} */
+let tmp;
+/** @type {string} */
+let pkg;
+
+const LIBRARY = '@acme/glyph-library';
+
+beforeEach(() => {
+  tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-icon-rename-'));
+  pkg = path.join(tmp, 'icons');
+  const lib = path.join(pkg, 'node_modules', ...LIBRARY.split('/'));
+  fs.mkdirSync(lib, {recursive: true});
+  fs.writeFileSync(
+    path.join(lib, 'package.json'),
+    JSON.stringify({
+      name: LIBRARY,
+      version: '2.0.0',
+      license: 'MIT',
+      type: 'module',
+      exports: {'.': './index.js'},
+    }),
+  );
+  fs.writeFileSync(path.join(lib, 'LICENSE'), 'MIT License\n');
+  fs.writeFileSync(
+    path.join(lib, 'index.js'),
+    [
+      'export function Bin(props) { return null; }',
+      'export function Cross(props) { return null; }',
+      '',
+    ].join('\n'),
+  );
+  writePackage('@acme/old-icons');
+  fs.writeFileSync(
+    path.join(pkg, 'index.js'),
+    "export * from './icon-sets/outline/outline.generated.js';\n",
+  );
+});
+afterEach(() => {
+  fs.rmSync(tmp, {recursive: true, force: true});
+});
+
+/** @param {string} name */
+function writePackage(name) {
+  fs.writeFileSync(
+    path.join(pkg, 'package.json'),
+    JSON.stringify(
+      {
+        name,
+        version: '1.0.0',
+        license: 'MIT',
+        type: 'module',
+        exports: {'.': './index.js'},
+        dependencies: {[LIBRARY]: '^2.0.0'},
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+/** @param {string[]} args */
+async function json(args) {
+  const res = await runCli([...args, '--json'], pkg);
+  return {code: res.code, body: JSON.parse(res.stdout)};
+}
+
+const dataOf = () =>
+  JSON.parse(
+    fs.readFileSync(
+      path.join(pkg, 'icon-sets', 'outline', 'outline.icons.json'),
+      'utf-8',
+    ),
+  );
+
+/** The pairs that map every built-in definition to `cross`. */
+const ALL_PAIRS = ICON_NAMES.map(name => `${name}=cross`).join(',');
+
+/** Wrap the library and map every built-in definition. */
+async function wrapAndMap() {
+  const wrapped = await json([
+    'experimental',
+    'icon',
+    'new-set',
+    'outline',
+    '--from',
+    LIBRARY,
+  ]);
+  expect(wrapped.code, JSON.stringify(wrapped.body)).toBe(0);
+  const mapped = await json([
+    'experimental',
+    'icon',
+    'map',
+    '--pairs',
+    ALL_PAIRS,
+  ]);
+  expect(mapped.code, JSON.stringify(mapped.body)).toBe(0);
+  expect(dataOf().module).toBe('@acme/old-icons');
+}
+
+/**
+ * Every issue the strict check reports and every failure, without the
+ * skipped TypeScript work.
+ */
+async function strictFailures() {
+  const res = await runCli(['integration', 'check', '--strict', '--json'], pkg);
+  const {checks, failures} = JSON.parse(res.stdout).data;
+  return [
+    ...checks.flatMap(
+      (/** @type {any} */ each) => each.response?.data?.issues ?? [],
+    ),
+    ...failures,
+  ]
+    .filter(
+      (/** @type {{code: string}} */ each) => each.code !== 'doc_types_skipped',
+    )
+    .map(
+      (/** @type {{code: string, message: string}} */ each) =>
+        `${each.code}: ${each.message}`,
+    );
+}
+
+describe('a renamed icon-set package', () => {
+  it('map, run again with the same entries, writes the new package name', async () => {
+    await wrapAndMap();
+    expect(await strictFailures()).toEqual([]);
+    writePackage('@acme/new-icons');
+    const mapped = await json([
+      'experimental',
+      'icon',
+      'map',
+      '--pairs',
+      ALL_PAIRS,
+    ]);
+    expect(mapped.code, JSON.stringify(mapped.body)).toBe(0);
+    expect(dataOf().module).toBe('@acme/new-icons');
+    expect(await strictFailures()).toEqual([]);
+  });
+
+  it('a refresh and an add each write the new package name', async () => {
+    await wrapAndMap();
+    for (const [name, run] of /** @type {Array<[string, string[]]>} */ ([
+      ['@acme/refreshed', ['new-set', 'outline', '--from', LIBRARY]],
+      [
+        '@acme/added',
+        ['add', 'Bin', '--from', LIBRARY, '--definition', 'delete'],
+      ],
+    ])) {
+      writePackage(name);
+      const done = await json(['experimental', 'icon', ...run]);
+      expect(done.code, JSON.stringify(done.body)).toBe(0);
+      expect(dataOf().module, run.join(' ')).toBe(name);
+      expect(await strictFailures(), run.join(' ')).toEqual([]);
+    }
+  });
+});
