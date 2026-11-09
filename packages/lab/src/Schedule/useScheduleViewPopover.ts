@@ -16,6 +16,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
@@ -76,8 +77,6 @@ export function useScheduleViewPopover(
   onTriggerLost?: (key: string) => void,
 ): ScheduleViewPopover {
   const [openKey, setOpenKey] = useState<string | null>(null);
-  const openKeyRef = useRef(openKey);
-  openKeyRef.current = openKey;
   const popover = usePopover({
     dialogLabel: dialogLabelFor(openKey),
     // Popover's own defaults, spelled out where the hook's differ.
@@ -91,7 +90,10 @@ export function useScheduleViewPopover(
     }, []),
   });
   const popoverRef = useRef(popover);
-  popoverRef.current = popover;
+  // Syncs the effects' ref with the committed popover.
+  useLayoutEffect(() => {
+    popoverRef.current = popover;
+  });
 
   // A pointer press on a trigger while the popover is open would close it by
   // the browser's light dismiss before the click arrives, and the layer then
@@ -107,12 +109,11 @@ export function useScheduleViewPopover(
       target
         ?.closest(`[${TRIGGER_ATTRIBUTE}]`)
         ?.getAttribute(TRIGGER_ATTRIBUTE) ?? null;
-    const currentKey = openKeyRef.current;
-    openKeyAtPressRef.current = pressedKey == null ? null : currentKey;
+    openKeyAtPressRef.current = pressedKey == null ? null : openKey;
     if (
       pressedKey != null &&
-      currentKey != null &&
-      pressedKey !== currentKey &&
+      openKey != null &&
+      pressedKey !== openKey &&
       popover.isOpen
     ) {
       popover.hide();
@@ -124,7 +125,7 @@ export function useScheduleViewPopover(
   const toggle = (key: string, button: HTMLButtonElement) => {
     const openAtPress = openKeyAtPressRef.current;
     openKeyAtPressRef.current = null;
-    if (openAtPress === key || (openKeyRef.current === key && popover.isOpen)) {
+    if (openAtPress === key || (openKey === key && popover.isOpen)) {
       if (popover.isOpen) {
         popover.hide();
       }
