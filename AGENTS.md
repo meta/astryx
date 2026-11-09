@@ -54,10 +54,11 @@ nested `AGENTS.md`.
 - Writing or reviewing any knowledge record: run the rubric in
   `docs/contributing/spec-writing.md` over the record and put its results in
   the pull request description under `## Writing rubric results`. A record
-  describes the system in the present tense; proposals, history, pull
-  requests, and research stay out of it. When reviewing, read the record
-  against the reported results; a record pull request without them is
-  incomplete, so ask for them before reviewing the content.
+  describes the system in the present tense; proposals, history, pull requests,
+  research, and project status (what is built so far, what goes first) stay out
+  of it. When reviewing, read the record against the reported results; a record
+  pull request without them is incomplete, so ask for them before reviewing the
+  content.
 - Integration contribution work: read `docs/specs/AST-039/spec.md`. Every new
   discoverable item owns a strongly typed, same-stem `.doc.mjs`; root manifests
   locate directories and never catalog their items. No catalog file (like

@@ -463,6 +463,29 @@ the rest:
     reserved example domains are not external links for this rule.
   - **a human owner** is `cixzhang` or a DESIGNOWNER, approving the exact head.
 
+### Record status
+
+- **INV32 — Records state behavior and decisions, not project status.** A
+  record states intended behavior, boundaries, owners, evidence, and
+  decisions. It does not state how far the work behind it has got or the
+  order in which that work happens (DEC-20). This holds in every section, a
+  gap or current-state section included. In this rule:
+  - **build status** is a statement of what is written, built, or shipped so
+    far: "the build has not started", "no code yet", "no module exists yet",
+    "not built", "not yet implemented", "follow-up work".
+  - **sequencing** is a statement of work order: "first consumer", "first
+    adopter", "adoption order", "Table adopts it first", "lands before",
+    "phase 1". An order the system itself follows, such as a release rule that
+    a deprecation ships before a removal, is behavior, not sequencing.
+  - **a requirement gap** is allowed in the form
+    `<FR or INV id> gap: <observable mismatch>`. It names what the system does
+    today that the requirement forbids, and it states no build status or
+    sequencing.
+  - **a status line** is allowed: at most one line, such as
+    `Status: in progress`, that says only that the record is still in
+    progress.
+  - Implementation plans (`plan.md`) track work and are outside this rule.
+
 ## Path applicability
 
 Use this optional block when a record governs paths that its placement, path
@@ -558,15 +581,15 @@ Before writing:
 Begin each component or module contract with this reader-first projection after its
 title:
 
-| Area                    | Contract                                                                                                                        |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | State the exact public API, concept, or syntax delta; write `None` when none changes.                                           |
-| Behavior                | State the observable governing behavior, including the decisive default, boundary, or precedence rule.                          |
-| End-user impact         | Name who is affected, in what state, and what improves, worsens, or remains unchanged.                                          |
-| Builder impact          | Name migration work and every new caller choice; write `None` when there is no new burden.                                      |
-| Compatibility/readiness | State default compatibility, additive/breaking status, authority and implementation state, and material evidence still pending. |
-| Review checks           | List the few concrete conditions that make an implementation or proposal rejectable under this contract.                        |
-| Governing rules         | Link the canonical owner and only the current clauses needed to justify the projection.                                         |
+| Area                    | Contract                                                                                                                         |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | State the exact public API, concept, or syntax delta; write `None` when none changes.                                            |
+| Behavior                | State the observable governing behavior, including the decisive default, boundary, or precedence rule.                           |
+| End-user impact         | Name who is affected, in what state, and what improves, worsens, or remains unchanged.                                           |
+| Builder impact          | Name migration work and every new caller choice; write `None` when there is no new burden.                                       |
+| Compatibility/readiness | State default compatibility, additive/breaking status, authority, requirement gaps (INV32), and material evidence still pending. |
+| Review checks           | List the few concrete conditions that make an implementation or proposal rejectable under this contract.                         |
+| Governing rules         | Link the canonical owner and only the current clauses needed to justify the projection.                                          |
 
 Architecture records use the same position and footer with architecture-specific
 rows:
@@ -577,7 +600,7 @@ rows:
 | System behavior         | State shipped system behavior, including the decisive invariant, boundary, or precedence rule.                                 |
 | End-user impact         | Name who is affected, in what state, and what improves, worsens, or remains unchanged.                                         |
 | Builder impact          | Name the implementation decisions, coordination work, or workarounds this architecture removes or adds.                        |
-| Compatibility/readiness | State compatibility effect, authority and implementation state, and material evidence still pending.                           |
+| Compatibility/readiness | State compatibility effect, authority, requirement gaps (INV32), and material evidence still pending.                          |
 | Review checks           | List boundary violations, product-API mechanism leaks, or lost invariants/evidence distinctions that make a change rejectable. |
 | Governing rules         | Link the deciding specs and only the current clauses needed to justify the projection.                                         |
 
@@ -595,6 +618,10 @@ Then write the authoritative body:
   `docs/contributing/spec-writing.md` turns this rule and INV10 into a rubric;
   a pull request that creates or changes a record reports that rubric's results
   in its description before review.
+- State intended behavior and decisions, not project status: no build status
+  and no work order (INV32). A requirement gap reads
+  `<FR or INV id> gap: <observable mismatch>`, and one line such as
+  `Status: in progress` may say the record is still in progress.
 - Use familiar words and short, direct sentences.
 - State each rule fully once, beside the conditions and exceptions that control it.
   Later sections cite its ID or canonical owner instead of restating the prose.
@@ -1316,6 +1343,15 @@ automation (INV30). Automated approval must not publish links an outside
 contributor added without a person checking them. Team-authored links follow
 the normal gates.
 
+### DEC-20 — Records state behavior and decisions, not project status
+
+**Reference:** `architecture:knowledge-contracts/DEC-20`
+**Decider:** `cixzhang`, `2026-11-09`
+
+The owner said: "Let’s also put in writing guidelines that specs should avoid including temporary status of projects like what’s been written or what goes first. It can have a statement like it’s still in progress though". A record states intended behavior and decisions (INV32). Build status and work order go stale as the work moves, and a later reader cannot tell a stale status line from a requirement. A requirement gap stays, in the form `<FR or INV id> gap: <observable mismatch>`, because it names behavior the system must change. One status line, such as `Status: in progress`, may say the record is still in progress. Implementation plans and pull requests carry the work's progress and order.
+
+Rejected: a check that fails on status phrases, because the same words also describe behavior ("focus lands", "while the Action is pending").
+
 ## Verification
 
 | Invariant                         | Evidence                                                                                                                                                                                                                 | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
@@ -1344,6 +1380,7 @@ the normal gates.
 | INV28, DEC-16        | `apps/docsite/src/lib/exampleCoverage.mjs` and `apps/docsite/src/__tests__/example-coverage.test.ts` (advisory: the report prints and never gates), plus review of each hook example against INV28's criteria                                                                                                                                                                                                                              | The report omits a public hook that has no hook doc or no conforming example block, or a missing or non-conforming hook example fails a merge or release                                                                                                                                                                                                                                                                           |
 | INV29                | Baselined lint over comments in package source (not built): record ids, pull request and issue numbers, date stamps, and long quote blocks fail in new comments, and existing sites are baselined. Review reports narration and file headers past about 12 lines as non-blocking findings. Cleanup lands in per-area pull requests with no behavior change, each with a `pnpm specs:for` comparison of every touched file before and after | A new comment cites a record, pull request, issue, or date, quotes a record, or narrates the code; a header grows past about 12 lines, with no lint failure or review finding; removing a comment drops a record or cited claim from a file's `pnpm specs:for` result because that comment was the file's only link to it; or cleanup removes or rewrites a directive a tool reads, such as a `@pr-a11y` line                      |
 | INV30, DEC-17        | Human-owner review of each new external URL in a pull request from an author outside the team, enforced by review and merge tooling outside the repository; no repository CI check (the INV30 enforcement gap below)                                                                                                                                                                                                                       | An outside pull request that adds an external URL under package docs or the docsite is approved or merged without a human owner's exact-head approval, or a team pull request that adds one is held for a human owner                                                                                                                                                                                                              |
+| INV32, DEC-20        | Review of each changed record against rubric item R7 in `docs/contributing/spec-writing.md`, reported under `## Writing rubric results`; no failing repository check (the INV32 enforcement gap below)                                                                                                                                                                                                                                     | A changed record states build status or work order outside a requirement gap or one status line, with no R7 finding; or a requirement gap in the `<FR or INV id> gap:` form or a single status line is reported as an R7 finding                                                                                                                                                                                                   |
 | DEC-15               | `.github/scripts/knowledge-paths.test.mjs`, `.github/scripts/change-scope.test.mjs`, `scripts/check-knowledge.test.mjs`, `scripts/specs-for-file.test.mjs`, and `pnpm check:knowledge`                                                                                                                                                                                                                                                     | A component or module record outside `docs/specs/components/<ComponentRoot>/`, a `*.spec.md` left in a component package's source tree or beside a Swift view, a record matched to the wrong package when two share a root, a record whose component root no registered package's source tree has, a platform record whose id or `platform_of` does not match its path, or a platform record change that skips the spec-owner gate |
 
 Evidence placement is enforced by contributors and reviewers. The local
@@ -1383,3 +1420,6 @@ docs gap under INV28, tracked in the repository's issue queue.
 Current enforcement gap: no repository CI check detects a new external URL in a
 pull request from an author outside the team (INV30). Review and merge tooling
 outside the repository enforces this.
+
+Current enforcement gap: no repository check fails on project status in a
+record (INV32). Review against rubric item R7 enforces it.
