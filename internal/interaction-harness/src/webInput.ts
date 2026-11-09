@@ -44,7 +44,7 @@
  *   harness self-test (../src/harness.interaction.browser.spec.ts).
  */
 
-import type {CDPSession, JSHandle, Page, TestInfo} from '@playwright/test';
+import type {CDPSession, JSHandle, Page} from '@playwright/test';
 import type {Engine} from './touch';
 
 /** One wheel step: the page receives exactly `dx`, `dy` CSS px. */
@@ -85,8 +85,8 @@ export interface WheelBurst {
  * page can only widen a gap, so a starved renderer that also held the step
  * lands here). The dispatch stalled before the page, so a loaded runner
  * splits what the driver sent as one gesture. Other work on the page's main
- * thread between steps (timers, frame callbacks) also lands here, so a
- * re-taken run is the runner's or that work's, never the wheel listeners'.
+ * thread between steps (timers, frame callbacks) also lands here. Such a
+ * stall is the runner's or that work's, never the wheel listeners'.
  */
 export class WheelPacingError extends Error {
   constructor(
@@ -106,7 +106,7 @@ export class WheelPacingError extends Error {
  * listeners held the main thread, and WebKit dispatches the next step only
  * once it is free. The handling time is page wall time, which on a starved
  * runner includes the page's wait for a CPU. Judge a page stall from a run
- * with CI's CPU limits: there it is the proof's own failure, never re-taken.
+ * with CI's CPU limits: there it is the proof's own failure.
  */
 export class WheelPageStallError extends Error {
   constructor(
@@ -242,35 +242,6 @@ export function wheelGapCauses(
     }
   }
   return {pageStalls, dispatchStalls};
-}
-
-/**
- * Runs a wheel proof through `attempt`, and once more when the page received
- * its burst off pace: `attempt` builds the page's state, sends the burst with
- * `maxGapMs` and makes the spec's assertions, so a re-take starts over. One
- * re-take, two attempts in all, and only on a `WheelPacingError`: any other
- * error (a `WheelPageStallError`, which the page's wheel listeners caused,
- * among them), and a second `WheelPacingError`, fail the test with their own
- * cause. A `WheelPacingError` is the runner's or other work on the page's main
- * thread between steps, so a re-take does not clear the page of that work.
- * Each re-take is listed in the report as a `wheel-retake` annotation.
- */
-export async function retakeOnWheelPacing<T>(
-  testInfo: Pick<TestInfo, 'annotations'>,
-  attempt: (n: 1 | 2) => Promise<T>,
-): Promise<T> {
-  try {
-    return await attempt(1);
-  } catch (error) {
-    if (!(error instanceof WheelPacingError)) {
-      throw error;
-    }
-    testInfo.annotations.push({
-      type: 'wheel-retake',
-      description: error.message,
-    });
-    return attempt(2);
-  }
 }
 
 /** A point of a pen stroke. */
