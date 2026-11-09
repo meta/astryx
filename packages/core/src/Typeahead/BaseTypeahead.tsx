@@ -21,6 +21,7 @@
  */
 
 import React, {
+  use,
   useCallback,
   useEffect,
   useId,
@@ -33,6 +34,7 @@ import React, {
   type RefObject,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {BaseTypeaheadFocusContext} from './BaseTypeaheadFocusContext';
 import {useBusyIndicatorLane} from './busyIndicatorLane';
 import {useTrailingKeyDown} from './trailingKeyDown';
 import {useCommittedChoices} from './committedChoicesKey';
@@ -643,6 +645,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   ref,
   ...rest
 }: BaseTypeaheadProps<T>) {
+  // A composing field's focus wiring is for this typeahead only; a typeahead
+  // inside its menu gets none.
+  const focusWiring = use(BaseTypeaheadFocusContext);
   const t = useComponentTranslator();
   const placeholder =
     placeholderFromProps ?? t('@astryx.typeahead.searchPlaceholder');
@@ -965,14 +970,23 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // True while the dialog's close moves focus back to the input. That focus
   // does not open the list, as a pick's own focus return does not.
   const isDialogFocusReturnRef = useRef(false);
-  const restoreFocusTo = useCallback((element: HTMLElement) => {
-    isDialogFocusReturnRef.current = element === inputRef.current;
-    try {
-      element.focus();
-    } finally {
-      isDialogFocusReturnRef.current = false;
-    }
-  }, []);
+  // Every dialog close returns focus here. When the field hides its input,
+  // the field's stand-in (Typeahead's token) takes the focus instead.
+  const restoreFocusTo = useCallback(
+    (element: HTMLElement) => {
+      const target =
+        element === inputRef.current
+          ? (focusWiring?.inputReturnTarget?.() ?? element)
+          : element;
+      isDialogFocusReturnRef.current = target === inputRef.current;
+      try {
+        target.focus();
+      } finally {
+        isDialogFocusReturnRef.current = false;
+      }
+    },
+    [focusWiring],
+  );
   // The element focused when the handle's `open()` ran. The open runs after
   // the commit, and a click's own handlers can move focus before it (a token
   // button inside the field), so the menu returns focus here. It holds until
@@ -2080,7 +2094,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     });
   }
 
-  return (
+  const content = (
     <>
       <input
         {...rest}
@@ -2188,6 +2202,13 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         ],
       })}
     </>
+  );
+  return focusWiring == null ? (
+    content
+  ) : (
+    <BaseTypeaheadFocusContext value={null}>
+      {content}
+    </BaseTypeaheadFocusContext>
   );
 } as <T extends SearchableItem>(
   props: BaseTypeaheadProps<T>,

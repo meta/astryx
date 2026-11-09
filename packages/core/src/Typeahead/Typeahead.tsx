@@ -30,6 +30,7 @@ import React, {
 } from 'react';
 import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
+import {BaseTypeaheadFocusContext} from './BaseTypeaheadFocusContext';
 import {
   BusyIndicatorLaneProvider,
   createBusyIndicatorLane,
@@ -570,6 +571,20 @@ export function Typeahead<T extends SearchableItem>({
     });
   }, []);
 
+  // While the token shows, the input is hidden and out of the tab order, so a
+  // dialog-role menu returns focus to the token's button instead of the input.
+  const baseTypeaheadFocus = useMemo(
+    () => ({
+      inputReturnTarget: () => {
+        const tokenEl = tokenRef.current;
+        return tokenEl == null
+          ? null
+          : (tokenEl.querySelector<HTMLElement>('button') ?? tokenEl);
+      },
+    }),
+    [],
+  );
+
   // Handle selection from dropdown — clears edit mode
   const handleChange = useCallback(
     (item: T | null) => {
@@ -590,20 +605,6 @@ export function Typeahead<T extends SearchableItem>({
     (isOpen: boolean) => {
       isListOpenRef.current = isOpen;
       onOpenChange?.(isOpen);
-      if (!isOpen) {
-        // A dialog-role menu returns focus to the input when it closes. When
-        // the token shows, the input is hidden and out of the tab order, so
-        // focus moves on to the token once it renders.
-        requestAnimationFrame(() => {
-          if (
-            tokenRef.current != null &&
-            document.activeElement === inputRef.current
-          ) {
-            const button = tokenRef.current.querySelector('button');
-            (button ?? tokenRef.current).focus();
-          }
-        });
-      }
     },
     [onOpenChange],
   );
@@ -755,53 +756,57 @@ export function Typeahead<T extends SearchableItem>({
               </>
             )}
             <TrailingKeyDownContext value={onKeyDown}>
-              <BaseTypeahead
-                {...rest}
-                ref={useMergedRefs(inputRef, ref)}
-                searchSource={searchSource}
-                value={value}
-                onChange={handleChange}
-                renderItem={renderItem}
-                placeholder={showToken ? undefined : placeholder}
-                hasEntriesOnFocus={hasEntriesOnFocus}
-                maxMenuItems={maxMenuItems}
-                minQueryLength={minQueryLength}
-                emptySearchText={emptySearchText}
-                isDisabled={isDisabled}
-                hasAutoFocus={hasAutoFocus}
-                // A disabled field keeps its tab stop (spec:AST-085 FR1).
-                isFocusableDisabled={isDisabled}
-                inputId={inputId}
-                ariaDescribedBy={
-                  [ariaDescribedByProp, ariaDescribedBy]
-                    .filter(Boolean)
-                    .join(' ') || undefined
-                }
-                ariaLabelledBy={inputLabelledBy}
-                // The resolved required state reaches the combobox, also when a
-                // FormLayout default hides the visible marker (component:FormLayout
-                // FR5, AR2).
-                aria-required={isEffectivelyRequired || rest['aria-required']}
-                // An error status is exposed on the combobox as on every other field
-                // (WCAG 4.1.2; spec:AST-020 FR9). Without one, a caller's own
-                // aria-required / aria-invalid still applies.
-                aria-invalid={status?.type === 'error' || rest['aria-invalid']}
-                onChangeQuery={onChangeQuery}
-                onOpenChange={handleOpenChange}
-                menu={menu}
-                handleRef={handleRef}
-                debounceMs={debounceMs}
-                anchorRef={wrapperRef}
-                onKeyDown={handleKeyDown}
-                inputXStyle={showToken ? styles.inputHidden : undefined}
-                // While the token is shown the input is invisible and inert behind
-                // it — take it out of the Tab order so keyboard users don't hit a
-                // stop they cannot see (WCAG 2.4.3 / 2.4.7). It stays
-                // programmatically focusable: entering edit mode and clearing both
-                // refocus it once the token goes away.
-                inputTabIndex={showToken ? -1 : undefined}
-                size={size}
-              />
+              <BaseTypeaheadFocusContext value={baseTypeaheadFocus}>
+                <BaseTypeahead
+                  {...rest}
+                  ref={useMergedRefs(inputRef, ref)}
+                  searchSource={searchSource}
+                  value={value}
+                  onChange={handleChange}
+                  renderItem={renderItem}
+                  placeholder={showToken ? undefined : placeholder}
+                  hasEntriesOnFocus={hasEntriesOnFocus}
+                  maxMenuItems={maxMenuItems}
+                  minQueryLength={minQueryLength}
+                  emptySearchText={emptySearchText}
+                  isDisabled={isDisabled}
+                  hasAutoFocus={hasAutoFocus}
+                  // A disabled field keeps its tab stop (spec:AST-085 FR1).
+                  isFocusableDisabled={isDisabled}
+                  inputId={inputId}
+                  ariaDescribedBy={
+                    [ariaDescribedByProp, ariaDescribedBy]
+                      .filter(Boolean)
+                      .join(' ') || undefined
+                  }
+                  ariaLabelledBy={inputLabelledBy}
+                  // The resolved required state reaches the combobox, also when a
+                  // FormLayout default hides the visible marker (component:FormLayout
+                  // FR5, AR2).
+                  aria-required={isEffectivelyRequired || rest['aria-required']}
+                  // An error status is exposed on the combobox as on every other field
+                  // (WCAG 4.1.2; spec:AST-020 FR9). Without one, a caller's own
+                  // aria-required / aria-invalid still applies.
+                  aria-invalid={
+                    status?.type === 'error' || rest['aria-invalid']
+                  }
+                  onChangeQuery={onChangeQuery}
+                  onOpenChange={handleOpenChange}
+                  menu={menu}
+                  handleRef={handleRef}
+                  debounceMs={debounceMs}
+                  anchorRef={wrapperRef}
+                  onKeyDown={handleKeyDown}
+                  inputXStyle={showToken ? styles.inputHidden : undefined}
+                  // While the token is shown the input is invisible and inert behind
+                  // it — take it out of the Tab order so keyboard users don't hit a
+                  // stop they cannot see (WCAG 2.4.3 / 2.4.7). It stays
+                  // programmatically focusable: entering edit mode and clearing both
+                  // refocus it once the token goes away.
+                  inputTabIndex={showToken ? -1 : undefined}
+                  size={size}
+                />
+              </BaseTypeaheadFocusContext>
             </TrailingKeyDownContext>
           </div>
         </BusyIndicatorLaneProvider>
