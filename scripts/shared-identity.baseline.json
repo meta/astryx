@@ -34,12 +34,12 @@
       "reason": "One audio context per copy for dictation level metering; a second context costs memory and changes no result."
     },
     "packages/core/src/CodeBlock/highlightRanges.ts:dynamicStyleSheet": {
-      "status": "allowed",
-      "reason": "Deduplicates an idempotent style insertion; a copy can at most insert the same rules again."
+      "status": "open",
+      "group": "triage"
     },
     "packages/core/src/CodeBlock/highlightRanges.ts:registeredHighlightTypes": {
-      "status": "allowed",
-      "reason": "Deduplicates an idempotent style insertion; a copy can at most insert the same rules again."
+      "status": "open",
+      "group": "triage"
     },
     "packages/core/src/CodeBlock/highlightStyles.ts:inserted": {
       "status": "allowed",
@@ -662,8 +662,8 @@
       "group": "F10 List reorder"
     },
     "packages/core/src/theme/Theme.tsx:injectedThemes": {
-      "status": "allowed",
-      "reason": "Deduplicates an idempotent style insertion; a copy can at most insert the same rules again."
+      "status": "open",
+      "group": "triage"
     },
     "packages/core/src/theme/declarationBoundary.ts:DECLARATION_ANALYSIS_CACHE": {
       "status": "allowed",
