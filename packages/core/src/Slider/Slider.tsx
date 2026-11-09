@@ -32,6 +32,7 @@ import {
   type RefObject,
 } from 'react';
 import {flushSync} from 'react-dom';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -902,7 +903,10 @@ export function Slider({ref, ...props}: SliderProps) {
   }, [value, min, max]);
 
   const valuesRef = useRef(values);
-  valuesRef.current = values;
+  // Syncs the handlers' values with the committed ones.
+  useIsomorphicLayoutEffect(() => {
+    valuesRef.current = values;
+  });
 
   const getValueFromPosition = useCallback(
     (clientX: number, clientY: number): number => {
@@ -1019,7 +1023,10 @@ export function Slider({ref, ...props}: SliderProps) {
   );
 
   const onChangeEndRef = useRef(onChangeEnd);
-  onChangeEndRef.current = onChangeEnd;
+  // Syncs the change-end report's callback with the committed one.
+  useIsomorphicLayoutEffect(() => {
+    onChangeEndRef.current = onChangeEnd;
+  });
 
   const fireChangeEnd = useCallback(
     (newValues?: number[]) => {
@@ -1258,7 +1265,10 @@ export function Slider({ref, ...props}: SliderProps) {
 
   // The touch presentation's value model (useSliderTouch reads it fresh).
   const updateValueRef = useRef(updateValue);
-  updateValueRef.current = updateValue;
+  // Syncs the touch model's update with the committed one.
+  useIsomorphicLayoutEffect(() => {
+    updateValueRef.current = updateValue;
+  });
   const touchModel: SliderTouchModel = {
     min,
     max,
