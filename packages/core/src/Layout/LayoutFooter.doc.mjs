@@ -34,13 +34,15 @@ export const docs = {
     {
       name: 'hasDivider',
       type: 'boolean',
-      description: 'Border at top edge.',
+      description:
+        "Border at top edge. When unset, the parent Layout's defaultHasDividers decides.",
       default: 'false',
     },
     {
       name: 'height',
       type: 'SizeValue',
-      description: 'Footer height. Numbers are treated as pixels, strings are used as-is.',
+      description:
+        'Footer height. Numbers are treated as pixels, strings are used as-is.',
     },
     {
       name: 'label',
@@ -48,9 +50,20 @@ export const docs = {
       description: 'Accessible label for the landmark element.',
     },
     {
+      name: 'padding',
+      type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
+      description:
+        'Internal padding on every edge, using the spacing scale. Replaces the inset from the layout; 0 is full bleed.',
+    },
+    {
       name: 'role',
       type: 'AriaRole',
       description: 'ARIA landmark role.',
+    },
+    {
+      name: 'ref',
+      type: 'React.Ref<HTMLDivElement>',
+      description: 'Ref forwarded to the footer element.',
     },
   ],
 };
@@ -69,7 +82,8 @@ export const docsZh = {
     {
       name: 'hasDivider',
       type: 'boolean',
-      description: '顶部边缘的边框。',
+      description:
+        '顶部边缘的边框。未设置时，由父级 Layout 的 defaultHasDividers 决定。',
       default: 'false',
     },
     {
@@ -83,9 +97,20 @@ export const docsZh = {
       description: '地标元素的无障碍标签。',
     },
     {
+      name: 'padding',
+      type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
+      description:
+        '所有边的内边距，使用间距刻度。替换布局提供的内边距；0 表示全出血。',
+    },
+    {
       name: 'role',
       type: 'AriaRole',
       description: 'ARIA 地标角色。',
+    },
+    {
+      name: 'ref',
+      type: 'React.Ref<HTMLDivElement>',
+      description: '转发到页脚元素的 ref。',
     },
   ],
 };
@@ -97,9 +122,12 @@ export const docsDense = {
   description: 'Bottom bar for action bars, pagination, status bars.',
   propDescriptions: {
     children: 'Footer content.',
-    hasDivider: 'Border at top edge.',
+    hasDivider: 'Border at top edge; unset uses the Layout default.',
     height: 'Footer height.',
     label: 'Accessible label for landmark element.',
+    padding:
+      'Padding on every edge; replaces the layout inset. 0 is full bleed.',
     role: 'ARIA landmark role.',
+    ref: 'Ref forwarded to the footer element.',
   },
 };

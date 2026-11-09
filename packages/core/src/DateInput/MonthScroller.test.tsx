@@ -8,6 +8,7 @@ import {
   type FakeAnimation,
 } from '../motion/__tests__/fakeWebAnimation';
 import {MonthScroller, type MonthScrollerHandle} from './MonthScroller';
+import {createMonthModel} from './monthGeometry';
 
 /**
  * A touch screen with Reduced Motion on: the policy's combined query
@@ -71,6 +72,7 @@ describe('MonthScroller under Reduced Motion on a touch screen', () => {
     const view = render(
       <MonthScroller
         handleRef={handleRef}
+        monthModel={createMonthModel('gregory')}
         minMonthIndex={0}
         maxMonthIndex={23}
         initialMonthIndex={9}

@@ -10,7 +10,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {afterAll, beforeAll, describe, it, expect} from 'vitest';
-import {program, JSON_SUPPORTED} from '../clients/cli/index.mjs';
+import {JSON_SUPPORTED} from '../clients/cli/index.mjs';
+import {program} from '../clients/cli/program.mjs';
 import {buildManifest} from '../clients/cli/lib/manifest.mjs';
 import {runCli} from '../test-utils/run-cli.mjs';
 

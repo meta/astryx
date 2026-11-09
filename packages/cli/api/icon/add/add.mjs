@@ -31,6 +31,7 @@ import {
   astryxIconDefinitions,
   authoring,
   checkNewDefinition,
+  definitionNameFromInput,
   closestNames,
   findLocalIconSet,
   iconIdOf,
@@ -40,12 +41,19 @@ import {
   generatedNamesOf,
   generatedOrigins,
   iconModulePackage,
-  iconNaming,
   localSourceNote,
   definitionNameOf,
   libraryIcons,
-  modulePrefix,
+  moduleNaming,
+  iconNamingWithoutLook,
+  iconNaming,
+  iconExportName,
+  sameIconModule,
+  splitLook,
   variantExportName,
+  answeringMatches,
+  checkVariantLook,
+  drawnLooks,
   rankIcons,
   resolveIconSource,
   setModuleNote,
@@ -56,6 +64,8 @@ import {
   refuseOutsideProject,
 } from '../_adapter.mjs';
 import {passed, refuseIgnoredPairs} from '../_options.mjs';
+import {logger} from '../../logger.mjs';
+import {shellArg} from '../../../foundation/text/shell-arg.mjs';
 
 /** The lowest score a definition match needs: an exact word or name. */
 const FIT_FLOOR = 80;
@@ -79,7 +89,7 @@ export async function iconAdd(exportName, options) {
     from,
     set: selector,
     definition: givenDefinition,
-    newDefinition,
+    newDefinition: givenNewDefinition,
     description,
     words,
     useDefault = false,
@@ -88,6 +98,11 @@ export async function iconAdd(exportName, options) {
     all = false,
   } = options ?? {};
   refuseOutsideProject(cwd, 'experimental icon add', 'the icon-set package');
+  // The docs' kebab-case (`ai-helper`) names the same new definition.
+  const newDefinition =
+    givenNewDefinition == null
+      ? undefined
+      : definitionNameFromInput(givenNewDefinition);
   // `--all` adds a declared variant to existing icons, so it names no icon
   // and maps nothing; a description and words describe only a new
   // definition (spec:AST-042 FR5).
@@ -177,14 +192,21 @@ export async function iconAdd(exportName, options) {
     const generated = generatedModulePath(set, packageDir);
     const module = set.data.module;
     // A library prefix every icon export shares (`feather` in `featherEye`)
-    // is left out of the id and the set's export name, as the bulk wrap does.
-    // A ./ path is the author's own files, named as written: never a library
-    // prefix (`CheckDouble` and `CheckDoubleSolid` share `check`).
-    const shared =
+    // is left out of the id and the set's export name, as the bulk wrap does,
+    // and so are the look words a library's names end in (`Outline24WGHT500`
+    // in `XOutline24WGHT500Icon`). A ./ path is the author's own files, named
+    // as written: never a library prefix (`CheckDouble` and
+    // `CheckDoubleSolid` share `check`).
+    const libraryNaming =
       useDefault || source.module.startsWith('./')
-        ? []
-        : modulePrefix(source.file, {adapter: Boolean(set.data.adapter)});
+        ? {prefix: [], positions: []}
+        : moduleNaming(source.file, {
+            adapter: Boolean(set.data.adapter),
+            module: source.module,
+            progress: line => logger.warn(line),
+          });
     const nameWords = iconIdOf(exportName).split('-');
+    const shared = libraryNaming.prefix;
     const prefix =
       shared.length > 0 &&
       nameWords.length > shared.length &&
@@ -199,11 +221,32 @@ export async function iconAdd(exportName, options) {
       sourceExport,
     );
     const known = set.data.icons.find(each => already.includes(each.export));
-    const naming = known
+    const glyph = known
       ? {id: known.id, name: known.export}
-      : iconNaming(exportName, prefix);
-    const id = givenId ?? naming.id;
+      : iconNamingWithoutLook(exportName, {
+          prefix,
+          positions: libraryNaming.positions,
+        });
     const asVariant = variant != null;
+    // The set may already export the glyph's name for another export of the
+    // library (its outline look, when this is the filled one). This export
+    // then keeps its look words in its id and name, or takes its name from
+    // --id, and the listing offers it as a variant of that icon instead.
+    const origin = generatedOrigins(packageDir, generated).get(glyph.name);
+    const glyphTaken =
+      !known &&
+      !asVariant &&
+      origin != null &&
+      !(
+        sameIconModule(origin.module, source.module) &&
+        origin.source === sourceExport
+      );
+    const naming = !glyphTaken
+      ? glyph
+      : givenId != null
+        ? {id: givenId, name: nameFromId(givenId)}
+        : iconNaming(exportName, prefix);
+    const id = givenId ?? naming.id;
     // The name the set exports it as: `<Name>Icon`, or for a variant the
     // icon's name with the variant's name.
     const baseIcon = set.data.icons.find(each => each.id === id);
@@ -219,7 +262,20 @@ export async function iconAdd(exportName, options) {
     }
 
     if (definition == null && newDefinition == null && !asVariant) {
-      return definitionMatches(set, exportName, from, id);
+      return definitionMatches(set, exportName, from, id, {
+        useDefault,
+        id: givenId,
+        look:
+          glyphTaken && origin != null
+            ? lookVariantOf(
+                iconNaming(exportName, prefix).id,
+                iconNaming(origin.source, prefix).id,
+                libraryNaming.positions,
+                set,
+              )
+            : null,
+        glyphId: glyph.id,
+      });
     }
 
     /** @type {{name: string, description: string, words: string[]} | null} */
@@ -250,7 +306,7 @@ export async function iconAdd(exportName, options) {
             }),
           ),
           {
-            name: `--new-definition ${definition} --description '<what it is for>' --words a,b`,
+            name: `--new-definition ${definitionNameFromInput(definition)} --description '<what it is for>' --words a,b`,
             reason: 'add it as your own definition',
           },
         ],
@@ -262,6 +318,15 @@ export async function iconAdd(exportName, options) {
     const icons = set.data.icons.map(each => ({...each}));
     const existing = icons.find(each => each.id === id);
     if (asVariant) {
+      checkVariantLook({
+        set,
+        variant,
+        module: source.module,
+        positions: libraryNaming.positions,
+        drawn: drawnLooks(set, packageDir, each =>
+          sameIconModule(each, source.module) ? libraryNaming.positions : null,
+        ),
+      });
       if (!existing) {
         throw new AstryxError(
           `Icon set "${set.name}" has no icon "${id}" to add a variant to. Add the icon first, or pass --id.`,
@@ -273,6 +338,18 @@ export async function iconAdd(exportName, options) {
             reason: 'an icon in this set',
           })),
           ERROR_CODES.ERR_NOT_FOUND,
+        );
+      }
+      const own = generatedOrigins(packageDir, generated).get(existing.export);
+      if (
+        own != null &&
+        own.source === sourceExport &&
+        sameIconModule(own.module, source.module)
+      ) {
+        throw new AstryxError(
+          `"${sourceExport}" is icon "${id}"'s own export, which draws its default look, so it can't be its ${variant} variant too.`,
+          undefined,
+          ERROR_CODES.ERR_INVALID_ARGUMENT,
         );
       }
       const variants = [...(existing.variants ?? [])];
@@ -394,9 +471,13 @@ export async function iconAdd(exportName, options) {
  * @param {string} exportName
  * @param {string} from
  * @param {string} id
+ * @param {{useDefault?: boolean, id?: string, look?: string | null, glyphId?: string}} passed the
+ *   options the author passed, repeated in each listed command so it runs as
+ *   printed; `look`, when the set already has an icon for the export's
+ *   glyph (`glyphId`): the variant it is of that icon
  * @returns {import('../icon.type.mjs').IconDefinitionMatchesResponse}
  */
-function definitionMatches(set, exportName, from, id) {
+function definitionMatches(set, exportName, from, id, passed = {}) {
   const astryx = astryxIconDefinitions().definitions.map(each => ({
     doc: each.doc,
     source: /** @type {const} */ ('astryx'),
@@ -432,14 +513,19 @@ function definitionMatches(set, exportName, from, id) {
   /** @type {Map<string, {score: number, reason: string}>} */
   const best = new Map();
   for (const query of queries) {
-    for (const match of rankIcons([asSet], query)) {
+    for (const match of answeringMatches(rankIcons([asSet], query))) {
       const prior = best.get(match.export);
       if (!prior || match.score > prior.score) {
         best.set(match.export, {score: match.score, reason: match.reason});
       }
     }
   }
-  const base = `astryx experimental icon add ${exportName} --from ${from}`;
+  const base = [
+    `astryx experimental icon add ${exportName} --from ${shellArg(from)}`,
+    `--set ${shellArg(set.name)}`,
+    ...(passed.useDefault ? ['--default'] : []),
+    ...(passed.id != null ? [`--id ${shellArg(passed.id)}`] : []),
+  ].join(' ');
   const matches = all
     .filter(({doc}) => best.has(doc.name))
     .map(({doc, source}) => {
@@ -463,6 +549,15 @@ function definitionMatches(set, exportName, from, id) {
     )
     .slice(0, MATCH_LIMIT);
   const fits = matches.some(match => match.score >= FIT_FLOOR);
+  const asLook =
+    passed.look && passed.glyphId
+      ? [
+          `astryx experimental icon add ${exportName} --from ${shellArg(from)}`,
+          `--set ${shellArg(set.name)}`,
+          ...(passed.useDefault ? ['--default'] : []),
+          `--id ${passed.glyphId} --variant ${passed.look}`,
+        ].join(' ')
+      : null;
   const name = id.replace(/-([a-z0-9])/gu, (_, c) => c.toUpperCase());
   return {
     type: 'icon.definitionMatches',
@@ -474,6 +569,7 @@ function definitionMatches(set, exportName, from, id) {
       newDefinition: fits
         ? null
         : `${base} --new-definition ${/^[a-z]/u.test(name) ? name : `icon${name}`} --description '<what the icon is for>' --words <word>,<word>`,
+      ...(asLook ? {variant: asLook} : {}),
     },
   };
 }
@@ -502,29 +598,34 @@ async function addVariantForAll({cwd, from, selector, variant}) {
   }
   const where = await findLocalIconSet(cwd, selector);
   const {packageDir, set} = where;
-  const declared = set.data.variants ?? [];
-  if (!declared.includes(variant)) {
-    throw new AstryxError(
-      `Icon set "${set.name}" declares no variant "${variant}"${declared.length > 0 ? ` (it declares ${declared.join(', ')})` : ''}. Declare it first.`,
-      [
-        {
-          name: `astryx experimental icon new-set ${set.name} --from <its library> --variants ${[...new Set([...(declared.length > 0 ? declared : ['<default>']), variant])].join(',')}`,
-          reason: 'declare the variants',
-        },
-      ],
-      ERROR_CODES.ERR_INVALID_ARGUMENT,
-    );
-  }
-  if (set.data.default?.variant === variant) {
-    throw new AstryxError(
-      `"${variant}" is the set's default variant: each icon's own export already draws it.`,
-      undefined,
-      ERROR_CODES.ERR_INVALID_ARGUMENT,
-    );
-  }
   const source = resolveIconSource(from, where);
-  const found = libraryIcons(source.file, {adapter: Boolean(set.data.adapter)});
+  // In a library that draws each icon in several looks, the variant is the
+  // glyph's look the variant's name picks (`filled`), and an icon is known
+  // by any look of its glyph.
+  /** @type {Array<Set<string>>} */
+  let positions = [];
+  const found = libraryIcons(source.file, {
+    adapter: Boolean(set.data.adapter),
+    prefer: [variant],
+    module: source.module,
+    progress: line => logger.warn(line),
+    summary: each => {
+      positions = each.positions.map(words => new Set(words));
+    },
+  });
+  checkVariantLook({
+    set,
+    variant,
+    module: source.module,
+    positions,
+    drawn: drawnLooks(set, packageDir, each =>
+      sameIconModule(each, source.module) ? positions : null,
+    ),
+  });
   const byId = new Map(found.map(each => [each.id, each]));
+  const byLook = new Map(
+    found.flatMap(each => (each.looks ?? []).map(look => [look, each])),
+  );
   // An existing icon is known by the library export it re-exports, then by
   // its own export, then by its id: an icon whose id or name an older rule
   // wrote (`squares-2-x2`, `Squares2X2Icon`) still meets its variant
@@ -548,6 +649,8 @@ async function addVariantForAll({cwd, from, selector, variant}) {
   const already = [];
   /** @type {string[]} */
   const missing = [];
+  /** @type {string[]} icons whose own export is the one the variant picks */
+  const own = [];
   const icons = set.data.icons.map(icon => {
     const origin = origins.get(icon.export);
     if (origin && iconModulePackage(origin.module) !== variantPackage) {
@@ -557,6 +660,7 @@ async function addVariantForAll({cwd, from, selector, variant}) {
       origin && origin.source !== 'default' ? origin.source : undefined;
     const match =
       (librarySource ? byLibraryExport.get(librarySource) : undefined) ??
+      (librarySource ? byLook.get(librarySource) : undefined) ??
       byName.get(icon.export) ??
       byId.get(icon.id);
     if (!match) {
@@ -564,6 +668,21 @@ async function addVariantForAll({cwd, from, selector, variant}) {
       return icon;
     }
     if (match.adapt && !set.data.adapter) {
+      missing.push(icon.id);
+      return icon;
+    }
+    // A glyph the library draws in no look of that name has no variant,
+    // and neither has one whose own export is the one that look picks.
+    if (match.look && !match.look.includes(variant)) {
+      missing.push(icon.id);
+      return icon;
+    }
+    if (
+      match.export === librarySource &&
+      origin != null &&
+      sameIconModule(origin.module, source.module)
+    ) {
+      own.push(icon.id);
       missing.push(icon.id);
       return icon;
     }
@@ -583,6 +702,29 @@ async function addVariantForAll({cwd, from, selector, variant}) {
     added.push(icon.id);
     return {...icon, variants};
   });
+  if (
+    added.length === 0 &&
+    already.length === 0 &&
+    own.length > 0 &&
+    set.data.default?.variant == null
+  ) {
+    // The module is the one the icons' own exports come from, so the
+    // variant names the look they draw now: the set's undeclared default.
+    const variants = [
+      variant,
+      ...(set.data.variants ?? []).filter(each => each !== variant),
+    ];
+    throw new AstryxError(
+      `"${source.module}" is the module the ${own.length} icons of "${set.name}" come from: its exports are those icons in the look they draw now, so "${variant}" is that look and can't be a variant of them. "${set.name}" declares no default variant; declare "${variant}" as the default first.`,
+      [
+        {
+          name: `astryx experimental icon new-set ${set.name} --variants ${variants.join(',')} --default-variant ${variant}`,
+          reason: `declare ${variant}, the look each icon draws, as the default`,
+        },
+      ],
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
   if (added.length === 0 && already.length === 0) {
     throw new AstryxError(
       `"${source.module}" exports no icon with the id of an icon in "${set.name}". Pass the module that exports the ${variant} variant under the same names.`,
@@ -626,4 +768,48 @@ async function addVariantForAll({cwd, from, selector, variant}) {
       changed: dataChanged || written.changed,
     },
   };
+}
+
+/**
+ * The set's export name for an id: `x-filled` is `XFilledIcon`.
+ * @param {string} id
+ */
+function nameFromId(id) {
+  return iconExportName(
+    id
+      .split('-')
+      .map(word => word[0].toUpperCase() + word.slice(1))
+      .join(''),
+  );
+}
+
+/**
+ * The variant an export of a library of looks is of the icon the set
+ * already wraps for its glyph: its word at the first look position, in name
+ * order, where it differs from the wrapped export. That word is a variant
+ * only when the set declares it and it is not the default, which the icon's
+ * own export draws. Otherwise null, so the listing offers no variant
+ * command that the set's data would refuse.
+ * @param {string} id the export's id, look words kept
+ * @param {string} wrappedId the wrapped export's id, look words kept
+ * @param {Array<Set<string>>} positions the library's look positions, the
+ *   last word first
+ * @param {import('../../../foundation/discovery/icon-set-discovery.mjs').DiscoveredIconSet} set
+ * @returns {string | null}
+ */
+function lookVariantOf(id, wrappedId, positions, set) {
+  const {look} = splitLook(id.split('-'), positions);
+  const {look: wrapped} = splitLook(wrappedId.split('-'), positions);
+  let word = null;
+  for (let index = look.length - 1; index >= 0; index--) {
+    if (look[index] !== wrapped[index]) {
+      word = look[index];
+      break;
+    }
+  }
+  return word != null &&
+    (set.data.variants ?? []).includes(word) &&
+    word !== set.data.default?.variant
+    ? word
+    : null;
 }

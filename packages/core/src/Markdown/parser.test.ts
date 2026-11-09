@@ -1309,6 +1309,58 @@ describe('citation parsing', () => {
       }
     });
 
+    it('finds the same bare emails as a scan from every character', () => {
+      // The reference is the unanchored pattern the scan from each `@`
+      // replaced, with the same boundary checks.
+      const referenceEmails = (text: string): string[] => {
+        const found: string[] = [];
+        const re = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
+        let m: RegExpExecArray | null;
+        while ((m = re.exec(text)) !== null) {
+          const prev = text[m.index - 1];
+          if (prev != null && /[A-Za-z0-9._%+\-@]/.test(prev)) {
+            continue;
+          }
+          if (text.slice(Math.max(0, m.index - 7), m.index) === 'mailto:') {
+            continue;
+          }
+          found.push(m[0]);
+        }
+        return found;
+      };
+      const linkedEmails = (text: string): string[] =>
+        parseInline(text, {autolink: 'gfm'}).flatMap(node =>
+          node.type === 'link' && node.href.startsWith('mailto:')
+            ? [node.href.slice('mailto:'.length)]
+            : [],
+        );
+
+      const cases = [
+        'a@b.c',
+        'x@a.b+c@d.e',
+        'name@x.y@host.com',
+        'a@b@c.d',
+        'mailto:user@host.com and user@host.com',
+        'ab@cd ef@gh.ij.',
+        '..a@b.c..d@e.f',
+        '@a.b x@ y@.z q@r.s',
+      ];
+      // A seeded walk over the characters that matter to the scan.
+      let seed = 7;
+      const alphabet = 'ab.@+-_ %:';
+      for (let n = 0; n < 300; n++) {
+        let text = '';
+        for (let i = 0; i < 24; i++) {
+          seed = (seed * 1103515245 + 12345) % 2147483648;
+          text += alphabet[seed % alphabet.length];
+        }
+        cases.push(text);
+      }
+      for (const text of cases) {
+        expect(linkedEmails(text), text).toEqual(referenceEmails(text));
+      }
+    });
+
     it('parses <scheme:url> angle-bracket autolinks', () => {
       const result = parseInline('see <https://example.com> ok', {
         autolink: 'gfm',
