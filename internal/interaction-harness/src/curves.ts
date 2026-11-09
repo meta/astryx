@@ -2085,7 +2085,11 @@ export async function watchAnimations(
  * to tell. Then, since the element last moved, no frame came for longer than
  * `FRAME_STARVATION_MS`. It held still in its last frame, or no frame came
  * after the deadline. So the still frames must come by `timeout` plus
- * `FRAME_STARVATION_MS`.
+ * `FRAME_STARVATION_MS`. A frame past the deadline can show motion after a gap
+ * longer than `FRAME_STARVATION_MS`. That tells nothing either: the element
+ * may have stopped unseen in the gap. That also throws `FrameStarvationError`,
+ * and its message gives the last move. An animation whose curve outlasts the
+ * gap is still moving, and rejects with "still moving".
  *
  * While a rendering trace runs (`traceRendering`), it stands down as the
  * animation recorder does: a per-frame callback would make every frame a
@@ -2118,6 +2122,8 @@ export async function waitForRest(
             frames: number;
             spanMs: number;
             longestGapMs: number;
+            /** The last move, when the frame past the deadline showed one. */
+            moved?: string;
           } | null>((resolve, reject) => {
             // The deadline reads the real clock, which a page freeze does not
             // stop.
@@ -2174,6 +2180,10 @@ export async function waitForRest(
             };
             let last = '';
             let still = 0;
+            // When the per-frame check last looked, and how many looks it took.
+            const waitStart = realNow();
+            let tickAt = waitStart;
+            let ticks = 0;
             // When each frame of the per-frame check came since the element
             // last moved, on the real clock: only those can show it at rest.
             let watchedFrom = realNow();
@@ -2194,6 +2204,7 @@ export async function waitForRest(
               last = read();
               still = 0;
               watchedFrom = realNow();
+              tickAt = watchedFrom;
               drawn.length = 0;
               frame(tick);
             };
@@ -2269,10 +2280,42 @@ export async function waitForRest(
                 Math.min(wait, Math.max(0, room)) + 1,
               );
             };
+            // How long the element's animations still move: a pending one moves
+            // for its whole curve, a running one for what its curve has left.
+            const curveLeftMs = () => {
+              // After a long task, the frame's timeline time can lag the real
+              // clock. Each curve is read at the real time.
+              const lagMs = Math.max(
+                0,
+                realNow() - Number(document.timeline.currentTime ?? realNow()),
+              );
+              let left = 0;
+              for (const a of element.getAnimations({subtree: true})) {
+                if (!(a.timeline instanceof DocumentTimeline)) {
+                  continue;
+                }
+                const rate = a.playbackRate || 1;
+                const at = Number(a.currentTime ?? 0) + lagMs * rate;
+                if (a.pending) {
+                  left = Math.max(left, curveEnd(a) / Math.abs(rate));
+                } else if (a.playState === 'running') {
+                  left = Math.max(
+                    left,
+                    rate > 0 ? (curveEnd(a) - at) / rate : at / -rate,
+                  );
+                }
+              }
+              return left;
+            };
             const tick = () => {
               if (starvedOut) {
                 return;
               }
+              const lookedAt = realNow();
+              const gapMs = lookedAt - tickAt;
+              tickAt = lookedAt;
+              ticks += 1;
+              const before = last;
               const now = read();
               const moving = element.getAnimations({subtree: true}).some(
                 a =>
@@ -2301,6 +2344,19 @@ export async function waitForRest(
                 end();
                 if (resting && short.longestGapMs > starvationMs) {
                   resolve(short);
+                } else if (
+                  !resting &&
+                  gapMs > starvationMs &&
+                  curveLeftMs() <= gapMs
+                ) {
+                  // This frame came after a starved gap: the motion it shows
+                  // may have ended in the gap, unseen.
+                  resolve({
+                    frames: ticks,
+                    spanMs: lookedAt - waitStart,
+                    longestGapMs: gapMs,
+                    moved: `${before} → ${now}`,
+                  });
                 } else {
                   reject(new Error(`waitForRest: still moving (${now})`));
                 }
@@ -2323,7 +2379,11 @@ export async function waitForRest(
         throw new FrameStarvationError({
           by: 'waitForRest',
           frames: starved.frames,
-          during: `it waited ${Math.round(starved.spanMs)} ms for the element to rest`,
+          during: `it waited ${Math.round(starved.spanMs)} ms for the element to rest${
+            starved.moved == null
+              ? ''
+              : `, and the element still moved at its last frame (${starved.moved})`
+          }`,
           min: frames,
           longestGapMs: starved.longestGapMs,
         });

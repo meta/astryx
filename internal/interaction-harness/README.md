@@ -413,7 +413,10 @@ long, and the error says that instead.
 `waitForRest` fails the same way when it cannot tell. The element held still
 in its last frame, or no frame came after the deadline, and no frame came for
 longer than `FRAME_STARVATION_MS`: it throws `FrameStarvationError`, not
-"still moving".
+"still moving". The same holds when the frame past the deadline shows motion
+after such a gap, since the element may have stopped unseen in it. The error
+then gives the last move. An animation whose curve outlasts the gap is still
+moving, and says so.
 
 **No Layout / Paint.** `traceRendering` records a Chromium trace around the
 interaction; `countBetween` counts the steady middle of an animation (its

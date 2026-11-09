@@ -225,6 +225,38 @@ async function waitForCastFrames(
   }
 }
 
+/**
+ * Starves the page across a `waitForRest` deadline. A long task runs from
+ * 250 ms before the deadline to 5 ms past it, timed from the wait's first read
+ * of `box`. The first frame after the task comes past the deadline, and before
+ * the wait's own deadline timer looks for starvation.
+ */
+async function starveAcrossDeadline(
+  box: ReturnType<Page['locator']>,
+  timeoutMs: number,
+) {
+  await box.evaluate((el, ms) => {
+    const read = window.getComputedStyle;
+    let isArmed = true;
+    window.getComputedStyle = function (
+      this: Window,
+      element: Element,
+      pseudo?: string | null,
+    ) {
+      if (isArmed && element === el) {
+        isArmed = false;
+        const from = performance.now();
+        setTimeout(() => {
+          while (performance.now() < from + ms + 5) {
+            // the page's main thread is busy
+          }
+        }, ms - 250);
+      }
+      return read.call(this, element, pseudo);
+    } as typeof window.getComputedStyle;
+  }, timeoutMs);
+}
+
 test.describe('touch input', () => {
   test('the page receives trusted touches and pointers at the scripted positions and times', async ({
     page,
@@ -2474,6 +2506,88 @@ test.describe('frame evidence', () => {
     expect(numbers.frames).toBeLessThan(3);
     expect(numbers.longestGapMs).toBeGreaterThan(FRAME_STARVATION_MS);
     expect((outcome as Error).message).toMatch(/^waitForRest: the page drew /);
+  });
+
+  test('waitForRest whose frame past the deadline shows motion after a starved gap fails by name, with the last move', async ({
+    page,
+  }) => {
+    await page.setContent(
+      '<!doctype html><div id="box" style="width:40px;height:40px;background:#000"></div>',
+    );
+    const box = page.locator('#box');
+    // A move that ends 80 ms past the deadline: the gap outlasts what is left.
+    await box.evaluate(el =>
+      el.animate(
+        [{transform: 'translateX(0)'}, {transform: 'translateX(100px)'}],
+        {duration: 580},
+      ),
+    );
+    await starveAcrossDeadline(box, 500);
+    const outcome = await waitForRest(box, {timeout: 500}).then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
+    expect(outcome, String((outcome as Error).message)).toBeInstanceOf(
+      FrameStarvationError,
+    );
+    const {numbers} = outcome as FrameStarvationError;
+    expect(numbers.longestGapMs).toBeGreaterThan(FRAME_STARVATION_MS);
+    expect((outcome as Error).message).toMatch(
+      /the element still moved at its last frame \(.+ → .+\)/,
+    );
+  });
+
+  test('waitForRest on an endless animation still says it is moving, across a starved gap too', async ({
+    page,
+  }) => {
+    await page.setContent(
+      '<!doctype html><div id="box" style="width:40px;height:40px;background:#000"></div>',
+    );
+    const box = page.locator('#box');
+    // Its curve never ends, so no gap explains the motion.
+    await box.evaluate(el =>
+      el.animate(
+        [{transform: 'translateX(0)'}, {transform: 'translateX(100px)'}],
+        {duration: 400, iterations: Infinity},
+      ),
+    );
+    await starveAcrossDeadline(box, 500);
+    await expect(waitForRest(box, {timeout: 500})).rejects.toThrow(
+      /waitForRest: still moving \(/,
+    );
+  });
+
+  test('waitForRest on endless script motion across a starved gap fails by name, and its message gives the last move', async ({
+    page,
+  }) => {
+    await page.setContent(
+      '<!doctype html><div id="box" style="width:40px;height:40px;background:#000"></div>',
+    );
+    const box = page.locator('#box');
+    // No animation drives it, so only the message tells it from a stop.
+    await box.evaluate(el => {
+      let x = 0;
+      const step = () => {
+        x = (x + 1) % 100;
+        (el as HTMLElement).style.transform = `translateX(${x}px)`;
+        requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
+    await starveAcrossDeadline(box, 500);
+    const outcome = await waitForRest(box, {timeout: 500}).then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
+    expect(outcome, String((outcome as Error).message)).toBeInstanceOf(
+      FrameStarvationError,
+    );
+    const [, from, to] =
+      /the element still moved at its last frame \((.+) → (.+)\)/.exec(
+        (outcome as Error).message,
+      ) ?? [];
+    expect(from).toBeDefined();
+    expect(to).not.toBe(from);
   });
 
   test('the trace counts no Layout for a transform animation and one per frame for `top`', async ({
