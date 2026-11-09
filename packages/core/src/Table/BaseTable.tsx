@@ -616,6 +616,9 @@ function BaseTableInner<T extends Record<string, unknown>>({
   const headerRowCount = mode === 'data' && resolvedColumns.length > 0 ? 1 : 0;
   const config = getTableVirtualizationConfig(virtualization);
   const windowFallbackReason = useMemo(() => {
+    if (virtualization != null && config == null) {
+      return 'virtualization is not a value from useTableRowsVirtualization';
+    }
     if (mode !== 'data') {
       return 'windowing requires data mode';
     }
@@ -659,6 +662,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
     rowIndexStart,
     rowCount,
     resolvedColumns,
+    virtualization,
     config,
   ]);
   const windowAdmitted = windowFallbackReason === undefined;
