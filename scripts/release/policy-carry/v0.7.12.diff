@@ -387,7 +387,7 @@ index 06d9db55411..f824d6ca219 100644
 -          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
 +          FILES_PATH: ${{ steps.scope.outputs.changed_files_path || steps.everything.outputs.path }}
 diff --git a/scripts/release/active-release.mjs b/scripts/release/active-release.mjs
-index 7eae88e71bd..caf458f5f3a 100644
+index 7eae88e71bd..cd22ea481b8 100644
 --- a/scripts/release/active-release.mjs
 +++ b/scripts/release/active-release.mjs
 @@ -14,2 +14,2 @@
@@ -659,7 +659,7 @@ index 7eae88e71bd..caf458f5f3a 100644
 +  /^\.github\/workflows\/ci\.yml$/,
 +  /^docs\/release\.md$/,
 +  /^docs\/specs\/AST-(?:017|030)\/spec\.md$/,
-@@ -718,2 +965,155 @@ const RELEASE_OUTPUT_PATTERNS = [
+@@ -718,2 +965,157 @@ const RELEASE_OUTPUT_PATTERNS = [
 -function isReleaseOutputPath(file) {
 -  return RELEASE_OUTPUT_PATTERNS.some(pattern => pattern.test(file));
 +function isAncestor(root, ancestor, descendant) {
@@ -680,7 +680,9 @@ index 7eae88e71bd..caf458f5f3a 100644
 +  const env = {...process.env, GIT_INDEX_FILE: index};
 +  try {
 +    execFileSync('git', ['read-tree', base], {cwd: root, env, stdio: 'ignore'});
-+    execFileSync('git', ['apply', '--cached', '--whitespace=nowarn'], {
++    execFileSync(
++      'git',
++      ['apply', '--cached', '--unidiff-zero', '--whitespace=nowarn'], {
 +      cwd: root,
 +      env,
 +      input: patch.endsWith('\n') ? patch : `${patch}\n`,
@@ -817,7 +819,7 @@ index 7eae88e71bd..caf458f5f3a 100644
 +    files: candidateEntries.length,
 +    bundleDigest: manifest ? sha256(canonicalJson(manifest)) : null,
 +  };
-@@ -1265,0 +1666,29 @@ async function main() {
+@@ -1265,0 +1668,29 @@ async function main() {
 +  if (command === 'validate-policy-carry') {
 +    const base = required(values, 'base');
 +    const head = required(values, 'head');
@@ -847,7 +849,7 @@ index 7eae88e71bd..caf458f5f3a 100644
 +    );
 +    return;
 +  }
-@@ -1274,7 +1703,25 @@ async function main() {
+@@ -1274,7 +1705,25 @@ async function main() {
 -    const errors = [
 -      ...validateIdentity(marker, plan),
 -      ...validateReleaseDiff(raw ? raw.split('\n') : [], {
@@ -880,15 +882,100 @@ index 7eae88e71bd..caf458f5f3a 100644
 +      ];
 +    }
 +    const errors = [...validateIdentity(marker, plan), ...diffErrors];
-@@ -1285,0 +1733 @@ async function main() {
+@@ -1285,0 +1735 @@ async function main() {
 +        kind,
-@@ -1287 +1735,2 @@ async function main() {
+@@ -1287 +1737,2 @@ async function main() {
 -        files: raw ? raw.split('\n').length : 0,
 +        files: entries.length,
 +        ...(sourceCommit ? {sourceCommit, patchId} : {}),
-@@ -1399,0 +1849 @@ export {
+@@ -1399,0 +1851 @@ export {
 +  changedStatementsFromDiff,
-@@ -1404,0 +1855 @@ export {
+@@ -1404,0 +1857 @@ export {
 +  isReleaseTestRepairPath,
-@@ -1411,0 +1863 @@ export {
+@@ -1411,0 +1865 @@ export {
 +  validateReleaseTestRepair,
+diff --git a/scripts/release/release-paths.mjs b/scripts/release/release-paths.mjs
+new file mode 100644
+index 00000000000..2b6fecf2694
+--- /dev/null
++++ b/scripts/release/release-paths.mjs
+@@ -0,0 +1,79 @@
++// Copyright (c) Meta Platforms, Inc. and affiliates.
++
++/**
++ * @file Shared release-branch path classification.
++ *
++ * @input  git diff --name-status entries
++ * @output generated bump, test repair, or invalid release-branch classification
++ * @position trusted base policy shared by release validation and CI scope routing
++ */
++
++import fs from 'node:fs';
++
++const RELEASE_OUTPUT_PATTERNS = [
++  /^packages\/(?:[^/]+|themes\/[^/]+)\/package\.json$/,
++  /^packages\/(?:[^/]+|themes\/[^/]+)\/CHANGELOG\.md$/,
++  /^packages\/cli\/assets\/codemods\/registry\.mjs$/,
++  /^packages\/cli\/assets\/codemods\/__tests__\/registry\.test\.mjs$/,
++  /^packages\/cli\/assets\/codemods\/transforms\/(?:next|v\d+\.\d+\.\d+)\//,
++  /^pnpm-lock\.yaml$/,
++];
++
++const RELEASE_TEST_REPAIR_PATTERNS = [
++  /(?:^|\/)__tests__\//,
++  /\.(?:spec|test)\.[cm]?[jt]sx?$/,
++  /^internal\/interaction-harness\//,
++];
++
++function isReleaseOutputPath(file) {
++  return RELEASE_OUTPUT_PATTERNS.some(pattern => pattern.test(file));
++}
++
++function isReleaseTestRepairPath(file) {
++  return (
++    !isReleaseOutputPath(file) &&
++    RELEASE_TEST_REPAIR_PATTERNS.some(pattern => pattern.test(file)) &&
++    !file.includes('/__snapshots__/') &&
++    !file.endsWith('.snap')
++  );
++}
++
++function diffEntryFiles(entry) {
++  const [status, ...files] = entry.split('\t');
++  const isMove = status?.startsWith('R') || status?.startsWith('C');
++  const expectedPaths = isMove ? 2 : 1;
++  return !status || files.length !== expectedPaths || files.some(file => !file)
++    ? null
++    : files;
++}
++
++function classifyReleaseDiff(entries) {
++  if (entries.length === 0) return 'invalid';
++  const files = entries.map(diffEntryFiles);
++  if (files.some(entryFiles => entryFiles === null)) return 'invalid';
++  const paths = files.flat();
++  if (paths.every(isReleaseTestRepairPath)) return 'test-repair';
++  if (
++    paths.every(
++      file => file.startsWith('.changeset/') || isReleaseOutputPath(file),
++    )
++  ) {
++    return 'version-bump';
++  }
++  return 'invalid';
++}
++
++if (process.argv.includes('--classify')) {
++  const entries = fs
++    .readFileSync(0, 'utf8')
++    .split('\n')
++    .filter(Boolean);
++  console.log(classifyReleaseDiff(entries));
++}
++
++export {
++  classifyReleaseDiff,
++  diffEntryFiles,
++  isReleaseOutputPath,
++  isReleaseTestRepairPath,
++};

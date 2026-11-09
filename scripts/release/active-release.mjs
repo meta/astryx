@@ -980,7 +980,9 @@ function patchBuildsHead(root, base, head, patch) {
   const env = {...process.env, GIT_INDEX_FILE: index};
   try {
     execFileSync('git', ['read-tree', base], {cwd: root, env, stdio: 'ignore'});
-    execFileSync('git', ['apply', '--cached', '--whitespace=nowarn'], {
+    execFileSync(
+      'git',
+      ['apply', '--cached', '--unidiff-zero', '--whitespace=nowarn'], {
       cwd: root,
       env,
       input: patch.endsWith('\n') ? patch : `${patch}\n`,
