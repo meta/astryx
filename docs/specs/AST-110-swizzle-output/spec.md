@@ -100,7 +100,8 @@ and the repository proves it before a change that could break it merges.
   another's provided value. A symbol that identifies objects across modules, such as a
   brand or a context key, is registered under the same kind of key, so a copy
   and the package agree on it. Such state is held through Core's shared-realm
-  helpers, so a copy and the package resolve the same slot; a module-scope
+  helpers, so a copy and the package resolve the same slot, and state that
+  holds React components or elements is kept one per React; a module-scope
   registry, counter or brand outside them fails the source check unless the
   allowlist names it with a reason. The rule holds in both directions: a copy inside
   a package overlay, and package components inside a copied Dialog or other

@@ -342,6 +342,7 @@ const SLOT_HELPERS = {
   sharedBrand: '',
   sharedSequence: '',
   createSharedContext: 'context/',
+  sharedForReact: 'react/',
   createLayerScopedContext: 'context/',
 };
 /** Files that define a slot helper, where the name is the caller's parameter. */
