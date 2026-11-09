@@ -412,9 +412,16 @@ the readings the proof dates from. Without the control ahead, a late frame near
 the first control's turn keeps its lateness. A proof that judges every frame
 near a turn starts the control ahead too
 (`startBusyControl(page, {ahead: true})`). It passes that control's frames as
-`ahead`, per run in a pool; `controlStarts` is optional. Chromium casts and
-casts with no control are judged on their stamps. Under load, Chromium's cast
-also stamps frames in bursts, which a proof on its stamps can misread. On
+`ahead`, per run in a pool; `controlStarts` is optional. A Chromium cast with
+a control is dated the same way. Its cast stamps each frame as it arrives.
+Under load, the stamps trail presentation unevenly: in a slider's coast, by a
+median 4.6 ms and up to 38 ms. So the frame interval read from the stamps is
+wrong, and a proof on them misreads a slow tail's pace. Two frames a whole
+frame apart can even carry stamps 2 ms apart. Without the control ahead, such a
+pair near the first control's turn keeps its stamps, as a late WebKit frame
+there keeps its lateness. Only frames that carry their engine, as `trackMarker`
+reads them, are dated. Frames a spec builds without it, and a cast with no
+control, are judged on their stamps. On
 WebKit's stamps, a late frame inside the judged part changes no verdict, since
 the proof reads a slow curve's held frames as motion. At the part's start, it
 shows a stall the control does not have: the false reds came from there.
