@@ -86,6 +86,13 @@ function animationRecorder(): void {
   }[] = [];
   // Each recorded animation's entry.
   const entries = new WeakMap<Animation, (typeof log)[number]>();
+  // CSS runs whose end event came while a rendering trace ran, with the
+  // event's time (real) and the active time the event reports.
+  const endedInTrace: {
+    entry: (typeof log)[number];
+    at: number;
+    elapsedMs: number;
+  }[] = [];
   // The times kept below are real: a page time plus the span a page freeze
   // stood still so far. A later freeze then leaves them where they were.
   const span = () =>
@@ -353,12 +360,42 @@ function animationRecorder(): void {
   // event came before it finished, and a cancelled run never finishes: under
   // load, a CSS exit reversed partway sent `transitionend` at current time 0,
   // still `running`, and was cancelled a frame later with no finish event.
+  // Chromium sends a run's end event before its finish event, so the run is
+  // still unfinished here. While a rendering trace runs, no run's state is
+  // read, as in the cancel wrapper below. That read flushes style, and lays
+  // out the run's anchored layer at the end of its own window. Only the newest
+  // run the event names is kept: an older run of that name that the page cut
+  // short stays unfinished. The recorder's resume() dates the kept run from
+  // what it stored.
   const onEnd = (event: Event) => {
+    if (tracing()) {
+      for (let i = log.length - 1; i >= 0; i--) {
+        const entry = log[i];
+        if (!isRunOf(entry, event)) {
+          continue;
+        }
+        if (entry.finishedAt == null) {
+          endedInTrace.push({
+            entry,
+            at: performance.now() + span(),
+            // The event carries the active time, so nothing is read from the
+            // run.
+            elapsedMs:
+              1000 *
+              Number(
+                (event as AnimationEvent | TransitionEvent).elapsedTime || 0,
+              ),
+          });
+        }
+        return;
+      }
+      return;
+    }
     for (const entry of log) {
       if (
         entry.finishedAt == null &&
-        atEnd(entry.animation) &&
-        isRunOf(entry, event)
+        isRunOf(entry, event) &&
+        atEnd(entry.animation)
       ) {
         dateFinish(entry, null);
       }
@@ -436,8 +473,30 @@ function animationRecorder(): void {
         record();
       }
     },
-    // Catches up on what started during a trace, then runs its frames again.
+    // Dates the CSS runs that ended during a trace, then catches up on what
+    // started during it and runs its frames again. A run ends where its start
+    // puts its end, through its specified timing, as the cancel wrapper reads
+    // it. Its stored start comes first: the page may have cancelled the run at
+    // its end since then. Without one, the end event's time and active time
+    // stand in.
     resume: () => {
+      for (const {entry, at, elapsedMs} of endedInTrace.splice(0)) {
+        if (entry.finishedAt != null) {
+          continue;
+        }
+        const timing = entry.animation.effect?.getTiming();
+        const delay = Number(timing?.delay ?? 0);
+        const duration =
+          typeof timing?.duration === 'number' ? timing.duration : 0;
+        const end =
+          delay +
+          duration * Number(timing?.iterations ?? 1) +
+          Number(timing?.endDelay ?? 0);
+        const speed = Math.abs(entry.animation.playbackRate || 1);
+        entry.finishStart = entry.startedAt ?? at - (delay + elapsedMs) / speed;
+        entry.startedAt ??= entry.finishStart;
+        entry.finishedAt = entry.finishStart + end / speed;
+      }
       record();
       loop();
     },
@@ -468,6 +527,7 @@ function animationRecorder(): void {
       log.length = 0;
       unread.length = 0;
       unstarted = [];
+      endedInTrace.length = 0;
     },
   };
 }

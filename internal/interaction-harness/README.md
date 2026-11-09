@@ -311,7 +311,10 @@ moved and its longest stall is no longer than the control's. Both are read from
 the same screencast frames, so a compositor animation misses none. A window in
 which the control moved on fewer than four frames fails, since the machine
 presented too little to judge; the failure names the cast's frames in the
-window and its longest gap. A run of frames with no new position counts as
+window and its longest gap. When no frame came for longer than
+`FRAME_STARVATION_MS` there too, the machine starved the run, and
+`busyWindowProof` throws `FrameStarvationError` instead of returning a verdict.
+A run of frames with no new position counts as
 moved when the change that ends it is a single cast step: the component moves
 under one step a frame there, as on an easing tail, which the cast cannot show
 on every frame. Where it moved under two steps a frame over the frames just
@@ -357,7 +360,8 @@ belongs to its run. A run whose control moved on fewer frames than
 `minRunFrames` (1 by default) is too little to judge: the summary names it,
 and the pool leaves it out, so it never counts as a pass. A run whose block
 began after its motion had settled is left out the same way: its `runs` entry
-is null, and `late` holds its `BusyWindowTooLateError`. The pool fails with
+is null, and `late` holds its `BusyWindowTooLateError`. The pool reads each
+run without the starvation throw. The pool fails with
 fewer than `minJudgedRuns` judged runs (half of all the runs, rounded up). In each judged run,
 the component must move on every frame its control moved on, so a freeze fails
 its run.
@@ -406,8 +410,10 @@ harness's own animation recorder stands down while the trace runs, since its
 frame loop would make every frame a main-thread one, restyling each running
 animation's target and laying out an anchored one: it reads only the element a
 CSS animation or transition event names, once, when that animation starts, and
-catches up afterwards. The frame it requested before the trace runs before the
-start mark, so the whole window counts none of its work. A `waitForRest`
+catches up afterwards. A CSS run's end event reads nothing then either: the
+recorder keeps the end and dates the run once the trace ends. The frame it
+requested before the trace runs before the start mark, so the whole window
+counts none of its work. A `waitForRest`
 awaited inside the traced body stands
 down too: it waits on timers for the scheduled ends of the element's curves
 (looking `frames` times a frame apart before settling on none, so an

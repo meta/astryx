@@ -4755,7 +4755,7 @@ describe('PowerSearch sheet value types (FR17)', () => {
     );
   });
 
-  it('date_range: the range input is rendered with the stored range', () => {
+  it('date_range: an inline calendar on the sheet edits the range, and no popover opens (FR17)', () => {
     const rangeFilter: PowerSearchFilter = {
       field: 'window',
       operator: 'between',
@@ -4767,14 +4767,44 @@ describe('PowerSearch sheet value types (FR17)', () => {
         },
       },
     };
-    setupValues({filters: [rangeFilter], timezoneID: 'UTC'});
+    const {onChange} = setupValues({filters: [rangeFilter], timezoneID: 'UTC'});
     openEditFlow(/^Window is between/);
-    // The popover presentation's editor labels the range with the catalog's
-    // lowercase noun; the sheet reuses that editor.
-    const range = within(sheet()).getByRole('button', {
-      name: /date range.*Mar 1, 2024/i,
-    });
-    expect(range).toHaveAttribute('aria-expanded', 'false');
+    const step = sheet();
+    // No field that opens a popover: the calendar is on the sheet itself.
+    expect(
+      within(step).queryByRole('button', {name: /date range/i}),
+    ).toBeNull();
+    const grid = within(step).getByRole('grid', {name: /March 2024/});
+    expect(
+      within(grid)
+        .getAllByRole('gridcell', {selected: true})
+        .map(cell => cell.textContent),
+    ).toContain('1');
+    const day = (n: number) =>
+      within(grid).getByRole('button', {
+        name: new RegExp(`March\\s+${n},\\s+2024`),
+      });
+    fireEvent.click(day(10));
+    fireEvent.click(day(12));
+    apply();
+    done();
+    expect(onChange).toHaveBeenCalledWith(
+      [
+        {
+          field: 'window',
+          operator: 'between',
+          value: {
+            type: 'date_range',
+            value: {
+              start: {type: 'ABSOLUTE', unixSeconds: 1710028800}, // 2024-03-10Z
+              end: {type: 'ABSOLUTE', unixSeconds: 1710201600}, // 2024-03-12Z
+            },
+          },
+        },
+      ],
+      expect.anything(),
+      0,
+    );
   });
 
   it("entity_list: the Tokenizer's sheet picks entities from the search source (FR21)", async () => {

@@ -420,6 +420,13 @@ const TARGETS = [
     guards:
       'rows appended under a resting pointer do not take the highlight; Enter selects the highlighted row (spec:AST-092 FR6)',
   },
+  {
+    component: 'Timer',
+    story: 'core-timer--default',
+    guards:
+      'the display ticks live from the runtime clock, so a regression that ' +
+      'freezes it at 0s fails CI (#6483 audit layer 2)',
+  },
 ];
 
 const CONTENT_TYPES = {
