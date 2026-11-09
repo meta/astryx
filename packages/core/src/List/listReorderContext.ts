@@ -37,9 +37,9 @@ import type {StyleXStyles} from '@stylexjs/stylex';
 import type {reorderListStyle} from './ListReorderHandle';
 
 /**
- * The key a reorderable object carries its machinery under. It is registered,
- * so a swizzled copy of List reads an object the package made, and the
- * package reads an object a copy adapted.
+ * The key a reorderable object carries its machinery under. `sharedKey`
+ * registers it, so a swizzled List reads a package object, and the package
+ * List reads an object a copy adapted.
  */
 export const REORDER_ENGINE = sharedKey('list/reorder-engine', 1);
 
