@@ -1024,6 +1024,58 @@ test('no Layout or Paint runs while it animates', async ({
   expect(counts.Paint ?? 0).toBe(0);
 });
 
+test('motions that one callback starts on new elements read their stylesheets in one style pass (architecture:react-component-runtime INV18)', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'tracing is a Chromium protocol');
+  await open(page);
+  // Eight rows that one change glides at once, as a list's reorder does,
+  // each with a stylesheet reason that its promotion keeps.
+  await page.evaluate(async () => {
+    const style = document.createElement('style');
+    style.textContent =
+      '.row { position: absolute; left: 0; width: 40px; height: 8px; background: #36c; will-change: opacity; }';
+    document.head.append(style);
+    for (let i = 0; i < 8; i++) {
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.style.top = `${120 + i * 12}px`;
+      document.body.append(row);
+    }
+    // A frame lays the rows out, so no style pass waits before the call.
+    await new Promise(resolve =>
+      requestAnimationFrame(() => setTimeout(resolve, 0)),
+    );
+  });
+  let call = {from: 0, to: 0};
+  const trace = await traceRendering(page, async () => {
+    call = await page.evaluate(async spring => {
+      const from = performance.timeOrigin + performance.now();
+      for (const row of document.querySelectorAll<HTMLElement>('.row')) {
+        Motion.createMotionEngine(row).animate({x: 60}, {spring});
+      }
+      // The callback's microtasks run before its task ends.
+      await Promise.resolve();
+      return {from, to: performance.timeOrigin + performance.now()};
+    }, SLOW);
+  });
+  const counts = countBetween(trace, call.from, call.to);
+  const willChange = await page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>('.row')].map(
+      row => row.style.willChange,
+    ),
+  );
+  test.info().annotations.push({
+    type: 'style passes in the callback that starts eight motions',
+    description: JSON.stringify({counts, willChange}),
+  });
+  // Each row keeps its stylesheet's reason beside its promotion.
+  expect(willChange).toEqual(Array(8).fill('opacity, translate'));
+  // One pass reads every stylesheet; a read per row forced a pass per row.
+  expect(counts.UpdateLayoutTree ?? 0).toBeLessThanOrEqual(1);
+});
+
 test('the calls from rest that one frame commits start at one time, however long the frame callbacks between them run', async ({
   page,
 }) => {

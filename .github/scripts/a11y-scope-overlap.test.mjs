@@ -17,7 +17,11 @@ import path from 'node:path';
 
 import {describe, expect, it} from 'vitest';
 
+import ts from 'typescript';
+
 import {
+  codeKey,
+  loadSameCode,
   overlappingSpecs,
   renders,
   selectingScope,
@@ -229,6 +233,72 @@ describe('overlappingSpecs', () => {
       ),
     ).toMatchObject([{path: tableSpec, reason: 'changed-on-main'}]);
     expect(renders('apps/storybook/stories/Table.stories.tsx')).toBe(true);
+  });
+
+  it('leaves out a spec main changed only in comments or whitespace', async () => {
+    const sameCode = await loadSameCode();
+    const head = `${FOCUS_RING_SOURCE}test('opens', async ({page}) => {\n  await page.goto(\`/x?\${id}\`);\n});\n`;
+    const changed = mainSource => [
+      {path: FOCUS_RING, status: 'changed', mainSource, headSource: head},
+    ];
+    const listed = mainSource =>
+      overlappingSpecs(changed(mainSource), TREE_CHANGE, {...GRAPH, sameCode});
+    // A reworded comment and reformatted code run the same tests.
+    expect(
+      listed(
+        head
+          .replace(
+            "test('opens'",
+            "/**\n * Opens the page, reworded.\n * @see the story\n */\n// Opens the page.\ntest(\n  'opens'",
+          )
+          .replace('});\n', '}); /* done */\n'),
+      ),
+    ).toEqual([]);
+    // A changed assertion, string, template text or routing line is listed.
+    for (const mainSource of [
+      head.replace("'opens'", "'opens twice'"),
+      head.replace('/x?', '/y?'),
+      head.replace('/x?', '/x ?'),
+      head.replace(
+        '@pr-a11y scope ^(packages/core/src/Table/',
+        '@pr-a11y scope ^(packages/core/src/Tables/',
+      ),
+    ]) {
+      expect(listed(mainSource), mainSource).toHaveLength(1);
+    }
+    // A spec the head lacks is always listed.
+    expect(
+      overlappingSpecs(
+        [
+          {
+            path: FOCUS_RING,
+            status: 'added',
+            mainSource: head,
+            headSource: null,
+          },
+        ],
+        TREE_CHANGE,
+        {...GRAPH, sameCode},
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('keeps a line break that changes the program', () => {
+    const value = 'function f() {\n  return x;\n}\n';
+    expect(codeKey(ts, value.replace('return x', 'return\n  x'))).not.toBe(
+      codeKey(ts, value),
+    );
+    expect(codeKey(ts, `/** Says what f does. */\n${value}`)).toBe(
+      codeKey(ts, `/** Says it better. */\n${value}`),
+    );
+  });
+
+  it('keys a spec by its tokens and routing lines', () => {
+    const key = codeKey(ts, FOCUS_RING_SOURCE);
+    expect(codeKey(ts, `${FOCUS_RING_SOURCE}\n\n`)).toBe(key);
+    expect(
+      codeKey(ts, FOCUS_RING_SOURCE.replace('scope ^(', 'scope ^(apps/|')),
+    ).not.toBe(key);
   });
 
   it('reads the touched components from changed source, never from a record', () => {

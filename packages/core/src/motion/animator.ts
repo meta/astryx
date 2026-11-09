@@ -804,6 +804,47 @@ function callTime(clock: () => number): number {
 }
 
 /**
+ * Promotions that wait for their stylesheet's will-change, from every
+ * animator, until the running callback's microtasks run.
+ */
+const sheetReads: SheetRead[] = [];
+
+/** One element's wait in sheetReads. */
+interface SheetRead {
+  /** Takes the promotion off the element, so a read sees its stylesheet. */
+  readonly lift: () => void;
+  readonly read: () => void;
+  /** Writes the promotion back with the stylesheet's reasons. */
+  readonly write: () => void;
+}
+
+/**
+ * Queues an element's stylesheet read for a microtask after the callback.
+ * That microtask lifts every queued promotion, reads every stylesheet, and
+ * then writes every promotion back. So motions that one callback starts force
+ * one style pass, not one per element.
+ */
+function queueSheetRead(read: SheetRead) {
+  if (sheetReads.length === 0) {
+    queueMicrotask(flushSheetReads);
+  }
+  sheetReads.push(read);
+}
+
+function flushSheetReads() {
+  const reads = sheetReads.splice(0);
+  for (const read of reads) {
+    read.lift();
+  }
+  for (const read of reads) {
+    read.read();
+  }
+  for (const read of reads) {
+    read.write();
+  }
+}
+
+/**
  * Per animator, the first of its calls that still wait for the frame that
  * commits them. An animator removes its entry once nothing of its waits: a
  * rebuild or a hidden page committed its calls, or it was disposed or moved.
@@ -1284,6 +1325,8 @@ export function createMotionEngine(
   let sheetWillChangeRead = false;
   /** The pending read of sheetWillChange, cancelled with its element. */
   let sheetReadTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The node whose promotion waits in sheetReads for its stylesheet. */
+  let sheetReadQueuedFor: HTMLElement | null = null;
   let demoteTimer: ReturnType<typeof setTimeout> | null = null;
   /** A pseudo-element is promoted through a custom property on its host. */
   const promotionProperty =
@@ -2359,13 +2402,16 @@ export function createMotionEngine(
     }
     if (ownWillChange == null) {
       ownWillChange = element.style.willChange;
-      // Without an inline value, the stylesheet's reasons stay alongside the
-      // promotion's. They were read in the task after the element was
-      // attached; a promotion that comes first (an element attached in this
-      // task that moves at once) reads them now.
-      if (ownWillChange === '' && !sheetWillChangeRead) {
-        readSheetWillChange(element);
-      }
+    }
+    // Without an inline value, the stylesheet's reasons stay alongside the
+    // promotion's. They were read in the task after the element was attached.
+    // A promotion that comes first (an element attached in this task that
+    // moves at once) is written now. Its reasons join it once the callback's
+    // microtasks run (queueSheetRead).
+    if (ownWillChange === '' && !sheetWillChangeRead) {
+      element.style.willChange = [...promoted].join(', ');
+      queueSheetReadFor(element);
+      return;
     }
     const base = ownWillChange !== '' ? ownWillChange : sheetWillChange;
     const own = base === 'auto' ? '' : base;
@@ -2383,6 +2429,41 @@ export function createMotionEngine(
         ?.getComputedStyle(element)
         .getPropertyValue('will-change') ?? '';
     sheetWillChangeRead = true;
+  };
+
+  /** Joins the stylesheet's reasons to a promotion once the callback ends. */
+  const queueSheetReadFor = (element: HTMLElement) => {
+    if (sheetReadQueuedFor === element) {
+      return;
+    }
+    sheetReadQueuedFor = element;
+    // Still waiting: the same node, still promoted, with no inline reason.
+    const waits = () =>
+      sheetReadQueuedFor === element &&
+      target === element &&
+      promoted.size > 0 &&
+      ownWillChange === '';
+    queueSheetRead({
+      lift: () => {
+        if (waits()) {
+          element.style.willChange = '';
+        }
+      },
+      read: () => {
+        if (waits()) {
+          readSheetWillChange(element);
+        }
+      },
+      write: () => {
+        if (sheetReadQueuedFor !== element) {
+          return;
+        }
+        sheetReadQueuedFor = null;
+        if (target === element && promoted.size > 0) {
+          writePromotion(element);
+        }
+      },
+    });
   };
 
   /**

@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import {themeAdd} from '../add/add.mjs';
 import {themeRemove} from './remove.mjs';
 import {parseThemeModuleRecord} from '../../../foundation/config/theme-state.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
@@ -44,7 +45,7 @@ function installThemes() {
 }
 
 beforeEach(async () => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-theme-remove-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-theme-remove-'));
   fs.mkdirSync(path.join(tmpDir, 'src'));
   fs.writeFileSync(
     path.join(tmpDir, 'package.json'),
