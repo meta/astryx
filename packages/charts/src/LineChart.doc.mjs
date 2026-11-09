@@ -156,8 +156,7 @@ export const docs = {
     {
       name: 'yBaseline',
       type: "'auto' | 'zero' | 'data'",
-      description:
-        'How the y-domain is derived when yDomain is omitted.',
+      description: 'How the y-domain is derived when yDomain is omitted.',
       default: "'auto'",
     },
     {
@@ -189,8 +188,7 @@ export const docs = {
     {
       name: 'title',
       type: 'string',
-      description:
-        'Visible heading and accessible name for the chart image.',
+      description: 'Visible heading and accessible name for the chart image.',
     },
     {
       name: 'subtitle',
