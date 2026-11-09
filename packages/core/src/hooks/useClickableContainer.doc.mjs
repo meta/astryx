@@ -107,7 +107,7 @@ export const docsDense = {
     bestPractices: [
       { guidance: true, description: 'Attach onClick + onMouseUp + onPointerDown to container element: full click handling incl. middle-click, no touch pressed state for press on nested control.' },
       { guidance: true, description: 'Use inside ClickableCard / SelectableCard for standard card interaction pattern.' },
-      { guidance: true, description: 'Pressable surface w/o Card chrome (e.g. quoted message jumping on press): this hook on surface; usePressFeedback() + interactionOverlayStyles.backgroundColor on same element; native <button> (or <a> for destination) inside VisuallyHidden as named control + interactiveRef; focusOutlineStyles.focusWithin on surface for shared focus ring (ClickableCard's). Full recipe: Core/Hooks/useClickableContainer story.' },
+      { guidance: true, description: 'Pressable surface w/o Card chrome (e.g. quoted message jumping on press): this hook on surface; usePressFeedback() + interactionOverlayStyles.backgroundColor on same element; native <button> (or <a> for destination) inside VisuallyHidden as named control + interactiveRef; focusOutlineStyles.focusWithin on surface for shared focus ring (the one ClickableCard draws). Full recipe: Core/Hooks/useClickableContainer story.' },
       { guidance: false, description: 'Use when entire container is single interactive element; just use <button> / <a> directly.' },
     ],
   },
