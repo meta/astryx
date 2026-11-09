@@ -1,5 +1,58 @@
 # @xds/cli
 
+# 0.7.12
+
+#### Experimental APIs
+
+- `astryx discover` lists the experimental TabBar and TabBarItem components from `@astryxdesign/lab`. (#9700)
+- `integration check` and `experimental icon new-set` follow `export const X = Y` to where `Y` is declared: an icon-set theme map or icon export written that way is now checked and recorded. (#10471)
+- Icon sets: when a wrapped library ships no license file, `integration check` on an icon set, `experimental icon new-set --from`, and a refresh name the NOTICE file to add and where, and the icon-sets guide lists the file names that count. A refresh from a library root moves icons added one file at a time from that library to the root import, keeping their ids, exports, map entries, variants, and words, and the receipt lists them under `moved`. Each keeps that id and export on every later refresh, and refreshing again changes nothing. A refresh keeps an id you chose that is not a spelling of the library name (`dismiss` for `XIcon`), also for an icon that already reads the root; it renames only an id the current rule spells differently. A library icon whose id or name a moved icon already has is left out. An icon whose root export another icon of the set already reads stays on its own import, and the receipt says why. A variant from another file of the package, such as a solid look, stays on its own import, and every export the refresh does not write again stays in the generated module. A `LICENSE` directory counts as a license notice in neither the receipt nor the check. (#10458)
+- Icon sets: wrapping a large icon library that names its looks in its exports works in seconds and gives one icon per glyph. Only the experimental icon commands, the icon-set guide, and `integration check` on an icon set change. (#8013)
+  - **Large libraries.** `experimental icon new-set --from` reads a library of 20,000 exports in about ten seconds instead of minutes, and in text mode says on stderr that it is reading and what it found. `iconNewSet` and `iconAdd` report reading progress for large modules through the shared `logger` (stderr, text mode only); called directly, they stay silent until `logger.setSilent(false)`.
+  - **Libraries of looks.** A library whose export names end in style, size and weight words (`XOutline24WGHT500Icon`), never direction words like `Up` and `Down`, gives one icon per glyph, named `x` (`XIcon`), in the look the set's default variant names, else the library's usual default; suggestions and `add` name icons by glyph, `add --variant filled --all` picks each glyph's filled look, a refresh keeps every icon an earlier release wrapped, and a refresh with a new `--default-variant` moves each glyph to that look. Every command that records the default variant takes it from the look each icon's export draws, refuses a look word the library does not have, and never adds a second export of an icon.
+  - **Variants on an existing set.** `experimental icon new-set <set> --variants outline,filled` without `--from` declares variants (a set with icons keeps its default variant, or, with none declared, takes the look its icons draw; a set whose library's export names name no looks keeps it on a refresh too, refuses `--variants` that leave it out, and the refusal names the `add --variant` run that adds the other look), and `--display-name` and `--description` rewrite the descriptor, in place; `add --variant` names an undeclared variant with that command.
+  - **Commands that run as printed.** Every command `new-set`, `add` and `map` print names the set, with `--set` where the command takes it; the commands `add` lists repeat `--default` and `--id`; `--new-definition` and `new-definition` take kebab-case as the definitions list shows it, and an unknown `--definition` suggests a name the next command takes.
+  - **Search.** `experimental icon star` no longer offers `start`, a plural matches its singular, `go home` finds the icon mapped to `home`, and a letter or two never matches inside a word.
+  - **Checks.** A set's own definitions pass `integration check --strict`, and the generated module and its declaration file pass after a formatter rewrites them.
+  - **Theme icons.** Each `themeIcons` entry is sized to its box by CSS, so a component that writes its own size attributes still fills the theme's icon box.
+
+#### New Features
+
+- Table plugins can now read where a row sits. Table passes each body row and cell transform an immutable `TableRowContext` (the row's key, its zero-based `logicalIndex` in the complete data, the row and header counts, and the row model). It passes the scroll-wrapper transform a `TableRenderContext` with a stable `viewport` reference. A plugin declares `rowModel: 'flat'` when its body transforms keep one row per data item. `useTableSelection` and `useTableStickyColumns` declare it. `useTableRowIndex()` without options now numbers rows from the context (passing `data` still numbers from that array), and rows that move re-render only for plugins that read the index. Read context values during the transform; a later read from a callback warns in development. The CLI's numbered-rows block no longer passes `data`. (#10171)
+- Replace the theme showcase's custom layout, text and icon styling with Astryx components. The embedded preview paints the theme's body behind card-token surfaces instead of a surface-colored card band. The new standalone top-navigation shell uses the theme's surface canvas; the embedded view stays shell-free. Make demo inputs, cart feedback, inventory filters and chat respond locally, with clearable filters and no payment submission. Keep the template id, gallery visibility and demo content. (#10404)
+
+#### Fixes
+
+- `astryx swizzle --list` no longer lists Core's shared folders (`animator`, `gestures`, `i18n`, `internal`, `keyboard`, `motion`, `privateAttributes`, `__tests__`) as components. A copy of `gestures` imports `@astryxdesign/core/motion`, which the core package does not export. (#10185)
+- `astryx build`: when an idea names a family only after its head ("a saml for a login") and the family's base template matches no other word, the variant that outranks the base now stays the start (`login-sso`, not `login`), so adding page templates no longer flips such ideas to the base. Ideas that name the family in their head ("saml login") start as before. (#10431)
+- Every import in an `astryx swizzle` copy now names a file the copy holds or a path the owner package exports. Before, the copy sent every import that left the component folder to the package's folder entry, which does not export the internal helpers most components use, so `Button`, `Dialog`, `Table` and about 100 other copies failed to type-check or bundle. Now the copy imports what the package exports from the package, carries every internal module it needs beside it in the package's folder layout, and copies the nested folders it imports (such as `Table`'s `plugins/`). Test helpers and notes are no longer copied. A helper an earlier swizzle wrote is reused when it is the same and is never replaced by a copy that carries it, even with `--overwrite`: a different one stays, and the new copy writes its own under a version-suffixed name. Swizzling the component whose folder holds that helper treats it as one of that component's own files, which `--overwrite` replaces. A private attribute owner module and the style modules it imports are the exception, as before: a changed copy fails the command without `--overwrite` and is replaced with it. Fixes #3506. (#10197)
+- `astryx swizzle` reports the npm packages a copy imports, such as `d3-scale` for a chart, with the version range the owner package declares, so the copy builds once you install them. The `swizzle.copy` receipt lists them in `dependencies`, and the text output names them to install. Node's built-in modules and the owner package itself are not listed. (#10502)
+
+#### Documentation
+
+- A new `Course Detail` page template: a long-form sales page for a single offering in two columns — the long read (a preview poster with a fact row, an about block with skill chips, a module syllabus whose sections collapse module by module, an instructor card, reviews with a scored-aspects panel, and a FAQ) beside a sticky enroll rail (the price with a compare-at, a self-paced or cohort start picker, and a weekly-pace slider that computes a finish date). Copy it with `astryx template course-detail <path>`. (#9753)
+- The File Explorer page template scrolls its columns with `StackItem` and `HStack` `isScrollable` instead of custom overflow and flex styles, and names each column after the folder it lists while the column scrolls. Its chevrons now mirror in right-to-left, and a detail pane scrolled to its end keeps its bottom padding. (#10421)
+- `RichTextView`, `RichTextEditorToolbar` and `RichTextEditorAutoLinkPlugin` each ship a doc file, so `astryx component`, `astryx discover` and the docs list their props, defaults and usage. (#10407)
+- The grouped table page template groups its rows with `useTableGroupedRows` instead of hand-rendered header rows and a hand-written `colgroup`. Its columns now have headers, each group's toggle is a button that reports whether its group is expanded, and the row menu's Move to project arrow mirrors in right-to-left. (#10423)
+
+#### Other Changes
+
+- Internal: the icon-set export reader reuses the shared top-level helper, and a source comment on look refreshes is shorter. No change to any command's output. (#10449)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @jiunshinn
+- @josephfarina
+- @mego1123
+- @rubyycheung
+- @thecodebasedot
+- @vjeux
+
+---
+
 # 0.7.11
 
 #### New Features
