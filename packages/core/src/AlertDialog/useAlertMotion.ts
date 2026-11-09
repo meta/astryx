@@ -40,8 +40,8 @@ import {isHTMLElement} from '../utils/nodeType';
 const EXIT_BACKSTOP_MS = 100;
 
 /**
- * A fade that no frame has started this long after the close starts then. A
- * hidden page gets no frames, and the backstop then ends its close.
+ * If no frame has started the fade this long after the close, the fade starts
+ * then. A hidden page gets no frames, so the backstop ends its close.
  */
 const EXIT_START_LIMIT_MS = 1000;
 
