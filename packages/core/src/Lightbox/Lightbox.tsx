@@ -980,9 +980,12 @@ export function Lightbox({
         parseFloat(style.paddingTop) -
         parseFloat(style.paddingBottom);
       const line = parseFloat(style.lineHeight);
-      setCaptionLastLineTop(
-        Number.isFinite(line) ? Math.max(0, lines - line) : 0,
-      );
+      // A whole number of line boxes. The client height rounds to whole
+      // pixels, and a spacer read from it would lay the caption out again a
+      // fraction of a pixel shorter, inside the delivery that measured it.
+      const lineCount =
+        Number.isFinite(line) && line > 0 ? Math.round(lines / line) : 0;
+      setCaptionLastLineTop(lineCount > 1 ? (lineCount - 1) * line : 0);
     }
     setIsCaptionScrolling(
       isCaptionOpen &&
