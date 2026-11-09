@@ -346,9 +346,13 @@ The run also lasts at most one frame more than the pace into it allows:
 ceil(step ÷ max(pace before, catch-up per frame)) + 1. A
 freeze ends in a catch-up of more than that, a stall in a frame-counted animation is longer than its runs
 before it, and a run that no change ends stays a miss. The component still has
-to show a new position on at least four of the control's frames. The cast step (`stepPx`)
+to show a new position on at least four of the control's frames. Fewer, with no
+miss and no longer stall, is too little to judge: `busyWindowProof` throws
+`BusyFrameUnjudgedError` with the count (`unresolved`). The cast step (`stepPx`)
 is read from the value's changes in the judged part, so a position the page
-commits off the grid once the block ends does not shrink it.
+commits off the grid once the block ends does not shrink it. A read that
+`trackMarker` stepped keeps its own step: one reading between two of those
+steps does not make the cast's step finer.
 A main-thread animation still fails: the control moves and it does not.
 Each such run counts in the control read's `belowStep`. A proof that claims a
 new position on every frame the control moved passes `judgeEveryFrame`. A frame

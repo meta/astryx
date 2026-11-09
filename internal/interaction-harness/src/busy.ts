@@ -824,26 +824,35 @@ export interface UnjudgedFrame {
 }
 
 /**
- * A frame the cast could not show the component's step on, in a busy proof
- * that judges every frame (`judgeEveryFrame`). The control moved on that
- * frame. The component moved under two of the cast's steps a frame, and the
- * frame shows no change. So the run is too little to judge: it fails by name,
- * not as a red on the component. A frozen or main-thread component still
- * fails the verdict, since the cast's step does not explain its hold.
+ * A busy proof with a control that the cast's step leaves too little to
+ * judge. Either a frame could not show the component's step, in a proof that
+ * judges every frame (`judgeEveryFrame`). Or the window showed a new position
+ * on fewer of the control's frames than the proof needs (`unresolved`). The
+ * component moved on every frame the control moved, under two of the cast's
+ * steps a frame, and stalled no longer than the control. So the run fails by
+ * name, not as a red on the component. A frozen or main-thread component
+ * still fails the verdict, since the cast's step does not explain its hold.
  */
 export class BusyFrameUnjudgedError extends Error {
   constructor(
     /** Each frame the proof could not judge. */
     readonly frames: readonly UnjudgedFrame[],
     summary: string,
+    /**
+     * The new positions the window showed on the control's frames, when they
+     * were fewer than the proof needs (`minJudgedFrames`).
+     */
+    readonly unresolved?: {readonly positions: number; readonly min: number},
   ) {
     super(
-      `busyWindowProof: too little to judge: ${frames
-        .map(
-          frame =>
-            `at +${frame.atMs.toFixed(1)} ms the component moved about ${frame.movePx.toFixed(2)} px a frame, under two of the cast's ${frame.stepPx} px steps, and the frame shows no step while the control moved`,
-        )
-        .join('; ')}. ${summary}`,
+      unresolved == null
+        ? `busyWindowProof: too little to judge: ${frames
+            .map(
+              frame =>
+                `at +${frame.atMs.toFixed(1)} ms the component moved about ${frame.movePx.toFixed(2)} px a frame, under two of the cast's ${frame.stepPx} px steps, and the frame shows no step while the control moved`,
+            )
+            .join('; ')}. ${summary}`
+        : `busyWindowProof: too little to judge: the component showed a new position on ${unresolved.positions} of the control's frames, under ${unresolved.min}. On the control's other frames it moved less than the cast's step, so they show no change. ${summary}`,
     );
     this.name = 'BusyFrameUnjudgedError';
   }
@@ -1853,7 +1862,10 @@ function motionStepPx(values: readonly number[]): number {
  * freeze ends in a larger catch-up, a stall in a frame-counted animation is
  * longer than its runs before it, and a run that no change ends stays a miss.
  * The component still has to show a new position on at least
- * `minJudgedFrames` of the control's frames.
+ * `minJudgedFrames` of the control's frames. Fewer, with no miss and no
+ * longer stall, is too little to judge: the proof throws
+ * `BusyFrameUnjudgedError` with the count (`unresolved`). Fewer with a miss or a
+ * longer stall stays a red.
  * A main-thread animation still fails: the control moves and it does not.
  * `maxMedianFrameMs`, when given, still applies; `minMovedFraction` and the
  * absolute stall, frame and motion limits do not.
@@ -1913,9 +1925,8 @@ function motionStepPx(values: readonly number[]): number {
 export function busyWindowProof(
   ...args: Parameters<typeof readBusyWindow>
 ): BusyProof {
-  const {proof, starvation, unjudged, componentFailed} = readBusyWindow(
-    ...args,
-  );
+  const {proof, starvation, unjudged, componentFailed, unresolved} =
+    readBusyWindow(...args);
   // Under the control's floor, a cast that kept pace still shows a missed
   // frame or a longer stall. That failure is the component's red.
   if (
@@ -1925,6 +1936,9 @@ export function busyWindowProof(
     throw new FrameStarvationError(starvation);
   }
   // A failed verdict is the component's red, whatever else the cast hid.
+  if (unresolved != null && proof.verdict.failures.length === 0) {
+    throw new BusyFrameUnjudgedError(unjudged, proof.summary, unresolved);
+  }
   if (unjudged.length > 0 && proof.verdict.failures.length === 0) {
     throw new BusyFrameUnjudgedError(unjudged, proof.summary);
   }
@@ -2189,6 +2203,11 @@ function judgeBusyWindow(
   starvation: FrameShortfall | null;
   /** Under `judgeEveryFrame`, the frames the cast's step excused. */
   unjudged: readonly UnjudgedFrame[];
+  /**
+   * The new positions the window showed on the control's frames, when they
+   * were fewer than `minJudgedFrames`, or null.
+   */
+  unresolved: {readonly positions: number; readonly min: number} | null;
   /**
    * The component failed on frames the control moved on: it missed one, or
    * stalled longer than the control. The cast's median interval is no part
@@ -2519,14 +2538,19 @@ function judgeBusyWindow(
         : deliveredFrames;
   const movedFraction = (moved + recorderSkipped) / Math.max(1, judgedFrames);
   // The cast's position step for the tracked value, read from the judged
-  // part. A sub-pixel read carries its own.
+  // part. A sub-pixel read carries its own. So does a whole-pixel read that
+  // `trackMarker` stepped: one reading between two of its steps does not make
+  // the cast show finer steps.
   const stepPx =
     subpixelStepPx ??
-    motionStepPx(
-      tracked.flatMap(f =>
-        f.box != null && f.t >= judged.from && f.t <= judged.to
-          ? [f.box[axis]]
-          : [],
+    Math.max(
+      readStepPx ?? 0,
+      motionStepPx(
+        tracked.flatMap(f =>
+          f.box != null && f.t >= judged.from && f.t <= judged.to
+            ? [f.box[axis]]
+            : [],
+        ),
       ),
     );
   const judgedValues = tracked.flatMap(f =>
@@ -2612,6 +2636,7 @@ function judgeBusyWindow(
       proof: null as unknown as BusyProof,
       starvation: null,
       unjudged: [],
+      unresolved: null,
       componentFailed: false,
       cast: {frames: 0, longestGapMs: 0},
       fallback: prediction.fallback,
@@ -2857,6 +2882,8 @@ function judgeBusyWindow(
   }
   const failures: string[] = [];
   let starvation: FrameShortfall | null = null;
+  let unresolved: {readonly positions: number; readonly min: number} | null =
+    null;
   const cast = castFramesIn(drawn, window);
   if (stats.frames === 0 && controlRead == null) {
     failures.push('no frame presented in the judged part');
@@ -2901,9 +2928,19 @@ function judgeBusyWindow(
             }),
       };
     } else if (visible < minJudgedFrames) {
-      failures.push(
-        `the component showed a new position on ${visible} of the control's frames, under ${minJudgedFrames}: too little motion in this window to judge`,
-      );
+      if (
+        controlRead.movedWith < controlRead.moved ||
+        controlRead.componentStallMs > controlRead.longestStallMs
+      ) {
+        failures.push(
+          `the component showed a new position on ${visible} of the control's frames, under ${minJudgedFrames}: too little motion in this window to judge`,
+        );
+      } else {
+        // The component moved on every frame the control moved, and the
+        // cast's step hid that motion on the others. So the window is too
+        // little to judge, not a red on the component.
+        unresolved = {positions: visible, min: minJudgedFrames};
+      }
     }
     if (controlRead.movedWith < controlRead.moved) {
       failures.push(
@@ -2989,7 +3026,7 @@ function judgeBusyWindow(
     controlRead != null &&
     (controlRead.movedWith < controlRead.moved ||
       controlRead.componentStallMs > controlRead.longestStallMs);
-  return {proof, starvation, unjudged, componentFailed, cast};
+  return {proof, starvation, unjudged, unresolved, componentFailed, cast};
 }
 
 /**
