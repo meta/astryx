@@ -46,10 +46,7 @@ import {VisuallyHidden} from '../../../VisuallyHidden';
 import {resolveContextActions} from '../../tableContextMenu';
 import {useTableContext} from '../../useTableCellStyles';
 import {rtlStyles} from '../../../utils';
-import {
-  hasInteractiveAncestor,
-  hasTextSelection,
-} from '../../../hooks/useClickableContainer';
+import {shouldSuppressRowPress} from '../../rowPressGuard';
 import type {
   TablePlugin,
   TableColumn,
@@ -1056,36 +1053,18 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
               htmlProps: {
                 ...keyed.htmlProps,
                 onClick: (event: React.MouseEvent<HTMLTableRowElement>) => {
-                  // Don't hijack clicks on interactive cell content (the
-                  // chevron already stops propagation, but a composed
-                  // selection checkbox, link, or action button does not) or a
-                  // text selection. Both rules come from
-                  // `useClickableContainer`, the same pair every clickable
-                  // surface in the system uses — the hook itself wants a ref
-                  // we have no way to hand it from inside `transformBodyRow`,
-                  // so this shares its guards rather than its plumbing.
+                  // Don't hijack clicks on interactive cell content or a
+                  // text selection: one shared row-press guard answers what
+                  // counts as "this click belongs to something else" for the
+                  // expansion, tree, and activation row paths alike.
                   const row = event.currentTarget;
-                  const target = event.target;
-                  if (!(target instanceof Element)) {
-                    return;
-                  }
-                  if (target !== row && hasInteractiveAncestor(target, row)) {
-                    return;
-                  }
-                  // A click inside a contenteditable region is an edit
-                  // action, not a row toggle. The shared guard does not
-                  // include contenteditable (it would change ClickableCard
-                  // and other consumers), so the Table row-click path
-                  // checks it separately.
                   if (
-                    target !== row &&
-                    target.closest(
-                      '[contenteditable]:not([contenteditable="false"])',
-                    )
+                    shouldSuppressRowPress(row, event.target, {
+                      nestedRow: false,
+                      readonlyScope: false,
+                      selection: 'contain',
+                    })
                   ) {
-                    return;
-                  }
-                  if (hasTextSelection(row)) {
                     return;
                   }
                   keyed.htmlProps.onClick?.(event);

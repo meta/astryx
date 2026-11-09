@@ -50,9 +50,12 @@ export interface TableRowProps extends BaseProps<HTMLTableRowElement> {
  * plain `:nth-child(even)` counts it and every row below an open panel takes
  * the opposite stripe: expanding one row repaints half the table. Counting
  * `of :not([data-expansion-panel])` leaves the panel out of the sequence, so
- * the rows keep their parity whatever is open.
+ * the rows keep their parity whatever is open. Rows carrying active state
+ * (`data-active`, e.g. the activation plugin) also skip the stripe, so their
+ * wash paints independent of row parity.
  */
-const NOT_PANEL_ROW = ':nth-child(even of :not([data-expansion-panel]))';
+const NOT_PANEL_ROW =
+  ':nth-child(even of :not([data-expansion-panel])):not([data-active="true"])';
 
 const logicalStripedRowStyles = stylex.create({
   row: {
