@@ -3,8 +3,8 @@
 
 /**
  * @file BottomSheetRelease.a11y.chromium.spec.ts
- * @input Built BottomSheet stories and real Chromium touch input (CDP), each
- *   event with its own timestamp
+ * @input Built BottomSheet stories and real Chromium touch and mouse input
+ *   (CDP), each event with its own timestamp
  * @output Browser evidence for the touch release: a fast short flick closes
  *   a sheet at its lowest detent, and its exit starts at the flick's speed.
  *   From the top snap point, a flick whose projection stops short of the
@@ -323,12 +323,10 @@ test('a mouse close under reduced motion moves the sheet no further', async ({
     };
     requestAnimationFrame(record);
   });
-  const x = rest.x + rest.width / 2;
-  const y = rest.y + 12;
-  await page.mouse.move(x, y);
-  await page.mouse.down();
-  await page.mouse.move(x, y + 150, {steps: 5});
-  await page.mouse.up();
+  const cdp = await page.context().newCDPSession(page);
+  // 150 px in 50 ms is 3,000 px/s, so the mouse release projects past the
+  // dismiss line even when event delivery is slow.
+  await mouseDrag(cdp, sheet, 150, 50);
   // While the dialog closes, no drag exit plays: no inline transition and no
   // animation moves the sheet.
   const exitPlayed = await page.evaluate(async () => {
