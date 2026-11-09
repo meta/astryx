@@ -13,7 +13,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
-import {bundleModule, checkBudgets} from './module-size.mjs';
+import {bundleModule, checkBudgets, measureAdapter} from './module-size.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPT = path.join(HERE, 'module-size.mjs');
@@ -62,6 +62,52 @@ beforeAll(() => {
 
 afterAll(() => fs.rmSync(root, {recursive: true, force: true}));
 
+/** A host that wires an adapter, which uses an engine. */
+function writeAdapterFixture() {
+  const write = (file, text) => {
+    fs.mkdirSync(path.dirname(path.join(root, file)), {recursive: true});
+    fs.writeFileSync(path.join(root, file), text);
+  };
+  write(
+    'lib/engine/engine.ts',
+    "export function windowRange(count: number) {\n  return ['engine-marker', count * 2, count + 7];\n}\n",
+  );
+  write(
+    'lib/adapter/useAdapter.ts',
+    [
+      "import {useMemo} from 'react';",
+      "import {windowRange} from '../engine/engine';",
+      'export function useAdapter(rows: string[]) {',
+      '  return useMemo(',
+      "    () => ({range: windowRange(rows.length), label: 'adapter-marker-' + rows.join('|')}),",
+      '    [rows],',
+      '  );',
+      '}',
+      '',
+    ].join('\n'),
+  );
+  write('lib/adapter/index.ts', "export {useAdapter} from './useAdapter';\n");
+  write(
+    'lib/host/Host.ts',
+    [
+      "import {useAdapter} from '../adapter';",
+      'export function Host(rows: string[]) {',
+      '  const plan = useAdapter(rows);',
+      "  return ['host-marker', rows.length, plan];",
+      '}',
+      '',
+    ].join('\n'),
+  );
+}
+
+const adapterEntry = {
+  name: 'fixture adapter',
+  role: 'adapter',
+  host: {entries: ['lib/host/Host.ts'], scope: 'lib'},
+  adapter: ['lib/adapter/index.ts', 'lib/adapter/useAdapter.ts'],
+  engine: {entries: ['lib/engine/engine.ts'], scope: 'lib/engine'},
+};
+
 const widget = {
   name: 'widget adapter',
   entries: ['src/widget/useWidget.ts'],
@@ -84,6 +130,71 @@ describe('measurement', () => {
     expect(code).toMatch(/export\s*\{/);
     const gzip = execFileSync('gzip', ['-9', '-n', '-c'], {input: code});
     expect(gzipBytes).toBe(gzip.length);
+  });
+});
+
+describe('adapter measurement', () => {
+  it('stubs the adapter out of its host, and the stubbed host keeps no adapter or engine code', async () => {
+    writeAdapterFixture();
+    const without = await bundleModule({
+      root,
+      entries: ['lib/host/Host.ts'],
+      scope: 'lib',
+      stub: adapterEntry.adapter,
+    });
+    expect(without.code).toContain('host-marker');
+    expect(without.code).not.toContain('adapter-marker');
+    expect(without.code).not.toContain('engine-marker');
+  });
+
+  it('is the host with the adapter, minus the host without it, minus the engine', async () => {
+    writeAdapterFixture();
+    const result = await measureAdapter({root, ...adapterEntry});
+    const host = await bundleModule({root, ...adapterEntry.host});
+    const without = await bundleModule({
+      root,
+      ...adapterEntry.host,
+      stub: adapterEntry.adapter,
+    });
+    const engine = await bundleModule({root, ...adapterEntry.engine});
+    expect(result.minBytes).toBe(
+      host.minBytes - without.minBytes - engine.minBytes,
+    );
+    expect(result.gzipBytes).toBe(
+      host.gzipBytes - without.gzipBytes - engine.gzipBytes,
+    );
+    // The difference is about the adapter's own code, bundled alone.
+    const alone = await bundleModule({
+      root,
+      entries: ['lib/adapter/useAdapter.ts'],
+      scope: 'lib/adapter',
+    });
+    expect(Math.abs(result.minBytes - alone.minBytes)).toBeLessThan(80);
+  });
+
+  it('checks an adapter against its budget by that difference', async () => {
+    writeAdapterFixture();
+    const result = await checkBudgets({
+      root,
+      config: {modules: [{...adapterEntry, budgetBytes: 1}]},
+    });
+    expect(result.modules[0].role).toBe('adapter');
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toContain('fixture adapter');
+  });
+
+  it('fails closed on a missing adapter or host path', async () => {
+    writeAdapterFixture();
+    await expect(
+      measureAdapter({root, ...adapterEntry, adapter: ['lib/adapter/gone.ts']}),
+    ).rejects.toThrow(/lib\/adapter\/gone\.ts/);
+    await expect(
+      measureAdapter({
+        root,
+        ...adapterEntry,
+        host: {entries: ['lib/host/Gone.ts'], scope: 'lib'},
+      }),
+    ).rejects.toThrow(/lib\/host\/Gone\.ts/);
   });
 });
 
@@ -199,12 +310,17 @@ describe('committed budgets', () => {
     const roles = config.modules.map(m => m.role);
     expect(roles).toContain('engine');
     expect(roles).toContain('adapter');
+    const exists = file =>
+      expect(fs.existsSync(path.join(REPO, file)), file).toBe(true);
     for (const m of config.modules) {
       expect(typeof m.budgetBytes).toBe('number');
       expect(typeof m.enforce).toBe('boolean');
-      for (const entry of m.entries)
-        expect(fs.existsSync(path.join(REPO, entry)), entry).toBe(true);
-      expect(fs.existsSync(path.join(REPO, m.scope)), m.scope).toBe(true);
+      const parts =
+        m.role === 'adapter' ? [m.host, m.engine, {entries: m.adapter}] : [m];
+      for (const part of parts) {
+        part.entries.forEach(exists);
+        if (part.scope) exists(part.scope);
+      }
     }
   });
 });
