@@ -63,3 +63,35 @@ test('a composition right after a mention pick commits only the composed text', 
 
   await expect(value).toHaveText(/^Value: "@\S+\sな"$/);
 });
+
+test('a composition after one Backspace removes a just-picked mention commits only the composed text', async ({
+  page,
+}) => {
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-chatcomposerinput--mention-trigger&viewMode=story`,
+  );
+  const textbox = page.getByRole('combobox');
+  await textbox.click();
+  await page.keyboard.type('hey @');
+  await expect(page.getByRole('option').first()).toBeVisible();
+  await page.keyboard.press('Enter');
+  const value = page.getByText(/^Value: /);
+  await expect(value).toHaveText(/^Value: "hey @\S+\s"$/);
+  await page.keyboard.press('Backspace');
+  await expect(value).toHaveText(/^Value: "hey\s"$/);
+
+  const session = await page.context().newCDPSession(page);
+  await session.send('Input.imeSetComposition', {
+    text: 'k',
+    selectionStart: 1,
+    selectionEnd: 1,
+  });
+  await session.send('Input.imeSetComposition', {
+    text: 'か',
+    selectionStart: 1,
+    selectionEnd: 1,
+  });
+  await session.send('Input.insertText', {text: 'か'});
+
+  await expect(value).toHaveText(/^Value: "hey\sか"$/);
+});

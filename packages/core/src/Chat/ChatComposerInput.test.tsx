@@ -2205,6 +2205,40 @@ describe('ChatComposerInput', () => {
       expect(textbox.querySelector('br')).toBeNull();
     });
 
+    it('after one Backspace removes a token, the caret is inside the text before it', () => {
+      let handle: ChatComposerInputHandle | null = null;
+      render(
+        <ChatComposer
+          onSubmit={() => {}}
+          input={
+            <ChatComposerInput
+              handleRef={h => {
+                handle = h;
+              }}
+            />
+          }
+        />,
+      );
+      const textbox = screen.getByRole('textbox');
+      act(() => textbox.focus());
+      act(() => handle?.insertText('hey '));
+      act(() => {
+        handle?.insertToken({
+          value: '@cindy',
+          label: '@Cindy Zhang',
+          variant: 'blue',
+        });
+      });
+
+      fireEvent.keyDown(textbox, {key: 'Backspace'});
+
+      const selection = window.getSelection()!;
+      expect(textbox.textContent).toBe('hey ');
+      expect(selection.anchorNode?.nodeType).toBe(Node.TEXT_NODE);
+      expect(selection.anchorNode?.textContent).toBe('hey ');
+      expect(selection.anchorOffset).toBe('hey '.length);
+    });
+
     it('anchors caret inside trailing text node after inserting a token', async () => {
       let handle: ChatComposerInputHandle | null = null;
       render(

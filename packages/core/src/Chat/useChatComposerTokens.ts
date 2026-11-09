@@ -21,7 +21,11 @@
  */
 
 import {useCallback, useState} from 'react';
-import {ensureCaretInside, insertTextAtCursor} from './chatComposerSelection';
+import {
+  ensureCaretInside,
+  insertTextAtCursor,
+  placeCaretAfterNode,
+} from './chatComposerSelection';
 import type {
   ChatComposerToken,
   ChatComposerTokenCustom,
@@ -181,10 +185,14 @@ export function useChatComposerTokens({
       ) {
         e.preventDefault();
         const tokenSpan = startContainer.previousSibling;
+        const before = tokenSpan.previousSibling;
         const parent = startContainer.parentNode;
         if (parent) {
           parent.removeChild(startContainer);
           parent.removeChild(tokenSpan);
+          if (parent instanceof HTMLElement) {
+            placeCaretAfterNode(parent, before);
+          }
         }
         onEmitChange();
         return true;

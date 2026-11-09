@@ -110,6 +110,31 @@ export function landInsideTrailingTextNode(
 }
 
 /**
+ * Collapse the Selection right after `node`, a child of `editable`, or at the
+ * start of `editable` when `node` is null. The caret lands inside the preceding
+ * text, so a composition that starts there composes.
+ */
+export function placeCaretAfterNode(
+  editable: HTMLElement,
+  node: Node | null,
+): void {
+  const selection = window.getSelection();
+  if (!selection) {
+    return;
+  }
+  const range = document.createRange();
+  if (node) {
+    range.setStartAfter(node);
+  } else {
+    range.setStart(editable, 0);
+  }
+  range.collapse(true);
+  landInsideTrailingTextNode(editable, range);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+/**
  * Collapse the Selection to the very end of `editable`'s content,
  * replacing whatever the Selection held before.
  *

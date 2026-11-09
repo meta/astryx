@@ -58,6 +58,7 @@ import {
   isSelectionAtStart,
   isSelectionAtEnd,
   placeCaretAtEnd,
+  placeCaretAfterNode,
   getSelectionRangeInside,
   restoreSelectionRange,
 } from './chatComposerSelection';
@@ -736,10 +737,14 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
             // and the token in one action
             e.preventDefault();
             const tokenSpan = startContainer.previousSibling;
+            const before = tokenSpan.previousSibling;
             const parent = startContainer.parentNode;
             if (parent) {
               parent.removeChild(startContainer);
               parent.removeChild(tokenSpan);
+              if (parent instanceof HTMLElement) {
+                placeCaretAfterNode(parent, before);
+              }
             }
             emitChange();
             return;
