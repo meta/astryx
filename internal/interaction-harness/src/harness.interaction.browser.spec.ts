@@ -6945,6 +6945,136 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     ).rejects.toThrow(/no animation started/);
   });
 
+  test("blockMainThread with during names the action's run that ended before its wait began, and no other run", async ({
+    page,
+  }) => {
+    await fixture(page);
+    // The wait waits on `#box.late`, which matches nothing until the page
+    // adds the class. So the wait begins late. The page starts a run after
+    // the call and cancels it while it plays, as Core's animator retires a
+    // run at its curve's end. Then it adds the class: the run ended before
+    // the wait began, as when a late runner delivers the action first.
+    const waitAfter = async (
+      property: string,
+      run?: {target: string; keyframes: Keyframe[]},
+    ) => {
+      const waited = blockMainThread(page, 50, {
+        during: page.locator('#box.late'),
+        property,
+        timeout: 300,
+      }).then(
+        () => null,
+        (error: unknown) => error,
+      );
+      await page.evaluate(
+        started =>
+          new Promise<void>(resolve => {
+            const animation =
+              started == null
+                ? null
+                : document
+                    .querySelector(started.target)
+                    ?.animate(started.keyframes, {duration: 1_000});
+            setTimeout(() => {
+              animation?.cancel();
+              document.getElementById('box')?.classList.add('late');
+              resolve();
+            }, 100);
+          }),
+        run ?? null,
+      );
+      const outcome = await waited;
+      await page.evaluate(() =>
+        document.getElementById('box')?.classList.remove('late'),
+      );
+      return outcome;
+    };
+    const isBare = (outcome: unknown) => {
+      expect(outcome).not.toBeInstanceOf(BusyWindowTooLateError);
+      expect(String(outcome)).toMatch(/no animation started/);
+    };
+    const travel = [{translate: '0px'}, {translate: '40px'}];
+    // Nothing ran: no start.
+    isBare(await waitAfter('translate'));
+    // A run outside `during`, and a run of another property: no start.
+    isBare(await waitAfter('translate', {target: 'body', keyframes: travel}));
+    isBare(
+      await waitAfter('translate', {
+        target: '#box',
+        keyframes: [{opacity: 1}, {opacity: 0.2}],
+      }),
+    );
+    // A travel that began and ended before the call is an earlier action's.
+    await page.evaluate(
+      keyframes =>
+        new Promise<void>(resolve => {
+          const run = document
+            .getElementById('box')
+            ?.animate(keyframes, {duration: 1_000});
+          setTimeout(() => {
+            run?.cancel();
+            resolve();
+          }, 100);
+        }),
+      travel,
+    );
+    isBare(await waitAfter('translate'));
+    // The action's travel began after the call and ended before the wait: the
+    // wait names that, with both times.
+    const named = await waitAfter('translate', {
+      target: '#box',
+      keyframes: travel,
+    });
+    expect(named).toBeInstanceOf(BusyWindowTooLateError);
+    const {message, numbers} = named as BusyWindowTooLateError;
+    expect(numbers.endedBeforeWaitMs).toBeGreaterThan(0);
+    expect(
+      numbers.startedBeforeWaitMs - numbers.endedBeforeWaitMs,
+    ).toBeGreaterThanOrEqual(50);
+    expect(message).toMatch(
+      /began \d+ ms before the page began to wait and ended \d+ ms before it/,
+    );
+  });
+
+  test('a recorder that blockMainThread starts reads nothing per frame, and the first wait adopts it as if it started then', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // Counts the page's document-wide animation reads: each one flushes
+    // style, and the recorder's frame loop makes one every frame.
+    await page.evaluate(() => {
+      const w = window as unknown as {__reads: number};
+      w.__reads = 0;
+      const read = document.getAnimations.bind(document);
+      document.getAnimations = () => {
+        w.__reads += 1;
+        return read();
+      };
+    });
+    const reads = () =>
+      page.evaluate(() => (window as unknown as {__reads: number}).__reads);
+    await expect(
+      blockMainThread(page, 50, {during: box, timeout: 200}),
+    ).rejects.toThrow(/no animation started/);
+    // A run plays and finishes over a dozen frames: a passive recorder logs
+    // it, with no read.
+    await box.evaluate(
+      el =>
+        new Promise<void>(resolve => {
+          el.animate([{scale: '1'}, {scale: '0.9'}], {duration: 200}).onfinish =
+            () => resolve();
+        }),
+    );
+    expect(await reads()).toBe(0);
+    // The first wait adopts the recorder, and its frame loop starts. The wait
+    // counts only what starts from its call, as on a page it touches first.
+    await expect(waitForAnimation(box, {timeout: 300})).rejects.toThrow(
+      /no animation started/,
+    );
+    expect(await reads()).toBeGreaterThan(0);
+  });
+
   test('blockMainThread with during names an animation rebuilt at every frame, which it never holds, at its timeout', async ({
     page,
   }) => {

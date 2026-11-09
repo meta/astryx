@@ -68,12 +68,21 @@ async function scopeElement(caller: string, scope: Locator | undefined) {
  * `startTime`.
  *
  * A run that the page cancels while it plays is dated at the cancel.
+ *
+ * With `passive`, as `blockMainThread` starts it, the recorder only logs what
+ * starts, through the `animate()` wrapper and the CSS events. It has no frame
+ * loop and makes no document-wide read. A later start without `passive`, as
+ * every wait of this module makes, adopts it as if it started then.
  */
-function animationRecorder(): void {
+export function animationRecorder(passive?: boolean): void {
   const w = window as unknown as {__harnessAnimations?: unknown};
   if (w.__harnessAnimations) {
+    if (passive !== true) {
+      (w.__harnessAnimations as {adopt: () => void}).adopt();
+    }
     return;
   }
+  let isPassive = passive === true;
   // The run a CSS animation or transition event names.
   const cssRunName = (event: Event) =>
     event.type.startsWith('animation')
@@ -110,7 +119,7 @@ function animationRecorder(): void {
     name: string;
   }[] = [];
   // Each recorded animation's entry.
-  const entries = new WeakMap<Animation, (typeof log)[number]>();
+  let entries = new WeakMap<Animation, (typeof log)[number]>();
   // CSS runs whose end event came while a rendering trace ran, with the
   // event's time (real) and the active time the event reports.
   const endedInTrace: {
@@ -278,8 +287,10 @@ function animationRecorder(): void {
   // harness touches for the first time) is seen now, before any watch arms;
   // first seen a frame later, it would read as started by the watched action.
   // (A recorder that starts during a trace reads once here, then waits.)
-  record();
-  loop();
+  if (!isPassive) {
+    record();
+    loop();
+  }
   // A start event with nothing left to read: a CSS animation shorter than the
   // gap between two of the page's frames can start and finish inside it, and
   // WebKit sends its start event only at the next frame, when
@@ -302,9 +313,9 @@ function animationRecorder(): void {
     );
   };
   const onStart = (event: Event) => {
-    if (tracing()) {
+    if (tracing() || isPassive) {
       // Inside a trace, read only the element the event names, once: a
-      // document-wide read flushes style.
+      // document-wide read flushes style. A passive recorder reads so too.
       const target = event.target;
       if (target instanceof Element) {
         // A pseudo-element's animation (`::backdrop`) is in the subtree.
@@ -522,8 +533,10 @@ function animationRecorder(): void {
         entry.startedAt ??= entry.finishStart;
         entry.finishedAt = entry.finishStart + end / speed;
       }
-      record();
-      loop();
+      if (!isPassive) {
+        record();
+        loop();
+      }
     },
     // Record first, then stamp strictly after the newest entry: a step that
     // changed style just before has its transition created by that read,
@@ -554,6 +567,22 @@ function animationRecorder(): void {
       unstarted = [];
       endedInTrace.length = 0;
     },
+    // The first call of this module takes a passive recorder as if it
+    // started now: nothing it logged before counts, and the loop starts.
+    adopt: () => {
+      if (!isPassive) {
+        return;
+      }
+      isPassive = false;
+      log.length = 0;
+      unread.length = 0;
+      unstarted = [];
+      endedInTrace.length = 0;
+      entries = new WeakMap();
+      armedAt = performance.now();
+      record();
+      loop();
+    },
   };
 }
 
@@ -565,7 +594,7 @@ async function installRecorder(page: Page): Promise<void> {
     recordingPages.add(page);
     await page.addInitScript(animationRecorder);
   }
-  await page.evaluate(animationRecorder);
+  await page.evaluate(animationRecorder, false);
 }
 
 /**

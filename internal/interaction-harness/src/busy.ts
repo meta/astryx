@@ -29,6 +29,7 @@
 import type {Locator, Page} from '@playwright/test';
 import {defineAnimatedProperties} from './animated-properties';
 import {defineCurveEnd} from './curve-end';
+import {animationRecorder} from './curves';
 import {
   FRAME_STARVATION_MS,
   FrameStarvationError,
@@ -454,6 +455,12 @@ export interface BlockedWindow extends BusyWindow {
 /** One display frame, ms: the least progress `blockMainThread` waits for. */
 const ONE_FRAME_MS = 16;
 
+// How far the runner's wall clock and the page's time origin can disagree, ms.
+// A run that began this much before the call still counts as the action's. A
+// clock that slews further on a long-lived page moves that line. The wait
+// still fails then, only under another name.
+const CALL_SLACK_MS = 5;
+
 /**
  * The block began too late for the motion it was meant to catch. So the
  * window holds too little to judge: when the block ran, not how the component
@@ -462,7 +469,10 @@ const ONE_FRAME_MS = 16;
  * by `busyWindowProof` when the tracked value had settled before the judged
  * part of the window began. Thrown too when a held curve that keeps no end
  * value ends so soon in the block that too few frames are left
- * (`curveEndMs`). Always a red, with the numbers; never a pass. Start the
+ * (`curveEndMs`). Thrown by `blockMainThread` too when its wait finds no run,
+ * but the action's run ended before the wait (`startedBeforeWaitMs`,
+ * `endedBeforeWaitMs`). The page received the action first. Always a red,
+ * with the numbers; never a pass. Start the
  * block earlier: call `blockMainThread` before the action that starts the
  * motion, and await it after.
  */
@@ -577,9 +587,14 @@ export async function blockMainThread(
   // The wait reads the curve end and the property match, defined in the page
   // first. Both are sent before the wait and not awaited: the wait starts no
   // later than before.
+  // The same evaluate starts the page's animation recorder, passive: no frame
+  // loop adds main-thread work to a busy proof. The recorder keeps a run after
+  // the page cancels it, and a wait that times out reads it for the action's
+  // run.
   const defined = page.evaluate(
-    `(${defineCurveEnd.toString()})();(${defineAnimatedProperties.toString()})();`,
+    `(${defineCurveEnd.toString()})();(${defineAnimatedProperties.toString()})();(${animationRecorder.toString()})(true);`,
   );
+  const calledFrom = Date.now() - CALL_SLACK_MS;
   // WebKit on Linux ignores `fill` on its compositor: a filled move that
   // ends during a main-thread block snaps back (motion/animator.ts,
   // END_HOLD_MS). Elsewhere a fill holds the end value. Node's platform is
@@ -589,7 +604,10 @@ export async function blockMainThread(
     process.platform === 'linux'
   );
   const waited = during.evaluate(
-    (element, {duration, minProgress, prop, pseudo, wait, fillHolds}) =>
+    (
+      element,
+      {duration, minProgress, prop, pseudo, wait, fillHolds, calledFrom},
+    ) =>
       new Promise<BlockedWindow>((resolve, reject) => {
         // The harness's own waits run on the real timers: a frozen timer gate
         // (story.ts) holds only the page's.
@@ -606,6 +624,14 @@ export async function blockMainThread(
         const later = gate?.timeout ?? window.setTimeout.bind(window);
         const realNow = gate?.now ?? (() => performance.now());
         const deadline = realNow() + wait;
+        // The recorder dates a run on the real clock: a page time plus every
+        // span that a page freeze stood still. The call's wall-clock time maps
+        // onto it through the time origin.
+        const waitBegan =
+          performance.now() +
+          ((window as unknown as {__harnessFreeze?: {offset: number}})
+            .__harnessFreeze?.offset ?? 0);
+        const callBegan = calledFrom - performance.timeOrigin;
         // The busy-window control animates on its own, inside a dialog with
         // `within`: it never stands for the animation under test.
         const isControl = (a: Animation) => {
@@ -663,8 +689,52 @@ export async function blockMainThread(
         // finish, or be cancelled once its curve ends, before the wait times
         // out.
         let heldSeen: ReturnType<typeof numbersOf> | null = null;
-        const tooLate = (numbers: ReturnType<typeof numbersOf>) =>
-          new Error(`BusyWindowTooLate ${JSON.stringify(numbers)}`);
+        const tooLate = (
+          numbers:
+            | ReturnType<typeof numbersOf>
+            | {startedBeforeWaitMs: number; endedBeforeWaitMs: number},
+        ) => new Error(`BusyWindowTooLate ${JSON.stringify(numbers)}`);
+        // The latest run that counts, began between the call and the wait, and
+        // has ended: the action's run, which reached the page before the wait.
+        // A run that began before the call is an earlier action's.
+        const endedRun = () => {
+          const log =
+            (
+              window as unknown as {
+                __harnessAnimations?: {
+                  log: readonly {
+                    animation: Animation;
+                    startedAt: number | null;
+                    finishStart: number | null;
+                    finishedAt: number | null;
+                    cancelledAt: number | null;
+                    playedMs: number | null;
+                    ancestors: readonly Element[];
+                  }[];
+                };
+              }
+            ).__harnessAnimations?.log ?? [];
+          for (let i = log.length - 1; i >= 0; i -= 1) {
+            const entry = log[i];
+            const start = entry.startedAt ?? entry.finishStart;
+            const end = entry.cancelledAt ?? entry.finishedAt;
+            if (
+              start != null &&
+              end != null &&
+              start >= callBegan &&
+              start < waitBegan &&
+              (entry.playedMs == null || entry.playedMs >= minProgress) &&
+              entry.ancestors.includes(element) &&
+              counts(entry.animation)
+            ) {
+              return {
+                startedBeforeWaitMs: waitBegan - start,
+                endedBeforeWaitMs: waitBegan - end,
+              };
+            }
+          }
+          return null;
+        };
         // The animations that counted at the frame before, pending ones too.
         let seen = new Set<Animation>();
         const tick = () => {
@@ -750,7 +820,12 @@ export async function blockMainThread(
           } else if (timedOut && leftover != null) {
             reject(tooLate(leftover));
           } else if (timedOut) {
-            reject(new Error('blockMainThread: no animation started'));
+            const ended = endedRun();
+            reject(
+              ended == null
+                ? new Error('blockMainThread: no animation started')
+                : tooLate(ended),
+            );
           } else {
             frame(tick);
           }
@@ -764,6 +839,7 @@ export async function blockMainThread(
       pseudo: pseudoElement ?? null,
       wait: timeout,
       fillHolds,
+      calledFrom,
     },
   );
   try {
@@ -776,7 +852,19 @@ export async function blockMainThread(
     if (late == null) {
       throw error;
     }
-    const numbers = JSON.parse(late[1]) as {
+    const parsed = JSON.parse(late[1]) as Record<string, number>;
+    if ('startedBeforeWaitMs' in parsed) {
+      const {startedBeforeWaitMs, endedBeforeWaitMs} = parsed;
+      const ended =
+        endedBeforeWaitMs >= 0
+          ? `${endedBeforeWaitMs.toFixed(0)} ms before it`
+          : `${(-endedBeforeWaitMs).toFixed(0)} ms after it began`;
+      throw new BusyWindowTooLateError(
+        `blockMainThread: the animation under test began ${startedBeforeWaitMs.toFixed(0)} ms before the page began to wait and ended ${ended}: the page received the action that started it before the wait, so a block now holds nothing to judge. A late runner can deliver the action first. Call blockMainThread before the action that starts the motion, and await it after.`,
+        parsed,
+      );
+    }
+    const numbers = parsed as {
       currentTimeMs: number;
       curveEndMs: number;
       startedWhileWaiting: number;
