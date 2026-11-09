@@ -101,7 +101,7 @@ import {themes, defaultThemeSlug} from './astryx-themes';`,
         },
         {
           type: 'prose',
-          text: "`astryx.css` also sets `--color-accent`, `--color-border`, `--color-neutral`, the status colours (`--color-info`, `--color-success`, `--color-warning`, `--color-error`) and the other Core `--color-*` tokens on `:root`, above Tailwind's `theme` layer. If the app's `@theme` defines one of these names, rename that key or mark the block `@theme inline`, or the app's utilities take Astryx's value.",
+          text: "`astryx.css` also sets `--color-accent`, `--color-border`, `--color-neutral`, the status colours (`--color-info`, `--color-success`, `--color-warning`, `--color-error`) and the other Core `--color-*` tokens on `:root`, above Tailwind's `theme` layer. If the app's `@theme` defines one of these names, rename that key or mark the block `@theme inline`, or the app's utilities take Astryx's value. Rename an app `:root` variable with one of these names too: inside the root `<Theme>`, the theme stylesheet sets these tokens again, so the app's own rules there read Astryx's value.",
         },
         {
           type: 'prose',
