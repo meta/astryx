@@ -298,6 +298,26 @@ describe('busyWindowProof on a WebKit cast with a control', () => {
     );
   });
 
+  it('gives two frames of a late burst different times, so a held frame clamped to the next reading still reads as a stall', () => {
+    // Frames 27 to 31 come in a burst, stamped 50, 55, 40, 25 and 10 ms late.
+    // Frame 27 is the last near the control's turn, with no reading. It takes
+    // its time from frame 30, whose stamp agrees with its reading, and would
+    // come after frame 28. So the order rule moves it to just before frame 28.
+    // The component holds on frame 27 while the control moves.
+    const late = [50, 55, 40, 25, 10];
+    const shots = onTime().map((shot, i) =>
+      i >= 27 && i <= 31 ? {...shot, stamp: shot.stamp + late[i - 27]} : shot,
+    );
+    const linear = (at: number) => 20 + (6 * (at - 800)) / FRAME;
+    const heldAt = 800 + 27 * FRAME;
+    const held = (at: number) =>
+      linear(Math.abs(at - heldAt) < 1 ? heldAt - FRAME : at);
+    expect(failures(cast(shots, linear, 'webkit'))).toEqual([]);
+    expect(failures(cast(shots, held, 'webkit'))[0]).toMatch(
+      /^moved on 39 of the 40 frames the control moved/,
+    );
+  });
+
   it("reports the judged part on the cast's stamps, so a caller's own frames select exactly the frames judged", () => {
     // The late frame was drawn before the judged part, and its stamp falls
     // inside it. The proof leaves it out on the controls' clock, so a
