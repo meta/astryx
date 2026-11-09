@@ -31,7 +31,7 @@ deciding_specs: []
 | Builder impact          | A Core component that windows a long list calls the one module instead of building its own. No public windowing hook exists while OQ1 is open.                                          |
 | Compatibility/readiness | Additive and internal. Spec only: no module exists yet (Current-state impact). Table's approved virtualization hook keeps its public shape.                                             |
 | Review checks           | Reject a second windowing implementation in Core, a public export of the module, or a change to Table's public virtualization shape made to adopt it.                                   |
-| Governing rules         | DEC-1.                                                                                                                                                                                  |
+| Governing rules         | DEC-1, DEC-5.                                                                                                                                                                           |
 
 This table is a review projection; the body below is authoritative.
 
@@ -54,6 +54,28 @@ Consumers, in adoption order:
 1. Table's row virtualization, behind `module:Table/useTableRowsVirtualization`.
 2. Selector's option list.
 3. Chat's message list.
+
+## Requirements
+
+- **FR5 — The engine's home.** The shared windowing engine lives in
+  `packages/core/src/virtualization/`. It isn't a package export. Table, the
+  chat virtualizer and Selector import it from there, and windowing behavior
+  they share lives there rather than in any one consumer. Lab reaches the
+  engine only through Core's private internal entry,
+  `@astryxdesign/core/internal/virtualization`, the same pattern as Core's
+  `@astryxdesign/core/internal/scroll-anchoring` entry for Lab (`spec:AST-017`
+  FR21, `architecture:react-component-runtime` INV13); it is not a public
+  export. The engine size budget (INV5) and the swizzle shared-state checks
+  measure that folder.
+- **FR6 — An engine swap ships timing and correctness evidence.** Any change
+  that swaps or replaces a windowing engine, in the shared module or in a
+  consumer, ships before-and-after evidence measured in the same session:
+  timing (frame time and long frames during scroll, mount and append cost) and
+  per-frame layout correctness. Every rendered row's rectangle is within 1 px
+  of an unwindowed reference render, no two rows overlap and no gap appears,
+  including after a text-scale change and after inserts above the viewport.
+  Zero unprompted scroll jumps; anchored-row drift at most 1 px. A regression
+  on any of these blocks the change.
 
 ## Boundaries and invariants
 
@@ -78,6 +100,11 @@ Consumers, in adoption order:
   Table's virtualization hook is specified in
   `module:Table/useTableRowsVirtualization` but not built; Chat renders every
   message.
+- **FR5 gap:** the chat virtualizer has its own engine and doesn't use the
+  shared one.
+- **FR5 gap:** Table's window math lives in `packages/core/src/utils/` and
+  Table's own virtualization plugin folder, not in
+  `packages/core/src/virtualization/`.
 
 ## Change coupling
 
@@ -92,7 +119,7 @@ windowing symbol.
 - `packages/core/src/Selector/` — the second consumer.
 - `packages/core/src/Chat/` — the third consumer.
 
-The module itself has no path yet (Current-state impact).
+The shared engine's home is `packages/core/src/virtualization/` (FR5).
 
 ## Deciding specs
 
@@ -105,6 +132,27 @@ One shared private windowing module owns long-list windowing in Core; spec
 only. Table virtualization adopts it first, then Selector and Chat. The module
 stays private while OQ1 is open.
 
+### DEC-5 — The shared engine's home is packages/core/src/virtualization
+
+**Reference:** `architecture:list-windowing/DEC-5`
+**Decider:** `cixzhang`, `2026-11-09`
+
+> Yes and add it to spec then [move] shared behavior there. Then i want to try
+> applying it to selector
+
+> The lab virtualizer should be able to use it from lab using our private core
+> to lab pattern
+
+> When we do the engine swap can you time them and also check correctness and
+> accuracy. No overlapping items or mispositioned ones, smooth scrolling etc
+
+The brackets around "[move]" mark a dictation fill-in; "the lab virtualizer"
+is the chat virtualizer. The shared windowing engine lives in
+`packages/core/src/virtualization/`, windowing behavior its consumers share
+lives there, and Lab reaches it only through Core's private internal entry
+(FR5). A change that swaps or replaces a windowing engine ships same-session
+before-and-after timing and layout-correctness evidence (FR6).
+
 ## Open questions
 
 - **OQ1 — Is the windowing module public (a hook) or internal only?** Not
@@ -112,8 +160,10 @@ stays private while OQ1 is open.
 
 ## Verification
 
-| Invariant | Evidence                                                                                                           | Failure signal                                                             |
-| --------- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
-| INV1      | Review of each Core list that windows (evidence gap: no module or automated check exists yet)                      | A Core component keeps its own windowing implementation beside the module  |
-| INV2      | Public export review of every package entry point (evidence gap: no module exists yet)                             | The module, or a type only it uses, is reachable from a public entry point |
-| INV3      | The public-API report for `useTableRowsVirtualization` and each consumer (evidence gap: the hook is not built yet) | Adopting the module changes a consumer's public props, types, or exports   |
+| Invariant | Evidence                                                                                                                                       | Failure signal                                                                                                                                                                                                    |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| INV1      | Review of each Core list that windows (evidence gap: no module or automated check exists yet)                                                  | A Core component keeps its own windowing implementation beside the module                                                                                                                                         |
+| INV2      | Public export review of every package entry point (evidence gap: no module exists yet)                                                         | The module, or a type only it uses, is reachable from a public entry point                                                                                                                                        |
+| INV3      | The public-API report for `useTableRowsVirtualization` and each consumer (evidence gap: the hook is not built yet)                             | Adopting the module changes a consumer's public props, types, or exports                                                                                                                                          |
+| FR5       | Import review of each windowing consumer; the `@astryx/no-core-internal-import` lint rule for Lab's import of the internal entry               | A consumer keeps shared windowing behavior outside the engine's folder, Lab imports the engine by another path, or a public entry point exports it                                                                |
+| FR6       | Before-and-after runs of the engine comparison harness, scenarios S1–S11, in one session (evidence gap: the harness is not in this repository) | A row's rectangle is more than 1 px from the unwindowed reference, rows overlap or leave a gap, the scroll position jumps unprompted, anchored-row drift exceeds 1 px, or timing regresses against the before run |
