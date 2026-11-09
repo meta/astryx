@@ -22,7 +22,7 @@
  * SYNC: Keep ./storyboard.ts using these for its animation filmstrips.
  */
 
-import type {Locator, Page} from '@playwright/test';
+import type {ElementHandle, Locator, Page} from '@playwright/test';
 import {defineAnimatedProperties} from './animated-properties';
 import {defineCurveEnd} from './curve-end';
 import {FRAME_STARVATION_MS, FrameStarvationError} from './frames';
@@ -54,6 +54,35 @@ async function scopeElement(caller: string, scope: Locator | undefined) {
     }
     throw error;
   });
+}
+
+/**
+ * Every element that `ignore` matches, or none without it. Throws by name
+ * when it matches nothing within TARGET_WAIT_MS, or when its elements leave
+ * before they are read. So a mistyped locator cannot leave every animation
+ * judged.
+ */
+async function ignoredElements(caller: string, ignore: Locator | undefined) {
+  if (ignore == null) {
+    return [];
+  }
+  const gone = () =>
+    new Error(
+      `${caller}: the ignored ${ignore.toString()} is not on the page after ${TARGET_WAIT_MS} ms: it is gone, or it never came`,
+    );
+  await ignore
+    .first()
+    .waitFor({state: 'attached', timeout: TARGET_WAIT_MS})
+    .catch(error => {
+      throw error instanceof Error && error.name === 'TimeoutError'
+        ? gone()
+        : error;
+    });
+  const handles = await ignore.elementHandles();
+  if (handles.length === 0) {
+    throw gone();
+  }
+  return handles;
 }
 
 /**
@@ -2092,6 +2121,12 @@ export async function watchAnimations(
  * begins just after such a gap and is too short at the deadline. An animation whose
  * curve outlasts the gap is still moving, and rejects with "still moving".
  *
+ * `ignore` leaves out the animations whose target sits inside an element it
+ * matches when the wait starts. Use it for a descendant's endless animation
+ * that is not part of the motion under test, such as a spinner. Every other animation inside the
+ * element still counts. An `ignore` that matches nothing within `TARGET_WAIT_MS`
+ * fails by name, and so does one that holds the element itself.
+ *
  * While a rendering trace runs (`traceRendering`), it stands down as the
  * animation recorder does: a per-frame callback would make every frame a
  * main-thread frame, which the trace counts. It then waits on timers for the
@@ -2107,9 +2142,29 @@ export async function watchAnimations(
  */
 export async function waitForRest(
   locator: Locator,
-  {timeout = 5_000, frames = 3}: {timeout?: number; frames?: number} = {},
+  {
+    timeout = 5_000,
+    frames = 3,
+    ignore,
+  }: {timeout?: number; frames?: number; ignore?: Locator} = {},
 ): Promise<void> {
   await installCurveEnd(locator.page());
+  const ignored = await ignoredElements('waitForRest', ignore);
+  try {
+    await waitForRestOf(locator, ignored, timeout, frames);
+  } finally {
+    // The handles would otherwise hold their elements until the page leaves.
+    await Promise.all(ignored.map(handle => handle.dispose()));
+  }
+}
+
+/** `waitForRest`'s wait, with the ignored elements already resolved. */
+async function waitForRestOf(
+  locator: Locator,
+  ignored: readonly ElementHandle[],
+  timeout: number,
+  frames: number,
+): Promise<void> {
   // The page-side wait rejects at its own deadline; the read gets a second
   // more, so only an element that is gone runs it out.
   const rested = await withinTimeout(
@@ -2118,7 +2173,7 @@ export async function waitForRest(
     Date.now() + timeout + 1_000,
     async evaluateTimeout => {
       const starved = await locator.evaluate(
-        (element, {ms, need, starvationMs}) =>
+        (element, {ms, need, starvationMs, skipped}) =>
           new Promise<{
             frames: number;
             spanMs: number;
@@ -2138,6 +2193,24 @@ export async function waitForRest(
             const curveEnd = (
               window as unknown as {__harnessCurveEnd: (a: Animation) => number}
             ).__harnessCurveEnd;
+            if (skipped.some(node => node.contains(element))) {
+              reject(
+                new Error(
+                  'waitForRest: an ignored element holds the element it waits for',
+                ),
+              );
+              return;
+            }
+            // The animations that count: all inside the element, except those
+            // whose target sits inside an ignored element.
+            const animations = () =>
+              element.getAnimations({subtree: true}).filter(a => {
+                const target =
+                  a.effect instanceof KeyframeEffect ? a.effect.target : null;
+                return (
+                  target == null || !skipped.some(node => node.contains(target))
+                );
+              });
             const read = () => {
               const style = getComputedStyle(element);
               const backdrop = getComputedStyle(element, '::backdrop').opacity;
@@ -2234,7 +2307,7 @@ export async function waitForRest(
             let idle = 0;
             const scheduled = () => {
               let wait = 0;
-              for (const a of element.getAnimations({subtree: true})) {
+              for (const a of animations()) {
                 // A scroll- or view-timeline animation moves only when something
                 // scrolls: it has no scheduled end to wait for (holdAnimations
                 // skips it the same way).
@@ -2296,7 +2369,7 @@ export async function waitForRest(
                   Number(document.timeline.currentTime ?? performance.now()),
               );
               let left = 0;
-              for (const a of element.getAnimations({subtree: true})) {
+              for (const a of animations()) {
                 if (!(a.timeline instanceof DocumentTimeline)) {
                   continue;
                 }
@@ -2326,7 +2399,7 @@ export async function waitForRest(
               }
               const before = last;
               const now = read();
-              const moving = element.getAnimations({subtree: true}).some(
+              const moving = animations().some(
                 a =>
                   a.pending ||
                   (a.playState === 'running' &&
@@ -2394,7 +2467,12 @@ export async function waitForRest(
               frames();
             }
           }),
-        {ms: timeout, need: frames, starvationMs: FRAME_STARVATION_MS},
+        {
+          ms: timeout,
+          need: frames,
+          starvationMs: FRAME_STARVATION_MS,
+          skipped: ignored,
+        },
         {timeout: evaluateTimeout},
       );
       if (starved != null) {

@@ -2646,6 +2646,62 @@ test.describe('frame evidence', () => {
     );
   });
 
+  test('waitForRest with ignore leaves out only the animations inside the ignored element', async ({
+    page,
+  }) => {
+    await page.setContent(
+      '<!doctype html><div id="parent"><div id="spinner" style="width:20px;height:20px;background:#000"></div><div id="slide" style="width:20px;height:20px;background:#000"></div></div>',
+    );
+    const parent = page.locator('#parent');
+    // A spinner inside the parent that never stops.
+    await page.evaluate(() => {
+      document
+        .getElementById('spinner')
+        ?.animate(
+          [{transform: 'rotate(0deg)'}, {transform: 'rotate(360deg)'}],
+          {duration: 400, iterations: Infinity},
+        );
+    });
+    // Without ignore, the spinner keeps the parent moving.
+    await expect(waitForRest(parent, {timeout: 500})).rejects.toThrow(
+      /waitForRest: still moving \(/,
+    );
+    // A slide beside the spinner, which ends after 600 ms.
+    await page.evaluate(() => {
+      const w = window as unknown as {slideDone?: boolean};
+      w.slideDone = false;
+      document
+        .getElementById('slide')
+        ?.animate(
+          [{transform: 'translateX(0)'}, {transform: 'translateX(60px)'}],
+          {duration: 600},
+        )
+        .finished.then(() => {
+          w.slideDone = true;
+        });
+    });
+    await waitForRest(parent, {
+      ignore: page.locator('#spinner'),
+      timeout: 3000,
+    });
+    // The slide still counted: the wait ended only once it had.
+    expect(
+      await page.evaluate(
+        () => (window as unknown as {slideDone?: boolean}).slideDone,
+      ),
+    ).toBe(true);
+    // An ignore that matches nothing fails by name.
+    await expect(
+      waitForRest(parent, {ignore: page.locator('#nothing')}),
+    ).rejects.toThrow(/^waitForRest: the ignored .* is not on the page after /);
+    // So does an ignore that holds the element itself.
+    await expect(
+      waitForRest(page.locator('#slide'), {ignore: parent}),
+    ).rejects.toThrow(
+      'waitForRest: an ignored element holds the element it waits for',
+    );
+  });
+
   test('the trace counts no Layout for a transform animation and one per frame for `top`', async ({
     page,
     browserName,

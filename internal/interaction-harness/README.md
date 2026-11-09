@@ -418,6 +418,10 @@ after such a gap, since the element may have stopped unseen in it. The error
 then gives the last move. It also holds when the still frames begin just after
 such a gap and are too few at the deadline. An animation whose curve outlasts the
 gap is still moving, and says so.
+Its `ignore` option leaves out the animations inside the elements it
+matches. Use it for a descendant's endless animation that is not part of the
+motion under test, such as a spinner. An `ignore` that matches nothing fails
+by name.
 
 **No Layout / Paint.** `traceRendering` records a Chromium trace around the
 interaction; `countBetween` counts the steady middle of an animation (its
