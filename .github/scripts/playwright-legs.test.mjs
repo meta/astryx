@@ -17,11 +17,13 @@ import {
   isInteractionSpec,
   legCount,
   legsFitMessage,
+  nearCeilingMessage,
   planLegs,
   recordLog,
   selectProofs,
   testsReader,
 } from './playwright-legs.mjs';
+import {matrixFor} from './ci-matrix.mjs';
 
 const root = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -37,6 +39,20 @@ const durations = JSON.parse(
   ),
 );
 const step = (job, name) => job.steps.find(each => each.name === name);
+
+describe('nearCeilingMessage', () => {
+  const limits = {setupSeconds: 90, maxSeconds: 600, maxLegs: 6};
+
+  it('stays quiet while a whole leg of room is left', () => {
+    expect(nearCeilingMessage({seconds: 2549, ...limits})).toBeNull();
+  });
+
+  it('names the room left once the proofs need the last leg', () => {
+    expect(nearCeilingMessage({seconds: 2600, ...limits})).toBe(
+      '2600 s of proofs need 6 of the 6 legs; 460 s of room is left before the ceiling',
+    );
+  });
+});
 
 describe('legsFitMessage', () => {
   const limits = {setupSeconds: 90, maxSeconds: 600, maxLegs: 3};
@@ -303,12 +319,121 @@ describe('the list reader and recordLog', () => {
   });
 });
 
+describe('the interaction leg count job in ci.yml', () => {
+  const counter = ci.jobs['interaction-legs'];
+  const lanes = [
+    {id: 'pr-interaction', key: 'chromium', count: "Count this run's legs", mine: 'Count the Chromium legs'},
+    {id: 'pr-interaction-webkit', key: 'webkit', count: "Count this run's WebKit legs", mine: 'Count the WebKit legs'},
+  ];
+
+  it('runs beside the Storybook build, behind the gate the lanes share', () => {
+    expect(counter.needs).toEqual(['room', 'admission', 'heavy-ci']);
+    expect(counter.if).toBe(ci.jobs['pr-interaction'].if);
+    expect(counter.if).toBe(ci.jobs['pr-interaction-webkit'].if);
+    expect(counter.env).toEqual(ci.jobs['pr-interaction-webkit'].env);
+    expect(counter.outputs).toEqual({
+      chromium: '${{ steps.matrix.outputs.chromium }}',
+      webkit: '${{ steps.matrix.outputs.webkit }}',
+    });
+  });
+
+  it('checks out and keeps the planner exactly as each lane does', () => {
+    // A file the lanes' planner needs but this job did not copy would fail
+    // its count and send every run back to the ten-leg fallback.
+    for (const lane of lanes) {
+      const job = ci.jobs[lane.id];
+      expect(counter.steps[0]).toEqual(job.steps[0]);
+      const keep = "Keep the leg planner from the workflow's commit";
+      expect(step(counter, keep).run).toBe(step(job, keep).run);
+    }
+  });
+
+  for (const lane of lanes) {
+    it(`counts the ${lane.key} lane the way its legs do`, () => {
+      const job = ci.jobs[lane.id];
+      const scope = step(job, "Decide this job's scope");
+      const myScope = counter.steps.find(each => each.id === `scope-${lane.key}`);
+      expect(myScope.uses).toBe(scope.uses);
+      expect(myScope.with).toEqual(scope.with);
+      const theirs = step(job, lane.count);
+      const mine = step(counter, lane.mine);
+      expect(mine.id).toBe(`count-${lane.key}`);
+      expect(mine.if).toBe(`steps.scope-${lane.key}.outputs.applies == 'true'`);
+      // A failed count falls back to ten legs that each decide for themselves.
+      expect(mine['continue-on-error']).toBe(true);
+      expect(mine.env ?? {}).toEqual(
+        JSON.parse(
+          JSON.stringify(theirs.env ?? {}).replaceAll('steps.scope.', `steps.scope-${lane.key}.`),
+        ),
+      );
+      expect(mine.run).toBe(theirs.run.replaceAll('${{ matrix.leg }}', '1'));
+      expect(theirs.run).toContain('--max-legs 10');
+    });
+  }
+
+  it('names each lane one leg out of scope, its count in scope, and ten when the count failed', () => {
+    const name = step(counter, "Name each lane's legs");
+    expect(name.id).toBe('matrix');
+    const outputs = (chromium, webkit) => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'interaction-legs-'));
+      try {
+        const output = path.join(dir, 'output.txt');
+        fs.writeFileSync(output, '');
+        execFileSync('bash', ['-e', '-c', name.run], {
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            GITHUB_OUTPUT: output,
+            CHROMIUM_OUTCOME: chromium[0],
+            CHROMIUM_COUNT: chromium[1],
+            WEBKIT_OUTCOME: webkit[0],
+            WEBKIT_COUNT: webkit[1],
+          },
+        });
+        return fs.readFileSync(output, 'utf8');
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true});
+      }
+    };
+    expect(outputs(['success', '3'], ['success', '0'])).toBe('chromium=[1, 2, 3]\nwebkit=[1]\n');
+    expect(outputs(['skipped', ''], ['failure', ''])).toBe(
+      'chromium=[1]\nwebkit=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]\n',
+    );
+    expect(outputs(['success', '12'], ['success', '6'])).toBe(
+      'chromium=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]\nwebkit=[1, 2, 3, 4, 5, 6]\n',
+    );
+  });
+
+  it('caps every count at the ceiling the lanes\' fallback matrix lists, ten legs', () => {
+    const ceiling = matrixFor(ci.jobs['pr-interaction'].strategy.matrix.leg, 'pull_request').length;
+    expect(ceiling).toBe(10);
+    expect(matrixFor(ci.jobs['pr-interaction-webkit'].strategy.matrix.leg, 'pull_request')).toHaveLength(ceiling);
+    for (const lane of lanes) {
+      expect(step(ci.jobs[lane.id], lane.count).run).toContain(`--max-legs ${ceiling}`);
+      expect(step(counter, lane.mine).run).toContain(`--max-legs ${ceiling}`);
+    }
+    const name = step(counter, "Name each lane's legs").run;
+    expect(name).toContain(`*) count=${ceiling} ;;`);
+    expect(name).toContain(`[ "$count" -le ${ceiling} ] || count=${ceiling}`);
+  });
+
+  it('reads a counted matrix as its fallback list, the most legs it starts', () => {
+    expect(
+      matrixFor(
+        "${{ fromJSON(needs.interaction-legs.outputs.webkit || '[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]') }}",
+        'pull_request',
+      ),
+    ).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  });
+});
+
 describe('the interaction proof legs in ci.yml', () => {
   const lanes = [
     {
       id: 'pr-interaction',
       project: 'chromium',
-      legs: [1, 2, 3, 4, 5, 6],
+      legs: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      matrix: 'chromium',
       run: 'Run interaction proofs',
       plan: "Plan this leg's interaction proofs",
       evidence: 'interaction-evidence-${{ matrix.leg }}',
@@ -322,7 +447,8 @@ describe('the interaction proof legs in ci.yml', () => {
     {
       id: 'pr-interaction-webkit',
       project: 'webkit',
-      legs: [1, 2, 3, 4, 5, 6],
+      legs: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      matrix: 'webkit',
       run: 'Run WebKit interaction proofs',
       plan: "Plan this leg's WebKit interaction proofs",
       evidence: 'interaction-evidence-webkit-${{ matrix.leg }}',
@@ -336,11 +462,13 @@ describe('the interaction proof legs in ci.yml', () => {
   ];
 
   for (const lane of lanes) {
-    it(`${lane.id} runs as ${lane.legs.length} legs that each plan their share and run only it`, () => {
+    it(`${lane.id} runs as the legs interaction-legs counts, at most ${lane.legs.length}, that each plan their share and run only it`, () => {
       const job = ci.jobs[lane.id];
       expect(job.strategy).toEqual({
         'fail-fast': false,
-        matrix: {leg: lane.legs},
+        matrix: {
+          leg: `\${{ fromJSON(needs.interaction-legs.outputs.${lane.matrix} || '${JSON.stringify(lane.legs).replaceAll(',', ', ')}') }}`,
+        },
       });
       expect(job.name).toBe(
         `${lane.id} (\${{ matrix.leg }}/\${{ strategy.job-total }})`,
@@ -431,7 +559,7 @@ describe('the interaction proof legs in ci.yml', () => {
         '--key interaction-webkit --fallback-key interaction-chromium',
         '--durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json"',
         '--setup-seconds 90 --max-seconds 600',
-        '--leg ${{ matrix.leg }} --max-legs ${{ strategy.job-total }}',
+        '--leg ${{ matrix.leg }} --max-legs 10',
         // Every spec file in the merge commit, recorded or not.
         'git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"',
         '--listed "$RUNNER_TEMP/interaction-legs/listed.txt" --source .test-scope',
@@ -520,7 +648,7 @@ describe('the interaction proof legs in ci.yml', () => {
               .replaceAll('${{ matrix.leg }}', String(leg))
               .replaceAll(
                 '${{ strategy.job-total }}',
-                String(job.strategy.matrix.leg.length),
+                '6',
               ),
           ],
           {
@@ -810,7 +938,7 @@ describe('the interaction proof legs in ci.yml', () => {
       '--key interaction-chromium --fallback-key interaction-webkit',
       '--durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json"',
       '--setup-seconds 90 --max-seconds 600',
-      '--leg ${{ matrix.leg }} --max-legs ${{ strategy.job-total }}',
+      '--leg ${{ matrix.leg }} --max-legs 10',
     ])
       expect(count.run).toContain(part);
     // No path filter: the Chromium lane counts every spec.
@@ -907,6 +1035,11 @@ describe('the interaction proof legs in ci.yml', () => {
         // The planner fits the matrix: no more legs than it has, and no leg
         // over ten minutes (plus one spec's slack). It fails naming the
         // heaviest specs, not by a margin under the matrix.
+        // Within one leg of the ceiling: a warning in the log, not a failure,
+        // so the next step is proposed before the guard trips.
+        const near = nearCeilingMessage({seconds, ...limits});
+        if (near)
+          console.log(`::warning title=Interaction legs near the ceiling::${label}: ${near}`);
         expect(
           legsFitMessage({
             seconds,

@@ -85,6 +85,7 @@ import {MarkdownExtensionsPlugin} from './MarkdownExtensionsPlugin';
 import type {RichTextMarkdownExtension} from './markdownExtensions';
 import type {CodeLanguage} from '@astryxdesign/core/CodeBlock';
 import {TaskCheckboxPlugin} from './TaskCheckboxPlugin';
+import {DisabledLinkGuardPlugin} from './DisabledLinkGuardPlugin';
 import {SelectAllScopePlugin} from './SelectAllScopePlugin';
 import {ImageSourceCaretPlugin} from './ImageSourceCaretPlugin';
 import {type Transformer} from '@lexical/markdown';
@@ -361,7 +362,8 @@ export interface RichTextEditorProps extends Omit<
   isReadOnly?: boolean;
   /**
    * Whether the editor is disabled: non-editable, dimmed, out of the tab
-   * order, and announced as disabled. Wins when `isReadOnly` is also set.
+   * order, and announced as disabled. Its links do not navigate and are not
+   * tab stops. Wins when `isReadOnly` is also set.
    * Takes effect when changed after mount.
    * @default false
    */
@@ -715,6 +717,7 @@ export const RichTextEditor = function RichTextEditor({
               <ListPlugin />
               <TaskCheckboxPlugin isReadOnly={isReadOnly || isDisabled} />
               <LinkPlugin />
+              <DisabledLinkGuardPlugin isDisabled={isDisabled} />
               {/* Tab keeps its editor meaning inside a table (indent, and
                   Escape then Tab to leave the editor); arrow keys move
                   between cells. GFM tables have no merged cells or cell

@@ -57,6 +57,14 @@ deciding_specs: []
 }
 ```
 
+<!-- path-applicability:v1 -->
+
+```json
+{
+  "paths": ["apps/docsite/**"]
+}
+```
+
 ## Purpose
 
 A reviewer should be able to answer two questions without rereading old pull
@@ -437,6 +445,23 @@ the rest:
 // the sheet. The page behind it stays live, so the person can move focus
 // away first.
 ```
+
+### External links
+
+- **INV30 — A new external link from outside the team needs a human owner.** A
+  pull request whose author is not on the team that adds an external URL (a
+  link to a site other than this repository and Astryx's own sites) to the
+  docsite or to package documentation is never approved or merged by
+  automation. A human owner approves it, and the reviewer checks that each new
+  link belongs. Team-authored links follow the normal gates (DEC-17). In this
+  rule:
+  - **the team** is the accounts listed in `.github/ENGOWNERS` or
+    `.github/DESIGNOWNERS` on `main`. Bot accounts are never on the team.
+  - **Astryx's own sites** are this repository on GitHub, the Astryx docsite,
+    Astryx preview deployments, and the `@astryxdesign` packages on npm. Links
+    to web standards and platform references (W3C, WHATWG, MDN, TC39) and
+    reserved example domains are not external links for this rule.
+  - **a human owner** is `cixzhang` or a DESIGNOWNER, approving the exact head.
 
 ## Path applicability
 
@@ -887,6 +912,8 @@ this flow passes the historical review benchmark and is enforced on pull request
   no authority of its own, such as a generated table beside a spec, requires an
   engineering owner. Record metadata never
   self-authorizes. The gate decides approval only; it never enables auto-merge.
+  The gate does not detect a new external link from outside the team (INV30);
+  see the enforcement gap under Verification.
 - `.github/workflows/review-signal.yml` lets a DESIGNOWNER author bypass the
   engineering gate only when trusted-base code verifies every changed Core line
   against the fetched base/head source bytes as a conservative declaration inside
@@ -1278,6 +1305,17 @@ gates a merge or release (owner decision, 2026-09-30).
 Rejected: an example that renders a component which calls the hook internally,
 because the reader never sees the hook wired.
 
+### DEC-17 — An outside contributor's new external link needs a human owner
+
+**Reference:** `architecture:knowledge-contracts/DEC-17`
+**Decider:** `cixzhang`, `2026-11-08`
+
+A pull request from an author outside the team that adds an external URL to the
+docsite or to package documentation is approved by a human owner, never by
+automation (INV30). Automated approval must not publish links an outside
+contributor added without a person checking them. Team-authored links follow
+the normal gates.
+
 ## Verification
 
 | Invariant                         | Evidence                                                                                                                                                                                                                 | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
@@ -1305,6 +1343,7 @@ because the reader never sees the hook wired.
 | INV27, DEC-13        | `scripts/check-knowledge.test.mjs`, `.github/scripts/change-scope.test.mjs`, and `pnpm check:knowledge`                                                                                                                                                                                                                                                                                                                                    | A `*.spec.md` file or a Markdown file under a `specs` directory without valid record frontmatter, outside its kind's location, or following a package-local template passes                                                                                                                                                                                                                                                        |
 | INV28, DEC-16        | `apps/docsite/src/lib/exampleCoverage.mjs` and `apps/docsite/src/__tests__/example-coverage.test.ts` (advisory: the report prints and never gates), plus review of each hook example against INV28's criteria                                                                                                                                                                                                                              | The report omits a public hook that has no hook doc or no conforming example block, or a missing or non-conforming hook example fails a merge or release                                                                                                                                                                                                                                                                           |
 | INV29                | Baselined lint over comments in package source (not built): record ids, pull request and issue numbers, date stamps, and long quote blocks fail in new comments, and existing sites are baselined. Review reports narration and file headers past about 12 lines as non-blocking findings. Cleanup lands in per-area pull requests with no behavior change, each with a `pnpm specs:for` comparison of every touched file before and after | A new comment cites a record, pull request, issue, or date, quotes a record, or narrates the code; a header grows past about 12 lines, with no lint failure or review finding; removing a comment drops a record or cited claim from a file's `pnpm specs:for` result because that comment was the file's only link to it; or cleanup removes or rewrites a directive a tool reads, such as a `@pr-a11y` line                      |
+| INV30, DEC-17        | Human-owner review of each new external URL in a pull request from an author outside the team, enforced by review and merge tooling outside the repository; no repository CI check (the INV30 enforcement gap below)                                                                                                                                                                                                                       | An outside pull request that adds an external URL under package docs or the docsite is approved or merged without a human owner's exact-head approval, or a team pull request that adds one is held for a human owner                                                                                                                                                                                                              |
 | DEC-15               | `.github/scripts/knowledge-paths.test.mjs`, `.github/scripts/change-scope.test.mjs`, `scripts/check-knowledge.test.mjs`, `scripts/specs-for-file.test.mjs`, and `pnpm check:knowledge`                                                                                                                                                                                                                                                     | A component or module record outside `docs/specs/components/<ComponentRoot>/`, a `*.spec.md` left in a component package's source tree or beside a Swift view, a record matched to the wrong package when two share a root, a record whose component root no registered package's source tree has, a platform record whose id or `platform_of` does not match its path, or a platform record change that skips the spec-owner gate |
 
 Evidence placement is enforced by contributors and reviewers. The local
@@ -1340,3 +1379,7 @@ Current enforcement gap: the example-coverage report lists each public hook
 that has no hook doc or no example block naming it, but it cannot see whether
 an example demonstrates its hook, so review checks that part of INV28. Each public hook without a conforming example is an open
 docs gap under INV28, tracked in the repository's issue queue.
+
+Current enforcement gap: no repository CI check detects a new external URL in a
+pull request from an author outside the team (INV30). Review and merge tooling
+outside the repository enforces this.

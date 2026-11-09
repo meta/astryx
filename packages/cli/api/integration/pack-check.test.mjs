@@ -18,11 +18,12 @@ import {
   integrationAddTemplate,
 } from './add-contribution.mjs';
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-pack-check-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-pack-check-'));
 });
 
 afterEach(() => {
@@ -2242,7 +2243,7 @@ describe('integrationPackCheck', () => {
     const marker = path.join(process.cwd(), 'astryx-pack-check-injected');
     fs.rmSync(marker, {force: true});
     const weirdDir = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-;touch astryx-pack-check-injected;#-'),
+      path.join(REPO_ROOT, '.astryx-;touch astryx-pack-check-injected;#-'),
     );
     try {
       const pkg = {name: 'safe-pkg', version: '1.0.0'};

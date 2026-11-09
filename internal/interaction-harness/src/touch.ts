@@ -51,7 +51,12 @@ import {
   type TouchEventStep,
   type TouchScript,
 } from './scripts';
-import {armInputRun, HELD_BACK_MS, type InputRun} from './webInput';
+import {
+  armInputRun,
+  HELD_BACK_MS,
+  installInputStart,
+  type InputRun,
+} from './webInput';
 
 export type Engine = 'chromium' | 'webkit';
 
@@ -217,6 +222,82 @@ export interface TouchDriver {
   play(script: TouchScript, options?: PlayOptions): Promise<PlayedEvent[]>;
   /** A tap through the engine's tap path (WebKit synthesises click only from this). */
   tap(at: Point): Promise<void>;
+  /**
+   * Puts a finger down at `at` and keeps it there: only the touch-down is
+   * sent, as a play's first step. The finger moves and lifts through the
+   * handle, each call one event. Its timing is the caller's, so it is never
+   * judged for pacing. A lift that `holdInputUntil` places then races the
+   * hold alone, after the page is thawed.
+   */
+  press(at: Point, options?: {readonly id?: number}): Promise<HeldTouch>;
+}
+
+/** A finger that `TouchDriver.press` holds down. */
+export interface HeldTouch {
+  readonly id: number;
+  /** Moves the finger to `to`; every other finger held stays where it is. */
+  move(to: Point): Promise<void>;
+  /** Lifts the finger: only its touch-up is sent. */
+  lift(): Promise<void>;
+}
+
+/**
+ * The fingers a driver holds down between calls. `dispatch` sends one event
+ * with the finger that changed and every finger down after it.
+ */
+function heldFingers(
+  dispatch: (
+    type: TouchEventStep['type'],
+    changed: Finger,
+    down: readonly Finger[],
+  ) => Promise<void>,
+) {
+  const down = new Map<number, Finger>();
+  return {
+    get size() {
+      return down.size;
+    },
+    async press(at: Point, {id = 0}: {readonly id?: number} = {}) {
+      if (down.has(id)) {
+        throw new Error(`touchDriver: finger ${id} is already down`);
+      }
+      const finger = {id, x: at.x, y: at.y};
+      down.set(id, finger);
+      await dispatch('touchStart', finger, [...down.values()]);
+      let lifted = false;
+      const live = () => {
+        if (lifted) {
+          throw new Error(`touchDriver: finger ${id} was lifted`);
+        }
+      };
+      const held: HeldTouch = {
+        id,
+        async move(to) {
+          live();
+          const moved = {id, x: to.x, y: to.y};
+          down.set(id, moved);
+          await dispatch('touchMove', moved, [...down.values()]);
+        },
+        async lift() {
+          live();
+          lifted = true;
+          const last = down.get(id) ?? finger;
+          down.delete(id);
+          await dispatch('touchEnd', last, [...down.values()]);
+        },
+      };
+      return held;
+    },
+  };
+}
+
+/** A play or a tap cannot share the screen with fingers `press` holds down. */
+function assertNoneHeld(held: {readonly size: number}): void {
+  if (held.size > 0) {
+    throw new Error(
+      `touchDriver: lift the ${held.size} finger${held.size === 1 ? '' : 's'} press holds down before a play or a tap`,
+    );
+  }
 }
 
 /**
@@ -290,6 +371,11 @@ export interface TouchArrival {
    * NaN unseen.
    */
   readonly handledAt: number;
+  /**
+   * When the page's listeners began on the step's first event, NaN unseen.
+   * Before it, the step waited for the main thread.
+   */
+  readonly startedAt?: number;
 }
 
 /** Where the release a paced play's page read strays from the script's. */
@@ -327,6 +413,15 @@ export interface TouchPacingFault {
    * dispatch can deliver a gesture's timing then.
    */
   readonly frameGapMs?: number | null;
+  /**
+   * The widest gap that an event's wait for the main thread accounts for,
+   * when the listeners alone do not, or null. The wait ends when the page's
+   * listeners begin. Another page task, or a starved runner, held the event.
+   */
+  readonly waited?: {
+    readonly gapMs: number;
+    readonly waitMs: number;
+  } | null;
 }
 
 /** The lifting finger's release, read from the page's stamps and the script's. */
@@ -577,19 +672,43 @@ export function touchPacingFault(
   const gapsMs = span.map(i => arrivals[i].stamp - arrivals[i - 1].stamp);
   const scriptedGapsMs = span.map(i => steps[i].t - steps[i - 1].t);
   let heldByPage: TouchPacingFault['heldByPage'] = null;
+  let waited: TouchPacingFault['waited'] = null;
   span.forEach((i, k) => {
+    const holds = (ms: number) =>
+      Number.isFinite(ms) &&
+      ms > scriptedGapsMs[k] &&
+      ms + HELD_BACK_MS >= gapsMs[k] - scriptedGapsMs[k];
     // The event before held this one back, or this step's own pointer
-    // listeners held its touch event (a lift read at its touchend).
-    const before = arrivals[i - 1].handledAt - arrivals[i - 1].stamp;
-    const own =
-      arrivals[i].stamp - (arrivals[i].firstStamp ?? arrivals[i].stamp);
-    for (const handlingMs of [before, own]) {
-      const held =
-        Number.isFinite(handlingMs) &&
-        handlingMs > scriptedGapsMs[k] &&
-        handlingMs + HELD_BACK_MS >= gapsMs[k] - scriptedGapsMs[k];
-      if (held && (heldByPage == null || handlingMs > heldByPage.handlingMs)) {
-        heldByPage = {gapMs: gapsMs[k], handlingMs};
+    // listeners held its touch event (a lift read at its touchend). Each runs
+    // from a stamp to the end of the listeners. The part before the
+    // listeners began is a wait for the main thread, not listener time.
+    const terms = [
+      [
+        arrivals[i - 1].stamp,
+        arrivals[i - 1].startedAt,
+        arrivals[i - 1].handledAt,
+      ],
+      [
+        arrivals[i].firstStamp ?? arrivals[i].stamp,
+        arrivals[i].startedAt,
+        arrivals[i].stamp,
+      ],
+    ] as const;
+    for (const [from, began, to] of terms) {
+      const totalMs = to - from;
+      const handlingMs =
+        began != null && Number.isFinite(began)
+          ? to - Math.max(began, from)
+          : totalMs;
+      if (holds(handlingMs)) {
+        if (heldByPage == null || handlingMs > heldByPage.handlingMs) {
+          heldByPage = {gapMs: gapsMs[k], handlingMs};
+        }
+      } else if (holds(totalMs)) {
+        const waitMs = totalMs - handlingMs;
+        if (waited == null || waitMs > waited.waitMs) {
+          waited = {gapMs: gapsMs[k], waitMs};
+        }
       }
     }
   });
@@ -601,6 +720,7 @@ export function touchPacingFault(
       gapsMs,
       scriptedGapsMs,
       heldByPage,
+      waited,
       threshold: boundaries.holdMs,
       holdMs: hold ?? undefined,
     };
@@ -621,6 +741,7 @@ export function touchPacingFault(
     gapsMs,
     scriptedGapsMs,
     heldByPage,
+    waited,
     threshold: strays ? undefined : releaseBound,
   };
 }
@@ -678,14 +799,16 @@ function describeReading(fault: TouchPacingFault): string {
 }
 
 /**
- * A paced play's page read a release that is not the script's, and its own
- * touch and pointer listeners did not hold the events back: a dispatch stalled before
- * the page. The runner failed, not the component under test.
+ * A paced play's page read a release that is not the script's. Its own touch
+ * and pointer listeners did not hold the events back: a dispatch stalled
+ * before the page. When an event waited for the main thread before the page's
+ * listeners began, the error says how long. Another page task, or a starved
+ * runner, held it there.
  */
 export class TouchPacingError extends Error {
   constructor(readonly fault: TouchPacingFault) {
     super(
-      `touchDriver: ${describeFault(fault)}: a dispatch stalled before the page`,
+      `touchDriver: ${describeFault(fault)}: ${fault.waited == null ? 'a dispatch stalled before the page' : `an event waited ${fault.waited.waitMs.toFixed(0)} ms for the main thread before the page's listeners began, so the next reached it ${fault.waited.gapMs.toFixed(0)} ms later: another page task held the thread, or the runner starved it`}`,
     );
     this.name = 'TouchPacingError';
   }
@@ -695,9 +818,11 @@ export class TouchPacingError extends Error {
  * A paced play's page read a release that is not the script's, and its own
  * touch and pointer listeners held an event back. They were still handling
  * the event before, and WebKit dispatches the next touch only once the page
- * is free. The handling time is page wall time, which on a starved runner
- * includes the page's wait for a CPU. Judge a page stall from a run with CI's
- * CPU limits: there it is the proof's own failure.
+ * is free. The handling time runs from when the listeners began, so a wait
+ * for the main thread before them is not counted. It is page wall time,
+ * which on a starved runner includes a listener's wait for a CPU. Judge a
+ * page stall from a run with CI's CPU limits: there it is the proof's own
+ * failure.
  */
 export class TouchPageStallError extends Error {
   constructor(
@@ -937,12 +1062,28 @@ async function chromiumDriver(page: Page): Promise<TouchDriver> {
       radiusY: 1,
       force: 1,
     }));
+  // A start or move lists every finger down. An end lists the finger that
+  // lifts while others stay down, and none for the last lift, as play does.
+  const held = heldFingers(async (type, changed, down) => {
+    await cdp.send('Input.dispatchTouchEvent', {
+      type,
+      touchPoints:
+        type !== 'touchEnd'
+          ? touchPoints(down)
+          : down.length > 0
+            ? touchPoints([changed])
+            : [],
+      timestamp: Date.now() / 1000,
+    });
+  });
   return {
     engine: 'chromium',
     scriptedTimestamps: true,
     drivesNativeGestures: true,
     partialLifts: true,
+    press: (at, options) => held.press(at, options),
     async play(script, options = {}) {
+      assertNoneHeld(held);
       // Stamps follow the wall clock the page's own clock is on: with real-time
       // pacing an event's stamp and its dispatch agree to ~0.1 ms.
       const base = Date.now();
@@ -970,6 +1111,7 @@ async function chromiumDriver(page: Page): Promise<TouchDriver> {
       );
     },
     async tap(at) {
+      assertNoneHeld(held);
       await page.touchscreen.tap(at.x, at.y);
     },
   };
@@ -1030,16 +1172,19 @@ export function touchArrivalsFrom(record: {
   readonly pointerTypes: readonly string[];
   readonly stamps: readonly number[];
   readonly handledAt: readonly number[];
+  readonly receivedAt?: readonly number[];
 }): TouchArrival[] {
   const arrivals: TouchArrival[] = [];
   let stamp = Number.POSITIVE_INFINITY;
   let handledAt = Number.NaN;
+  let startedAt = Number.POSITIVE_INFINITY;
   record.eventTypes.forEach((type, i) => {
     // A mouse's or a pen's pointer event is not this play's.
     if (!type.startsWith('touch') && record.pointerTypes[i] !== 'touch') {
       return;
     }
     stamp = Math.min(stamp, record.stamps[i]);
+    startedAt = Math.min(startedAt, record.receivedAt?.[i] ?? Number.NaN);
     const mark = record.handledAt[i];
     if (Number.isFinite(mark)) {
       handledAt = Number.isNaN(handledAt) ? mark : Math.max(handledAt, mark);
@@ -1049,9 +1194,13 @@ export function touchArrivalsFrom(record: {
         stamp: type === 'touchstart' ? record.stamps[i] : stamp,
         firstStamp: stamp,
         handledAt,
+        ...(record.receivedAt == null
+          ? {}
+          : {startedAt: Number.isFinite(startedAt) ? startedAt : Number.NaN}),
       });
       stamp = Number.POSITIVE_INFINITY;
       handledAt = Number.NaN;
+      startedAt = Number.POSITIVE_INFINITY;
     }
   });
   return arrivals;
@@ -1110,6 +1259,11 @@ function touchArrivalProbe(page: Page): TouchArrivalProbe {
           pointerTypes: recorded.pointerTypes.slice(),
           stamps: recorded.stamps.slice(),
           handledAt: recorded.handledAt.slice(),
+          // Only a mark added before the page's scripts comes before every
+          // page listener. Without it, the hold counts from the stamp.
+          ...(recorded.startsFirst
+            ? {receivedAt: recorded.receivedAt.slice()}
+            : {}),
         };
       });
       await run.dispose();
@@ -1129,18 +1283,27 @@ function touchArrivalProbe(page: Page): TouchArrivalProbe {
 
 async function webkitDriver(page: Page): Promise<TouchDriver> {
   const session = webkitPageSession(page);
+  await installInputStart(page, TOUCH_TYPES);
   // WebKit's command takes integer CSS px and applies the event's phase to
   // every point it lists: a start lists only the fingers that land (listing a
   // finger already down presses it again), an end only the fingers that lift
   // (an empty list releases nothing), a move every finger down.
   const points = (fingers: readonly Finger[]) =>
     fingers.map(f => ({x: Math.round(f.x), y: Math.round(f.y), id: f.id}));
+  const held = heldFingers(async (type, changed, down) => {
+    await session.send('Input.dispatchTouchEvent', {
+      type,
+      touchPoints: points(type === 'touchMove' ? down : [changed]),
+    });
+  });
   return {
     engine: 'webkit',
     scriptedTimestamps: false,
     drivesNativeGestures: false,
     partialLifts: false,
+    press: (at, options) => held.press(at, options),
     async play(script, options = {}) {
+      assertNoneHeld(held);
       return playSteps(
         script,
         options,
@@ -1157,6 +1320,7 @@ async function webkitDriver(page: Page): Promise<TouchDriver> {
       ).then(played => played.map(p => ({...p, timestamp: null})));
     },
     async tap(at) {
+      assertNoneHeld(held);
       await page.touchscreen.tap(Math.round(at.x), Math.round(at.y));
     },
   };

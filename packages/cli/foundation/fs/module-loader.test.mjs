@@ -13,11 +13,12 @@ import {
   importUserModule,
   loadModuleWithParser,
 } from './module-loader.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-module-loader-test-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-module-loader-test-'));
 });
 
 afterEach(() => {
