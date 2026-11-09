@@ -3573,6 +3573,61 @@ test.describe('wheel and pen input', () => {
     }
   });
 
+  test("a page that draws no frame across a burst's gap splits it itself, with its listeners idle: WheelPageStallError names the frame gap", async ({
+    browser,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'webkit',
+      'only WebKit dispatches a wheel step once the page is free',
+    );
+    const context = await browser.newContext({
+      viewport: {width: 402, height: 714},
+      isMobile: false,
+      hasTouch: false,
+    });
+    try {
+      const page = await context.newPage();
+      // The first step queues a 150 ms task, as engine or page work can hold
+      // the main thread. The listener itself returns at once, and the page
+      // draws no frame until the task ends.
+      await page.route('http://wheel-task-page.test/', route =>
+        route.fulfill({
+          contentType: 'text/html',
+          body: '<!doctype html><body style="margin:0;height:3000px"><script>let queued=false;addEventListener("wheel",()=>{if(queued)return;queued=true;setTimeout(()=>{const end=performance.now()+150;while(performance.now()<end){}},0)},{passive:true});</script>',
+        }),
+      );
+      await page.goto('http://wheel-task-page.test/');
+      const driver = await webInputDriver(page);
+      test.skip(!driver.wheels, WHEEL_SKIP);
+      const outcome = await driver
+        .wheelBurst({
+          x: 200,
+          y: 300,
+          steps: Array.from({length: 6}, () => ({dx: 10})),
+          maxGapMs: 100,
+        })
+        .then(
+          () => 'resolved',
+          (error: unknown) => error,
+        );
+      expect(outcome).toBeInstanceOf(WheelPageStallError);
+      const {stall} = outcome as WheelPageStallError;
+      expect(stall.frameGapMs).toBeGreaterThan(100);
+      expect(stall.handlingMs).toBeLessThan(stall.gapMs);
+      expect(String(outcome)).toMatch(
+        /the page drew no frame for \d+ ms around a \d+ ms gap between two wheel steps, over its 100 ms \(engine or page work\)/,
+      );
+      // A starved runner's renderer draws no frame either, and the error
+      // says so.
+      expect(String(outcome)).toMatch(
+        /On a starved runner the renderer draws no frame either/,
+      );
+    } finally {
+      await context.close();
+    }
+  });
+
   test('a page whose wheel listener stops the step and holds its main thread still splits a burst itself', async ({
     browser,
     browserName,

@@ -69,10 +69,11 @@ export interface WheelBurst {
   readonly ctrl?: boolean;
   /**
    * The longest gap the page may see between two received steps, ms (see
-   * `wheelArrivals`): the gap after which the proof's component would treat
-   * the run as more than one gesture. Past it `wheelBurst` throws `WheelPageStallError` when the
-   * page's own handling of the step before caused the gap, and
-   * `WheelPacingError` otherwise.
+   * `wheelArrivals`). Past it, the proof's component would treat the run as
+   * more than one gesture. Past it `wheelBurst` throws
+   * `WheelPageStallError` when the page held the gap, and `WheelPacingError`
+   * otherwise. The page holds it while it handles the step before, or while
+   * it draws no frame.
    */
   readonly maxGapMs?: number;
 }
@@ -84,9 +85,9 @@ export interface WheelBurst {
  * or the gap was no wider than the harness's own spacing of the sends (the
  * page can only widen a gap, so a starved renderer that also held the step
  * lands here). The dispatch stalled before the page, so a loaded runner
- * splits what the driver sent as one gesture. Other work on the page's main
- * thread between steps (timers, frame callbacks) also lands here. Such a
- * stall is the runner's or that work's, never the wheel listeners'.
+ * splits what the driver sent as one gesture. Other work between steps that
+ * leaves the page's frames running also lands here. Such a stall is the
+ * runner's or that work's, never the wheel listeners'.
  */
 export class WheelPacingError extends Error {
   constructor(
@@ -102,11 +103,13 @@ export class WheelPacingError extends Error {
 
 /**
  * The page received a wheel burst's steps further apart than the proof's
- * `maxGapMs` while it was still handling the step before. Its own wheel
- * listeners held the main thread, and WebKit dispatches the next step only
- * once it is free. The handling time is page wall time, which on a starved
- * runner includes the page's wait for a CPU. Judge a page stall from a run
- * with CI's CPU limits: there it is the proof's own failure.
+ * `maxGapMs` while its main thread was held. Its own wheel listeners were
+ * still handling the step before, or the page drew no frame across the gap.
+ * WebKit dispatches the next step only once the thread is free. Both
+ * times are page wall time. On a starved runner they include the page's wait
+ * for a CPU, and a renderer held from outside draws no frame either. Judge a
+ * page stall from a run with CI's CPU limits: there it is the proof's own
+ * failure.
  */
 export class WheelPageStallError extends Error {
   constructor(
@@ -114,16 +117,23 @@ export class WheelPageStallError extends Error {
     readonly stall: WheelPageStall,
   ) {
     super(
-      `webInputDriver: the page's own wheel listeners took ${stall.handlingMs.toFixed(0)} ms of page wall time to handle a step, so the next reached it ${stall.gapMs.toFixed(0)} ms later, over its ${maxGapMs} ms: the page split the run. On a starved runner that time includes the page's wait for a CPU: judge a page stall from a run with CI's CPU limits`,
+      stall.frameGapMs == null
+        ? `webInputDriver: the page's own wheel listeners took ${stall.handlingMs.toFixed(0)} ms of page wall time to handle a step, so the next reached it ${stall.gapMs.toFixed(0)} ms later, over its ${maxGapMs} ms: the page split the run. On a starved runner that time includes the page's wait for a CPU: judge a page stall from a run with CI's CPU limits`
+        : `webInputDriver: the page drew no frame for ${stall.frameGapMs.toFixed(0)} ms around a ${stall.gapMs.toFixed(0)} ms gap between two wheel steps, over its ${maxGapMs} ms (engine or page work), while its own wheel listeners took ${stall.handlingMs.toFixed(0)} ms: the page split the run. On a starved runner the renderer draws no frame either: judge a page stall from a run with CI's CPU limits`,
     );
     this.name = 'WheelPageStallError';
   }
 }
 
-/** A gap the page caused: how long it was, and how long the page spent handling the step before it. */
+/**
+ * A gap the page caused: how long it was, and how long the page spent
+ * handling the step before it. `frameGapMs` is set when the page drew no
+ * frame across the gap instead.
+ */
 export interface WheelPageStall {
   readonly gapMs: number;
   readonly handlingMs: number;
+  readonly frameGapMs?: number;
 }
 
 /**
@@ -198,22 +208,25 @@ export function wheelSendGaps(
 
 /**
  * Sorts a burst's gaps past `maxGapMs` by cause. `stamps` are when the
- * received steps reached the page (`wheelArrivals`); `handledAt` is when the
- * page's wheel listeners had finished with each (for a step whose propagation
- * the page stopped, when a task queued at its arrival ran; NaN unseen);
+ * received steps reached the page (`wheelArrivals`). `handledAt` is when the
+ * page's wheel listeners had finished with each, NaN unseen. For a step whose
+ * propagation the page stopped, it is when a task queued at its arrival ran.
  * `sendGapsMs` is how far apart the harness sent the steps behind each gap
- * (`wheelSendGaps`; `null` where unknown). In WebKit, which dispatches a step
- * only once the page's main thread is free, a gap is the page's when the step
- * reached the page within one frame of the listeners finishing the step
- * before, so it was waiting on them, and the gap is more than a frame wider
- * than the harness's own spacing of those steps: the page can only widen a
- * gap, so one no wider than the send spacing is the dispatch's, even when a
- * starved renderer also held the step (a runner whose CPU quota holds the
- * page right after its listeners). Every other gap is the dispatch's, and in
- * Chromium, which stamps a step with its dispatch time, so the page cannot
- * move its stamps, every gap is. Other work on the page's main thread between
- * steps (timers, frame callbacks) counts as the dispatch's, unless it ran
- * before a stopped step's marking task.
+ * (`wheelSendGaps`; `null` where unknown). WebKit dispatches a step only once
+ * the page's main thread is free. There a gap is the page's when the step
+ * reached it within one frame of the listeners finishing the step before. It
+ * waited on them. The gap must also be more than a frame wider than the
+ * harness's own spacing of those steps. The page can only widen a gap, so one
+ * no wider than the send spacing is the dispatch's. That holds even when a
+ * starved renderer also held the step, as a runner whose CPU quota holds the
+ * page right after its listeners does. A WebKit gap is the page's too when
+ * `frames`, the page's frame times, show none across nearly all of it. Then
+ * engine or page work held the main thread, or a starved runner held the
+ * renderer, not the page's wheel listeners.
+ * Every other gap is the dispatch's. In Chromium, which stamps a step with
+ * its dispatch time, the page cannot move its stamps, so every gap is. Other
+ * work between steps that leaves frames running counts as the dispatch's,
+ * unless it ran before a stopped step's marking task.
  */
 export function wheelGapCauses(
   engine: Engine,
@@ -221,6 +234,7 @@ export function wheelGapCauses(
   handledAt: readonly number[],
   maxGapMs: number,
   sendGapsMs: readonly (number | null)[] = [],
+  frames: readonly number[] = [],
 ): {pageStalls: WheelPageStall[]; dispatchStalls: number[]} {
   const pageStalls: WheelPageStall[] = [];
   const dispatchStalls: number[] = [];
@@ -230,18 +244,50 @@ export function wheelGapCauses(
       continue;
     }
     const sendGapMs = sendGapsMs[i - 1];
+    const widened = sendGapMs == null || gapMs > sendGapMs + HELD_BACK_MS;
+    const handlingMs = handledAt[i - 1] - stamps[i - 1];
     const heldBack =
       engine === 'webkit' &&
       Number.isFinite(handledAt[i - 1]) &&
       stamps[i] - handledAt[i - 1] <= HELD_BACK_MS &&
-      (sendGapMs == null || gapMs > sendGapMs + HELD_BACK_MS);
+      widened;
+    const frameGap =
+      engine === 'webkit' && widened
+        ? frameGapAcross(frames, stamps[i - 1], stamps[i])
+        : null;
     if (heldBack) {
-      pageStalls.push({gapMs, handlingMs: handledAt[i - 1] - stamps[i - 1]});
+      pageStalls.push({gapMs, handlingMs});
+    } else if (frameGap != null && frameGap.covered >= gapMs - HELD_BACK_MS) {
+      pageStalls.push({
+        gapMs,
+        handlingMs: Number.isFinite(handlingMs) ? handlingMs : 0,
+        frameGapMs: frameGap.gapMs,
+      });
     } else {
       dispatchStalls.push(gapMs);
     }
   }
   return {pageStalls, dispatchStalls};
+}
+
+/**
+ * The page's longest stretch without a frame inside `from` to `to`. It gives
+ * how much of that span the stretch covers, and the whole gap between its two
+ * frames. Null with fewer than two frames.
+ */
+function frameGapAcross(
+  frames: readonly number[],
+  from: number,
+  to: number,
+): {covered: number; gapMs: number} | null {
+  let best: {covered: number; gapMs: number} | null = null;
+  for (let k = 1; k < frames.length; k++) {
+    const covered = Math.min(frames[k], to) - Math.max(frames[k - 1], from);
+    if (covered > 0 && (best == null || covered > best.covered)) {
+      best = {covered, gapMs: frames[k] - frames[k - 1]};
+    }
+  }
+  return best;
 }
 
 /** A point of a pen stroke. */
@@ -273,9 +319,10 @@ export interface WebInputDriver {
    * handles one step when the next arrives, the engine coalesces them, as it
    * does a trackpad's: the page can receive fewer, larger steps with the same
    * total. Returns how many steps the page received and the gaps between
-   * their arrivals (`wheelArrivals`), ms; with `maxGapMs`, a longer gap throws
-   * `WheelPageStallError` when the page's own handling of the step before
-   * caused it, and `WheelPacingError` otherwise.
+   * their arrivals (`wheelArrivals`), ms. With `maxGapMs`, a longer gap throws
+   * `WheelPageStallError` when the page held it, and `WheelPacingError`
+   * otherwise. The page holds a gap while it handles the step before, or
+   * while it draws no frame.
    */
   wheelBurst(burst: WheelBurst): Promise<{
     readonly receivedSteps: number;
@@ -353,6 +400,8 @@ export interface InputRun {
   stamps: number[];
   /** When the page's first listener received each event. */
   receivedAt: number[];
+  /** When the page drew each frame during the run, with `frames` asked. */
+  frames: number[];
   /**
    * True while every event of the run carries the mark `installInputStart`
    * added before the page's scripts. Then `receivedAt` comes before every
@@ -416,9 +465,10 @@ export async function installInputStart(
 export function armInputRun(
   page: Page,
   types: readonly string[],
+  {frames = false}: {readonly frames?: boolean} = {},
 ): Promise<JSHandle<InputRun>> {
   return page.evaluateHandle(
-    eventTypes => {
+    ([eventTypes, recordFrames]) => {
       const first = {capture: true, passive: true};
       const last = {capture: false, passive: true};
       const index = new WeakMap<Event, number>();
@@ -433,11 +483,13 @@ export function armInputRun(
           };
         }
       ).__harnessInputStart;
+      let drawing = recordFrames;
       const run = {
         types: [...eventTypes],
         stamps: [] as number[],
         receivedAt: [] as number[],
         startsFirst: mark?.first === true,
+        frames: [] as number[],
         handledAt: [] as number[],
         eventTypes: [] as string[],
         pointerTypes: [] as string[],
@@ -445,6 +497,7 @@ export function armInputRun(
         dx: 0,
         dy: 0,
         stop: () => {
+          drawing = false;
           for (const type of eventTypes) {
             window.removeEventListener(type, received, first);
             window.removeEventListener(type, handled, last);
@@ -499,9 +552,27 @@ export function armInputRun(
         window.addEventListener(type, received, first);
         window.addEventListener(type, handled, last);
       }
+      // The page's own frames, on the real frame loop: a frozen timer gate
+      // (story.ts) holds only the page's.
+      const frame =
+        (
+          window as unknown as {
+            __harnessTimerGate?: {frame?: typeof requestAnimationFrame};
+          }
+        ).__harnessTimerGate?.frame ??
+        window.requestAnimationFrame.bind(window);
+      const draw = () => {
+        if (drawing) {
+          run.frames.push(performance.now());
+          frame(draw);
+        }
+      };
+      if (recordFrames) {
+        frame(draw);
+      }
       return run;
     },
-    [...types],
+    [[...types], frames] as const,
   );
 }
 
@@ -525,6 +596,7 @@ async function untilRunReceived(
       new Promise<{
         stamps: number[];
         receivedAt: number[];
+        frames: number[];
         handledAt: number[];
         deltas: [number, number][];
         dx: number;
@@ -553,6 +625,7 @@ async function untilRunReceived(
             resolve({
               stamps: run.stamps.slice(),
               receivedAt: run.receivedAt.slice(),
+              frames: run.frames.slice(),
               handledAt: run.handledAt.slice(),
               deltas: run.deltas.slice(),
               dx: run.dx,
@@ -584,6 +657,7 @@ async function untilRunReceived(
       got.handledAt,
       maxGapMs,
       wheelSendGaps(steps, sentAt, got.deltas),
+      got.frames,
     );
     if (pageStalls.length > 0) {
       throw new WheelPageStallError(maxGapMs, pageStalls[0]);
@@ -755,7 +829,7 @@ async function webkitWebInput(page: Page): Promise<WebInputDriver> {
         await page.keyboard.down('Control');
       }
       try {
-        const armed = await armInputRun(page, ['wheel']);
+        const armed = await armInputRun(page, ['wheel'], {frames: true});
         const sentAt = await dispatchOnSchedule(
           steps,
           everyMs,
