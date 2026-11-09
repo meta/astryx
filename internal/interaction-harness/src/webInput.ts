@@ -44,7 +44,7 @@
  *   harness self-test (../src/harness.interaction.browser.spec.ts).
  */
 
-import type {CDPSession, JSHandle, Page, TestInfo} from '@playwright/test';
+import type {CDPSession, JSHandle, Page} from '@playwright/test';
 import type {Engine} from './touch';
 
 /** One wheel step: the page receives exactly `dx`, `dy` CSS px. */
@@ -85,8 +85,8 @@ export interface WheelBurst {
  * page can only widen a gap, so a starved renderer that also held the step
  * lands here). The dispatch stalled before the page, so a loaded runner
  * splits what the driver sent as one gesture. Other work on the page's main
- * thread between steps (timers, frame callbacks) also lands here, so a
- * re-taken run is the runner's or that work's, never the wheel listeners'.
+ * thread between steps (timers, frame callbacks) also lands here. Such a
+ * stall is the runner's or that work's, never the wheel listeners'.
  */
 export class WheelPacingError extends Error {
   constructor(
@@ -106,7 +106,7 @@ export class WheelPacingError extends Error {
  * listeners held the main thread, and WebKit dispatches the next step only
  * once it is free. The handling time is page wall time, which on a starved
  * runner includes the page's wait for a CPU. Judge a page stall from a run
- * with CI's CPU limits: there it is the proof's own failure, never re-taken.
+ * with CI's CPU limits: there it is the proof's own failure.
  */
 export class WheelPageStallError extends Error {
   constructor(
@@ -244,35 +244,6 @@ export function wheelGapCauses(
   return {pageStalls, dispatchStalls};
 }
 
-/**
- * Runs a wheel proof through `attempt`, and once more when the page received
- * its burst off pace: `attempt` builds the page's state, sends the burst with
- * `maxGapMs` and makes the spec's assertions, so a re-take starts over. One
- * re-take, two attempts in all, and only on a `WheelPacingError`: any other
- * error (a `WheelPageStallError`, which the page's wheel listeners caused,
- * among them), and a second `WheelPacingError`, fail the test with their own
- * cause. A `WheelPacingError` is the runner's or other work on the page's main
- * thread between steps, so a re-take does not clear the page of that work.
- * Each re-take is listed in the report as a `wheel-retake` annotation.
- */
-export async function retakeOnWheelPacing<T>(
-  testInfo: Pick<TestInfo, 'annotations'>,
-  attempt: (n: 1 | 2) => Promise<T>,
-): Promise<T> {
-  try {
-    return await attempt(1);
-  } catch (error) {
-    if (!(error instanceof WheelPacingError)) {
-      throw error;
-    }
-    testInfo.annotations.push({
-      type: 'wheel-retake',
-      description: error.message,
-    });
-    return attempt(2);
-  }
-}
-
 /** A point of a pen stroke. */
 export interface PenPoint {
   readonly x: number;
@@ -383,6 +354,12 @@ export interface InputRun {
   /** When the page's first listener received each event. */
   receivedAt: number[];
   /**
+   * True while every event of the run carries the mark `installInputStart`
+   * added before the page's scripts. Then `receivedAt` comes before every
+   * page listener.
+   */
+  startsFirst: boolean;
+  /**
    * When the page's own listeners had finished with each event, NaN until
    * seen. An event whose propagation the page stops is marked by a task
    * queued when it arrived, and never later than the next event's arrival.
@@ -403,10 +380,38 @@ export interface InputRun {
 }
 
 /**
+ * Marks when the page's listeners begin on each trusted event of `types`,
+ * with a passive window capture listener. Added before the page's scripts, it
+ * runs before every page listener, a window capture one included, and
+ * `armInputRun` uses its mark. A page already loaded gets it too. There it
+ * runs after the window capture listeners the page added at load, such as a
+ * gesture host's, so its mark is not used.
+ */
+export async function installInputStart(
+  page: Page,
+  types: readonly string[],
+): Promise<void> {
+  const script = (first: boolean) => `(() => {
+  if (window.__harnessInputStart) return;
+  const starts = new WeakMap();
+  window.__harnessInputStart = {starts, first: ${first}};
+  for (const type of ${JSON.stringify([...types])}) {
+    window.addEventListener(type, event => {
+      if (event.isTrusted && !starts.has(event)) starts.set(event, performance.now());
+    }, {capture: true, passive: true});
+  }
+})()`;
+  await page.addInitScript(script(true));
+  await page.evaluate(script(false));
+}
+
+/**
  * Arms two passive listeners on the window before a run is dispatched. A
  * capture listener stamps each trusted event of `types` before the page's
  * own listeners. A bubble listener, after them, notes when the page has
- * finished with the event. The wheel and touch drivers share it.
+ * finished with the event. The wheel and touch drivers share it. Where
+ * `installInputStart` marked, before the page's scripts, when the page's
+ * listeners began on an event, that mark is the event's `receivedAt`.
  */
 export function armInputRun(
   page: Page,
@@ -420,10 +425,19 @@ export function armInputRun(
       // A message runs as a task of its own, after the dispatch that queued
       // it: it marks an event whose bubble listener never ran.
       const channel = new MessageChannel();
+      const mark = (
+        window as unknown as {
+          __harnessInputStart?: {
+            starts: WeakMap<Event, number>;
+            first: boolean;
+          };
+        }
+      ).__harnessInputStart;
       const run = {
         types: [...eventTypes],
         stamps: [] as number[],
         receivedAt: [] as number[],
+        startsFirst: mark?.first === true,
         handledAt: [] as number[],
         eventTypes: [] as string[],
         pointerTypes: [] as string[],
@@ -457,7 +471,13 @@ export function armInputRun(
         const i = run.stamps.length;
         index.set(event, i);
         run.stamps.push(event.timeStamp);
-        run.receivedAt.push(performance.now());
+        const markedAt = run.startsFirst ? mark?.starts.get(event) : undefined;
+        // A page that reopens its document drops the mark's listener but
+        // keeps the mark. Its events go unmarked, and the run reads as before.
+        if (markedAt == null) {
+          run.startsFirst = false;
+        }
+        run.receivedAt.push(markedAt ?? performance.now());
         run.handledAt.push(Number.NaN);
         run.eventTypes.push(event.type);
         run.pointerTypes.push(

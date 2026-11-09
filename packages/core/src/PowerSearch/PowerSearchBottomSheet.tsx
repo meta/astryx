@@ -60,15 +60,14 @@ import {EmptyState} from '../EmptyState/EmptyState';
 import {Heading} from '../Heading/Heading';
 import {Icon} from '../Icon/Icon';
 import {IconButton} from '../IconButton/IconButton';
-import {CheckboxIndicator} from '../Indicator/CheckboxIndicator';
-import {RadioIndicator} from '../Indicator/RadioIndicator';
-import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {isRenderable} from '../utils/isRenderable';
 import {containerPaddingInlineVarStyles} from '../Layout/padding.stylex';
 import {List} from '../List/List';
 import {ListItem} from '../List/ListItem';
 import {RadioList} from '../RadioList/RadioList';
 import {RadioListItem} from '../RadioList/RadioListItem';
+import {CheckboxList} from '../CheckboxList/CheckboxList';
+import {CheckboxListItem} from '../CheckboxList/CheckboxListItem';
 import {Text} from '../Text/Text';
 import {TextInput} from '../TextInput/TextInput';
 import type {SearchSource} from '../Typeahead/types';
@@ -395,11 +394,18 @@ const styles = stylex.create({
     display: 'flex',
     flexDirection: 'column',
     gap: spacingVars['--spacing-3'],
-    // Clears the sheet's floating grab handle.
-    paddingBlockStart: spacingVars['--spacing-6'],
     paddingBlockEnd: spacingVars['--spacing-3'],
     paddingInline: spacingVars['--spacing-4'],
     backgroundColor: colorVars['--color-background-surface'],
+  },
+  // The value sheet scrolls its whole content, so its sticky header can reach
+  // the sheet's top. The header rises into the band that the sheet keeps
+  // under its grab bar and keeps its own padding there, so it clears the bar
+  // at rest and while stuck. The Filters and Add filter sheets do not scroll
+  // their header, and the band alone clears the bar.
+  headerScrollsToTop: {
+    marginBlockStart: `calc(-1 * ${spacingVars['--spacing-6']})`,
+    paddingBlockStart: spacingVars['--spacing-6'],
   },
   headerRow: {
     display: 'flex',
@@ -477,17 +483,11 @@ const styles = stylex.create({
     justifyContent: 'center',
   },
   // With more than one section in the value step, each section is a muted
-  // container. Its inline padding is published as container padding, so
-  // choice rows run edge to edge inside the section.
+  // container.
   controlSection: {
     padding: spacingVars['--spacing-3'],
     borderRadius: radiusVars['--radius-container'],
     backgroundColor: colorVars['--color-background-muted'],
-  },
-  // The operator radios put their indicator at the row's end, as the choice
-  // rows do.
-  trailingControlRow: {
-    flexDirection: 'row-reverse',
   },
   // The built-in nested editor's sub-filter rows collapse from one line to
   // wrapped lines under a container query on the popover's own container;
@@ -500,53 +500,6 @@ const styles = stylex.create({
   },
   rowValue: {
     fontWeight: fontWeightVars['--font-weight-bold'],
-  },
-  // Choice rows run edge to edge on the inset of the surface that holds them,
-  // the body or a muted section, with no dividers: the group reaches into
-  // that padding and each row pads back out to it.
-  choiceList: {
-    display: 'flex',
-    flexDirection: 'column',
-    marginInlineStart: 'calc(-1 * var(--container-padding-inline-start, 0px))',
-    marginInlineEnd: 'calc(-1 * var(--container-padding-inline-end, 0px))',
-    width:
-      'calc(100% + var(--container-padding-inline-start, 0px) + var(--container-padding-inline-end, 0px))',
-  },
-  choiceRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: spacingVars['--spacing-3'],
-    width: '100%',
-    minHeight: 44,
-    paddingBlock: spacingVars['--spacing-3'],
-    paddingInlineStart: 'var(--container-padding-inline-start, 0px)',
-    paddingInlineEnd: 'var(--container-padding-inline-end, 0px)',
-    borderWidth: 0,
-    borderRadius: 0,
-    backgroundColor: 'transparent',
-    color: colorVars['--color-text-primary'],
-    fontFamily: 'inherit',
-    textAlign: 'start',
-    cursor: {
-      default: 'pointer',
-      ':is([aria-disabled="true"])': 'default',
-    },
-  },
-  // An aria-disabled row gets no system disabled paint in forced colors;
-  // GrayText is the platform's disabled affordance there.
-  choiceRowDisabled: {
-    color: {
-      default: colorVars['--color-text-secondary'],
-      '@media (forced-colors: active)': 'GrayText',
-    },
-  },
-  choiceIcon: {
-    display: 'inline-flex',
-    flexShrink: 0,
-  },
-  choiceLabel: {
-    flexGrow: 1,
-    minWidth: 0,
   },
   editorInput: {
     paddingBlockStart: spacingVars['--spacing-1'],
@@ -691,134 +644,65 @@ interface ChoiceItem {
   readonly icon?: ReactNode;
 }
 
-// A radio group's one tab stop: the checked row, else the first.
-function radioTabStopOrder(list: HTMLElement): ReadonlyArray<HTMLElement> {
-  const rows = Array.from(list.querySelectorAll<HTMLElement>('[role="radio"]'));
-  const checked = rows.find(row => row.getAttribute('aria-checked') === 'true');
-  return checked == null
-    ? rows
-    : [checked, ...rows.filter(row => row !== checked)];
-}
-
 /**
- * Closed vocabularies render as full-width rows with a trailing check instead
- * of the popover presentation's Selector or Tokenizer: a dropdown layer inside
- * a sheet stacks a second overlay on a surface the person is already inside.
+ * Closed vocabularies render as lists, not as a dropdown. A dropdown layer
+ * inside a sheet stacks a second overlay on a surface the person is already
+ * inside.
  */
-function ChoiceRows({
-  items,
-  selected,
-  isDisabled,
-  isMultiple,
-  label,
-  onToggle,
-}: {
-  items: ReadonlyArray<ChoiceItem>;
-  selected: ReadonlySet<string>;
-  isDisabled?: boolean;
-  /** `enum_list`: checkbox rows that toggle. Otherwise radio rows. */
-  isMultiple: boolean;
-  /** The group's accessible name: the field label. */
-  label: string;
-  onToggle: (value: string, isSelected: boolean) => void;
-}) {
-  // The rows carry their state as state, not as a name suffix: `radio` rows
-  // in a `radiogroup` for a single choice, `checkbox` rows in a `group` for
-  // `enum_list`, each with `aria-checked`, as the Tokenizer's sheet rows do.
-  // Disabled rows stay focusable with `aria-disabled`.
-  //
-  // Keyboard: a radio group is one tab stop — the checked row, else the
-  // first — and the arrow keys move focus and check the row they land on,
-  // wrapping; Home and End move to and check the first and last row. The
-  // shared list focus owns the tab stop and the moves; a row that takes focus
-  // from an arrow, Home or End is checked here. Space and Enter check the
-  // focused radio row and toggle a checkbox row: each row is a native
-  // `button`, whose activation fires `onClick` for both keys. A checkbox row
-  // is its own tab stop.
-  const isKeyMoveRef = useRef(false);
-  const {listRef, handleKeyDown, handleFocus} =
-    useInternalListFocus<HTMLDivElement>({
-      itemSelector: '[role="radio"]',
-      orientation: 'both',
-      hasRovingTabIndex: !isMultiple,
-      tabStopOrder: radioTabStopOrder,
-    });
-  const handleRadioKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    isKeyMoveRef.current = true;
-    try {
-      handleKeyDown(event);
-    } finally {
-      isKeyMoveRef.current = false;
-    }
-  };
-  const handleRadioFocus = (event: React.FocusEvent<HTMLDivElement>) => {
-    handleFocus(event);
-    if (!isKeyMoveRef.current || isDisabled) {
-      return;
-    }
-    const value = (event.target as HTMLElement).closest<HTMLElement>(
-      '[role="radio"]',
-    )?.dataset.value;
-    if (value != null && !selected.has(value)) {
-      onToggle(value, false);
-    }
-  };
-  return (
-    <div
-      ref={listRef}
-      role={isMultiple ? 'group' : 'radiogroup'}
-      aria-label={label}
-      onKeyDown={isMultiple ? undefined : handleRadioKeyDown}
-      onFocus={isMultiple ? undefined : handleRadioFocus}
-      {...stylex.props(styles.choiceList)}>
-      {items.map(item => {
-        const isSelected = selected.has(item.value);
-        return (
-          <button
+function ChoiceRows(
+  props: {
+    items: ReadonlyArray<ChoiceItem>;
+    selected: ReadonlyArray<string>;
+    isDisabled?: boolean;
+    /** The group's accessible name: the field label. */
+    label: string;
+  } & (
+    | {isMultiple: true; onChange: (values: string[]) => void}
+    | {isMultiple?: false; onChange: (value: string) => void}
+  ),
+) {
+  const {items, selected, isDisabled, label} = props;
+  const itemLabel = (item: ChoiceItem) =>
+    isRenderable(item.icon) ? (
+      <>
+        <span aria-hidden="true">{item.icon}</span> {item.label}
+      </>
+    ) : (
+      item.label
+    );
+  if (props.isMultiple === true) {
+    return (
+      <CheckboxList
+        label={label}
+        isLabelHidden
+        isDisabled={isDisabled}
+        value={[...selected]}
+        onChange={props.onChange}>
+        {items.map(item => (
+          <CheckboxListItem
             key={item.value}
-            type="button"
-            role={isMultiple ? 'checkbox' : 'radio'}
-            aria-checked={isSelected}
-            aria-disabled={isDisabled || undefined}
-            data-value={item.value}
-            onClick={() => {
-              if (!isDisabled) {
-                onToggle(item.value, isSelected);
-              }
-            }}
-            {...stylex.props(
-              focusOutlineStyles.focusVisible,
-              styles.choiceRow,
-              isDisabled && styles.choiceRowDisabled,
-            )}>
-            {isRenderable(item.icon) && (
-              <span aria-hidden="true" {...stylex.props(styles.choiceIcon)}>
-                {item.icon}
-              </span>
-            )}
-            <Text
-              type="body"
-              color={isDisabled ? 'inherit' : undefined}
-              xstyle={styles.choiceLabel}>
-              {item.label}
-            </Text>
-            {isMultiple ? (
-              <CheckboxIndicator
-                state={isSelected ? 'checked' : 'unchecked'}
-                size="md"
-                isDisabled={isDisabled}
-              />
-            ) : (
-              <RadioIndicator
-                state={isSelected ? 'checked' : 'unchecked'}
-                size="md"
-                isDisabled={isDisabled}
-              />
-            )}
-          </button>
-        );
-      })}
-    </div>
+            value={item.value}
+            label={itemLabel(item)}
+          />
+        ))}
+      </CheckboxList>
+    );
+  }
+  return (
+    <RadioList
+      label={label}
+      isLabelHidden
+      isDisabled={isDisabled}
+      value={selected[0] ?? ''}
+      onChange={props.onChange}>
+      {items.map(item => (
+        <RadioListItem
+          key={item.value}
+          value={item.value}
+          label={itemLabel(item)}
+        />
+      ))}
+    </RadioList>
   );
 }
 
@@ -852,14 +736,14 @@ function SheetValueEditor({
 }) {
   const {buildRelativeDateOptions, PowerSearchValueEditor} = editors;
   const t = useComponentTranslator();
-  const selectedValues = useMemo<ReadonlySet<string>>(() => {
+  const selectedValues = useMemo<ReadonlyArray<string>>(() => {
     if (filterValue?.type === 'enum' || filterValue?.type === 'date_relative') {
-      return new Set([filterValue.value]);
+      return [filterValue.value];
     }
     if (filterValue?.type === 'enum_list') {
-      return new Set(filterValue.value);
+      return filterValue.value;
     }
-    return new Set();
+    return [];
   }, [filterValue]);
 
   switch (operatorValue.type) {
@@ -872,9 +756,8 @@ function SheetValueEditor({
           items={operatorValue.values}
           selected={selectedValues}
           isDisabled={isDisabled}
-          isMultiple={false}
           label={fieldLabel}
-          onToggle={value => onChange({type: 'enum', value})}
+          onChange={value => onChange({type: 'enum', value})}
         />
       );
     case 'enum_list':
@@ -885,16 +768,7 @@ function SheetValueEditor({
           isDisabled={isDisabled}
           isMultiple
           label={fieldLabel}
-          onToggle={(value, isSelected) => {
-            const existing =
-              filterValue?.type === 'enum_list' ? filterValue.value : [];
-            onChange({
-              type: 'enum_list',
-              value: isSelected
-                ? existing.filter(v => v !== value)
-                : [...existing, value],
-            });
-          }}
+          onChange={values => onChange({type: 'enum_list', value: values})}
         />
       );
     case 'date_relative':
@@ -903,9 +777,8 @@ function SheetValueEditor({
           items={buildRelativeDateOptions(operatorValue, t)}
           selected={selectedValues}
           isDisabled={isDisabled}
-          isMultiple={false}
           label={fieldLabel}
-          onToggle={value => onChange({type: 'date_relative', value})}
+          onChange={value => onChange({type: 'date_relative', value})}
         />
       );
     case 'string':
@@ -2047,10 +1920,7 @@ export function PowerSearchBottomSheet({
     styles.scrollContent,
     containerPaddingInlineVarStyles[4],
   );
-  const controlSectionProps = stylex.props(
-    styles.controlSection,
-    containerPaddingInlineVarStyles[3],
-  );
+  const controlSectionProps = stylex.props(styles.controlSection);
 
   // A vertical touch drag on the Add filter rows moves focus off a focused
   // search to the sheet, so the software keyboard leaves and the rows can be
@@ -2121,7 +1991,6 @@ export function PowerSearchBottomSheet({
             operator: resolveOperatorLabel(operator, t),
           })}
           value={operator.key}
-          xstyle={styles.trailingControlRow}
         />
       ))}
     </RadioList>
@@ -2548,7 +2417,7 @@ export function PowerSearchBottomSheet({
         padding={0}
         purpose="info">
         <div {...stylex.props(styles.sheet)}>
-          <div {...stylex.props(styles.header)}>
+          <div {...stylex.props(styles.header, styles.headerScrollsToTop)}>
             <div {...stylex.props(styles.headerRow)}>
               <div {...stylex.props(styles.headerText)}>
                 <Heading level={3} maxLines={1}>
