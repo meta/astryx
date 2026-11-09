@@ -56,6 +56,23 @@ describe('status phrases', () => {
     ).toEqual(['in progress']);
   });
 
+  it('warns on a second in-progress sentence with no Status line', () => {
+    expect(
+      phrases(
+        record('Windowing is in progress.', '', 'Sorting work in progress.'),
+      ),
+    ).toEqual(['in progress']);
+    expect(
+      phrases(
+        record(
+          'Windowing is in progress.',
+          '',
+          'Sorting is still in progress.',
+        ),
+      ),
+    ).toEqual(['in progress']);
+  });
+
   it('does not count a state of the system as a status line', () => {
     expect(
       phrases(
@@ -101,6 +118,21 @@ describe('gap sections', () => {
         ),
       ),
     ).toEqual([]);
+  });
+
+  it('warns on a claim line whose other words are build status or sequencing', () => {
+    expect(
+      phrases(
+        record(
+          '## Known gaps',
+          '',
+          '- FR7 gap: no code yet.',
+          '- FR7 gap: the module has no code yet and lands after the Table work.',
+          '- INV12 gap: no module exists; Selector adopts it once the engine ships.',
+          '- FR7 gap: Table windows only inside its own viewport.',
+        ),
+      ),
+    ).toEqual(['no code yet', 'no code yet', 'no module exists']);
   });
 
   it('warns on general build status inside a gap section', () => {
