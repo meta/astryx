@@ -53,10 +53,7 @@ import {announceInModal} from '../hooks/useAnnounce';
 import {useScrollLock} from '../hooks/useScrollLock';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useAttachment} from '../hooks/useAttachment';
-import {
-  observeResize,
-  observeResizeAfterLayout,
-} from '../utils/sharedResizeObserver';
+import {observeResizeAfterLayout} from '../utils/sharedResizeObserver';
 import {observeContent} from '../utils/sharedMutationObserver';
 import {MIN_TOUCH_TARGET} from '../utils/hitArea';
 import {useTouchHitArea, type TouchHitAreaOptions} from '../utils/touchHitArea';
@@ -405,36 +402,37 @@ const styles = stylex.create({
   },
   // Physical floats: StyleX keys `inline-end` on the page's direction. So a
   // right-to-left caption flips them, as the toggle follows its own.
-  // A zero-width float as tall as every shown line but the last. It pushes
-  // the toggle's place down to the last line. Without a toggle it has no
-  // height.
-  captionToggleSpacer: {
-    float: {
-      default: 'right',
-      ':is([dir="rtl"] *)': 'left',
-    },
-    inlineSize: 0,
-  },
-  captionToggleSpacerHeight: (height: number) => ({
-    blockSize: height,
-  }),
   // The toggle's place at the end of the caption's last line. The text wraps
   // around it, so the clamp's ellipsis comes just before the toggle. Without
-  // a toggle it has no size, so it moves no line.
+  // a toggle it has no box, so it moves no line.
   captionTogglePlace: {
     float: {
       default: 'right',
       ':is([dir="rtl"] *)': 'left',
     },
-    clear: {
-      default: 'right',
-      ':is([dir="rtl"] *)': 'left',
+    display: 'none',
+    overflow: 'hidden',
+    whiteSpace: 'pre',
+    userSelect: 'none',
+    // The clamp draws an ellipsis on its last line. The place shows nothing.
+    visibility: 'hidden',
+    // The lines are generated, so the caption's text and its ranges hold
+    // none of them.
+    '::before': {
+      content: 'attr(data-lines)',
     },
   },
-  captionTogglePlaceShown: (width: number) => ({
+  // The place shows one line box for each line the caption shows. Layout
+  // rounds line boxes to its own grid, and each engine rounds them its own
+  // way. So the place ends exactly where the caption's last line ends. Only
+  // its last line keeps the text away.
+  captionTogglePlaceShown: (width: number, lines: number) => ({
+    display: '-webkit-box',
+    WebkitBoxOrient: 'vertical',
+    WebkitLineClamp: lines,
     inlineSize: width,
-    blockSize: '1lh',
     marginInlineStart: spacingVars['--spacing-1'],
+    shapeOutside: 'inset(calc(100% - 1lh + 0.5px) 0 0 0)',
   }),
   // The caption's link over its place: the caption's last line, inside the
   // Text's inline padding. It takes the caption's font and line height, so
@@ -607,6 +605,16 @@ const KEYBOARD_PAN_OFFSETS: Record<string, [number, number]> = {
 /** The height of a video's native controls, px: no browser reports it. */
 const VIDEO_CONTROLS_BAND = 48;
 
+/**
+ * The toggle's place generates these lines of a no-break space, and shows
+ * as many as the caption does. They never change, so a measurement changes
+ * no node. An open caption scrolls once it passes 60 % of the viewport, and
+ * then the place is not shown. 240 lines cover that at a 10px line in a
+ * window 4,000px tall.
+ */
+const CAPTION_PLACE_LINES = Array.from({length: 240}, () => '\u00a0').join(
+  '\n',
+);
 /**
  * A fullscreen overlay for viewing images and videos at full resolution.
  *
@@ -941,8 +949,8 @@ export function Lightbox({
     bandCaptionRef,
     captionTruncation.ref,
   );
-  // How far below the caption's first line its last shown line starts.
-  const [captionLastLineTop, setCaptionLastLineTop] = useState(0);
+  // How many lines the caption shows.
+  const [captionShownLines, setCaptionShownLines] = useState(0);
   // Whether the open caption scrolls inside its panel.
   const [isCaptionScrolling, setIsCaptionScrolling] = useState(false);
   const measureCaptionLines = useCallback(() => {
@@ -955,12 +963,11 @@ export function Lightbox({
         parseFloat(style.paddingTop) -
         parseFloat(style.paddingBottom);
       const line = parseFloat(style.lineHeight);
-      // A whole number of line boxes. The client height rounds to whole
-      // pixels, and a spacer read from it would lay the caption out again a
-      // fraction of a pixel shorter, inside the delivery that measured it.
-      const lineCount =
-        Number.isFinite(line) && line > 0 ? Math.round(lines / line) : 0;
-      setCaptionLastLineTop(lineCount > 1 ? (lineCount - 1) * line : 0);
+      // The client height rounds to whole pixels, so this rounds to whole
+      // lines.
+      setCaptionShownLines(
+        Number.isFinite(line) && line > 0 ? Math.round(lines / line) : 0,
+      );
     }
     setIsCaptionScrolling(
       isCaptionOpen &&
@@ -1899,24 +1906,16 @@ export function Lightbox({
                                         <span
                                           aria-hidden="true"
                                           {...stylex.props(
-                                            styles.captionToggleSpacer,
-                                            i === index &&
-                                              hasCaptionTogglePlace &&
-                                              styles.captionToggleSpacerHeight(
-                                                captionLastLineTop,
-                                              ),
-                                          )}
-                                        />
-                                        <span
-                                          aria-hidden="true"
-                                          {...stylex.props(
                                             styles.captionTogglePlace,
                                             i === index &&
                                               hasCaptionTogglePlace &&
+                                              captionShownLines > 0 &&
                                               styles.captionTogglePlaceShown(
                                                 captionToggleWidth,
+                                                captionShownLines,
                                               ),
                                           )}
+                                          data-lines={CAPTION_PLACE_LINES}
                                         />
                                         {mediaArray[i].caption}
                                       </div>
