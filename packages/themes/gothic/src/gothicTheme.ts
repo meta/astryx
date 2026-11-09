@@ -395,6 +395,15 @@ export const gothicTheme = defineTheme({
     },
   },
 
+  // Gothic's accent text and icons are one light color, so on a light media
+  // surface they follow that surface's accent, the dark on-light color.
+  onLight: {
+    tokens: {
+      '--color-text-accent': 'var(--color-accent)',
+      '--color-icon-accent': 'var(--color-accent)',
+    },
+  },
+
   icons: gothicIconRegistry,
 });
 
