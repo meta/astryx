@@ -77,7 +77,8 @@ one trusted GitHub workflow per package.
 
 - **Stable:** explicit dispatch from the immutable `vX.Y.Z` tag with the exact
   release branch, version, head, tag, and plan digest. It publishes `latest`.
-- **Canary:** automatic main push. It publishes
+- **Canary:** at most hourly from main's tip, or on demand from `main` (a
+  dispatch with `channel: canary`). It publishes
   `<declared-version>-canary.<short-sha>` to `canary` only while the declaration is
   strictly above the newest stable tag. It never authorizes or mutates stable release
   state.
@@ -126,8 +127,9 @@ finish: add a GitHub Actions publisher with owner `meta`, repository
 `astryx`, workflow `release.yml`, no environment, and `npm publish` allowed.
 
 npm expires a new trusted publisher that no publish has validated within 48
-hours. The next push to `main` publishes the package's canary and validates it.
-If no canary publishes in that window, recreate the publisher.
+hours. The next canary (the hourly run, or a canary dispatch from `main`)
+publishes the package's canary and validates it. If no canary publishes in that
+window, recreate the publisher.
 
 Registry reads can keep reporting a just-created package as missing for a few
 minutes. A re-run of `--bootstrap` in that window gets `409` for the placeholder

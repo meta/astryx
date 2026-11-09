@@ -2,11 +2,11 @@
 /**
  * @file privateAttributes/menuPressLit.stylex.ts
  * @input The row that a held finger or pen lights in a menu
- * @output markMenuPressLit and clearMenuPressLit, which mark that row,
- *   isMenuPressLit, which reads the mark, menuPressLitRowStyle, which
- *   paints the marked row, holdMenuPressPaint and releaseMenuPressPaint,
- *   which keep the other rows off their pressed paint, and
- *   isMenuPressPaintHeld, which reads that hold
+ * @output Exports markMenuPressLit and clearMenuPressLit, which mark that row,
+ *   and isMenuPressLit, which reads the mark. It also exports
+ *   menuPressLitRowStyle, which paints the marked row. The hold pair,
+ *   holdMenuPressPaint and releaseMenuPressPaint, keeps the other rows off
+ *   their pressed paint, and isMenuPressPaintHeld reads that hold.
  * @position Owner module of the private menu-press-lit attribute: the only
  *   file that writes its name. The menu press model (hooks/useMenuPress.ts)
  *   marks the row; DropdownMenu's rows compose the styles. No package entry

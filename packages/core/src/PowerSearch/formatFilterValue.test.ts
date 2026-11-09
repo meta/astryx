@@ -300,6 +300,115 @@ describe('formatFilterValue', () => {
       }
     });
 
+    describe.each([
+      {calendar: 'persian', locale: 'en', year: '1405'},
+      {calendar: 'persian', locale: 'fa', year: '۱۴۰۵'},
+      {calendar: 'hebrew', locale: 'en', year: '5787'},
+      {calendar: 'hebrew', locale: 'he', year: '5787'},
+      {calendar: 'buddhist', locale: 'en', year: '2569'},
+      {calendar: 'buddhist', locale: 'th', year: '2569'},
+    ] as const)(
+      'absolute dates in $calendar under $locale',
+      ({calendar, locale, year}) => {
+        const instant = Date.parse('2026-10-30T12:00:00Z');
+        const unixSeconds = instant / 1000;
+
+        it('writes the editor summary in the calendar, with its time', () => {
+          const value = formatDateAbsolute(
+            unixSeconds,
+            locale,
+            'UTC',
+            false,
+            calendar,
+          );
+          expect(value).toBe(
+            new Intl.DateTimeFormat(locale, {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+              hour: 'numeric',
+              minute: '2-digit',
+              timeZone: 'UTC',
+              calendar,
+            }).format(instant),
+          );
+          expect(value).toContain(year);
+          expect(value).not.toContain('2026');
+        });
+
+        it('writes the token value in the calendar', () => {
+          const value = formatDateAbsolute(
+            unixSeconds,
+            locale,
+            'UTC',
+            true,
+            calendar,
+          );
+          expect(value).toBe(
+            new Intl.DateTimeFormat(locale, {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+              timeZone: 'UTC',
+              calendar,
+            }).format(instant),
+          );
+          expect(value).toContain(year);
+        });
+
+        it('passes the calendar through formatFilterValue', () => {
+          expect(
+            formatFilterValue(
+              {} as never,
+              {type: 'date_absolute'},
+              {type: 'date_absolute', unixSeconds},
+              60,
+              t,
+              locale,
+              'UTC',
+              calendar,
+            ),
+          ).toBe(
+            formatDateAbsolute(unixSeconds, locale, 'UTC', true, calendar),
+          );
+        });
+      },
+    );
+
+    it('defaults absolute dates to the Gregorian calendar', () => {
+      const unixSeconds = Date.parse('2026-10-30T12:00:00Z') / 1000;
+      expect(formatDateAbsolute(unixSeconds, 'fa', 'UTC')).toBe(
+        formatDateAbsolute(unixSeconds, 'fa', 'UTC', true, 'gregory'),
+      );
+      expect(formatDateAbsolute(unixSeconds, 'fa', 'UTC', false)).toBe(
+        formatDateAbsolute(unixSeconds, 'fa', 'UTC', false, 'gregory'),
+      );
+      expect(
+        fmt(
+          {type: 'date_absolute'},
+          {type: 'date_absolute', unixSeconds},
+          60,
+          'UTC',
+        ),
+      ).toContain('2026');
+    });
+
+    it('keeps time and relative values unchanged in another calendar', () => {
+      const inCalendar = (value: FilterValue) =>
+        formatFilterValue(
+          {} as never,
+          {type: value.type} as OperatorValue,
+          value,
+          20,
+          t,
+          'fa',
+          'UTC',
+          'persian',
+        );
+      expect(inCalendar({type: 'time', value: '14:30'})).toBe('14:30');
+      expect(inCalendar({type: 'date_relative', value: '7d'})).toBe('7d');
+    });
+
     it('formats an absolute date and truncates to maxLength', () => {
       const full = fmt(
         {type: 'date_absolute'},

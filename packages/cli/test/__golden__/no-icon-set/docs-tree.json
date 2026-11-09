@@ -690,6 +690,24 @@
     ],
     "mentions": []
   },
+  "calendars": {
+    "type": "docs.node",
+    "children": [
+      "calendars/calendar-systems"
+    ],
+    "mentions": []
+  },
+  "calendars/calendar-systems": {
+    "type": "docs.detail",
+    "sections": [
+      "choose-a-calendar",
+      "supported-calendars",
+      "load-temporal-where-the-runtime-lacks-it",
+      "lunisolar-calendars",
+      "week-numbers"
+    ],
+    "mentions": []
+  },
   "color": {
     "type": "docs.detail",
     "sections": [
@@ -730,6 +748,7 @@
     "sections": [
       "quick-start-with-ai",
       "install",
+      "upgrade",
       "install-once",
       "add-base-css-and-a-theme",
       "add-your-first-component",
@@ -906,7 +925,8 @@
       "custom-icons",
       "theme-overrides",
       "icon-variants",
-      "component-and-library-icons"
+      "component-and-library-icons",
+      "component-icon-slots"
     ],
     "mentions": [
       "This lets you swap the icon set (e.g."
@@ -926,7 +946,15 @@
     "children": [
       "internationalization/i18n-quick-start",
       "internationalization/i18n-library-integration",
+      "internationalization/i18n-calendars",
       "internationalization/i18n-rtl-and-testing"
+    ],
+    "mentions": []
+  },
+  "internationalization/i18n-calendars": {
+    "type": "docs.detail",
+    "sections": [
+      "show-dates-in-another-calendar"
     ],
     "mentions": []
   },
@@ -1169,7 +1197,8 @@
   "styling-libraries/tailwind": {
     "type": "docs.detail",
     "sections": [
-      "tailwind"
+      "tailwind",
+      "add-astryx-to-an-app-that-already-uses-tailwind"
     ],
     "mentions": []
   },
@@ -1387,7 +1416,8 @@
       "type-scale",
       "display-text",
       "usage",
-      "custom-type-scale"
+      "custom-type-scale",
+      "dynamic-type"
     ],
     "mentions": []
   },

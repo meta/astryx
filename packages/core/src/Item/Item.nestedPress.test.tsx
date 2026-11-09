@@ -72,3 +72,14 @@ it('paints no press on the row for a finger on another control inside it', () =>
   expect(rowOf(more).hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
   fireEvent.pointerUp(more, {pointerType: 'touch', pointerId: 1});
 });
+
+it('keeps the row marked as a pressable container while a finger on another control inside it paints no press', () => {
+  render(<DelegatingRow />);
+  const more = screen.getByRole('button', {name: 'More'});
+  const row = rowOf(more);
+  expect(row.getAttribute('data-pressable-container')).toBe('true');
+  fingerOn(more);
+  expect(row.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  expect(row.getAttribute('data-pressable-container')).toBe('true');
+  fireEvent.pointerUp(more, {pointerType: 'touch', pointerId: 1});
+});

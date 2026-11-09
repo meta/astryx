@@ -62,9 +62,9 @@ import {
 import english from '../i18n/generated-english/Switch/Switch.generated';
 
 registerEnglishFallback(english);
+import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {
   interactionOverlayStyles,
-  pressConsts,
   pressVars,
 } from '../utils/interactionOverlay.stylex';
 import {pressHoldsDragProps} from '../privateAttributes/pressHoldsDrag.stylex';
@@ -93,14 +93,15 @@ const PRESS_FADING = '[data-astryx-press="fading"]';
 
 /**
  * The shared press release, for the press layers the switch fades on the
- * compositor. The clock scales by the theme's tempo, and the curve is the
- * controller's own. Switch.test.tsx compares the two.
+ * compositor: the theme's exit motion tokens, no longer than the Reduce
+ * Motion fade under Reduce Motion. Switch.test.tsx compares them with
+ * the overlay's.
  * SYNC: utils/interactionOverlay.stylex.ts PRESS_RELEASE_DURATION,
  * PRESS_RELEASE_DURATION_REDUCED and RELEASE_EASE.
  */
-const PRESS_RELEASE_DURATION = `calc(${pressConsts.releaseMs}ms * min(var(--_astryx-motion-tempo, 1), 1.5))`;
-const PRESS_RELEASE_DURATION_REDUCED = `min(${pressConsts.releaseMs}ms, calc(${pressConsts.releaseMs}ms * var(--_astryx-motion-tempo, 1)))`;
-const PRESS_RELEASE_EASE = 'cubic-bezier(0, 0, 0.2, 1)';
+const PRESS_RELEASE_DURATION = durationVars['--duration-exit'];
+const PRESS_RELEASE_DURATION_REDUCED = `min(${durationVars['--duration-exit']}, ${reducedMotionFadeConsts.duration})`;
+const PRESS_RELEASE_EASE = easeVars['--ease-exit'];
 
 // The measured hit insets (utils/hitArea), 0 until measured.
 const HIT_TOP = 'var(--astryx-hit-inset-top, 0px)';
@@ -459,9 +460,13 @@ const styles = stylex.create({
       pointerEvents: 'none',
       opacity: 0,
       backgroundColor: 'var(--_switch-fade-fill, transparent)',
-      // Its own compositing layer from the start, so its fade runs off the
-      // main thread (iOS Safari otherwise animates it on the main thread).
-      willChange: {default: null, [TOUCH]: 'opacity'},
+      // A compositing layer only while a fade runs. The animator sets the
+      // property in the task that starts the fade: iOS Safari needs that to
+      // run the fade off the main thread. It clears it after the fade rests.
+      willChange: {
+        default: null,
+        [TOUCH]: 'var(--astryx-motion-will-change-after, auto)',
+      },
     },
   },
   // The one ring in the system not drawn by focusOutlineStyles. The focusable
@@ -628,7 +633,12 @@ const styles = stylex.create({
       pointerEvents: 'none',
       opacity: 0,
       boxShadow: shadowVars['--shadow-low'],
-      willChange: {default: null, [TOUCH]: 'opacity'},
+      // A compositing layer only while the lift fades the shadow, as for the
+      // track's colour fade.
+      willChange: {
+        default: null,
+        [TOUCH]: 'var(--astryx-motion-will-change-after, auto)',
+      },
     },
     // Pressed with a mouse: the same overlay as the track, so the whole
     // control darkens rather than the thumb standing out against a darker

@@ -437,9 +437,10 @@ export type MenuPressEffect<T> =
   | {type: 'clear'}
   | {type: 'act'; row: T}
   /**
-   * The gesture ended without a row acting. `stray` says whether the browser
-   * will still report a `click` for this gesture that must not act; `dismiss`
-   * says the menu should close (a mouse released outside it).
+   * The gesture ends without a row acting. Its `stray` flag is true when the
+   * browser still sends a `click` for this gesture. That click must not act.
+   * Its `dismiss` flag is true when the menu must close (a mouse released
+   * outside it).
    */
   | {type: 'settle'; stray: boolean; dismiss: boolean};
 

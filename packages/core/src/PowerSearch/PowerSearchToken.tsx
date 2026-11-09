@@ -13,12 +13,14 @@ import React from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Token} from '../Token';
 import {useLocale} from '../i18n/useLocale';
+import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import {fontWeightVars} from '../theme/tokens.stylex';
 import {formatFilterValue} from './formatFilterValue';
 import {resolveOperatorLabel} from './resolveOperatorLabel';
 import {useInternalConfig} from './useInternalConfig';
 import type {PowerSearchTokenProps} from './types';
 import {useComponentTranslator} from '../i18n/useComponentTranslator';
+import {formatTokenLabel} from './formatTokenValue';
 
 const tokenValueStyles = stylex.create({
   value: {
@@ -47,13 +49,11 @@ export function PowerSearchToken({
   const config = useInternalConfig(configProp);
   const t = useComponentTranslator();
   const locale = useLocale();
+  const calendar = useCalendarSystem(undefined, 'PowerSearchToken');
 
   const fieldLabel = field.label;
   const resolvedOperatorLabel = resolveOperatorLabel(operator, t);
-  const operatorLabel = resolvedOperatorLabel
-    ? `: ${resolvedOperatorLabel}`
-    : '';
-  const tokenLabel = `${fieldLabel}${operatorLabel}`;
+  const tokenLabel = formatTokenLabel(t, fieldLabel, resolvedOperatorLabel);
 
   const adjustedMaxLength = Math.max(
     maxLength - fieldLabel.length - resolvedOperatorLabel.length,
@@ -68,6 +68,7 @@ export function PowerSearchToken({
     t,
     locale,
     timezoneID,
+    calendar,
   );
 
   const valueContent = valueStr ? (

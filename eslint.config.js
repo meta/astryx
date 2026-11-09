@@ -1006,6 +1006,19 @@ export default defineConfig(
       ],
     },
   },
+  // React attaches its wheel, touchstart and touchmove listeners as passive,
+  // so preventDefault() in those handlers does nothing. Shipped package
+  // source, the same files as the block above.
+  {
+    files: privateAttributeScope.files,
+    ignores: privateAttributeScope.ignores,
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-prevent-default-in-passive-react-handler': 'error',
+    },
+  },
   // A source comment explains a reason, a constraint, or a quirk. It does not
   // cite a record, a claim, a pull request, an issue, or a date, and it does
   // not quote requirement text: the record links the code, and

@@ -6,13 +6,13 @@
  *   profile, with real finger, pen and mouse input (touch.ts, webInput.ts and
  *   Playwright's mouse)
  * @output Interaction proofs that the highlight follows a held pointer
- *   (`spec:AST-094` FR27, FR43): dragged from the trigger across the rows,
- *   each enabled row lights in turn and nothing is lit once the pointer
- *   leaves the menu. Under a finger or a pen, the lit row is painted
- *   stronger than a row the keyboard focuses. Under a mouse, it keeps that
- *   hover tint. Under a desktop mouse, a press that begins on one row and
- *   drags onto another leaves the row under it told apart from the first.
- *   Under a desktop pen, only the row under it keeps the pressed overlay
+ *   (`spec:AST-094` FR27, FR43). Dragged from the trigger across the rows,
+ *   each enabled row lights in turn. Nothing is lit once the pointer leaves
+ *   the menu. Under a finger or a pen, the lit row is painted stronger than
+ *   a row the keyboard focuses. Under a mouse, it keeps that hover tint.
+ *   Under a desktop mouse, a press that begins on one row and drags onto
+ *   another leaves the row under it told apart from the first. Under a
+ *   desktop pen, only the row under it keeps the pressed overlay.
  * @position Evidence for the lit row's paint in DropdownMenu's rows; the
  *   press model's mark on that row is unit-tested in useMenuPress.test.tsx
  */
@@ -73,9 +73,9 @@ async function paintOf(row: Locator): Promise<string> {
 }
 
 /**
- * The story with the open menu measured once its entrance has come to rest:
- * a tap opens it, the keyboard focuses its first row for the paint a
- * keyboard focus gets, and Escape closes it again.
+ * The story with the open menu, measured once its entrance has come to rest.
+ * A tap opens the menu, and the keyboard focuses its first row for the paint
+ * a keyboard focus gets. Escape then closes it again.
  */
 async function openLayout(page: Page): Promise<Layout> {
   await openStory(page, storybook(), 'core-dropdownmenu--default');
@@ -209,7 +209,7 @@ test('a held finger dragged from the trigger across the rows lights each enabled
   await recordFrames(page);
   const start = {x: layout.x, y: Math.floor(layout.triggerBottom) - 1};
   const endY = Math.ceil(layout.menuBottom) + 40;
-  // The finger holds until the menu has opened under it, then slides down
+  // The finger holds until the menu has opened under it. Then it slides down
   // across every row and off the menu, and rests there before the lift.
   await driver.play(
     path(

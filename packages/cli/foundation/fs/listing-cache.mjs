@@ -2,23 +2,27 @@
 
 /**
  * @file One directory listing per path for the duration of one read-only
- * operation.
+ * operation, kept for later operations while the folder is unchanged.
  *
  * @input A read-only operation (`withListingCache(fn)`), and directory paths
  *   its discovery helpers list or probe.
  * @output The same answers `fs.readdirSync` / `fs.existsSync` give, read from
  *   disk once per path while the operation runs, and `oncePerListing`, a
- *   value computed once per operation.
- * @position Used by the name resolvers in foundation/discovery and by
- *   `existsCaseExact`. A search or build resolves ~160 components and their
- *   hooks, and each resolution walks the same source tree again; inside one
- *   operation the tree does not change, so each directory is read once.
- *   Outside `withListingCache` every helper reads the disk directly, exactly
- *   as before, so long-lived callers never see a stale listing.
+ *   value computed once per operation. A later operation in the same process
+ *   reuses a listing while its folder's stamp is unchanged.
+ * @position Used by the name resolvers and doc walkers in
+ *   foundation/discovery and by `existsCaseExact`. A search or build resolves
+ *   ~160 components and their hooks, and each resolution walks the same
+ *   source tree again. Inside one operation the tree does not change, so each
+ *   directory is read once. Outside `withListingCache` every helper reads the
+ *   disk directly, exactly as before.
  */
 
 import {AsyncLocalStorage} from 'node:async_hooks';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
+import {performance} from 'node:perf_hooks';
+import {fileStamp, recordContentRead} from './read-record.mjs';
 
 /**
  * @typedef {{
@@ -32,6 +36,24 @@ import * as fs from 'node:fs';
 
 /** @type {AsyncLocalStorage<ListingCache>} */
 const scope = new AsyncLocalStorage();
+
+/**
+ * Listings kept for later operations in this process, by folder. Each holds
+ * the folder's stamp (`fileStamp`: size, times and inode) and when this
+ * process first saw it. Once the stamp has held for {@link SETTLE_MS}, it
+ * holds the entries too. Adding, removing or renaming an entry changes the
+ * stamp.
+ * @type {Map<string, {stamp: string, since: number, entries: fs.Dirent[] | null}>}
+ */
+const kept = new Map();
+
+/**
+ * How long a folder's stamp must hold, by this process's clock, before its
+ * listing is kept. A file system can store times as coarsely as 2 s. So a
+ * change within one tick of the last can leave the stamp as it was. After the
+ * stamp has held this long, a new change falls in a later tick.
+ */
+const SETTLE_MS = 2000;
 
 /**
  * Run `fn` with a listing cache. A nested call shares the outer cache. Only
@@ -79,7 +101,9 @@ export function listingCacheActive() {
 
 /**
  * `fs.readdirSync(dir)`, read once per operation. Returns a fresh array, so a
- * caller that sorts it cannot reorder another caller's listing.
+ * caller that sorts it cannot reorder another caller's listing. The names come
+ * from the same read as {@link listDirEntries}, so a folder listed both ways
+ * is read once.
  * @param {string} dir
  * @returns {string[]}
  */
@@ -88,7 +112,7 @@ export function listDir(dir) {
   if (!cache) return fs.readdirSync(dir);
   let names = cache.names.get(dir);
   if (!names) {
-    names = fs.readdirSync(dir);
+    names = listDirEntries(dir).map(entry => entry.name);
     cache.names.set(dir, names);
   }
   return names.slice();
@@ -104,10 +128,38 @@ export function listDirEntries(dir) {
   if (!cache) return fs.readdirSync(dir, {withFileTypes: true});
   let entries = cache.entries.get(dir);
   if (!entries) {
-    entries = fs.readdirSync(dir, {withFileTypes: true});
+    entries = keptOrRead(dir);
     cache.entries.set(dir, entries);
   }
   return entries.slice();
+}
+
+/**
+ * `dir`'s entries for an operation. They are the kept listing while the
+ * folder's stamp is the one it was kept with. Otherwise they are a new read,
+ * kept once the stamp has held for {@link SETTLE_MS}.
+ * @param {string} dir
+ * @returns {fs.Dirent[]}
+ */
+function keptOrRead(dir) {
+  const folder = path.resolve(dir);
+  // A reuse check (read-record.mjs) records the folder's state before the
+  // stamp below is taken. So a change between the two shows as a change.
+  recordContentRead(folder);
+  const before = performance.now();
+  const stamp = fileStamp(folder);
+  const held = kept.get(folder);
+  if (held?.entries && held.stamp === stamp) return held.entries;
+  const entries = fs.readdirSync(dir, {withFileTypes: true});
+  if (held?.stamp !== stamp) {
+    // Taken after the stamp, so the stamp's times are no later than this.
+    kept.set(folder, {stamp, since: performance.now(), entries: null});
+  } else if (before - held.since >= SETTLE_MS) {
+    // Read after the stamp held for the settle time: a later change gets a
+    // new stamp.
+    kept.set(folder, {stamp, since: held.since, entries});
+  }
+  return entries;
 }
 
 /**

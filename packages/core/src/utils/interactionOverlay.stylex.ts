@@ -42,7 +42,7 @@
 // background image, so a composer's color transition cannot fade the onset
 // in. `on` sets the strength to 1 on the first frame. `fading` animates it
 // from 1 to 0, not to the hover strength, because a finger has no hover. The
-// theme's motion tempo scales the release clock (AST-108).
+// release plays the theme's exit motion tokens, which follow its tempo.
 //
 // The release is an animation, not a transition. Composers own their
 // `transition-*` longhands, and StyleX is last-wins per property. A
@@ -55,7 +55,8 @@
 // `animation-*` on the element that composes them. The touch arms own both.
 
 import * as stylex from '@stylexjs/stylex';
-import {colorVars} from '../theme/tokens.stylex';
+import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
+import {colorVars, durationVars, easeVars} from '../theme/tokens.stylex';
 
 /**
  * The touch press's strength on the surface the controller painted, 0 to 1.
@@ -73,26 +74,22 @@ export const pressVars = stylex.defineVars({
 });
 
 /**
- * The touch press's clocks that both the stylesheet and the controller read.
- *
- * `defineConsts`, so the one number is inlined here at build time and is the
- * controller's constant at run time (`PRESS_FADE_MS` in pressGesture.ts):
- * the release animation and the controller's clock cannot drift apart. When
- * that clock runs out, the controller waits for a release animation that a
- * busy main thread started late, then removes the attribute.
+ * The touch press's measured release clock, kept as a reference value. Press
+ * releases now play the theme's `--duration-exit`.
  */
 export const pressConsts = stylex.defineConsts({
-  /** How long the release takes, in ms. UIKit's deselect clock. */
+  /** UIKit's deselect clock, in ms: the measured reference value. */
   releaseMs: 200,
 });
 
 /**
- * The release's clock as CSS, scaled by the theme's `--_astryx-motion-tempo`
- * up to 1.5, its maximum. The controller's timer reads the same property.
+ * The release's clock: the theme's exit duration. The token already
+ * follows the theme's tempo. The controller's timer reads the
+ * same property.
  */
-const PRESS_RELEASE_DURATION = `calc(${pressConsts.releaseMs}ms * min(var(--_astryx-motion-tempo, 1), 1.5))`;
-/** The same clock under Reduce Motion: a tempo may shorten it, never lengthen it. */
-const PRESS_RELEASE_DURATION_REDUCED = `min(${pressConsts.releaseMs}ms, calc(${pressConsts.releaseMs}ms * var(--_astryx-motion-tempo, 1)))`;
+const PRESS_RELEASE_DURATION = durationVars['--duration-exit'];
+/** The same clock under Reduce Motion, no longer than the Reduce Motion fade. */
+const PRESS_RELEASE_DURATION_REDUCED = `min(${durationVars['--duration-exit']}, ${reducedMotionFadeConsts.duration})`;
 
 const ENABLED = ':where(:not(:disabled,[aria-disabled="true"]))';
 const HOVER_HOVER = '@media (hover: hover)';
@@ -145,17 +142,12 @@ const pressRelease = stylex.keyframes({
 });
 
 /**
- * The release's curve: a gentle ease-out that spends the whole clock fading
- * (strength ≈ 0.2 at the midpoint), which is what a deselect crossfade reads
- * as. Not the system's `--ease-standard`: that curve is for things that move,
- * and is so front-loaded (strength 0.05 at the midpoint) that the release
- * would read as half its clock. It is the constants table's
- * `timing.press.highlightOutCurve`, which the list row's layer mirrors too
- * (rowPressLayer.stylex.ts); interactionOverlay.cell.test.ts fails if either
- * drifts. A copy, not an import: this module reaches nearly every component,
- * and the row layer's constants stay with the rows.
+ * The release's curve: the theme's exit easing. The list row's layer
+ * (privateAttributes/press.stylex.ts) and Switch's press layers use the same
+ * token; interactionOverlay.cell.test.ts and Switch.test.tsx fail if they
+ * differ.
  */
-const RELEASE_EASE = 'cubic-bezier(0, 0, 0.2, 1)';
+const RELEASE_EASE = easeVars['--ease-exit'];
 
 /**
  * The touch press's strength and its release, on the element the controller

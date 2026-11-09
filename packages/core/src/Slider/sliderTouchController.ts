@@ -2,8 +2,9 @@
 
 /**
  * @file sliderTouchController.ts
- * @input The slider's control (and its size), thumbs, fill parts and value
- *   model; the gesture recognizers, the animator and the UIKit slider table
+ * @input The slider's control (and its size), thumbs, fill parts, value
+ *   tooltips and value model; the gesture recognizers, the animator and the
+ *   UIKit slider table
  * @output Exports `SliderTouchController`, `sliderCoastCurve` and the
  *   `SliderTouchModel` and `SliderTouchParts` types
  * @position Internal to Slider: useSliderTouch attaches it while enabled.
@@ -29,7 +30,7 @@ import {TapGestureRecognizer} from '../gestures/TapGestureRecognizer';
 import type {PointerKind} from '../gestures/types';
 import {isRtlElement} from '../hooks/isRtlElement';
 import {
-  createMotionAnimator,
+  createMotionEngine,
   type Animator,
   type MotionCurve,
   type MotionHandle,
@@ -60,6 +61,8 @@ export interface SliderTouchParts {
   /** The fill's mover (a range's start) and the fill itself. */
   readonly fillMover: HTMLElement | null;
   readonly fill: HTMLElement | null;
+  /** Each thumb's value tooltip while it is mounted, else null. */
+  readonly tooltips: ReadonlyArray<HTMLElement | null>;
 }
 
 /** What the controller needs from Slider. Read fresh on every use. */
@@ -97,6 +100,18 @@ export interface SliderTouchModel {
   commit(index: number, value: number | null): void;
   /** `onChangeEnd`, with the values the owner rendered. */
   reportEnd(): void;
+  /**
+   * Holds thumb `index`'s value-tooltip anchor where the owner last rendered
+   * it, and returns that place as progress along the travel (0 to 1). Null
+   * when the thumb has no value tooltip. While held, the owner's renders do
+   * not move the anchor, so the tooltip can move with the thumb by translate.
+   */
+  holdAnchor(index: number): number | null;
+  /**
+   * The anchors of thumbs `indices` follow the owner's rendered values
+   * again. The owner renders them now, so they move in this task.
+   */
+  releaseAnchors(indices: ReadonlyArray<number>): void;
   /**
    * The value a press at client point (`x`, `y`) on the track means: a
    * mark's value on a mark, else the point along the travel.
@@ -173,6 +188,8 @@ interface Interaction {
    * thumb by its first movement and may pass to the other thumb.
    */
   readonly beganCoincident: boolean;
+  /** Each held tooltip anchor's place, as progress, by thumb. */
+  readonly anchors: Map<number, number | null>;
 }
 
 /**
@@ -241,6 +258,8 @@ export class SliderTouchController {
   private readonly getParts: () => SliderTouchParts | null;
   private readonly interactions = new Map<number, Interaction>();
   private readonly animators = new Map<HTMLElement, Animator>();
+  /** The thumbs whose tooltip anchor an interaction holds. */
+  private readonly heldAnchors = new Set<number>();
   /** The owner unmounted the slider: a cancel reports nothing then. */
   private disposed = false;
   /** Thumbs whose current touch is a mouse: Slider's own handlers take it. */
@@ -422,6 +441,7 @@ export class SliderTouchController {
       for (const interaction of ended) {
         this.model.commit(interaction.index, null);
       }
+      this.releaseHeldAnchors();
       if (ended.some(interaction => interaction.changed)) {
         this.model.reportEnd();
       }
@@ -454,7 +474,33 @@ export class SliderTouchController {
         animator.set({opacity: 1});
         element.style.removeProperty('opacity');
       }
+      // A value tooltip mounts anew each time it opens.
+      if (!element.isConnected) {
+        animator.dispose();
+        this.animators.delete(element);
+      }
     }
+  }
+
+  /**
+   * Releases the tooltip anchors that no live interaction holds. It runs in
+   * the task of the hand-back that ends their tooltips' translates. So
+   * anchor positioning takes over at the place each translate held.
+   */
+  private releaseHeldAnchors(): void {
+    const live = [...this.interactions.values()].filter(
+      interaction => interaction.coast != null || !interaction.released,
+    );
+    const released = [...this.heldAnchors].filter(
+      index => !live.some(interaction => interaction.anchors.has(index)),
+    );
+    if (released.length === 0) {
+      return;
+    }
+    for (const index of released) {
+      this.heldAnchors.delete(index);
+    }
+    this.model.releaseAnchors(released);
   }
 
   // -- events ----------------------------------------------------------------
@@ -619,6 +665,7 @@ export class SliderTouchController {
       isMouse,
       coasts,
       beganCoincident: this.model.isRange && values[0] === values[1],
+      anchors: new Map(),
     });
     this.model.press(owner);
   }
@@ -821,6 +868,7 @@ export class SliderTouchController {
       isMouse: false,
       coasts: false,
       beganCoincident: false,
+      anchors: new Map(),
     };
     this.interactions.set(index, interaction);
     // A tap's value change happens in place. So under Reduce Motion it
@@ -1038,6 +1086,15 @@ export class SliderTouchController {
       }
     };
     add(parts.thumbs[index], p => p, 1);
+    const tooltip = parts.tooltips[index];
+    if (tooltip != null) {
+      const anchored = this.anchorFor(interaction);
+      if (anchored != null) {
+        // The tooltip's anchor stays where it was held. The tooltip moves
+        // with the thumb by translate.
+        add(tooltip, p => p - anchored * travel, 1);
+      }
+    }
     if (isRange) {
       if (index === 0) {
         add(parts.fillMover, p => inset + p, 1);
@@ -1109,6 +1166,7 @@ export class SliderTouchController {
     // reads what the owner rendered.
     this.model.commit(interaction.index, finalValue);
     this.handBack();
+    this.releaseHeldAnchors();
     if (report) {
       this.model.reportEnd();
     }
@@ -1186,10 +1244,26 @@ export class SliderTouchController {
   private animatorFor(element: HTMLElement): Animator {
     let animator = this.animators.get(element);
     if (animator == null) {
-      animator = createMotionAnimator(element);
+      animator = createMotionEngine(element);
       this.animators.set(element, animator);
     }
     return animator;
+  }
+
+  /**
+   * Where the interaction's thumb's tooltip anchor is held, as progress.
+   * The first call for a thumb holds it, where the owner last rendered it.
+   */
+  private anchorFor(interaction: Interaction): number | null {
+    const {anchors, index} = interaction;
+    if (!anchors.has(index)) {
+      const held = this.model.holdAnchor(index);
+      anchors.set(index, held);
+      if (held != null) {
+        this.heldAnchors.add(index);
+      }
+    }
+    return anchors.get(index) ?? null;
   }
 
   private partsOf(interaction: Interaction): Set<HTMLElement> {
@@ -1199,7 +1273,10 @@ export class SliderTouchController {
       return set;
     }
     const thumb = parts.thumbs[interaction.index];
-    for (const element of [thumb, parts.fillMover, parts.fill]) {
+    const tooltip = interaction.anchors.has(interaction.index)
+      ? parts.tooltips[interaction.index]
+      : null;
+    for (const element of [thumb, parts.fillMover, parts.fill, tooltip]) {
       if (element != null) {
         set.add(element);
       }

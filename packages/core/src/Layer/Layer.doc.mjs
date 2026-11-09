@@ -40,7 +40,7 @@ export const docs = {
       {
         guidance: false,
         description:
-          'Add nested LayerProvider instances: nested providers are ignored and add unnecessary tree depth.',
+          'Nest a LayerProvider to change toast settings: a nested provider keeps the outer toast configuration and mounts no second toast viewport.',
       },
     ],
   },
@@ -49,7 +49,7 @@ export const docs = {
       name: 'LayerProvider',
       displayName: 'Layer Provider',
       description:
-        'App-level provider for layer systems such as toast viewports and imperative modals. Nested providers pass through.',
+        'App-level configuration for toasts and the viewport inset. A nested provider mounts no second toast viewport and keeps the outer toast configuration; one that declares an inset applies its declared edges to the anchored layers in its subtree.',
       props: [
         {
           name: 'children',
@@ -93,7 +93,8 @@ export const docsDense = {
       },
       {
         guidance: false,
-        description: 'Add nested LayerProvider instances.',
+        description:
+          'Nest LayerProvider for toast config: a nested provider keeps the outer toast config.',
       },
     ],
   },

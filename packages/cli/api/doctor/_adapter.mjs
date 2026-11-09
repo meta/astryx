@@ -39,6 +39,8 @@ import {
 } from '../../foundation/agent-docs/computer-agent-text.mjs';
 import {computerAgentTextSettings} from '../../foundation/env/user-settings.mjs';
 import * as fs from 'node:fs';
+import {elementPropOrigins} from '../../foundation/discovery/module-exports.mjs';
+import {cssImports} from '../../foundation/render/embedded-imports.mjs';
 import * as path from 'node:path';
 import {
   Project,
@@ -113,8 +115,9 @@ export function readTextFileIfExists(file) {
  * links. The doctor parses the returned bytes without executing app code.
  * @param {string} root
  * @param {string} generatedModule
+ * @param {{stylesheets?: boolean}} [options] - also list `.css` files
  */
-export function listProjectSourceFiles(root, generatedModule) {
+export function listProjectSourceFiles(root, generatedModule, options = {}) {
   /** @type {string[]} */
   const files = [];
   /** @type {string[]} */
@@ -137,7 +140,8 @@ export function listProjectSourceFiles(root, generatedModule) {
       } else if (
         entry.isFile() &&
         file !== generatedModule &&
-        SOURCE_EXTENSIONS.has(path.extname(entry.name))
+        (SOURCE_EXTENSIONS.has(path.extname(entry.name)) ||
+          (options.stylesheets === true && path.extname(entry.name) === '.css'))
       ) {
         files.push(file);
       }
@@ -164,6 +168,39 @@ export function resolveDoctorThemeImports(theme, options) {
 /** @param {string} projectDir */
 export function discoverDoctorUnmigratedCopies(projectDir) {
   return discoverUnmigratedThemeCopies(projectDir);
+}
+
+/**
+ * The real path of a file, links resolved; null when it does not exist.
+ * @param {string} file
+ * @returns {string | null}
+ */
+export function realDoctorFile(file) {
+  try {
+    return fs.realpathSync(file);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Where each `<Name prop={value}>` value of a module is declared (see
+ * `elementPropOrigins`).
+ * @param {string} file
+ * @param {Parameters<typeof elementPropOrigins>[1]} element
+ */
+export function doctorElementPropOrigins(file, element) {
+  return elementPropOrigins(file, element);
+}
+
+/**
+ * The `@import` specifiers of a stylesheet, quoted or in `url()`, in any case
+ * (see `cssImports`); empty for CSS that does not parse.
+ * @param {string} css
+ * @returns {Set<string>}
+ */
+export function doctorStylesheetImports(css) {
+  return new Set(cssImports(css));
 }
 
 /** @param {string} projectDir */

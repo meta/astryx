@@ -31,7 +31,8 @@ async function expectSearchKeyboard(input: Locator) {
 
 async function openSearchRow(page: Page, story: string, label: string) {
   await openStory(page, storybook(), story);
-  const trigger = page.getByRole('button', {name: label, exact: true});
+  // A searchable trigger's name is its label followed by its value text.
+  const trigger = page.getByRole('button', {name: new RegExp(`^${label}\\b`)});
   await expect(trigger).toBeVisible();
   await trigger.tap();
   return page.getByRole('combobox');
@@ -47,8 +48,8 @@ test('a tap on Typeahead focuses a field that asks for the Search key and no aut
 test('a tap on the inline Tokenizer focuses a field that asks for the Search key and no autocorrection', async ({
   page,
 }) => {
-  // The story pins `presentation="popover"`, so the phone keeps the inline field.
-  await openStory(page, storybook(), 'core-tokenizer--with-end-content');
+  // `presentation="popover"` keeps the inline field on the phone.
+  await openStory(page, storybook(), 'core-tokenizer--popover-presentation');
   await expectSearchKeyboard(page.getByRole('combobox'));
 });
 

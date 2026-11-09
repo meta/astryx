@@ -57,9 +57,9 @@ describe('Lab-only lane (spec:AST-030 FR26)', () => {
   });
 
   it('reports success with a Lab-only notice on every required context', () => {
-    // docsite-test and test read their own scope; build reads it from the
-    // Storybook build, which runs on a Lab-only change.
-    for (const name of ['docsite-test', 'test']) {
+    // test reads its own scope; build reads it from the Storybook build and
+    // docsite-test from the docsite build, which both run on a Lab-only change.
+    for (const name of ['test']) {
       const notice = step(name, NOTICE);
       expect(notice?.if, name).toBe(LAB_TRUE);
       expect(notice.run, name).toContain(
@@ -69,6 +69,12 @@ describe('Lab-only lane (spec:AST-030 FR26)', () => {
     }
     expect(step('build', NOTICE).if).toBe(
       "needs.build-storybook.outputs.lab_only == 'true'",
+    );
+    expect(step('docsite-test', NOTICE).if).toBe(
+      "needs.docsite-build.outputs.lab_only == 'true'",
+    );
+    expect(ci.jobs['docsite-build'].outputs.lab_only).toBe(
+      '${{ steps.scope.outputs.lab_only }}',
     );
     expect(ci.jobs['build-storybook'].outputs.lab_only).toBe(
       '${{ steps.scope.outputs.lab_only }}',
@@ -80,12 +86,15 @@ describe('Lab-only lane (spec:AST-030 FR26)', () => {
   });
 
   it('keeps every owner the required joins wait on green while skipping its work', () => {
-    for (const name of ['docsite-test', 'test-build', 'typecheck']) {
+    for (const name of ['docsite-build', 'test-build', 'typecheck']) {
       expect(step(name, NOTICE)?.if, name).toBe(LAB_TRUE);
       expect(String(ci.jobs[name].if), name).not.toContain('lab_only');
       for (const work of workAfterScope(name)) {
         if (work.name === 'Validate spec records') continue;
         if (work.name === 'Skip docsite work for Node tooling') continue;
+        // Decides from the scope, Lab-only included, and does no work.
+        if (work.name === 'Decide whether the browser contracts apply')
+          continue;
         if (/^Skip /.test(work.name ?? '')) continue;
         // A step gated on an earlier work step's outcome follows that step.
         if (
@@ -108,7 +117,13 @@ describe('Lab-only lane (spec:AST-030 FR26)', () => {
 
   it('runs the Node lane as any scoped pull request does, source-reading guards included', () => {
     // A Lab file that broke a guard would turn every later pull request red.
-    for (const s of steps('test-node')) {
+    // The one Lab-only step adds a check; none skips one.
+    const official = step('test-node', 'Lab-only: CLI official-packages check');
+    expect(official.if).toBe(`matrix.shard == 1 && ${LAB_TRUE}`);
+    expect(official.run).toBe(
+      'pnpm exec vitest run scripts/check-cli-official-packages.test.mjs --maxWorkers=1',
+    );
+    for (const s of steps('test-node').filter(s => s !== official)) {
       expect(String(s.if ?? ''), s.name ?? s.uses ?? s.run).not.toContain(
         'lab_only',
       );
@@ -185,7 +200,29 @@ describe('Lab-only lane (spec:AST-030 FR26)', () => {
     expect(all.indexOf(typecheck)).toBeGreaterThan(
       all.findIndex(s => s.name === 'Build packages and Storybook'),
     );
-    for (const s of all.filter(s => s !== typecheck)) {
+    // A Lab-only change that carries a Lab component's routes checks them
+    // against the registry the docsite builds from these packages.
+    const routeLock = step(
+      'build-storybook',
+      'Lab-only: check the ShadCN route lock',
+    );
+    expect(routeLock.if).toBe(
+      `steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && ${LAB_TRUE}`,
+    );
+    // Compared with the merge base, not the head's parent commit.
+    expect(routeLock.env.MERGE_BASE).toBe(
+      '${{ steps.merge-base.outputs.sha }}',
+    );
+    expect(routeLock.env.DOCSITE_TARGET).toBe('canary');
+    expect(routeLock.run).toContain(
+      'git diff --quiet "$MERGE_BASE" HEAD -- internal/shadcn-registry/routes.lock.json',
+    );
+    expect(routeLock.run).not.toContain('HEAD^1');
+    expect(routeLock.run).toContain(
+      'node apps/docsite/scripts/generate-data.mjs',
+    );
+    expect(all.indexOf(routeLock)).toBeGreaterThan(all.indexOf(typecheck));
+    for (const s of all.filter(s => s !== typecheck && s !== routeLock)) {
       expect(String(s.if ?? ''), s.name ?? s.uses ?? s.run).not.toContain(
         'lab_only',
       );

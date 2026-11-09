@@ -86,8 +86,9 @@ export interface GestureRecognizerOptions<R = GestureRecognizer> {
    * Scroll input this recognizer takes, as UIKit's `allowedScrollTypesMask`.
    * A pan follows a trackpad's two-finger scroll (`continuous`), never a
    * mouse wheel's notches. It moves as a contact with the content, along its
-   * own axis, after the scrollers under the pointer. A pinch takes a
-   * ctrl-wheel of either, as a trackpad pinches.
+   * own axis, after the scrollers under the pointer. Its own element is the
+   * pan's on the axis its `touch-action` keeps, as for a finger. A pinch takes
+   * a ctrl-wheel of either, as a trackpad pinches.
    * @default none; a pinch takes both, the screen-edge pan none whatever a
    *   caller passes
    */
@@ -556,6 +557,15 @@ export abstract class GestureRecognizer {
   /** The event clock's current time. */
   protected now(): number {
     return this.arena?.now() ?? 0;
+  }
+
+  /**
+   * Takes this recognizer's touches from the view, as a claiming winner does
+   * under `cancelsTouchesInView`: the view's press ends and no click follows.
+   * The touches stay unclaimed, so the page still scrolls.
+   */
+  protected cancelTouchesInView(): void {
+    this.arena?.cancelTouchesInViewOf(this);
   }
 
   // --- Arena hooks (internal) ----------------------------------------------

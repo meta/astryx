@@ -9,7 +9,12 @@
  * SYNC: When Dialog.tsx changes, update tests to match new behavior
  */
 
-import {StrictMode, useState, type SyntheticEvent} from 'react';
+import {
+  StrictMode,
+  useLayoutEffect,
+  useState,
+  type SyntheticEvent,
+} from 'react';
 import {readFileSync} from 'node:fs';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import type {MockInstance} from 'vitest';
@@ -28,6 +33,8 @@ import {
   resolveDialogPositionOffsets,
 } from './Dialog';
 import {DialogHeader} from './DialogHeader';
+import {getFocusableElements, useFocusTrap} from '../hooks/useFocusTrap';
+import {useDialogContext} from './DialogContext';
 import {defineTheme, generateThemeCSS} from '../theme';
 import {
   __resetInteractionModalityForTest,
@@ -398,6 +405,35 @@ describe('Dialog', () => {
     );
   });
 
+  it('focuses the title of a header that mounts with the opening commit only after the dialog is modal', () => {
+    const order: string[] = [];
+    const showModal = HTMLDialogElement.prototype.showModal;
+    HTMLDialogElement.prototype.showModal = vi.fn(function (
+      this: HTMLDialogElement,
+    ) {
+      order.push(`showModal open=${this.open}`);
+      showModal.call(this);
+    });
+    const focus = vi
+      .spyOn(HTMLElement.prototype, 'focus')
+      .mockImplementation(function (this: HTMLElement) {
+        if (this.tagName === 'H2') {
+          order.push(`title focus open=${this.closest('dialog')?.open}`);
+        }
+      });
+    function Harness({open}: {open: boolean}) {
+      return (
+        <Dialog isOpen={open} onOpenChange={() => {}}>
+          {open ? <DialogHeader title="Review" /> : null}
+        </Dialog>
+      );
+    }
+    const harness = render(<Harness open={false} />);
+    harness.rerender(<Harness open />);
+    focus.mockRestore();
+    expect(order).toEqual(['showModal open=false', 'title focus open=true']);
+  });
+
   it('restores focus to the opener when content mounts in the open commit', () => {
     function Harness({
       open,
@@ -442,6 +478,65 @@ describe('Dialog', () => {
     // (now unmounted) title.
     harness.rerender(<Harness open={false} onOpenChange={setOpen} />);
     expect(document.activeElement).toBe(opener);
+  });
+
+  it('keeps the opener when StrictMode re-runs the capture on a dialog first mounted open', () => {
+    // StrictMode simulates an unmount/remount after the first commit, which
+    // re-runs the layout effect AFTER DialogHeader's own passive effect has
+    // already focused the title. Capturing on every run would take the title
+    // as the opener, and closing would return focus to a node about to unmount.
+    const opener = document.createElement('button');
+    opener.type = 'button';
+    document.body.appendChild(opener);
+    opener.focus();
+
+    const {rerender} = render(
+      <StrictMode>
+        <Dialog isOpen={true} onOpenChange={() => {}}>
+          <DialogHeader title="Review" />
+        </Dialog>
+      </StrictMode>,
+    );
+    expect(document.activeElement).toBe(screen.getByText('Review'));
+
+    rerender(
+      <StrictMode>
+        <Dialog isOpen={false} onOpenChange={() => {}}>
+          {null}
+        </Dialog>
+      </StrictMode>,
+    );
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
+  });
+
+  it('captures a fresh opener on each open, not only the first', () => {
+    const first = document.createElement('button');
+    const second = document.createElement('button');
+    for (const b of [first, second]) {
+      b.type = 'button';
+      document.body.appendChild(b);
+    }
+    // Content mounts only while open, as it does in the other opener test.
+    const dialog = (isOpen: boolean) => (
+      <Dialog isOpen={isOpen} onOpenChange={() => {}}>
+        {isOpen ? <DialogHeader title="Review" /> : null}
+      </Dialog>
+    );
+
+    first.focus();
+    const {rerender} = render(dialog(false));
+    rerender(dialog(true));
+    rerender(dialog(false));
+    expect(document.activeElement).toBe(first);
+
+    second.focus();
+    rerender(dialog(true));
+    rerender(dialog(false));
+    expect(document.activeElement).toBe(second);
+
+    first.remove();
+    second.remove();
   });
 
   it('renders when isOpen is true', () => {
@@ -493,6 +588,91 @@ describe('Dialog', () => {
     );
 
     expect(screen.getByRole('button', {name: 'Continue'})).toHaveFocus();
+  });
+
+  it('skips a hidden or inert initial-focus request for the next eligible one', () => {
+    render(
+      <Dialog isOpen={true} onOpenChange={() => {}}>
+        <div hidden>
+          <button type="button" data-autofocus>
+            Hidden
+          </button>
+        </div>
+        <div inert>
+          <button type="button" data-autofocus>
+            Inert
+          </button>
+        </div>
+        <button type="button" data-autofocus>
+          Continue
+        </button>
+      </Dialog>,
+    );
+
+    expect(screen.getByRole('button', {name: 'Continue'})).toHaveFocus();
+  });
+
+  it('honors its own initial-focus request inside an inert region of the page', () => {
+    render(
+      <div inert>
+        <Dialog isOpen={true} onOpenChange={() => {}}>
+          <button type="button" data-autofocus>
+            Continue
+          </button>
+        </Dialog>
+      </div>,
+    );
+
+    expect(
+      screen.getByRole('button', {name: 'Continue', hidden: true}),
+    ).toHaveFocus();
+  });
+
+  it('falls through an initial-focus request that cannot take focus', () => {
+    render(
+      <Dialog isOpen={true} onOpenChange={() => {}}>
+        <button type="button" disabled data-autofocus>
+          Unavailable
+        </button>
+        <button type="button" data-autofocus>
+          Continue
+        </button>
+      </Dialog>,
+    );
+
+    expect(screen.getByRole('button', {name: 'Continue'})).toHaveFocus();
+  });
+
+  it("honors an explicit request before a header's title request", () => {
+    render(
+      <Dialog isOpen={true} onOpenChange={() => {}}>
+        <h2 tabIndex={-1} data-autofocus="dialog-title">
+          Hero title
+        </h2>
+        <button type="button" data-autofocus>
+          Continue
+        </button>
+      </Dialog>,
+    );
+
+    expect(screen.getByRole('button', {name: 'Continue'})).toHaveFocus();
+  });
+
+  it("focuses a header's title request when no explicit request is eligible", () => {
+    render(
+      <Dialog isOpen={true} onOpenChange={() => {}}>
+        <h2 tabIndex={-1} data-autofocus="dialog-title">
+          Hero title
+        </h2>
+        <div hidden>
+          <button type="button" data-autofocus>
+            Hidden
+          </button>
+        </div>
+      </Dialog>,
+    );
+
+    expect(screen.getByRole('heading', {name: 'Hero title'})).toHaveFocus();
   });
 
   describe('purpose: info (default)', () => {
@@ -899,6 +1079,25 @@ describe('Dialog', () => {
         );
       }
 
+      it("honors an explicit request before a header's title request", () => {
+        render(
+          createPortal(
+            <Dialog isOpen={true} onOpenChange={() => {}} aria-label="Review">
+              <h2 tabIndex={-1} data-autofocus="dialog-title">
+                Hero title
+              </h2>
+              <button type="button" data-autofocus>
+                Continue
+              </button>
+            </Dialog>,
+            secondDocument.body,
+          ),
+        );
+
+        const continueButton = secondDocument.querySelector('button')!;
+        expect(secondDocument.activeElement).toBe(continueButton);
+      });
+
       function SecondDocumentFieldDialog({isOpen}: {isOpen: boolean}) {
         return createPortal(
           <>
@@ -986,7 +1185,7 @@ describe('Dialog', () => {
           focus.mock.calls.filter(
             (_call, index) => focus.mock.contexts[index] === opener,
           ),
-        ).toEqual([[]]);
+        ).toEqual([[{preventScroll: true}]]);
         focus.mockRestore();
       });
 
@@ -1015,7 +1214,7 @@ describe('Dialog', () => {
           focus.mock.calls.filter(
             (_call, index) => focus.mock.contexts[index] === field,
           ),
-        ).toEqual([[]]);
+        ).toEqual([[{preventScroll: true}]]);
         expect(blur.mock.contexts).not.toContain(field);
         focus.mockRestore();
         blur.mockRestore();
@@ -1108,7 +1307,11 @@ describe('Dialog', () => {
       fireEvent.pointerUp(cancel);
       fireEvent.click(cancel);
       expect(invoker).toHaveFocus();
-      expect(focusCallsOn(focus, invoker)).toEqual([[{focusVisible: false}]]);
+      // The return reveals nothing: the opener was on screen when the dialog
+      // opened and the page has not moved since.
+      expect(focusCallsOn(focus, invoker)).toEqual([
+        [{preventScroll: true, focusVisible: false}],
+      ]);
     });
 
     it('keeps plain focus on both moves after keyboard input', () => {
@@ -1125,7 +1328,7 @@ describe('Dialog', () => {
       fireEvent.keyDown(cancel, {key: 'Enter'});
       fireEvent.click(cancel);
       expect(invoker).toHaveFocus();
-      expect(focusCallsOn(focus, invoker)).toEqual([[]]);
+      expect(focusCallsOn(focus, invoker)).toEqual([[{preventScroll: true}]]);
     });
 
     it('clears a ring the browser already drew before refocusing after pointer input', () => {
@@ -1162,7 +1365,9 @@ describe('Dialog', () => {
       fireEvent.click(cancel);
 
       expect(blur).toHaveBeenCalledTimes(1);
-      expect(focus.mock.calls.at(-1)).toEqual([{focusVisible: false}]);
+      expect(focus.mock.calls.at(-1)).toEqual([
+        {preventScroll: true, focusVisible: false},
+      ]);
       expect(blur.mock.invocationCallOrder[0]).toBeLessThan(
         focus.mock.invocationCallOrder.at(-1) ?? 0,
       );
@@ -1716,6 +1921,38 @@ describe('Dialog', () => {
       expect(dialog).toHaveAccessibleName('Rich dialog title');
     });
 
+    it('names itself by a header title that renders after the dialog mounts', () => {
+      // A composed header whose title arrives in a later commit asks the
+      // dialog to check its default name again.
+      function LateTitleHeader({isReady}: {isReady: boolean}) {
+        const context = useDialogContext();
+        const syncDefaultName = context?.syncDefaultName;
+        useLayoutEffect(() => {
+          syncDefaultName?.();
+        }, [isReady, syncDefaultName]);
+        return isReady ? <h2 id={context?.titleId}>Late title</h2> : null;
+      }
+      const {rerender} = render(
+        <Dialog isOpen={true} onOpenChange={() => {}}>
+          <LateTitleHeader isReady={false} />
+        </Dialog>,
+      );
+      const dialog = screen.getByRole('dialog');
+      expect(dialog).not.toHaveAttribute('aria-labelledby');
+      rerender(
+        <Dialog isOpen={true} onOpenChange={() => {}}>
+          <LateTitleHeader isReady={true} />
+        </Dialog>,
+      );
+      expect(dialog).toHaveAccessibleName('Late title');
+      rerender(
+        <Dialog isOpen={true} onOpenChange={() => {}}>
+          <LateTitleHeader isReady={false} />
+        </Dialog>,
+      );
+      expect(dialog).not.toHaveAttribute('aria-labelledby');
+    });
+
     it('prefers a consumer-provided aria-label over the header title', () => {
       render(
         <Dialog isOpen={true} onOpenChange={() => {}} aria-label="Custom name">
@@ -1879,5 +2116,206 @@ describe('Dialog', () => {
         '0px',
       );
     });
+  });
+});
+
+// Tab from the last tabbable control wraps to the first and Shift+Tab from the
+// first wraps to the last, so focus never leaves the modal for the browser's
+// own UI.
+function expectTabWrapsInside(modal: HTMLElement) {
+  const tabbables = getFocusableElements(modal);
+  expect(tabbables.length).toBeGreaterThan(0);
+  const first = tabbables[0];
+  const last = tabbables[tabbables.length - 1];
+
+  last.focus();
+  expect(last).toHaveFocus();
+  expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+  expect(first).toHaveFocus();
+
+  expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(last).toHaveFocus();
+}
+
+function PanelRegion() {
+  const {containerRef} = useFocusTrap<HTMLDivElement>({isActive: true});
+  return (
+    <div ref={containerRef}>
+      <button type="button">Panel first</button>
+      <button type="button">Panel last</button>
+    </div>
+  );
+}
+
+describe('Dialog focus region (DEC-2)', () => {
+  it('lets a region opened last inside the Dialog answer its own Tab', () => {
+    // The panel's last control is also the Dialog's last Tab stop. The
+    // Dialog's listener runs first because it was activated first, so only
+    // the innermost-region rule keeps Tab inside the panel.
+    const {rerender} = render(
+      <Dialog isOpen onOpenChange={() => {}} aria-label="Settings">
+        <button type="button">Dialog first</button>
+      </Dialog>,
+    );
+    rerender(
+      <Dialog isOpen onOpenChange={() => {}} aria-label="Settings">
+        <button type="button">Dialog first</button>
+        <PanelRegion />
+      </Dialog>,
+    );
+    const panelLast = screen.getByRole('button', {name: 'Panel last'});
+    panelLast.focus();
+
+    expect(fireEvent.keyDown(panelLast, {key: 'Tab'})).toBe(false);
+    expect(screen.getByRole('button', {name: 'Panel first'})).toHaveFocus();
+  });
+
+  it('leaves a Tab that the last control handles itself where it is', () => {
+    render(
+      <Dialog isOpen onOpenChange={() => {}} aria-label="Settings">
+        <button type="button">First</button>
+        <textarea
+          aria-label="Notes"
+          onKeyDown={event => {
+            if (event.key === 'Tab') {
+              // An editor that indents on Tab.
+              event.preventDefault();
+            }
+          }}
+        />
+      </Dialog>,
+    );
+    const notes = screen.getByRole('textbox', {name: 'Notes'});
+    notes.focus();
+
+    fireEvent.keyDown(notes, {key: 'Tab'});
+    expect(notes).toHaveFocus();
+  });
+
+  it('wraps Tab and Shift+Tab inside the open modal', () => {
+    render(
+      <Dialog isOpen onOpenChange={() => {}} aria-label="Settings">
+        <button type="button">First</button>
+        <button type="button">Last</button>
+      </Dialog>,
+    );
+    expectTabWrapsInside(screen.getByRole('dialog'));
+  });
+
+  it('wraps Shift+Tab from the focused title to the last control', () => {
+    render(
+      <Dialog isOpen onOpenChange={() => {}}>
+        <DialogHeader title="Settings" />
+        <button type="button">First</button>
+        <button type="button">Last</button>
+      </Dialog>,
+    );
+    const dialog = screen.getByRole('dialog');
+    const title = screen.getByRole('heading', {name: 'Settings'});
+    // The title takes programmatic focus (tabIndex -1) and is not a Tab stop.
+    title.focus();
+    expect(title).toHaveFocus();
+    const tabbables = getFocusableElements(dialog);
+    expect(tabbables).not.toContain(title);
+
+    expect(fireEvent.keyDown(title, {key: 'Tab', shiftKey: true})).toBe(false);
+    expect(tabbables[tabbables.length - 1]).toHaveFocus();
+  });
+
+  it('lets the inner modal answer Tab when a Dialog opens from a Dialog', () => {
+    function Nested({isInnerOpen}: {isInnerOpen: boolean}) {
+      return (
+        <Dialog isOpen onOpenChange={() => {}} aria-label="Outer">
+          <button type="button">Outer first</button>
+          <Dialog
+            isOpen={isInnerOpen}
+            onOpenChange={() => {}}
+            aria-label="Inner">
+            <button type="button">Inner first</button>
+            <button type="button">Inner last</button>
+          </Dialog>
+        </Dialog>
+      );
+    }
+    // The outer modal's region is active before the inner one opens, as when
+    // a person opens a Dialog from a Dialog.
+    const {rerender} = render(<Nested isInnerOpen={false} />);
+    rerender(<Nested isInnerOpen />);
+    expectTabWrapsInside(screen.getByRole('dialog', {name: 'Inner'}));
+  });
+
+  it('leaves Tab alone when the Dialog renders inline', () => {
+    render(
+      <>
+        <Dialog isOpen isInline onOpenChange={() => {}} aria-label="Preview">
+          <button type="button">Only</button>
+        </Dialog>
+        <button type="button">After</button>
+      </>,
+    );
+    const only = screen.getByRole('button', {name: 'Only'});
+    only.focus();
+    expect(fireEvent.keyDown(only, {key: 'Tab'})).toBe(true);
+  });
+});
+
+// A same-name native radio group is one Tab stop: its checked radio, or its
+// first when none is checked. Medium is checked and is neither first nor last.
+function SizeRadios({name}: {name: string}) {
+  return (
+    <fieldset>
+      <legend>Size</legend>
+      <input type="radio" name={name} value="s" aria-label="Small" />
+      <input
+        type="radio"
+        name={name}
+        value="m"
+        aria-label="Medium"
+        defaultChecked
+      />
+      <input type="radio" name={name} value="l" aria-label="Large" />
+    </fieldset>
+  );
+}
+
+function expectRadioGroupEndsTheCycle() {
+  const medium = screen.getByRole('radio', {name: 'Medium', hidden: true});
+  const first = screen.getByRole('button', {name: 'First', hidden: true});
+  medium.focus();
+  expect(fireEvent.keyDown(medium, {key: 'Tab'})).toBe(false);
+  expect(first).toHaveFocus();
+  expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(medium).toHaveFocus();
+}
+
+function expectRadioGroupStartsTheCycle() {
+  const medium = screen.getByRole('radio', {name: 'Medium', hidden: true});
+  const last = screen.getByRole('button', {name: 'Last', hidden: true});
+  medium.focus();
+  expect(fireEvent.keyDown(medium, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(last).toHaveFocus();
+  expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+  expect(medium).toHaveFocus();
+}
+
+describe('Dialog focus region: a radio group is one Tab stop', () => {
+  it('wraps Tab from the checked radio of a group that ends the dialog', () => {
+    render(
+      <Dialog isOpen onOpenChange={() => {}} aria-label="Visit">
+        <button type="button">First</button>
+        <SizeRadios name="size" />
+      </Dialog>,
+    );
+    expectRadioGroupEndsTheCycle();
+  });
+
+  it('wraps Shift+Tab from the checked radio of a group that starts the dialog', () => {
+    render(
+      <Dialog isOpen onOpenChange={() => {}} aria-label="Visit">
+        <SizeRadios name="size" />
+        <button type="button">Last</button>
+      </Dialog>,
+    );
+    expectRadioGroupStartsTheCycle();
   });
 });

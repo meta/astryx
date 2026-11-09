@@ -51,6 +51,7 @@
 
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
@@ -320,16 +321,20 @@ export function useCommentThreadDismissal({
   };
 
   // The document listeners run outside render and reach the latest draft
-  // through this ref, as the composer's own listeners do.
+  // through this ref, as the composer's own listeners do. The ref is written
+  // at commit: a render React discards, as a suspended transition does, must
+  // not leave its draft for the listeners.
   const latestRef = useRef<{
     request: () => RequestOutcome;
     wouldGuard: () => boolean;
   } | null>(null);
-  latestRef.current = {
-    request,
-    wouldGuard: () =>
-      draft != null && guardedSignatureRef.current !== draft.signature,
-  };
+  useLayoutEffect(() => {
+    latestRef.current = {
+      request,
+      wouldGuard: () =>
+        draft != null && guardedSignatureRef.current !== draft.signature,
+    };
+  });
 
   const {shouldDismissOnCloseRequest} = useLayerDismissal({
     isActive: isEnabled,

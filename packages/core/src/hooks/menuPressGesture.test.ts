@@ -256,7 +256,7 @@ describe('menuPressStep — the trigger', () => {
 });
 
 describe('menuPressStep — a finger that opened the menu hands off after travelling (UIMenu)', () => {
-  // UIKit on iOS 26.2: the menu opens under a held finger; the finger picks
+  // UIKit on iOS 26.2: the menu opens under a held finger. The finger picks
   // only once it has moved the handoff distance from the first sample the
   // menu saw. Positions are viewport px.
   const held = (pointerType: 'touch' | 'pen' = 'touch') =>
@@ -319,9 +319,10 @@ describe('menuPressStep — a finger that opened the menu hands off after travel
   });
 
   it('counts from the first sample, not from where the finger was when the menu opened (b4 capture: 7.3 pt, then 11 pt)', () => {
-    // The finger rested at y 182 when the menu opened; samples then came at
-    // 189.33, 196.67 (14.7 from the open point, 7.3 from the first sample)
-    // and 200.33 (11 from the first sample), where UIKit began.
+    // The finger rested at y 182 when the menu opened. Samples then came at
+    // 189.33, 196.67 and 200.33, where UIKit began. The second sample is 14.7
+    // from the open point and 7.3 from the first sample. The third is 11 from
+    // the first sample.
     const samples = [189.33, 196.67, 200.33];
     const phases = samples.map(
       (_, i) =>

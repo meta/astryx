@@ -19,9 +19,11 @@ import * as path from 'node:path';
 import {formatCliCommand, getCliInvocation, quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 import {hasRecordedProject} from '../../foundation/env/cli-command.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
+import {findConfigPath} from '../../foundation/config/config-path.mjs';
 import {API_VERSION, setJsonMode} from '../../foundation/response/json.mjs';
 import {answeredBy, runChoice} from '../../foundation/release/run-context.mjs';
-import {cliInstallAdvice, installFolder} from '../../foundation/release/notices.mjs';
+import {cliInstallAdvice, installFolder, projectRelease, SETUP_REMINDER_KEY, takeNotice} from '../../foundation/release/notices.mjs';
+import {isCi} from '../../foundation/release/update-notice-env.mjs';
 import {buildManifest} from './lib/manifest.mjs';
 import {cliError} from './lib/cli-error.mjs';
 import {section, text, records} from './formatters/index.mjs';
@@ -29,14 +31,18 @@ import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
 import {installJsonShim} from './lib/json-shim.mjs';
 import {markReportsResult} from './lib/define-command.mjs';
+// The light modules, not agent-docs.mjs: that one loads discovery and the
+// project config, which every run would pay for at startup.
 import {
   agentDocsTargetDir,
   assertAgentDocsTarget,
+} from '../../foundation/agent-docs/agent-docs-target.mjs';
+import {CLI_ROOT} from '../../foundation/fs/paths.mjs';
+import {
   isAstryxInitialized,
   isAstryxPromptInReach,
-} from '../../foundation/agent-docs/agent-docs.mjs';
-import {CLI_ROOT} from '../../foundation/fs/paths.mjs';
-import {setupNudge} from '../../foundation/agent-docs/agent-doc-state.mjs';
+  setupNudge,
+} from '../../foundation/agent-docs/agent-doc-state.mjs';
 import * as debug from '../../foundation/debug/index.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -186,9 +192,6 @@ function fullCommandName(actionCommand, root) {
  */
 export async function loadProjectDebugHandler() {
   try {
-    const {findConfigPath, Project} = await import(
-      '../../foundation/config/project.mjs'
-    );
     const configPath = findConfigPath(process.cwd());
     if (!configPath) return;
     const text = fs.readFileSync(configPath, 'utf-8');
@@ -196,6 +199,9 @@ export async function loadProjectDebugHandler() {
       debug.noteConfigGateSkipped();
       return;
     }
+    // Only now: a run in a folder with no such config never loads the project
+    // module and its discovery.
+    const {Project} = await import('../../foundation/config/project.mjs');
     await Project.load(process.cwd());
   } catch {
     // A broken config is the command's problem to report, not ours.
@@ -678,8 +684,11 @@ export async function createProgram({argv} = {}) {
    * repository root — see isAstryxPromptInReach), remind the user/agent that
    * setup is missing.
    *
-   * Uses `preAction` (not postAction) so it fires for EVERY valid command — even
-   * ones whose action errors or calls process.exit (postAction is skipped then).
+   * `preAction` decides the line; `postAction` prints it after a command that
+   * succeeds, at most once a day per project, recorded in the per-user state
+   * as the daily hint is, and never under CI. An agent that leaves `init` to
+   * its person then sees it once, not before every command. Doctor reports
+   * the missing setup in its own check every time.
    *
    * Suppressed in --json: that is machine output with a strict clean stdout+stderr
    * contract (json-shim.test: "error envelopes have empty stderr"), and --json
@@ -690,8 +699,29 @@ export async function createProgram({argv} = {}) {
    * or one that neither installs nor declares Astryx), and inside the CLI's own
    * source checkout when it runs from there.
    */
+  /** @type {{root: string, line: string} | null} */
+  let setupReminder = null;
+  /**
+   * Keep the reminder for `root` until the command ends.
+   * @param {string} root
+   * @param {string} line
+   */
+  const remindSetup = (root, line) => {
+    setupReminder = {root, line};
+  };
+  program.hook('postAction', () => {
+    try {
+      const reminder = setupReminder;
+      setupReminder = null;
+      if (reminder == null || process.exitCode || isCi(process.env)) return;
+      if (takeNotice(`${SETUP_REMINDER_KEY}${reminder.root}`)) console.error(reminder.line);
+    } catch {
+      // Never let the nudge break a command.
+    }
+  });
   program.hook('preAction', (thisCommand, actionCommand) => {
     try {
+      setupReminder = null;
       if (program.opts().json) return; // machine mode — keep --json output clean
       if (SETUP_NUDGE_EXEMPT.has(actionCommand.name())) return;
       const cwd = process.cwd();
@@ -733,9 +763,12 @@ export async function createProgram({argv} = {}) {
       // before it, so the command is the picker's for that folder, never the
       // bare `astryx` name a package runner would fetch from the registry
       // (spec AST-081 FR5).
+      // The command names the project's release, as run from its folder,
+      // never the Core this folder installs for itself.
       if (target.moved) {
-        console.error(
-          setupNudge(getCliInvocation(target.dir), {before: `cd ${quoteCommandArgument(target.dir)}`}).trimEnd(),
+        remindSetup(
+          target.dir,
+          setupNudge(getCliInvocation(target.dir, {release: projectRelease(target.dir)}), {before: `cd ${quoteCommandArgument(target.dir)}`}).trimEnd(),
         );
         return;
       }
@@ -745,13 +778,14 @@ export async function createProgram({argv} = {}) {
         // version, then run that CLI's init.
         const add = cliInstallAdvice({cwd, core: choice.coreVersion});
         if (add?.command) {
-          console.error(
+          remindSetup(
+            add.root,
             setupNudge(getCliInvocation(add.root, {installed: true}), {before: add.command}).trimEnd(),
           );
           return;
         }
       }
-      console.error(setupNudge(getCliInvocation(cwd)).trimEnd());
+      remindSetup(agentDocsTargetDir(cwd), setupNudge(getCliInvocation(cwd)).trimEnd());
     } catch {
       // Never let the nudge break a command.
     }

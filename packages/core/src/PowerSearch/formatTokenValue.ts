@@ -3,8 +3,12 @@
 /**
  * @fileoverview The text a PowerSearch filter token shows for a value.
  *
- * @input `OperatorValue`, `FilterValue`, a width budget, and the locale.
- * @output `formatTokenValueText` — one string, or null for an empty value.
+ * @input `OperatorValue`, `FilterValue`, a width budget, the locale, and the
+ * calendar.
+ * @output `formatTokenValueText` — one string, or null for an empty value;
+ * `formatTokenLabel` and `formatTokenText` — the token's "field: operator"
+ * label and its full text, each one catalog message; `tokenTextKeepsParts` —
+ * whether the full text is the label, a space, then the value.
  * @position Shared by the token itself (`PowerSearch.tsx`) and the sheet
  * presentation's Filters rows and removal announcement
  * (`PowerSearchBottomSheet.tsx`), so every reading of a value on the field
@@ -13,6 +17,7 @@
 
 import type {OperatorValue, FilterValue, EnumItem} from './types';
 import type {Locale, TranslatorFn} from '../i18n';
+import type {CalendarSystem} from '../utils/calendarSystem';
 import {truncateCharacters} from '../utils/characters';
 import {formatDateAbsolute, formatSharedNumber} from './formatFilterValue';
 import {registerEnglishFallback} from '../i18n/englishFallback';
@@ -21,6 +26,48 @@ import english from '../i18n/generated-english/PowerSearch/formatTokenValue.gene
 registerEnglishFallback(english);
 
 type ListFormatFn = (items: ReadonlyArray<string>) => string;
+
+/**
+ * A filter token's label: its field and operator, joined by one catalog
+ * message so a locale can reorder them. A filter with no operator text shows
+ * its field alone.
+ */
+export function formatTokenLabel(
+  t: TranslatorFn,
+  fieldLabel: string,
+  operatorLabel: string,
+): string {
+  if (operatorLabel === '') {
+    return fieldLabel;
+  }
+  return t('@astryx.powersearch.token.fieldOperator', {
+    field: fieldLabel,
+    operator: operatorLabel,
+  });
+}
+
+/** A filter token's full text: its label and its value, in one message. */
+export function formatTokenText(
+  t: TranslatorFn,
+  label: string,
+  value: string,
+): string {
+  return t('@astryx.powersearch.token.labelValue', {label, value});
+}
+
+// Characters no message text uses, to find where the catalog puts each part.
+const LABEL_MARK = '\uE000';
+const VALUE_MARK = '\uE001';
+
+/**
+ * Whether the locale writes a token's full text as its label, a space, then
+ * its value. Only then can the pill show the label and the styled value as
+ * two parts and still read as the full text that names it.
+ */
+export function tokenTextKeepsParts(t: TranslatorFn): boolean {
+  const pattern = formatTokenText(t, LABEL_MARK, VALUE_MARK);
+  return new RegExp(`^${LABEL_MARK}\\s+${VALUE_MARK}$`).test(pattern);
+}
 
 function truncateString(value: string, limit: number): string {
   // Same semantics as before — strings within limit + 3 pass through, longer
@@ -103,6 +150,8 @@ function formatListText(
  * the sheet presentation's Filters rows and its removal announcement — can
  * use the same words and the same zone handling. `maxLength` is the token's
  * width budget; pass `Number.MAX_SAFE_INTEGER` for the untruncated text.
+ * A `date_absolute` value is written in `calendar`, the calendar that the
+ * provider resolves.
  * With `t`, the list, date-range and nested summaries resolve through the
  * catalog (`@astryx.powersearch.valueEditor.*`); without it they are the
  * token's own literals. With `formatList` (the provider's list formatter),
@@ -114,6 +163,7 @@ export function formatTokenValueText(
   filterValue: FilterValue,
   maxLength: number,
   locale: Locale,
+  calendar: CalendarSystem,
   t?: TranslatorFn,
   formatList?: ListFormatFn,
   timezoneID?: string,
@@ -182,6 +232,7 @@ export function formatTokenValueText(
           timezoneID,
           operatorValue.type !== 'date_absolute' ||
             operatorValue.isDateOnly !== false,
+          calendar,
         ),
         maxLength,
       );

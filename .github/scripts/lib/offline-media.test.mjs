@@ -67,7 +67,10 @@ describe('isRemoteNonImage', () => {
 });
 
 // The Node test legs install no browser; this proof runs wherever Chromium is
-// installed (a workstation, or any job that installs Playwright's Chromium).
+// installed. CI's "Offline-media browser cases" step sets
+// ASTRYX_OFFLINE_MEDIA_BROWSER=1, so a missing browser there fails the cases
+// instead of skipping them.
+const browserRequired = process.env.ASTRYX_OFFLINE_MEDIA_BROWSER === '1';
 const chromiumInstalled = (() => {
   try {
     return fs.existsSync(require('playwright').chromium.executablePath());
@@ -76,7 +79,7 @@ const chromiumInstalled = (() => {
   }
 })();
 
-describe.runIf(chromiumInstalled)('routeRemoteImages in a real browser', () => {
+describe.runIf(browserRequired || chromiumInstalled)('routeRemoteImages in a real browser', () => {
   let server;
   let stalled;
   let origin;

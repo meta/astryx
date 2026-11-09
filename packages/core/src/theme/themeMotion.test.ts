@@ -396,6 +396,52 @@ describe('a layer\u2019s own durations reach the busy loops under an enclosing t
     ).component;
     expect(css).toContain('--_astryx-pre-tempo-duration-medium: 300ms');
   });
+
+  it('a theme whose durations come from a duration scale alone writes a tempo of 1, so its springs keep its pace inside a theme with one', () => {
+    const scaled = defineTheme({
+      name: 'ScaledPace',
+      motion: {fast: 100, medium: 250, ratio: 0.75},
+    });
+    expect(scaled.tokens['--_astryx-motion-tempo']).toBe('1');
+    // A child keeps its base's tempo beside a scale of its own.
+    const child = defineTheme({
+      name: 'ScaledPaceChild',
+      extends: defineTheme({name: 'PacedBase', motion: {tempo: 1.5}}),
+      motion: {fast: 100, medium: 250, ratio: 0.75},
+    });
+    expect(child.tokens['--_astryx-motion-tempo']).toBe('1.5');
+    // A knob that writes no duration, and one explicit duration, leave the
+    // enclosing tempo in place.
+    for (const theme of [
+      defineTheme({name: 'CrispPace', motion: {character: 'crisp'}}),
+      defineTheme({name: 'ExplicitPace', tokens: {'--duration-slow': '800ms'}}),
+    ]) {
+      expect(theme.tokens['--_astryx-motion-tempo']).toBeUndefined();
+    }
+  });
+
+  it('an adaptation rule whose durations come from a duration scale writes the tempo they play at', () => {
+    const ruleCss = (name: string, tempo?: number) =>
+      generateAdaptationCSS(
+        defineTheme({
+          name,
+          ...(tempo == null ? {} : {motion: {tempo}}),
+          adaptations: {
+            rules: [
+              {
+                when: {pointer: 'coarse'},
+                value: {motion: {fast: 100, medium: 250, ratio: 0.75}},
+              },
+            ],
+          },
+        }),
+      ).component;
+    expect(ruleCss('AdaptiveScale')).toContain('--_astryx-motion-tempo: 1;');
+    // Over a theme with a tempo, the rule keeps the theme's tempo.
+    expect(ruleCss('AdaptiveScaleTempo', 1.5)).toContain(
+      '--_astryx-motion-tempo: 1.5;',
+    );
+  });
 });
 
 describe('a child of an installed built theme (spec:AST-108 FR5, INV15)', () => {
@@ -538,7 +584,7 @@ describe('busy loops read the duration before tempo (spec:AST-108 FR4)', () => {
   it('Spinner and Skeleton read the pre-tempo duration first', () => {
     const read = (file: string) =>
       fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
-    expect(read('Spinner/Spinner.tsx')).toContain(
+    expect(read('Spinner/spinnerRotor.ts')).toContain(
       "var(--_astryx-pre-tempo-duration-slow-min, ${durationVars['--duration-slow-min']})",
     );
     expect(read('Skeleton/Skeleton.tsx')).toContain(

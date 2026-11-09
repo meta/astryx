@@ -10,9 +10,10 @@
 import {describe, it, expect, vi, beforeEach} from 'vitest';
 import {render, screen, waitFor, fireEvent, act} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {useState} from 'react';
+import {Component, useState, type ReactNode} from 'react';
 import {CommandPalette} from './CommandPalette';
 import {CommandPaletteInput} from './CommandPaletteInput';
+import {getFocusableElements} from '../hooks/useFocusTrap';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {createStaticSource} from '@astryxdesign/core/Typeahead';
 import type {SearchSource, SearchableItem} from '@astryxdesign/core/Typeahead';
@@ -33,6 +34,21 @@ const emptySource = createStaticSource([]);
 function NestedDismissible({onDismiss}: {onDismiss: () => void}) {
   useLayerDismissal({isActive: true, onDismiss});
   return null;
+}
+
+class TestErrorBoundary extends Component<
+  {children: ReactNode},
+  {hasError: boolean}
+> {
+  state = {hasError: false};
+
+  static getDerivedStateFromError() {
+    return {hasError: true};
+  }
+
+  render(): ReactNode {
+    return this.state.hasError ? <p>Boundary fallback</p> : this.props.children;
+  }
 }
 
 // Mock showModal and close since jsdom doesn't implement them
@@ -739,6 +755,126 @@ describe('CommandPalette', () => {
     }
   });
 
+  describe('a rejected search source', () => {
+    const spinner = () => document.querySelector('.astryx-spinner');
+
+    const renderInsideBoundary = (source: SearchSource) =>
+      render(
+        <TestErrorBoundary>
+          <CommandPalette
+            isOpen={true}
+            onOpenChange={() => {}}
+            searchSource={source}
+            emptyBootstrapText="Type to search"
+            emptySearchText="No results"
+          />
+        </TestErrorBoundary>,
+      );
+
+    it('keeps the palette open with no results when bootstrap rejects', async () => {
+      let rejectBootstrap: (error: Error) => void = () => {};
+      renderInsideBoundary({
+        bootstrap: async () =>
+          new Promise<SearchableItem[]>((_, reject) => {
+            rejectBootstrap = reject;
+          }),
+        search: () => [],
+      });
+
+      await act(async () => {
+        rejectBootstrap(new Error('offline'));
+      });
+
+      expect(screen.queryByText('Boundary fallback')).not.toBeInTheDocument();
+      expect(screen.getByRole('combobox')).toBeInTheDocument();
+      expect(screen.getByText('Type to search')).toBeInTheDocument();
+      expect(spinner()).not.toBeInTheDocument();
+    });
+
+    it('clears the results and ends the busy state when a search rejects', async () => {
+      const rejecters: ((error: Error) => void)[] = [];
+      renderInsideBoundary({
+        bootstrap: () => [{id: 'home', label: 'Home'}],
+        search: async () =>
+          new Promise<SearchableItem[]>((_, reject) => {
+            rejecters.push(reject);
+          }),
+      });
+      await screen.findByText('Home');
+
+      const input = screen.getByRole('combobox');
+      fireEvent.change(input, {target: {value: 'h'}});
+      await waitFor(() => expect(rejecters).toHaveLength(1));
+      await act(async () => {
+        rejecters[0](new Error('offline'));
+      });
+
+      expect(screen.queryByText('Boundary fallback')).not.toBeInTheDocument();
+      expect(screen.getByRole('combobox')).toHaveValue('h');
+      expect(screen.queryByText('Home')).not.toBeInTheDocument();
+      expect(screen.getByText('No results')).toBeInTheDocument();
+      expect(spinner()).not.toBeInTheDocument();
+    });
+
+    it('clears the results and ends the busy state when a search throws synchronously', async () => {
+      renderInsideBoundary({
+        bootstrap: () => [{id: 'home', label: 'Home'}],
+        search: () => {
+          throw new Error('offline');
+        },
+      });
+      await screen.findByText('Home');
+
+      await act(async () => {
+        fireEvent.change(screen.getByRole('combobox'), {
+          target: {value: 'h'},
+        });
+      });
+
+      expect(screen.queryByText('Boundary fallback')).not.toBeInTheDocument();
+      expect(screen.getByRole('combobox')).toHaveValue('h');
+      expect(screen.queryByText('Home')).not.toBeInTheDocument();
+      expect(screen.getByText('No results')).toBeInTheDocument();
+      expect(spinner()).not.toBeInTheDocument();
+    });
+
+    it('ignores a rejection from a superseded query', async () => {
+      const pending = new Map<
+        string,
+        {
+          resolve: (items: SearchableItem[]) => void;
+          reject: (error: Error) => void;
+        }
+      >();
+      renderInsideBoundary({
+        bootstrap: () => [],
+        search: async query =>
+          new Promise<SearchableItem[]>((resolve, reject) => {
+            pending.set(query, {resolve, reject});
+          }),
+      });
+
+      const input = screen.getByRole('combobox');
+      fireEvent.change(input, {target: {value: 'a'}});
+      await waitFor(() => expect(pending.has('a')).toBe(true));
+      fireEvent.change(input, {target: {value: 'ab'}});
+      await waitFor(() => expect(pending.has('ab')).toBe(true));
+
+      await act(async () => {
+        pending.get('ab')?.resolve([{id: 'about', label: 'About'}]);
+      });
+      await act(async () => {
+        pending.get('a')?.reject(new Error('aborted'));
+      });
+
+      expect(screen.queryByText('Boundary fallback')).not.toBeInTheDocument();
+      expect(await screen.findByText('About')).toBeInTheDocument();
+      expect(screen.getByRole('combobox')).toHaveValue('ab');
+      expect(screen.queryByText('No results')).not.toBeInTheDocument();
+      expect(spinner()).not.toBeInTheDocument();
+    });
+  });
+
   describe('screen reader announcements', () => {
     const politeRegion = () =>
       document.querySelector('[data-astryx-live-region="polite"]');
@@ -915,5 +1051,36 @@ describe('CommandPalette', () => {
       // its results are never counted aloud.
       expect(['', 'Loading']).toContain(politeRegion()?.textContent ?? '');
     });
+  });
+});
+
+// Tab from the last tabbable control wraps to the first and Shift+Tab from the
+// first wraps to the last, so focus never leaves the modal for the browser's
+// own UI.
+function expectTabWrapsInside(modal: HTMLElement) {
+  const tabbables = getFocusableElements(modal);
+  expect(tabbables.length).toBeGreaterThan(0);
+  const first = tabbables[0];
+  const last = tabbables[tabbables.length - 1];
+
+  last.focus();
+  expect(last).toHaveFocus();
+  expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+  expect(first).toHaveFocus();
+
+  expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(last).toHaveFocus();
+}
+
+describe('CommandPalette focus region (Dialog DEC-2)', () => {
+  it('keeps Tab inside the open palette', () => {
+    render(
+      <CommandPalette
+        isOpen
+        onOpenChange={() => {}}
+        searchSource={simpleSource}
+      />,
+    );
+    expectTabWrapsInside(document.querySelector('dialog') as HTMLElement);
   });
 });

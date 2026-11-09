@@ -3,13 +3,13 @@
 /**
  * @file DropdownMenuTouchHandoff.interaction.browser.spec.ts
  * @input The built Default DropdownMenu story under the harness's phone
- *   profile, real touch input (Chromium CDP / WebKit's input command), and
- *   UIMenu's handoff distance from the UIKit constants table
+ *   profile, with real touch input (Chromium CDP / WebKit's input command).
+ *   UIMenu's handoff distance comes from the UIKit constants table.
  * @output Interaction proofs for the finger that opened DropdownMenu from its
- *   trigger (`spec:AST-094` FR29): once the menu is open under the held
- *   finger, a move shorter than the handoff onto a row and a lift act on
- *   nothing and leave the menu open, however long the finger rested; a
- *   finger that travels past it picks the row it lifts on, once
+ *   trigger (`spec:AST-094` FR29). Once the menu is open under the held
+ *   finger, a move shorter than the handoff onto a row, and a lift, act on
+ *   nothing. The menu stays open, however long the finger rested. A finger
+ *   that travels past the handoff picks the row it lifts on, once.
  * @position Evidence for the handoff in DropdownMenu (and MoreMenu, which
  *   renders it); the machine itself is unit-tested in menuPressGesture.test.ts
  *   and useMenuPress.test.tsx
@@ -77,8 +77,8 @@ interface Layout {
 
 /**
  * The story under a finger, with the open menu's rows measured once its
- * entrance has come to rest: a tap opens it (its lift's click), Escape
- * closes it again.
+ * entrance has come to rest. A tap opens the menu (its lift's click), and
+ * Escape closes it again.
  */
 async function openLayout(page: Page): Promise<Layout> {
   await openStory(page, storybook(), 'core-dropdownmenu--default');
@@ -111,9 +111,9 @@ test('a move shorter than the handoff onto a row, after the menu opened under th
     throw new Error('no Edit row');
   }
   // The finger rests on the trigger's edge nearest the menu until the menu
-  // is open and the press has long settled, then moves 1 px (the first
-  // sample the menu sees, where the distance counts from) and on, short of
-  // the handoff, onto the first row.
+  // is open and the press has long settled. Then it moves 1 px: the first
+  // sample the menu sees, where the distance counts from. It goes on, short
+  // of the handoff, onto the first row.
   const start = {x: layout.x, y: Math.floor(layout.triggerBottom) - 1};
   const origin = {x: layout.x, y: start.y + 1};
   const end = {x: layout.x, y: Math.ceil(edit.top) + 1};

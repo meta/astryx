@@ -15,6 +15,8 @@ verified_by:
     packages/core/src/InfoTip/InfoTip.test.tsx,
     packages/core/src/InfoTip/InfoTip.pin.test.tsx,
     packages/core/src/InfoTip/__tests__/InfoTipTouch.a11y.chromium.spec.ts,
+    packages/core/src/InfoTip/__tests__/InfoTipAudit.a11y.chromium.spec.ts,
+    packages/core/src/Layer/__tests__/TouchTrigger.a11y.chromium.spec.ts,
     packages/lab/src/InfoTip/InfoTip.test.tsx,
     packages/core/src/Tooltip/Tooltip.test.tsx,
     scripts/check-knowledge.mjs,
@@ -26,6 +28,7 @@ architecture:
   [
     architecture:public-component-api,
     architecture:icon-resolution-and-component-slots,
+    architecture:component-theming-surface,
   ]
 contributing: []
 system_specs: [spec:AST-017, spec:AST-094]
@@ -49,7 +52,7 @@ system_specs: [spec:AST-017, spec:AST-094]
 | Behavior                | A named native info-icon button that pins its help through `useTooltip`'s `show()` and `hide()`: hover and focus preview the help, a click, tap, Enter, or Space pins it open until Escape, a second press, a press outside, or focus leaving, and a mouse or pen press on a tip shown by hover holds it in place, without hiding and showing again. |
 | End-user impact         | People on a mouse, touch, keyboard, or screen reader can open, keep open, and close the help behind an "i", and hear it once when it pins.                                                                                                                                                                                                           |
 | Builder impact          | Use InfoTip for help next to a label, value, or metric instead of composing an icon inside Tooltip. Lab callers change the import.                                                                                                                                                                                                                   |
-| Compatibility/readiness | New in Core; the `@astryxdesign/lab` export is a deprecated re-export of it for one release (FR4).                                                                                                                                                                                                                                                   |
+| Compatibility/readiness | Released in Core 0.7.7; the `@astryxdesign/lab` export is a deprecated re-export of it for one release (FR4).                                                                                                                                                                                                                                        |
 | Review checks           | Reject a layer, document listener, timer, or dismissal rule of InfoTip's own, a wrapper element around the button, a trigger that is not a named native button, a pinning press that reaches a row, card, or label around it, a preview that blinks on a mouse or pen press, an untranslated default name, or a prop beyond those FR3 lists.         |
 | Governing rules         | `component:Tooltip` FR9, FR10, FR12, AR6; `architecture:public-component-api` INV21; `spec:AST-094` FR42; `spec:AST-017` (lifecycle).                                                                                                                                                                                                                |
 
@@ -65,8 +68,9 @@ Consumer usage lives in `InfoTip.doc.mjs`.
 
 ## Compatibility and migration
 
-- Released default preserved: not yet released in Core; the Lab component's
-  props keep their meaning
+- Released default preserved: yes. Core released InfoTip in 0.7.7, and 0.7.8
+  removed its wrapper element (DEC-1, amended); the Lab component's props keep
+  their meaning
 - Compatibility class: additive Core export; the Lab component moves to Core
   with the same props and pins through `useTooltip`'s `show()` and `hide()`
   instead of opening through `touchTrigger="tap"`
@@ -78,7 +82,10 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Current-state impact
 
-None.
+- At the standard spacing, the sm box is 20×20 px under a fine pointer (some
+  themes render it 22×22 px); where the caller keeps other targets 24 px away,
+  it meets WCAG 2.5.8 through the spacing exception, and `spec:AST-094` FR42
+  keeps desktop boxes unchanged.
 
 ## Ownership boundary
 
@@ -157,6 +164,30 @@ None.
 | Info icon        | The registry's `info` artwork at `size`.  | Icon registry            | Supporting     | FR1                |
 | Help surface     | Tooltip's surface with `content`.         | `component:Tooltip`      | Prominent      | FR2                |
 
+### Theming anatomy
+
+<!-- anatomy-theming:v1 -->
+
+```json
+{
+  "Trigger button": {
+    "none": {
+      "reason": "unsettled: InfoTip's own button paints but has no public theming target yet; adding an `info-tip` target is a future owner decision"
+    }
+  },
+  "Info icon": {"delegatesTo": {"owner": "component:Icon", "target": "icon"}},
+  "Help surface": {
+    "delegatesTo": {"owner": "component:Tooltip", "target": "tooltip"}
+  }
+}
+```
+
+The `none` disposition records current reachability while target exposure for
+the trigger button remains unsettled
+(`architecture:component-theming-surface` INV3). The info icon's artwork comes
+from the icon registry, and the help surface is Tooltip's
+(`architecture:component-theming-surface` INV5).
+
 ## Family and system relationships
 
 - `component:Tooltip` owns the preview, the `show()` hold, the announcement,
@@ -169,12 +200,13 @@ None.
 
 ## Verification map
 
-| Contract | Verification                                                                                                                                                     | Representative states                                                                                                                                                                                                       | Mutation or failure expectation                                                                                                                                                                                                                                                      | Audit section                 |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------- |
-| FR1, AR1 | `InfoTip.test.tsx` button, name, catalog-default and hit-area cases; `InfoTipTouch.a11y.chromium.spec.ts` coarse-pointer reach, neighbour and fine-pointer cases | Default and custom name; each size                                                                                                                                                                                          | A trigger that is not a named button, an untranslated default, or a coarse-pointer hit area that stays under 44 px where its neighbors leave room or reaches a neighbor's target fails.                                                                                              | `audit:InfoTip/accessibility` |
-| FR2, AR2 | `InfoTip.pin.test.tsx`; `InfoTip.test.tsx` press cases                                                                                                           | Hover and focus preview; click, tap, Enter, Space pin; second press, press outside, focus leaving, and Escape close; a mouse or pen press on a hover preview; a button inside a ClickableCard, an Item row, and a `<label>` | A press that does not pin or close, a preview that closes and reopens on a mouse or pen press, a missing or stale `aria-expanded` or `aria-controls`, a press that also activates the card, row, or labelled control, or a wrapper, layer, or document listener InfoTip owns, fails. | `audit:InfoTip/behavior`      |
-| FR3      | `InfoTip.test.tsx` props cases: the type checker rejects other props, and `ref`, `xstyle`, `className`, and `style` reach the button                             | `content`, `label`, `size`, `ref`, `xstyle`, `className`, `style`                                                                                                                                                           | A prop beyond those, or a `ref` that does not reach the button, fails.                                                                                                                                                                                                               | `audit:InfoTip/api`           |
-| FR4      | Lab `InfoTip.test.tsx` identity and deprecation cases                                                                                                            | Lab import                                                                                                                                                                                                                  | A Lab export that is not the Core component, or lacks the deprecation metadata, fails.                                                                                                                                                                                               | `audit:InfoTip/api`           |
+| Contract            | Verification                                                                                                                                                                                                                                                                                                                                            | Representative states                                                                                                                                                                                                       | Mutation or failure expectation                                                                                                                                                                                                                                                      | Audit section                 |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------- |
+| FR1, AR1            | `InfoTip.test.tsx` button, name, catalog-default, icon-size and hit-area cases; `InfoTipTouch.a11y.chromium.spec.ts` coarse-pointer reach, neighbour and fine-pointer cases; `InfoTipAudit.a11y.chromium.spec.ts` button, name, icon-size, round-box, focus-outline and spacing-exception checks under a fine pointer, in light and dark and two themes | Default and custom name; each size; a button next to a label                                                                                                                                                                | A trigger that is not a named button, an untranslated default, an icon off its size, a coarse-pointer hit area that stays under 44 px where its neighbors leave room or reaches a neighbor's target, or a fine-pointer box under 24 px with a neighboring target within 24 px fails. | `audit:InfoTip/accessibility` |
+| FR2, AR2            | `InfoTip.pin.test.tsx`; `InfoTip.test.tsx` press cases; `InfoTipAudit.a11y.chromium.spec.ts` hover, keyboard-focus, click-pin, key-pin and Escape cases; `TouchTrigger.a11y.chromium.spec.ts` InfoTip press-to-pin and pinned-under-a-mouse suites                                                                                                      | Hover and focus preview; click, tap, Enter, Space pin; second press, press outside, focus leaving, and Escape close; a mouse or pen press on a hover preview; a button inside a ClickableCard, an Item row, and a `<label>` | A press that does not pin or close, a preview that closes and reopens on a mouse or pen press, a missing or stale `aria-expanded` or `aria-controls`, a press that also activates the card, row, or labelled control, or a wrapper, layer, or document listener InfoTip owns, fails. | `audit:InfoTip/behavior`      |
+| FR3                 | `InfoTip.test.tsx` props cases: the type checker rejects other props, and `ref`, `xstyle`, `className`, and `style` reach the button                                                                                                                                                                                                                    | `content`, `label`, `size`, `ref`, `xstyle`, `className`, `style`                                                                                                                                                           | A prop beyond those, or a `ref` that does not reach the button, fails.                                                                                                                                                                                                               | `audit:InfoTip/api`           |
+| FR4                 | Lab `InfoTip.test.tsx` identity and deprecation cases                                                                                                                                                                                                                                                                                                   | Lab import                                                                                                                                                                                                                  | A Lab export that is not the Core component, or lacks the deprecation metadata, fails.                                                                                                                                                                                               | `audit:InfoTip/api`           |
+| Theming anatomy map | `scripts/check-knowledge.mjs`                                                                                                                                                                                                                                                                                                                           | The three anatomy parts and their dispositions                                                                                                                                                                              | A missing, extra, or stale mapping, or a delegation to a target its owner does not declare, fails repository validation.                                                                                                                                                             | `audit:InfoTip/theming`       |
 
 ## Decision log
 
