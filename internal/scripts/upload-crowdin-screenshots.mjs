@@ -703,15 +703,15 @@ const TARGETS = [
   {
     name: 'table-sort-headers',
     // The sort-direction strings (`Sort ascending`, `Sort descending`,
-    // `Clear sort`) are NOT the column header aria-labels — those use the
-    // compound `sortBy` / `sortedBy` templates. The three strings we care
-    // about live in the header context menu, which opens on right-click.
+    // `Clear sort`) are not the column header buttons' names, which are the
+    // column text. The three strings we care about live in the header
+    // context menu, which opens on right-click.
     // Right-clicking the currently-sorted column (Name) reveals all three
     // options in one popover.
     storyId: 'core-tablesortable--single-sort',
     viewport: {width: 1100, height: 500},
     interact: async page => {
-      const header = page.getByRole('button', {name: /^Sort by Name/}).first();
+      const header = page.getByRole('button', {name: 'Name', exact: true}).first();
       await header.waitFor({state: 'visible', timeout: 5000});
       await header.click({button: 'right'});
       // Wait for context menu.

@@ -12,7 +12,12 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {expect, test, type Locator, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   DEFAULT_STORYBOOK_DIR,
@@ -274,7 +279,20 @@ for (const item of cases) {
       await expect(flyout).toBeVisible();
       await page.mouse.down();
     } else if (item.interaction === 'disabled-hover') {
-      await row(menu, 'Archive').hover();
+      // The disabled trigger is inert: a click, Enter, Space and the open key
+      // leave it collapsed (the `rowStates` check) and pick nothing (the
+      // `counters` check).
+      const archive = row(menu, 'Archive');
+      const box = await archive.boundingBox();
+      if (box == null) {
+        throw new Error('the disabled row has no box');
+      }
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      await archive.focus();
+      await page.keyboard.press('Enter');
+      await page.keyboard.press(' ');
+      await page.keyboard.press(openKey);
+      await archive.hover();
       await page.waitForTimeout(600);
     } else if (item.interaction === 'drill-in') {
       await subject.click();
@@ -602,7 +620,8 @@ for (const item of cases) {
         item.interaction === 'select' ||
         item.interaction === 'drill-in' ||
         (findRow('Archive')?.disabled === 'true' &&
-          findRow('Archive')?.tabIndex === null &&
+          findRow('Archive')?.tabIndex === '-1' &&
+          findRow('Archive')?.expanded === 'false' &&
           findRow('Export')?.spinnerHidden === true &&
           findRow('Share')?.haspopup === 'menu'),
       indicatorMirror:

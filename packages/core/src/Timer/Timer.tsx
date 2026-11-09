@@ -9,7 +9,7 @@
  * @position Core content primitive for elapsed duration in active operations
  *
  * SYNC: When modified, update these files to stay in sync:
- * - /packages/core/src/Timer/Timer.spec.md
+ * - /docs/specs/components/Timer/Timer.spec.md
  * - /packages/core/src/Timer/Timer.doc.mjs
  * - /packages/core/src/Timer/Timer.test.tsx
  * - /packages/core/src/Timer/index.ts
@@ -186,6 +186,7 @@ export function Timer({
   const resolvedFormat = resolveFormat(format);
   const initialPresentation = getPresentation(0, resolvedFormat);
 
+  // Syncs the elapsed-time text with a timer.
   useEffect(() => {
     const resolvedStartTime =
       startTime !== undefined && Number.isFinite(startTime)

@@ -600,19 +600,9 @@ const rule = {
         '`rtlStyles.centerInline(blockOffset)` for fixed centering, or write the ' +
         'RTL transform as a plain negated length so the pair can be checked.',
     },
-    schema: [
-      {
-        type: 'object',
-        properties: {
-          allowLogicalCentering: {type: 'boolean'},
-        },
-        additionalProperties: false,
-      },
-    ],
+    schema: [],
   },
   create(context) {
-    const allowLogicalCentering =
-      context.options[0]?.allowLogicalCentering === true;
     return {
       Property(node) {
         if (!isInsideStylexCreate(node)) return;
@@ -683,10 +673,7 @@ const rule = {
         // RELATIONSHIP-BASED: a logical 50% anchor flips under RTL while a
         // physical horizontal translation does not. Inspect matching nested
         // media/state branches and accept an explicit opposite RTL transform.
-        if (
-          !allowLogicalCentering &&
-          (propName === 'insetInlineStart' || propName === 'insetInlineEnd')
-        ) {
+        if (propName === 'insetInlineStart' || propName === 'insetInlineEnd') {
           const centering = uncompensatedLogicalCentering(node);
           if (centering !== null) {
             context.report({

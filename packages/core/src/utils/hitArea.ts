@@ -8,26 +8,33 @@
  *   the element and the page around it)
  * @output The touch hit area: how far a target may grow toward 44 px on each
  *   side without taking a tap that is nearer a neighbour. `clampedHitInsets`
- *   and `resolveHitTarget` answer from rects; `watchHitArea` keeps a control's
- *   insets live where the primary pointer is coarse
+ *   and `resolveHitTarget` answer from rects. `watchHitArea` keeps a control's
+ *   insets live where the primary pointer is coarse. `groupGrowth` sizes a
+ *   group's box from its edge members, and shrinks a side the members do not
+ *   reach. `INTERACTIVE_SELECTOR` names what a touch can land on
  * @position Core-internal utility, not exported from `@astryxdesign/core/utils`.
  *   Groups that measure their actions at press start pass `resolveHitTarget`;
  *   a standalone control writes `watchHitArea`'s insets to an invisible
  *   coarse-only hit layer
  *
- * A finger needs a 44 × 44 px target, but a control may not grow on a phone,
- * and its hit area must never take a neighbour's taps. Each side grows toward
- * the minimum size and stops at half the gap to the nearest neighbour on that
- * side (0 when they touch), so two neighbours' areas meet in the middle and a
- * tap always goes to the nearer target. CSS cannot see where the neighbours
- * are, so a live control measures: only where the primary pointer is coarse,
- * only while on screen, and every control pending a measurement in one read
- * pass per frame (all reads, then all writes), up to a 4 ms budget, the rest
- * carried to the next frame. Until the first pass the
- * insets are 0, so first paint and server rendering never overlap anything.
  */
 
-import {observeContent} from './sharedMutationObserver';
+// A finger needs a 44 × 44 px target, but a control may not grow on a phone,
+// and its hit area must never take a neighbor's taps. Each side grows toward
+// the minimum and stops at half the gap to the nearest neighbor on that side,
+// so a tap always goes to the nearer target. CSS cannot see the neighbors, so a
+// live control measures: only under a coarse primary pointer (AST-094), only on
+// screen, and in one read pass per frame within a 4 ms budget. Until the first
+// pass the insets are 0, so first paint never overlaps anything.
+// The insets are lengths in the control's own box, so a pass measures in its
+// layout px. A layer that opens from a smaller scale then keeps the insets of
+// the size it settles at.
+
+import {
+  flushMutations,
+  observeContent,
+  observeMutations,
+} from './sharedMutationObserver';
 
 /** A rect in client pixels. */
 export interface HitRect {
@@ -96,12 +103,50 @@ function growth(rect: HitRect, minSize: number): HitInsets {
 }
 
 /**
+ * How far a group's box grows on each side before any neighbour stops it: as
+ * far as its members on that edge grow toward `minSize`. So an end member's
+ * target reaches past the group, as a lone control's would. A side that
+ * reaches past its edge member shrinks to that member's grown edge, a
+ * negative growth. So a box wider than its members covers only their targets.
+ */
+export function groupGrowth(
+  group: HitRect,
+  members: ReadonlyArray<HitRect>,
+  minSize: number = MIN_TOUCH_TARGET,
+): HitInsets {
+  if (members.length === 0) {
+    return NO_HIT_INSETS;
+  }
+  const insets = {
+    top: -Infinity,
+    right: -Infinity,
+    bottom: -Infinity,
+    left: -Infinity,
+  };
+  for (const member of members) {
+    const own = growth(member, minSize);
+    insets.top = Math.max(insets.top, own.top - (member.top - group.top));
+    insets.right = Math.max(
+      insets.right,
+      own.right - (group.right - member.right),
+    );
+    insets.bottom = Math.max(
+      insets.bottom,
+      own.bottom - (group.bottom - member.bottom),
+    );
+    insets.left = Math.max(insets.left, own.left - (member.left - group.left));
+  }
+  return insets;
+}
+
+/**
  * How far `target` may grow on each side: toward `minSize` on each axis,
  * centered, and on each side no further than half the gap to a neighbour.
  * A neighbour counts when either one, at full growth toward `minSize`, would
  * reach into the other's half of the gap, or their full areas would meet; it
  * stops the side facing it, or,
  * for a neighbour apart on both axes (diagonal), the side with the larger gap.
+ * `full` replaces the centered growth, as `groupGrowth` gives a group's box.
  * That decision rests on the two rects alone, so the neighbour decides the
  * same about this target and the two areas never overlap. A neighbour
  * overlapping the target (an ancestor, an overlay) is not beside it and stops
@@ -111,9 +156,14 @@ export function clampedHitInsets(
   target: HitRect,
   neighbours: ReadonlyArray<HitRect>,
   minSize: number = MIN_TOUCH_TARGET,
+  full: HitInsets = growth(target, minSize),
 ): HitInsets {
-  const full = growth(target, minSize);
-  if (full.top === 0 && full.left === 0) {
+  if (
+    full.top === 0 &&
+    full.right === 0 &&
+    full.bottom === 0 &&
+    full.left === 0
+  ) {
     return NO_HIT_INSETS;
   }
   const insets = {...full};
@@ -211,7 +261,7 @@ export function writeHitInsets(element: HTMLElement, insets: HitInsets): void {
 // --- Live controls -----------------------------------------------------------
 
 /** What a touch can land on: the neighbours a hit area must not take from. */
-const INTERACTIVE = [
+export const INTERACTIVE_SELECTOR = [
   'a[href]',
   'area[href]',
   'button',
@@ -259,6 +309,24 @@ const CONTENT_SETTLE_MS = 100;
 
 const PASSIVE_CAPTURE = {capture: true, passive: true} as const;
 
+/**
+ * The mutations that can change which elements `INTERACTIVE_SELECTOR`
+ * matches: elements added, removed or moved, and the attributes it reads.
+ */
+const CANDIDATE_MUTATIONS: MutationObserverInit = {
+  childList: true,
+  subtree: true,
+  attributes: true,
+  attributeFilter: [
+    'href',
+    'type',
+    'for',
+    'contenteditable',
+    'role',
+    'tabindex',
+  ],
+};
+
 function now(): number {
   return typeof performance === 'undefined' ? Date.now() : performance.now();
 }
@@ -266,6 +334,12 @@ function now(): number {
 interface Watch {
   readonly element: Element;
   readonly minSize: number;
+  readonly ownsDescendantTouches: boolean;
+  readonly growth?: (
+    target: HitRect,
+    toLayout: (rect: HitRect) => HitRect,
+  ) => HitInsets;
+  readonly checkAtPress: boolean;
   readonly onInsets: (insets: HitInsets) => void;
   isVisible: boolean;
   last: HitInsets;
@@ -286,10 +360,30 @@ const observedSizes = new WeakMap<Element, string>();
 const scopeTimers = new Map<Element, ReturnType<typeof setTimeout>>();
 let frame: number | null = null;
 let view: Window | null = null;
+/** The document the shared press listener is on, while it is on one. */
+let pressDocument: Document | null = null;
 let pointer: MediaQueryList | null = null;
 let visibility: IntersectionObserver | null = null;
 let resize: ResizeObserver | null = null;
 let isCoarse = false;
+/**
+ * The page's interactive elements, as the last pass found them. A pass keeps
+ * them until a mutation or a watch change can change them.
+ */
+let interactive: Element[] | null = null;
+let interactiveDocument: Document | null = null;
+let stopInteractiveWatch: (() => void) | null = null;
+
+function forgetInteractive(): void {
+  interactive = null;
+}
+
+function stopWatchingInteractive(): void {
+  stopInteractiveWatch?.();
+  stopInteractiveWatch = null;
+  interactiveDocument = null;
+  interactive = null;
+}
 
 function sameInsets(a: HitInsets, b: HitInsets): boolean {
   return (
@@ -332,6 +426,95 @@ function plainRect(element: Element): HitRect {
   return {left, top, right, bottom};
 }
 
+/** A box that the transforms around it leave at its layout size. */
+const UNSCALED = {x: 1, y: 1} as const;
+
+/** One axis of a box's scale on screen: its client size over its layout size. */
+function axisScale(onScreen: number, layout: number): number {
+  if (!(layout > 0) || !(onScreen > 0)) {
+    return 1;
+  }
+  const scale = onScreen / layout;
+  // Within rounding of 1 the box is at its layout size: no change to the rects.
+  return Math.abs(scale - 1) < 1e-3 ? 1 : scale;
+}
+
+/**
+ * How far the transforms around `element` scale its box on screen, per axis.
+ * A layer that opens from a smaller scale scales every rect inside it, while
+ * the layout box keeps the size the layer settles at. Only a scale is
+ * expected: a rotated or skewed box would read as a larger scale.
+ */
+function screenScale(
+  element: Element,
+  onScreen: HitRect,
+): {x: number; y: number} {
+  // The offset size is the layout size in whole pixels, unaffected by
+  // transforms, and costs no style resolution. A box with none, such as an SVG
+  // element or a jsdom box, reads as unscaled.
+  const box = element as Partial<HTMLElement>;
+  const offsetWidth = box.offsetWidth ?? 0;
+  const offsetHeight = box.offsetHeight ?? 0;
+  if (offsetWidth === 0 || offsetHeight === 0) {
+    return UNSCALED;
+  }
+  // Within a pixel of its layout size the box reads as unscaled, which bounds
+  // the inset error at about a pixel. Only a box that a transform shrinks or
+  // grows reads its exact size from the computed style.
+  if (
+    Math.abs(onScreen.right - onScreen.left - offsetWidth) <= 1 &&
+    Math.abs(onScreen.bottom - onScreen.top - offsetHeight) <= 1
+  ) {
+    return UNSCALED;
+  }
+  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
+  if (style == null || !style.width.endsWith('px')) {
+    return UNSCALED;
+  }
+  const px = (value: string) => Number.parseFloat(value) || 0;
+  const isContentBox = style.boxSizing !== 'border-box';
+  const width =
+    px(style.width) +
+    (isContentBox
+      ? px(style.paddingLeft) +
+        px(style.paddingRight) +
+        px(style.borderLeftWidth) +
+        px(style.borderRightWidth)
+      : 0);
+  const height =
+    px(style.height) +
+    (isContentBox
+      ? px(style.paddingTop) +
+        px(style.paddingBottom) +
+        px(style.borderTopWidth) +
+        px(style.borderBottomWidth)
+      : 0);
+  return {
+    x: axisScale(onScreen.right - onScreen.left, width),
+    y: axisScale(onScreen.bottom - onScreen.top, height),
+  };
+}
+
+/**
+ * `rect` in the layout px of the box at `origin`: its offset from `origin`,
+ * divided by that box's scale on screen.
+ */
+function inLayout(
+  rect: HitRect,
+  origin: HitRect,
+  scale: {x: number; y: number},
+): HitRect {
+  if (scale.x === 1 && scale.y === 1) {
+    return rect;
+  }
+  return {
+    left: origin.left + (rect.left - origin.left) / scale.x,
+    top: origin.top + (rect.top - origin.top) / scale.y,
+    right: origin.left + (rect.right - origin.left) / scale.x,
+    bottom: origin.top + (rect.bottom - origin.top) / scale.y,
+  };
+}
+
 interface Candidate {
   readonly element: Element;
   readonly rect: HitRect;
@@ -352,21 +535,48 @@ function watchedOwner(element: Element): Element | null {
 }
 
 /**
- * The page's interactive elements and their rects: one read. A watched
- * control counts by its own box, never by a part inside it (its invisible
- * input is grown by its hit area, which must not shrink a neighbour's).
+ * The page's interactive elements. A watched control counts by its own box,
+ * never by a part inside it (its invisible input is grown by its hit area,
+ * which must not shrink a neighbour's).
  */
-function readCandidates(doc: Document): Candidate[] {
+function interactiveElements(doc: Document): Element[] {
+  if (typeof MutationObserver === 'undefined') {
+    // Nothing reports a change, so nothing is kept.
+    interactive = null;
+  } else if (interactiveDocument !== doc) {
+    stopWatchingInteractive();
+    interactiveDocument = doc;
+    stopInteractiveWatch = observeMutations(
+      doc,
+      CANDIDATE_MUTATIONS,
+      forgetInteractive,
+    );
+  } else {
+    // A mutation earlier in this task is not delivered yet.
+    flushMutations(CANDIDATE_MUTATIONS);
+  }
+  if (interactive != null) {
+    return interactive;
+  }
   const seen = new Set<Element>();
-  const candidates: Candidate[] = [];
-  for (const found of doc.querySelectorAll(INTERACTIVE)) {
+  const elements: Element[] = [];
+  for (const found of doc.querySelectorAll(INTERACTIVE_SELECTOR)) {
     const element = watchedOwner(found) ?? found;
     if (!seen.has(element)) {
       seen.add(element);
-      candidates.push({element, rect: plainRect(element)});
+      elements.push(element);
     }
   }
-  return candidates;
+  interactive = elements;
+  return elements;
+}
+
+/** The page's interactive elements and their rects: one read. */
+function readCandidates(doc: Document): Candidate[] {
+  return interactiveElements(doc).map(element => ({
+    element,
+    rect: plainRect(element),
+  }));
 }
 
 /** A control's rect and clamped insets, from candidates already read. */
@@ -375,14 +585,15 @@ function measureOne(
   candidates: ReadonlyArray<Candidate>,
 ): {target: HitRect; insets: HitInsets; neighbours: HitRect[]} {
   const target = plainRect(watch.element);
+  const scale = screenScale(watch.element, target);
   // Two targets each growing up to half the minimum reach each other from a
   // minimum apart.
   const reach = Math.max(0, watch.minSize);
   const band = grown(target, {
-    top: reach,
-    right: reach,
-    bottom: reach,
-    left: reach,
+    top: reach * scale.y,
+    right: reach * scale.x,
+    bottom: reach * scale.y,
+    left: reach * scale.x,
   });
   const neighbours = candidates
     .filter(
@@ -395,7 +606,19 @@ function measureOne(
     .map(({rect}) => rect);
   return {
     target,
-    insets: clampedHitInsets(target, neighbours, watch.minSize),
+    // The insets are in the control's layout px. The returned rects stay in
+    // screen px for a touch's distance checks. A neighbour maps by the
+    // control's scale, as if it is in the same layer. A neighbour outside that
+    // layer then reads farther away. A touch compares screen distances, so it
+    // still counts that neighbour.
+    insets: clampedHitInsets(
+      inLayout(target, target, scale),
+      neighbours.map(rect => inLayout(rect, target, scale)),
+      watch.minSize,
+      watch.growth?.(inLayout(target, target, scale), rect =>
+        inLayout(rect, target, scale),
+      ),
+    ),
     neighbours,
   };
 }
@@ -456,13 +679,13 @@ function scheduleAll(): void {
  * touch is outside the fresh area (a neighbour moved nearer since the last
  * measurement), the control's click is swallowed. The tap then does
  * nothing rather than toggle the wrong control; nothing is re-sent to the
- * neighbour, and the next tap uses the fresh insets.
+ * neighbour, and the next tap uses the fresh insets. A watch whose owner reads
+ * its own targets when a press begins skips this (`checkAtPress`).
  */
 function onPress(event: Event): void {
-  // One listener for every watched control, on the document: a control, a
-  // row or a handle carries none of its own (a list's listeners stay the
-  // list's, spec:AST-103 FR5). The innermost watched element the press
-  // lands in is the one it is for.
+  // One listener on the document for every watched control, so a control, row
+  // or handle has none of its own (AST-103 FR5). The innermost watched element
+  // that the press lands in is the one it is for.
   for (
     let node: Element | null =
       event.target instanceof Element ? event.target : null;
@@ -487,6 +710,10 @@ function checkPress(element: Element, event: PointerEvent): void {
   if (!isCoarse || press.pointerType !== 'touch') {
     return;
   }
+  const checked = [...entry.watches].filter(watch => watch.checkAtPress);
+  if (checked.length === 0) {
+    return;
+  }
   const candidates = readCandidates(element.ownerDocument);
   const x = press.clientX;
   const y = press.clientY;
@@ -494,13 +721,22 @@ function checkPress(element: Element, event: PointerEvent): void {
   // fresh area too (a corner beside an offset or diagonal neighbour), and
   // a few px past it, where a browser's own touch adjustment reaches.
   let isNearerNeighbour = false;
-  for (const watch of entry.watches) {
+  for (const watch of checked) {
     const {target, insets, neighbours} = measureOne(watch, candidates);
     deliver(watch, insets);
     const own = distanceTo(target, x, y);
     isNearerNeighbour ||= neighbours.some(rect => distanceTo(rect, x, y) < own);
   }
-  if (isNearerNeighbour) {
+  // A watch can own its descendants' touches. Then a press that the browser
+  // hit-tests onto a descendant lands on content the element paints, even
+  // past its own box. A swipe panel's entry beside a moved row is such
+  // content. That touch is the element's.
+  const isOnOwnContent =
+    [...entry.watches].some(watch => watch.ownsDescendantTouches) &&
+    press.target instanceof Node &&
+    press.target !== element &&
+    element.contains(press.target);
+  if (isNearerNeighbour && !isOnOwnContent) {
     const swallow = (click: Event) => {
       disarm();
       // A keyboard or assistive-technology activation (detail 0) is never
@@ -579,16 +815,17 @@ function observe(element: Element, entry: Watched): void {
 }
 
 /**
- * Everything that watches the page for hit areas: on only while the primary
- * pointer is coarse, so a mouse page runs no observer, timer or listener for
- * them (`spec:AST-094` FR24).
+ * Everything that watches the page for hit areas is on only while the
+ * primary pointer is coarse, so a mouse page runs no observer, timer or
+ * listener for them.
  */
 function startObserving(): void {
   if (view == null) {
     return;
   }
   view.addEventListener('resize', scheduleAll);
-  view.document.addEventListener('pointerdown', onPress, PASSIVE_CAPTURE);
+  pressDocument = view.document;
+  pressDocument.addEventListener('pointerdown', onPress, PASSIVE_CAPTURE);
   if (typeof IntersectionObserver === 'function') {
     visibility = new IntersectionObserver(entries => {
       for (const entry of entries) {
@@ -644,13 +881,17 @@ function stopObserving(): void {
     entry.release = null;
   }
   view?.removeEventListener('resize', scheduleAll);
-  view?.document.removeEventListener('pointerdown', onPress, PASSIVE_CAPTURE);
+  // The listener leaves the document it went on. A window can close first, as
+  // a removed iframe's, and then it has no document to read.
+  pressDocument?.removeEventListener('pointerdown', onPress, PASSIVE_CAPTURE);
+  pressDocument = null;
   visibility?.disconnect();
   resize?.disconnect();
   visibility = null;
   resize = null;
   scopeTimers.forEach(timer => clearTimeout(timer));
   scopeTimers.clear();
+  stopWatchingInteractive();
   if (frame != null && typeof cancelAnimationFrame === 'function') {
     cancelAnimationFrame(frame);
   }
@@ -678,6 +919,31 @@ function onPointerChange(): void {
 export interface WatchHitAreaOptions {
   /** The size to grow toward, px. @default 44 */
   readonly minSize?: number;
+  /**
+   * A touch that the browser hit-tests onto a descendant is the element's,
+   * however near a neighbour is. Set it for a host whose content can paint
+   * past its box, such as a list row with a swipe panel. A control whose
+   * grown input is its descendant leaves it off. @default false
+   */
+  readonly ownsDescendantTouches?: boolean;
+  /**
+   * How far the control grows on each side before any neighbour stops it,
+   * read in the measure pass. A group passes `groupGrowth` of its members.
+   * It gets the control's box in layout px, and `toLayout` maps a rect the
+   * owner reads into the same px.
+   * @default toward `minSize` on each axis, centered
+   */
+  readonly growth?: (
+    target: HitRect,
+    toLayout: (rect: HitRect) => HitRect,
+  ) => HitInsets;
+  /**
+   * Whether a finger's press on the control re-measures it against every
+   * interactive element on the page, at once. An owner that reads its own
+   * targets when a press begins, such as a group's tracker, turns it off.
+   * @default true
+   */
+  readonly checkAtPress?: boolean;
 }
 
 /**
@@ -709,7 +975,12 @@ export function resetHitAreaForTests(): void {
 export function watchHitArea(
   element: Element,
   onInsets: (insets: HitInsets) => void,
-  {minSize = MIN_TOUCH_TARGET}: WatchHitAreaOptions = {},
+  {
+    minSize = MIN_TOUCH_TARGET,
+    ownsDescendantTouches = false,
+    growth: growthOf,
+    checkAtPress = true,
+  }: WatchHitAreaOptions = {},
 ): () => void {
   const owner = element.ownerDocument.defaultView;
   if (owner == null) {
@@ -729,6 +1000,9 @@ export function watchHitArea(
   const watch: Watch = {
     element,
     minSize,
+    ownsDescendantTouches,
+    growth: growthOf,
+    checkAtPress,
     onInsets,
     isVisible: isCoarse && visibility == null,
     last: NO_HIT_INSETS,
@@ -737,6 +1011,7 @@ export function watchHitArea(
   if (entry == null) {
     entry = {watches: new Set(), release: null, disarm: null};
     watched.set(element, entry);
+    forgetInteractive();
     entry.watches.add(watch);
     if (isCoarse) {
       observe(element, entry);
@@ -758,6 +1033,7 @@ export function watchHitArea(
     if (own.watches.size === 0) {
       own.release?.();
       watched.delete(element);
+      forgetInteractive();
     }
     if (watched.size === 0) {
       stopObserving();

@@ -25,14 +25,19 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
-import {
+import {requireNatively} from '../test-utils/native-require.mjs';
+import {REPO_ROOT} from '../test-utils/repo-root.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('../api/integration/check/check.mjs')} */
+const {
   CONFLICT_CODES,
   INTEGRATION_CHECKS,
   NO_MANIFEST_CODE,
   integrationCheck,
   isCheckReport,
   skippedCode,
-} from '../api/integration/check/check.mjs';
+} = require('../api/integration/check/check.mjs');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.resolve(HERE, '..');
@@ -163,11 +168,18 @@ let result;
 beforeAll(async () => {
   // Under the repository, so the components check resolves Core. Every kind
   // of root, so every field a check's result can carry is present.
-  pkg = fs.mkdtempSync(path.join(process.cwd(), '.astryx-check-failures-'));
+  pkg = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-check-failures-'));
   const write = (/** @type {string} */ rel, /** @type {string} */ text) => {
     fs.mkdirSync(path.dirname(path.join(pkg, rel)), {recursive: true});
     fs.writeFileSync(path.join(pkg, rel), text);
   };
+  // Its own TypeScript config, scoped to its own files: with none, it gets
+  // the repository's root config, as `tsc` reads it, and the components check
+  // compiles every file in the repository.
+  write(
+    'tsconfig.json',
+    `${JSON.stringify({extends: '../tsconfig.json', include: ['**/*']})}\n`,
+  );
   write(
     'package.json',
     JSON.stringify({name: '@acme/widgets', version: '1.2.3'}),

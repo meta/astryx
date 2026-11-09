@@ -19,10 +19,11 @@ import type {
   MouseEvent as ReactMouseEvent,
   SyntheticEvent,
 } from 'react';
-import {createContext} from 'react';
+
 import type {BaseProps} from '../BaseProps';
 import type {DialogPurpose} from '../Dialog';
 import type {BottomSheetStackView} from './bottomSheetStack';
+import {createSharedContext} from '../utils/sharedContext';
 
 export type BottomSheetSwitcherPhase =
   | 'entering'
@@ -50,6 +51,14 @@ export type BottomSheetSwitcherDialogProps = Omit<
 
 export interface BottomSheetSwitcherContextValue {
   activeSheet: string | null;
+  /**
+   * The sheet that was active on page load, until the active sheet first
+   * changes: it opens where it rests, with no entry motion
+   * (spec:AST-013 FR13).
+   */
+  settledSheet: string | null;
+  /** Releases `settledSheet` once its settled entry's transition ends. */
+  releaseSettledSheet: () => void;
   hasScrim: boolean;
   onActiveSheetChange: (sheetId: string | null) => void;
   getSheetPhase: (sheetId: string) => BottomSheetSwitcherPhase;
@@ -107,6 +116,10 @@ export interface BottomSheetSwitcherContextValue {
 }
 
 export const BottomSheetSwitcherContext =
-  createContext<BottomSheetSwitcherContextValue | null>(null);
+  createSharedContext<BottomSheetSwitcherContextValue | null>(
+    'BottomSheetSwitcherContext',
+    1,
+    null,
+  );
 
 BottomSheetSwitcherContext.displayName = 'BottomSheetSwitcherContext';

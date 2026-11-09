@@ -15,8 +15,8 @@ owner first when one is linked or easy to find. Human contributors do not need t
 understand or edit the spec system to contribute; reviewers and maintainers route
 new decisions and record final rulings.
 
-1. The component's `<Name>.spec.md`, when one exists beside its code in
-   [`packages/core/src/`](../../packages/core/src/), owns component behavior.
+1. The component's `<Name>.spec.md`, when one exists in its folder under
+   [`docs/specs/components/`](../specs/components/), owns component behavior.
 2. A current contract under [`docs/families/`](../families/) owns behavior shared
    by sibling components.
 3. Current architecture and accepted system decisions own cross-component rules.
@@ -30,8 +30,8 @@ consumer syntax and reference material. The component spec owns local semantic
 API meaning and guarantees, including public hooks or utilities it explicitly
 co-owns.
 
-The wiki gives broader background: [API Conventions](https://github.com/facebook/astryx/wiki/API-Conventions)
-and [API Arbitration](https://github.com/facebook/astryx/wiki/API-Arbitration).
+The wiki gives broader background: [API Conventions](https://github.com/meta/astryx/wiki/API-Conventions)
+and [API Arbitration](https://github.com/meta/astryx/wiki/API-Arbitration).
 Do not copy detailed decisions from those pages into a proposal. Link the current
 owner instead.
 
@@ -401,7 +401,7 @@ Before requesting review:
   and representative integration coverage in the same pull request.
 
 If two or three viable shapes remain after applying current conventions, use the
-[API Arbitration](https://github.com/facebook/astryx/wiki/API-Arbitration)
+[API Arbitration](https://github.com/meta/astryx/wiki/API-Arbitration)
 process. Compare realistic consumer code across the relevant cases and put the
 evidence in the pull request. Ask the owner to decide. A maintainer or review
 agent records the final ruling in the owning spec. Keep the research procedure

@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-export const GITHUB_REPO = 'https://github.com/facebook/astryx';
+export const GITHUB_REPO = 'https://github.com/meta/astryx';
 
 export const DISCORD_URL = 'https://discord.com/invite/XnsUcFykEP';
 export const FACEBOOK_URL = 'https://www.facebook.com/astryxdesign';
