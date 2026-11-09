@@ -954,6 +954,7 @@ describe('approval line history', () => {
     for (const placeholder of [
       '`owner-a`, `<pending>`',
       '`owner-a`, pending (awaiting the owner)',
+      'proposed by `owner-a`, `2026-09-27`; pending owner review',
     ]) {
       expect(
         findApprovalLineRewrites(
@@ -1003,12 +1004,19 @@ describe('approval line history', () => {
         '',
         '**Decider:** `owner-a`, `2026-09-12`',
       ],
+      // A direction owner names who decided.
+      [
+        '### DEC-4 — Owner label',
+        '',
+        '**Direction owner:** `owner-a`, `2026-10-02`',
+      ],
     ];
     const expected = [
       {claim: 'DEC-1', decider: 'owner-a'},
       {claim: 'DEC-2', decider: 'owner-a, owner-c'},
       {claim: 'DEC-3', decider: 'owner-a'},
       {claim: 'Amendment — Narrow the name', decider: 'owner-a'},
+      {claim: 'DEC-4', decider: 'owner-a'},
     ];
     shapes.forEach((shape, i) => {
       const rewritten = shape.map(line => line.replace('owner-a', 'owner-b'));

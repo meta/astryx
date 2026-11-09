@@ -896,7 +896,8 @@ const ANY_HEADING = /^#{1,4} /;
 // Any bold label that ends in "decider" or "deciders" (a decision may name
 // several, such as a system-boundary and an adoption decider), except a
 // proposed one, which approves nothing.
-const DECIDER_LINE = /\*\*((?:[^*]*?\s)?[Dd]eciders?):?\*\*:?\s*(.*)$/;
+const DECIDER_LINE =
+  /\*\*((?:[^*]*?\s)?[Dd]eciders?|Direction owners?):?\*\*:?\s*(.*)$/;
 const PROPOSED_DECIDER = /^proposed\b/i;
 const PLACEHOLDER_DECIDER = /pending|<[^>]*>/i;
 
@@ -912,7 +913,7 @@ function deciderLines(content) {
     const decider = decision && line.match(DECIDER_LINE);
     if (!decider || PROPOSED_DECIDER.test(decider[1])) continue;
     const label = decider[1].trim();
-    const key = /^deciders?$/i.test(label)
+    const key = /^(deciders?|direction owners?)$/i.test(label)
       ? decision
       : `${decision} (${label})`;
     if (!deciders.has(key)) {
@@ -942,6 +943,7 @@ function originalDecider(line) {
 function hasPlaceholderDecider(line) {
   const [decider = '', date = ''] = line.split(';')[0].split(',');
   return (
+    PROPOSED_DECIDER.test(decider.replace(/[`@]/g, '').trim()) ||
     PLACEHOLDER_DECIDER.test(decider) ||
     PLACEHOLDER_DECIDER.test(date.split('(')[0])
   );
