@@ -293,7 +293,11 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     an icon exported under several names is recorded once, its other names
     as words; `…Provider` and `…Context` components
     are never icons; and `--exclude` adds exports that are not icons to the
-    data file's `exclude`, which every refresh honors. From an installed
+    data file's `exclude`, which every refresh honors. An icon whose id
+    would start with a digit once the shared prefix comes off keeps the
+    prefix (`fa0` is id `fa-0`, exported as `Fa0Icon`), and an id that
+    starts with a digit with no prefix to keep is refused with
+    `ERR_INVALID_ARGUMENT`. From an installed
     package it records `source` (the library and version), copies the
     library's license notices into the set, and takes the library's license
     for the descriptor; when the library ships none and the set and package
