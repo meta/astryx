@@ -1929,9 +1929,12 @@ export function Lightbox({
                                         ref={captionToggleRefs}
                                         hidden={!hasCaptionToggle}
                                         type="inherit"
-                                        // On the media surface a link's
-                                        // colour is close to the caption's.
-                                        // The underline sets it apart.
+                                        // The toggle takes the caption's
+                                        // own colour. A theme's accent on
+                                        // the media surface can match the
+                                        // band. The underline sets the
+                                        // toggle apart.
+                                        color="inherit"
                                         hasUnderline
                                         aria-expanded={isCaptionOpen}
                                         aria-controls={fullCaptionId}

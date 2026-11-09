@@ -86,13 +86,15 @@ const PHOTO_SVG =
 async function openCaptionGallery(
   page: Page,
   viewport: {width: number; height: number},
+  theme?: string,
 ): Promise<Locator> {
   await page.setViewportSize(viewport);
   await page.route(/picsum\.photos/, async route =>
     route.fulfill({contentType: 'image/svg+xml', body: PHOTO_SVG}),
   );
+  // Storybook's theme global applies from the story's first render.
   await page.goto(
-    `${storybook.origin}/iframe.html?id=core-lightbox--gallery-with-captions&viewMode=story`,
+    `${storybook.origin}/iframe.html?id=core-lightbox--gallery-with-captions&viewMode=story${theme == null ? '' : `&globals=astryxTheme:${theme}`}`,
   );
   await page.getByRole('button', {name: 'Open gallery with captions'}).click();
   const dialog = page.getByRole('dialog');
@@ -300,6 +302,52 @@ test.describe('under a finger', () => {
     expect(facts.beside).toBe(true);
   });
 });
+
+/** Every shipped theme. */
+const SHIPPED_THEMES = [
+  'butter',
+  'chocolate',
+  'gothic',
+  'matcha',
+  'neutral',
+  'stone',
+  'y2k',
+] as const;
+
+for (const theme of SHIPPED_THEMES) {
+  test(`"more" and "less" read in the caption's own colour on its band (${theme})`, async ({
+    page,
+  }) => {
+    const dialog = await openCaptionGallery(
+      page,
+      {width: 402, height: 874},
+      theme,
+    );
+    for (const name of ['more', 'less']) {
+      const toggle = dialog.getByRole('button', {name});
+      await expect(toggle).toBeVisible();
+      // The caption's text is the first child of the box the toggle sits
+      // in. Where the caption reads on its band, the toggle reads too.
+      const read = await toggle.evaluate(element => {
+        const caption = element.parentElement?.firstElementChild;
+        return {
+          hasCaption: caption != null,
+          isToggle: caption === element,
+          captionText: caption?.textContent?.trim() ?? '',
+          toggle: getComputedStyle(element).color,
+          caption: caption == null ? '' : getComputedStyle(caption).color,
+        };
+      });
+      expect(read.hasCaption, `"${name}" (${theme}): a caption`).toBe(true);
+      expect(read.isToggle, `"${name}" (${theme}): not the toggle`).toBe(false);
+      expect(read.captionText, `"${name}" (${theme}): caption text`).not.toBe(
+        '',
+      );
+      expect(read.toggle, `"${name}" (${theme})`).toBe(read.caption);
+      await toggle.click();
+    }
+  });
+}
 
 test(`the first frame that shows the clamped caption at open already ends it in "more"`, async ({
   page,
