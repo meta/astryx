@@ -157,7 +157,11 @@ test('a caption sits under the fitted photo, as it does without zoom', async ({
   await expect
     .poll(async () => img.evaluate(el => (el as HTMLImageElement).naturalWidth))
     .toBe(3000);
-  const caption = dialog.getByText('A winding path through the forest');
+  // The caption's box, not its text: the text sits on a backing inside the
+  // box's top padding.
+  const caption = dialog.locator('[data-lightbox-caption]', {
+    hasText: 'A winding path through the forest',
+  });
   await expect
     .poll(async () => {
       const photo = await boxOf(img);
