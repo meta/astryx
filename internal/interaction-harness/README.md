@@ -630,8 +630,11 @@ as it does a trackpad's.
 WebKit dispatches a step only once the page's main thread is free, and the
 steps it holds meanwhile reach the page coalesced into one, stamped like the
 step before it, so the burst times each WebKit step by when the page's first
-listener received it (`wheelArrivals`). Three things can split a run past
-`maxGapMs`. When a step reached the page within one frame of its own wheel
+listener received it (`wheelArrivals`). A gap of `maxGapMs` or more splits the
+run, as Core's gesture host ends a wheel gesture at a pause of its end window or
+more. A proof whose component reads the run as one trackpad scroll passes its
+axis's `WHEEL_SCROLL_END_MS`. Three things can split a run. When a step reached
+the page within one frame of its own wheel
 listeners finishing the step before, and the gap is more than a frame wider
 than the harness's own spacing of those sends, those listeners held it back:
 the burst throws `WheelPageStallError`, the page split the gesture, and the
@@ -652,7 +655,7 @@ arrived, and never later than the next step's arrival. So its handling, with
 any work queued before that task, counts as the page's. Other main-thread work
 between steps that leaves frames running still counts as the dispatch's stall.
 Chromium stamps a step with its dispatch time, so a page that holds its main
-thread does not widen the gaps there, and every gap past `maxGapMs` is a
+thread does not widen the gaps there, and every gap of `maxGapMs` or more is a
 `WheelPacingError`.
 
 The WebKit input command is reached through Playwright's in-process server

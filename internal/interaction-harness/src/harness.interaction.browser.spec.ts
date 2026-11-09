@@ -3665,7 +3665,7 @@ test.describe('wheel and pen input', () => {
       expect(stall.frameGapMs).toBeGreaterThan(100);
       expect(stall.handlingMs).toBeLessThan(stall.gapMs);
       expect(String(outcome)).toMatch(
-        /the page drew no frame for \d+ ms around a \d+ ms gap between two wheel steps, over its 100 ms \(engine or page work\)/,
+        /the page drew no frame for \d+ ms around a \d+ ms gap between two wheel steps, at or over its 100 ms \(engine or page work\)/,
       );
       // A starved runner's renderer draws no frame either, and the error
       // says so.
