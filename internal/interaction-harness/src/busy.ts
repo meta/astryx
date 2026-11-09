@@ -10,7 +10,9 @@
  *   the control when it has one. `castStep`, the screencast's position step
  *   read from its frames. `pooledBusyProof`, which judges several short
  *   blocks as one. `BusyWindowTooLateError`, for a block that began too late
- *   for the motion it was meant to catch.
+ *   for the motion it was meant to catch. `BusyFrameUnjudgedError`, for a
+ *   frame the cast could not judge in a proof that judges every frame
+ *   (`judgeEveryFrame`).
  *   `BUSY_PROOF_LOOKAROUND_MS` is how far around its judged part a proof
  *   reads frames.
  *   `trackControl` and `controlClock` read the control's box and its own
@@ -472,6 +474,45 @@ export class BusyWindowTooLateError extends Error {
   ) {
     super(message);
     this.name = 'BusyWindowTooLateError';
+  }
+}
+
+/** A frame a busy proof could not judge (see `BusyFrameUnjudgedError`). */
+export interface UnjudgedFrame {
+  /** When the frame was presented, ms after the window began. */
+  readonly atMs: number;
+  /**
+   * The component's move per frame there, px: the change that ends the run of
+   * equal positions that holds the frame, over the run's frames.
+   */
+  readonly movePx: number;
+  /** The cast's position step for the judged value, px. */
+  readonly stepPx: number;
+}
+
+/**
+ * A frame the cast could not show the component's step on, in a busy proof
+ * that judges every frame (`judgeEveryFrame`). The control moved on that
+ * frame. The component moved under two of the cast's steps a frame, and the
+ * frame shows no change. So the run is too little to judge: it fails by name,
+ * not as a red on the component. A frozen or main-thread component still
+ * fails the verdict, since the cast's step does not explain its hold.
+ */
+export class BusyFrameUnjudgedError extends Error {
+  constructor(
+    /** Each frame the proof could not judge. */
+    readonly frames: readonly UnjudgedFrame[],
+    summary: string,
+  ) {
+    super(
+      `busyWindowProof: too little to judge: ${frames
+        .map(
+          frame =>
+            `at +${frame.atMs.toFixed(1)} ms the component moved about ${frame.movePx.toFixed(2)} px a frame, under two of the cast's ${frame.stepPx} px steps, and the frame shows no step while the control moved`,
+        )
+        .join('; ')}. ${summary}`,
+    );
+    this.name = 'BusyFrameUnjudgedError';
   }
 }
 
@@ -1029,13 +1070,23 @@ function motionStepPx(values: readonly number[]): number {
  * `FRAME_STARVATION_MS` in the block. Without a control, a block with no
  * frame is a frozen animation's, and it fails the verdict. `pooledBusyProof`
  * reads each run without the throw and judges the runs together.
+ *
+ * With `judgeEveryFrame`, a frame the cast could not show the component's
+ * step on is too little to judge (the frames `belowStep` counts). When the
+ * verdict otherwise passes, the proof throws `BusyFrameUnjudgedError` with
+ * each such frame, the component's move there and the cast's step. A failed
+ * verdict is returned as it is: it is the component's red.
  */
 export function busyWindowProof(
   ...args: Parameters<typeof readBusyWindow>
 ): BusyProof {
-  const {proof, starvation} = readBusyWindow(...args);
+  const {proof, starvation, unjudged} = readBusyWindow(...args);
   if (starvation != null) {
     throw new FrameStarvationError(starvation);
+  }
+  // A failed verdict is the component's red, whatever else the cast hid.
+  if (unjudged.length > 0 && proof.verdict.failures.length === 0) {
+    throw new BusyFrameUnjudgedError(unjudged, proof.summary);
   }
   return proof;
 }
@@ -1064,6 +1115,7 @@ function readBusyWindow(
     minJudgedFrames = 4,
     presented,
     control,
+    judgeEveryFrame = false,
   }: {
     axis?: 'x' | 'y' | 'width' | 'height';
     marginMs?: number;
@@ -1131,8 +1183,20 @@ function readBusyWindow(
      * screencast with `CONTROL_RGB`): judge the component against them.
      */
     control?: readonly TrackedFrame[];
+    /**
+     * With a control: judge every frame the control moved on by the
+     * component's own step. A frame the cast could not show that step on
+     * (`belowStep`) is then too little to judge, and `busyWindowProof` throws
+     * `BusyFrameUnjudgedError`. Such a frame is never a pass, and never a red
+     * on the component.
+     */
+    judgeEveryFrame?: boolean;
   } = {},
-): {proof: BusyProof; starvation: FrameShortfall | null} {
+): {
+  proof: BusyProof;
+  starvation: FrameShortfall | null;
+  unjudged: readonly UnjudgedFrame[];
+} {
   let end = window.to - marginMs;
   if (settledWithin != null && settledWithinSteps != null) {
     throw new Error(
@@ -1518,6 +1582,7 @@ function readBusyWindow(
     return changes;
   };
   let controlRead: BusyControlRead | null = null;
+  let unjudged: UnjudgedFrame[] = [];
   if (control != null) {
     const controlChanges = controlChangesUpTo(control, judged.to);
     const controlEdges = [judged.from, ...controlChanges, judged.to];
@@ -1539,6 +1604,15 @@ function readBusyWindow(
         s -= 1;
       }
       return s;
+    };
+    // The first frame after that run: the change that ends it, or the
+    // series' length when no change does.
+    const runEnd = (i: number): number => {
+      let k = i + 1;
+      while (k < series.length && same(k, i)) {
+        k += 1;
+      }
+      return k;
     };
     // The component's motion per frame over up to four frames before frame
     // `start`, or null with fewer than two to read.
@@ -1570,10 +1644,7 @@ function readBusyWindow(
         return false;
       }
       const start = runStart(i);
-      let k = i + 1;
-      while (k < series.length && same(k, i)) {
-        k += 1;
-      }
+      const k = runEnd(i);
       if (k >= series.length) {
         return false;
       }
@@ -1654,11 +1725,32 @@ function readBusyWindow(
       ...delivered.filter(t => changed.has(t) || underStep(t)),
       judged.to,
     ];
+    const excused = controlChanges.filter(underStep);
+    if (judgeEveryFrame) {
+      unjudged = excused.map(t => {
+        const i = seriesIndex.get(t);
+        if (i == null) {
+          throw new Error(
+            'busyWindowProof: an excused frame is missing from the series',
+          );
+        }
+        const start = runStart(i);
+        const k = runEnd(i);
+        const runFrames = (series[k].t - series[start].t) / cadence;
+        return {
+          atMs: t - window.from,
+          movePx:
+            Math.abs(series[k].value - series[i].value) /
+            Math.max(1, runFrames),
+          stepPx,
+        };
+      });
+    }
     controlRead = {
       moved: controlChanges.length,
       movedWith: controlChanges.filter(t => changed.has(t) || underStep(t))
         .length,
-      belowStep: controlChanges.filter(underStep).length,
+      belowStep: excused.length,
       longestStallMs: Math.max(
         ...controlEdges.slice(1).map((t, i) => t - controlEdges[i]),
       ),
@@ -1800,7 +1892,7 @@ function readBusyWindow(
     verdict: {pass: failures.length === 0, failures},
     summary,
   };
-  return {proof, starvation};
+  return {proof, starvation, unjudged};
 }
 
 /** One run of a pooled busy proof (see `pooledBusyProof`). */
@@ -1869,7 +1961,7 @@ export function pooledBusyProof(
   runs: readonly BusyRun[],
   options: Omit<
     NonNullable<Parameters<typeof busyWindowProof>[2]>,
-    'control' | 'minMovedFraction'
+    'control' | 'minMovedFraction' | 'judgeEveryFrame'
   > & {
     /** The fewest frames a run's control must move on for the run to count. */
     minRunFrames?: number;
