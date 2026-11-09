@@ -1891,6 +1891,70 @@ test.describe('frame evidence', () => {
     await first.remove();
   });
 
+  test('a busy proof given the control ahead judges a compositor animation through a blocked main thread, and a rAF one still freezes', async ({
+    page,
+  }, testInfo) => {
+    await busyFixture(page);
+    const box = page.locator('#box');
+    await markElement(box, {mode: 'outline'});
+    // Opted in: the control ahead dates the frames near the first one's turns.
+    const first = await startBusyControl(page);
+    const ahead = await startBusyControl(page, {ahead: true});
+    const run = async (driver: 'compositor' | 'raf') => {
+      const cast = await startScreencast(page);
+      await box.evaluate((el, how) => {
+        el.getAnimations().forEach(a => a.cancel());
+        el.style.transform = 'none';
+        if (how === 'compositor') {
+          el.animate(
+            [{transform: 'translateY(0px)'}, {transform: 'translateY(560px)'}],
+            {duration: 1100, easing: 'linear'},
+          );
+          return;
+        }
+        const start = performance.now();
+        const step = (now: number) => {
+          const progress = Math.min(1, (now - start) / 1100);
+          el.style.transform = `translateY(${560 * progress}px)`;
+          if (progress < 1) {
+            requestAnimationFrame(step);
+          }
+        };
+        requestAnimationFrame(step);
+      }, driver);
+      // A rendering update first, so the compositor drops the last run's
+      // animation before the block.
+      await page.evaluate(
+        () =>
+          new Promise<void>(resolve =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+      const window = await blockMainThread(
+        page,
+        700,
+        driver === 'compositor' ? {during: box} : {},
+      );
+      await page.waitForTimeout(200);
+      const castFrames = await cast.stop();
+      return busyWindowProof(await trackMarker(page, castFrames), window, {
+        axis: 'y',
+        control: await trackControl(page, castFrames),
+        ahead: await trackControl(page, castFrames, {ahead: true}),
+        controlStarts: [first.start, ahead.start],
+      });
+    };
+    const compositor = await run('compositor');
+    testInfo.annotations.push({
+      type: 'busy proof with the control ahead',
+      description: compositor.summary,
+    });
+    expect(compositor.verdict.failures, compositor.summary).toEqual([]);
+    const raf = await run('raf');
+    expect(raf.verdict.failures, raf.summary).not.toEqual([]);
+    await first.remove();
+  });
+
   test('a hold that starts before the block is judged from its first presented change inside it; a single change and then a freeze still fails', async ({
     page,
   }) => {

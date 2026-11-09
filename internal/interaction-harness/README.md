@@ -367,6 +367,36 @@ turn, the one ahead is mid-leg. Track it with `trackControl(page, frames,
 resolves with each control's `start` on the page clock, where its own time
 is zero. Keep the component's marker out of the top 28 px then.
 
+In WebKit, a busy proof with a control judges every frame on the controls'
+clock, not on the screencast's stamps. WebKit stamps the frame after a delivery
+gap about 60 ms late. So `busyWindowProof` and `pooledBusyProof` date each
+WebKit frame from the control's positions, the component's and the control's
+alike. A frame with no reading keeps its stamp's distance from the nearest frame
+whose stamp agrees with its reading. The dated frames keep the cast's order,
+since the cast delivers them in the order they were drawn. The proof's `judged`
+part stays on the cast's stamps, so a spec selects the judged part from its own
+cast; frames the display-rate keep left out fall inside it too. A spec that
+needs a frame's own time for another check reads it with `pageTimesOnControls`,
+the readings the proof dates from. Without the control ahead, a late frame near
+the first control's turn keeps its lateness. A proof that judges every frame
+near a turn starts the control ahead too
+(`startBusyControl(page, {ahead: true})`). It passes that control's frames as
+`ahead`, per run in a pool; `controlStarts` is optional. Chromium casts and
+casts with no control are judged on their stamps. Under load, Chromium's cast
+also stamps frames in bursts, which a proof on its stamps can misread. On
+WebKit's stamps, a late frame inside the judged part changes no verdict, since
+the proof reads a slow curve's held frames as motion. At the part's start, it
+shows a stall the control does not have: the false reds came from there.
+
+A WebKit proof keeps one dated frame per display interval. A frame under one
+interval after the last one kept is left out; the earlier one stays. WebKit's
+compositor can draw two frames 6 to 9 ms apart, and a curve then shows no new
+step between them. A frame with no reading always stays, since its time is a
+neighbour's. A WebKit cast rarely shows two frames one interval apart. So
+the proof judges motion on every kept frame the control moved, but no 30 Hz
+cadence. Its summary says so in a note, with the count of pairs one interval
+apart. Chromium's cast judges that cadence.
+
 An animation that lasts a fraction of a second, such as a 0.2 s fade, leaves a
 block only a few frames to judge: in WebKit, or on a loaded machine, the control
 can present fewer than four, and one run cannot decide. Play it several times
