@@ -7,6 +7,7 @@ import {integrationAdd} from '../../integration/add-contribution.mjs';
 import {iconNewSet} from './new-set.mjs';
 import {discoverIconSetDirectory} from '../../../foundation/discovery/icon-set-discovery.mjs';
 import {cliVersion} from '../../../foundation/release/run-context.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 /** @type {string} */
 let tmpDir;
@@ -38,7 +39,7 @@ function setup({
 const read = file => fs.readFileSync(path.join(tmpDir, file), 'utf-8');
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-add-icon-set-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-add-icon-set-'));
 });
 
 afterEach(() => {

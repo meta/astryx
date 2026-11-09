@@ -185,9 +185,9 @@ function useAnimatorList(count: number) {
  * moves retarget them, so the lens keeps moving through a busy main thread.
  * Under Reduce Motion a press scales nothing, and a selection change from a
  * key or the app cross-fades instead of moving. Under a finger the lens is
- * put where the finger is at once, as UIKit's is. Only its lifted look fades,
- * since a travel would play as a dip, with frames that show no lens. Each
- * spring plays as measured, from the UIKit table.
+ * put where the finger is at once, as UIKit's is. A travel would play as a
+ * dip, with frames that show no lens. Its lifted look shows at once too, and
+ * fades only at the lift. Each spring plays as measured, from the UIKit table.
  *
  * Under a fine pointer nothing here runs. A press there is a plain button
  * press: its click chooses the tab, and TabBar's CSS slides the lens.
@@ -331,7 +331,7 @@ export function useTabBarLens({
   /**
    * Lifts (true) or lowers (false) a lens `size` px wide and flexes the
    * capsule. Under Reduce Motion a press scales nothing: the glass and its
-   * shadow only fade.
+   * shadow show at once, and fade only when lowered.
    */
   const lift = (
     isLifted: boolean,
@@ -341,9 +341,17 @@ export function useTabBarLens({
   ) => {
     const options = {at, touchRelease};
     const spring = {spring: tabBar.lift};
-    shadow.animator.animate({opacity: isLifted ? 1 : 0}, spring, options);
-    glass.animator.animate({opacity: isLifted ? 1 : 0}, spring, options);
-    if (body.animator.reducedMotion({touchRelease}) !== 'off') {
+    const isReduced = body.animator.reducedMotion({touchRelease}) !== 'off';
+    // Under Reduce Motion the lifted look shows at once at the press, as
+    // UIKit's does. Its lowering still fades, as UIKit's settle does.
+    if (isReduced && isLifted) {
+      shadow.animator.set({opacity: 1});
+      glass.animator.set({opacity: 1});
+    } else {
+      shadow.animator.animate({opacity: isLifted ? 1 : 0}, spring, options);
+      glass.animator.animate({opacity: isLifted ? 1 : 0}, spring, options);
+    }
+    if (isReduced) {
       return;
     }
     const lifted = liftScale(size);

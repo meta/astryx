@@ -6,6 +6,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {MonthScroller, type MonthScrollerHandle} from './MonthScroller';
 import {SCROLL_QUIET_MS} from './useScrollSettle';
 import {createMonthModel} from './monthGeometry';
+import type {PlainDate} from '../utils/dateTypes';
 
 class FakeResizeObserver {
   constructor(private callback: ResizeObserverCallback) {}
@@ -49,23 +50,24 @@ describe('MonthScroller settle', () => {
     vi.restoreAllMocks();
   });
 
-  function renderScroller() {
+  function renderScroller(onVisibleMonthChange = () => {}) {
     const handleRef = createRef<MonthScrollerHandle>();
-    const view = render(
+    const scrollerFor = (selectedDate: PlainDate | null) => (
       <MonthScroller
         monthModel={createMonthModel('gregory')}
         handleRef={handleRef}
         minMonthIndex={0}
         maxMonthIndex={23}
         initialMonthIndex={9}
-        onVisibleMonthChange={() => {}}
-        selectedDate={null}
+        onVisibleMonthChange={onVisibleMonthChange}
+        selectedDate={selectedDate}
         today={{year: 2026, month: 10, day: 15}}
         isDateDisabled={() => false}
         weekStartsOn={0}
         onSelect={() => {}}
-      />,
+      />
     );
+    const view = render(scrollerFor(null));
     const scroller = view.container.querySelector<HTMLElement>(
       '[data-scroller="months"]',
     );
@@ -73,7 +75,11 @@ describe('MonthScroller settle', () => {
       throw new Error('no month scroller');
     }
     scrollTo.mockClear();
-    return {handleRef, scroller};
+    /** The owner renders the scroller again with a new selection. */
+    const select = (date: PlainDate) => {
+      view.rerender(scrollerFor(date));
+    };
+    return {handleRef, scroller, select};
   }
 
   /** The browser moving the scroller to `left`, as a scroll event reports. */
@@ -160,6 +166,67 @@ describe('MonthScroller settle', () => {
       vi.advanceTimersByTime(SCROLL_QUIET_MS + 50);
     });
     // The settle finishes the steer onto month 9, not the nearest pane (10).
+    expect(
+      scrollTo.mock.calls.map(([options]) => (options as ScrollToOptions).left),
+    ).toEqual([9 * PANE]);
+  });
+
+  it('rests a step that arrives on scrollend once: no correction and no report, and a scroll after it reports', () => {
+    const onVisibleMonthChange = vi.fn();
+    const {handleRef, scroller} = renderScroller(onVisibleMonthChange);
+    act(() => handleRef.current?.scrollToMonth(10));
+    scrollTo.mockClear();
+    // The step's scroll arrives on month 10, and the browser ends it.
+    act(() => scrollBy(scroller, 10 * PANE));
+    act(() => {
+      vi.advanceTimersByTime(16);
+      scroller.dispatchEvent(new Event('scrollend'));
+      vi.advanceTimersByTime(16);
+    });
+    act(() => {
+      vi.advanceTimersByTime(SCROLL_QUIET_MS + 50);
+    });
+    expect(scrollTo).not.toHaveBeenCalled();
+    expect(onVisibleMonthChange).not.toHaveBeenCalled();
+    // The steer ended where it arrived: a trackpad scroll on to month 11 is
+    // the user's, and it reports.
+    act(() => scrollBy(scroller, 11 * PANE));
+    act(() => {
+      vi.advanceTimersByTime(16);
+    });
+    expect(onVisibleMonthChange.mock.calls).toEqual([[11]]);
+  });
+
+  it('keeps a steer through a render: the settle still finishes it', () => {
+    const {handleRef, scroller, select} = renderScroller();
+    act(() => handleRef.current?.scrollToMonth(10));
+    act(() => scrollBy(scroller, 9 * PANE + 0.3 * PANE));
+    // The owner renders the scroller again mid-scroll: the settle stays
+    // attached, so the steer stays.
+    act(() => select({year: 2026, month: 11, day: 3}));
+    scrollTo.mockClear();
+    act(() => {
+      vi.advanceTimersByTime(SCROLL_QUIET_MS + 50);
+    });
+    // On to the steered month 10, not the nearest pane (9).
+    expect(
+      scrollTo.mock.calls.map(([options]) => (options as ScrollToOptions).left),
+    ).toEqual([10 * PANE]);
+  });
+
+  it('ends a steer on a person’s input, so the settle rounds their scroll to the nearest month', () => {
+    const {handleRef, scroller} = renderScroller();
+    act(() => handleRef.current?.scrollToMonth(10));
+    act(() => scrollBy(scroller, 9 * PANE + 0.3 * PANE));
+    // A trackpad takes the scroller part-way and stops nearer month 9.
+    act(() => {
+      scroller.dispatchEvent(new Event('wheel'));
+    });
+    scrollTo.mockClear();
+    act(() => scrollBy(scroller, 9 * PANE + 0.2 * PANE));
+    act(() => {
+      vi.advanceTimersByTime(SCROLL_QUIET_MS + 50);
+    });
     expect(
       scrollTo.mock.calls.map(([options]) => (options as ScrollToOptions).left),
     ).toEqual([9 * PANE]);

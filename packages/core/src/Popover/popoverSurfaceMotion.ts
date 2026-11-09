@@ -4,8 +4,8 @@
 
 /**
  * @file popoverSurfaceMotion.ts
- * @input A Popover's layer element, the source it hangs off and the
- *   compositor animator. Also the theme's duration and easing tokens, and
+ * @input A Popover's surface (the box that paints it, inside its layer),
+ *   the source it hangs off and the compositor animator. Also the theme's duration and easing tokens, and
  *   the layer runtime's exit copy and input hold
  * @output Exports `popoverCollapsedState`, `popoverFrame` and
  *   `createPopoverSurfaceMotion`, the touch presentation's present and

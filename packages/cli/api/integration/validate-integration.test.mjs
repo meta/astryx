@@ -24,6 +24,7 @@ import {
   integrationTemplateConflicts,
 } from './authoring-checks.mjs';
 import {warmIntegrationChecks} from '../../test-utils/warm-integration-checks.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 // The checks' one-time start in this file (TypeScript and its lib files) runs
 // here, while the file is collected, so no test carries it.
@@ -32,7 +33,7 @@ await warmIntegrationChecks();
 let tmpDir;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-validate-it-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-validate-it-'));
 });
 
 afterEach(() => {

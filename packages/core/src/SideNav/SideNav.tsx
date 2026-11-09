@@ -999,16 +999,18 @@ export function SideNav({
             collapsed && styles.stickyBottomCollapsed,
           )}>
           {footer}
-          <div
-            {...stylex.props(
-              styles.footerRow,
-              collapsed && styles.footerRowCollapsed,
-            )}>
-            <SizeProvider value={FOOTER_ICON_SIZE}>
-              {showCollapseButton && <SideNavCollapseButton />}
-              {footerIcons}
-            </SizeProvider>
-          </div>
+          {(showCollapseButton || isRenderable(footerIcons)) && (
+            <div
+              {...stylex.props(
+                styles.footerRow,
+                collapsed && styles.footerRowCollapsed,
+              )}>
+              <SizeProvider value={FOOTER_ICON_SIZE}>
+                {showCollapseButton && <SideNavCollapseButton />}
+                {footerIcons}
+              </SizeProvider>
+            </div>
+          )}
         </div>
       )}
     </nav>

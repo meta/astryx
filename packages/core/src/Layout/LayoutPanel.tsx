@@ -214,7 +214,7 @@ export interface LayoutPanelProps extends BaseProps<HTMLDivElement> {
  *
  * @example
  * ```
- * <LayoutContainer variant="card">
+ * <Card>
  *   <Layout
  *     start={
  *       <LayoutPanel hasDivider role="navigation">
@@ -228,7 +228,7 @@ export interface LayoutPanelProps extends BaseProps<HTMLDivElement> {
  *       </LayoutPanel>
  *     }
  *   />
- * </LayoutContainer>
+ * </Card>
  * ```
  */
 export function LayoutPanel({
