@@ -152,6 +152,35 @@ function MasterDetailDemo() {
   return content;
 }
 
+/** Sixty unvirtualized rows: every tenth archived, the rest activatable. */
+const manyServices: Service[] = Array.from({length: 60}, (_, index) => ({
+  id: `svc-${String(index).padStart(2, '0')}`,
+  name: `Service ${String(index).padStart(2, '0')}`,
+  owner: index % 2 === 0 ? 'Core' : 'Infra',
+  status: index % 3 === 0 ? 'Degraded' : 'Healthy',
+  updated: `${index + 1}m ago`,
+  isArchived: index % 10 === 9,
+}));
+
+function LargeTableDemo() {
+  const [activeKey, setActiveKey] = useState<string | null>('svc-05');
+  const activation = useTableActivation<Service>({
+    activeKey,
+    onActivate: (_item, key) => setActiveKey(key as string),
+    getIsItemActivatable: item => !item.isArchived,
+  });
+  return (
+    <Table
+      data={manyServices}
+      columns={columns}
+      idKey="id"
+      isStriped
+      hasHover
+      plugins={{activation}}
+    />
+  );
+}
+
 const meta: Meta = {
   title: 'Core/TableActivation',
   tags: ['autodocs'],
@@ -174,4 +203,12 @@ export const MasterDetail: Story = {
 export const MasterDetailDark: Story = {
   globals: {colorMode: 'dark'},
   render: () => <MasterDetailDemo />,
+};
+
+/**
+ * Sixty unvirtualized rows for focus-order evidence at scale: Tab walks
+ * every eligible row in order while archived rows never take focus.
+ */
+export const LargeTable: Story = {
+  render: () => <LargeTableDemo />,
 };
