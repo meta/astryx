@@ -842,7 +842,11 @@ async function settleBlockLags(
 test('the page settle keeps advancing every frame while the main thread is blocked', async ({
   page,
 }, testInfo) => {
-  const deadline = Date.now() + testInfo.timeout - POOL_RESERVE_MS;
+  // With no test timeout (0, as under --debug) the pool has no deadline.
+  const deadline =
+    testInfo.timeout > 0
+      ? Date.now() + testInfo.timeout - POOL_RESERVE_MS
+      : undefined;
   const g = await openGallery(page);
   // A compositor-only control animation in the same windows: what the
   // compositor presented while the main thread spun, on this machine.
