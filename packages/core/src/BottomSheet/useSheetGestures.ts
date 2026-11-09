@@ -1768,6 +1768,9 @@ export function useSheetGestures({
       const pullDownAtTop = opposesTop && delta > DRAG_PROMOTION_SLOP;
       const pullUpAtBottom = opposesBottom && delta < -DRAG_PROMOTION_SLOP;
       if (pullDownAtTop || pullUpAtBottom) {
+        if (event.cancelable) {
+          event.preventDefault();
+        }
         releaseContentHold(armed);
         touchDragRef.current = null;
         beginDragRef.current(

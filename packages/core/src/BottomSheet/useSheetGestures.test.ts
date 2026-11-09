@@ -1844,13 +1844,13 @@ describe('useSheetGestures', () => {
     ) {
       const ev = new Event(type, {bubbles: true, cancelable: true});
       Object.defineProperty(ev, 'changedTouches', {
-        value: [{identifier: id, clientY: y}],
+        value: [{identifier: id, clientX: 0, clientY: y}],
       });
       Object.defineProperty(ev, 'touches', {
         value:
           type === 'touchend' || type === 'touchcancel'
             ? []
-            : [{identifier: id, clientY: y}],
+            : [{identifier: id, clientX: 0, clientY: y}],
       });
       Object.defineProperty(ev, 'currentTarget', {value: listener});
       target.dispatchEvent(ev);
