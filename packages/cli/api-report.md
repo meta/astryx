@@ -21,6 +21,7 @@ function component: (name?: string | string[], options?: { cwd?: string | undefi
 function discover: (query?: string, options?: DiscoverOptions) => Promise<DiscoverListResponse | DiscoverDetailResponse | DiscoverDetailDocResponse | DiscoverItemResponse | DiscoverSearchResponse>
 function docs: (topic?: string, section?: string, options?: { lang?: string | undefined; zh?: boolean | undefined; dense?: boolean | undefined; index?: boolean | undefined; depth?: number | "all" | undefined; detail?: "c … #601fa90d) => Promise<DocsListResponse | DocsIndexResponse | DocsDetailResponse | DocsDetailSectionResponse | DocsNodeResponse>
 function doctor: (options?: DoctorOptions) => Promise<{ type: "doctor"; data: DoctorReport }>
+function exportSearchIndex @experimental: (options?: { cwd?: string | undefined; package?: string | undefined }) => Promise<SearchIndex>
 function gapReport: (component: string | undefined, options?: GapReportOptions) => Promise<GapReportCategoriesResponse | GapReportReceiptResponse>
 function generateTonalPalette: (input: TonalPaletteGenerationInput) => TonalPaletteCandidate
 function hook: (name?: string, options?: { cwd?: string | undefined; list?: boolean | undefined; category?: string | undefined; params?: boolean | undefined; detail?: "compact" | "full" | "brief" | und … #9fea52ed) => Promise<{ type: string; data: unknown }>
@@ -44,7 +45,8 @@ function integrationDocConflicts: (pkg?: string, options?: IntegrationAuthoringO
 function integrationPackCheck: (options?: IntegrationPackCheckOptions) => Promise<IntegrationPackCheckResponse>
 function integrationTemplateConflicts: (pkg?: string, options?: IntegrationAuthoringOptions) => Promise<IntegrationTemplateConflictResponse>
 function listThemes: () => BundledTheme[]
-function search: (query: string, options?: { cwd?: string | undefined; type?: "template" | "component" | "hook" | "theme" | "doc" | undefined; limit?: number | undefined }) => Promise<SearchResponse>
+function rankSearchIndex @experimental: (query: string, indexes: SearchIndex | SearchIndex[], options?: { type?: SearchDomain | undefined; limit?: number | undefined }) => Promise<SearchResponse>
+function search: (query: string, options?: { cwd?: string | undefined; type?: "template" | "component" | "doc" | "theme" | "hook" | undefined; limit?: number | undefined }) => Promise<SearchResponse>
 function summarizeIssues: (issues: Issue[]) => { errors: number; warnings: number }
 function swizzle: (component?: string, options?: { cwd?: string; output?: string; package?: string; list?: boolean; overwrite?: boolean }) => Promise<SwizzleListResponse | SwizzleCopyResponse>
 function template: (name?: string, options?: { targetPath?: string | undefined; overwrite?: boolean | undefined; list?: boolean | undefined; skeleton?: boolean | undefined; cdn?: string | boolean | undefin … #f5e81f6a) => Promise<{ type: string; data: unknown }>
@@ -355,6 +357,7 @@ type DocsLinks
   previous?: DocsCommand | undefined
   related?: DocsCommand[] | undefined
   up: DocsCommand
+type DocsListChild = DocsNodeChild & { topic: string; description: string; children?: DocsListChild[]; childCount?: number }
 type DocsListEntry
   description: string
   package: string
@@ -362,6 +365,8 @@ type DocsListEntry
   replaces?: string | undefined
   topic: string
 type DocsListNamespace
+  childCount?: number | undefined
+  children?: DocsListChild[] | undefined
   description: string
   package: string
   topic: string
@@ -745,6 +750,11 @@ type RegistryCompositionSummary
   wouldRefreshReceipt: number
   wouldUpdate: number
 type SearchDomain = "component" | "hook" | "doc" | "template" | "theme"
+type SearchIndex
+  candidates: Record<string, unknown>[]
+  coreSkipped?: string | undefined
+  coreSkippedCode?: string | undefined
+  version: string
 type SearchOptions
   cwd?: string | undefined
   limit?: number | undefined
@@ -755,6 +765,7 @@ type SearchResponse
   type: "search"
 type SearchResultEntry
   command: string
+  deprecated?: ComponentDeprecation | undefined
   description: string
   displayName?: string | undefined
   domain: SearchDomain
@@ -778,7 +789,7 @@ type StrayPointer
   section: string | null
   topic: string
 type SwizzleCopyResponse
-  data: { component: string; package: string; outputDir: string; filesCopied: number; files: string[]; usesStyleX: boolean; feedback?: SwizzleFeedback | undefined }
+  data: { component: string; package: string; outputDir: string; filesCopied: number; files: string[]; usesStyleX: boolean; dependencies: Record<string, string>; marker … #84d9505b
   package: string
   type: "swizzle.copy"
 type SwizzleFeedback
@@ -1213,6 +1224,9 @@ interface ComponentAnatomyElement
 interface ComponentBestPractice
   description: string
   guidance: boolean
+interface ComponentDeprecation
+  description: string
+  replacement: string
 type ComponentDoc = SingleComponentDoc | MultiComponentDoc | SubComponentDoc
 interface ComponentEntry
   description: string
@@ -1235,6 +1249,16 @@ interface ComponentGroupDoc
   canonical: string
   description: string
   name: string
+interface ComponentIconSlotDoc
+  description: string
+  fallback: string
+  slot: string
+  state?: ComponentIconSlotStateDoc[]
+  whenNull: string
+interface ComponentIconSlotStateDoc
+  description: string
+  name: string
+  type: string
 interface ComponentPlaygroundConfig
   appShellMobile?: boolean
   defaults?: Record<string, unknown>
@@ -1554,6 +1578,7 @@ interface MultiComponentDoc extends ComponentBaseDoc
   audience?: DocAudience
   category?: | 'Action' | 'Chat' | 'Container' | 'Content' | 'Form Controls' | 'Data Input' | 'Data Visualization' | 'Feedback & Status' | 'Layout' | 'Navigation' | 'Overlay' | 'Table & List' | 'Utility'
   components: (ComponentEntry | ComponentRef)[]
+  deprecated?: ComponentDeprecation
   displayName: string
   examples?: ComponentExampleDoc[]
   group?: string
@@ -1568,7 +1593,7 @@ interface MultiComponentDoc extends ComponentBaseDoc
   registry?: RegistryDocIdentity
   replaces?: string
   stability?: 'experimental'
-  theming?: { container?: boolean; targets: ComponentThemingTarget[]; vars?: ComponentThemingVar[]; derived?: ComponentThemingDerivedVar[] }
+  theming?: { container?: boolean; targets: ComponentThemingTarget[]; vars?: ComponentThemingVar[]; derived?: ComponentThemingDerivedVar[]; componentIcons?: ComponentIconSlotDoc[] }
   type?: 'component'
   usage: UsageDoc
 interface NamespaceAdoptionRule
@@ -1671,6 +1696,7 @@ interface SingleComponentDoc extends ComponentBaseDoc
   aliases?: string[]
   audience?: DocAudience
   category?: | 'Action' | 'Chat' | 'Container' | 'Content' | 'Form Controls' | 'Data Input' | 'Data Visualization' | 'Feedback & Status' | 'Layout' | 'Navigation' | 'Overlay' | 'Table & List' | 'Utility'
+  deprecated?: ComponentDeprecation
   displayName: string
   examples?: ComponentExampleDoc[]
   group?: string
@@ -1686,10 +1712,10 @@ interface SingleComponentDoc extends ComponentBaseDoc
   registry?: RegistryDocIdentity
   replaces?: string
   stability?: 'experimental'
-  theming?: { container?: boolean; targets: ComponentThemingTarget[]; vars?: ComponentThemingVar[]; derived?: ComponentThemingDerivedVar[] }
+  theming?: { container?: boolean; targets: ComponentThemingTarget[]; vars?: ComponentThemingVar[]; derived?: ComponentThemingDerivedVar[]; componentIcons?: ComponentIconSlotDoc[] }
   type?: 'component'
   usage: UsageDoc
-type TemplateCategory = | 'Dashboard - Analytics' | 'Dashboard - Comparison' | 'Dashboard - KPI Summary' | 'Dashboard - Monitoring' | 'Dashboard - Executive Summary' | 'Dashboard - Sco … #e7c18378
+type TemplateCategory = | 'Dashboard - Analytics' | 'Dashboard - Comparison' | 'Dashboard - KPI Summary' | 'Dashboard - Monitoring' | 'Dashboard - Executive Summary' | 'Dashboard - Sco … #a8be998f
 type TemplateDoc = PageTemplateDoc | BlockTemplateDoc
 interface ThemeDoc
   description: string
@@ -1849,6 +1875,7 @@ interface ComponentBaseDoc extends AuthoredDocGraphFields
   aliases?: string[]
   audience?: DocAudience
   category?: | 'Action' | 'Chat' | 'Container' | 'Content' | 'Form Controls' | 'Data Input' | 'Data Visualization' | 'Feedback & Status' | 'Layout' | 'Navigation' | 'Overlay' | 'Table & List' | 'Utility'
+  deprecated?: ComponentDeprecation
   displayName: string
   examples?: ComponentExampleDoc[]
   group?: string
@@ -1863,7 +1890,7 @@ interface ComponentBaseDoc extends AuthoredDocGraphFields
   registry?: RegistryDocIdentity
   replaces?: string
   stability?: 'experimental'
-  theming?: { container?: boolean; targets: ComponentThemingTarget[]; vars?: ComponentThemingVar[]; derived?: ComponentThemingDerivedVar[] }
+  theming?: { container?: boolean; targets: ComponentThemingTarget[]; vars?: ComponentThemingVar[]; derived?: ComponentThemingDerivedVar[]; componentIcons?: ComponentIconSlotDoc[] }
   type?: 'component'
   usage: UsageDoc
 interface ComponentRef
@@ -1933,6 +1960,7 @@ interface SubComponentDoc extends Omit<ComponentBaseDoc, 'usage'>
   aliases?: string[]
   audience?: DocAudience
   category?: | 'Action' | 'Chat' | 'Container' | 'Content' | 'Form Controls' | 'Data Input' | 'Data Visualization' | 'Feedback & Status' | 'Layout' | 'Navigation' | 'Overlay' | 'Table & List' | 'Utility'
+  deprecated?: ComponentDeprecation
   description: string
   displayName: string
   examples?: ComponentExampleDoc[]
@@ -1950,7 +1978,7 @@ interface SubComponentDoc extends Omit<ComponentBaseDoc, 'usage'>
   replaces?: string
   stability?: 'experimental'
   subComponentOf: string
-  theming?: { container?: boolean; targets: ComponentThemingTarget[]; vars?: ComponentThemingVar[]; derived?: ComponentThemingDerivedVar[] }
+  theming?: { container?: boolean; targets: ComponentThemingTarget[]; vars?: ComponentThemingVar[]; derived?: ComponentThemingDerivedVar[]; componentIcons?: ComponentIconSlotDoc[] }
   type?: 'component'
   usage?: UsageDoc
 ```
@@ -1976,10 +2004,13 @@ ComponentAccessibilityThemeStatus (./authoring)
 ComponentAccessibilityThemeTable (./authoring)
 ComponentAnatomyElement (./authoring)
 ComponentBestPractice (./authoring)
+ComponentDeprecation (./authoring)
 ComponentDoc (./authoring)
 ComponentEntry (./authoring)
 ComponentExampleDoc (./authoring)
 ComponentGroupDoc (./authoring)
+ComponentIconSlotDoc (./authoring)
+ComponentIconSlotStateDoc (./authoring)
 ComponentPlaygroundConfig (./authoring)
 ComponentPropDoc (./authoring)
 ComponentSlotElement (./authoring)
@@ -2224,6 +2255,7 @@ DocsIndexEntry (./api)
 DocsIndexResponse (./api)
 DocsIndexSection (./api)
 DocsLinks (./api)
+DocsListChild (./api)
 DocsListEntry (./api)
 DocsListNamespace (./api)
 DocsListResponse (./api)
@@ -2294,6 +2326,7 @@ RegistryCompositionFileSummary (./api)
 RegistryCompositionItemSummary (./api)
 RegistryCompositionSummary (./api)
 SearchDomain (./api)
+SearchIndex (./api)
 SearchOptions (./api)
 SearchResponse (./api)
 SearchResultEntry (./api)
@@ -2368,10 +2401,13 @@ ComponentAccessibilityThemeTable (./authoring)
 ComponentAnatomyElement (./authoring)
 ComponentBaseDoc (./doc)
 ComponentBestPractice (./authoring)
+ComponentDeprecation (./authoring)
 ComponentDoc (./authoring)
 ComponentEntry (./authoring)
 ComponentExampleDoc (./authoring)
 ComponentGroupDoc (./authoring)
+ComponentIconSlotDoc (./authoring)
+ComponentIconSlotStateDoc (./authoring)
 ComponentPlaygroundConfig (./authoring)
 ComponentPropDoc (./authoring)
 ComponentRef (./doc)
