@@ -49,6 +49,8 @@ import {
   monthIndexOf,
   fromMonthIndex,
   clampIndex,
+  createMonthModel,
+  dateInMonth,
   rowAtScrollOffset,
   scrollOffsetForRow,
   paneWindow,
@@ -130,6 +132,15 @@ function stubMedia({
       dispatchEvent: () => false,
     };
   });
+}
+
+/**
+ * A touchscreen laptop with the sheet pinned (`presentation="bottom-sheet"`).
+ * Its primary pointer is fine, so the sheet's wheels are the scrolling
+ * columns. A finger can still turn them.
+ */
+function stubTouchscreenLaptop(): void {
+  stubMedia({pointer: 'fine', anyPointer: 'coarse', width: 1280});
 }
 
 function setViewport(kind: 'mobile' | 'desktop'): void {
@@ -1799,6 +1810,165 @@ describe('DateInput — month/year wheels', () => {
     expect(title()).toHaveTextContent('March 2025');
   });
 
+  /**
+   * UIDatePicker's inline calendar: turning the month or year wheel changes
+   * the date, keeping its day (datePicker.calendar.monthYearWheels
+   * .changesDate), clamped to the month and the bounds.
+   */
+  it('with a mouse the scrolling wheels move only the calendar, not the date', () => {
+    stubTouchscreenLaptop();
+    expect(matchMedia('(pointer: coarse)').matches).toBe(false);
+    const onChange = vi.fn();
+    renderAndOpen(
+      <Controlled
+        initial="2026-03-21"
+        {...ONE_YEAR}
+        presentation="bottom-sheet"
+        onChange={onChange}
+      />,
+    );
+    openWheels();
+    fireEvent.click(
+      within(screen.getByRole('listbox', {name: 'Month'})).getByText('May'),
+    );
+    expect(onChange).not.toHaveBeenCalled();
+    expect(field()).toHaveValue('March 21, 2026');
+  });
+
+  it('under a finger: keeps a date a custom constraint refuses, while the calendar moves', () => {
+    const onChange = vi.fn();
+    renderAndOpen(
+      <Controlled
+        initial="2026-03-21"
+        {...ONE_YEAR}
+        // May 21, 2026 is refused; the wheels must not choose it.
+        dateConstraints={[
+          date => !(date.getMonth() === 4 && date.getDate() === 21),
+        ]}
+        onChange={onChange}
+      />,
+    );
+    openWheels();
+    fireEvent.click(
+      within(screen.getByRole('listbox', {name: 'Month'})).getByText('May'),
+    );
+    expect(onChange).not.toHaveBeenCalled();
+    expect(field()).toHaveValue('March 21, 2026');
+    expect(title()).toHaveTextContent('May 2026');
+  });
+
+  it('under a finger: moves the chosen date with the wheels, keeping its day', () => {
+    const onChange = vi.fn();
+    renderAndOpen(
+      <Controlled initial="2026-03-21" {...ONE_YEAR} onChange={onChange} />,
+    );
+    openWheels();
+    fireEvent.click(
+      within(screen.getByRole('listbox', {name: 'Month'})).getByText('May'),
+    );
+    expect(onChange).toHaveBeenLastCalledWith('2026-05-21');
+    expect(field()).toHaveValue('May 21, 2026');
+  });
+
+  it('under a finger: a date the wheels move runs changeAction after onChange, shows at once, and is busy (family:input-fields FR6)', async () => {
+    const calls: string[] = [];
+    let resolve: () => void = () => {};
+    const changeAction = vi.fn(async (value: string | undefined) => {
+      calls.push(`changeAction ${value}`);
+      return new Promise<void>(done => {
+        resolve = done;
+      });
+    });
+    renderAndOpen(
+      <DateInput
+        nativePicker="never"
+        label="Ship date"
+        value="2026-03-21"
+        {...ONE_YEAR}
+        onChange={value => calls.push(`onChange ${value}`)}
+        changeAction={changeAction}
+      />,
+    );
+    openWheels();
+    fireEvent.click(
+      within(screen.getByRole('listbox', {name: 'Month'})).getByText('May'),
+    );
+    await waitFor(() => {
+      expect(calls).toEqual(['onChange 2026-05-21', 'changeAction 2026-05-21']);
+    });
+    // Optimistic: the moved date shows while the Action runs, the field busy.
+    expect(field()).toHaveValue('May 21, 2026');
+    expect(document.querySelector('[aria-busy="true"]')).not.toBeNull();
+    await act(async () => {
+      resolve();
+    });
+  });
+
+  it('under a finger: clamps a day the new month lacks to its last day', () => {
+    const onChange = vi.fn();
+    renderAndOpen(
+      <Controlled initial="2026-03-31" {...ONE_YEAR} onChange={onChange} />,
+    );
+    openWheels();
+    fireEvent.click(
+      within(screen.getByRole('listbox', {name: 'Month'})).getByText('April'),
+    );
+    expect(onChange).toHaveBeenLastCalledWith('2026-04-30');
+  });
+
+  it('under a finger: takes a year change past the range on to its nearest reachable month, date and month wheel too', async () => {
+    const onChange = vi.fn();
+    renderAndOpen(
+      <Controlled
+        initial="2026-03-21"
+        min="2025-06-01"
+        max="2026-12-31"
+        onChange={onChange}
+      />,
+    );
+    openWheels();
+    fireEvent.click(
+      within(screen.getByRole('listbox', {name: 'Year'})).getByText('2025'),
+    );
+    // March 2025 is before the range: June 2025, the first reachable month.
+    expect(title()).toHaveTextContent('June 2025');
+    expect(onChange).toHaveBeenLastCalledWith('2025-06-21');
+    const months = screen.getByRole('listbox', {name: 'Month'});
+    await waitFor(() =>
+      expect(
+        document.getElementById(months.getAttribute('aria-activedescendant')!),
+      ).toHaveTextContent('June'),
+    );
+  });
+
+  it('under a finger: opening the wheels on a date outside the range changes nothing until a wheel moves', () => {
+    // An untouched value is never changed by opening: the wheels show the
+    // calendar's month, inside the range, and nothing commits.
+    const onChange = vi.fn();
+    renderAndOpen(
+      <Controlled
+        initial="2025-12-15"
+        min="2026-01-01"
+        max="2026-12-31"
+        onChange={onChange}
+      />,
+    );
+    openWheels();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(field()).toHaveValue('December 15, 2025');
+  });
+
+  it('only moves the calendar when no date is chosen', () => {
+    const onChange = vi.fn();
+    renderAndOpen(<Controlled {...ONE_YEAR} onChange={onChange} />);
+    openWheels();
+    fireEvent.click(
+      within(screen.getByRole('listbox', {name: 'Month'})).getByText('May'),
+    );
+    expect(title()).toHaveTextContent('May 2026');
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('is a single tab stop driven by the arrow keys', () => {
     renderAndOpen();
     openWheels();
@@ -2540,6 +2710,41 @@ describe('monthGeometry', () => {
     );
   });
 
+  it('moves a date to another month keeping its day, within the month and the bounds', () => {
+    const d = (year: number, month: number, day: number) => ({
+      year,
+      month,
+      day,
+    });
+    const gregory = createMonthModel('gregory');
+    expect(
+      dateInMonth(gregory, d(2026, 10, 15), toMonthIndex(2026, 5)),
+    ).toEqual(d(2026, 5, 15));
+    expect(dateInMonth(gregory, d(2026, 1, 31), toMonthIndex(2026, 2))).toEqual(
+      d(2026, 2, 28),
+    );
+    expect(dateInMonth(gregory, d(2024, 1, 31), toMonthIndex(2024, 2))).toEqual(
+      d(2024, 2, 29),
+    );
+    expect(
+      dateInMonth(
+        gregory,
+        d(2026, 6, 10),
+        toMonthIndex(2026, 5),
+        d(2026, 5, 20),
+      ),
+    ).toEqual(d(2026, 5, 20));
+    expect(
+      dateInMonth(
+        gregory,
+        d(2026, 6, 25),
+        toMonthIndex(2026, 7),
+        null,
+        d(2026, 7, 4),
+      ),
+    ).toEqual(d(2026, 7, 4));
+  });
+
   it('clamps to the reachable range', () => {
     expect(clampIndex(5, 10, 20)).toBe(10);
     expect(clampIndex(25, 10, 20)).toBe(20);
@@ -2844,9 +3049,10 @@ describe('DateInput — scroll CSS (definition-level)', () => {
     // that is what put the title and Done 4px off the day grid's line.
     expect(source).toContain("paddingInline: spacingVars['--spacing-4']");
     expect(source).toContain("paddingBlockEnd: spacingVars['--spacing-4']");
-    // The block-start is the documented exception: the grab handle floats out
-    // of flow, so the content wrapper owes it the height it occupies.
-    expect(source).toContain("paddingBlockStart: spacingVars['--spacing-6']");
+    // The block-start is the documented exception: BottomSheet keeps the band
+    // under its grab bar (component:BottomSheet, Content area inset), so the
+    // content wrapper adds nothing above.
+    expect(source).toContain('paddingBlockStart: 0,');
     const header = source.slice(
       source.indexOf('  header: {'),
       source.indexOf('  title: {'),

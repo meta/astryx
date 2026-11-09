@@ -64,6 +64,53 @@ export function planLegs(files, durations, legs) {
 }
 
 /**
+ * A note that the proofs need the last leg the matrix allows, with the room
+ * left before it is full; null while a whole leg of room remains, and null
+ * past the ceiling, which `legsFitMessage` reports.
+ */
+export function nearCeilingMessage({seconds, setupSeconds, maxSeconds, maxLegs}) {
+  const needed = legsNeeded({seconds, setupSeconds, maxSeconds});
+  if (needed !== maxLegs) return null;
+  const room = Math.round(maxLegs * (maxSeconds - setupSeconds) - seconds);
+  return `${Math.round(seconds)} s of proofs need ${needed} of the ${maxLegs} legs; ${room} s of room is left before the ceiling`;
+}
+
+/**
+ * Why a suite's proofs do not fit its matrix, or null when they do: the leg
+ * count the planner takes for `seconds` must be no more than `maxLegs`, and
+ * every leg it plans, with its setup, within `maxSeconds` plus `slackSeconds`
+ * (one spec cannot be split across legs). The message names the heaviest
+ * specs, which are where the time goes.
+ */
+export function legsFitMessage({
+  seconds,
+  files,
+  costs,
+  setupSeconds,
+  maxSeconds,
+  maxLegs,
+  slackSeconds = 60,
+}) {
+  const needed = legsNeeded({seconds, setupSeconds, maxSeconds});
+  const legs = legCount({seconds, setupSeconds, maxSeconds, maxLegs});
+  const planned = planLegs(files, costs, legs);
+  const longest = Math.max(0, ...planned.map(leg => leg.seconds));
+  if (needed <= maxLegs && longest + setupSeconds <= maxSeconds + slackSeconds)
+    return null;
+  const heaviest = [...new Set(files)]
+    .map(file => [file, costs[file] ?? 0])
+    .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
+    .slice(0, 5)
+    .map(([file, cost]) => `${file} (${Math.round(cost)} s)`)
+    .join(', ');
+  return (
+    `${Math.round(seconds)} s of proofs need ${needed} legs of ${Math.round(maxSeconds - setupSeconds)} s; ` +
+    `the matrix has ${maxLegs}, and its longest leg takes ${Math.round(longest + setupSeconds)} s with setup. ` +
+    `Heaviest specs: ${heaviest}`
+  );
+}
+
+/**
  * The seconds a suite's proofs take: each listed spec file a filter selects
  * (every listed spec with no filter), and each changed spec, at its recorded
  * time. A spec with no time of its own counts its time in `fallback`
@@ -180,6 +227,14 @@ function meanTestSeconds(texts, project, strip) {
 }
 
 /**
+ * The legs whose share of the proofs, each beside its setup, fits
+ * `maxSeconds`, with no ceiling.
+ */
+export function legsNeeded({seconds, setupSeconds, maxSeconds}) {
+  return Math.ceil(seconds / (maxSeconds - setupSeconds));
+}
+
+/**
  * The fewest legs, at most `maxLegs`, in which each leg's setup and share of
  * the proofs fits `maxSeconds`. One leg while the whole estimate fits.
  */
@@ -190,7 +245,7 @@ export function legCount({seconds, setupSeconds, maxSeconds, maxLegs}) {
     throw new Error(
       'a leg needs more time than its setup, and one leg at least',
     );
-  const needed = Math.ceil(seconds / (maxSeconds - setupSeconds));
+  const needed = legsNeeded({seconds, setupSeconds, maxSeconds});
   return Math.min(maxLegs, Math.max(1, needed));
 }
 

@@ -244,6 +244,18 @@ export const ReadOnly: Story = {
   },
 };
 
+/** A disabled editor whose content holds a link. */
+export const DisabledWithLink: Story = {
+  name: 'Disabled with a link',
+  args: {
+    label: 'Notes',
+    isDisabled: true,
+    defaultValue: markdownToEditorStateJSON(
+      'Read [the guide](https://example.com/guide) before you edit.\n',
+    ),
+  },
+};
+
 const SEED = JSON.stringify({
   root: {
     children: [

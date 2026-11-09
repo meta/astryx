@@ -210,7 +210,10 @@ describe('where runs wait', () => {
       guarded.push(id);
     }
     expect(guarded.sort()).toEqual([
+      'a11y-dependent-audits-plan',
       'docsite-build',
+      'interaction-legs',
+      'pr-a11y-dependent-audits',
       'pr-component-a11y-contracts',
       'pr-interaction',
       'pr-interaction-webkit',

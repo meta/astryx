@@ -370,6 +370,40 @@ describe('busyWindowProof on-screen start', () => {
     expect(proof.verdict.failures.join('\n')).toMatch(/longest stall/);
   });
 
+  it('judges an element that enters from off screen from its first position inside the block, and reports when', () => {
+    // The cast's frames before the block show the screen without it.
+    const entering = moving().map(f =>
+      f.t < 1020
+        ? ({...f, box: null} as TrackedFrame)
+        : ({...f, box: {...f.box!, y: f.box!.y - 60}} as TrackedFrame),
+    );
+    const proof = busyWindowProof(entering, BLOCK);
+    expect(proof.verdict.failures).toEqual([]);
+    expect(proof.onScreenFromMs).toBeGreaterThanOrEqual(20);
+    expect(proof.onScreenFromMs).toBeLessThan(20 + FRAME);
+    expect(proof.summary).toMatch(/\(off screen before the block\)/);
+  });
+
+  it('still fails an entrance the main thread drives: off screen before the block, and no frame in it shows the element', () => {
+    const blocked = moving().map(f =>
+      f.t < 1720 ? ({...f, box: null} as TrackedFrame) : f,
+    );
+    const proof = busyWindowProof(blocked, BLOCK);
+    expect(proof.onScreenFromMs).toBeNull();
+    expect(proof.verdict.failures.join('\n')).toMatch(/no frame presented/);
+  });
+
+  it('still fails an entrance the block delays: too few frames inside it from the first position', () => {
+    const late = moving().map(f =>
+      f.t < 1640 ? ({...f, box: null} as TrackedFrame) : f,
+    );
+    const proof = busyWindowProof(late, BLOCK);
+    expect(proof.onScreenFromMs).toBeGreaterThanOrEqual(640);
+    expect(proof.verdict.failures.join('\n')).toMatch(
+      /frames < 4: the animation under test was not moving/,
+    );
+  });
+
   it('still fails a start the block itself delays until it ends', () => {
     const proof = busyWindowProof(startingAt(1720), BLOCK);
     expect(proof.onScreenFromMs).toBeNull();

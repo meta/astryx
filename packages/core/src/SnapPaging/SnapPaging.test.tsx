@@ -22,6 +22,8 @@ import {
   makeSnapPaging,
   nearestStop,
   type SnapPagingAttachment,
+  snapPages,
+  snapStops,
 } from './snapPagingValue';
 
 class MockResizeObserver {
@@ -224,6 +226,40 @@ describe('Carousel with hasSnap', () => {
   it('nearestStop picks the nearest stop, and keeps the offset with no items', () => {
     expect(nearestStop([0, 103, 205], 120)).toBe(103);
     expect(nearestStop([], 42)).toBe(42);
+  });
+
+  describe('the end page', () => {
+    // A row 299 px wide holds seven items 94.67 px wide and 8 px apart. The
+    // fifth item's stop, 410.67, sits 1.33 px before the row's end.
+    function row() {
+      const element = document.createElement('div');
+      const box = {left: 0, right: 299, width: 299} as DOMRect;
+      element.getBoundingClientRect = () => box;
+      for (let i = 0; i < 7; i++) {
+        const item = document.createElement('div');
+        const left = i * (94.67 + 8);
+        item.getBoundingClientRect = () =>
+          ({left, right: left + 94.67, width: 94.67}) as DOMRect;
+        element.append(item);
+      }
+      document.body.append(element);
+      return element;
+    }
+    const rounded = (stops: number[]) => stops.map(stop => Math.round(stop));
+
+    it('a stop within half its preceding step of the end is the end page, which rests where the row ends', () => {
+      expect(rounded(snapStops(row(), 0, 412))).toEqual([
+        0, 103, 205, 308, 412,
+      ]);
+    });
+
+    it('native snap skips that stop until the stop is further from the end than half its step', () => {
+      const element = row();
+      expect(snapPages(element, 0, 412).skipped).toEqual([element.children[4]]);
+      const split = snapPages(element, 0, 471);
+      expect(rounded(split.stops)).toEqual([0, 103, 205, 308, 411, 471]);
+      expect(split.skipped).toEqual([]);
+    });
   });
 
   it('attaches once: a new paging value on a later render attaches nothing again', () => {
