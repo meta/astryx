@@ -2,23 +2,26 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import {describe, expect, it} from 'vitest';
+import {describe, expect, it, vi} from 'vitest';
 import {
   CORE_DEFAULTS,
   SWIFT_THEME_DIR,
   SWIFT_TOKENS_FILE,
   defineTheme,
+  finishRun,
   localTokensLeftOut,
   publishedThemePackages,
   renderAll,
   renderSwiftTheme,
   swiftMember,
   swiftThemeName,
+  toColor,
   toFamilies,
-  toHexColor,
+  toLeading,
   toPoints,
   renderTokenTypes,
   toShadow,
+  toWeight,
   tokenSurface,
   valueForMode,
 } from '../../scripts/swift-ios-theme.mjs';
@@ -105,25 +108,128 @@ describe('swift theme generator: names (G6)', () => {
   });
 });
 
+// Every row is exact to the 8-bit channel (tolerance 0 of 255). The lab(),
+// lch(), oklab(), and oklch() rows are CSS Color 4's own examples of #7D2329
+// and #C65D06; the rest agree with an independent CSS Color 4 implementation.
+// Outside Display P3, each channel clips, as Chromium 154 draws it.
+const P3_CLIPPED = 'outside Display P3; clipped to match the web';
+const COLORS: [css: string, swift: string, note?: string][] = [
+  ['#0064E0', '#0064E0FF'],
+  ['#abc8', '#AABBCC88'],
+  ['rebeccapurple', '#663399FF'],
+  ['transparent', '#00000000'],
+  ['rgba(5, 54, 89, 0.1)', '#0536591A'],
+  ['rgb(10% 20% 30% / 50%)', '#1A334D80'],
+  ['rgb(none 0 0)', '#000000FF'],
+  ['rgb(calc(255 / 2) 0 0)', '#800000FF'],
+  ['hsl(210 100% 50%)', '#0080FFFF'],
+  ['hsla(120, 100%, 25%, 0.5)', '#00800080'],
+  ['hsl(0.5turn 50% 50%)', '#40BFBFFF'],
+  ['hsl(200grad 50% 50%)', '#40BFBFFF'],
+  ['hsl(3.14159rad 50% 50%)', '#40BFBFFF'],
+  ['hwb(194 0% 0% / .5)', '#00C4FF80'],
+  ['hwb(0 60% 60%)', '#808080FF'],
+  ['lab(29.2345% 39.3825 20.0664)', '#7D2329FF'],
+  ['lch(52.2345% 72.2 56.2)', '#C65D06FF'],
+  ['oklab(40.101% 0.1147 0.0453)', '#7D2329FF'],
+  ['oklch(40.101% 0.12332 21.555)', '#7D2329FF'],
+  ['oklch(0 0 0 / 5%)', '#0000000D'],
+  ['oklch(50% 0 0)', '#636363FF'],
+  ['color(srgb 0.5 0.2 0.1)', '#80331AFF'],
+  ['color(srgb-linear 0.5 0.2 0.1)', '#BC7C59FF'],
+  ['color(display-p3 0.4 0.6 0.2)', '#559B17FF'],
+  ['color(a98-rgb 0.4 0.6 0.2)', '#439A22FF'],
+  ['color(prophoto-rgb 0.4 0.6 0.2)', '#52B204FF'],
+  // rec2020 decodes with the BT.2020 curve, as Chromium 154 draws it.
+  ['color(rec2020 0.4 0.6 0.2)', '#4AA829FF'],
+  ['color(rec2020 0.5 0.5 0.5)', '#8B8B8BFF'],
+  ['color(xyz-d65 0.2 0.3 0.4)', 'display-p3 #44A4A3FF'],
+  ['color(xyz-d50 0.2 0.3 0.4)', 'display-p3 #2CA5BAFF'],
+  ['color(display-p3 1 0 0)', 'display-p3 #FF0000FF'],
+  ['color-mix(in srgb, red, blue)', '#800080FF'],
+  ['color-mix(in srgb, red 30%, blue)', '#4D00B3FF'],
+  ['color-mix(in srgb, red 20%, blue 20%)', '#80008066'],
+  ['color-mix(in srgb, rgb(255 0 0 / .5), blue)', '#5500AABF'],
+  ['color-mix(in srgb, rgb(none 50 0), rgb(10 200 0))', '#0A7D00FF'],
+  ['color-mix(in srgb-linear, red, blue)', '#BC00BCFF'],
+  ['color-mix(in xyz, red, blue)', '#BC00BCFF'],
+  ['color-mix(in display-p3, red, blue)', '#800A91FF'],
+  ['color-mix(in oklab, red, blue)', '#8C53A2FF'],
+  ['color-mix(red, blue)', '#8C53A2FF'],
+  ['color-mix(in lab, red, blue)', 'display-p3 #B01185FF'],
+  ['color-mix(in hsl, red, blue)', '#FF00FFFF'],
+  ['color-mix(in oklch, red, blue)', 'display-p3 #AA00BBFF', P3_CLIPPED],
+  [
+    'color-mix(in oklch longer hue, red, blue)',
+    'display-p3 #009000FF',
+    P3_CLIPPED,
+  ],
+  ['rgb(from #123456 calc(r + 10) g b)', '#1C3456FF'],
+  ['rgb(from red r g b / 50%)', '#FF000080'],
+  ['hsl(from blue calc(h + 180) s l)', '#FFFF00FF'],
+  ['oklch(0.7 0.4 150)', 'display-p3 #00D100FF', P3_CLIPPED],
+  ['oklch(0.9 0.4 300)', 'display-p3 #FB7CFFFF', P3_CLIPPED],
+  // A relative color keeps its origin's gamut instead of clamping to sRGB.
+  ['rgb(from color(display-p3 1 0 0) r g b / 50%)', 'display-p3 #FF000080'],
+  ['hwb(from color(display-p3 1 0 0) h w b)', 'display-p3 #FF0000FF'],
+  // A missing alpha takes the other color's before premultiplying.
+  ['color-mix(in srgb, rgb(255 0 0 / none), rgb(0 0 255 / 0.5))', '#80008080'],
+  ['color-mix(in srgb, rgb(255 0 0 / none), rgb(0 0 255 / none))', '#80008000'],
+  // A missing blue is not Lab's b: only analogous channels carry over.
+  ['color-mix(in lab, rgb(0 0 none), lab(50 20 30))', '#4F3525FF'],
+  // HSL lightness is analogous to Lab's, so a missing one carries over.
+  ['color-mix(in lab, hsl(0 50% none), lab(50 20 30))', '#8E705EFF'],
+  // hsl() saturation clamps at 100% in both syntaxes, as browsers read it.
+  ['hsl(120, 200%, 40%)', '#00CC00FF'],
+  ['hsl(120 200% 40%)', '#00CC00FF'],
+  // Hues are taken modulo 360° before interpolating (400° is 40°).
+  ['color-mix(in oklch, oklch(0.6 0.1 400), oklch(0.6 0.1 20))', '#B4685CFF'],
+];
+
 describe('swift theme generator: values (G7)', () => {
-  it('reads CSS colors, lengths, and font stacks as Swift values', () => {
-    expect(toHexColor('#0064E0')).toBe('#0064E0FF');
-    expect(toHexColor('#fff')).toBe('#FFFFFFFF');
-    expect(toHexColor('rgba(5, 54, 89, 0.1)')).toBe('#0536591A');
-    expect(toHexColor('transparent')).toBe('#00000000');
-    expect(toHexColor('oklch(0 0 0 / 5%)')).toBe('#0000000D');
-    expect(toHexColor('oklch(1 0 0 / 8%)')).toBe('#FFFFFF14');
-    expect(toHexColor('oklch(0.5 0 0)')).toBe('#636363FF');
-    expect(toHexColor('oklch(50% 0 0)')).toBe('#636363FF');
-    expect(toHexColor('color-mix(in srgb, red, blue)')).toBeNull();
-    expect(toHexColor('light-dark(#000, #fff)')).toBeNull();
-    expect(toHexColor('hsl(0 100% 50%)')).toBe('#FF0000FF');
-    expect(toHexColor('hsl(210 100% 50%)')).toBe('#0080FFFF');
-    expect(toHexColor('hsla(120, 100%, 25%, 0.5)')).toBe('#00800080');
-    expect(toPoints('0.875rem')).toBe(14);
-    expect(toPoints('32px')).toBe(32);
-    expect(toPoints('600')).toBe(600);
-    expect(toPoints('calc(1px + 1rem)')).toBeNull();
+  it.each(COLORS)('reads the color %s as %s', (css, swift, note) => {
+    const notes: string[] = [];
+    expect(toColor(css, notes)).toBe(swift);
+    expect(notes).toEqual(note ? [note] : []);
+  });
+
+  it('reads lengths, weights, and line heights', () => {
+    const lengths: [string, number][] = [
+      ['0.875rem', 14],
+      ['32px', 32],
+      ['12pt', 16],
+      ['1in', 96],
+      ['0', 0],
+      ['calc(1rem + 2px)', 18],
+      ['calc((1rem - 2px) * 2)', 28],
+      ['max(4px, 0.5rem)', 8],
+      ['clamp(2px, 1rem, 12px)', 12],
+    ];
+    for (const [css, points] of lengths) {
+      expect(toPoints(css), css).toBe(points);
+    }
+    // thin, medium, and thick are lengths only for a border width.
+    expect(toPoints('thin', [], {borderWidth: true})).toBe(1);
+    expect(toPoints('medium', [], {borderWidth: true})).toBe(3);
+    expect(() => toPoints('medium')).toThrow(/names a border width/);
+    const notes: string[] = [];
+    expect(toPoints('1.5em', notes)).toBe(24);
+    expect(notes).toEqual(['em read against the 16px root font size']);
+    expect(toWeight('bold')).toBe(700);
+    expect(toWeight('normal')).toBe(400);
+    expect(toWeight('650')).toBe(650);
+    expect(toWeight('bolder', notes)).toBe(700);
+    expect(toLeading('1.5', 14)).toBe(1.5);
+    expect(toLeading('150%', 14)).toBe(1.5);
+    expect(toLeading('21px', 14)).toBe(1.5);
+    // An em counts against the style's own size, not the 16-point root.
+    expect(toLeading('1.5em', 14)).toBe(1.5);
+    expect(toLeading('calc(1em + 7px)', 14)).toBe(1.5);
+    expect(toLeading('normal', 14, notes)).toBe(1.2);
+    expect(notes.slice(1)).toEqual([
+      "bolder read against normal (400), the root's inherited weight",
+      'normal depends on the font; read as 1.2',
+    ]);
     expect(toFamilies('"Figtree", -apple-system, sans-serif')).toEqual([
       'Figtree',
       '-apple-system',
@@ -132,51 +238,279 @@ describe('swift theme generator: values (G7)', () => {
     expect(toFamilies('var(--font-family-body)')).toBeNull();
   });
 
-  it('reads box-shadow lists as drop layers and inset rings (G7)', () => {
+  it('fails on a value with no static form, saying why', () => {
+    const cases: [() => unknown, RegExp][] = [
+      [() => toColor('currentColor'), /currentColor depends on where/],
+      [() => toColor('Canvas'), /system color/],
+      [() => toColor('var(--brand)'), /var\(--brand\) is not a token/],
+      [() => toColor('color(--custom 1 0 0)'), /not a color space/],
+      [() => toPoints('50%'), /percentage depends on the box/],
+      [() => toPoints('10vh'), /viewport units/],
+      [() => toPoints('2ch'), /font-relative units/],
+      [() => toPoints('calc(1px + 50%)'), /adds length and percent/],
+      [() => toPoints('env(safe-area-inset-top)'), /env\(\) is known only/],
+      [() => toWeight('1001'), /from 1 to 1000/],
+      [
+        () => toShadow('inset 0 1px 2px #000'),
+        /SwiftUI draws only inset rings/,
+      ],
+    ];
+    for (const [run, message] of cases) {
+      expect(run).toThrow(message);
+    }
+  });
+
+  it('reads box-shadow lists as drop layers and inset rings', () => {
     const neutralLow =
       '0 2px 4px light-dark(oklch(0 0 0 / 5%), oklch(0 0 0 / 25%)), 0 4px 8px light-dark(oklch(0 0 0 / 10%), oklch(0 0 0 / 40%)), inset 0 0 0 1px light-dark(transparent, oklch(1 0 0 / 8%))';
-    expect(toShadow(neutralLow, 'light')).toEqual([
+    expect(toShadow(valueForMode(neutralLow, 'light'))).toEqual([
       {x: 0, y: 2, blur: 4, spread: 0, isInset: false, color: '#0000000D'},
       {x: 0, y: 4, blur: 8, spread: 0, isInset: false, color: '#0000001A'},
       {x: 0, y: 0, blur: 0, spread: 1, isInset: true, color: '#00000000'},
     ]);
-    expect(toShadow(neutralLow, 'dark')?.[2]?.color).toBe('#FFFFFF14');
-    expect(toShadow('0 2px 4px #4a35200D', 'light')).toEqual([
-      {x: 0, y: 2, blur: 4, spread: 0, isInset: false, color: '#4A35200D'},
+    expect(toShadow(valueForMode(neutralLow, 'dark'))[2]?.color).toBe(
+      '#FFFFFF14',
+    );
+    expect(toShadow('none')).toEqual([]);
+    const notes: string[] = [];
+    expect(toShadow('#000 0 calc(1px + 1px) 0.25rem 1px', notes)).toEqual([
+      {x: 0, y: 2, blur: 4, spread: 0, isInset: false, color: '#000000FF'},
     ]);
-    // No exact SwiftUI form: a drop spread, or a blurred or offset inset.
-    expect(toShadow('0 2px 4px 1px #000', 'light')).toBeNull();
-    expect(toShadow('inset 0 1px 2px #000', 'light')).toBeNull();
+    expect(notes).toEqual([
+      'drop layer "#000 0 calc(1px + 1px) 0.25rem 1px" drawn without its spread',
+    ]);
   });
 
-  it('takes light-dark() per mode (G1)', async () => {
+  it('takes light-dark() per mode at any depth (G1)', () => {
     expect(valueForMode('light-dark(#000, #fff)', 'light')).toBe('#000');
     expect(valueForMode('light-dark(#000, #fff)', 'dark')).toBe('#fff');
-    expect(
-      valueForMode('light-dark(rgb(0, 0, 0), rgb(255, 255, 255))', 'dark'),
-    ).toBe('rgb(255, 255, 255)');
+    const mixed = 'color-mix(in srgb, light-dark(red, blue), white)';
+    expect(toColor(valueForMode(mixed, 'light'))).toBe('#FF8080FF');
+    expect(toColor(valueForMode(mixed, 'dark'))).toBe('#8080FFFF');
     expect(valueForMode('#123', 'dark')).toBe('#123');
+  });
+
+  it('generates a [light, dark] tuple and a light-dark() value per mode', async () => {
     const theme = await defineTheme({
       name: 'acme-brand',
-      tokens: {'--color-accent': 'light-dark(#000, #fff)'},
+      tokens: {
+        '--color-accent': 'light-dark(#000, #fff)',
+        '--color-border': [
+          'oklch(40.101% 0.12332 21.555)',
+          'color-mix(in srgb, light-dark(red, blue) 50%, white)',
+        ],
+        '--spacing-4': ['4px', '0.75rem'],
+      },
     });
     const swift = await renderSwiftTheme(theme);
-    expect(swift).toContain(
+    const [light, dark] = swift.split('dark: Tokens(');
+    expect(light).toContain(
       'accent: Color(.sRGB, red: 0, green: 0, blue: 0, opacity: 1)',
     );
-    expect(swift).toContain(
+    expect(dark).toContain(
       'accent: Color(.sRGB, red: 1, green: 1, blue: 1, opacity: 1)',
+    );
+    expect(light).toContain(
+      'border: Color(.sRGB, red: 0.49019607843137253, green: 0.13725490196078433, blue: 0.1607843137254902, opacity: 1)',
+    );
+    expect(dark).toContain(
+      'border: Color(.sRGB, red: 0.5019607843137255, green: 0.5019607843137255, blue: 1, opacity: 1)',
+    );
+    expect(light).toContain('s4: 4,');
+    expect(dark).toContain('s4: 12,');
+  });
+
+  // A value with no static form takes core's default and warns (G15).
+  it.each([
+    ['--font-family-body', 'inherit', 'inherit depends on'],
+    ['--font-family-body', '"Figtree", env(x)', 'env() is known'],
+    ['--shadow-low', 'inherit', 'inherit depends on'],
+    ['--shadow-low', '0 1px 2px', 'draws in currentColor'],
+  ])('falls back from %s: %s, warning why', async (token, value, reason) => {
+    const theme = await defineTheme({name: 'acme', tokens: {[token]: value}});
+    const warnings: string[] = [];
+    await renderSwiftTheme(theme, {warnings});
+    expect(warnings).toHaveLength(2);
+    for (const warning of warnings) {
+      expect(warning).toContain(reason);
+      expect(warning).toContain("core's default");
+    }
+  });
+
+  // A form the reader does not read fails, saying so (G7).
+  it.each([
+    ['--font-family-body', '"Figtree", inherit', 'cannot be one name'],
+    ['--color-accent', 'color(display-p3-linear 1 0 0)', 'not a color'],
+  ])(
+    'fails %s: %s as a form it does not read',
+    async (token, value, reason) => {
+      const theme = await defineTheme({name: 'acme', tokens: {[token]: value}});
+      const {message} = await renderSwiftTheme(theme, {warnings: []}).catch(
+        error => error,
+      );
+      expect(message).toContain(reason);
+      expect(
+        message.endsWith('; the Swift theme generator does not read this form'),
+      ).toBe(true);
+    },
+  );
+
+  it('reads + and - in calc() only with a space on each side, as CSS does', () => {
+    expect(toPoints('calc(1rem - 2px)')).toBe(14);
+    expect(() => toPoints('calc(4px+2px)')).toThrow(/space on each side of \+/);
+    expect(() => toPoints('calc(1rem-2px)')).toThrow(/space on each side of -/);
+  });
+
+  it.each([
+    ['hwb(0, 0%, 0%)', /no comma syntax/],
+    ['rgb(255, none, 0)', /cannot hold none/],
+    ['rgba(255, 0, 0, none)', /cannot hold none/],
+    ['rgb(255, 50%, 0)', /all numbers or all percentages/],
+    ['hsl(120, 50, 40)', /saturation and lightness as percentages/],
+  ])('fails the comma syntax CSS does not allow: %s', (css, reason) => {
+    expect(() => toColor(css)).toThrow(reason);
+  });
+
+  it("writes a color outside sRGB as SwiftUI's Display P3 color", async () => {
+    const theme = await defineTheme({
+      name: 'acme-brand',
+      tokens: {'--color-accent': 'color(display-p3 1 0 0 / 50%)'},
+    });
+    expect(await renderSwiftTheme(theme)).toContain(
+      'accent: Color(.displayP3, red: 1, green: 0, blue: 0, opacity: 0.5019607843137255)',
     );
   });
 
-  it('fails on a value Swift cannot read, naming theme, mode, token, and value', async () => {
+  it("keeps a relative color in its origin's gamut through core's var()", async () => {
     const theme = await defineTheme({
       name: 'acme-brand',
-      tokens: {'--color-accent': 'color-mix(in srgb, red, blue)'},
+      tokens: {
+        '--color-accent': 'color(display-p3 1 0 0)',
+        '--color-border': 'rgb(from var(--color-accent) r g b / 50%)',
+      },
+    });
+    expect(await renderSwiftTheme(theme)).toContain(
+      'border: Color(.displayP3, red: 1, green: 0, blue: 0, opacity: 0.5019607843137255)',
+    );
+  });
+
+  it('turns a length line height into a multiplier of its style size', async () => {
+    const theme = await defineTheme({
+      name: 'acme-brand',
+      tokens: {'--text-body-size': '16px', '--text-body-leading': '20px'},
+    });
+    expect(await renderSwiftTheme(theme)).toMatch(
+      /body: TypeStyleTokens\(size: 16, weight: \d+, leading: 1\.25\)/,
+    );
+  });
+});
+
+describe('swift theme generator: diagnostics (G15)', () => {
+  it('warns on a lossy value with theme, mode, token, value, and output', async () => {
+    const theme = await defineTheme({
+      name: 'acme-brand',
+      tokens: {'--color-accent': 'oklch(0.7 0.4 150)'},
+    });
+    const warnings: string[] = [];
+    const swift = await renderSwiftTheme(theme, {warnings});
+    expect(swift).toContain(
+      'accent: Color(.displayP3, red: 0, green: 0.8196078431372549, blue: 0, opacity: 1)',
+    );
+    expect(warnings).toEqual([
+      `acme-brand light: --color-accent = oklch(0.7 0.4 150) → Color(.displayP3, red: 0, green: 0.8196078431372549, blue: 0, opacity: 1): ${P3_CLIPPED}`,
+      `acme-brand dark: --color-accent = oklch(0.7 0.4 150) → Color(.displayP3, red: 0, green: 0.8196078431372549, blue: 0, opacity: 1): ${P3_CLIPPED}`,
+    ]);
+  });
+
+  it("takes core's default for a value with no static form, with a warning", async () => {
+    const theme = await defineTheme({
+      name: 'acme-brand',
+      tokens: {'--spacing-4': '2vw'},
+    });
+    const warnings: string[] = [];
+    const swift = await renderSwiftTheme(theme, {warnings});
+    const core = await renderSwiftTheme(CORE_DEFAULTS);
+    const s4 = (text: string) => /s4: [\d.]+/.exec(text)?.[0];
+    expect(s4(swift)).toBe(s4(core));
+    expect(warnings[0]).toMatch(
+      /^acme-brand light: --spacing-4 = 2vw → \d+: viewport units depend on the screen; core's default \S+ used instead$/,
+    );
+  });
+
+  it('fails when a value has no static form and core has no default', async () => {
+    const theme = await defineTheme({
+      name: 'acme-brand',
+      tokens: {'--color-acme-only': 'currentColor'},
     });
     await expect(renderSwiftTheme(theme)).rejects.toThrow(
-      'acme-brand light: --color-accent is not a color Swift can read: color-mix(in srgb, red, blue)',
+      'acme-brand light: --color-acme-only = currentColor: currentColor depends on where the token is used; Swift has no static value',
     );
+  });
+
+  it('prints warnings to standard error when no list is passed', async () => {
+    const theme = await defineTheme({
+      name: 'acme-brand',
+      tokens: {'--color-accent': 'oklch(0.7 0.4 150)'},
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await renderSwiftTheme(theme);
+      expect(warn).toHaveBeenCalledTimes(2);
+      expect(warn.mock.calls[0][0]).toMatch(
+        /^warning: acme-brand light: --color-accent = oklch\(0\.7 0\.4 150\) → /,
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("drops a failed value's notes before falling back to core's default", async () => {
+    const theme = await defineTheme({
+      name: 'acme-brand',
+      tokens: {'--spacing-4': 'calc(1em + 2vw)'},
+    });
+    const warnings: string[] = [];
+    await renderSwiftTheme(theme, {warnings});
+    expect(warnings).toHaveLength(2);
+    for (const warning of warnings) {
+      expect(warning).toMatch(
+        /viewport units depend on the screen; core's default/,
+      );
+      expect(warning).not.toMatch(/em read/);
+    }
+  });
+
+  it("prints a token's note once per mode", async () => {
+    const theme = await defineTheme({
+      name: 'acme-brand',
+      tokens: {'--spacing-4': 'calc(1em + 1em)'},
+    });
+    const warnings: string[] = [];
+    await renderSwiftTheme(theme, {warnings});
+    expect(warnings).toEqual([
+      'acme-brand light: --spacing-4 = calc(1em + 1em) → 32: em read against the 16px root font size',
+      'acme-brand dark: --spacing-4 = calc(1em + 1em) → 32: em read against the 16px root font size',
+    ]);
+  });
+
+  it('turns warnings into errors with --strict, before anything is written', async () => {
+    const theme = await defineTheme({
+      name: 'acme-brand',
+      tokens: {'--color-accent': 'oklch(0.7 0.4 150)'},
+    });
+    await expect(renderSwiftTheme(theme, {strict: true})).rejects.toThrow(
+      /2 warning\(s\), which --strict treats as errors:\nerror: acme-brand light: --color-accent/,
+    );
+    let wrote = false;
+    const write = () => {
+      wrote = true;
+    };
+    expect(() => finishRun(['a warning'], true, write)).toThrow(
+      /error: a warning/,
+    );
+    expect(wrote).toBe(false);
+    finishRun([], true, write);
+    expect(wrote).toBe(true);
   });
 });
 

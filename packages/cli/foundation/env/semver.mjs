@@ -80,7 +80,10 @@ export function semverGt(a, b) {
  * @returns {{major: number, minor: number, patch: number, count: number}}
  */
 function parseVersionParts(value) {
-  const core = String(value).trim().replace(/^[v=]+/, '').split(/[-+]/)[0];
+  const core = String(value)
+    .trim()
+    .replace(/^[v=]+/, '')
+    .split(/[-+]/)[0];
   const nums = core.split('.').map(n => parseInt(n, 10));
   return {
     major: Number.isFinite(nums[0]) ? nums[0] : 0,
@@ -105,7 +108,8 @@ function satisfiesComparator(version, token) {
   if (!m) return true;
   const op = m[1] || '=';
   const target = m[2].trim();
-  if (target === '' || target === '*' || target.toLowerCase() === 'x') return true;
+  if (target === '' || target === '*' || target.toLowerCase() === 'x')
+    return true;
   const t = parseVersionParts(target);
   // No numeric component (e.g. `workspace:*`, a git/url spec) — can't model it,
   // so treat as unconstrained rather than emit a false mismatch.
@@ -123,16 +127,22 @@ function satisfiesComparator(version, token) {
     case '<':
       return cmp < 0;
     case '^':
-      if (t.major > 0) return below(`${t.major + 1}.0.0`);
-      if (t.minor > 0) return below(`0.${t.minor + 1}.0`);
+      // A partial target widens the range to the parts given: `^0` is any
+      // 0.x.y, `^0.0` is any 0.0.y, while `^0.0.3` is locked to the patch.
+      if (t.major > 0 || t.count === 1) return below(`${t.major + 1}.0.0`);
+      if (t.minor > 0 || t.count === 2) return below(`0.${t.minor + 1}.0`);
       return below(`0.0.${t.patch + 1}`);
     case '~':
-      return below(t.count >= 2 ? `${t.major}.${t.minor + 1}.0` : `${t.major + 1}.0.0`);
+      return below(
+        t.count >= 2 ? `${t.major}.${t.minor + 1}.0` : `${t.major + 1}.0.0`,
+      );
     case '=':
     default:
       // A full version is exact; a partial (`1`, `1.2`) behaves like a range.
       if (t.count >= 3) return cmp === 0;
-      return below(t.count === 2 ? `${t.major}.${t.minor + 1}.0` : `${t.major + 1}.0.0`);
+      return below(
+        t.count === 2 ? `${t.major}.${t.minor + 1}.0` : `${t.major + 1}.0.0`,
+      );
   }
 }
 
@@ -154,11 +164,33 @@ function satisfiesComparator(version, token) {
 export function satisfiesRange(version, range) {
   if (!isValidSemver(version)) return true;
   const r = String(range ?? '').trim();
-  if (r === '' || r === '*' || r.toLowerCase() === 'x' || r.toLowerCase() === 'latest') {
+  if (
+    r === '' ||
+    r === '*' ||
+    r.toLowerCase() === 'x' ||
+    r.toLowerCase() === 'latest'
+  ) {
     return true;
   }
   return r.split('||').some(union => {
-    const tokens = union.trim().split(/\s+/).filter(Boolean);
-    return tokens.length === 0 || tokens.every(tok => satisfiesComparator(version, tok));
+    // A hyphen range `A - B` is the inclusive intersection `>=A <=B`; left
+    // as-is its two bare versions would each read as an exact match that
+    // can never both hold. A partial upper bound covers its whole series, as
+    // npm reads it: `1.0.0 - 2` is `>=1.0.0 <3.0.0`.
+    const normalized = union
+      .trim()
+      .replace(/^(\S+)\s+-\s+(\S+)$/, (_, low, high) => {
+        const h = parseVersionParts(high);
+        if (h.count === 0) return `>=${low}`;
+        if (h.count >= 3) return `>=${low} <=${high}`;
+        const next =
+          h.count === 2 ? `${h.major}.${h.minor + 1}.0` : `${h.major + 1}.0.0`;
+        return `>=${low} <${next}`;
+      });
+    const tokens = normalized.split(/\s+/).filter(Boolean);
+    return (
+      tokens.length === 0 ||
+      tokens.every(tok => satisfiesComparator(version, tok))
+    );
   });
 }

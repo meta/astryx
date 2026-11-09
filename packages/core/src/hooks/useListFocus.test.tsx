@@ -13,7 +13,7 @@
 import {describe, it, expect, vi} from 'vitest';
 import type {KeyboardEvent as ReactKeyboardEvent} from 'react';
 import {render, screen, fireEvent} from '@testing-library/react';
-import {useListFocus} from './useListFocus';
+import {useInternalListFocus, useListFocus} from './useListFocus';
 
 const NO_DISABLED: string[] = [];
 
@@ -122,13 +122,15 @@ function RovingToolbar({
 }: {
   labels?: string[];
   disabledLabels?: string[];
-} & Parameters<typeof useListFocus>[0]) {
-  const {listRef, handleKeyDown, handleFocus} = useListFocus<HTMLDivElement>({
-    itemSelector: 'button, input, [tabindex]',
-    hasRovingTabIndex: true,
-    orientation: 'horizontal',
-    ...opts,
-  });
+} & Parameters<typeof useInternalListFocus>[0]) {
+  // The internal hook takes the public options plus the Core-only ones.
+  const {listRef, handleKeyDown, handleFocus} =
+    useInternalListFocus<HTMLDivElement>({
+      itemSelector: 'button, input, [tabindex]',
+      hasRovingTabIndex: true,
+      orientation: 'horizontal',
+      ...opts,
+    });
   return (
     <div
       ref={listRef}
@@ -148,6 +150,16 @@ function RovingToolbar({
   );
 }
 
+function orderBy(first: string) {
+  return (list: HTMLElement) => {
+    const buttons = Array.from(list.querySelectorAll<HTMLElement>('button'));
+    const stop = buttons.find(button => button.dataset.testid === first);
+    return stop == null
+      ? buttons
+      : [stop, ...buttons.filter(button => button !== stop)];
+  };
+}
+
 describe('useListFocus roving tabindex (hasRovingTabIndex)', () => {
   it('stamps a single tab stop (first enabled item is tabbable)', () => {
     render(<RovingToolbar />);
@@ -160,6 +172,45 @@ describe('useListFocus roving tabindex (hasRovingTabIndex)', () => {
     render(<RovingToolbar disabledLabels={['A']} />);
     expect(screen.getByTestId('B')).toHaveAttribute('tabindex', '0');
     expect(screen.getByTestId('A')).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('leaves no tab stop while every item is disabled, by default', () => {
+    render(<RovingToolbar disabledLabels={ROVING_LABELS} />);
+    for (const label of ROVING_LABELS) {
+      expect(screen.getByTestId(label)).not.toHaveAttribute('tabindex', '0');
+    }
+  });
+
+  it('keeps one tab stop while every item is disabled, on the element the callback returns first', () => {
+    const {rerender} = render(
+      <RovingToolbar
+        disabledLabels={ROVING_LABELS}
+        tabStopOrder={orderBy('B')}
+      />,
+    );
+    expect(screen.getByTestId('B')).toHaveAttribute('tabindex', '0');
+    expect(screen.getByTestId('A')).toHaveAttribute('tabindex', '-1');
+    expect(screen.getByTestId('C')).toHaveAttribute('tabindex', '-1');
+
+    // The stop follows what the callback returns first.
+    rerender(
+      <RovingToolbar
+        disabledLabels={ROVING_LABELS}
+        tabStopOrder={orderBy('A')}
+      />,
+    );
+    expect(screen.getByTestId('A')).toHaveAttribute('tabindex', '0');
+    expect(screen.getByTestId('B')).toHaveAttribute('tabindex', '-1');
+    expect(screen.getByTestId('C')).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('puts the stop where the callback says while items are enabled too, even on a disabled item', () => {
+    render(
+      <RovingToolbar disabledLabels={['B']} tabStopOrder={orderBy('B')} />,
+    );
+    expect(screen.getByTestId('B')).toHaveAttribute('tabindex', '0');
+    expect(screen.getByTestId('A')).toHaveAttribute('tabindex', '-1');
+    expect(screen.getByTestId('C')).toHaveAttribute('tabindex', '-1');
   });
 
   it('ArrowRight moves the tab stop to the next enabled item', () => {

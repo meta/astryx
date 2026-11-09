@@ -217,12 +217,10 @@ body[data-hero-dark] [data-home-page] .astryx-pagination-dot:focus-visible {
    home-page nav rules above (transparent nav / frosted bar) target every
    `.astryx-top-nav` on the page and leak into this embedded preview, leaving
    its nav transparent so a mismatched band shows through. Pin the embedded
-   preview's nav (and its header wrapper) to the themed body color so it reads
+   preview's nav to the themed body color so it reads
    as one continuous surface. !important + the data-attribute scope beat the
    home-page overrides without affecting the real top nav. */
-[data-themes-card-preview] .astryx-top-nav,
-[data-themes-card-preview] .astryx-layout-header,
-[data-themes-card-preview] :has(> .astryx-layout-header) {
+[data-themes-card-preview] .astryx-top-nav {
   background: var(--color-background-body) !important;
   backdrop-filter: none !important;
 }

@@ -5,7 +5,7 @@ import type {Meta, StoryObj} from '@storybook/react';
 import {ScrollableArea} from '@astryxdesign/core/ScrollableArea';
 import {TreeList} from '@astryxdesign/core/TreeList';
 import type {TreeListItemData} from '@astryxdesign/core/TreeList';
-import {Collapsible} from '@astryxdesign/core/Collapsible';
+import {Collapsible, CollapsibleGroup} from '@astryxdesign/core/Collapsible';
 import {useAnimatedLayout} from '@astryxdesign/core/hooks';
 
 const meta: Meta = {
@@ -143,6 +143,38 @@ function Demo() {
               New
             </span>
           </div>
+          <Section title="A CollapsibleGroup, one open at a time, of unequal heights">
+            <div style={card}>
+              <CollapsibleGroup type="single">
+                <Collapsible
+                  trigger="Return policy"
+                  value="returns"
+                  animatedLayout={animatedLayout}>
+                  <p style={{margin: '4px 0'}}>
+                    Return any item within 30 days.
+                  </p>
+                  <p style={{margin: '4px 0'}}>Items must be unused.</p>
+                  <p style={{margin: '4px 0'}}>Refunds take 5 business days.</p>
+                  <p style={{margin: '4px 0'}}>Exchanges ship free.</p>
+                  <p style={{margin: '4px 0'}}>
+                    Gift returns get store credit.
+                  </p>
+                </Collapsible>
+                <Collapsible
+                  trigger="Gift options"
+                  value="gifts"
+                  animatedLayout={animatedLayout}>
+                  <p style={{margin: '4px 0'}}>Add a note at checkout.</p>
+                </Collapsible>
+                <Collapsible
+                  trigger="Delivery windows"
+                  value="delivery"
+                  animatedLayout={animatedLayout}>
+                  <p style={{margin: '4px 0'}}>Choose a two-hour window.</p>
+                </Collapsible>
+              </CollapsibleGroup>
+            </div>
+          </Section>
           <div style={{display: 'contents'}}>
             <div style={plain}>Inside a display: contents wrapper (1)</div>
             <div style={plain}>Inside a display: contents wrapper (2)</div>
@@ -266,4 +298,48 @@ export const BeforeAndAfter: Story = {
       <CompareColumn title="With animatedLayout" isAnimated />
     </div>
   ),
+};
+
+/**
+ * Content before the change moves too when the layout centers it: in a
+ * vertically centered column, opening the Collapsible moves the card above it
+ * up as much as the card below it moves down.
+ */
+function CenteredDemo() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const animatedLayout = useAnimatedLayout({containerRef});
+  return (
+    <div style={{maxWidth: 520}}>
+      <ScrollableArea ref={containerRef} height={420} label="Centered column">
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            minHeight: 400,
+            padding: 12,
+            boxSizing: 'border-box',
+          }}>
+          <div style={plain}>Before the change (moves up)</div>
+          <div style={card}>
+            <Collapsible
+              trigger="Shipping details"
+              defaultIsOpen={false}
+              animatedLayout={animatedLayout}>
+              <p style={{margin: '4px 0'}}>Ships in 2 business days.</p>
+              <p style={{margin: '4px 0'}}>Free returns for 30 days.</p>
+              <p style={{margin: '4px 0'}}>Tracking arrives by email.</p>
+            </Collapsible>
+          </div>
+          <div style={plain}>After the change (moves down)</div>
+        </div>
+      </ScrollableArea>
+    </div>
+  );
+}
+
+/** A centered column: the content before the change glides too. */
+export const CenteredColumn: Story = {
+  name: 'Centered column',
+  render: () => <CenteredDemo />,
 };

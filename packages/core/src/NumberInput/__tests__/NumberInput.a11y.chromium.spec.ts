@@ -3,7 +3,12 @@
 
 /** Real-browser and accessibility-tree binding evidence for NumberInput. */
 
-import {expect, test, type CDPSession, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type CDPSession,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   SPINBUTTON_PATTERN,
   blockingResults,
