@@ -76,6 +76,7 @@ import {
   flick,
   frames,
   FRAME_STARVATION_MS,
+  FRAMES_STALL_MS,
   FrameStarvationError,
   freezePage,
   freezePageOn,
@@ -3436,6 +3437,52 @@ test.describe('frame evidence', () => {
       true,
     );
     expect(trace.devtoolsTasks.filter(within(direct))).toEqual([]);
+  });
+
+  test('frames fails by name on a page that stops presenting frames, once none came for FRAMES_STALL_MS', async ({
+    page,
+  }) => {
+    test.setTimeout(30_000);
+    await page.setContent(
+      '<!doctype html><div id="box" style="width:40px;height:40px;background:#000"></div>',
+    );
+    // The page's frame callbacks never run, as on a page that stopped drawing.
+    await page.evaluate(() => {
+      window.requestAnimationFrame = () => 0;
+    });
+    const startedAt = Date.now();
+    const outcome = await frames(page, 2).then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
+    expect(outcome, String((outcome as Error).message)).toBeInstanceOf(
+      FrameStarvationError,
+    );
+    const {numbers} = outcome as FrameStarvationError;
+    expect(numbers.frames).toBe(0);
+    expect(numbers.longestGapMs).toBeGreaterThanOrEqual(FRAMES_STALL_MS);
+    expect(Date.now() - startedAt).toBeLessThan(FRAMES_STALL_MS + 5_000);
+  });
+
+  test('frames waits out a slow page that keeps drawing, however long the whole wait takes', async ({
+    page,
+  }) => {
+    test.setTimeout(40_000);
+    await page.setContent(
+      '<!doctype html><div id="box" style="width:40px;height:40px;background:#000"></div>',
+    );
+    // One frame a second: twelve of them outlast the stall bound in all, and
+    // no gap comes near it.
+    await page.evaluate(() => {
+      const frame = window.requestAnimationFrame.bind(window);
+      window.requestAnimationFrame = callback => {
+        setTimeout(() => frame(callback), 1000);
+        return 0;
+      };
+    });
+    const startedAt = Date.now();
+    await frames(page, 12);
+    expect(Date.now() - startedAt).toBeGreaterThan(11_000);
   });
 });
 

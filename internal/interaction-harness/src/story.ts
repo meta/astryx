@@ -26,6 +26,7 @@ import {
   serveStorybook,
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
+import {FrameStarvationError} from './frames';
 import {installTouchStartBeforeLoad} from './touch';
 
 export const phone = {
@@ -159,24 +160,79 @@ export async function openStory(
   }
 }
 
-/** Resolves after `count` animation frames have been presented in the page. */
+/**
+ * How long `frames` waits for the page's next frame, ms. A page that presents
+ * none for that long has stopped drawing.
+ */
+export const FRAMES_STALL_MS = 10_000;
+
+/**
+ * Resolves after `count` animation frames have been presented in the page.
+ * A slow page that keeps drawing is waited for. A page that presents no frame
+ * for `FRAMES_STALL_MS` fails the wait as `FrameStarvationError`.
+ */
 export async function frames(page: Page, count = 2): Promise<void> {
-  await page.evaluate(
-    n =>
-      new Promise<void>(resolve => {
-        // The page's real frames, even while a timer gate holds its callbacks.
-        const frame =
-          (
+  const stalled = await page.evaluate(
+    ({n, stallMs}) =>
+      new Promise<{drawn: number; spanMs: number; gapMs: number} | null>(
+        resolve => {
+          // The page's real frames, timers and clock, even while a timer gate
+          // holds its callbacks or a page freeze stops its clock.
+          const gate = (
             window as unknown as {
-              __harnessTimerGate?: {frame: typeof requestAnimationFrame};
+              __harnessTimerGate?: {
+                frame: typeof requestAnimationFrame;
+                timeout?: typeof setTimeout;
+                clearTimeout?: typeof clearTimeout;
+                now?: () => number;
+              };
             }
-          ).__harnessTimerGate?.frame ?? requestAnimationFrame;
-        let left = n;
-        const tick = () => (--left <= 0 ? resolve() : frame(tick));
-        frame(tick);
-      }),
-    count,
+          ).__harnessTimerGate;
+          const frame = gate?.frame ?? requestAnimationFrame;
+          const timeout = gate?.timeout ?? setTimeout;
+          const clearTimer = gate?.clearTimeout ?? clearTimeout;
+          const now = gate?.now ?? (() => performance.now());
+          const start = now();
+          let last = start;
+          let drawn = 0;
+          let isDone = false;
+          const onStall = () => {
+            isDone = true;
+            resolve({drawn, spanMs: now() - start, gapMs: now() - last});
+          };
+          // Each frame moves the stall check to a full bound after it.
+          let stall = timeout(onStall, stallMs);
+          const tick = () => {
+            if (isDone) {
+              return;
+            }
+            last = now();
+            drawn += 1;
+            clearTimer(stall);
+            if (drawn >= n) {
+              isDone = true;
+              resolve(null);
+              return;
+            }
+            stall = timeout(onStall, stallMs);
+            frame(tick);
+          };
+          frame(tick);
+        },
+      ),
+    {n: count, stallMs: FRAMES_STALL_MS},
   );
+  if (stalled != null) {
+    throw new FrameStarvationError({
+      by: 'frames',
+      during: `it waited ${Math.round(stalled.spanMs)} ms for ${count} frames`,
+      frames: stalled.drawn,
+      min: count,
+      longestGapMs: stalled.gapMs,
+      cause:
+        'the page stopped presenting frames (a starved machine, or a hidden or stalled page)',
+    });
+  }
 }
 
 // A held callback is queued under its timer or frame id, so the page's own

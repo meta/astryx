@@ -440,6 +440,8 @@ starve the page of frames. When no frame came for longer than
 with `FrameStarvationError`, which names the frames drawn and the longest gap.
 So a run that cannot prove anything still fails, and says why. With too few frames on pace, the motion did not last that
 long, and the error says that instead.
+`frames(page, n)` throws it too when the page presents no frame at all for
+`FRAMES_STALL_MS` (10 s). A slow page that keeps drawing never fails it.
 `waitForRest` fails the same way when it cannot tell. The element held still
 in its last frame, or no frame came after the deadline, and no frame came for
 longer than `FRAME_STARVATION_MS`: it throws `FrameStarvationError`, not
