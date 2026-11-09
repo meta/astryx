@@ -226,12 +226,23 @@ export function useTabBarLens({
   // The settle a lift started toward a newly chosen item, until the new
   // selection renders (or the app keeps the old one).
   const settleRef = useRef<number | null>(null);
+  // The press, its moves and the lift read these props through refs. Each is
+  // written at commit: a render React discards must not leave its props.
   const selectedRef = useRef(selectedIndex);
-  selectedRef.current = selectedIndex;
+  // Syncs the press's selected tab with the committed props.
+  useLayoutEffect(() => {
+    selectedRef.current = selectedIndex;
+  });
   const onLiftRef = useRef(onLift);
-  onLiftRef.current = onLift;
+  // Syncs the lift's callback with the committed props.
+  useLayoutEffect(() => {
+    onLiftRef.current = onLift;
+  });
   const isDisabledRef = useRef(isDisabled);
-  isDisabledRef.current = isDisabled;
+  // Syncs the press's disabled check with the committed props.
+  useLayoutEffect(() => {
+    isDisabledRef.current = isDisabled;
+  });
   const tabsOf = (capsule: HTMLElement) =>
     [...capsule.children].filter(
       (child): child is HTMLElement => child.getAttribute('role') === 'tab',
@@ -595,7 +606,11 @@ export function useTabBarLens({
   });
 
   const endRef = useRef(end);
-  endRef.current = end;
+  // Syncs the tab-list effect's press ending with the committed render, before
+  // that effect reads it.
+  useLayoutEffect(() => {
+    endRef.current = end;
+  });
 
   // Synchronizes the recognizer's press and the lens's animations with the tab
   // list. When it changes under a held finger, the press ends here, as a
