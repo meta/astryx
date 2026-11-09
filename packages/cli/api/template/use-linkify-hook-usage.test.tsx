@@ -63,10 +63,7 @@ describe('useLinkifyHookUsage example', () => {
     expect(hrefs).toContain('https://example.com/issues/123');
     expect(hrefs).toContain('https://example.com/issues/456');
 
-    // The plain note renders no link.
-    const plain = links.filter(link => link.textContent === 'No links here');
-    expect(plain).toHaveLength(0);
-    // Exactly the four detected links, nothing more.
+    // Exactly the four detected links, nothing more: the plain comment adds none.
     expect(links).toHaveLength(4);
   });
 });

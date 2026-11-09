@@ -35,7 +35,7 @@ export const docs = {
       name: 'options.patterns',
       type: 'LinkifyPattern[]',
       description:
-        'Custom patterns to detect, in addition to (or, with hasBuiltins false, replacing) the built-in URL and email detection. Each pattern is a global-flag regex plus an href builder (capture groups available) and an optional label builder and isExternal flag. Patterns are matched in order; the first match wins for overlapping ranges, custom before builtins.',
+        'Custom patterns to detect, in addition to (or, with hasBuiltins false, replacing) the built-in URL and email detection. Each pattern is a global-flag regex plus an href builder (capture groups available) and an optional label builder and isExternal flag. When matches overlap, the earliest one wins; at the same start, custom patterns win over the built-in ones.',
       required: false,
     },
     {
@@ -57,7 +57,7 @@ export const docs = {
   ],
   usage: {
     description:
-      'Finds URLs, email addresses and custom patterns in plain text and returns React nodes with a Link for each match; the links respect LinkProvider for client-side routing. Use it wherever user- or tool-authored plain text should grow safe, styled links without pre-parsing it into markup: activity feeds, comment threads, description fields. Custom patterns turn project-specific references (issue numbers like #123, ticket IDs) into links by supplying a regex plus an href builder — e.g. an issue tracker pattern that maps captures onto its URL scheme. Overlaps resolve first-match-wins with custom patterns ahead of builtins, so a custom #123 pattern coexists with URL detection in the same string.',
+      'Finds URLs, email addresses and custom patterns in plain text and returns React nodes with a Link for each match; the links respect LinkProvider for client-side routing. Use it wherever user- or tool-authored plain text should grow safe, styled links without pre-parsing it into markup: activity feeds, comment threads, description fields. Custom patterns turn project-specific references (issue numbers like #123, ticket IDs) into links by supplying a regex plus an href builder — e.g. an issue tracker pattern that maps captures onto its URL scheme. When matches overlap, the earliest one wins, and at the same start a custom pattern wins over the built-in ones, so a custom #123 pattern coexists with URL detection in the same string.',
     bestPractices: [
       {
         guidance: true,
@@ -72,7 +72,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Give a custom pattern the global flag (g) — the hook clones and resets it per scan, but a non-global regex never advances and matches nothing.',
+          'Give a custom pattern the global flag (g). Without it the scan never advances, and when the text contains a match the render never finishes.',
       },
       {
         guidance: false,
@@ -89,7 +89,7 @@ export const docs = {
 /** @type {import('@astryxdesign/cli/authoring').HookTranslationDoc} */
 export const docsDense = {
   description:
-    'Finds URLs, emails and custom patterns in plain text; returns ReactNode[] interleaving plain strings and Link elements that respect LinkProvider routing. Built-in URL/email detection, custom global-regex patterns with href/label builders, first-match-wins overlap resolution (custom before builtins).',
+    'Finds URLs, emails and custom patterns in plain text; returns ReactNode[] interleaving plain strings and Link elements that respect LinkProvider routing. Built-in URL/email detection, custom global-regex patterns with href/label builders, overlaps resolved earliest-match-first (custom wins at the same start).',
   paramDescriptions: {
     text: 'plain text to scan; empty returns [text].',
     options: 'config object.',
@@ -104,7 +104,7 @@ export const docsDense = {
   },
   usage: {
     description:
-      'Grow safe styled links in plain authored text (feeds, comments, descriptions) without pre-parsing. Custom patterns map project references (#123, ticket IDs) onto a URL scheme via capture groups. Overlaps: first match wins, custom first.',
+      'Grow safe styled links in plain authored text (feeds, comments, descriptions) without pre-parsing. Custom patterns map project references (#123, ticket IDs) onto a URL scheme via capture groups. Overlaps: earliest match wins; custom wins at the same start.',
     bestPractices: [
       {
         guidance: true,
