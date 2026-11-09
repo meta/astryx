@@ -457,7 +457,14 @@ export function TextInput({
   // Handle clear button click
   const handleClear = useCallback(
     (e?: React.MouseEvent<HTMLButtonElement>) => {
-      onChange?.('', null as unknown as ChangeEvent<HTMLInputElement>);
+      const clearEvent = null as unknown as ChangeEvent<HTMLInputElement>;
+      onChange?.('', clearEvent);
+      if (changeAction) {
+        startTransition(async () => {
+          setOptimisticValue('');
+          await changeAction('', clearEvent);
+        });
+      }
       if (!e || e.detail === 0) {
         inputRef.current?.focus();
       } else {
@@ -469,7 +476,7 @@ export function TextInput({
         inputRef.current?.focus({preventScroll: true});
       }
     },
-    [onChange],
+    [onChange, changeAction, startTransition, setOptimisticValue],
   );
 
   // Focus input when clicking anywhere on the wrapper (icons, padding, etc.)

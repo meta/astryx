@@ -11,7 +11,7 @@
  */
 
 import {describe, it, expect, vi, beforeEach} from 'vitest';
-import {render, screen, fireEvent, waitFor} from '@testing-library/react';
+import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
@@ -1027,6 +1027,62 @@ describe('TextInput', () => {
       );
       await user.click(screen.getByRole('button', {name: 'Clear Name'}));
       expect(onChange).toHaveBeenCalledWith('', null);
+    });
+
+    it('calls onChange then changeAction with empty string when clear is clicked', async () => {
+      const user = userEvent.setup();
+      const order: string[] = [];
+      const onChange = vi.fn(() => {
+        order.push('onChange');
+      });
+      const changeAction = vi.fn(async () => {
+        order.push('changeAction');
+      });
+      render(
+        <TextInput
+          label="Name"
+          value="hello"
+          onChange={onChange}
+          changeAction={changeAction}
+          hasClear
+        />,
+      );
+      await user.click(screen.getByRole('button', {name: 'Clear Name'}));
+      expect(onChange).toHaveBeenCalledWith('', null);
+      expect(changeAction).toHaveBeenCalledWith('', null);
+      expect(order).toEqual(['onChange', 'changeAction']);
+    });
+
+    it('presents optimistic empty value and aria-busy while clear changeAction is pending', async () => {
+      const user = userEvent.setup();
+      let resolveAction: () => void = () => {};
+      const changeAction = vi.fn(
+        async () =>
+          new Promise<void>(resolve => {
+            resolveAction = resolve;
+          }),
+      );
+      render(
+        <TextInput
+          label="Name"
+          value="hello"
+          onChange={() => {}}
+          changeAction={changeAction}
+          hasClear
+        />,
+      );
+      const input = screen.getByRole('textbox', {name: 'Name'});
+      expect(input).toHaveValue('hello');
+      expect(input).not.toHaveAttribute('aria-busy');
+
+      await user.click(screen.getByRole('button', {name: 'Clear Name'}));
+
+      expect(input).toHaveValue('');
+      expect(input).toHaveAttribute('aria-busy', 'true');
+
+      await act(async () => {
+        resolveAction();
+      });
     });
   });
 
