@@ -141,7 +141,7 @@ function PullToRefresh({
               alignItems: 'center',
               justifyContent: 'center',
             }}>
-            <span style={revealed}>
+            <span data-refresh-spinner="" style={revealed}>
               <Spinner size="lg" shade="subtle" label={text} />
             </span>
           </div>
