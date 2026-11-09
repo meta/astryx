@@ -55,6 +55,7 @@ describe('interaction proof routing', () => {
       'admission',
       'heavy-ci',
       'build-storybook',
+      'interaction-legs',
     ]);
   });
 
@@ -69,6 +70,7 @@ describe('interaction proof routing', () => {
       "Require this pull request's Storybook build",
       'Skip the proofs outside their scope',
       'Leave the proofs to the other legs',
+      'Require a leg for every share',
     ]);
     // Every step after the leg count also waits for this leg to have a share.
     const counted = proofs.steps.indexOf(step(proofs, "Count this run's legs"));
@@ -92,6 +94,10 @@ describe('interaction proof routing', () => {
     }
     expect(step(proofs, 'Leave the proofs to the other legs').if).toBe(
       `${applies} && steps.legs.outputs.runs != 'true'`,
+    );
+    // A leg whose own count needs more legs than started fails.
+    expect(step(proofs, 'Require a leg for every share').if).toBe(
+      `${applies} && fromJSON(steps.legs.outputs.count || '0') > strategy.job-total`,
     );
   });
 

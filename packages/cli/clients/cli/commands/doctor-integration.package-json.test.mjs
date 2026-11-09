@@ -5,13 +5,14 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {runCli} from '../../../test-utils/run-cli.mjs';
 import {validateIntegration} from '../../../api/integration/validate-integration.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 const NO_MANIFEST = 'No astryx.integration.* found next to package.json.';
 
 let tmpDir;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-doctor-pkgjson-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-doctor-pkgjson-'));
   fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name": "@acme/widgets",}\n');
   fs.writeFileSync(
     path.join(tmpDir, 'astryx.integration.mjs'),

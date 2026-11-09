@@ -87,6 +87,30 @@ export const Gallery: Story = {
   },
 };
 
+/**
+ * The parent decides whether the viewer closes: here it asks first. When it
+ * keeps the viewer open, a photo dragged down comes back.
+ */
+export const ConfirmClose: Story = {
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <button onClick={() => setIsOpen(true)}>Open, confirm to close</button>
+        <Lightbox
+          isOpen={isOpen}
+          onOpenChange={next => {
+            if (next || window.confirm('Close the photo?')) {
+              setIsOpen(next);
+            }
+          }}
+          media={{src: SAMPLE_IMAGE, alt: 'Forest path'}}
+        />
+      </>
+    );
+  },
+};
+
 export const WithZoom: Story = {
   render: () => {
     const [isOpen, setIsOpen] = useState(false);

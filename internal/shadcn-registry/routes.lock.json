@@ -603,6 +603,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-dialog-hero-header",
+      "path": "components/lab/dialog-hero-header",
+      "aliases": []
+    },
+    {
       "name": "component-lab-diff-viewer",
       "path": "components/lab/diff-viewer",
       "aliases": []
@@ -610,6 +615,11 @@
     {
       "name": "component-lab-emoji-picker",
       "path": "components/lab/emoji-picker",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-line-clamp",
+      "path": "components/lab/line-clamp",
       "aliases": []
     },
     {
@@ -3802,6 +3812,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-interactive-role-one-tile-four-roles",
+      "path": "examples/use-interactive-role/one-tile-four-roles",
+      "aliases": []
+    },
+    {
       "name": "example-use-keyboard-hint-arrow-key-hint",
       "path": "examples/use-keyboard-hint/arrow-key-hint",
       "aliases": []
@@ -3819,6 +3834,11 @@
     {
       "name": "example-use-link-component-article-cards",
       "path": "examples/use-link-component/article-cards",
+      "aliases": []
+    },
+    {
+      "name": "example-use-linkify-links-in-a-comment-thread",
+      "path": "examples/use-linkify/links-in-a-comment-thread",
       "aliases": []
     },
     {
@@ -3872,6 +3892,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-power-search-config-filtered-directory-table",
+      "path": "examples/use-power-search-config/filtered-directory-table",
+      "aliases": []
+    },
+    {
       "name": "example-use-press-feedback-pressable-card",
       "path": "examples/use-press-feedback/pressable-card",
       "aliases": []
@@ -3907,6 +3932,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-table-column-settings-state-column-visibility-picker",
+      "path": "examples/use-table-column-settings-state/column-visibility-picker",
+      "aliases": []
+    },
+    {
       "name": "example-use-table-grouped-rows-collapsible-groups",
       "path": "examples/use-table-grouped-rows/collapsible-groups",
       "aliases": []
@@ -3924,6 +3954,11 @@
     {
       "name": "example-use-table-row-status-semantic-and-custom-markers",
       "path": "examples/use-table-row-status/semantic-and-custom-markers",
+      "aliases": []
+    },
+    {
+      "name": "example-use-table-rows-virtualization-fixed-height-rows",
+      "path": "examples/use-table-rows-virtualization/fixed-height-rows",
       "aliases": []
     },
     {
@@ -4014,6 +4049,11 @@
     {
       "name": "hook-create-pan-gesture",
       "path": "hooks/create-pan-gesture",
+      "aliases": []
+    },
+    {
+      "name": "hook-create-reorderable",
+      "path": "hooks/create-reorderable",
       "aliases": []
     },
     {
@@ -4177,6 +4217,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-linkify",
+      "path": "hooks/use-linkify",
+      "aliases": []
+    },
+    {
       "name": "hook-use-list-focus",
       "path": "hooks/use-list-focus",
       "aliases": []
@@ -4237,6 +4282,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-power-search-config",
+      "path": "hooks/use-power-search-config",
+      "aliases": []
+    },
+    {
       "name": "hook-use-press-feedback",
       "path": "hooks/use-press-feedback",
       "aliases": []
@@ -4282,6 +4332,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-table-column-settings-state",
+      "path": "hooks/use-table-column-settings-state",
+      "aliases": []
+    },
+    {
       "name": "hook-use-table-filter-state",
       "path": "hooks/use-table-filter-state",
       "aliases": []
@@ -4314,6 +4369,11 @@
     {
       "name": "hook-use-table-row-status",
       "path": "hooks/use-table-row-status",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-rows-virtualization",
+      "path": "hooks/use-table-rows-virtualization",
       "aliases": []
     },
     {
@@ -4694,6 +4754,11 @@
     {
       "name": "showcase-dialog-header-default",
       "path": "showcases/dialog-header/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-dialog-hero-header-default",
+      "path": "showcases/dialog-hero-header/default",
       "aliases": []
     },
     {

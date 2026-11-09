@@ -58,21 +58,21 @@ committed: a pull request links or attaches it.
 
 ## Instruments
 
-| Module          | What it gives a spec                                                                                                                                                                                                                                                         |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `scripts.ts`    | Touch scripts as data: `tap`, `drag` (hold, rest), `flick` (exact final-move speed, velocity profiles), `holdThenDrag`, `pinch`, `rotate`, `path`, `merge` (a second finger mid-gesture), `releaseVelocity`, `toTouchEvents`.                                                |
-| `touch.ts`      | `touchDriver(page).play(script)`: the script as real engine input. `installInputLog` / `readInputLog`: what the page received.                                                                                                                                               |
-| `frames.ts`     | `startScreencast` (timestamped composited frames), `markElement` (a marker chip or outline), `trackMarker` (marker box per frame), `trackMarkers` (several colors from one decode of each frame), `sampleRects` (per-rAF rects), `frameStats`, `requireFrames`.              |
-| `busy.ts`       | `blockMainThread(page, ms)`, which returns the window it held and the span its loop measured, and `busyWindowProof(tracked, window)`: frames presented, frames that moved, longest stall, a verdict; `presented` adds the compositor's own frames.                           |
-| `brightness.ts` | `trackBrightness(page, frames, {x, y})`: a colour channel's mean in a square per frame, as a scalar on `box.x`, for a busy-window proof of a fade or a dim.                                                                                                                  |
-| `webInput.ts`   | `webInputDriver(page)`: `wheel({x, y, dx, dy, ctrl})` and `pen(points)` as real engine input, for proofs across pointers (`spec:AST-100` FR4); `wheel` resolves once the page has the step; read back through the input log.                                                 |
-| `trace.ts`      | `traceRendering(page, body)`: main-thread counts of UpdateLayoutTree / Layout / PrePaint / Paint / Layerize / UpdateLayer / ScrollLayer / HitTest, `countBetween`, long tasks; `installLongTaskLog` / `readLongTasks`; `startCompositorTrace`: when the compositor presents. |
-| `curves.ts`     | `holdAnimations`, `armHold`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `waitForAnimation`, `watchAnimations`, `waitForRest`, `releaseAnimations`, `releaseAnimationLog` (frees what the recorder kept, before a heap or listener count).     |
-| `math.ts`       | Oracles independent of the code under test: `cubicBezier`, `timingFunction`, `springStep` (SwiftUI response / dampingFraction, initial velocity), `projectDecay`, `rubberBand`, `parseTransform`, `compareCurve`, `timeline`.                                                |
-| `storyboard.ts` | `animationStoryboard` (seek to t = 0, 16.7, 33.3 … ms), `touchStoryboard` (a frame per scripted event), `castStoryboard` (real screencast frames): PNG contact sheet + JSON trace.                                                                                           |
-| `output.ts`     | `evidenceDir`, `writeEvidence`: where evidence goes and how it is attached to the report.                                                                                                                                                                                    |
-| `story.ts`      | `phone`, `withStorybook`, `openStory`, `frames`, and the timer gate (`installTimerGate`, `freezeTimers`, `thawTimers`).                                                                                                                                                      |
-| `pointer.ts`    | `newFinePointerPage(browser)`: a page under a mouse that really reads `(pointer: fine)`. `assertFinePointer` / `assertCoarsePointer`: fail before a case's checks when the page reads the other pointer.                                                                     |
+| Module          | What it gives a spec                                                                                                                                                                                                                                                                                                                                                              |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scripts.ts`    | Touch scripts as data: `tap`, `drag` (hold, rest), `flick` (exact final-move speed, velocity profiles), `holdThenDrag`, `pinch`, `rotate`, `path`, `merge` (a second finger mid-gesture), `releaseVelocity`, `toTouchEvents`.                                                                                                                                                     |
+| `touch.ts`      | `touchDriver(page).play(script)`: the script as real engine input. `installInputLog` / `readInputLog`: what the page received.                                                                                                                                                                                                                                                    |
+| `frames.ts`     | `startScreencast` (timestamped composited frames), `markElement` (a marker chip or outline), `trackMarker` (marker box per frame), `trackMarkers` (several colors from one decode of each frame), `sampleRects` (per-rAF rects), `frameStats`, `requireFrames`.                                                                                                                   |
+| `busy.ts`       | `blockMainThread(page, ms)`, which returns the window it held and the span its loop measured, and `busyWindowProof(tracked, window)`: frames presented, frames that moved, longest stall, a verdict; `presented` adds the compositor's own frames.                                                                                                                                |
+| `brightness.ts` | `trackBrightness(page, frames, {x, y})`: a colour channel's mean in a square per frame, as a scalar on `box.x`, for a busy-window proof of a fade or a dim.                                                                                                                                                                                                                       |
+| `webInput.ts`   | `webInputDriver(page)`: `wheel({x, y, dx, dy, ctrl})` and `pen(points)` as real engine input, for proofs across pointers (`spec:AST-100` FR4); `wheel` resolves once the page has the step; read back through the input log.                                                                                                                                                      |
+| `trace.ts`      | `traceRendering(page, body)`: main-thread counts of UpdateLayoutTree / Layout / PrePaint / Paint / Layerize / UpdateLayer / ScrollLayer / HitTest, `countBetween`, long tasks; `installLongTaskLog` / `readLongTasks`; `startCompositorTrace`: when the compositor presents.                                                                                                      |
+| `curves.ts`     | `holdAnimations`, `armHold`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `waitForAnimation`, `watchAnimations`, `waitForRest`, `settlesAt` (a computed value reached and every animation inside finished, on `waitForRest`'s deadline), `releaseAnimations`, `releaseAnimationLog` (frees what the recorder kept, before a heap or listener count). |
+| `math.ts`       | Oracles independent of the code under test: `cubicBezier`, `timingFunction`, `springStep` (SwiftUI response / dampingFraction, initial velocity), `projectDecay`, `rubberBand`, `parseTransform`, `compareCurve`, `timeline`.                                                                                                                                                     |
+| `storyboard.ts` | `animationStoryboard` (seek to t = 0, 16.7, 33.3 … ms), `touchStoryboard` (a frame per scripted event), `castStoryboard` (real screencast frames): PNG contact sheet + JSON trace.                                                                                                                                                                                                |
+| `output.ts`     | `evidenceDir`, `writeEvidence`: where evidence goes and how it is attached to the report.                                                                                                                                                                                                                                                                                         |
+| `story.ts`      | `phone`, `withStorybook`, `openStory`, `frames`, and the timer gate (`installTimerGate`, `freezeTimers`, `thawTimers`).                                                                                                                                                                                                                                                           |
+| `pointer.ts`    | `newFinePointerPage(browser)`: a page under a mouse that really reads `(pointer: fine)`. `assertFinePointer` / `assertCoarsePointer`: fail before a case's checks when the page reads the other pointer.                                                                                                                                                                          |
 
 ## A fine pointer
 
@@ -121,7 +121,11 @@ colour change) can meet that count before the motion a test judges starts,
 and a hold that took only them proves nothing about it. So every armed hold
 names the motion it judges, `{judges: {target, property}}` (a list for
 several; `pseudoElement` for a `::before` or `::after`), and `held()` rejects
-when the hold took no animation of it. `judges: 'count-only'` checks nothing:
+when the hold took no animation of it. A judged run that the page cancels after
+the hold (a later style change retargets a CSS transition) fails the next
+`seekAnimations` or `sampleCurve` by name: a read would show a run that the
+hold did not take. A hold whose scope is not on the page within 5 s fails by
+name too. `judges: 'count-only'` checks nothing:
 it marks a call site whose hold does not take its judged motion yet.
 A hold sent from the test (`holdAnimations`, and `animationStoryboard`
 without `held`) takes the same `judges` and rejects the same way: it takes
@@ -202,7 +206,14 @@ A judged part shorter than four of the
 screencast's intervals fails: the animation under test was not moving during
 the block. One that had already settled when the judged part began (nothing in
 the window to judge) throws `BusyWindowTooLateError`, with the numbers: the
-block ran too late, which is no reading of the component. With
+block ran too late, which is no reading of the component. The held animation
+can also end inside the block. When it keeps no end value (`holds` false: no
+held tail, and no fill the compositor honors; WebKit on Linux honors none)
+and no settle bound applies, the judged part ends at its curve's end. Past it,
+WebKit presents the value the main thread last committed, not the animation.
+If that leaves the control fewer than four frames, where the uncut part held
+enough, the block also began too late: `BusyWindowTooLateError`, with
+`curveEndMs`. A starved run still throws `FrameStarvationError`. With
 `during`, `blockMainThread` starts the loop from a task queued in the frame
 that saw the animation, after that frame's rendering update: WebKit hands a
 newly started animation to its compositor there, and a loop inside the rAF
@@ -218,7 +229,16 @@ animations, the page looked too late, and the wait rejects with
 `BusyWindowTooLateError`. With `pseudoElement` (`'::before'` or
 `'::after'`), only that pseudo-element's animations on `during` itself count,
 as `sampleCurve` reads them: a child's animation, such as a switch thumb's
-press, does not start the block. The `verdict` judges the
+press, does not start the block. With `property`, only animations that set
+that property count, named as CSS names it (`translate`, `background-color`,
+`--press-strength`), as a hold's judged motion names it. The animation must
+also be the same one the page saw at its frame before:
+a component can rebuild a running animation on its old clock, and the page sees
+it running before the compositor shows a frame of it. The window names the
+animation it caught (`animation`): when it started and where its curve ends.
+These times are on the real clock, as the window's own are, after a page
+freeze too.
+The `verdict` judges the
 frames the screencast delivered, whatever its rate (a loaded machine's can
 deliver one frame in five or six), and tolerates nothing a frozen animation
 does: at least one frame in the judged part, no stall longer than three of the
@@ -233,11 +253,24 @@ raw numbers for the report. Frames are judged in presentation order: a loaded
 machine can deliver them out of order. `castStoryboard` turns the frames of the
 block into a filmstrip.
 
+To read frames after a moment, such as the rest after a block, wait for them by
+time: `waitForCastFrame(cast, {after, during})` returns once the cast holds a
+frame presented after `after`, epoch ms on the page's clock. A frame that
+arrives after that moment can still have been presented before it, so a count
+of frames delivered is no such wait. `cast.lastFrameAt()` reads the latest
+presentation time captured so far. Past 5 s with no such frame, the wait fails.
+When no frame came for longer than `FRAME_STARVATION_MS`, it throws
+`FrameStarvationError`: the screen did not change, or the page was starved of
+frames. Keep something moving, such as `startBusyControl`, to tell them apart.
+While frames still come, all presented before `after`, the error names both
+times.
+
 A just-started animation can reach the screen after the block began (50–100 ms
 later in WebKit on a loaded machine). When the cast saw the element at rest
 before the block (wait for `cast.frameCount()` to pass 0 before starting the
 animation), judging starts at its first presented change: the judged part still
-ends with the block and still needs four intervals, and `onScreenFromMs` and the
+ends with the block (or the held curve, above) and still needs four intervals,
+and `onScreenFromMs` and the
 summary report when it came. So is an element that moved, then held from
 before the block until its first presented change inside it: WebKit presents
 a just-started compositor animation late (a sheet's release held on screen for
@@ -290,7 +323,10 @@ moved and its longest stall is no longer than the control's. Both are read from
 the same screencast frames, so a compositor animation misses none. A window in
 which the control moved on fewer than four frames fails, since the machine
 presented too little to judge; the failure names the cast's frames in the
-window and its longest gap. A run of frames with no new position counts as
+window and its longest gap. When no frame came for longer than
+`FRAME_STARVATION_MS` there too, the machine starved the run, and
+`busyWindowProof` throws `FrameStarvationError` instead of returning a verdict.
+A run of frames with no new position counts as
 moved when the change that ends it is a single cast step: the component moves
 under one step a frame there, as on an easing tail, which the cast cannot show
 on every frame. Where it moved under two steps a frame over the frames just
@@ -310,6 +346,12 @@ to show a new position on at least four of the control's frames. The cast step (
 is read from the value's changes in the judged part, so a position the page
 commits off the grid once the block ends does not shrink it.
 A main-thread animation still fails: the control moves and it does not.
+Each such run counts in the control read's `belowStep`. A proof that claims a
+new position on every frame the control moved passes `judgeEveryFrame`. A frame
+the cast's step explains is then too little to judge: `busyWindowProof` throws
+`BusyFrameUnjudgedError` with each such frame, the component's move per frame
+there and the cast's step. A verdict that fails anyway comes back as it is, so
+a frozen or main-thread component stays a red on the component.
 
 `controlClock(control)` reads the compositor's own time in each frame off the
 control's position, for a proof that judges motion against time, not against
@@ -335,8 +377,9 @@ its longest stall may be no longer than that run's control's, since a stall
 belongs to its run. A run whose control moved on fewer frames than
 `minRunFrames` (1 by default) is too little to judge: the summary names it,
 and the pool leaves it out, so it never counts as a pass. A run whose block
-began after its motion had settled is left out the same way: its `runs` entry
-is null, and `late` holds its `BusyWindowTooLateError`. The pool fails with
+began too late for its motion is left out the same way: its `runs` entry
+is null, and `late` holds its `BusyWindowTooLateError`. The pool reads each
+run without the starvation throw. The pool fails with
 fewer than `minJudgedRuns` judged runs (half of all the runs, rounded up). In each judged run,
 the component must move on every frame its control moved on, so a freeze fails
 its run.
@@ -377,13 +420,18 @@ interaction; `countBetween` counts the steady middle of an animation (its
 first and last frames may commit). A transform/opacity animation does no
 Layout or Paint there; a layout-property animation does one per frame. Each
 counted `Paint` names the node it painted (`node`), and each `UpdateLayoutTree`
-counts the elements it restyled (`elements`). The
+counts the elements it restyled (`elements`). A proof that expects no Layout
+can explain one: `traceRendering(page, body, {keepEvents: true})` keeps the
+window's main-thread events, and `layoutSources` names the task that ran each
+Layout and each invalidation before it. The
 harness's own animation recorder stands down while the trace runs, since its
 frame loop would make every frame a main-thread one, restyling each running
 animation's target and laying out an anchored one: it reads only the element a
 CSS animation or transition event names, once, when that animation starts, and
-catches up afterwards. The frame it requested before the trace runs before the
-start mark, so the whole window counts none of its work. A `waitForRest`
+catches up afterwards. A CSS run's end event reads nothing then either: the
+recorder keeps the end and dates the run once the trace ends. The frame it
+requested before the trace runs before the start mark, so the whole window
+counts none of its work. A `waitForRest`
 awaited inside the traced body stands
 down too: it waits on timers for the scheduled ends of the element's curves
 (looking `frames` times a frame apart before settling on none, so an
@@ -563,6 +611,17 @@ gesture the same way, and the play fails with `TouchPacingError`. A play whose
 proof reads no release from the lift, such as a pinch's end, passes
 `releaseUnread`.
 
+A proof whose component decides on a threshold names it in `boundaries`:
+the release speed a pager pages from (`releasePxPerS`), or the hold after
+which it catches the content (`holdMs`). In WebKit the play then fails by
+name when the page read the release, or the first finger's hold from
+touch-down to lift, on the other side of the threshold from the script. A
+scrolling surface reads its release as Core's `scrollVelocity` does: pass
+`release: 'scroll'`. Each pacing error names the longest time the page drew no
+frame during the gesture. A page that drew nothing for 100 ms or more never
+received the gesture as scripted. To read a frame before the gesture, a judged
+play starts one frame later.
+
 A wheel gesture is a run of steps, and `wheel` waits for each step's round
 trip, so on a loaded runner awaited steps land as far apart as a round trip
 takes: 49 to 141 ms in WebKit, past the 100 ms a proof may allow between the
@@ -575,24 +634,30 @@ as it does a trackpad's.
 WebKit dispatches a step only once the page's main thread is free, and the
 steps it holds meanwhile reach the page coalesced into one, stamped like the
 step before it, so the burst times each WebKit step by when the page's first
-listener received it (`wheelArrivals`). Two things can split a run past
+listener received it (`wheelArrivals`). Three things can split a run past
 `maxGapMs`. When a step reached the page within one frame of its own wheel
 listeners finishing the step before, and the gap is more than a frame wider
 than the harness's own spacing of those sends, those listeners held it back:
 the burst throws `WheelPageStallError`, the page split the gesture, and the
 proof fails. A page can only widen a gap, so one no wider than the send
 spacing is the dispatch's even when a starved renderer also held the step.
-Otherwise the dispatch stalled before the page (a loaded runner) and it throws
-`WheelPacingError` with the gaps. Wrap such a
-proof in `retakeOnWheelPacing(testInfo, attempt)`: one re-take, only on
-`WheelPacingError`, listed as a `wheel-retake` annotation. The burst times the
+When the page drew no frame across nearly all of a widened gap, engine or page
+work held the main thread: the burst records the page's frames and throws
+`WheelPageStallError` with the frame gap, the arrival gap and the listeners'
+time. A starved runner's renderer draws no frame either, so judge such a stall
+from a run with CI's CPU limits. Otherwise the dispatch stalled before the
+page (a loaded runner) and it throws `WheelPacingError` with the gaps. A proof
+never re-takes itself: a `WheelPacingError` stays red, named as the runner's.
+Where one shows in CI's profile, fix the wheel's delivery, not the proof. The
+burst times the
 page's handling with a listener on the window that runs after the page's own.
 A step whose propagation the page stops is marked by a task queued when it
 arrived, and never later than the next step's arrival. So its handling, with
 any work queued before that task, counts as the page's. Other main-thread work
-between steps (timers, frames) still counts as the dispatch's stall. Chromium
-stamps a step with its dispatch time, so a page that holds its main thread does
-not widen the gaps there, and every gap past `maxGapMs` is a `WheelPacingError`.
+between steps that leaves frames running still counts as the dispatch's stall.
+Chromium stamps a step with its dispatch time, so a page that holds its main
+thread does not widen the gaps there, and every gap past `maxGapMs` is a
+`WheelPacingError`.
 
 The WebKit input command is reached through Playwright's in-process server
 object, so it needs a locally launched browser (the default), not `connect()`.
