@@ -54,7 +54,6 @@ const styles = stylex.create({
     boxSizing: 'border-box',
     flexShrink: 0,
     overflow: 'clip',
-    // Default: inner padding on all sides (will be overridden by position-specific styles)
     paddingInlineStart: `var(--layout-padding-inner-x, ${spacingVars['--spacing-4']})`,
     paddingInlineEnd: `var(--layout-padding-inner-x, ${spacingVars['--spacing-4']})`,
     paddingBlockStart: `var(--layout-padding-inner-y, ${spacingVars['--spacing-4']})`,
@@ -64,21 +63,23 @@ const styles = stylex.create({
     '--container-padding-block-start': `var(--layout-padding-inner-y, ${spacingVars['--spacing-4']})`,
     '--container-padding-block-end': `var(--layout-padding-inner-y, ${spacingVars['--spacing-4']})`,
   },
-  // Start panel: outer-x on left edge
+  // An edge on the Layout's boundary takes the Layout-edge inset. Each edge
+  // publishes the padding it applies, so full-bleed children line up with it.
   startPanel: {
     paddingInlineStart: `var(--layout-padding-own-outer-x, var(--layout-padding-outer-x, ${spacingVars['--spacing-4']}))`,
+    '--container-padding-inline-start': `var(--layout-padding-own-outer-x, var(--layout-padding-outer-x, ${spacingVars['--spacing-4']}))`,
   },
-  // End panel: outer-x on right edge
   endPanel: {
     paddingInlineEnd: `var(--layout-padding-own-outer-x, var(--layout-padding-outer-x, ${spacingVars['--spacing-4']}))`,
+    '--container-padding-inline-end': `var(--layout-padding-own-outer-x, var(--layout-padding-outer-x, ${spacingVars['--spacing-4']}))`,
   },
-  // When no header: outer-y on top
   noHeader: {
     paddingBlockStart: `var(--layout-padding-own-outer-y, var(--layout-padding-outer-y, ${spacingVars['--spacing-4']}))`,
+    '--container-padding-block-start': `var(--layout-padding-own-outer-y, var(--layout-padding-outer-y, ${spacingVars['--spacing-4']}))`,
   },
-  // When no footer: outer-y on bottom
   noFooter: {
     paddingBlockEnd: `var(--layout-padding-own-outer-y, var(--layout-padding-outer-y, ${spacingVars['--spacing-4']}))`,
+    '--container-padding-block-end': `var(--layout-padding-own-outer-y, var(--layout-padding-outer-y, ${spacingVars['--spacing-4']}))`,
   },
   fullBleed: {
     paddingInlineStart: 0,
