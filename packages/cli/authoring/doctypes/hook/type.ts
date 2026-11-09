@@ -23,10 +23,10 @@ import type {
  * Standalone hooks (e.g. useMediaQuery, useFocusTrap, useOverflow) get
  * their own {hookName}.doc.mjs file and use this type.
  *
- * Every hook .doc.mjs must export a single `docs` constant:
+ * Every new hook .doc.mjs default-exports a stamped object:
  *
  *   /\*\* @type {import('@astryxdesign/cli/authoring').HookDoc} \*\/
- *   export const docs = { ... };
+ *   export default { type: 'function', ... };
  */
 export interface HookDoc extends AuthoredDocGraphFields {
   /** Doc-kind discriminant for the stamped default-export format
@@ -68,6 +68,10 @@ export interface HookDoc extends AuthoredDocGraphFields {
  * Translation overlay for hook documentation.
  */
 export interface HookTranslationDoc {
+  /** Optional exact name from the base doc. Ignored at render time. */
+  name?: string;
+  /** Optional translated displayName. Ignored at render time. */
+  displayName?: string;
   /** Compressed/translated description. */
   description?: string;
   /** Param descriptions keyed by param name. */

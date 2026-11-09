@@ -21,7 +21,11 @@
  */
 
 import {useCallback, useState} from 'react';
-import {ensureCaretInside, insertTextAtCursor} from './chatComposerSelection';
+import {
+  ensureCaretInside,
+  insertTextAtCursor,
+  placeCaretAfterRemovedToken,
+} from './chatComposerSelection';
 import type {
   ChatComposerToken,
   ChatComposerTokenCustom,
@@ -120,7 +124,9 @@ export function useChatComposerTokens({
       span.setAttribute('data-astryx-token-id', id);
       span.contentEditable = 'false';
       span.style.display = 'inline-flex';
-      span.style.verticalAlign = 'middle';
+      span.style.alignItems = 'center';
+      span.style.height = '1lh';
+      span.style.verticalAlign = 'top';
 
       range.deleteContents();
       range.insertNode(span);
@@ -130,7 +136,7 @@ export function useChatComposerTokens({
       span.after(space);
 
       const newRange = document.createRange();
-      newRange.setStartAfter(space);
+      newRange.setStart(space, space.length);
       newRange.collapse(true);
       selection.removeAllRanges();
       selection.addRange(newRange);
@@ -179,10 +185,15 @@ export function useChatComposerTokens({
       ) {
         e.preventDefault();
         const tokenSpan = startContainer.previousSibling;
+        const before = tokenSpan.previousSibling;
+        const after = startContainer.nextSibling;
         const parent = startContainer.parentNode;
         if (parent) {
           parent.removeChild(startContainer);
           parent.removeChild(tokenSpan);
+          if (parent instanceof HTMLElement) {
+            placeCaretAfterRemovedToken(parent, before, after);
+          }
         }
         onEmitChange();
         return true;
@@ -219,7 +230,8 @@ export function useChatComposerTokens({
         const space = tokenEl.nextSibling;
         const newRange = document.createRange();
         if (space && space.nodeType === Node.TEXT_NODE) {
-          newRange.setStartAfter(space);
+          const textNode = space as Text;
+          newRange.setStart(textNode, textNode.nodeValue?.length ?? 0);
         } else {
           newRange.setStartAfter(tokenEl);
         }
@@ -266,7 +278,7 @@ export function useChatComposerTokens({
       const selection = window.getSelection();
       if (selection) {
         const range = document.createRange();
-        range.setStartAfter(textNode);
+        range.setStart(textNode, textNode.length);
         range.collapse(true);
         selection.removeAllRanges();
         selection.addRange(range);

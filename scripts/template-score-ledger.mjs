@@ -3,9 +3,13 @@
 
 /**
  * @file Template audit ledger reader, writer, queue, stats, and wiki publisher.
- * @input Template scorecards plus page/block templates under packages/cli/assets/templates.
- * @output Validated template-scores.json updates, summaries, and optional wiki pushes.
- * @position Standalone source of truth for recording template audits.
+ * @input Template scorecards, the canonical rubric exported by
+ *   packages/cli/assets/docs/tree/template-quality.doc.mjs, and page/block
+ *   templates under packages/cli/assets/templates.
+ * @output Validated template-scores.json updates, summaries, and optional wiki
+ *   pushes.
+ * @position Ledger persistence for the public rubric. Category ids, weights,
+ *   version, and grade bands are owned by the shipped template-quality doc.
  *
  * SYNC: Keep this schema aligned with apps/sandbox/src/data/templateAudits.ts.
  */
@@ -15,31 +19,28 @@ import os from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {TEMPLATE_RUBRIC} from '../packages/cli/assets/docs/tree/template-grading-rubric.doc.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 export const TEMPLATE_LEDGER_FILENAME = 'template-scores.json';
 export const TEMPLATE_LEDGER_URL =
-  'https://raw.githubusercontent.com/wiki/facebook/astryx/template-scores.json';
-export const WIKI_REMOTE = 'https://github.com/facebook/astryx.wiki.git';
+  'https://raw.githubusercontent.com/wiki/meta/astryx/template-scores.json';
+export const WIKI_REMOTE = 'https://github.com/meta/astryx.wiki.git';
 export const WIKI_BRANCH = 'master';
 export const TEMPLATE_AUDITS_PAGE_URL =
-  'https://facebook.github.io/astryx/sandbox/templates/';
+  'https://astryx.atmeta.com/sandbox/templates/';
 export const LEDGER_FETCH_TIMEOUT_MS = 10_000;
 export const WIKI_CACHE_DIR = path.join(
   os.tmpdir(),
   'astryx-template-score-ledger-wiki',
 );
 
-export const TEMPLATE_CATEGORIES = Object.freeze([
-  {id: 'component_purity', title: 'Astryx component purity', max: 30},
-  {id: 'icon_purity', title: 'Icon purity', max: 15},
-  {id: 'custom_css', title: 'Custom CSS', max: 15},
-  {id: 'layout_structure', title: 'Layout & structure', max: 15},
-  {id: 'doc_metadata', title: 'Doc metadata', max: 10},
-  {id: 'image_handling', title: 'Image handling', max: 5},
-  {id: 'code_quality', title: 'Code quality', max: 10},
-]);
+export const TEMPLATE_CATEGORIES = Object.freeze(
+  TEMPLATE_RUBRIC.categories.map(({id, title, max}) =>
+    Object.freeze({id, title, max}),
+  ),
+);
 
 const CATEGORY_BY_ID = new Map(
   TEMPLATE_CATEGORIES.map(category => [category.id, category]),
@@ -124,11 +125,7 @@ function assertNonEmptyString(value, label) {
 }
 
 export function templateGrade(score) {
-  if (score >= 90) return 'A';
-  if (score >= 75) return 'B';
-  if (score >= 60) return 'C';
-  if (score >= 40) return 'D';
-  return 'F';
+  return TEMPLATE_RUBRIC.grades.find(({min}) => score >= min)?.grade ?? 'F';
 }
 
 export function isTemplateId(id) {
@@ -543,7 +540,7 @@ export function ensureWikiClone(dir = WIKI_CACHE_DIR, remote = WIKI_REMOTE) {
 
 export function repoFromWikiRemote(remote = WIKI_REMOTE) {
   const match = /github\.com[/:]([^/]+)\/(.+?)\.wiki(\.git)?$/.exec(remote);
-  return match ? `${match[1]}/${match[2]}` : 'facebook/astryx';
+  return match ? `${match[1]}/${match[2]}` : 'meta/astryx';
 }
 
 export function wikiCommitUrl(sha, remote = WIKI_REMOTE) {

@@ -1,0 +1,484 @@
+{
+  "recipe": "astryx-oklch-v1",
+  "vibrancy": 48,
+  "neutralProfile": "custom",
+  "modeStrategy": "light-and-dark",
+  "stops": [
+    0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90,
+    95, 100
+  ],
+  "families": [
+    {
+      "id": "neutral",
+      "name": "Butter Neutral",
+      "seed": "#79786a",
+      "kind": "neutral",
+      "anchors": [
+        {
+          "mode": "dark",
+          "stop": 5,
+          "color": "#131107",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 10,
+          "color": "#261a13",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 15,
+          "color": "#2e2117",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 20,
+          "color": "#3a2a1f",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 30,
+          "color": "#4a4732",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 35,
+          "color": "#49473b",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 40,
+          "color": "#725538",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 45,
+          "color": "#605f52",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 55,
+          "color": "#79786a",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 60,
+          "color": "#939184",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 70,
+          "color": "#adac9e",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 80,
+          "color": "#d6d3b8",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 85,
+          "color": "#f0edd4",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 90,
+          "color": "#f3f2e2",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 95,
+          "color": "#fdfbe4",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 15,
+          "color": "#1d1c11",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 30,
+          "color": "#4a4732",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 40,
+          "color": "#725538",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 45,
+          "color": "#605f52",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 55,
+          "color": "#79786a",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 70,
+          "color": "#adac9e",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 75,
+          "color": "#c7c4b2",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 80,
+          "color": "#d6d3b8",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 85,
+          "color": "#e5e3d4",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 90,
+          "color": "#f3f2e2",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 95,
+          "color": "#fdfbe4",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "accent",
+      "name": "Brand Blue",
+      "seed": "#225bff",
+      "anchors": [
+        {
+          "mode": "light",
+          "stop": 40,
+          "color": "#225bff",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 40,
+          "color": "#225bff",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "blue",
+      "name": "Blue",
+      "seed": "#5681ff",
+      "anchors": [
+        {
+          "mode": "light",
+          "stop": 25,
+          "color": "#203a6c",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 80,
+          "color": "#bdc5eb",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 90,
+          "color": "#dbe1ff",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 25,
+          "color": "#203a6c",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 80,
+          "color": "#bdc5eb",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 90,
+          "color": "#dbe1ff",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "cyan",
+      "name": "Cyan",
+      "seed": "#60cfd3",
+      "anchors": [
+        {
+          "mode": "light",
+          "stop": 25,
+          "color": "#004649",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 80,
+          "color": "#8dd2d3",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 90,
+          "color": "#a9eff0",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 25,
+          "color": "#004649",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 80,
+          "color": "#8dd2d3",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 90,
+          "color": "#a9eff0",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "green",
+      "name": "Green",
+      "seed": "#5dce5f",
+      "anchors": []
+    },
+    {
+      "id": "orange",
+      "name": "Orange",
+      "seed": "#ffa347",
+      "anchors": [
+        {
+          "mode": "light",
+          "stop": 25,
+          "color": "#622e00",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 80,
+          "color": "#f2bd81",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 90,
+          "color": "#ffdcb6",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 25,
+          "color": "#622e00",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 80,
+          "color": "#f2bd81",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 90,
+          "color": "#ffdcb6",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "pink",
+      "name": "Pink",
+      "seed": "#f680e8",
+      "anchors": [
+        {
+          "mode": "light",
+          "stop": 25,
+          "color": "#6c0a68",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 80,
+          "color": "#f0b3e8",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 90,
+          "color": "#ffd5fb",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 25,
+          "color": "#6c0a68",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 80,
+          "color": "#f0b3e8",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 90,
+          "color": "#ffd5fb",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "purple",
+      "name": "Purple",
+      "seed": "#b780f6",
+      "anchors": [
+        {
+          "mode": "light",
+          "stop": 25,
+          "color": "#52237b",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 80,
+          "color": "#ddb9f6",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 90,
+          "color": "#f2daff",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 25,
+          "color": "#52237b",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 80,
+          "color": "#ddb9f6",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 90,
+          "color": "#f2daff",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "red",
+      "name": "Red",
+      "seed": "#ff7553",
+      "anchors": []
+    },
+    {
+      "id": "teal",
+      "name": "Teal",
+      "seed": "#6cd9a8",
+      "anchors": [
+        {
+          "mode": "light",
+          "stop": 25,
+          "color": "#00482d",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 80,
+          "color": "#94d3bb",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 90,
+          "color": "#b0f0d7",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 25,
+          "color": "#00482d",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 80,
+          "color": "#94d3bb",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 90,
+          "color": "#b0f0d7",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "yellow",
+      "name": "Butter Yellow",
+      "seed": "#fdee8c",
+      "anchors": [
+        {
+          "mode": "light",
+          "stop": 90,
+          "color": "#fdee8c",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 90,
+          "color": "#fdee8c",
+          "policy": "exact"
+        }
+      ]
+    }
+  ]
+}

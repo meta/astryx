@@ -8,13 +8,17 @@
  */
 
 import {describe, it, expect, vi, beforeAll} from 'vitest';
-import {useState} from 'react';
-import {render, screen, within, fireEvent} from '@testing-library/react';
+import {Suspense, startTransition, use, useState} from 'react';
+import {act, render, screen, within, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Table} from '../../Table';
 import {useTableColumnResize} from './useTableColumnResize';
 import {useTableSelection} from '../selection/useTableSelection';
-import {proportional, pixel} from '../../columnUtils';
+import {
+  DEFAULT_FLEXIBLE_COLUMN_MIN_WIDTH,
+  proportional,
+  pixel,
+} from '../../columnUtils';
 import type {TableColumn} from '../../types';
 
 // JSDOM doesn't implement pointer capture
@@ -570,6 +574,43 @@ describe('useTableColumnResize', () => {
       expect(handle).toHaveAttribute('aria-label', 'Resize column Name');
     });
 
+    it("names a node header's handle by the header's visible text (AR1)", () => {
+      function Glyph() {
+        return <svg aria-hidden />;
+      }
+      render(
+        <ResizeTable
+          columns={[
+            {key: 'name', header: <span>Amount (EUR)</span>},
+            {key: 'role', header: <Glyph />},
+            {key: 'id', header: 'ID'},
+          ]}
+        />,
+      );
+      const [amount, role] = getResizeHandles();
+      expect(amount).toHaveAttribute(
+        'aria-label',
+        'Resize column Amount (EUR)',
+      );
+      // A header with no text it renders through children falls back to the key.
+      expect(role).toHaveAttribute('aria-label', 'Resize column role');
+    });
+
+    it("the handle never adds to its column header's name (AR1)", () => {
+      render(<ResizeTable />);
+      const headers = screen.getAllByRole('columnheader');
+      // Named by its text alone: no handle name, no width value.
+      expect(headers[0]).toHaveAccessibleName('Name');
+      for (const header of headers) {
+        expect(header.textContent).not.toBe('');
+        expect(header).not.toHaveAccessibleName(/Resize column|\d{2,}/);
+      }
+      // The label stays inline, so the cell's ellipsis still reaches it.
+      const labelId = headers[0].getAttribute('aria-labelledby')?.split(' ')[0];
+      expect(labelId).toBeDefined();
+      expect(document.getElementById(labelId ?? '')?.tagName).toBe('SPAN');
+    });
+
     it('handle has aria-valuemin', () => {
       render(<ResizeTable minWidth={80} />);
       const handle = getResizeHandles()[0];
@@ -580,6 +621,102 @@ describe('useTableColumnResize', () => {
       render(<ResizeTable maxWidth={500} />);
       const handle = getResizeHandles()[0];
       expect(handle).toHaveAttribute('aria-valuemax', '500');
+      // A real maximum needs no stand-in, so no value text either.
+      expect(handle).not.toHaveAttribute('aria-valuetext');
+    });
+
+    it("announces its column's rendered width before any resize, not the minimum", () => {
+      const original = HTMLElement.prototype.getBoundingClientRect;
+      HTMLElement.prototype.getBoundingClientRect = function (
+        this: HTMLElement,
+      ) {
+        if (this.tagName !== 'TH') {
+          return original.call(this);
+        }
+        const width = 180.4;
+        const height = 32;
+        return {
+          x: 0,
+          y: 0,
+          top: 0,
+          left: 0,
+          width,
+          height,
+          right: width,
+          bottom: height,
+          toJSON: () => ({}),
+        };
+      };
+      try {
+        render(<ResizeTable minWidth={60} />);
+        for (const handle of getResizeHandles()) {
+          expect(handle).toHaveAttribute('aria-valuenow', '180');
+          expect(handle).toHaveAttribute('aria-valuetext', '180 pixels');
+        }
+      } finally {
+        HTMLElement.prototype.getBoundingClientRect = original;
+      }
+    });
+
+    it('keeps the announced range holding a column rendered past its limits', () => {
+      const original = HTMLElement.prototype.getBoundingClientRect;
+      HTMLElement.prototype.getBoundingClientRect = function (
+        this: HTMLElement,
+      ) {
+        if (this.tagName !== 'TH') {
+          return original.call(this);
+        }
+        const width = 180.4;
+        const height = 32;
+        return {
+          x: 0,
+          y: 0,
+          top: 0,
+          left: 0,
+          width,
+          height,
+          right: width,
+          bottom: height,
+          toJSON: () => ({}),
+        };
+      };
+      try {
+        render(<ResizeTable minWidth={60} maxWidth={150} />);
+        for (const handle of getResizeHandles()) {
+          // The layout made the column 180 px, past its 150 px maximum.
+          expect(handle).toHaveAttribute('aria-valuenow', '180');
+          expect(
+            Number(handle.getAttribute('aria-valuemax')),
+          ).toBeGreaterThanOrEqual(180);
+          expect(
+            Number(handle.getAttribute('aria-valuemin')),
+          ).toBeLessThanOrEqual(180);
+        }
+      } finally {
+        HTMLElement.prototype.getBoundingClientRect = original;
+      }
+    });
+
+    it('an unbounded column announces a finite maximum, never below its value, and its width in words', () => {
+      render(<ResizeTable />);
+      for (const handle of getResizeHandles()) {
+        const now = Number(handle.getAttribute('aria-valuenow'));
+        const min = Number(handle.getAttribute('aria-valuemin'));
+        // ARIA's default maximum is 100, which a column wider than 100px
+        // would read past.
+        expect(handle).toHaveAttribute('aria-valuemax');
+        const max = Number(handle.getAttribute('aria-valuemax'));
+        expect(Number.isFinite(max)).toBe(true);
+        expect(max).toBeGreaterThanOrEqual(now);
+        expect(max).toBeGreaterThanOrEqual(min);
+        expect(handle).toHaveAttribute('aria-valuetext', `${now} pixels`);
+      }
+    });
+
+    it('says a fractional width as a whole number of pixels', () => {
+      render(<ResizeTable columnWidths={{name: 202.656}} />);
+      const handle = getResizeHandles()[0];
+      expect(handle).toHaveAttribute('aria-valuetext', '203 pixels');
     });
   });
 
@@ -703,6 +840,15 @@ describe('useTableColumnResize', () => {
       expect(handle).toHaveAttribute('aria-valuemin', '60');
     });
 
+    it('uses the compact flexible floor for a width-less column', () => {
+      render(<ResizeTable />);
+      const handle = getResizeHandles()[0];
+      expect(handle).toHaveAttribute(
+        'aria-valuemin',
+        String(DEFAULT_FLEXIBLE_COLUMN_MIN_WIDTH),
+      );
+    });
+
     it('defaults to DEFAULT_MIN_COLUMN_WIDTH (120) for proportional without explicit minWidth', () => {
       const defaultColumns: TableColumn<TestItem>[] = [
         {key: 'name', header: 'Name', width: proportional(1)},
@@ -772,5 +918,209 @@ describe('useTableColumnResize', () => {
       const handles = getResizeHandles();
       expect(handles).toHaveLength(2);
     });
+  });
+
+  // ===========================================================================
+  // Disclosure — scroll gate (FR10), focus scope (FR9)
+  // ===========================================================================
+
+  describe('disclosure', () => {
+    /**
+     * The gate lives on the scroll wrapper as an inline custom property that
+     * the header row and handles inherit. Asserting the property directly is
+     * the only honest check in JSDOM: the reveal itself is a CSS media/hover
+     * resolution that no JSDOM computed style will report.
+     */
+    function getScrollWrapper(container: HTMLElement): HTMLElement {
+      const table = container.querySelector('table');
+      const wrapper = table?.closest('div[class]');
+      if (!wrapper) {
+        throw new Error('scroll wrapper not found');
+      }
+      return wrapper as HTMLElement;
+    }
+
+    it('closes the disclosure gate while the region scrolls', () => {
+      const {container} = render(<ResizeTable columns={pixelColumns} />);
+      const wrapper = getScrollWrapper(container);
+
+      expect(wrapper.style.getPropertyValue('--resize-hint-gate')).toBe('');
+
+      fireEvent.scroll(wrapper);
+
+      expect(wrapper.style.getPropertyValue('--resize-hint-gate')).toBe(
+        'transparent',
+      );
+    });
+
+    it('reopens the gate once scrolling settles', () => {
+      const {container} = render(<ResizeTable columns={pixelColumns} />);
+      const wrapper = getScrollWrapper(container);
+
+      fireEvent.scroll(wrapper);
+      expect(wrapper.style.getPropertyValue('--resize-hint-gate')).toBe(
+        'transparent',
+      );
+
+      fireEvent(wrapper, new Event('scrollend'));
+
+      expect(wrapper.style.getPropertyValue('--resize-hint-gate')).toBe('');
+    });
+
+    it('falls back to a settle timeout where scrollend is unsupported', () => {
+      vi.useFakeTimers();
+      // Force the fallback path: the gate probes for `onscrollend` when the
+      // ref attaches, so the property has to be gone before the first render.
+      // Take the descriptor rather than reading the value — the accessor is a
+      // real getter and throws when invoked on the prototype itself.
+      const proto = window.HTMLElement.prototype;
+      const descriptor = Object.getOwnPropertyDescriptor(proto, 'onscrollend');
+      if (descriptor) {
+        // @ts-expect-error — deleting a DOM accessor for the duration of one test
+        delete proto.onscrollend;
+      }
+
+      try {
+        const {container} = render(<ResizeTable columns={pixelColumns} />);
+        const wrapper = getScrollWrapper(container);
+
+        fireEvent.scroll(wrapper);
+        expect(wrapper.style.getPropertyValue('--resize-hint-gate')).toBe(
+          'transparent',
+        );
+
+        // Still closed part-way through the settle window.
+        vi.advanceTimersByTime(60);
+        expect(wrapper.style.getPropertyValue('--resize-hint-gate')).toBe(
+          'transparent',
+        );
+
+        vi.advanceTimersByTime(120);
+        expect(wrapper.style.getPropertyValue('--resize-hint-gate')).toBe('');
+      } finally {
+        if (descriptor) {
+          Object.defineProperty(proto, 'onscrollend', descriptor);
+        }
+        vi.useRealTimers();
+      }
+    });
+
+    it('scrolling does not rerender the Table', () => {
+      const renderSpy = vi.fn();
+
+      function CountingResizeTable() {
+        renderSpy();
+        const resizePlugin = useTableColumnResize<TestItem>({
+          columns: pixelColumns as TableColumn<Record<string, unknown>>[],
+        });
+        return (
+          <Table
+            data={testData}
+            columns={pixelColumns}
+            idKey="id"
+            plugins={{resize: resizePlugin}}
+          />
+        );
+      }
+
+      const {container} = render(<CountingResizeTable />);
+      const wrapper = getScrollWrapper(container);
+      const before = renderSpy.mock.calls.length;
+
+      fireEvent.scroll(wrapper);
+      fireEvent.scroll(wrapper);
+      fireEvent(wrapper, new Event('scrollend'));
+
+      expect(renderSpy.mock.calls.length).toBe(before);
+    });
+
+    it('focusing a handle leaves the gate and the row hint alone', () => {
+      const {container} = render(<ResizeTable columns={pixelColumns} />);
+      const wrapper = getScrollWrapper(container);
+      const [first] = getResizeHandles();
+
+      first.focus();
+      expect(first).toHaveFocus();
+
+      // Focus is deliberate: it must not trip the scroll gate, and it must not
+      // publish a row-level hint — only the focused boundary is emphasized.
+      expect(wrapper.style.getPropertyValue('--resize-hint-gate')).toBe('');
+      const headerRow = container.querySelector('thead tr') as HTMLElement;
+      expect(headerRow.style.getPropertyValue('--resize-hint')).toBe('');
+    });
+  });
+});
+
+// A render that reads this promise suspends for good.
+const pending = new Promise<never>(() => {});
+function Pending(): null {
+  use(pending);
+  return null;
+}
+
+interface ResizeState {
+  columnWidths: Record<string, number>;
+  onColumnResizeEnd: (updates: Record<string, number>) => void;
+}
+
+function PixelResizeTable({columnWidths, onColumnResizeEnd}: ResizeState) {
+  const resize = useTableColumnResize<TestItem>({
+    columnWidths,
+    onColumnResizeEnd,
+    columns: pixelColumns as TableColumn<Record<string, unknown>>[],
+  });
+  return (
+    <Table
+      data={testData}
+      columns={pixelColumns}
+      idKey="id"
+      plugins={{resize}}
+    />
+  );
+}
+
+function ControlledResizeTable({
+  isPending,
+  ...state
+}: ResizeState & {isPending: boolean}) {
+  return (
+    <Suspense fallback={null}>
+      <PixelResizeTable {...state} />
+      {isPending ? <Pending /> : null}
+    </Suspense>
+  );
+}
+
+describe('useTableColumnResize after a render React discards', () => {
+  it('a keyboard resize starts from the widths on screen and reports to the committed callback', async () => {
+    const committed: Record<string, number>[] = [];
+    const discarded: Record<string, number>[] = [];
+    const {rerender} = render(
+      <ControlledResizeTable
+        columnWidths={{name: 200}}
+        onColumnResizeEnd={updates => committed.push(updates)}
+        isPending={false}
+      />,
+    );
+    // The next props render in a transition, then suspend for good, so React
+    // keeps the committed tree and never commits that render.
+    await act(async () => {
+      startTransition(() => {
+        rerender(
+          <ControlledResizeTable
+            columnWidths={{name: 300}}
+            onColumnResizeEnd={updates => discarded.push(updates)}
+            isPending
+          />,
+        );
+      });
+    });
+    const handle = getResizeHandles()[0];
+    handle.focus();
+
+    fireEvent.keyDown(handle, {key: 'ArrowRight'});
+
+    expect(discarded).toEqual([]);
+    expect(committed).toEqual([{name: 210}]);
   });
 });

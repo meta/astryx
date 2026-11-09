@@ -6,7 +6,8 @@
  *   page's `message` events. Preview side: the document's own URL and the
  *   incoming `message` events.
  * @output A dedicated MessagePort pair that only the playground and a preview
- *   document the playground itself navigated to can hold.
+ *   document the playground itself navigated to can hold, plus lifecycle
+ *   callbacks for attestation and replacement.
  * @position Playground <-> preview iframe — the postMessage trust boundary.
  *
  * ## Why there is a boundary at all
@@ -187,11 +188,14 @@ export interface PreviewConnector {
  */
 export function createPreviewConnector({
   onMessage,
+  onAttested,
   onReplaced,
   nonce = createPreviewNonce,
 }: {
   /** Receives every message that arrives on the adopted port. */
   onMessage: (event: MessageEvent) => void;
+  /** The current frame proved it loaded the issued preview URL. */
+  onAttested?: () => void;
   /**
    * The attested document is gone. The caller must `issue()` a new
    * generation and mount a fresh iframe for it.
@@ -245,6 +249,7 @@ export function createPreviewConnector({
       attested = true;
       port = connectToPreview(frame as Pick<Window, 'postMessage'>);
       port.onmessage = onMessage;
+      onAttested?.();
     },
 
     handleFrameLoad() {

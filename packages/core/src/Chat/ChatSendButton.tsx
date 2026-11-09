@@ -10,7 +10,8 @@
  *
  * Reads composer state from ChatComposerContext by default so it "just
  * works" inside ChatComposer. All context-derived values can be
- * overridden via props for standalone usage.
+ * overridden via props for standalone usage. Accepted `onClick` handlers
+ * compose after the selected send or stop action.
  *
  * States:
  * - **Send** — accent/primary, arrowUp icon, disabled when nothing to send.
@@ -24,9 +25,15 @@ import {useIcon} from '../Icon';
 import {useChatComposerContext} from './ChatContext';
 
 import type {BaseProps} from '../BaseProps';
-import {mergeProps} from '../utils';
+import {composeEventHandlers, mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Chat/ChatSendButton.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Types
@@ -77,7 +84,7 @@ const styles = stylex.create({
  * ```
  */
 export function ChatSendButton(props: ChatSendButtonProps): ReactNode {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const context = useChatComposerContext();
 
   const {
@@ -85,6 +92,7 @@ export function ChatSendButton(props: ChatSendButtonProps): ReactNode {
     isDisabled = !(context?.canSend ?? false),
     onSend,
     onStop = context?.onStop,
+    onClick,
     sendIcon,
     stopIcon,
     size = 'md',
@@ -116,7 +124,7 @@ export function ChatSendButton(props: ChatSendButtonProps): ReactNode {
       }
       isIconOnly
       isDisabled={!isStopShown && isDisabled}
-      onClick={isStopShown ? onStop : handleSend}
+      onClick={composeEventHandlers(isStopShown ? onStop : handleSend, onClick)}
       {...rest}
       {...mergeProps(themeProps('chat-send-button'), {className}, style)}
       xstyle={[styles.root, xstyle]}

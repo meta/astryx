@@ -485,7 +485,7 @@ export default function MobileTypePage() {
                   isLabelHidden
                   size="sm"
                   placeholder="Select ratio"
-                  xstyle={styles.fullWidth}
+                  controlXstyle={styles.fullWidth}
                   options={RATIO_OPTIONS}
                   value={ratio}
                   onChange={(v: string) => setRatio(v)}
@@ -542,7 +542,7 @@ export default function MobileTypePage() {
                     label="Pin anchor"
                     isLabelHidden
                     size="sm"
-                    xstyle={styles.fullWidth}
+                    controlXstyle={styles.fullWidth}
                     options={PIN_ANCHORS}
                     value={String(pinStep)}
                     onChange={(v: string) => setPinStep(Number(v))}

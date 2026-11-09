@@ -187,9 +187,11 @@ function connectorHarness() {
   const nonces: string[] = [];
   let counter = 0;
   const received: Array<{type?: string}> = [];
+  const onAttested = vi.fn();
   const onReplaced = vi.fn();
   const connector = createPreviewConnector({
     onMessage: event => received.push(event.data as {type?: string}),
+    onAttested,
     onReplaced,
     nonce: () => {
       const next = `nonce-${(counter += 1)}`;
@@ -201,6 +203,7 @@ function connectorHarness() {
     connector,
     nonces,
     received,
+    onAttested,
     onReplaced,
     get doc() {
       return current;
@@ -244,14 +247,17 @@ describe('createPreviewConnector', () => {
     expect(doc.port).toBe(null);
     expect(stranger.port).toBe(null);
     expect(h.connector.isAttested()).toBe(false);
+    expect(h.onAttested).not.toHaveBeenCalled();
 
     // The right hello from the right window earns exactly one port.
     h.connector.handleWindowMessage(doc.hello(nonce));
     expect(doc.port).toBeInstanceOf(MessagePort);
     expect(h.connector.isAttested()).toBe(true);
+    expect(h.onAttested).toHaveBeenCalledTimes(1);
     const firstPort = doc.port;
     h.connector.handleWindowMessage(doc.hello(nonce));
     expect(doc.port).toBe(firstPort);
+    expect(h.onAttested).toHaveBeenCalledTimes(1);
   });
 
   it('flows traffic over the adopted pair in both directions', async () => {

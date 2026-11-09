@@ -30,19 +30,37 @@ export interface CollectionDocBlock {
   whenEmpty?: 'show' | 'omit';
 }
 
-/** A bounded projection of one canonical doc. */
+/**
+ * A bounded projection of one canonical doc. In a namespace doc's `blocks` it
+ * is layout the docs tree renders later. In a topic section, a read includes
+ * the doc it names in place of the block: a schema, command, function, or
+ * enum doc as `astryx docs` prints it (`projection.fields` keeps only those
+ * fields of a schema), then the command that opens that doc. Any other doc
+ * shows its title and summary.
+ */
 export interface ReferenceDocBlock {
   type: 'reference';
+  /** The doc it names, by identity: `[<provider>:]<kind>:<name>`. */
   target: string;
   projection?: {
     fields?: string[];
     sections?: string[];
   };
+  /** `summary`: only the doc's title, summary, and the command that opens it.
+   *  `compact`: the included doc without its code blocks. `full`, the default:
+   *  the included doc. */
   presentation?: 'summary' | 'compact' | 'full';
 }
 
+/** Graph-only content blocks, for a namespace doc's `blocks`. These are
+ * additive and do not widen the stable {@link ReferenceContentBlock} union
+ * consumed by existing exhaustive renderers. A topic section accepts the
+ * `reference` block too, and a read inlines it as stable blocks. */
+export type GraphContentBlock =
+  WorkflowDocBlock | CollectionDocBlock | ReferenceDocBlock;
+
 /**
- * A content block within a reference doc section or namespace.
+ * A content block within a reference doc section.
  * Ordered arrays of these blocks form renderer-neutral documentation content.
  * A new semantic kind must ship with every renderer or fail visibly at a legacy
  * reader boundary until that renderer is available.
@@ -55,12 +73,12 @@ export interface ReferenceDocBlock {
  * { type: 'table', headers: ['Token', 'Value'], rows: [['--spacing-4', '16px']] }
  * { type: 'list', style: 'do', items: ['Use semantic tokens'] }
  * { type: 'token-ref', topic: 'tokens', section: 'Color Tokens' }
- * { type: 'workflow', steps: [{title: 'Validate', references: ['command:doctor']}] }
- * { type: 'collection', source: {slot: 'guides'}, presentation: 'cards' }
- * { type: 'reference', target: 'schema:integration', projection: {fields: ['docs']} }
+ * { type: 'prose', text: 'Check it with {@link command:doctor}.' }
  * ```
  */
 export type ReferenceContentBlock =
+  /** Text. `{@link [<provider>:]<kind>:<name>}` inside it links another doc
+   *  by identity; `astryx docs` prints the command that opens that doc. */
   | {type: 'prose'; text: string}
   | {type: 'heading'; level: 3 | 4 | 5 | 6; text: string}
   | {type: 'code'; lang: string; code: string; label?: string}
@@ -80,10 +98,7 @@ export type ReferenceContentBlock =
       topic: string;
       /** Section title to pull from that topic. e.g. `'Color Tokens'` */
       section: string;
-    }
-  | WorkflowDocBlock
-  | CollectionDocBlock
-  | ReferenceDocBlock;
+    };
 
 /**
  * A reference documentation file (.doc.mjs).
@@ -93,10 +108,10 @@ export type ReferenceContentBlock =
  * they aren't tied to a specific component — just drop a .doc.mjs file
  * in the docs/ directory and it shows up in `astryx docs`.
  *
- * Every reference .doc.mjs must export a single `docs` constant:
+ * Every new reference .doc.mjs default-exports a stamped object:
  *
  *   /** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} *\/
- *   export const docs = { ... };
+ *   export default { type: 'generic', ... };
  */
 export interface ReferenceDoc extends AuthoredDocGraphFields {
   /** Doc-kind discriminant for the stamped default-export format
@@ -112,17 +127,26 @@ export interface ReferenceDoc extends AuthoredDocGraphFields {
   description: string;
   /** Navigation category: 'guide' or 'foundations'. */
   category?: string;
+  /** Words a reader may search for that the title and sections do not use:
+   *  a synonym, a task ("dark mode"), or another library's name for the same
+   *  thing. `astryx search` matches each as a keyword of the whole topic, so
+   *  an exact one ranks the topic like its own title does. */
+  keywords?: string[];
   /** Name of an existing topic this doc takes the place of. Authored by an
    *  integration whose guide should be served instead of the built-in one —
    *  `replaces: 'getting-started'` on a doc named `getting-started` swaps the
    *  content, and on a doc named something else swaps it and leaves the old
    *  name as an alias, so `astryx docs getting-started` still resolves.
+   *  A route (`'authoring/quick-start'`) names a guide the docs tree
+   *  places: readers who open that route get this doc.
    *  Ignored on a built-in topic (there is nothing above it to replace). */
   replaces?: string;
   /** Name of an existing topic this doc merges onto, section by section: a
    *  section whose title matches one in the base replaces it, and a section
-   *  the base does not have is appended. For correcting or adding to a topic
-   *  rather than owning it — `replaces` and `extends` are exclusive. */
+   *  the base does not have is added where its `before` or `after` says, else
+   *  at the end. A route (`'authoring/quick-start'`) names a guide the
+   *  docs tree places. For correcting or adding to a topic rather than owning
+   *  it — `replaces` and `extends` are exclusive. */
   extends?: string;
   /** Ordered sections that make up the doc. */
   sections: ReferenceSection[];
@@ -146,8 +170,18 @@ export interface ReferenceSection {
   /** Navigation category ('guide' | 'foundations'). Mirrors the parent doc's
    *  category so sections can be grouped independently in the docsite nav. */
   category?: string;
-  /** Ordered content blocks. Mix prose, code, tables, and lists freely. */
-  content: ReferenceContentBlock[];
+  /** Ordered content blocks. Mix prose, code, tables, and lists freely. A
+   *  `reference` block includes another doc from its canonical source, so a
+   *  guide never copies a schema's fields or a command's options. */
+  content: (ReferenceContentBlock | ReferenceDocBlock)[];
+  /** In a doc that `extends` a topic, the key of the base section (as
+   *  `astryx docs <topic> --index` shows it) to add this section before,
+   *  when it replaces none. Set `before` or `after`, not both; with neither,
+   *  the section is added at the end. Ignored on any other doc. */
+  before?: string;
+  /** In a doc that `extends` a topic, the key of the base section to add this
+   *  section after, when it replaces none. */
+  after?: string;
   /** Preview type for token tables in this section. When set, the docsite
    *  renders a visual preview column using the token's computed CSS value
    *  from the current theme. Omit for non-token sections. */

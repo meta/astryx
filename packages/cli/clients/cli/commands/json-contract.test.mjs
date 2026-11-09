@@ -143,7 +143,12 @@ describe('--json contract: supported commands emit valid envelopes', () => {
     const parsed = parseJson(stdout);
     expect(parsed.type).toBe('discover.list');
     expect(parsed.data).toEqual([]);
-    expect(parsed.meta).toEqual({configured: false});
+    expect(parsed.meta.configured).toBe(false);
+    // The official list the CLI carries is always a source.
+    expect(parsed.meta.sources).toEqual([
+      expect.objectContaining({name: 'Astryx', status: 'fresh'}),
+    ]);
+    expect(parsed.meta.answeredBy).toEqual(expect.any(Object));
   });
 
   it('astryx template --json emits a typed envelope', async () => {
@@ -162,7 +167,11 @@ describe('--json contract: supported commands emit valid envelopes', () => {
   });
 
   it('astryx doctor --json emits a doctor envelope with checks + summary', async () => {
-    // Run in a bare tmp dir → @astryxdesign/core won't resolve → a FAIL → exit 1.
+    // A project that declares @astryxdesign/core but installs none → a FAIL → exit 1.
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      '{"name":"app","dependencies":{"@astryxdesign/core":"*"}}',
+    );
     const {status, stdout} = await runCli(['doctor', '--json'], {cwd: tmpDir});
     expect(status).toBe(1);
     const parsed = parseJson(stdout);
@@ -170,5 +179,38 @@ describe('--json contract: supported commands emit valid envelopes', () => {
     expect(Array.isArray(parsed.data.checks)).toBe(true);
     expect(parsed.data.summary).toHaveProperty('fail');
     expect(parsed.data.summary.fail).toBeGreaterThan(0);
+  });
+});
+
+describe('--json contract: the flag describes the envelopes it emits', () => {
+  /** @param {string} shape e.g. ` apiVersion, error, code, suggestions? ` */
+  const fields = shape => shape.split(',').map(f => f.trim().replace(/\?$/, ''));
+
+  it('names every field of the success and error envelopes', async () => {
+    const manifest = parseJson((await runCli(['manifest', '--json'], {cwd: tmpDir})).stdout);
+    const {description} = manifest.data.globalOptions.find(o => o.flag === '--json');
+    const match = /Success envelope: \{([^}]*)\}.*Error envelope: \{([^}]*)\}/.exec(description);
+    expect(match, description).not.toBeNull();
+    const [, success, error] = /** @type {RegExpExecArray} */ (match);
+
+    for (const key of Object.keys(manifest)) expect(fields(success)).toContain(key);
+    expect(fields(success)).toContain('meta');
+
+    // An unknown command's envelope carries every error field, suggestions included.
+    const failure = parseJson((await runCli(['bogus-cmd', '--json'], {cwd: tmpDir})).stdout);
+    expect(Object.keys(failure)).toContain('suggestions');
+    for (const key of Object.keys(failure)) expect(fields(error)).toContain(key);
+  });
+
+  it('the CLI README describes the same envelopes', () => {
+    const readme = fs.readFileSync(new URL('../../../README.md', import.meta.url), 'utf8');
+    const line = readme
+      .split('\n')
+      .find(l => l.startsWith('- `--json`: Output as typed JSON envelope:'));
+    expect(line, 'README global --json line').toBeDefined();
+    const [success, error] = [...String(line).matchAll(/`\{([^}]*)\}`/g)].map(m => fields(m[1]));
+    expect(success).toEqual(expect.arrayContaining(['apiVersion', 'type', 'data', 'meta']));
+    expect(error).toEqual(expect.arrayContaining(['apiVersion', 'error', 'code', 'suggestions']));
+    expect(readme).toContain('{"apiVersion": 1, "type": "component.detail"');
   });
 });

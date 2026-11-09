@@ -38,7 +38,9 @@ import {CORRECTED_EXIT_RULE, GUIDANCE_CONFLICTS} from '../publishedGuidance';
 const sx = stylex.create({
   full: {width: '100%'},
   quote: {
-    borderInlineStart: '2px solid var(--color-border)',
+    borderInlineStartWidth: '2px',
+    borderInlineStartStyle: 'solid',
+    borderInlineStartColor: 'var(--color-border)',
     paddingInlineStart: '12px',
     maxWidth: '62ch',
   },

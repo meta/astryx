@@ -3,22 +3,24 @@
 /**
  * @file isRenderable.ts
  * @input A ReactNode value
- * @output Boolean indicating whether the value will produce DOM output
- * @position Utility for checking if a React slot prop has meaningful content.
+ * @output Boolean indicating whether the value passes the shallow React-slot check
+ * @position Utility for checking if a React slot prop has non-empty scalar content.
  *
  * React treats null, undefined, true, false, and '' as empty — they render
- * nothing. This utility checks if a ReactNode is NOT one of those values,
- * meaning it will produce actual DOM output when rendered.
+ * nothing. This utility excludes exactly those values. It does not inspect
+ * descendants: elements, arrays, fragments, and other containers return true
+ * even when their contents ultimately render nothing.
  *
- * Use this instead of `prop != null` when checking if a slot has content,
- * since boolean/empty-string props also render nothing.
+ * Use this instead of `prop != null` when a slot should also reject booleans and
+ * the empty string. Do not use the return value as proof that DOM output exists.
  */
 
 import type {ReactNode} from 'react';
 
 /**
- * Returns true if a ReactNode value will produce DOM output when rendered.
- * Returns false for null, undefined, true, false, and empty string.
+ * Returns false for null, undefined, booleans, and the empty string; true for
+ * every other ReactNode value. The check is shallow and does not inspect the
+ * descendants of elements or containers.
  *
  * @example
  * ```tsx

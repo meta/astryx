@@ -20,8 +20,8 @@
  *   1. Create the page under the appropriate route group
  *   2. Add an entry to the appropriate category below
  *
- * Note: hrefs use trailing slashes because the sandbox is a static export
- * with `trailingSlash: true` in next.config.mjs.
+ * Note: hrefs use trailing slashes because the Vite build writes a physical
+ * index.html for each route; static hosts redirect /route to /route/.
  */
 
 import {templates as autoDiscoveredTemplates} from '../generated/templateRegistry';
@@ -94,6 +94,24 @@ export const categories: SandboxCategory[] = [
           'Interactive mobile interaction prototypes (bottom sheets, action sheets, drawers) for the component migration table',
       },
       {
+        name: 'Chat Layout',
+        href: '/pages/chat-layout/',
+        description:
+          'A full page ChatLayout for phone checks. ?case= long (the default), composer or streaming scroll the document; docked scrolls a fixed-height panel',
+      },
+      {
+        name: 'AlertDialog Cases',
+        href: '/pages/alert-dialog-cases/',
+        description:
+          'An alert over a toast and a dialog closed after a save, on a page that scrolls with the document, to check on a phone',
+      },
+      {
+        name: 'List Reorder Cases',
+        href: '/pages/list-reorder-cases/',
+        description:
+          'A reorderable List, a TransferList and a reorderable List in a Card, on a page that scrolls with the document, to check on a phone',
+      },
+      {
         name: 'TextArea Counter',
         href: '/pages/textarea-counter/',
         description:
@@ -151,6 +169,12 @@ export const categories: SandboxCategory[] = [
         href: '/pages/tap-targets/',
         description:
           'WCAG 2.5.8 AA touch-target sizes visualized on real components',
+      },
+      {
+        name: 'Text Types',
+        href: '/pages/text-types/',
+        description:
+          'Every built-in Text type at the default size, on a bare page that scrolls',
       },
     ],
   },
@@ -250,6 +274,17 @@ export const categories: SandboxCategory[] = [
         href: '/pages/markdown-perf/',
         description:
           'Compare complete Markdown rendering with bursty streaming performance and animation',
+      },
+      {
+        name: 'DiffViewer Perf',
+        href: '/pages/diffviewer-perf/',
+        description:
+          'Render and scroll many files and lines; compare unified and split',
+      },
+      {
+        name: 'Perf Scenes',
+        href: '/pages/perf-scenes/',
+        description: 'Fixed performance scenes to mount and profile by hand',
       },
       {
         name: 'Table Lab',

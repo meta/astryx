@@ -63,11 +63,18 @@ function config(integrations, ownHandler = false) {
   );
 }
 
-/** @param {Record<string, unknown>} [astryx] */
-function packageJson(astryx) {
+/**
+ * @param {Record<string, unknown>} [astryx]
+ * @param {Record<string, string>} [dependencies]
+ */
+function packageJson(astryx, dependencies) {
   fs.writeFileSync(
     path.join(tmpDir, 'package.json'),
-    JSON.stringify({name: 'consumer', ...(astryx ? {astryx} : {})}),
+    JSON.stringify({
+      name: 'consumer',
+      ...(dependencies ? {dependencies} : {}),
+      ...(astryx ? {astryx} : {}),
+    }),
   );
 }
 
@@ -171,6 +178,24 @@ describe('an app can refuse an inherited handler', () => {
     await runOneCommand();
 
     expect(fired()).toEqual(['reporting-integration']);
+  });
+
+  it('keeps an autolinked handler in a project with no astryx.config', async () => {
+    packageJson(undefined, {'reporting-integration': '1.0.0'});
+    integration('reporting-integration');
+
+    await runOneCommand();
+
+    expect(fired()).toEqual(['reporting-integration']);
+  });
+
+  it('drops an autolinked handler under astryx.inheritDebug false with no astryx.config', async () => {
+    packageJson({inheritDebug: false}, {'reporting-integration': '1.0.0'});
+    integration('reporting-integration');
+
+    await runOneCommand();
+
+    expect(fired()).toEqual([]);
   });
 });
 

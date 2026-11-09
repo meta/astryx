@@ -1,25 +1,20 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file The canonical `.template.{ts,mjs,js}` suffix is discovered identically
- * to the legacy `.doc.{ts,mjs,js}` suffix.
+ * @file The canonical `.doc.{mjs,ts,js}` suffix is discovered identically
+ * to the released `.template.{ts,mjs,js}` compatibility suffix.
  *
- * Template-spec files are named for what they are: a scaffoldable TEMPLATE
- * stamped with `type: 'page' | 'block'`. The `.doc.*` suffix was
- * inherited from the component-doc convention and is still accepted during the
- * transition. These tests stand up integration templates and external blocks in
- * both families and assert byte-for-byte-equivalent discovery + scaffolding.
+ * New authoring writes `.doc.mjs`, the canonical typed descriptor. Stable
+ * 0.6.0 already accepted `.template.*`, so these tests
+ * keep that family as a compatibility input and assert equivalent discovery +
+ * scaffolding.
  */
 
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import {
-  template,
-  findShowcase,
-  findRelatedBlocks,
-} from './template.mjs';
+import {template, findShowcase, findRelatedBlocks} from './template.mjs';
 
 let tmpDir;
 let originalCwd;
@@ -82,8 +77,8 @@ afterEach(() => {
   fs.rmSync(tmpDir, {recursive: true, force: true});
 });
 
-describe('integration templates: .template.* discovered like legacy .doc.*', () => {
-  for (const suffix of ['.template.ts', '.template.mjs', '.doc.mjs']) {
+describe('integration templates: canonical .doc.* plus released .template.* compatibility', () => {
+  for (const suffix of ['.doc.mjs', '.doc.ts', '.template.mjs']) {
     it(`discovers + lists a page template authored as ${suffix}`, async () => {
       const pkgDir = installWidgets(tmpDir);
       writeTemplate(pkgDir, 'pricing', {kind: 'page', suffix});
@@ -124,7 +119,7 @@ describe('integration templates: .template.* discovered like legacy .doc.*', () 
     });
   }
 
-  it('treats a .template.ts and a legacy .doc.mjs identically (same shape)', async () => {
+  it('treats canonical .doc.mjs and released .template.ts identically (same shape)', async () => {
     const pkgDir = installWidgets(tmpDir);
     writeTemplate(pkgDir, 'gauge', {kind: 'block', suffix: '.template.ts'});
     writeTemplate(pkgDir, 'chip', {kind: 'block', suffix: '.doc.mjs'});
@@ -143,12 +138,33 @@ describe('integration templates: .template.* discovered like legacy .doc.*', () 
     expect(gauge.type).toBe(chip.type);
     expect(gauge.package).toBe(chip.package);
   });
+  it('lists both same-stem specs and reads the id as ambiguous', async () => {
+    for (const [first, second] of [
+      ['.doc.mjs', '.template.ts'],
+      ['.doc.ts', '.doc.mjs'],
+    ]) {
+      const pkgDir = installWidgets(tmpDir);
+      fs.rmSync(path.join(pkgDir, 'templates'), {recursive: true, force: true});
+      writeTemplate(pkgDir, 'pricing', {kind: 'page', suffix: first});
+      writeTemplate(pkgDir, 'pricing', {kind: 'page', suffix: second});
+
+      const result = await template(undefined, {list: true, cwd: tmpDir});
+      expect(
+        result.data.filter(entry => entry.id === 'pricing'),
+        `${first} + ${second}`,
+      ).toHaveLength(2);
+      await expect(
+        template('pricing', {cwd: tmpDir}),
+        `${first} + ${second}`,
+      ).rejects.toMatchObject({code: 'ERR_AMBIGUOUS_TEMPLATE'});
+    }
+  });
 });
 
-describe('external showcase blocks: .template.* discovered like legacy .doc.*', () => {
+describe('external showcase blocks: canonical .doc.* plus released .template.* compatibility', () => {
   /**
    * Create a consumer whose @test/ext package contributes two showcase blocks,
-   * one authored as `Foo.template.ts` and one as legacy `Bar.doc.mjs`.
+   * one authored with released `Foo.template.ts` and one with canonical `Bar.doc.mjs`.
    */
   function makeShowcaseFixture() {
     // Symlink the real core package (needed by findCoreDir during discovery).
@@ -166,7 +182,7 @@ describe('external showcase blocks: .template.* discovered like legacy .doc.*', 
     const extDir = path.join(tmpDir, 'node_modules', '@test', 'ext');
     const blocksDir = path.join(extDir, 'blocks', 'components');
 
-    // Foo showcase — canonical .template.ts (stamped type: 'block' default export).
+    // Foo showcase — released .template.ts compatibility input.
     const fooDir = path.join(blocksDir, 'Foo');
     fs.mkdirSync(fooDir, {recursive: true});
     fs.writeFileSync(
@@ -185,7 +201,7 @@ describe('external showcase blocks: .template.* discovered like legacy .doc.*', 
       "'use client';\nexport default function FooShowcase() { return <div>Foo</div>; }",
     );
 
-    // Bar showcase — legacy .doc.mjs (export const doc).
+    // Bar showcase — canonical .doc.mjs (historical named export).
     const barDir = path.join(blocksDir, 'Bar');
     fs.mkdirSync(barDir, {recursive: true});
     fs.writeFileSync(
@@ -209,7 +225,11 @@ describe('external showcase blocks: .template.* discovered like legacy .doc.*', 
       path.join(extDir, 'package.json'),
       JSON.stringify({
         name: '@test/ext',
-        astryx: {docs: './src', category: 'Common', blocks: './blocks/components'},
+        astryx: {
+          docs: './src',
+          category: 'Common',
+          blocks: './blocks/components',
+        },
       }),
     );
     fs.mkdirSync(path.join(extDir, 'src'), {recursive: true});
@@ -223,11 +243,37 @@ describe('external showcase blocks: .template.* discovered like legacy .doc.*', 
     expect(result.filePath).toContain('FooShowcase.tsx');
   });
 
-  it('findShowcase resolves a legacy .doc.mjs external block by componentsUsed', async () => {
+  it('findShowcase resolves a canonical .doc.mjs external block by componentsUsed', async () => {
     makeShowcaseFixture();
     const result = await findShowcase('Bar', tmpDir);
     expect(result).not.toBeNull();
     expect(result.name).toBe('Bar — Showcase');
+  });
+
+  it('findShowcase prefers the showcase that names the component in exampleFor', async () => {
+    makeShowcaseFixture();
+    // Bar's showcase also uses Chip; Chip's own showcase sits in a folder
+    // that does not carry its name and says so only through exampleFor.
+    const dir = path.join(
+      tmpDir,
+      'node_modules',
+      '@test',
+      'ext',
+      'blocks',
+      'components',
+      'Gallery',
+    );
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(
+      path.join(dir, 'ChipCard.doc.mjs'),
+      "export default {type: 'block', name: 'Chip — Card', description: 'Chip showcase.', category: 'Test - Showcases', exampleFor: 'Chip', isShowcase: true, componentsUsed: ['Chip']};\n",
+    );
+    fs.writeFileSync(
+      path.join(dir, 'ChipCard.tsx'),
+      "'use client';\nexport default function ChipCard() { return <div>Chip</div>; }",
+    );
+    const result = await findShowcase('Chip', tmpDir);
+    expect(result?.name).toBe('Chip — Card');
   });
 
   it('findRelatedBlocks finds both suffix families', async () => {

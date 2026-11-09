@@ -8,7 +8,7 @@
  * browser warning, not a gate, so a typo or a stale key ships. This asserts:
  *
  *   1. Source ⊆ catalog. Every `@astryx.*` key referenced in packages/core/src
- *      and packages/lab/src exists in en.json.
+ *      packages/lab/src, and packages/richtext/src exists in en.json.
  *   2. Locale parity. Translated catalogs may omit keys and fall back to en,
  *      but extra keys are stale and fail.
  *   3. Every en.json entry carries a non-empty `description` — the only
@@ -43,7 +43,11 @@ const require = createRequire(import.meta.url);
 const ts = require('typescript');
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SRC_DIRS = ['packages/core/src', 'packages/lab/src'];
+const SRC_DIRS = [
+  'packages/core/src',
+  'packages/lab/src',
+  'packages/richtext/src',
+];
 const LOCALES_DIR = 'packages/core/locales';
 
 /**

@@ -17,9 +17,11 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import {withListingCache} from '../fs/listing-cache.mjs';
 import {findCoreDir} from '../fs/paths.mjs';
 import {
   discoverComponents,
+  familyMember,
   findComponentReadme,
   resolveImportPath,
 } from '../discovery/component-discovery.mjs';
@@ -105,9 +107,18 @@ let cachedRegistry = /** @type {import('./xle-ast').Registry | null} */ (null);
  * @param {string} [options.cwd]
  * @returns {Promise<{components: Map<string, object>, aliases: Map<string, string>, componentNames: string[]}>}
  */
-export async function buildRegistry({cwd = process.cwd()} = {}) {
+export async function buildRegistry(options = {}) {
   if (cachedRegistry) return cachedRegistry;
+  // Every name's lookups walk the same source tree: read each directory once.
+  return withListingCache(() => readRegistry(options));
+}
 
+/**
+ * {@link buildRegistry}'s read, inside one listing operation.
+ * @param {{cwd?: string}} options
+ * @returns {ReturnType<typeof buildRegistry>}
+ */
+async function readRegistry({cwd = process.cwd()}) {
   const coreDir = findCoreDir(cwd);
   if (!coreDir) {
     throw new Error('Could not find @astryxdesign/core package — run from an XDS workspace');
@@ -126,6 +137,9 @@ export async function buildRegistry({cwd = process.cwd()} = {}) {
     } catch {
       continue; // a malformed doc must not take down the whole language
     }
+    // A member documented in its family's doc (VStack in Stack's doc) is
+    // registered by the family's own folder, with every other member.
+    if (familyMember(docs, dirName)) continue;
     const importPath = resolveImportPath(coreDir, dirName);
 
     const register = (/** @type {string} */ rawName, /** @type {import('./xle-ast').DocProp[]} */ props) => {

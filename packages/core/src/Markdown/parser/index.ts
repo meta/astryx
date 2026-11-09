@@ -3,12 +3,14 @@
 /**
  * @file index.ts
  * @input Markdown source and public parser options
- * @output Server-safe legacy and canonical Markdown parser entry points and types
+ * @output Server-safe legacy and canonical Markdown parser entry points and types,
+ *   and the character reference decoder Markdown renders with
  * @position Public subpath entry point: `@astryxdesign/core/Markdown/parser`
  */
 
 export {
   createIncrementalState,
+  decodeMarkdownCharacterReferences,
   parseInline,
   parseInlineAst,
   parseMarkdown,

@@ -53,7 +53,7 @@ const anatomy = [
     name: 'Pointer section heading',
     required: false,
     description:
-      'Heading that labels a data-driven section in an anchored menu.',
+      'Heading that labels a group of rows in an anchored menu: a data-driven section or a compound DropdownMenuGroup.',
   },
   {
     name: 'Pointer divider',
@@ -158,7 +158,7 @@ export const docs = {
       {
         name: '--_dropdown-menu-radius',
         description: 'Border radius of the menu popup',
-        default: 'var(--radius-element)',
+        default: 'var(--radius-container)',
         private: true,
       },
       {
@@ -180,22 +180,28 @@ export const docs = {
       name: 'button',
       type: 'DropdownMenuButtonProps',
       description:
-        'Props for the trigger button (Button props except onClick).',
+        'Props for the trigger button (Button props except onClick). Mutually exclusive with `renderTrigger`.',
       default: "{ label: 'Menu' }",
     },
+    {
+      name: 'renderTrigger',
+      type: '(props: DropdownMenuTriggerProps) => ReactNode',
+      description:
+        'Render the control the menu hangs off — an IconButton, a chip, an avatar, a list row — instead of the built-in Button. Spread the given props onto it: they carry the press model (a mouse opens on press-down, a held finger opens with the finger down), the keyboard opens, the toggle click, and `aria-haspopup`/`aria-expanded`/`aria-controls`/`id`; the menu is then named by that control through `aria-labelledby`. Mutually exclusive with `button`.',
+    },
+
     {
       name: 'items',
       type: 'DropdownMenuOption[]',
       description:
-        'Array of menu entries. Each entry is one of: an action item `{label, onClick?, icon?, description?, endContent?, isDisabled?, variant?, hasCloseOnSelect?, id?}` (variant `"destructive"` renders it in the error color; `endContent` holds trailing content such as a keyboard-shortcut hint; `id` is the row\'s stable React key, needed only when the array reorders or filters), a divider `{type: "divider"}`, or a section `{type: "section", title?, id?, items: [...action items]}`.',
+        'Array of menu entries. Each entry is one of: an action item `{label, onClick?, href?, target?, rel?, icon?, description?, endContent?, isDisabled?, variant?, hasCloseOnSelect?, id?}` (`href` makes the row a real link, so a modified click keeps the browser\'s meaning; variant `"destructive"` renders it in the error color; `endContent` holds trailing content such as a keyboard-shortcut hint; `id` is the row\'s stable React key, needed only when the array reorders or filters), a divider `{type: "divider"}`, or a section `{type: "section", title?, id?, items: [...action items]}`.',
       required: true,
     },
     {
       name: 'presentation',
       type: "'popover' | 'bottom-sheet' | 'adaptive'",
       description:
-        "Presentation surface for data-driven items. 'popover' stays anchored, 'bottom-sheet' always renders the actions in a modal BottomSheet, and 'adaptive' uses a BottomSheet on compact coarse-pointer layouts while remaining anchored elsewhere. Compound children currently support popover only.",
-      default: "'popover'",
+        "Presentation surface for data-driven items. 'popover' stays anchored, 'bottom-sheet' always renders the actions in a modal BottomSheet, and 'adaptive' uses a BottomSheet on compact coarse-pointer layouts while remaining anchored elsewhere. Compound children currently support popover only. Omitted, the menu is anchored, and under a finger, on every device, the finger that opened it picks a row only after moving 10 px. Pass 'popover' to keep the pointer behavior on every device, the settle rule included.",
     },
     {
       name: 'isMenuOpen',
@@ -213,6 +219,24 @@ export const docs = {
       type: 'number | string',
       description:
         'Minimum width for the popover presentation. Length values may grow for content; intrinsic and CSS-wide keywords select the preferred inline size. Every form is capped to the available viewport space. Defaults to matching the trigger width up to that cap.',
+    },
+    {
+      name: 'menuMaxHeight',
+      type: 'number',
+      description:
+        'Maximum height in pixels for the popover presentation, for a menu that must fit its rows. Lifts the default 300px cap; the viewport still bounds it.',
+    },
+    {
+      name: 'header',
+      type: 'ReactNode',
+      description:
+        'Content above the rows and outside the menu itself — a filter field, a toggle. A menu holds only its rows, so a control that is not a row goes here or in `footer`, never among the rows. It keeps its own keys and presses. With a header or footer the popover is a modal dialog around the menu: Tab and Shift+Tab move through the header, the menu and the footer and wrap at either end, and Escape closes. The bottom sheet shows it above the actions.',
+    },
+    {
+      name: 'footer',
+      type: 'ReactNode',
+      description:
+        'Content below the rows and outside the menu itself — a "Create" button. Tab from the menu moves into it, and Tab past its last control wraps to the start of the dialog (see `header`). The bottom sheet shows it below the actions.',
     },
     {
       name: 'placement',
@@ -245,14 +269,14 @@ export const docs = {
       name: 'children',
       type: 'ReactNode',
       description:
-        'Compound-mode menu content: DropdownMenuItem, DropdownMenuDivider, DropdownMenuSubMenu, and the selectable items. Mutually exclusive with `items`.',
+        'Compound-mode menu content: DropdownMenuItem, DropdownMenuDivider, DropdownMenuSubMenu (a flyout on a laptop, a drilled-in view with a Back row on a phone), and the selectable items. Mutually exclusive with `items`.',
     },
   ],
   components: [{name: 'DropdownMenuItem'}],
   usage: {
     anatomy,
     description:
-      'A dropdown menu that displays a list of actionable items in a popup triggered by a button. Use to present action options as a next step in a process, or to offer contextual actions without cluttering the interface.',
+      'A dropdown menu that displays a list of actionable items in a popup triggered by a button. Use to present action options as a next step in a process, or to offer contextual actions without cluttering the interface. Like the menus of macOS and iOS, the row under the pointer when it is released is the row that acts, the highlight follows a held mouse or finger, a mouse opens it on press and can drag straight into it, and a finger held on the trigger opens it with the finger down.',
     bestPractices: [
       {
         guidance: true,

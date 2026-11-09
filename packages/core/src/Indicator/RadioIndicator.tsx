@@ -16,7 +16,9 @@ import {
   easeVars,
   radiusVars,
 } from '../theme/tokens.stylex';
-import {isRenderable, mergeProps, themeProps} from '../utils';
+import {isRenderable} from '../utils/isRenderable';
+import {mergeProps} from '../utils/mergeProps';
+import {themeProps} from '../utils/themeProps';
 import {indicatorScope} from './indicator.markers.stylex';
 import type {IndicatorProps} from './types';
 
@@ -127,7 +129,8 @@ const dotSizeStyles = stylex.create({
  * Decorative and non-interactive — it renders `aria-hidden` and owns no input,
  * role, or focus behavior. Themes replace it wholesale through
  * `defineTheme({indicators: {radio: MyRadio}})`, or restyle it through the
- * `radio` / `radio-dot` theme targets like any other component.
+ * `radio-indicator` / `radio-indicator-dot` theme targets like any other
+ * component.
  *
  * Unlike an icon, a radio draws in *both* states — an empty circle when
  * unchecked. That is what makes it usable as a selection indicator in
@@ -163,17 +166,11 @@ export function RadioIndicator({
       ref={ref}
       aria-hidden="true"
       {...mergeProps(
-        themeProps(
-          'radio-indicator',
-          {
-            size,
-            checked: isChecked ? 'checked' : null,
-            disabled: isDisabled ? 'disabled' : null,
-          },
-          // `radio` was the target before indicators existed; keep it emitted
-          // so existing themes continue to work.
-          {legacyNames: ['radio']},
-        ),
+        themeProps('radio-indicator', {
+          size,
+          checked: isChecked ? 'checked' : null,
+          disabled: isDisabled ? 'disabled' : null,
+        }),
         stylex.props(
           styles.circle,
           circleSizeStyles[size],
@@ -190,11 +187,7 @@ export function RadioIndicator({
         : isChecked && (
             <span
               {...mergeProps(
-                themeProps(
-                  'radio-indicator-dot',
-                  {size},
-                  {legacyNames: ['radio-dot']},
-                ),
+                themeProps('radio-indicator-dot', {size}),
                 stylex.props(styles.dot, dotSizeStyles[size]),
               )}
             />

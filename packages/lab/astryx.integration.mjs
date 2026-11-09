@@ -1,10 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * Astryx CLI integration for the canary-only Lab package.
+ * Astryx CLI integration for the canary-only Lab components and example blocks.
  * Package identity and version come from package.json.
  */
 export default {
   components: './src',
-  issuesUrl: 'https://github.com/facebook/astryx/issues',
+  templates: './blocks',
+  issuesUrl: 'https://github.com/meta/astryx/issues',
 };

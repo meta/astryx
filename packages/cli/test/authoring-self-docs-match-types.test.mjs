@@ -23,7 +23,7 @@ const SUBPATHS = [
   'codemod',
   'debug',
 ];
-const GRAPH_FIELDS = ['placement', 'aliases', 'audience'];
+const GRAPH_FIELDS = ['placement', 'aliases', 'audience', 'stability'];
 
 /** Each self-doc and the published type (or union) it describes. */
 const SELF_DOCS = {
@@ -37,7 +37,10 @@ const SELF_DOCS = {
   'doctypes/command/command.doc.mjs': 'CommandDoc',
   'doctypes/enum/enum.doc.mjs': 'EnumDoc',
   'doctypes/namespace/namespace.doc.mjs': 'NamespaceDoc',
+  'doctypes/theme/theme.doc.mjs': 'ThemeDoc',
   'config/config.doc.mjs': 'AstryxConfig',
+  'debug/debug.doc.mjs': 'DebugEvent',
+  'gap-report/gap-report.doc.mjs': 'GapReportHandler',
   'integration/integration.doc.mjs': 'AstryxIntegration',
   // The codemod types describe a loaded codemod, whose `isOptional` has its
   // default; the self-doc describes what an author writes.

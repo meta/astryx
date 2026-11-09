@@ -17,7 +17,7 @@
  * Runs as part of the core build so pseudo.json stays in sync with en.json.
  */
 
-import {readFileSync, writeFileSync} from 'node:fs';
+import {readFileSync, realpathSync, writeFileSync} from 'node:fs';
 import {resolve, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
@@ -36,7 +36,7 @@ const ACCENTED = {
   Y: 'Ý', Z: 'Ž',
 };
 
-function pseudoTranslate(msg) {
+export function pseudoTranslate(msg) {
   let out = '';
   let depth = 0;
   for (const ch of msg) {
@@ -48,11 +48,24 @@ function pseudoTranslate(msg) {
   return `\u27E6${out}\u27E7`;
 }
 
-const en = JSON.parse(readFileSync(EN_PATH, 'utf8'));
-const pseudo = {};
-for (const [key, entry] of Object.entries(en)) {
-  pseudo[key] = {defaultMessage: pseudoTranslate(entry.defaultMessage)};
+export function createPseudoCatalog(en) {
+  const pseudo = {};
+  for (const [key, entry] of Object.entries(en)) {
+    pseudo[key] = {defaultMessage: pseudoTranslate(entry.defaultMessage)};
+  }
+  return pseudo;
 }
 
-writeFileSync(PSEUDO_PATH, JSON.stringify(pseudo, null, 2) + '\n', 'utf8');
-console.log(`Built pseudo.json — ${Object.keys(pseudo).length} keys`);
+function main() {
+  const en = JSON.parse(readFileSync(EN_PATH, 'utf8'));
+  const pseudo = createPseudoCatalog(en);
+  writeFileSync(PSEUDO_PATH, JSON.stringify(pseudo, null, 2) + '\n', 'utf8');
+  console.log(`Built pseudo.json — ${Object.keys(pseudo).length} keys`);
+}
+
+if (
+  process.argv[1] &&
+  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
+) {
+  main();
+}

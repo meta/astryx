@@ -15,6 +15,10 @@ export interface EnumMemberDoc {
   description: string;
   /** Deprecation reason, if deprecated. */
   deprecated?: string;
+  /** Set on a value of an experimental surface (spec:AST-017 FR27). The
+   *  enum's own section leaves it out; the experimental feature's docs,
+   *  under `astryx docs cli/experimental`, document it. */
+  stability?: 'experimental';
 }
 
 /**
@@ -32,7 +36,7 @@ export interface EnumDoc extends AuthoredDocGraphFields {
   displayName: string;
   /** One-line summary shown in listings. */
   description: string;
-  /** Docs namespace path. Defaults to 'cli' when applied by the docs index. */
+  /** The group that reads this doc. The CLI's enums use 'cli/api', which the docs tree adopts by kind: each is the leaf `cli/api/enums/<name>`. Every enum doc the CLI ships declares one, and `astryx doctor` fails on one that is missing or that nothing reads. */
   namespace?: string;
   /** Alternate slugs that also resolve to this doc. */
   aliases?: string[];

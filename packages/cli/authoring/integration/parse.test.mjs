@@ -87,6 +87,27 @@ describe('parseIntegration (load boundary)', () => {
     expect(reason({issuesUrl: 'nope'})).toContain('issuesUrl');
   });
 
+  it('accepts a docsiteUrl as a known key', () => {
+    const manifest = {docsiteUrl: 'https://widgets.example.com'};
+    expect(parseIntegration(manifest)).toEqual(manifest);
+    expect(unknownIntegrationKeys(manifest)).toEqual([]);
+  });
+
+  it('rejects a non-URL docsiteUrl', () => {
+    expect(reason({docsiteUrl: 'nope'})).toContain('docsiteUrl');
+  });
+
+  it('accepts a cliCommand and rejects one that is not a single clean line', () => {
+    expect(parseIntegration({cliCommand: 'acme astryx'})).toEqual({
+      cliCommand: 'acme astryx',
+    });
+    expect(reason({cliCommand: ''})).toContain('cliCommand');
+    expect(reason({cliCommand: ' acme astryx'})).toContain('cliCommand');
+    expect(reason({cliCommand: 'acme\nastryx'})).toContain('cliCommand');
+    expect(reason({cliCommand: 'a'.repeat(121)})).toContain('120');
+    expect(reason({cliCommand: 42})).toContain('cliCommand');
+  });
+
   it('rejects a noncanonical providerId', () => {
     expect(reason({providerId: 'Acme Widgets'})).toContain('providerId');
   });

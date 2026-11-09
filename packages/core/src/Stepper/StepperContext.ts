@@ -4,7 +4,7 @@
 
 /**
  * @file StepperContext.ts
- * @input Uses React createContext/use
+ * @input Layer-scoped React context/use
  * @output Exports the public Stepper context hook and package-internal
  *   coordination used by Stepper and Step
  * @position Context for Stepper <-> Step communication
@@ -25,7 +25,8 @@
  * - /packages/core/src/Stepper/Stepper.public.test.ts
  */
 
-import {createContext, use, type Context} from 'react';
+import {use, type Context} from 'react';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 
 export type StepperOrientation = 'horizontal' | 'vertical';
 export type StepperDensity = 'compact' | 'balanced' | 'spacious';
@@ -88,11 +89,20 @@ export interface StepperInternalContextValue extends StepperContextValue {
   summarySlot: HTMLElement | null;
 }
 
-export const StepperContext = createContext<StepperContextValue | null>(null);
+export const StepperContext =
+  createLayerScopedContext<StepperContextValue | null>(
+    'StepperContext',
+    1,
+    null,
+  );
 StepperContext.displayName = 'StepperContext';
 
 export const StepperInternalContext =
-  createContext<StepperInternalContextValue | null>(null);
+  createLayerScopedContext<StepperInternalContextValue | null>(
+    'StepperInternalContext',
+    1,
+    null,
+  );
 StepperInternalContext.displayName = 'StepperInternalContext';
 
 function useContextValue<T>(context: Context<T | null>, hookName: string): T {

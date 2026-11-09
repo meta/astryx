@@ -131,6 +131,27 @@ describe('lowerReferenceTopic', () => {
     });
   });
 
+  it('keeps the topic named as it is when extended, and renames it only when replaced', () => {
+    const extended = lowerReferenceTopic(
+      input(file(demo()), [extension('acme', 'Acme start.')]),
+    );
+    expect(extended.doc.title).toBe('demo title');
+    expect(extended.doc.description).toBe('About demo.');
+    const replacement = authored(
+      'acme-demo',
+      [{title: 'Quick Start', content: [prose('Acme start.')]}],
+      {replaces: 'demo'},
+    );
+    const replaced = lowerReferenceTopic({
+      ...input(file(replacement)),
+      id: 'demo',
+      provider: '@acme/replacement',
+      replaces: 'demo',
+    });
+    expect(replaced.doc.title).toBe('acme-demo title');
+    expect(replaced.doc.description).toBe('About acme-demo.');
+  });
+
   it('applies extensions in configuration order, so the last one wins', () => {
     const node = lowerReferenceTopic(
       input(file(demo()), [
@@ -544,6 +565,7 @@ describe('readers go through the compiler', () => {
       'lowerReferenceTopic',
       'linkReferenceTopic',
       'linkReferenceSection',
+      'lowerDoc',
     ],
   };
   /** The docs adapter and leaves drive the compiler; nothing else does. */
@@ -618,12 +640,17 @@ describe('readers go through the compiler', () => {
     return found;
   }
 
+  /** Temporary folders other tests create with mkdtemp and delete mid-run. */
+  const TRANSIENT_DIR = /^__[a-z][a-z_]*_[A-Za-z0-9]{6}$/;
+
   /** @param {string} dir @returns {string[]} */
   const sources = dir =>
     fs.readdirSync(dir, {withFileTypes: true}).flatMap(entry => {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        return entry.name === 'node_modules' ? [] : sources(full);
+        const skip =
+          entry.name === 'node_modules' || TRANSIENT_DIR.test(entry.name);
+        return skip ? [] : sources(full);
       }
       return entry.name.endsWith('.mjs') && !entry.name.endsWith('.test.mjs')
         ? [full]

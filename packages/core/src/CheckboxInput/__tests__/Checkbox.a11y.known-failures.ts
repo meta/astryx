@@ -51,18 +51,4 @@ export const CHECKBOX_KNOWN_FAILURES: ReadonlyArray<KnownFailure> = [
     reason:
       'DropdownMenuCheckboxItem makes onChange optional. Without it, the controlled value cannot persist a user change, but the role-bearing item remains exposed as available.',
   },
-  {
-    expectation: 'checkbox.focus.declared-inoperable-reachable',
-    binding: 'SelectableCard',
-    state: 'card-disabled',
-    evidenceLayer: 'real-browser',
-    failureEquals:
-      '10 presses of Tab from the start of the document never reached the checkbox, so a keyboard user cannot get to this setting',
-    standardsReference:
-      'Astryx spec:AST-021 FR7 (preserve existing documented behavior); SelectableCard isDisabled public prop contract',
-    userImpact:
-      'A keyboard user cannot tab to the disabled card to discover that the option exists and is unavailable, despite the public prop contract promising continued focusability.',
-    reason:
-      'SelectableCard documents a focusable aria-disabled state, but the implementation applies native disabled to its checkbox and removes it from the tab sequence. This advisory migration check records that public-contract mismatch without presenting disabled focusability as a WCAG requirement.',
-  },
 ];

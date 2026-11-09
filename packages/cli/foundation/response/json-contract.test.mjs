@@ -70,13 +70,18 @@ describe('json envelope shape', () => {
     expect(env.apiVersion).toBe(API_VERSION);
     expect(env.type).toBe('docs.list');
     expect(env.data).toEqual([{name: 'Button'}]);
-    expect('meta' in env).toBe(false);
+    // The only meta every result carries names who answered (AST-081 FR5).
+    expect(Object.keys(env.meta)).toEqual(['answeredBy']);
+    const {cli, core, copy} = env.meta.answeredBy;
+    expect(typeof cli).toBe('string');
+    expect(core === null || typeof core === 'string').toBe(true);
+    expect(['project', 'matched', 'carried']).toContain(copy);
   });
 
   it('jsonOut attaches optional meta as a sibling of data', () => {
     jsonOut({type: 'discover.list', data: [], meta: {configured: false}});
     const env = JSON.parse(logs[0]);
-    expect(env.meta).toEqual({configured: false});
+    expect(env.meta).toEqual({configured: false, answeredBy: expect.any(Object)});
     expect(env.data).toEqual([]);
   });
 
@@ -110,6 +115,17 @@ describe('json envelope shape', () => {
       error: 'kaboom',
       code: 'ERR_NO_DOC',
     });
+  });
+
+  it('toErrorEnvelope never emits an unregistered code', () => {
+    // A Node system error carries `code: 'EACCES'`; that is not an Astryx code.
+    const sysErr = Object.assign(new Error('EACCES: permission denied'), {
+      code: 'EACCES',
+    });
+    expect(toErrorEnvelope(sysErr).code).toBe('ERR_UNKNOWN');
+    expect(toErrorEnvelope('boom', undefined, 'ENOENT').code).toBe('ERR_UNKNOWN');
+    const docErr = Object.assign(new Error('no doc'), {code: 'ERR_NO_DOC'});
+    expect(toErrorEnvelope(docErr, undefined, 'ENOENT').code).toBe('ERR_NO_DOC');
   });
 
   it('toErrorEnvelope includes suggestions when present', () => {

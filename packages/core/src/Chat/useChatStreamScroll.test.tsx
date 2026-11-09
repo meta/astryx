@@ -16,7 +16,8 @@ import {
 // scroll paths (instant positioning, lock state, rAF scheduling decisions).
 // The spring physics itself (frame-by-frame integration, scrollend re-lock,
 // user-scroll detection) is layout/browser-dependent and is verified
-// manually via Storybook — mocking it here would only test the mock.
+// by useChatStreamScroll.a11y.chromium.spec.ts — mocking it here would only
+// test the mock.
 // ---------------------------------------------------------------------------
 
 let rafQueue: {id: number; cb: FrameRequestCallback}[] = [];
@@ -296,22 +297,22 @@ describe('useChatStreamScroll — reader intent while content arrives', () => {
     // inline style.
     const {api, el, unmount} = renderHook();
     settleAtBottom(el);
-    expect(el.hasAttribute('data-astryx-chat-following')).toBe(true);
+    expect(el.getAttribute('data-astryx-scroll-anchoring')).toBe('off');
     const rule = document.head.querySelector(
-      '[data-astryx-chat-following-style]',
+      '[data-astryx-scroll-anchoring="rule"]',
     );
     expect(rule?.textContent).toContain('overflow-anchor:none !important');
     expect(el.style.overflowAnchor).toBe('');
 
     scrollUpDuringGrowth(el);
     expect(api.current!.isLocked).toBe(false);
-    expect(el.hasAttribute('data-astryx-chat-following')).toBe(false);
+    expect(el.hasAttribute('data-astryx-scroll-anchoring')).toBe(false);
 
     act(() => api.current!.scrollToBottom({behavior: 'instant'}));
-    expect(el.hasAttribute('data-astryx-chat-following')).toBe(true);
+    expect(el.getAttribute('data-astryx-scroll-anchoring')).toBe('off');
 
     unmount();
-    expect(el.hasAttribute('data-astryx-chat-following')).toBe(false);
+    expect(el.hasAttribute('data-astryx-scroll-anchoring')).toBe(false);
   });
 
   it("never touches the element's own overflow-anchor, whatever it becomes", () => {
@@ -376,5 +377,150 @@ describe('useChatStreamScroll — spring cancellation', () => {
 
     // Only the live loop rescheduled itself.
     expect(rafQueue).toHaveLength(1);
+  });
+});
+
+describe('useChatStreamScroll — the page as the scroller', () => {
+  // A page scrolls its root element, and the browser raises the scroll at
+  // the document. The root's offsetHeight is the page's height; its
+  // clientHeight is the viewport's.
+  const root = document.documentElement;
+
+  function setPageGeometry({
+    scrollHeight,
+    clientHeight,
+  }: {
+    scrollHeight: number;
+    clientHeight: number;
+  }) {
+    Object.defineProperty(root, 'scrollHeight', {
+      value: scrollHeight,
+      configurable: true,
+    });
+    Object.defineProperty(root, 'clientHeight', {
+      value: clientHeight,
+      configurable: true,
+    });
+    Object.defineProperty(root, 'offsetHeight', {
+      value: scrollHeight,
+      configurable: true,
+    });
+  }
+
+  function PageHarness({
+    api,
+  }: {
+    api: {current: UseChatStreamScrollReturn | null};
+  }) {
+    const scrollRef = useRef<HTMLElement>(root);
+    api.current = useChatStreamScroll({scrollRef});
+    return null;
+  }
+
+  function scrollPageTo(top: number, target: EventTarget = document) {
+    root.scrollTop = top;
+    act(() => {
+      target.dispatchEvent(new Event('scroll'));
+    });
+  }
+
+  function renderPage() {
+    const api: {current: UseChatStreamScrollReturn | null} = {current: null};
+    setPageGeometry({scrollHeight: 3000, clientHeight: 700});
+    const utils = render(<PageHarness api={api} />);
+    flushRaf();
+    scrollPageTo(2300);
+    return {api, ...utils};
+  }
+
+  afterEach(() => {
+    for (const property of ['scrollHeight', 'clientHeight', 'offsetHeight']) {
+      Reflect.deleteProperty(root, property);
+    }
+    root.scrollTop = 0;
+  });
+
+  it('opens at the bottom, following, with no scroll button', () => {
+    const {api} = renderPage();
+    expect(root.scrollTop).toBe(2300);
+    expect(api.current!.isScrolledUp).toBe(false);
+    expect(api.current!.isLocked).toBe(true);
+  });
+
+  it('shows the scroll button and stops following when the reader scrolls the page up', () => {
+    const {api} = renderPage();
+    scrollPageTo(2000);
+    expect(api.current!.isScrolledUp).toBe(true);
+    expect(api.current!.isLocked).toBe(false);
+  });
+
+  it('follows again, with no scroll button, once the page comes to rest at the bottom', () => {
+    const {api} = renderPage();
+    scrollPageTo(2000);
+    scrollPageTo(2300);
+    act(() => {
+      document.dispatchEvent(new Event('scrollend'));
+    });
+    expect(api.current!.isScrolledUp).toBe(false);
+    expect(api.current!.isLocked).toBe(true);
+  });
+
+  it('puts a message at the top of the viewport with scrollToMessage', () => {
+    const {api} = renderPage();
+    root.scrollTop = 1000;
+    const scrollTo = vi.fn();
+    Object.defineProperty(root, 'scrollTo', {
+      value: scrollTo,
+      configurable: true,
+    });
+    vi.spyOn(root, 'getBoundingClientRect').mockReturnValue({
+      top: -1000,
+    } as DOMRect);
+    const message = document.createElement('div');
+    vi.spyOn(message, 'getBoundingClientRect').mockReturnValue({
+      top: 300,
+    } as DOMRect);
+    try {
+      api.current!.scrollToMessage(message);
+      expect(scrollTo).toHaveBeenCalledWith({top: 1300, behavior: 'instant'});
+    } finally {
+      Reflect.deleteProperty(root, 'scrollTo');
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('ignores the scroll of an element inside the page', () => {
+    const {api} = renderPage();
+    const panel = document.createElement('div');
+    document.body.append(panel);
+    try {
+      scrollPageTo(2000, panel);
+      expect(api.current!.isScrolledUp).toBe(false);
+      expect(api.current!.isLocked).toBe(true);
+    } finally {
+      panel.remove();
+    }
+  });
+});
+
+describe('useChatStreamScroll — scrollToMessage in a scrolling element', () => {
+  it('puts a message at the top of the element\u2019s visible area', () => {
+    const {api, el} = renderHook();
+    el.scrollTop = 50;
+    const scrollTo = vi.fn();
+    Object.defineProperty(el, 'scrollTo', {
+      value: scrollTo,
+      configurable: true,
+    });
+    vi.spyOn(el, 'getBoundingClientRect').mockReturnValue({
+      top: 100,
+    } as DOMRect);
+    const message = document.createElement('div');
+    vi.spyOn(message, 'getBoundingClientRect').mockReturnValue({
+      top: 400,
+    } as DOMRect);
+    api.current!.scrollToMessage(message);
+    expect(scrollTo).toHaveBeenCalledWith({top: 350, behavior: 'instant'});
+    vi.restoreAllMocks();
   });
 });

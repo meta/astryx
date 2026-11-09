@@ -62,8 +62,8 @@ const MODE_STORAGE_KEY = 'astryx-sandbox-mode';
  * useSearchParams in the root Providers component.
  *
  * For non-embed contexts, localStorage hydration is handled via useEffect in
- * Providers so the initial server render matches the client (avoiding hydration
- * mismatches on Next.js SSR).
+ * Providers so the default theme appears immediately before a saved preference
+ * replaces it. Embeds take their initial theme from the URL instead.
  */
 function getEmbedThemeParams(): {
   initialTheme: string;

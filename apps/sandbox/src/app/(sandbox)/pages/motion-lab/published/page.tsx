@@ -46,7 +46,9 @@ import {
 
 const sx = stylex.create({
   quote: {
-    borderInlineStart: '2px solid var(--color-border)',
+    borderInlineStartWidth: '2px',
+    borderInlineStartStyle: 'solid',
+    borderInlineStartColor: 'var(--color-border)',
     paddingInlineStart: '12px',
     maxWidth: '62ch',
   },

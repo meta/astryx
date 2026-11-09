@@ -153,6 +153,122 @@ function exampleRendering(text: string) {
 }
 
 test.describe('playground preview isolation', () => {
+  test('survives a deployment-injected cookie probe', async ({page}) => {
+    // Vercel adds its Toolbar cookie probe to Next's shared main-app bundle.
+    // Insert the same probe immediately after our bootstrap guard but before
+    // the Webpack runtime, making this stricter than the deployed ordering.
+    await page.route(
+      /\/_next\/static\/chunks\/main-app-[^/]+\.js/,
+      async route => {
+        // A new connection, so a kept-alive socket that `next start` closes
+        // for idleness cannot reset this fetch.
+        const response = await route.fetch({
+          headers: {...route.request().headers(), connection: 'close'},
+        });
+        const body = await response.text();
+        const runtimeStart = body.indexOf('(self.webpackChunk_N_E=');
+        expect(runtimeStart).toBeGreaterThan(0);
+        const cookieProbe = [
+          "if (location.pathname === '/playground/preview') {",
+          '  void document.cookie;',
+          '}',
+        ].join('\n');
+        await route.fulfill({
+          response,
+          body: [
+            body.slice(0, runtimeStart),
+            cookieProbe,
+            body.slice(runtimeStart),
+          ].join('\n'),
+        });
+      },
+    );
+
+    await page.goto('/playground');
+
+    await expectPreviewToRender(page, 'Welcome');
+    await expect(
+      page.getByText('Build error', {exact: true}),
+    ).not.toBeVisible();
+    expect(
+      await currentPreviewFrame(page).evaluate(() => {
+        const blocked = (probe: () => unknown) => {
+          try {
+            probe();
+            return false;
+          } catch {
+            return true;
+          }
+        };
+        return {
+          cookie: document.cookie,
+          localStorage: blocked(() => window.localStorage),
+          parentDocument: blocked(() => window.parent.document),
+        };
+      }),
+    ).toEqual({cookie: '', localStorage: true, parentDocument: true});
+  });
+
+  test('reports a compiler bootstrap failure instead of building forever', async ({
+    page,
+  }) => {
+    await page.route('**/vendor/typescript.js', route => route.abort());
+
+    await page.goto('/playground');
+
+    await expect(page.getByText('Build error', {exact: true})).toBeVisible();
+    await expect(page.getByText('Building…', {exact: true})).not.toBeVisible();
+
+    // An edit updates the pending code but preserves the actionable error. It
+    // must not re-enter Building without restarting the failed document.
+    await setEditorCode(page, exampleRendering('Pending retry'));
+    await page.waitForTimeout(600);
+    await expect(page.getByText('Build error', {exact: true})).toBeVisible();
+    await expect(page.getByText('Building…', {exact: true})).not.toBeVisible();
+  });
+
+  test('allows an attested preview time to load its compiler', async ({
+    page,
+  }) => {
+    let releaseCompiler!: () => void;
+    let markCompilerRequested!: () => void;
+    const compilerRequested = new Promise<void>(resolve => {
+      markCompilerRequested = resolve;
+    });
+    const compilerGate = new Promise<void>(resolve => {
+      releaseCompiler = resolve;
+    });
+    await page.route('**/vendor/typescript.js', async route => {
+      markCompilerRequested();
+      await compilerGate;
+      await route.continue();
+    });
+
+    await page.goto('/playground', {waitUntil: 'domcontentloaded'});
+    await compilerRequested;
+    await page.waitForTimeout(12_000);
+    await expect(
+      page.getByText('Build error', {exact: true}),
+    ).not.toBeVisible();
+
+    releaseCompiler();
+    await expectPreviewToRender(page, 'Welcome');
+  });
+
+  test('times out a preview document that never starts', async ({page}) => {
+    await page.route(
+      /\/_next\/static\/chunks\/app\/playground\/preview\/page-[^/]+\.js/,
+      route => route.abort(),
+    );
+
+    await page.goto('/playground');
+
+    await expect(page.getByText('Build error', {exact: true})).toBeVisible({
+      timeout: 40_000,
+    });
+    await expect(page.getByText('Building…', {exact: true})).not.toBeVisible();
+  });
+
   test('recovers from a reloaded preview document with the current code, theme and mode', async ({
     page,
   }) => {
@@ -198,12 +314,19 @@ test.describe('playground preview isolation', () => {
       setTimeout(() => location.reload(), 0);
     });
 
-    // The playground notices the second load, tears the frame down and mounts
-    // a fresh one under a new nonce …
+    // The detached-frame gap must not count as recovery: `null !== old URL`
+    // was true before a replacement iframe had even been attached. Wait for a
+    // live frame with a new trusted nonce, then for its current content below.
     await expect
-      .poll(() => previewFrame(page)?.url() ?? null, POLL)
-      .not.toBe(replacedUrl);
-    expect(currentPreviewFrame(page).url()).toContain(PREVIEW_URL_MARK);
+      .poll(() => {
+        const nextUrl = previewFrame(page)?.url();
+        return Boolean(
+          nextUrl &&
+          nextUrl !== replacedUrl &&
+          nextUrl.includes(PREVIEW_URL_MARK),
+        );
+      }, POLL)
+      .toBe(true);
 
     // … and the new document renders the current code with the active theme
     // and mode, with no edit needed to wake it up.

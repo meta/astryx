@@ -19,4 +19,5 @@ export const doc = {
     'Text',
     'List',
   ],
+  icons: {CalendarIcon: 'calendar', TagIcon: 'tag', UserIcon: 'user'},
 };

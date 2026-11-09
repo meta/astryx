@@ -13,7 +13,12 @@ page is guidance and an index, not a canonical record. Start a record from
 
 Current records:
 
-- [Neutral](../../packages/themes/neutral/neutral.spec.md) — draft
+- [Neutral](../../packages/themes/neutral/neutral.spec.md) — current
+- [Stone](../../packages/themes/stone/stone.spec.md) — current
+- [Gothic](../../packages/themes/gothic/gothic.spec.md) — current
+- [Matcha](../../packages/themes/matcha/matcha.spec.md) — current
+- [Butter](../../packages/themes/butter/butter.spec.md) — current
+- [Y2K](../../packages/themes/y2k/y2k.spec.md) — current
 
 A theme record sits between system theming architecture and consumer/component
 records. It uses one typed `references` list for architecture, design, system,
@@ -32,6 +37,7 @@ and other knowledge relationships rather than separate relation fields:
 
 Only `current` records are policy. A draft may link another draft while decisions
 are being developed, but current records may depend only on current records.
-Current theme records require exact-head approval from the committed union of
+Current theme records require approval of their content (`architecture:knowledge-contracts`
+DEC-14) from the committed union of
 `.github/ENGOWNERS` and `.github/DESIGNOWNERS`. Theme records do not declare an
 `owners` field, and record metadata never grants approval rights.

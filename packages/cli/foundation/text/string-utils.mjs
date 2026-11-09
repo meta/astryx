@@ -48,7 +48,8 @@ export function findClosestComponents(name, components, maxDistance = 3) {
  *    30  keyword Levenshtein distance 2
  *    20  name Levenshtein distance 3
  *
- * Each result: { name, score, reason }
+ * Each result: { name, score, reason }, plus `keywordAt` when a keyword set
+ * the component's score: the position of the keyword that set it.
  *
  * @param {string} needle
  * @param {string} coreDir
@@ -56,14 +57,19 @@ export function findClosestComponents(name, components, maxDistance = 3) {
  * @returns {Promise<{name: string, score: number, reason: string}[]>}
  */
 export async function searchComponents(needle, coreDir, components) {
-  const {pathToFileURL} = await import('node:url');
-  const fs = await import('node:fs');
+  const {readDocView} = await import('../doc-compiler/read.mjs');
+  const {listDirEntries, oncePerListing, pathExists} = await import(
+    '../fs/listing-cache.mjs'
+  );
   const path = await import('node:path');
 
   const term = needle.toLowerCase();
   const allNames = Object.values(components).flat();
   /** @type {Map<string, {name: string, score: number, reason: string}>} */
   const scored = new Map();
+  /** Position of the keyword that set each component's score. */
+  /** @type {Map<string, number>} */
+  const keywordAt = new Map();
 
   /**
    * @param {string} name
@@ -100,49 +106,58 @@ export async function searchComponents(needle, coreDir, components) {
     // Levenshtein on name
     const dist = levenshteinDistance(term, compLower);
     if (dist === 1) addMatch(comp, 80, 'similar name (distance ' + dist + ')');
-    else if (dist === 2) addMatch(comp, 40, 'similar name (distance ' + dist + ')');
-    else if (dist === 3) addMatch(comp, 20, 'similar name (distance ' + dist + ')');
+    else if (dist === 2)
+      addMatch(comp, 40, 'similar name (distance ' + dist + ')');
+    else if (dist === 3)
+      addMatch(comp, 20, 'similar name (distance ' + dist + ')');
   }
 
   // --- Pass 2: Keyword + description matching (async, reads doc files) ---
-  for (const comp of allNames) {
-    const srcDir = path.join(coreDir, 'src');
-
-    let docPath = null;
+  const srcDir = path.join(coreDir, 'src');
+  /**
+   * The doc that Pass 2 reads for `comp`, or null.
+   * @param {string} comp
+   * @returns {string | null}
+   */
+  function docPathOf(comp) {
     const direct = path.join(srcDir, comp, comp + '.doc.mjs');
-    if (fs.existsSync(direct)) {
-      docPath = direct;
+    if (pathExists(direct)) return direct;
+    const xdsDirect = path.join(srcDir, comp, 'XDS' + comp + '.doc.mjs');
+    if (pathExists(xdsDirect)) return xdsDirect;
+    if (!pathExists(srcDir)) return null;
+    for (const entry of listDirEntries(srcDir)) {
+      if (!entry.isDirectory()) continue;
+      const nested = path.join(srcDir, entry.name, comp, comp + '.doc.mjs');
+      if (pathExists(nested)) return nested;
     }
-    if (!docPath) {
-      const xdsDirect = path.join(srcDir, comp, 'XDS' + comp + '.doc.mjs');
-      if (fs.existsSync(xdsDirect)) {
-        docPath = xdsDirect;
-      }
-    }
-    if (!docPath && fs.existsSync(srcDir)) {
-      const entries = fs.readdirSync(srcDir, {withFileTypes: true});
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-        const nested = path.join(srcDir, entry.name, comp, comp + '.doc.mjs');
-        if (fs.existsSync(nested)) { docPath = nested; break; }
-      }
-    }
-
+    return null;
+  }
+  // Each search probes the same paths, so one operation finds each doc once.
+  for (const comp of allNames) {
+    const docPath = oncePerListing(`search-doc\0${srcDir}\0${comp}`, () =>
+      docPathOf(comp),
+    );
     if (!docPath) continue;
 
     try {
-      const mod = await import(pathToFileURL(docPath).href);
-      const docs = mod.docs;
+      // Only the legacy `docs` export has ever been indexed here.
+      const docs = await readDocView(docPath, {
+        root: 'components',
+        loader: 'native',
+        exports: ['docs'],
+      });
       if (!docs) continue;
 
       // Keyword matching
       if (docs.keywords && Array.isArray(docs.keywords)) {
-        for (const kw of docs.keywords) {
+        for (const [at, kw] of docs.keywords.entries()) {
           const kwLower = kw.toLowerCase();
+          const before = scored.get(comp)?.score ?? 0;
 
           // Exact keyword
           if (kwLower === term) {
             addMatch(comp, 90, 'keyword "' + kw + '"');
+            if (!keywordAt.has(comp) || before < 90) keywordAt.set(comp, at);
             break;
           }
 
@@ -157,8 +172,11 @@ export async function searchComponents(needle, coreDir, components) {
           }
 
           const dist = levenshteinDistance(term, kwLower);
-          if (dist === 1) addMatch(comp, 70, 'keyword "' + kw + '" (distance ' + dist + ')');
-          else if (dist === 2) addMatch(comp, 30, 'keyword "' + kw + '" (distance ' + dist + ')');
+          if (dist === 1)
+            addMatch(comp, 70, 'keyword "' + kw + '" (distance ' + dist + ')');
+          else if (dist === 2)
+            addMatch(comp, 30, 'keyword "' + kw + '" (distance ' + dist + ')');
+          if ((scored.get(comp)?.score ?? 0) > before) keywordAt.set(comp, at);
         }
       }
 
@@ -191,8 +209,64 @@ export async function searchComponents(needle, coreDir, components) {
     }
   }
 
+  // --- Pass 3: a name made of other words around a component's name ---
+  // Only when nothing above matched: a contiguous run of the needle's words
+  // ("Primitive Button", "Meta Employee Typeahead") that is a component's
+  // whole name. Longer runs and runs nearer the end score higher.
+  if (scored.size === 0) {
+    const words = String(needle)
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(Boolean);
+    const byLower = new Map(allNames.map(n => [n.toLowerCase(), n]));
+    const longest = Math.max(0, ...allNames.map(n => n.length));
+    for (let i = 0; i < words.length; i++) {
+      let run = '';
+      for (let j = i + 1; j <= words.length; j++) {
+        // Grow the run one word at a time; stop once no name is that long.
+        run += words[j - 1];
+        if (run.length > longest) break;
+        if (run.length < 4 || run === term) continue;
+        const comp = byLower.get(run);
+        if (!comp) continue;
+        const span = j - i;
+        const atEnd = j === words.length ? 1 : 0;
+        addMatch(comp, 10 + Math.min(span, 4) + atEnd, 'name part "' + run + '"');
+      }
+    }
+    // Keep only the strongest name parts, so a weaker part never sits
+    // beside the best one.
+    const best = Math.max(0, ...[...scored.values()].map(r => r.score));
+    for (const [name, r] of scored) if (r.score < best) scored.delete(name);
+  }
+
   const results = Array.from(scored.values())
+    .map(r =>
+      keywordAt.has(r.name)
+        ? {...r, keywordAt: /** @type {number} */ (keywordAt.get(r.name))}
+        : r,
+    )
     .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
 
   return results;
+}
+
+/**
+ * The first sentence of a text, whitespace collapsed. A period after "e.g" or
+ * "i.e" does not end the sentence. Used where a description has to fit on one
+ * line: `build`'s alternatives and its text kit.
+ * @param {string} text
+ * @returns {string}
+ */
+export function firstSentence(text) {
+  const flat = String(text ?? '').replace(/\s+/g, ' ').trim();
+  const ends = /[.!?](?=\s|$)/g;
+  for (let m = ends.exec(flat); m; m = ends.exec(flat)) {
+    if (!/\b(e\.g|i\.e)$/i.test(flat.slice(0, m.index))) {
+      return flat.slice(0, m.index + 1);
+    }
+  }
+  return flat;
 }

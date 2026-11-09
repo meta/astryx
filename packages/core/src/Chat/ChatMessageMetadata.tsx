@@ -4,12 +4,12 @@
 
 /**
  * @file ChatMessageMetadata.tsx
- * @input Uses React, StyleX, ChatContext, Icon, theme tokens
+ * @input Uses React, StyleX, ChatContext, Icon, theme tokens, and isRenderable
  * @output Exports ChatMessageMetadata component
  * @position Shared metadata row used by composing inside ChatMessage
  *
- * Renders: <timestamp> · <footer> · <status>
- * Direction reverses for user sender.
+ * Renders timestamp, footer, and status values with separators determined by
+ * scalar presence. Direction reverses for user sender.
  */
 
 import React, {type ReactNode} from 'react';
@@ -23,10 +23,16 @@ import {
 import {useChatMessageContext} from './ChatContext';
 import {Icon} from '../Icon';
 import type {IconName} from '../Icon/globalIconRegistry';
-import {mergeProps} from '../utils';
+import {isRenderable, mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Chat/ChatMessageMetadata.generated';
+
+registerEnglishFallback(english);
 
 export type ChatMessageStatus =
   'sending' | 'sent' | 'delivered' | 'read' | 'error';
@@ -70,7 +76,7 @@ const styles = stylex.create({
     gap: spacingVars['--spacing-1'],
   },
   statusError: {
-    color: colorVars['--color-error'],
+    color: colorVars['--color-text-error'],
   },
   statusPulse: {
     animationName: pulseKeyframes,
@@ -97,7 +103,8 @@ export interface ChatMessageMetadataProps extends BaseProps<HTMLDivElement> {
  * Composable metadata row for chat messages.
  *
  * Renders: timestamp · footer · status
- * Renders nothing if all props are null/undefined.
+ * Renders nothing when neither slot passes the scalar-presence check and no
+ * status is set. Composite React nodes remain caller-owned.
  *
  * @example
  * ```
@@ -117,15 +124,16 @@ export function ChatMessageMetadata({
   style,
   ...rest
 }: ChatMessageMetadataProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const msgContext = useChatMessageContext();
   const sender = msgContext?.sender ?? 'assistant';
 
   const statusConfig = status != null ? STATUS_CONFIG[status] : null;
   const statusLabel = statusConfig != null ? t(statusConfig.i18nKey) : '';
 
-  const hasContent =
-    timestamp != null || footer != null || statusConfig != null;
+  const hasTimestamp = isRenderable(timestamp);
+  const hasFooter = isRenderable(footer);
+  const hasContent = hasTimestamp || hasFooter || statusConfig != null;
   if (!hasContent) {
     return null;
   }
@@ -144,12 +152,10 @@ export function ChatMessageMetadata({
         style,
       )}
       {...rest}>
-      {timestamp != null && <span>{timestamp}</span>}
-      {timestamp != null && (footer != null || statusConfig != null) && (
-        <span>·</span>
-      )}
-      {footer != null && footer}
-      {footer != null && statusConfig != null && <span>·</span>}
+      {hasTimestamp && <span>{timestamp}</span>}
+      {hasTimestamp && (hasFooter || statusConfig != null) && <span>·</span>}
+      {hasFooter && footer}
+      {hasFooter && statusConfig != null && <span>·</span>}
       {statusConfig != null && (
         <span
           title={statusLabel}

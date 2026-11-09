@@ -5,10 +5,11 @@ export const doc = {
   type: 'function',
   kind: 'api',
   name: 'integrationAddDoc',
+  namespace: 'cli/api',
   displayName: 'integrationAddDoc()',
   summary: 'Add a complete reference-doc contribution.',
   description:
-    'Creates a valid generic topic, declares the docs root on first use, and supports an intentional replaces or extends relationship.',
+    'Creates a valid generic topic, declares the docs root on first use, and supports an intentional replaces or extends relationship, or places the doc as a guide in a namespace of the package.',
   importPath: '@astryxdesign/cli/api',
   signature:
     'integrationAddDoc(name: string, options?: IntegrationAddDocOptions): Promise<IntegrationAddResponse>',
@@ -40,6 +41,12 @@ export const doc = {
       name: 'options.extends',
       type: 'string',
       description: 'Existing topic this topic extends.',
+    },
+    {
+      name: 'options.parent',
+      type: 'string',
+      description:
+        "Namespace of this package to place the doc in, as a guide in its `guides` slot; the namespace doc is written when missing, and package.json declares the CLI that reads it as an optional `@astryxdesign/cli` peer. Only valid for doc, and not with options.replaces or options.extends.",
     },
   ],
   returns: [

@@ -1,13 +1,14 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file The compiled-node contract and its sealed parser.
+ * @file The compiled-doc contract and its sealed parsers.
  *
- * @input Any value that claims to be a compiled reference node — typically one
- *   read back from JSON.
+ * @input Any value that claims to be a compiled node or a compiled docs bundle
+ *   — typically one read back from JSON.
  * @output The same value once it validates; a thrown Error naming the problems
- *   otherwise. An unsupported schema version fails with its own message before
- *   anything else is checked.
+ *   otherwise, carrying a compiler diagnostic (`unsupported_schema` or
+ *   `invalid_bundle`). An unsupported schema version fails with its own message
+ *   before anything else is checked.
  * @position The load boundary for compiled nodes that did not come straight
  *   from ./compile.mjs in this process. The value is returned as given, not
  *   rebuilt, so key order (which response JSON follows) survives. A node is
@@ -15,7 +16,8 @@
  */
 
 import {SECTION_KEY_RE} from '../discovery/docs-section-key.mjs';
-import {COMPILED_DOC_SCHEMA_VERSION} from './compile.mjs';
+import {COMPILED_DOC_KINDS, COMPILED_DOC_SCHEMA_VERSION} from './compile.mjs';
+import {diagnostic, diagnosticProblem} from './diagnostics.mjs';
 
 const NODE_FIELDS = new Set([
   'schemaVersion',
@@ -25,6 +27,7 @@ const NODE_FIELDS = new Set([
   'lang',
   'provenance',
   'sourceTitles',
+  'sectionProviders',
   'doc',
 ]);
 const RESOLVED_FIELDS = new Set([
@@ -65,15 +68,13 @@ const isPackageName = value =>
  */
 export function parseCompiledReferenceNode(value) {
   const node = /** @type {any} */ (value);
-  if (node?.schemaVersion !== COMPILED_DOC_SCHEMA_VERSION) {
-    throw new Error(
-      `Compiled doc schema version ${JSON.stringify(node?.schemaVersion)} is not supported; this CLI reads version ${COMPILED_DOC_SCHEMA_VERSION}. Compile the docs again with this CLI.`,
-    );
-  }
+  const skew = schemaVersionProblem(node);
+  if (skew) throw compiledDocError('unsupported_schema', skew);
   const problems = jsonProblems(node, 'node');
   if (problems.length === 0) problems.push(...structureProblems(node));
   if (problems.length > 0) {
-    throw new Error(
+    throw compiledDocError(
+      'invalid_bundle',
       `Invalid compiled doc node: ${problems.slice(0, MAX_PROBLEMS).join('; ')}`,
     );
   }
@@ -169,6 +170,12 @@ function structureProblems(node) {
     problems.push(
       'provenance: expected {provider, replaces, extensions} naming packages, not paths',
     );
+  }
+  const providers = isRecord(node.sectionProviders)
+    ? node.sectionProviders
+    : null;
+  if (!providers || !Object.values(providers).every(isText)) {
+    problems.push('sectionProviders: expected section key -> provider id');
   }
   const titles = isRecord(node.sourceTitles) ? node.sourceTitles : null;
   if (!titles || !Object.values(titles).every(isText)) {
@@ -284,4 +291,181 @@ function resolutionProblem(resolved) {
     default:
       return `status: expected resolved, unknown-topic or unknown-section, got ${JSON.stringify(resolved.status)}`;
   }
+}
+
+const DOC_NODE_FIELDS = new Set([
+  'schemaVersion',
+  'kind',
+  'stage',
+  'id',
+  'lang',
+  'provenance',
+  'doc',
+]);
+const BUNDLE_FIELDS = new Set([
+  'schemaVersion',
+  'lang',
+  'nodes',
+  'diagnostics',
+]);
+
+/**
+ * A package-relative source, never a location on one machine.
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+const isPackageSource = value =>
+  isPackageName(value) &&
+  !/(^|\/)\.\.(\/|$)/.test(/** @type {string} */ (value));
+
+/**
+ * An Error for a value that is not a compiled doc, carrying the diagnostic a
+ * reader reports.
+ * @param {'unsupported_schema' | 'invalid_bundle'} code
+ * @param {string} message
+ * @returns {Error & {diagnostic: import('./diagnostics.mjs').CompilerDiagnostic}}
+ */
+function compiledDocError(code, message) {
+  const error = /** @type {Error & {diagnostic: any}} */ (new Error(message));
+  error.diagnostic = diagnostic(code, {message});
+  return error;
+}
+
+/**
+ * @param {unknown} value
+ */
+function schemaVersionProblem(value) {
+  const version = /** @type {any} */ (value)?.schemaVersion;
+  return version === COMPILED_DOC_SCHEMA_VERSION
+    ? null
+    : `Compiled doc schema version ${JSON.stringify(version)} is not supported; this CLI reads version ${COMPILED_DOC_SCHEMA_VERSION}. Compile the docs again with this CLI.`;
+}
+
+/**
+ * Validate a compiled node of any kind.
+ * @param {unknown} value
+ * @returns {import('./compile.mjs').CompiledDocNode | import('./compile.mjs').CompiledReferenceNode}
+ */
+export function parseCompiledDocNode(value) {
+  const skew = schemaVersionProblem(value);
+  if (skew) throw compiledDocError('unsupported_schema', skew);
+  const problems = nodeProblems(value, 'node');
+  if (problems.length > 0) {
+    throw compiledDocError(
+      'invalid_bundle',
+      `Invalid compiled doc node: ${problems.slice(0, MAX_PROBLEMS).join('; ')}`,
+    );
+  }
+  return /** @type {any} */ (value);
+}
+
+/**
+ * Validate a compiled docs bundle: every node, every diagnostic, and one node
+ * per id.
+ * @param {unknown} value
+ * @returns {import('./bundle.mjs').CompiledDocsBundle}
+ */
+export function parseCompiledDocsBundle(value) {
+  const skew = schemaVersionProblem(value);
+  if (skew) throw compiledDocError('unsupported_schema', skew);
+  const bundle = /** @type {any} */ (value);
+  /** @type {string[]} */
+  const problems = jsonProblems(bundle, 'bundle');
+  if (problems.length === 0) {
+    const unknown = Object.keys(bundle).filter(key => !BUNDLE_FIELDS.has(key));
+    if (unknown.length > 0)
+      problems.push(`unknown fields: ${unknown.join(', ')}`);
+    if (bundle.lang !== null && !isText(bundle.lang)) {
+      problems.push('lang: expected a language or null');
+    }
+    if (!Array.isArray(bundle.nodes)) {
+      problems.push('nodes: expected an array');
+    } else {
+      const ids = new Set();
+      bundle.nodes.forEach(
+        (/** @type {unknown} */ node, /** @type {number} */ index) => {
+          for (const problem of nodeProblems(node, `nodes[${index}]`)) {
+            problems.push(problem);
+          }
+          const id = /** @type {any} */ (node)?.id;
+          if (ids.has(id))
+            problems.push(`nodes[${index}].id: "${id}" appears twice`);
+          ids.add(id);
+        },
+      );
+    }
+    if (!Array.isArray(bundle.diagnostics)) {
+      problems.push('diagnostics: expected an array');
+    } else {
+      bundle.diagnostics.forEach(
+        (/** @type {unknown} */ d, /** @type {number} */ index) => {
+          const problem = diagnosticProblem(d);
+          if (problem) problems.push(`diagnostics[${index}]: ${problem}`);
+        },
+      );
+    }
+  }
+  if (problems.length > 0) {
+    throw compiledDocError(
+      'invalid_bundle',
+      `Invalid compiled docs bundle: ${problems.slice(0, MAX_PROBLEMS).join('; ')}`,
+    );
+  }
+  return bundle;
+}
+
+/**
+ * Problems with one node of any kind, each prefixed with where it is.
+ * @param {unknown} value
+ * @param {string} at
+ * @returns {string[]}
+ */
+function nodeProblems(value, at) {
+  const node = /** @type {any} */ (value);
+  if (node?.schemaVersion !== COMPILED_DOC_SCHEMA_VERSION) {
+    return [`${at}.schemaVersion: expected ${COMPILED_DOC_SCHEMA_VERSION}`];
+  }
+  const json = jsonProblems(node, at);
+  if (json.length > 0) return json;
+  if (node.kind === 'reference') {
+    return structureProblems(node).map(problem => `${at}: ${problem}`);
+  }
+  /** @type {string[]} */
+  const problems = [];
+  const unknown = Object.keys(node).filter(key => !DOC_NODE_FIELDS.has(key));
+  if (unknown.length > 0)
+    problems.push(`${at}: unknown fields: ${unknown.join(', ')}`);
+  if (!COMPILED_DOC_KINDS.includes(node.kind)) {
+    problems.push(
+      `${at}.kind: ${JSON.stringify(node.kind)} is not a compiled doc kind`,
+    );
+  }
+  if (node.stage !== 'lowered')
+    problems.push(`${at}.stage: expected "lowered"`);
+  if (!isText(node.id)) problems.push(`${at}.id: expected an id`);
+  if (node.lang !== null && !isText(node.lang)) {
+    problems.push(`${at}.lang: expected a language or null`);
+  }
+  const provenance = node.provenance;
+  if (
+    !isRecord(provenance) ||
+    Object.keys(provenance).length !== 2 ||
+    !isPackageName(provenance.provider) ||
+    !isPackageSource(provenance.source)
+  ) {
+    problems.push(
+      `${at}.provenance: expected {provider, source} naming a package and a path inside it, not a machine path`,
+    );
+  }
+  if (!isRecord(node.doc) || !isText(node.doc.name)) {
+    problems.push(`${at}.doc: expected a doc with a name`);
+  } else if (
+    (node.kind === 'page' || node.kind === 'block' || node.kind === 'theme') &&
+    node.doc.type !== node.kind
+  ) {
+    problems.push(
+      `${at}.doc.type: a ${node.kind} node holds a ${node.kind} doc`,
+    );
+  }
+  return problems;
 }

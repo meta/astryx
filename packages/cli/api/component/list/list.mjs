@@ -15,21 +15,138 @@ import {
   CORE_PACKAGE,
   discoverComponents,
   discoverExternalComponentsGrouped,
-  discoverIntegrationComponents,
+  discoverValidIntegrationComponents,
+  familyMember,
   findComponentReadme,
+  findExternalComponentDoc,
   resolveImportPath,
   resolveIntegrationImportPath,
 } from '../../../foundation/discovery/component-discovery.mjs';
 import {discoverExternalPackages} from '../../../foundation/fs/paths.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {AstryxError} from '../../error.mjs';
-import {loadComponentDoc, loadIntegrationsSafely} from '../_adapter.mjs';
+import {
+  loadComponentDoc,
+  loadComponentReplacements,
+  loadIntegrationsSafely,
+  withOwnership,
+} from '../_adapter.mjs';
 
 /**
  * @typedef {import('../component.type.mjs').ComponentListResponse} ComponentListResponse
  * @typedef {import('../component.type.mjs').ComponentListEntry} ComponentListEntry
  * @typedef {import('../component.type.mjs').ComponentBriefEntry} ComponentBriefEntry
  */
+
+/**
+ * The import a legacy `pkg.astryx.docs` component's detail reports, derived the
+ * same way (`withOwnership`) so list and detail agree.
+ * @param {{name: string, docsDir: string}} ext
+ * @param {string} name
+ * @param {string} coreDir
+ * @param {{zh: boolean, lang: string|null}} docOpts
+ * @returns {Promise<string>}
+ */
+async function legacyImport(ext, name, coreDir, docOpts) {
+  const docPath = findExternalComponentDoc(ext.docsDir, name);
+  /** @type {import('../_adapter.mjs').LoadedComponentDoc} */
+  let docs = {};
+  if (docPath && docPath.endsWith('.doc.mjs')) {
+    try {
+      docs = await loadComponentDoc(docPath, docOpts);
+    } catch {
+      // Keep list resilient; validation owns malformed docs.
+    }
+  }
+  return withOwnership(docs, {package: ext.name, sourcePath: null}, name, coreDir).import;
+}
+
+/**
+ * A full Core ComponentDoc list entry, naming the package that owns it.
+ * @param {any} doc
+ */
+const coreEntry = doc => ({name: doc.name, package: CORE_PACKAGE, ...doc});
+
+/**
+ * The full-level entry for a component documented as a member of its family's
+ * doc (VStack in Stack's doc): a component doc built from the member's own
+ * entry, under its own name, display name and import, shaped like every other
+ * full entry. Null when the doc is the component's own.
+ * @param {any} docs
+ * @param {string} name
+ * @param {string} coreDir
+ * @returns {any}
+ */
+function memberEntry(docs, name, coreDir) {
+  const member = familyMember(docs, name);
+  if (!member) return null;
+  return {
+    name,
+    package: CORE_PACKAGE,
+    displayName: member.displayName ?? name,
+    ...(docs.group ? {group: docs.group} : {}),
+    ...(docs.category ? {category: docs.category} : {}),
+    usage: member.usage ?? {description: member.description ?? ''},
+    props: member.props ?? [],
+    ...(member.examples ? {examples: member.examples} : {}),
+    ...(docs.theming ? {theming: docs.theming} : {}),
+    import: resolveImportPath(coreDir, name),
+  };
+}
+
+/**
+ * The entry for a Core slot an integration component replaces
+ * (spec:AST-035 FR11), at the list's detail level: the replacement's own name,
+ * its package, and the import `component <Name>` reports for it.
+ * @param {import('../../../foundation/discovery/component-replacement.mjs').ActiveComponentReplacement} replacement
+ * @param {'names'|'compact'|'full'} detail
+ * @param {{zh: boolean, dense: boolean, lang: string|null}} docOpts
+ * @returns {Promise<any>}
+ */
+async function replacementEntry(replacement, detail, {zh, dense, lang}) {
+  const {integration} = replacement;
+  /** @type {any} */
+  let docs = null;
+  try {
+    docs = await loadComponentDoc(
+      replacement.docPath,
+      detail === 'full' ? {zh, lang, dense} : {zh, lang},
+    );
+  } catch {
+    // Keep list resilient; validation owns malformed integration docs.
+  }
+  const importPath = resolveIntegrationImportPath(
+    {
+      exportsMap: integration.__packageExports,
+      packageDir: integration.__packageDir,
+      docPath: replacement.docPath,
+      packageName: replacement.package,
+    },
+    replacement.name,
+    docs?.import,
+  );
+  if (detail === 'names') {
+    return {name: replacement.name, package: replacement.package, import: importPath};
+  }
+  if (detail === 'compact') {
+    return {
+      name: replacement.name,
+      package: replacement.package,
+      description: docs?.usage?.description || docs?.description || '',
+      import: importPath,
+    };
+  }
+  if (docs == null) {
+    return {name: replacement.name, package: replacement.package, description: ''};
+  }
+  const {package: _owner, ...doc} = docs;
+  return {
+    name: doc.name ?? replacement.name,
+    package: replacement.package,
+    ...doc,
+    import: importPath,
+  };
+}
 
 /**
  * Build the `component.list` envelope. The list taxonomy is collapsed: all
@@ -50,6 +167,15 @@ export async function componentList(
   {cwd, category, detail, zh, dense, lang},
 ) {
   const components = discoverComponents(coreDir);
+  // An active integration replacement takes its Core component's slot in
+  // every list view (spec:AST-035 FR11); the Core original stays reachable
+  // with `component <Name> --package @astryxdesign/core`.
+  const loadedIntegrations = await loadIntegrationsSafely(cwd);
+  const replacements = await loadComponentReplacements(
+    coreDir,
+    loadedIntegrations,
+  );
+  const docOpts = {zh, dense, lang};
 
   if (category) {
     const match = Object.entries(components).find(
@@ -67,18 +193,29 @@ export async function componentList(
       /** @type {ComponentBriefEntry[]} */
       const entries = [];
       for (const comp of match[1]) {
+        const replacement = replacements.forTarget(comp);
+        if (replacement) {
+          entries.push(await replacementEntry(replacement, 'compact', docOpts));
+          continue;
+        }
         const readme = findComponentReadme(coreDir, comp);
         if (readme && readme.endsWith('.doc.mjs')) {
           try {
             const docs = await loadComponentDoc(readme, {zh, lang});
             entries.push({
               name: comp,
-              description: docs.usage?.description || docs.description || '',
+              package: CORE_PACKAGE,
+              description:
+                familyMember(docs, comp)?.description ||
+                docs.usage?.description ||
+                docs.description ||
+                '',
               import: resolveImportPath(coreDir, comp),
             });
           } catch {
             entries.push({
               name: comp,
+              package: CORE_PACKAGE,
               description: '',
               import: resolveImportPath(coreDir, comp),
             });
@@ -86,6 +223,7 @@ export async function componentList(
         } else {
           entries.push({
             name: comp,
+            package: CORE_PACKAGE,
             description: '',
             import: resolveImportPath(coreDir, comp),
           });
@@ -101,15 +239,21 @@ export async function componentList(
       /** @type {any[]} */
       const entries = [];
       for (const comp of match[1]) {
+        const replacement = replacements.forTarget(comp);
+        if (replacement) {
+          entries.push(await replacementEntry(replacement, 'full', docOpts));
+          continue;
+        }
         const readme = findComponentReadme(coreDir, comp);
         if (readme && readme.endsWith('.doc.mjs')) {
           try {
-            entries.push(await loadComponentDoc(readme, {zh, lang, dense}));
+            const docs = await loadComponentDoc(readme, {zh, lang, dense});
+            entries.push(memberEntry(docs, comp, coreDir) ?? coreEntry(docs));
           } catch {
-            entries.push({name: `XDS${comp}`, description: ''});
+            entries.push({name: `XDS${comp}`, package: CORE_PACKAGE, description: ''});
           }
         } else {
-          entries.push({name: `XDS${comp}`, description: ''});
+          entries.push({name: `XDS${comp}`, package: CORE_PACKAGE, description: ''});
         }
       }
       return {
@@ -126,7 +270,14 @@ export async function componentList(
       data: {
         detail: 'names',
         components: {
-          [match[0]]: match[1].map(n => ({name: n, package: CORE_PACKAGE})),
+          [match[0]]: await Promise.all(
+            match[1].map(n => {
+              const replacement = replacements.forTarget(n);
+              return replacement
+                ? replacementEntry(replacement, 'names', docOpts)
+                : {name: n, package: CORE_PACKAGE};
+            }),
+          ),
         },
       },
     };
@@ -139,18 +290,29 @@ export async function componentList(
     for (const [cat, comps] of Object.entries(components)) {
       result[cat] = [];
       for (const comp of comps) {
+        const replacement = replacements.forTarget(comp);
+        if (replacement) {
+          result[cat].push(await replacementEntry(replacement, 'compact', docOpts));
+          continue;
+        }
         const readme = findComponentReadme(coreDir, comp);
         if (readme && readme.endsWith('.doc.mjs')) {
           try {
             const docs = await loadComponentDoc(readme, {zh, lang});
             result[cat].push({
               name: comp,
-              description: docs.usage?.description || docs.description || '',
+              package: CORE_PACKAGE,
+              description:
+                familyMember(docs, comp)?.description ||
+                docs.usage?.description ||
+                docs.description ||
+                '',
               import: resolveImportPath(coreDir, comp),
             });
           } catch {
             result[cat].push({
               name: comp,
+              package: CORE_PACKAGE,
               description: '',
               import: resolveImportPath(coreDir, comp),
             });
@@ -158,6 +320,7 @@ export async function componentList(
         } else {
           result[cat].push({
             name: comp,
+            package: CORE_PACKAGE,
             description: '',
             import: resolveImportPath(coreDir, comp),
           });
@@ -176,15 +339,21 @@ export async function componentList(
     for (const [cat, comps] of Object.entries(components)) {
       result[cat] = [];
       for (const comp of comps) {
+        const replacement = replacements.forTarget(comp);
+        if (replacement) {
+          result[cat].push(await replacementEntry(replacement, 'full', docOpts));
+          continue;
+        }
         const readme = findComponentReadme(coreDir, comp);
         if (readme && readme.endsWith('.doc.mjs')) {
           try {
-            result[cat].push(await loadComponentDoc(readme, {zh, lang, dense}));
+            const docs = await loadComponentDoc(readme, {zh, lang, dense});
+            result[cat].push(memberEntry(docs, comp, coreDir) ?? coreEntry(docs));
           } catch {
-            result[cat].push({name: `XDS${comp}`, description: ''});
+            result[cat].push({name: `XDS${comp}`, package: CORE_PACKAGE, description: ''});
           }
         } else {
-          result[cat].push({name: `XDS${comp}`, description: ''});
+          result[cat].push({name: `XDS${comp}`, package: CORE_PACKAGE, description: ''});
         }
       }
     }
@@ -196,21 +365,33 @@ export async function componentList(
   /** @type {Record<string, ComponentListEntry[]>} */
   const listData = {};
   for (const [cat, comps] of Object.entries(components)) {
-    listData[cat] = comps.map(n => ({name: n, package: CORE_PACKAGE}));
+    listData[cat] = await Promise.all(
+      comps.map(n => {
+        const replacement = replacements.forTarget(n);
+        return replacement
+          ? replacementEntry(replacement, 'names', docOpts)
+          : {name: n, package: CORE_PACKAGE};
+      }),
+    );
   }
+  // A replacement is listed once, in the Core slot it took.
+  const listedReplacements = new Set(
+    replacements.active.map(active => `${active.package}\0${active.name}`),
+  );
 
   // Integration components (authoritative source: loadedIntegrations).
-  const loadedIntegrations = await loadIntegrationsSafely(cwd);
   const seenIntegration = new Set();
   for (const integration of loadedIntegrations) {
     seenIntegration.add(integration.name);
-    const owned = discoverIntegrationComponents(integration);
+    const {components: owned} =
+      await discoverValidIntegrationComponents(integration);
     // Group integration components by their doc `group`, falling back to the
     // package name. Keys are package-qualified so they never collide with
     // core groups or each other.
     /** @type {Map<string, Array<{name: string, package: string, import?: string}>>} */
     const byGroup = new Map();
     for (const rec of owned) {
+      if (listedReplacements.has(`${integration.name}\0${rec.name}`)) continue;
       const groupLabel = rec.group ?? integration.name;
       const key = `${groupLabel} (${integration.name})`;
       if (!byGroup.has(key)) byGroup.set(key, []);
@@ -267,20 +448,24 @@ export async function componentList(
       k => grouped[k].length > 1 || grouped[k][0] !== k,
     );
 
-    if (hasGroups) {
-      for (const [group, members] of Object.entries(grouped)) {
-        listData[`${group} (${ext.name})`] = members.map(n => ({
+    /** @param {string[]} names */
+    const entriesFor = names =>
+      Promise.all(
+        names.map(async n => ({
           name: n,
           package: ext.name,
-        }));
+          import: await legacyImport(ext, n, coreDir, {zh, lang}),
+        })),
+      );
+
+    if (hasGroups) {
+      for (const [group, members] of Object.entries(grouped)) {
+        listData[`${group} (${ext.name})`] = await entriesFor(members);
       }
     } else {
       const allComps = Object.values(grouped).flat().sort();
       if (allComps.length > 0) {
-        listData[`${ext.category} (${ext.name})`] = allComps.map(n => ({
-          name: n,
-          package: ext.name,
-        }));
+        listData[`${ext.category} (${ext.name})`] = await entriesFor(allComps);
       }
     }
   }

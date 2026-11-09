@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 /**
- * Promote staged codemods from transforms/next into the just-bumped release
- * version folder. Run after `changeset version`, when package.json contains
- * the actual version this release will publish.
+ * Promote staged codemods from transforms/next into the release version folder
+ * declared at the cut. `pnpm version-packages` runs this after its custom
+ * release-branch versioner writes changelogs at that declaration; package.json
+ * already contains the exact version and is never bumped here.
  *
  * The target version folder MAY already exist and already contain codemods —
  * e.g. a codemod PR that merged earlier in the release cycle seeded
@@ -19,7 +20,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_ROOT = path.resolve(__dirname, '..');
@@ -355,6 +356,9 @@ async function main() {
   );
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   main();
 }

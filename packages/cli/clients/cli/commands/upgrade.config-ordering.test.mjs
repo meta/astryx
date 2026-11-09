@@ -30,6 +30,8 @@ import {Command} from 'commander';
 import {registerUpgrade} from './upgrade.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
 import {generateCompressedIndex} from '../../../foundation/agent-docs/agent-docs.mjs';
+import {CLI_VERSION} from '../../../test-utils/release-fixtures.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 let tmpDir;
 let originalCwd;
@@ -40,7 +42,7 @@ let exitCode;
 beforeEach(() => {
   originalCwd = process.cwd();
   // Repo-local temp dir: under cwd so Vite allows the astryx.config import.
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-upgrade-order-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-upgrade-order-'));
   process.chdir(tmpDir);
   logCalls = [];
   stdoutCalls = [];
@@ -187,8 +189,9 @@ describe('upgrade — core codemods run before config load', () => {
 
     const out = await runHuman(['upgrade', '--from', '0.1.2', '--path', 'src']);
     expect(out).toMatch(/fails strict validation/i);
+    // The fixture has no `astryx` bin installed, so the command names the scoped package.
     expect(out).toContain(
-      'astryx upgrade --from 0.1.2 --codemod migrate-layout-components-to-experimental --apply',
+      `@astryxdesign/cli@${CLI_VERSION} upgrade --from 0.1.2 --codemod migrate-layout-components-to-experimental --apply`,
     );
     expect(exitCode).not.toBe(1);
   });

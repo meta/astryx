@@ -16,7 +16,9 @@ const styles = stylex.create({
     maxWidth: 960,
   },
   navWrapper: {
-    border: '1px solid #e0e0e0',
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: '#e0e0e0',
     borderRadius: 8,
     overflow: 'hidden',
   },
