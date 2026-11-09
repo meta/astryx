@@ -165,7 +165,8 @@ export const docsDense = {
       "position relative to trigger. logical: start/end follow the popover's inherited direction (RTL mirrors).",
     alignment:
       "alignment along placement axis. logical: start/end follow the popover's inherited direction (RTL mirrors).",
-    delay: 'show delay in ms.',
+    delay:
+      'initial hover delay in ms; skipped between tooltip triggers in the same document during the hover bridge, restored after leaving beyond it.',
     hideDelay: 'hide delay after mouse/focus leave in ms.',
     focusTrigger:
       'when focus opens tooltip; auto = focus on the trigger, or inside a trigger focusable when focus arrives.',
