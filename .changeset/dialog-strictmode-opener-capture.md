@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] Dialog: under React StrictMode, a `Dialog` with a `DialogHeader` first mounted open now returns focus to the element that opened it on close, instead of leaving focus on the page body. The opener is captured only on the closed-to-open edge.
+[fix] Dialog: under React StrictMode, a `Dialog` with a `DialogHeader` that is first mounted open and then removed while open (rendered only while open) now returns focus to the element that opened it, instead of leaving focus on the page body. The opener is captured only on the closed-to-open edge.
 
-@HelloOjasMutreja
+@HelloOjasMutreja @cixzhang
