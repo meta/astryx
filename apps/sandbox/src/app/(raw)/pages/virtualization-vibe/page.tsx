@@ -33,6 +33,7 @@ import {Table, useTableRowsVirtualization} from '@astryxdesign/core';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {ChatVirtualizer, type ChatVirtualizerHandle} from '@astryxdesign/lab';
 import {calculateListWindow} from '../../../../../../../packages/core/src/utils/listWindow';
+import {FenwickOffsets} from './fenwick';
 
 type CaseId = 'table' | 'chat' | 'selector';
 
@@ -221,8 +222,110 @@ function MeasuredRows({
   );
 }
 
+/**
+ * Measured rows on page scroll: a prefix-sum offset model with an estimate,
+ * corrected as rows render. ChatVirtualizer opened this case about 574,000 px
+ * down the page with an empty viewport, so this case runs on the prototype.
+ */
+function MeasuredPageRows({rows}: {rows: Order[]}) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const estimate =
+    56 *
+    (parseFloat(getComputedStyle(document.documentElement).fontSize) / 16 || 1);
+  const modelRef = useRef<FenwickOffsets | null>(null);
+  if (modelRef.current == null) {
+    modelRef.current = new FenwickOffsets(rows.length, estimate);
+  }
+  const model = modelRef.current;
+  const [, setTick] = useState(0);
+  const pending = useRef(0);
+  useEffect(() => {
+    const onScroll = () => setTick(t => t + 1);
+    window.addEventListener('scroll', onScroll, {passive: true});
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, []);
+  const observer = useMemo(
+    () =>
+      new ResizeObserver(entries => {
+        const listTop = listRef.current
+          ? listRef.current.getBoundingClientRect().top + window.scrollY
+          : 0;
+        const firstVisible = model.indexAt(
+          Math.max(0, window.scrollY - listTop),
+        );
+        for (const entry of entries) {
+          const el = entry.target as HTMLElement;
+          const index = Number(el.dataset.index);
+          const delta = model.set(
+            index,
+            entry.borderBoxSize[0]?.blockSize ?? el.offsetHeight,
+          );
+          // Rows above the first visible row change size out of sight. The
+          // page scrolls by the same amount, so the rows on screen stay still.
+          if (delta !== 0 && index < firstVisible) {
+            pending.current += delta;
+          }
+        }
+        setTick(t => t + 1);
+      }),
+    [model],
+  );
+  useEffect(() => () => observer.disconnect(), [observer]);
+  useLayoutEffect(() => {
+    if (pending.current !== 0) {
+      window.scrollBy(0, pending.current);
+      pending.current = 0;
+    }
+  });
+  const listTop = listRef.current
+    ? listRef.current.getBoundingClientRect().top + window.scrollY
+    : 0;
+  const top = Math.max(0, window.scrollY - listTop - 400);
+  const bottom = window.scrollY - listTop + window.innerHeight + 400;
+  const start = model.indexAt(top);
+  const indexes: number[] = [];
+  for (let i = start; i < rows.length && model.offsetOf(i) < bottom; i++) {
+    indexes.push(i);
+  }
+  return (
+    <div ref={listRef} style={{position: 'relative', height: model.total()}}>
+      {indexes.map(i => {
+        const row = rows[i];
+        if (!row) {
+          return null;
+        }
+        return (
+          <div
+            key={row.id}
+            data-index={i}
+            ref={el => {
+              if (el) {
+                observer.observe(el);
+              }
+            }}
+            style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              top: 0,
+              transform: `translateY(${model.offsetOf(i)}px)`,
+            }}>
+            <OrderRow order={row} wrap />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function TableCase() {
   const rows = useMemo(() => makeOrders(10_000), []);
+  const textScale =
+    parseFloat(getComputedStyle(document.documentElement).fontSize) / 16 || 1;
   const [sizing, setSizing] = useState<'exact' | 'estimate'>('exact');
   const [scroll, setScroll] = useState<'box' | 'page'>('box');
   const [hint, setHint] = useState<'on' | 'off'>('on');
@@ -280,6 +383,14 @@ function TableCase() {
           ? 'Notes wrap, so rows differ in height.'
           : 'Every row is 48 px; long notes are cut.'}
       </Text>
+      {sizing === 'exact' && scroll === 'box' && textScale > 1 ? (
+        <Text weight="bold">
+          Finding: at {Math.round(textScale * 100)}% text the rows are taller
+          than rowHeight (48 px), so today&apos;s Table engine turns windowing
+          off and renders all 10,000 rows. It may be slow here. The card&apos;s
+          proposed guard would switch to measured rows instead.
+        </Text>
+      ) : null}
       {sizing === 'exact' && scroll === 'box' ? (
         <Table
           data={rows}
@@ -308,15 +419,13 @@ function TableCase() {
         </div>
       ) : (
         <div>
+          <Text color="secondary">
+            Finding: ChatVirtualizer, given the page as its scroller, opened
+            this list about 574,000 px down with an empty screen. This case runs
+            on a measured prefix-sum prototype instead.
+          </Text>
           <OrderHeader />
-          <MeasuredRows
-            rows={rows}
-            scrollElement={
-              typeof document === 'undefined'
-                ? null
-                : (document.scrollingElement as HTMLElement)
-            }
-          />
+          <MeasuredPageRows rows={rows} />
         </div>
       )}
     </VStack>
