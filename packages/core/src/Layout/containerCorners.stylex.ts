@@ -6,14 +6,17 @@
  * @output containerCornerStyles: the corner publication rounded padding
  *   publishers share
  * @position Layout utility beside container(). Internal: the package does not
- *   export this module, so the corner variables stay out of public API.
+ *   export `containerCornerStyles`. The `--container-corner-*` variables it
+ *   sets are in the shipped CSS, but no API documents them; only Table and
+ *   List read them.
  */
 
 import * as stylex from '@stylexjs/stylex';
 
 /**
- * Corner publication for a rounded padding publisher (Card, Dialog). The host sets `--_container-corner-block-start` and
- * `--_container-corner-block-end` to the radius at each block edge.
+ * Corner publication for a rounded padding publisher (Card, Dialog). The host
+ * sets `--_container-corner-block-start` and `--_container-corner-block-end` to
+ * the radius at each block edge.
  *
  * A corner goes only to the host's first or last child when that child reads
  * corners (it carries `data-container-corner`). A reader deeper inside could

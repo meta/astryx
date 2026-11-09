@@ -358,7 +358,47 @@ describe('the dependent-audits jobs', () => {
     expect(planJob.outputs.complete).toBe(
       "${{ steps.plan.outputs.complete || 'true' }}",
     );
+    // A run out of scope still writes a record that owes nothing.
+    const skip = step(planJob, 'Skip the dependent audits outside their scope');
+    expect(skip.run).toContain(
+      '"owed": [], "ran": [], "deferred": [], "complete": true',
+    );
+    expect(skip.run).toContain('> "$RUNNER_TEMP/a11y-dependent-audits.json"');
+    // It names the same fields as the planner's own record for a decided scope.
+    const template = /printf '(\{.*\})\\n'/.exec(skip.run)[1];
+    const outOfScope = JSON.parse(
+      template.replace('"%s"', '"head"').replace('%s', '1'),
+    );
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dependent-record-'));
+    try {
+      fs.writeFileSync(path.join(dir, 'changed.txt'), 'README.md\n');
+      execFileSync(
+        process.execPath,
+        [
+          '.github/scripts/a11y-dependent-audits.mjs',
+          '--changed',
+          path.join(dir, 'changed.txt'),
+          '--out',
+          path.join(dir, 'record.json'),
+        ],
+        {
+          cwd: root,
+          env: {...process.env, GITHUB_OUTPUT: '', GITHUB_STEP_SUMMARY: ''},
+        },
+      );
+      const planned = JSON.parse(
+        fs.readFileSync(path.join(dir, 'record.json'), 'utf8'),
+      );
+      expect(Object.keys(outOfScope).sort()).toEqual(
+        Object.keys(planned).sort(),
+      );
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
     const upload = step(planJob, 'Upload the dependent-audit record');
+    // Every run uploads a record, and a run without one fails in CI.
+    expect(upload.if).toBe('always()');
+    expect(upload.with['if-no-files-found']).toBe('error');
     expect(upload.with.name).toBe(
       'a11y-dependent-audits-record-${{ github.run_attempt }}',
     );

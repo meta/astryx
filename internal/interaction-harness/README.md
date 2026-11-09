@@ -58,21 +58,21 @@ committed: a pull request links or attaches it.
 
 ## Instruments
 
-| Module          | What it gives a spec                                                                                                                                                                                                                                                         |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `scripts.ts`    | Touch scripts as data: `tap`, `drag` (hold, rest), `flick` (exact final-move speed, velocity profiles), `holdThenDrag`, `pinch`, `rotate`, `path`, `merge` (a second finger mid-gesture), `releaseVelocity`, `toTouchEvents`.                                                |
-| `touch.ts`      | `touchDriver(page).play(script)`: the script as real engine input. `installInputLog` / `readInputLog`: what the page received.                                                                                                                                               |
-| `frames.ts`     | `startScreencast` (timestamped composited frames), `markElement` (a marker chip or outline), `trackMarker` (marker box per frame), `trackMarkers` (several colors from one decode of each frame), `sampleRects` (per-rAF rects), `frameStats`, `requireFrames`.              |
-| `busy.ts`       | `blockMainThread(page, ms)`, which returns the window it held and the span its loop measured, and `busyWindowProof(tracked, window)`: frames presented, frames that moved, longest stall, a verdict; `presented` adds the compositor's own frames.                           |
-| `brightness.ts` | `trackBrightness(page, frames, {x, y})`: a colour channel's mean in a square per frame, as a scalar on `box.x`, for a busy-window proof of a fade or a dim.                                                                                                                  |
-| `webInput.ts`   | `webInputDriver(page)`: `wheel({x, y, dx, dy, ctrl})` and `pen(points)` as real engine input, for proofs across pointers (`spec:AST-100` FR4); `wheel` resolves once the page has the step; read back through the input log.                                                 |
-| `trace.ts`      | `traceRendering(page, body)`: main-thread counts of UpdateLayoutTree / Layout / PrePaint / Paint / Layerize / UpdateLayer / ScrollLayer / HitTest, `countBetween`, long tasks; `installLongTaskLog` / `readLongTasks`; `startCompositorTrace`: when the compositor presents. |
-| `curves.ts`     | `holdAnimations`, `armHold`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `waitForAnimation`, `watchAnimations`, `waitForRest`, `releaseAnimations`, `releaseAnimationLog` (frees what the recorder kept, before a heap or listener count).     |
-| `math.ts`       | Oracles independent of the code under test: `cubicBezier`, `timingFunction`, `springStep` (SwiftUI response / dampingFraction, initial velocity), `projectDecay`, `rubberBand`, `parseTransform`, `compareCurve`, `timeline`.                                                |
-| `storyboard.ts` | `animationStoryboard` (seek to t = 0, 16.7, 33.3 … ms), `touchStoryboard` (a frame per scripted event), `castStoryboard` (real screencast frames): PNG contact sheet + JSON trace.                                                                                           |
-| `output.ts`     | `evidenceDir`, `writeEvidence`: where evidence goes and how it is attached to the report.                                                                                                                                                                                    |
-| `story.ts`      | `phone`, `withStorybook`, `openStory`, `frames`, and the timer gate (`installTimerGate`, `freezeTimers`, `thawTimers`).                                                                                                                                                      |
-| `pointer.ts`    | `newFinePointerPage(browser)`: a page under a mouse that really reads `(pointer: fine)`. `assertFinePointer` / `assertCoarsePointer`: fail before a case's checks when the page reads the other pointer.                                                                     |
+| Module          | What it gives a spec                                                                                                                                                                                                                                                                                                                                                              |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scripts.ts`    | Touch scripts as data: `tap`, `drag` (hold, rest), `flick` (exact final-move speed, velocity profiles), `holdThenDrag`, `pinch`, `rotate`, `path`, `merge` (a second finger mid-gesture), `releaseVelocity`, `toTouchEvents`.                                                                                                                                                     |
+| `touch.ts`      | `touchDriver(page).play(script)`: the script as real engine input. `installInputLog` / `readInputLog`: what the page received.                                                                                                                                                                                                                                                    |
+| `frames.ts`     | `startScreencast` (timestamped composited frames), `markElement` (a marker chip or outline), `trackMarker` (marker box per frame), `trackMarkers` (several colors from one decode of each frame), `sampleRects` (per-rAF rects), `frameStats`, `requireFrames`.                                                                                                                   |
+| `busy.ts`       | `blockMainThread(page, ms)`, which returns the window it held and the span its loop measured, and `busyWindowProof(tracked, window)`: frames presented, frames that moved, longest stall, a verdict; `presented` adds the compositor's own frames.                                                                                                                                |
+| `brightness.ts` | `trackBrightness(page, frames, {x, y})`: a colour channel's mean in a square per frame, as a scalar on `box.x`, for a busy-window proof of a fade or a dim.                                                                                                                                                                                                                       |
+| `webInput.ts`   | `webInputDriver(page)`: `wheel({x, y, dx, dy, ctrl})` and `pen(points)` as real engine input, for proofs across pointers (`spec:AST-100` FR4); `wheel` resolves once the page has the step; read back through the input log.                                                                                                                                                      |
+| `trace.ts`      | `traceRendering(page, body)`: main-thread counts of UpdateLayoutTree / Layout / PrePaint / Paint / Layerize / UpdateLayer / ScrollLayer / HitTest, `countBetween`, long tasks; `installLongTaskLog` / `readLongTasks`; `startCompositorTrace`: when the compositor presents.                                                                                                      |
+| `curves.ts`     | `holdAnimations`, `armHold`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `waitForAnimation`, `watchAnimations`, `waitForRest`, `settlesAt` (a computed value reached and every animation inside finished, on `waitForRest`'s deadline), `releaseAnimations`, `releaseAnimationLog` (frees what the recorder kept, before a heap or listener count). |
+| `math.ts`       | Oracles independent of the code under test: `cubicBezier`, `timingFunction`, `springStep` (SwiftUI response / dampingFraction, initial velocity), `projectDecay`, `rubberBand`, `parseTransform`, `compareCurve`, `timeline`.                                                                                                                                                     |
+| `storyboard.ts` | `animationStoryboard` (seek to t = 0, 16.7, 33.3 … ms), `touchStoryboard` (a frame per scripted event), `castStoryboard` (real screencast frames): PNG contact sheet + JSON trace.                                                                                                                                                                                                |
+| `output.ts`     | `evidenceDir`, `writeEvidence`: where evidence goes and how it is attached to the report.                                                                                                                                                                                                                                                                                         |
+| `story.ts`      | `phone`, `withStorybook`, `openStory`, `frames`, and the timer gate (`installTimerGate`, `freezeTimers`, `thawTimers`).                                                                                                                                                                                                                                                           |
+| `pointer.ts`    | `newFinePointerPage(browser)`: a page under a mouse that really reads `(pointer: fine)`. `assertFinePointer` / `assertCoarsePointer`: fail before a case's checks when the page reads the other pointer.                                                                                                                                                                          |
 
 ## A fine pointer
 
@@ -241,6 +241,18 @@ every frame, so one late frame is not "1 of 1 moved"). Pass
 raw numbers for the report. Frames are judged in presentation order: a loaded
 machine can deliver them out of order. `castStoryboard` turns the frames of the
 block into a filmstrip.
+
+To read frames after a moment, such as the rest after a block, wait for them by
+time: `waitForCastFrame(cast, {after, during})` returns once the cast holds a
+frame presented after `after`, epoch ms on the page's clock. A frame that
+arrives after that moment can still have been presented before it, so a count
+of frames delivered is no such wait. `cast.lastFrameAt()` reads the latest
+presentation time captured so far. Past 5 s with no such frame, the wait fails.
+When no frame came for longer than `FRAME_STARVATION_MS`, it throws
+`FrameStarvationError`: the screen did not change, or the page was starved of
+frames. Keep something moving, such as `startBusyControl`, to tell them apart.
+While frames still come, all presented before `after`, the error names both
+times.
 
 A just-started animation can reach the screen after the block began (50–100 ms
 later in WebKit on a loaded machine). When the cast saw the element at rest
@@ -606,9 +618,9 @@ the burst throws `WheelPageStallError`, the page split the gesture, and the
 proof fails. A page can only widen a gap, so one no wider than the send
 spacing is the dispatch's even when a starved renderer also held the step.
 Otherwise the dispatch stalled before the page (a loaded runner) and it throws
-`WheelPacingError` with the gaps. Wrap such a
-proof in `retakeOnWheelPacing(testInfo, attempt)`: one re-take, only on
-`WheelPacingError`, listed as a `wheel-retake` annotation. The burst times the
+`WheelPacingError` with the gaps. A proof never re-takes itself: a
+`WheelPacingError` stays red, named as the runner's. Where one shows in CI's
+profile, fix the wheel's delivery, not the proof. The burst times the
 page's handling with a listener on the window that runs after the page's own.
 A step whose propagation the page stops is marked by a task queued when it
 arrived, and never later than the next step's arrival. So its handling, with

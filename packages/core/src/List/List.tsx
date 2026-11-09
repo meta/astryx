@@ -9,7 +9,15 @@
  *   intrinsic marker column, including when a counter changes digit count.
  * @output Exports List component, ListProps, ListDensity, ListEdge, ListStyle
  *   types
- * @position Core implementation; consumed by index.ts, tested by List.test.tsx
+ * @position Core implementation. Consumed by index.ts, tested by List.test.tsx
+ *
+ * `animatedLayout` runs the layout updates (List/listLayoutUpdates.ts).
+ * `reorderable` runs the reorder session after them. List imports only the
+ * reorderable object's type and List/listReorderContext.ts, which holds the
+ * object's key and the session hooks. It hands the reorder to its rows
+ * through ListContext. The session, its handle
+ * and its listeners come with the object (reorderable/createReorderable.ts).
+ * So a List without it loads no reorder code.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/List/List.doc.mjs
@@ -19,7 +27,8 @@
  * - /packages/cli/assets/templates/blocks/components/List/ (showcase blocks)
  */
 
-import {useId, useMemo, useRef, type ReactNode} from 'react';
+import {useCallback, useId, useMemo, useRef, type ReactNode} from 'react';
+import type {Reorderable} from '../reorderable/createReorderable';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
@@ -36,6 +45,11 @@ import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
 import type {AnimatedLayout} from '../motion/animatedLayout';
 import {themeProps} from '../utils/themeProps';
 import {useDevWarning} from '../hooks/useDevWarning';
+import {
+  useReorderCommit,
+  useReorderSession,
+  type ListReorderOptions,
+} from './listReorderContext';
 
 export {
   type ListDensity,
@@ -72,6 +86,31 @@ export interface ListProps extends BaseProps<
    * changes at once. Without a handle the list changes at once.
    */
   animatedLayout?: AnimatedLayout;
+
+  /**
+   * Makes the rows reorderable, with the object `createReorderable` makes.
+   * Each ListItem with an `itemKey` gets a reorder handle at its end. One the
+   * object's `isReorderable` rejects keeps its place. Each committed move
+   * calls its `onReorder` once with the row's key and its index after the
+   * move. Apply it by rendering the rows in their new order. A drop on the
+   * starting place, a cancel, or a move the order does not take changes
+   * nothing.
+   *
+   * On a touch screen, a finger held still on a handle for a moment picks up
+   * its row. A flick on it still scrolls. The row stays in its place, dimmed,
+   * while a copy of it follows the finger. An accent line marks where it
+   * would land. The other rows stay still, the list scrolls near the edges,
+   * and on release the rows rearrange. A mouse drags a handle at once, the
+   * same way.
+   *
+   * Without a drag, activating a handle (a click, Space or Enter) turns on
+   * reorder mode for its row. Each arrow key moves it a place at once,
+   * reported and announced with its place and neighbours. Escape or another
+   * activation ends the mode, keeping the moves.
+   * While it is on, a hint anchored to the handle shows the moves and Done as
+   * buttons, so taps alone can reorder.
+   */
+  reorderable?: Reorderable;
 
   /**
    * Whether to show dividers between list items.
@@ -290,6 +329,7 @@ const dynamicStyles = stylex.create({
 export function List({
   children,
   animatedLayout,
+  reorderable,
   density = 'balanced',
   hasDividers = false,
   edge: edgeProp,
@@ -306,7 +346,23 @@ export function List({
 }: ListProps) {
   const headerId = useId();
   const listRef = useRef<HTMLUListElement & HTMLOListElement>(null);
+  // The reorder's machinery comes with the object. The handles'
+  // instructions take the header's id with a suffix.
+  const {session: reorderSession, options: reorderOptions} = useReorderSession(
+    reorderable,
+    () => listRef.current,
+    `${headerId}h`,
+  );
   const measureRows = useListLayoutUpdates(listRef, animatedLayout);
+  // A drag's or a reorder-mode move's commits are the reorder's to move, so
+  // the layout updates measure nothing for them.
+  const measureUnlessReordering = useCallback(() => {
+    if (reorderSession?.ownsCommit() !== true) {
+      measureRows();
+    }
+  }, [measureRows, reorderSession]);
+  // After the layout updates, so a drop's commit is the reorder's.
+  useReorderCommit(reorderSession);
   const mergedRef = useMergedRefs(
     listRef,
     ref as React.Ref<HTMLUListElement & HTMLOListElement>,
@@ -314,7 +370,7 @@ export function List({
   const isOrdered = listStyle === 'decimal';
   const Tag = isOrdered ? 'ol' : 'ul';
   // Plain use of the deprecated prop is reported by its @deprecated type;
-  // development warns only when the two names conflict (spec:AST-017 FR29).
+  // development warns only when the two names conflict.
   useDevWarning(
     'List',
     '`edge` and the deprecated `edgeCompensation` are both set; `edge` wins. ' +
@@ -332,8 +388,21 @@ export function List({
       edge,
       listStyle,
       animatedLayout,
+      // With a session there is an object, so its options too.
+      reorder: reorderSession && {
+        session: reorderSession,
+        options: reorderOptions as ListReorderOptions,
+      },
     }),
-    [density, hasDividers, edge, listStyle, animatedLayout],
+    [
+      density,
+      hasDividers,
+      edge,
+      listStyle,
+      animatedLayout,
+      reorderSession,
+      reorderOptions,
+    ],
   );
 
   const listElement = (
@@ -372,6 +441,7 @@ export function List({
             (start != null && start !== 1
               ? dynamicStyles.counterStart(start - 1)
               : styles.withCounter),
+          reorderSession?.listStyle,
           xstyle,
         ),
         className,
@@ -385,14 +455,24 @@ export function List({
   // calls this in the commit, before the DOM changes.
   const snapshot =
     animatedLayout != null ? (
-      <LayoutChangeSnapshot value={children} onBeforeChange={measureRows} />
+      <LayoutChangeSnapshot
+        value={children}
+        onBeforeChange={measureUnlessReordering}
+      />
     ) : null;
+
+  // The session's options and listeners, and the handles' instructions.
+  const {reorder: reorderValue} = contextValue;
+  const reorderHost = reorderValue && (
+    <reorderValue.session.Host reorder={reorderValue} />
+  );
 
   if (header == null) {
     return (
       <ListContext value={contextValue}>
         {snapshot}
         {listElement}
+        {reorderHost}
       </ListContext>
     );
   }
@@ -410,6 +490,7 @@ export function List({
           {header}
         </div>
         {listElement}
+        {reorderHost}
       </div>
     </ListContext>
   );
