@@ -480,6 +480,47 @@ describe('ChatLayout in a page that scrolls the document', () => {
     return result;
   }
 
+  // Android's Remove animations: the keyboard shows in one step, and reduced
+  // motion applies.
+  function reduceMotion() {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches:
+        query === '(pointer: coarse)' ||
+        query === '(prefers-reduced-motion: reduce)',
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+  }
+
+  it('keeps a page\u2019s learned cover through a pan to the dock after the lift, under Remove animations: the pan goes back, and the next show lifts at once', () => {
+    reduceMotion();
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    try {
+      const {container} = renderDocumentLayout();
+      report(window.innerHeight - 290);
+      wait(700);
+      expect(isDockLeftCovered(window)).toBe(true);
+      expect(layoutLift(dockOf(container))).toBe(290);
+      // The browser pans to the composer after the lift, before any input.
+      wait(50);
+      pan(290);
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+      expect(layoutLift(dockOf(container))).toBe(290);
+      expect(isDockLeftCovered(window)).toBe(true);
+      report(window.innerHeight);
+      pan(0);
+      report(window.innerHeight - 290);
+      expect(layoutLift(dockOf(container))).toBe(290);
+    } finally {
+      Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+    }
+  });
+
   it('lifts the fixed dock nothing in Safari on iOS, whose reveal pans the visual viewport to it and keeps the pan', () => {
     const {container} = renderDocumentLayout();
     // Safari's reveal: the keyboard's report comes with a pan by its height.
@@ -634,34 +675,67 @@ describe('ChatLayout in a page that scrolls the document', () => {
     expect(isDockLeftCovered(window)).toBe(false);
   });
 
-  it('drops the lift once for a slow browser whose pan to the dock comes after the wait, with no input since the show opened', () => {
-    const {container} = renderDocumentLayout();
-    report(window.innerHeight - 337);
-    wait(800);
-    expect(layoutLift(dockOf(container))).toBe(337);
-    pan(337);
-    expect(layoutLift(dockOf(container))).toBe(0);
-    expect(isDockLeftCovered(window)).toBe(false);
-    expect(__focusTakeoverCallersForTest(document)).toBe(0);
+  it('puts back a pan to the dock that comes after the show learned the cover, with no input since the show opened, and keeps the lift', () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    try {
+      const {container} = renderDocumentLayout();
+      report(window.innerHeight - 337);
+      wait(800);
+      expect(layoutLift(dockOf(container))).toBe(337);
+      pan(337);
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+      expect(layoutLift(dockOf(container))).toBe(337);
+      expect(isDockLeftCovered(window)).toBe(true);
+      expect(__focusTakeoverCallersForTest(document)).toBe(1);
+      // A pan smaller than the cover is no reveal: nothing goes back.
+      pan(40);
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    } finally {
+      Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+    }
   });
 
-  it('keeps the lift for a reveal-sized pan after a touch, as a reader\u2019s fling to the end', () => {
-    const {container} = renderDocumentLayout();
-    report(window.innerHeight - 290);
-    wait(800);
-    drag();
-    pan(290);
-    expect(layoutLift(dockOf(container))).toBe(290);
-    expect(isDockLeftCovered(window)).toBe(true);
+  it('keeps the lift, and leaves the pan, for a reveal-sized pan after a touch, as a reader\u2019s fling to the end', () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    try {
+      const {container} = renderDocumentLayout();
+      report(window.innerHeight - 290);
+      wait(800);
+      drag();
+      pan(290);
+      expect(layoutLift(dockOf(container))).toBe(290);
+      expect(isDockLeftCovered(window)).toBe(true);
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    } finally {
+      Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+    }
   });
 
-  it('keeps the lift for a reveal-sized pan after a wheel', () => {
-    const {container} = renderDocumentLayout();
-    report(window.innerHeight - 290);
-    wait(800);
-    wheel();
-    pan(290);
-    expect(layoutLift(dockOf(container))).toBe(290);
+  it('keeps the lift, and leaves the pan, for a reveal-sized pan after a wheel', () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    try {
+      const {container} = renderDocumentLayout();
+      report(window.innerHeight - 290);
+      wait(800);
+      wheel();
+      pan(290);
+      expect(layoutLift(dockOf(container))).toBe(290);
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    } finally {
+      Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+    }
   });
 
   it('keeps the input gate closed through a report during a drag, such as a toolbar\u2019s resize', () => {

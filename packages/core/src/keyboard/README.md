@@ -79,7 +79,9 @@ that times motion with it. Everything here is internal to
   wait, up to 3 s; the height reports of the keyboard's slide do not. A dock
   still covered when a clean wait ends teaches the page that its browser leaves
   it covered (`isDockLeftCovered(win)`), and every later show works as on main.
-  A show under a pinch zoom, whose pan is the reader's, learns nothing.
+  In the show that learned it, a later pan to the dock before any input is put
+  back, as at every later show, and the page keeps what it learned. A show
+  under a pinch zoom, whose pan is the reader's, learns nothing.
   Otherwise, and after any touch or wheel once the reveal is over, the dock
   follows the part of the cover the pan leaves (`followsDockDeficit(win)`). A
   show for a field outside the dock follows it from the start. Where the layout

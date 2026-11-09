@@ -662,13 +662,9 @@ function notifyDockReveal(): void {
   }
 }
 
-function learnDockLeftCovered(win: Window, covered: boolean): void {
-  if (docksLeftCovered.has(win) !== covered) {
-    if (covered) {
-      docksLeftCovered.add(win);
-    } else {
-      docksLeftCovered.delete(win);
-    }
+function learnDockLeftCovered(win: Window): void {
+  if (!docksLeftCovered.has(win)) {
+    docksLeftCovered.add(win);
     notifyDockReveal();
   }
 }
@@ -676,8 +672,8 @@ function learnDockLeftCovered(win: Window, covered: boolean): void {
 /**
  * Whether `win`'s browser was found to leave a fixed dock covered at a
  * keyboard show. A pan to the dock decides only its own show and teaches
- * nothing. A browser can pan at one show and not at the next. A late pan to
- * the dock after the lift, before any input, forgets it.
+ * nothing. A browser can pan at one show and not at the next. Once learned, it
+ * holds for the page.
  */
 export function isDockLeftCovered(win: Window): boolean {
   return docksLeftCovered.has(win);
@@ -720,14 +716,15 @@ export function __resetDockRevealForTest(win: Window): void {
 // The dock's watch: one decision per keyboard show for the dock's field. A
 // pan to the dock decides that show alone: no lift. A dock still covered when
 // the wait ends rises. With no touch or wheel in the wait, the page learns that
-// its browser leaves the dock covered. Only the show that learned it, before
-// any input, still meets a slow browser's pan: the lift then goes, and the page
-// forgets it. After a touch or a wheel, once the browser's reveal is over, the
+// its browser leaves the dock covered. In the show that learned it, a later pan
+// to the dock before any input is put back, as at every later show. After a
+// touch or a wheel, once the browser's reveal is over, the
 // dock follows the part of the cover that the pan leaves. So a reader's scroll
 // that moves the pan keeps the dock on the keyboard.
 function watchDock(
   win: Window,
   owns: (focused: HTMLElement) => boolean,
+  putBackTo: (top: number) => void,
 ): {
   report: (height: number) => boolean;
   input: () => void;
@@ -801,7 +798,7 @@ function watchDock(
       show = 'covered';
       coveredPan = getKeyboardPan(win) ?? 0;
       isClassifying = true;
-      learnDockLeftCovered(win, true);
+      learnDockLeftCovered(win);
     }
   };
   const restartSettle = () => {
@@ -881,11 +878,11 @@ function watchDock(
       }
       return true;
     }
+    // The module's own put-back measures from the opening report, before the
+    // lift moved the layout. So this show puts a pan to the dock back itself.
     if (show === 'covered' && isClassifying) {
       if (isRevealPan(pan, height) && pan > coveredPan + 0.5) {
-        show = 'revealed';
-        isClassifying = false;
-        learnDockLeftCovered(win, false);
+        putBackTo(coveredPan);
       }
       return true;
     }
@@ -925,9 +922,34 @@ export function watchRevealPan(
   {owns, onTouch, dock = false}: WatchRevealPanOptions,
 ): RevealPanWatch {
   const doc = win.document;
-  const dockWatch = dock ? watchDock(win, owns) : null;
   let atReport: {x: number; y: number; top: number; scale: number} | null =
     null;
+  // Pans the visual viewport back to `top`, without scrolling the document. It
+  // scrolls `anchor` into view, or a probe fixed at `top` in the layout
+  // viewport, which the pan does not move.
+  const putBackTo = (top: number, anchor?: Element | null) => {
+    const options: ScrollIntoViewOptions = {
+      block: 'start',
+      inline: 'nearest',
+      behavior: 'instant',
+    };
+    if (anchor != null) {
+      anchor.scrollIntoView(options);
+      return;
+    }
+    const probe = doc.createElement('div');
+    probe.style.position = 'fixed';
+    probe.style.left = '0';
+    probe.style.top = `${top}px`;
+    probe.style.width = '1px';
+    probe.style.height = '1px';
+    probe.style.visibility = 'hidden';
+    probe.style.pointerEvents = 'none';
+    (doc.body ?? doc.documentElement).append(probe);
+    probe.scrollIntoView(options);
+    probe.remove();
+  };
+  const dockWatch = dock ? watchDock(win, owns, top => putBackTo(top)) : null;
   let touchedSinceReport = false;
   const stopTouchStarts = watchTouchStarts(doc, () => {
     touchedSinceReport = true;
@@ -965,30 +987,7 @@ export function watchRevealPan(
         owns(focused)
       );
     },
-    putBack: anchor => {
-      const options: ScrollIntoViewOptions = {
-        block: 'start',
-        inline: 'nearest',
-        behavior: 'instant',
-      };
-      if (anchor != null) {
-        anchor.scrollIntoView(options);
-        return;
-      }
-      // A fixed element sits in the layout viewport, which the pan does not
-      // move: scrolling its top into view pans the visual viewport back.
-      const probe = doc.createElement('div');
-      probe.style.position = 'fixed';
-      probe.style.left = '0';
-      probe.style.top = `${atReport?.top ?? 0}px`;
-      probe.style.width = '1px';
-      probe.style.height = '1px';
-      probe.style.visibility = 'hidden';
-      probe.style.pointerEvents = 'none';
-      (doc.body ?? doc.documentElement).append(probe);
-      probe.scrollIntoView(options);
-      probe.remove();
-    },
+    putBack: anchor => putBackTo(atReport?.top ?? 0, anchor),
     dockReport: height => dockWatch?.report(height) ?? false,
     stop:
       dockWatch == null
