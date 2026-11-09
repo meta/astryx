@@ -376,6 +376,15 @@ WebKit's stamps, a late frame inside the judged part changes no verdict, since
 the proof reads a slow curve's held frames as motion. At the part's start, it
 shows a stall the control does not have: the false reds came from there.
 
+A WebKit proof keeps one dated frame per display interval. A frame under one
+interval after the last one kept is left out; the earlier one stays. WebKit's
+compositor can draw two frames 6 to 9 ms apart, and a curve then shows no new
+step between them. A frame with no reading always stays, since its time is a
+neighbour's. A WebKit cast rarely shows two frames one interval apart. So
+the proof judges motion on every kept frame the control moved, but no 30 Hz
+cadence. Its summary says so in a note, with the count of pairs one interval
+apart. Chromium's cast judges that cadence.
+
 An animation that lasts a fraction of a second, such as a 0.2 s fade, leaves a
 block only a few frames to judge: in WebKit, or on a loaded machine, the control
 can present fewer than four, and one run cannot decide. Play it several times

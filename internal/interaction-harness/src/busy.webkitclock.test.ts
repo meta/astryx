@@ -10,12 +10,14 @@
  *   frame keeps its lateness. A frame with no reading takes its time from a
  *   neighbour whose stamp agrees with its reading. A measured cast keeps its
  *   order, no two frames share a time, and its judged part stays on its
- *   stamps. Chromium casts and casts with no control get their stamps' proof.
+ *   stamps. It keeps one frame per display interval and notes that it judges
+ *   no 30 Hz cadence. Chromium casts and casts with no control get their
+ *   stamps' proof.
  * @position Unit test of ./busy's busyWindowProof on WebKit casts
  */
 
 import {describe, expect, it} from 'vitest';
-import {busyWindowProof} from './busy';
+import {busyWindowProof, pooledBusyProof} from './busy';
 import type {TrackedFrame} from './frames';
 
 const FRAME = 1000 / 60;
@@ -312,6 +314,97 @@ describe('busyWindowProof on a WebKit cast with a control', () => {
         frame.t <= proof.judged.to,
     );
     expect(proof.summary).toContain(`: ${selected.length} frames presented`);
+  });
+
+  it('keeps one frame per display interval: a frame drawn 6.6 to 8.4 ms after another shows no new step and is left out', () => {
+    // A curve of 4 px a frame in 2 px steps: two steps, so no early-frame
+    // leniency applies. Every fourth frame in the block has a second frame
+    // drawn 6.6 or 8.4 ms after it, still at its step.
+    const shots = onTime().flatMap((shot, i) => {
+      if (shot.at <= 1000 || shot.at >= 1650 || i % 4 !== 0) {
+        return [shot];
+      }
+      const after = i % 8 === 0 ? 6.6 : 8.4;
+      return [shot, {at: shot.at + after, stamp: shot.stamp + after}];
+    });
+    const stepped = (at: number) =>
+      20 + 4 * Math.floor((at - 800) / FRAME + 1e-6);
+    const frames = cast(shots, stepped, 'webkit');
+    const proof = (ahead?: TrackedFrame[]) =>
+      busyWindowProof(frames.tracked, BLOCK, {
+        axis: 'x',
+        control: frames.control,
+        ahead,
+      }).verdict.failures;
+    // The control ahead reads the frames near the first control's turns.
+    expect(proof(frames.ahead)).toEqual([]);
+    // Without it, the second frame at a turn has no reading. It stays, and
+    // still reads as held.
+    expect(proof().join('\n')).toMatch(/moved on \d+ of the \d+ frames/);
+  });
+
+  it('judges no 30 Hz cadence on a sparse cast and says so: a fade that changes every other interval passes, with the count of pairs in a note', () => {
+    // Frames two display intervals apart. A fade that changes every other
+    // interval moves on every frame shown, so only the note can tell.
+    const sparse = onTime().filter((_, i) => i % 2 === 0);
+    const halfRate = (at: number) =>
+      212 - 1.2 * Math.floor((at - 800) / (2 * FRAME) + 1e-6);
+    const proof = (value: (at: number) => number) => {
+      const frames = cast(sparse, value, 'webkit');
+      return busyWindowProof(frames.tracked, BLOCK, {
+        axis: 'x',
+        control: frames.control,
+      });
+    };
+    expect(proof(halfRate).verdict.failures).toEqual([]);
+    expect(proof(halfRate).summary).toMatch(
+      /; note: cadence not judged: 0 display-interval pairs$/,
+    );
+    const frozen = proof(at => halfRate(Math.min(at, 1300)));
+    expect(frozen.verdict.failures).not.toEqual([]);
+    expect(frozen.summary).toMatch(/cadence not judged: 0 display-interval/);
+  });
+
+  it('on a dense cast, a fade that changes every other interval still fails in both engines; only WebKit carries the cadence note', () => {
+    const eased = (at: number) => {
+      const progress = Math.min(Math.max((at - 800) / 1000, 0), 1);
+      return 212 - 120 * (1 - (1 - progress) ** 2);
+    };
+    const halfRate = (at: number) =>
+      eased(800 + 2 * FRAME * Math.floor((at - 800) / (2 * FRAME) + 1e-6));
+    const proof = (engine?: 'webkit') => {
+      const frames = cast(onTime(), halfRate, engine);
+      return busyWindowProof(frames.tracked, BLOCK, {
+        axis: 'x',
+        control: frames.control,
+      });
+    };
+    expect(proof('webkit').verdict.failures).not.toEqual([]);
+    expect(proof('webkit').summary).toMatch(
+      /cadence not judged: [1-9]\d* display-interval pairs/,
+    );
+    expect(proof().verdict.failures).not.toEqual([]);
+    expect(proof().summary).not.toContain('cadence not judged');
+  });
+
+  it('matches each frame to its control frame by time, and names the pairs that have none', () => {
+    const frames = cast(onTime(), fade(0.6), 'webkit');
+    const control = frames.control.filter((_, i) => i % 7 !== 3);
+    const proof = busyWindowProof(frames.tracked, BLOCK, {axis: 'x', control});
+    expect(proof.summary).toMatch(
+      /cadence not judged: \d+ display-interval pairs, [1-9]\d* without a control frame at their time$/,
+    );
+  });
+
+  it("carries the cadence note in each run's own summary in a pooled proof", () => {
+    const runs = [0.6, 0.9].map(perFrame => {
+      const frames = cast(onTime(), fade(perFrame), 'webkit');
+      return {tracked: frames.tracked, control: frames.control, window: BLOCK};
+    });
+    const pooled = pooledBusyProof(runs, {axis: 'x'});
+    expect(pooled.summary).toMatch(
+      /; run 1: [^;]*(;[^;]*)*?; note: cadence not judged: \d+ display-interval pairs; run 2: .*; note: cadence not judged: \d+ display-interval pairs$/,
+    );
   });
 
   it("dates the frames from the controls' starts as from the origin their stamps agree with", () => {

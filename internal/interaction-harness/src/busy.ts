@@ -273,6 +273,10 @@ const CONTROL_EDGE = 36;
  * The proof matches frames by time, so no two may share one.
  */
 const DATED_GAP_MS = 0.01;
+/** One display interval, ms: the compositor presents at most once in one. */
+const DISPLAY_FRAME_MS = 1000 / 60;
+/** How close the controls' clock reads a time, ms: one px of travel. */
+const CONTROL_READ_MS = CONTROL_LEG_MS / CONTROL_TRAVEL;
 
 /**
  * The compositor's clock in each frame of `control` (`startBusyControl`'s box,
@@ -384,14 +388,15 @@ function readControlClock(control: readonly TrackedFrame[]): {
  * `CONTROL_AGREE_MS`, so the stamps without a reading between them could
  * swap. So such a stamp never passes the next stamp with a reading. Each time
  * comes at least `DATED_GAP_MS` after the time of the stamp before it, since
- * the proof matches frames by time. Null when no stamp has a reading.
+ * the proof matches frames by time. `read` holds the stamps whose time is
+ * their own reading. Null when no stamp has a reading.
  */
 function controlPageTimes(
   stamps: readonly number[],
   control: readonly TrackedFrame[],
   ahead: readonly TrackedFrame[] | undefined,
   controlStarts: readonly [number, number?] | undefined,
-): Map<number, number> | null {
+): {times: Map<number, number>; read: ReadonlySet<number>} | null {
   const cycle = 2 * CONTROL_LEG_MS;
   const readers = [
     {...readControlClock(control), start: controlStarts?.[0]},
@@ -453,15 +458,16 @@ function controlPageTimes(
     floor = Math.max(times.get(stamp) ?? stamp, floor + DATED_GAP_MS);
     times.set(stamp, floor);
   }
-  return times;
+  return {times, read: new Set(read.keys())};
 }
 
 /**
  * The component's and the control's frames dated on the controls' clock
  * (`controlPageTimes`), in the cast's order, which those times keep. Both
  * series come from one screencast, so each frame takes the same time in both.
- * `stampOf` gives each dated time's stamp. Null when the controls give no
- * reading: the proof then judges the cast's stamps.
+ * `stampOf` gives each dated time's stamp, and `readTimes` holds the times
+ * that are a frame's own reading. Null when the controls give no reading:
+ * the proof then judges the cast's stamps.
  */
 function datedOnControlClock(
   tracked: readonly TrackedFrame[],
@@ -472,15 +478,17 @@ function datedOnControlClock(
   tracked: TrackedFrame[];
   control: TrackedFrame[];
   stampOf: ReadonlyMap<number, number>;
+  readTimes: ReadonlySet<number>;
 } | null {
   if (control.length === 0) {
     return null;
   }
   const stamps = [...new Set([...tracked, ...control].map(frame => frame.t))];
-  const times = controlPageTimes(stamps, control, ahead, controlStarts);
-  if (times == null) {
+  const dating = controlPageTimes(stamps, control, ahead, controlStarts);
+  if (dating == null) {
     return null;
   }
+  const {times, read} = dating;
   const date = (frames: readonly TrackedFrame[]) =>
     [...frames]
       .sort((a, b) => a.t - b.t)
@@ -489,7 +497,81 @@ function datedOnControlClock(
     tracked: date(tracked),
     control: date(control),
     stampOf: new Map([...times].map(([stamp, time]) => [time, stamp])),
+    readTimes: new Set([...read].map(stamp => times.get(stamp) ?? Number.NaN)),
   };
+}
+
+/**
+ * The dated frames at display rate: at most one each display interval, read
+ * to the px (`CONTROL_READ_MS`). A frame under one interval after the last one
+ * kept is left out, and the earlier one stays. WebKit's compositor can draw
+ * two frames 6 to 9 ms apart, and a curve then shows no new step between them.
+ * Only frames whose time is their own reading count. A frame dated from a
+ * neighbour always stays. Its time is too rough to call it early, and leaving
+ * it out could hide a held frame. Near a turn without the control ahead, such
+ * a frame can then read as held, a false red that `ahead` removes. Both
+ * series keep the same frames.
+ */
+function atDisplayRate<
+  T extends {
+    readonly tracked: readonly TrackedFrame[];
+    readonly control: readonly TrackedFrame[];
+    readonly readTimes: ReadonlySet<number>;
+  },
+>(dated: T): T {
+  const times = [
+    ...new Set([...dated.tracked, ...dated.control].map(frame => frame.t)),
+  ].sort((a, b) => a - b);
+  const kept = new Set<number>();
+  let last = Number.NEGATIVE_INFINITY;
+  for (const t of times) {
+    if (!dated.readTimes.has(t)) {
+      kept.add(t);
+      continue;
+    }
+    // To a nanosecond, so float error never drops a frame one read early.
+    if (t - last + 1e-6 >= DISPLAY_FRAME_MS - CONTROL_READ_MS) {
+      kept.add(t);
+      last = t;
+    }
+  }
+  return {
+    ...dated,
+    tracked: dated.tracked.filter(frame => kept.has(frame.t)),
+    control: dated.control.filter(frame => kept.has(frame.t)),
+  };
+}
+
+/**
+ * Pairs of judged frames one display interval apart, with the control moved
+ * between them. On such a pair, a fade that holds every other frame shows no
+ * step. Each frame finds its control frame by time. A pair without both counts
+ * as unmatched.
+ */
+function displayIntervalPairs(
+  tracked: readonly TrackedFrame[],
+  control: readonly TrackedFrame[],
+  judged: {readonly from: number; readonly to: number},
+): {pairs: number; unmatched: number} {
+  const controlAt = new Map(control.map(frame => [frame.t, frame]));
+  const inside = tracked.filter(
+    frame => frame.t >= judged.from && frame.t <= judged.to,
+  );
+  let pairs = 0;
+  let unmatched = 0;
+  for (let i = 1; i < inside.length; i += 1) {
+    const [a, b] = [inside[i - 1], inside[i]];
+    if (b.t - a.t >= 2 * DISPLAY_FRAME_MS - CONTROL_READ_MS) {
+      continue;
+    }
+    const [from, to] = [controlAt.get(a.t), controlAt.get(b.t)];
+    if (from == null || to == null) {
+      unmatched += 1;
+    } else if (from.box?.x !== to.box?.x) {
+      pairs += 1;
+    }
+  }
+  return {pairs, unmatched};
 }
 
 /**
@@ -1203,6 +1285,12 @@ function motionStepPx(values: readonly number[]): number {
  * turn keeps its lateness. Chromium casts and casts with no control are
  * judged on their stamps.
  *
+ * A WebKit proof keeps one dated frame per display interval, the earlier
+ * one. A frame with no reading always stays. The proof judges motion on every
+ * kept frame the control moved. Its cast rarely shows two frames one interval
+ * apart, so it judges no 30 Hz cadence. A note in the summary says so, with
+ * the count of such pairs.
+ *
  * With a control, a run the machine starved of frames proves nothing. So it
  * throws `FrameStarvationError` with its numbers and returns no verdict. A
  * starved run has two marks. Its control moved on fewer than
@@ -1265,13 +1353,31 @@ function readBusyWindow(
   if (dated == null) {
     return judgeBusyWindow(tracked, window, options);
   }
-  const read = judgeBusyWindow(dated.tracked, window, {
+  const shown = atDisplayRate(dated);
+  const read = judgeBusyWindow(shown.tracked, window, {
     ...options,
-    control: dated.control,
+    control: shown.control,
   });
+  // A WebKit cast rarely shows two frames one interval apart, so the proof
+  // cannot judge a 30 Hz cadence there. It says so, with the count.
+  const {pairs, unmatched} = displayIntervalPairs(
+    shown.tracked,
+    shown.control,
+    read.proof.judged,
+  );
+  const note =
+    `cadence not judged: ${pairs} display-interval pairs` +
+    (unmatched > 0
+      ? `, ${unmatched} without a control frame at their time`
+      : '');
   return {
     ...read,
-    proof: {...read.proof, judged: judgedOnStamps(read.proof.judged, dated)},
+    proof: {
+      ...read.proof,
+      judged: judgedOnStamps(read.proof.judged, shown),
+      notes: [...read.proof.notes, note],
+      summary: `${read.proof.summary}; note: ${note}`,
+    },
   };
 }
 
