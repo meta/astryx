@@ -247,6 +247,26 @@ describe('Tab in a code block', () => {
     expect(marked(editor)).toBe('\tx\n\t|y');
   });
 
+  it('keeps typing right after a press of a tab-indented line out of its undo step', async () => {
+    const {editor, textbox} = await renderCode('\tx\ny');
+    select(editor, '\tx\n'.length);
+    pressTab(editor, textbox);
+    act(() => {
+      editor.update(() => {
+        const selection = $getSelection();
+        if ($isRangeSelection(selection)) {
+          selection.insertText('r');
+        }
+      });
+    });
+    expect(marked(editor)).toBe('\tx\n\tr|y');
+
+    act(() => {
+      editor.dispatchCommand(UNDO_COMMAND, undefined);
+    });
+    expect(marked(editor)).toBe('\tx\n\t|y');
+  });
+
   it('still lets Escape then Tab move focus out of the editor', async () => {
     const user = userEvent.setup();
     const {editor} = await renderCode('alpha');

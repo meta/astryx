@@ -279,10 +279,12 @@ export function CodeTabPlugin(): null {
           }
           event.preventDefault();
           // One undo step per press, even when a press adds or removes a
-          // single character beside the caret, which history would
-          // otherwise merge with typing or with the press before.
+          // single character beside the caret. The push tag starts a step
+          // before the press. A dirty block makes history class the press
+          // as its own change, so typing after it starts another step.
           $addUpdateTag(HISTORY_PUSH_TAG);
           $shiftLines(code, selection, event.shiftKey);
+          code.markDirty();
           return true;
         },
         // After TabFocusEscapePlugin's low-priority listener, which lets an
