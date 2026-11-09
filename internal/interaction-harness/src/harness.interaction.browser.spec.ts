@@ -102,10 +102,10 @@ import {
   readLongTasks,
   releaseAnimations,
   requireFrames,
-  retakeOnWheelPacing,
   sampleCurve,
   sampleRects,
   seekAnimations,
+  settlesAt,
   springStep,
   startCompositorTrace,
   startScreencast,
@@ -119,6 +119,7 @@ import {
   toTouchEvents,
   touchDriver,
   trackBrightness,
+  TouchPacingError,
   TouchPageStallError,
   touchStoryboard,
   TouchLiftStallError,
@@ -126,6 +127,7 @@ import {
   trackControl,
   trackMarker,
   waitForAnimation,
+  waitForCastFrame,
   releaseAnimationLog,
   waitForRest,
   watchAnimations,
@@ -303,15 +305,15 @@ test.describe('touch input', () => {
     // behind such a send is off pace too. A runner whose CPU quota holds the
     // test process also wakes the harness late from a wait, or holds a send,
     // on a few moves (in a container capped at 3 CPUs, where the quota stalls
-    // the process for about 100 ms at a time), so a take is off pace when
-    // more than half its moves are. It is re-taken once, as wheel bursts are,
-    // and a second such take fails. Under CPU starvation (a 3-CPU cap with 16
-    // workers, with the software compositor's threads matched to the cap by
-    // LP_NUM_THREADS), a pacer the cap throttles falls behind and need not
-    // wait, so the pacing check can miss a slow pacer there (sending each step
-    // at twice its time failed 8 of 20 runs), and the quota slows some sends
-    // past the step's spacing, which reads like a harness whose send is slow
-    // (the real test passed 40 of 40 there, re-taken 9 times).
+    // the process for about 100 ms at a time), so a take is off pace when more
+    // than half its moves are. It is re-taken once, and a second such take
+    // fails. Under CPU starvation (a 3-CPU cap with 16 workers, with the
+    // software compositor's threads matched to the cap by LP_NUM_THREADS), a
+    // pacer the cap throttles falls behind and need not wait, so the pacing
+    // check can miss a slow pacer there (sending each step at twice its time
+    // failed 8 of 20 runs), and the quota slows some sends past the step's
+    // spacing, which reads like a harness whose send is slow (the real test
+    // passed 40 of 40 there, re-taken 9 times).
     for (const attempt of [1, 2] as const) {
       const {played, answeredAt, playStart, log} = await take();
       const {moves} = checkInput(log);
@@ -430,6 +432,139 @@ test.describe('touch input', () => {
     expect(played.at(-1)?.release).toBeDefined();
   });
 
+  test("a page task that holds the main thread before an event changes a paced flick's release, and the error names the wait, not the page's listeners", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'webkit',
+      'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
+    );
+    // Each pointer move queues a 60 ms task, as a component's timer can. The
+    // listeners themselves return at once, and the next move waits for the
+    // task before they begin. The driver comes first, so its mark does too.
+    const driver = await touchDriver(page);
+    await page.route('http://task-stalling-page.test/', route =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>addEventListener("pointermove",()=>{setTimeout(()=>{const end=performance.now()+60;while(performance.now()<end){}},0)});</script>',
+      }),
+    );
+    await page.goto('http://task-stalling-page.test/');
+    const outcome = await driver
+      .play(
+        drag({x: 200, y: 400}, {x: 200, y: 300}, {durationMs: 100, hz: 60}),
+        {pacing: 'spacing'},
+      )
+      .then(
+        () => 'resolved',
+        (error: unknown) => error,
+      );
+    expect(outcome).toBeInstanceOf(TouchPacingError);
+    expect(String(outcome)).toMatch(
+      /an event waited \d+ ms for the main thread before the page's listeners began/,
+    );
+  });
+
+  test("a page's own window capture listener counts as the page's listeners when the driver is created before the page loads", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'webkit',
+      'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
+    );
+    // The driver marks when the page's listeners begin with a window capture
+    // listener of its own, added here before the page's scripts. So it runs
+    // before the page's, which the page adds at load on the window's capture
+    // phase and which holds each pointer move 60 ms.
+    const driver = await touchDriver(page);
+    await page.route('http://capture-stalling-page.test/', route =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>addEventListener("pointermove",()=>{const end=performance.now()+60;while(performance.now()<end){}},{capture:true});</script>',
+      }),
+    );
+    await page.goto('http://capture-stalling-page.test/');
+    const outcome = await driver
+      .play(
+        drag({x: 200, y: 400}, {x: 200, y: 300}, {durationMs: 100, hz: 60}),
+        {pacing: 'spacing'},
+      )
+      .then(
+        () => 'resolved',
+        (error: unknown) => error,
+      );
+    expect(outcome).toBeInstanceOf(TouchPageStallError);
+    expect(String(outcome)).toMatch(
+      /the page's own touch and pointer listeners took \d+ ms/,
+    );
+  });
+
+  test("a page's window capture listener added before a driver created after load still counts as the page's listeners, as a gesture host's does", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'webkit',
+      'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
+    );
+    // The page adds its window capture listener at load, as a gesture host
+    // does at mount, and the driver comes after. Its mark then runs after
+    // that listener, so the hold counts from the event's stamp, as before.
+    await page.route('http://late-driver-page.test/', route =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>addEventListener("pointermove",()=>{const end=performance.now()+60;while(performance.now()<end){}},{capture:true});</script>',
+      }),
+    );
+    await page.goto('http://late-driver-page.test/');
+    const driver = await touchDriver(page);
+    const outcome = await driver
+      .play(
+        drag({x: 200, y: 400}, {x: 200, y: 300}, {durationMs: 100, hz: 60}),
+        {pacing: 'spacing'},
+      )
+      .then(
+        () => 'resolved',
+        (error: unknown) => error,
+      );
+    expect(outcome).toBeInstanceOf(TouchPageStallError);
+    expect(String(outcome)).toMatch(
+      /the page's own touch and pointer listeners took \d+ ms/,
+    );
+  });
+
+  test("a page set by setContent after the driver keeps the old reading: its window capture listener counts as the page's listeners", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'webkit',
+      'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
+    );
+    // The driver's mark runs first on the blank page it navigates to.
+    // setContent then reopens that document, which drops the mark's listener
+    // and keeps the mark, and the new page adds its own capture listener.
+    const driver = await touchDriver(page);
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>addEventListener("pointermove",()=>{const end=performance.now()+60;while(performance.now()<end){}},{capture:true});</script>',
+    );
+    const outcome = await driver
+      .play(
+        drag({x: 200, y: 400}, {x: 200, y: 300}, {durationMs: 100, hz: 60}),
+        {pacing: 'spacing'},
+      )
+      .then(
+        () => 'resolved',
+        (error: unknown) => error,
+      );
+    expect(outcome).toBeInstanceOf(TouchPageStallError);
+    expect(String(outcome)).toMatch(
+      /the page's own touch and pointer listeners took \d+ ms/,
+    );
+  });
   test("a page whose touch listener holds its main thread changes a paced flick's release itself: TouchPageStallError, never the runner's", async ({
     page,
     browserName,
@@ -869,6 +1004,51 @@ test.describe('touch input', () => {
 });
 
 test.describe('frame evidence', () => {
+  test('a cast reads when its latest frame was presented before it stops, on the page clock, and a wait for a frame on a screen held still fails by name', async ({
+    page,
+  }) => {
+    await busyFixture(page);
+    const box = page.locator('#box');
+    await markElement(box, {mode: 'outline'});
+    const cast = await startScreencast(page);
+    await box.evaluate(el =>
+      el.animate(
+        [{transform: 'translateY(0px)'}, {transform: 'translateY(560px)'}],
+        {duration: 500},
+      ),
+    );
+    const pageNow = () =>
+      page.evaluate(() => performance.timeOrigin + performance.now());
+    const after = await pageNow();
+    const at = await waitForCastFrame(cast, {after, during: 'the box moved'});
+    expect(at).toBeGreaterThan(after);
+    // Once the box rests, nothing on screen changes, so the cast sends no
+    // frame, and the wait fails at its cap as the cast's starvation. The
+    // frame that shows the box at rest can come after the animation ends. The
+    // screen is still once the cast has sent nothing for 100 ms.
+    await box.evaluate(el =>
+      Promise.all(el.getAnimations().map(a => a.finished)),
+    );
+    await expect
+      .poll(async () => (await pageNow()) - (cast.lastFrameAt() ?? 0), {
+        message: 'the cast goes quiet once the box rests',
+        timeout: 2_000,
+      })
+      .toBeGreaterThan(100);
+    const still = await waitForCastFrame(cast, {
+      after: await pageNow(),
+      during: 'the screen held still',
+      timeoutMs: 300,
+    }).catch((error: unknown) => error);
+    expect(still).toBeInstanceOf(FrameStarvationError);
+    expect(String(still)).toMatch(
+      /waitForCastFrame: the page drew 0 frames while the screen held still \(\d+ ms\).*: the screen did not change after \d+\.\d, or the page was starved of frames/,
+    );
+    // stop() stamps the frame the first wait read with the same time.
+    const frames = await cast.stop();
+    expect(frames.some(f => f.t === at)).toBe(true);
+  });
+
   test('a compositor animation advances every frame through a blocked main thread; a rAF one freezes, whatever the screencast rate', async ({
     page,
   }, testInfo) => {
@@ -971,6 +1151,8 @@ test.describe('frame evidence', () => {
         alone,
         tracked,
         leftAt,
+        // Every place a frame left the box before the block.
+        leftBefore: written.filter(w => w.at < window.from).map(w => w.y),
       };
     };
 
@@ -989,30 +1171,33 @@ test.describe('frame evidence', () => {
       alone: rafAlone,
       tracked: rafTracked,
       leftAt,
+      leftBefore,
     } = await run('raf');
     testInfo.annotations.push({
       type: 'busy-main-thread rAF control',
       description: raf.summary,
     });
-    // Frozen for the block: the compositor sends no frame while nothing on
-    // screen changes, so at most the frame presented as the block starts
-    // moved, and the bound's verdict fails it as the control's does.
-    expect(raf.changed).toBeLessThanOrEqual(1);
-    // Still where the last frame before the block left it, within a cast
-    // step. A starved compositor can present that frame late in the block.
-    const last = rafTracked
-      .filter(
-        f => f.box != null && f.t > raf.judged.from && f.t < raf.judged.to,
-      )
-      .at(-1);
+    // Frozen for the block: every frame inside it shows a place a frame left
+    // the box before the block, within a cast step. A starved compositor can
+    // present the last frames before the block late, inside it.
+    const inBlock = rafTracked.filter(
+      f => f.box != null && f.t > raf.judged.from && f.t < raf.judged.to,
+    );
     expect(leftAt, 'a frame moved the box before the block').toBeDefined();
-    const shown = (last?.box?.y ?? Number.NaN) - rest.cast;
+    for (const frame of inBlock) {
+      const shown = (frame.box?.y ?? Number.NaN) - rest.cast;
+      expect(
+        leftBefore.some(
+          y => Math.abs(y - rest.page - shown) <= compositor.stepPx,
+        ),
+        `the frame at +${(frame.t - raf.window.from).toFixed(0)} ms shows the box ${shown.toFixed(1)} px down, where no frame left it before the block. ${raf.summary}`,
+      ).toBe(true);
+    }
+    // The block ends where the last frame before it left the box.
+    const shown = (inBlock.at(-1)?.box?.y ?? Number.NaN) - rest.cast;
     const left = (leftAt ?? Number.NaN) - rest.page;
     expect(Math.abs(shown - left), raf.summary).toBeLessThanOrEqual(
       compositor.stepPx,
-    );
-    expect(raf.verdict.failures.join('\n')).toMatch(
-      /moved on [01] of the \d+ frames the control moved/,
     );
     expect(raf.verdict.failures.join('\n')).toMatch(
       /longest stall .* longer than the control's/,
@@ -1030,6 +1215,46 @@ test.describe('frame evidence', () => {
     const {proof: slowRaf} = await run('raf', 6, 1400, 1600);
     expect(slowRaf.verdict.pass, slowRaf.summary).toBe(false);
     expect(slowRaf.verdict.failures.join('\n')).toMatch(/longest stall/);
+    await control.remove();
+  });
+
+  test('a busy proof whose cast the machine starved fails by name: FrameStarvationError', async ({
+    page,
+  }) => {
+    await busyFixture(page);
+    const box = page.locator('#box');
+    await markElement(box, {mode: 'outline'});
+    const control = await startBusyControl(page);
+    // One presented frame in 40 reaches the proof, as on a starved machine.
+    // The block then holds fewer than four of the control's frames, with gaps
+    // past FRAME_STARVATION_MS between them.
+    const cast = await startScreencast(page, {everyNthFrame: 40});
+    await box.evaluate(el =>
+      el.animate(
+        [{transform: 'translateY(0px)'}, {transform: 'translateY(560px)'}],
+        {duration: 1100, easing: 'linear'},
+      ),
+    );
+    const window = await blockMainThread(page, 700, {during: box});
+    const frames = await cast.stop();
+    const tracked = await trackMarker(page, frames);
+    const controlFrames = await trackControl(page, frames);
+    const outcome = (() => {
+      try {
+        return busyWindowProof(tracked, window, {
+          axis: 'y',
+          control: controlFrames,
+        }).summary;
+      } catch (error) {
+        return error;
+      }
+    })();
+    expect(outcome).toBeInstanceOf(FrameStarvationError);
+    const {numbers} = outcome as FrameStarvationError;
+    expect(numbers.by).toBe('busyWindowProof');
+    expect(numbers.min).toBe(4);
+    expect(numbers.frames).toBeLessThan(4);
+    expect(numbers.longestGapMs).toBeGreaterThan(FRAME_STARVATION_MS);
     await control.remove();
   });
 
@@ -1129,8 +1354,10 @@ test.describe('frame evidence', () => {
 
     const {fine: raf} = await run('raf');
     expect(raf.verdict.pass, raf.summary).toBe(false);
+    // Frozen for the block, it stalls longer than the control. A starved
+    // compositor can present the last frames before the block late, inside it.
     expect(raf.verdict.failures.join('\n')).toMatch(
-      /moved on [01] of the \d+ frames the control moved/,
+      /longest stall .* longer than the control's/,
     );
     // A JPEG frame hides the marker's edges in its chroma blocks.
     await expect(
@@ -1806,13 +2033,25 @@ test.describe('frame evidence', () => {
     };
 
     const compositor = await runs('compositor');
-    const single = busyWindowProof(
-      compositor[0].tracked,
-      compositor[0].window,
-      {axis: 'y', control: compositor[0].control},
-    );
-    expect(single.verdict.failures.join('\n'), single.summary).toMatch(
-      /too little in this window to judge/,
+    // One run is too little to judge: its verdict says so, or, when the
+    // machine also starved its cast, the proof throws by name.
+    const single = (() => {
+      try {
+        const proof = busyWindowProof(
+          compositor[0].tracked,
+          compositor[0].window,
+          {axis: 'y', control: compositor[0].control},
+        );
+        return `${proof.verdict.failures.join('\n')} ${proof.summary}`;
+      } catch (error) {
+        if (!(error instanceof FrameStarvationError)) {
+          throw error;
+        }
+        return String(error);
+      }
+    })();
+    expect(single).toMatch(
+      /too little in this window to judge|FrameStarvationError: busyWindowProof/,
     );
     const pooled = pooledBusyProof(compositor, {axis: 'y'});
     testInfo.annotations.push({
@@ -2398,6 +2637,206 @@ test.describe('frame evidence', () => {
     expect(started.map(a => a.durationMs)).toEqual([600, 600]);
   });
 
+  // The page's listener for the end-of-run proofs below, on the anchored
+  // fixture. It is a capture listener on the document added after the
+  // recorder's, so it runs after the recorder's. It sets a mark the trace
+  // records, and a window that ends at that mark compares times on the
+  // trace's own clock. `layOutAtEnd` first forces a layout of the target:
+  // the control.
+  async function markEndListeners(page: Page) {
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __end: {stamp: number};
+        __layOutAtEnd: boolean;
+      };
+      w.__end = {stamp: 0};
+      w.__layOutAtEnd = false;
+      document.addEventListener(
+        'animationend',
+        event => {
+          const el = event.target as HTMLElement;
+          if (w.__layOutAtEnd) {
+            el.style.minWidth = '1px';
+            void el.offsetWidth;
+            el.style.minWidth = '';
+          }
+          performance.mark('harness-test-end-listeners-ran');
+          w.__end = {stamp: performance.timeOrigin + event.timeStamp};
+        },
+        true,
+      );
+    });
+  }
+
+  // The time of the last mark named `name` in a trace that kept its events.
+  function markIn(
+    trace: Awaited<ReturnType<typeof traceRendering>>,
+    name: string,
+  ): number {
+    const marks = (trace.mainThread ?? []).filter(e => e.name === name);
+    const mark = marks.at(-1);
+    if (mark == null) {
+      throw new Error(`the trace kept no ${name} mark`);
+    }
+    return mark.t;
+  }
+
+  test("a CSS animation's end inside a trace costs no Layout from the recorder, with an earlier run of its name cut short, and only the runs that ended are reported, each dated where its start puts its end", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'rendering traces are Chromium-only (README: engine limits)',
+    );
+    await page.route('http://anchored.test/', route =>
+      route.fulfill({contentType: 'text/html', body: ANCHORED}),
+    );
+    await page.goto('http://anchored.test/');
+    const pop = page.locator('#pop');
+    // The recorder runs, and its listeners are on the document by now.
+    await waitForRest(pop);
+    await page.addStyleTag({
+      content:
+        '@keyframes fade { from { opacity: 0.5 } to { opacity: 1 } } #pop.fade { animation: fade 300ms linear; }',
+    });
+    await markEndListeners(page);
+    const endOnce = async (layOutAtEnd: boolean) => {
+      await page.evaluate(layOut => {
+        const w = window as unknown as {
+          __end: {stamp: number};
+          __layOutAtEnd: boolean;
+        };
+        w.__end = {stamp: 0};
+        w.__layOutAtEnd = layOut;
+      }, layOutAtEnd);
+      const trace = await traceRendering(
+        page,
+        async () => {
+          await pop.evaluate(el => {
+            el.classList.add('fade');
+          });
+          await page.waitForFunction(
+            () =>
+              (window as unknown as {__end: {stamp: number}}).__end.stamp > 0,
+            undefined,
+            {polling: 50},
+          );
+        },
+        {keepEvents: true},
+      );
+      const {stamp} = await page.evaluate(
+        () => (window as unknown as {__end: {stamp: number}}).__end,
+      );
+      await pop.evaluate(el => {
+        el.classList.remove('fade');
+      });
+      // From a millisecond before the end event's coarse time stamp to the
+      // mark after the recorder's end listener.
+      return (
+        countBetween(
+          trace,
+          stamp - 1,
+          markIn(trace, 'harness-test-end-listeners-ran'),
+        ).Layout ?? 0
+      );
+    };
+    // An earlier run of the same name, cut short outside any trace, never
+    // finishes. It stays unfinished in the recorder's log, so each end below
+    // has another run of its name to read.
+    const watch = await watchAnimations(pop);
+    await pop.evaluate(el => {
+      el.classList.add('fade');
+    });
+    await waitForAnimation(pop);
+    await pop.evaluate(el => {
+      el.classList.remove('fade');
+    });
+    for (let run = 0; run < 3; run++) {
+      expect(await endOnce(false)).toBe(0);
+    }
+    // Only the three runs that ended are reported, each where its start puts
+    // its end. The run cut short is not reported as finished.
+    const ended = await watch.started();
+    expect(ended).toHaveLength(3);
+    for (const run of ended) {
+      expect(run.finishedAt).not.toBeNull();
+      expect(Math.abs((run.finishedAt ?? 0) - run.to)).toBeLessThan(1);
+    }
+    // Control: a layout forced in that span is counted.
+    expect(await endOnce(true)).toBeGreaterThan(0);
+  });
+
+  test('an end event that comes before its run finishes, inside a trace, costs no Layout, and the recorder dates the run from the start it stored once the trace ends', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'rendering traces are Chromium-only (README: engine limits)',
+    );
+    await page.route('http://anchored.test/', route =>
+      route.fulfill({contentType: 'text/html', body: ANCHORED}),
+    );
+    await page.goto('http://anchored.test/');
+    const pop = page.locator('#pop');
+    await waitForRest(pop);
+    await page.addStyleTag({
+      content:
+        '@keyframes fade { from { opacity: 0.5 } to { opacity: 1 } } #pop.fade { animation: fade 300ms linear; }',
+    });
+    await markEndListeners(page);
+    // Chromium can send a CSS run's end event a frame before the run
+    // finishes. A page that cancels the run at that end gets no finish event.
+    // The proof sends that end event itself, while the run plays, and then
+    // cancels the run. A style write first leaves style to restyle, as at a
+    // run's real end.
+    const early = async (layOutAtEnd: boolean) => {
+      const watch = await watchAnimations(pop);
+      await pop.evaluate(el => {
+        el.classList.add('fade');
+      });
+      await waitForAnimation(pop);
+      await page.evaluate(layOut => {
+        (window as unknown as {__layOutAtEnd: boolean}).__layOutAtEnd = layOut;
+      }, layOutAtEnd);
+      const trace = await traceRendering(
+        page,
+        () =>
+          pop.evaluate(el => {
+            performance.mark('harness-test-early-end');
+            el.style.minWidth = '1px';
+            el.dispatchEvent(
+              new AnimationEvent('animationend', {
+                animationName: 'fade',
+                elapsedTime: 0.1,
+              }),
+            );
+            el.style.minWidth = '';
+            el.classList.remove('fade');
+          }),
+        {keepEvents: true},
+      );
+      const layouts =
+        countBetween(
+          trace,
+          markIn(trace, 'harness-test-early-end'),
+          markIn(trace, 'harness-test-end-listeners-ran'),
+        ).Layout ?? 0;
+      return {layouts, watch};
+    };
+    const first = await early(false);
+    expect(first.layouts).toBe(0);
+    // The recorder kept that end, and dated the run once the trace ended,
+    // from the start it stored and the run's timing.
+    const runs = await first.watch.started();
+    expect(runs).toHaveLength(1);
+    expect(runs[0].finishedAt).not.toBeNull();
+    expect(Math.abs((runs[0].finishedAt ?? 0) - runs[0].to)).toBeLessThan(1);
+    // Control: a layout forced in that span is counted.
+    expect((await early(true)).layouts).toBeGreaterThan(0);
+  });
+
   test('a waitForRest awaited inside a traced body stands down too, so the trace counts no Layout from it', async ({
     page,
     browserName,
@@ -2966,7 +3405,7 @@ test.describe('wheel and pen input', () => {
     }
   });
 
-  test('a wheel burst reaches the page as one run with its whole delta and no gap past the 100 ms a proof allows within a wheel gesture, re-taken once when the runner stalls it', async ({
+  test('a wheel burst reaches the page as one run with its whole delta and no gap past the 100 ms a proof allows within a wheel gesture', async ({
     browser,
   }) => {
     const context = await browser.newContext({
@@ -2986,32 +3425,31 @@ test.describe('wheel and pen input', () => {
       await page.goto('http://wheel-burst.test/');
       const driver = await webInputDriver(page);
       test.skip(!driver.wheels, WHEEL_SKIP);
-      // A proof allows 100 ms between the steps of one wheel gesture: sent on
+      // A proof allows 100 ms between the steps of one wheel gesture. Sent on
       // its schedule, the run stays one gesture however long each step's
-      // round trip takes, and a runner stall past that bound is re-taken once.
-      await retakeOnWheelPacing(test.info(), async () => {
-        await page.evaluate(() => {
-          (window as unknown as {__deltas: number[]}).__deltas = [];
-        });
-        const {receivedSteps, receivedGapsMs} = await driver.wheelBurst({
-          x: 200,
-          y: 300,
-          steps: Array.from({length: 20}, () => ({dx: 40})),
-          maxGapMs: 100,
-        });
-        // Every pixel arrives, in steps of 40 px or, where the engine
-        // coalesced steps the page was still handling, their sums.
-        const deltas = await page.evaluate(
-          () => (window as unknown as {__deltas: number[]}).__deltas,
-        );
-        expect(deltas.reduce((sum, d) => sum + d, 0)).toBe(800);
-        expect(
-          deltas.every(d => d > 0 && d % 40 === 0),
-          String(deltas),
-        ).toBe(true);
-        expect(receivedSteps).toBe(deltas.length);
-        expect(receivedGapsMs).toHaveLength(receivedSteps - 1);
+      // round trip takes. A runner stall past that bound fails as
+      // WheelPacingError.
+      await page.evaluate(() => {
+        (window as unknown as {__deltas: number[]}).__deltas = [];
       });
+      const {receivedSteps, receivedGapsMs} = await driver.wheelBurst({
+        x: 200,
+        y: 300,
+        steps: Array.from({length: 20}, () => ({dx: 40})),
+        maxGapMs: 100,
+      });
+      // Every pixel arrives, in steps of 40 px or, where the engine
+      // coalesced steps the page was still handling, their sums.
+      const deltas = await page.evaluate(
+        () => (window as unknown as {__deltas: number[]}).__deltas,
+      );
+      expect(deltas.reduce((sum, d) => sum + d, 0)).toBe(800);
+      expect(
+        deltas.every(d => d > 0 && d % 40 === 0),
+        String(deltas),
+      ).toBe(true);
+      expect(receivedSteps).toBe(deltas.length);
+      expect(receivedGapsMs).toHaveLength(receivedSteps - 1);
     } finally {
       await context.close();
     }
@@ -3020,9 +3458,8 @@ test.describe('wheel and pen input', () => {
   test('a wheel burst sent slower than its maxGapMs throws WheelPacingError, in both engines', async ({
     browser,
   }) => {
-    // The negative control for the pacing check the re-take relies on: steps
-    // 180 ms apart, on a page that handles each at once, against a 100 ms
-    // bound.
+    // The negative control for the pacing check: steps 180 ms apart, on a page
+    // that handles each at once, against a 100 ms bound.
     const context = await browser.newContext({
       viewport: {width: 402, height: 714},
       isMobile: false,
@@ -3092,7 +3529,7 @@ test.describe('wheel and pen input', () => {
     }
   });
 
-  test('a page whose wheel listener holds its main thread splits a burst itself: never a runner stall, never re-taken', async ({
+  test('a page whose wheel listener holds its main thread splits a burst itself: never a runner stall', async ({
     browser,
     browserName,
   }) => {
@@ -3113,25 +3550,18 @@ test.describe('wheel and pen input', () => {
       await page.goto('http://wheel-stalling-page.test/');
       const driver = await webInputDriver(page);
       test.skip(!driver.wheels, WHEEL_SKIP);
-      const testInfo = {
-        annotations: [] as {type: string; description?: string}[],
-      };
-      const attempts: number[] = [];
-      const outcome = await retakeOnWheelPacing(testInfo, async n => {
-        attempts.push(n);
-        return driver.wheelBurst({
+      const outcome = await driver
+        .wheelBurst({
           x: 200,
           y: 300,
           steps: Array.from({length: 4}, () => ({dx: 10})),
           maxGapMs: 100,
-        });
-      }).then(
-        () => 'resolved',
-        (error: unknown) => error,
-      );
+        })
+        .then(
+          () => 'resolved',
+          (error: unknown) => error,
+        );
       expect(outcome).not.toBeInstanceOf(WheelPacingError);
-      expect(attempts).toEqual([1]);
-      expect(testInfo.annotations).toEqual([]);
       if (browserName === 'webkit') {
         // WebKit dispatches the next step only once the page is free, so the
         // page's stall widens the gaps, and the error names it.
@@ -3143,7 +3573,7 @@ test.describe('wheel and pen input', () => {
     }
   });
 
-  test('a page whose wheel listener stops the step and holds its main thread still splits a burst itself: never re-taken', async ({
+  test('a page whose wheel listener stops the step and holds its main thread still splits a burst itself', async ({
     browser,
     browserName,
   }) => {
@@ -3165,24 +3595,18 @@ test.describe('wheel and pen input', () => {
       await page.goto('http://wheel-stopping-page.test/');
       const driver = await webInputDriver(page);
       test.skip(!driver.wheels, WHEEL_SKIP);
-      const testInfo = {
-        annotations: [] as {type: string; description?: string}[],
-      };
-      const attempts: number[] = [];
-      const outcome = await retakeOnWheelPacing(testInfo, async n => {
-        attempts.push(n);
-        return driver.wheelBurst({
+      const outcome = await driver
+        .wheelBurst({
           x: 200,
           y: 300,
           steps: Array.from({length: 4}, () => ({dx: 10})),
           maxGapMs: 100,
-        });
-      }).then(
-        () => 'resolved',
-        (error: unknown) => error,
-      );
+        })
+        .then(
+          () => 'resolved',
+          (error: unknown) => error,
+        );
       expect(outcome).not.toBeInstanceOf(WheelPacingError);
-      expect(attempts).toEqual([1]);
       if (browserName === 'webkit') {
         // The queued task marks the stopped step's handling, so the stall is
         // the page's.
@@ -4571,6 +4995,217 @@ test.describe('animation state', () => {
     expect(settledAt).toBeGreaterThanOrEqual(running.to);
     const transform = await box.evaluate(el => getComputedStyle(el).transform);
     expect(parseTransform(transform).translateY).toBeCloseTo(100, 1);
+  });
+
+  test('settlesAt waits for the value, which can come after every animation has ended', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // No animation runs: a page timer sets the value 300 ms from now.
+    await box.evaluate(el => {
+      setTimeout(() => {
+        (el as HTMLElement).style.opacity = '0.25';
+      }, 300);
+    });
+    await settlesAt(box, 'opacity', '0.25');
+    expect(await box.evaluate(el => getComputedStyle(el).opacity)).toBe('0.25');
+  });
+
+  test('settlesAt resolves only once every animation inside the element has finished', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // The box fades for 300 ms, and a child inside it slides for 2 s. The
+    // value comes first, and the wait ends with the slide.
+    await box.evaluate(el => {
+      const child = document.createElement('div');
+      el.append(child);
+      child.animate(
+        [{transform: 'translateX(0px)'}, {transform: 'translateX(40px)'}],
+        {duration: 2000},
+      );
+      const target = el as HTMLElement;
+      target.style.transition = 'opacity 300ms linear';
+      void target.offsetWidth;
+      target.style.opacity = '0.5';
+    });
+    await settlesAt(box, 'opacity', '0.5');
+    const unfinished = await box.evaluate(
+      el =>
+        el
+          .getAnimations({subtree: true})
+          .filter(animation => animation.playState !== 'finished').length,
+    );
+    expect(unfinished).toBe(0);
+  });
+
+  test("settlesAt keeps checking while a frozen timer gate holds the page's frames", async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await installTimerGate(page);
+    await freezeTimers(page);
+    // Waits for real frames, which the frozen gate does not hold.
+    const realFrames = async (count: number) =>
+      page.evaluate(
+        async n =>
+          new Promise<void>(resolve => {
+            const {frame} = (
+              window as unknown as {
+                __harnessTimerGate: {frame: typeof requestAnimationFrame};
+              }
+            ).__harnessTimerGate;
+            let left = n;
+            const tick = () => {
+              left -= 1;
+              if (left <= 0) {
+                resolve();
+              } else {
+                frame(tick);
+              }
+            };
+            frame(tick);
+          }),
+        count,
+      );
+    let outcome: unknown = 'waiting';
+    const wait = settlesAt(box, 'opacity', '0.75').then(
+      () => {
+        outcome = 'settled';
+      },
+      (error: unknown) => {
+        outcome = error;
+      },
+    );
+    await realFrames(2);
+    await box.evaluate(el => {
+      (el as HTMLElement).style.opacity = '0.75';
+    });
+    // The wait answers on the first real frame after the change. That
+    // answer comes back before the answer to five more frames.
+    await realFrames(5);
+    expect(outcome).toBe('settled');
+    await wait;
+    await thawTimers(page);
+  });
+
+  test('settlesAt names the property, the last value and what still runs at its deadline', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    const message = async (wait: Promise<void>) =>
+      wait.then(
+        () => 'settled',
+        (error: unknown) => (error as Error).message,
+      );
+    // The value never comes. A starved runner can leave the page unwatched
+    // before the deadline. Then FrameStarvationError carries the same names,
+    // so either error matches.
+    expect(
+      await message(settlesAt(box, 'opacity', '0.3', {timeout: 300})),
+    ).toMatch(
+      /^settlesAt: .*opacity read "1" \(not "0\.3"\); no animation under it was unfinished/,
+    );
+    // The value is there, but a child slides forever, so the box never
+    // settles.
+    await box.evaluate(el => {
+      const child = document.createElement('div');
+      child.id = 'slider';
+      el.append(child);
+      child.animate(
+        [{transform: 'translateX(0px)'}, {transform: 'translateX(40px)'}],
+        {duration: 400, iterations: Infinity},
+      );
+    });
+    expect(
+      await message(settlesAt(box, 'opacity', '1', {timeout: 300})),
+    ).toMatch(
+      /^settlesAt: .*opacity read "1"; unfinished under it: Animation on div#slider, running at \d+ of forever/,
+    );
+  });
+
+  test('settlesAt on a page starved of frames fails by name, with what it last read', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // Each frame now comes 1,000 ms after the one before, as on a starved
+    // machine.
+    await page.evaluate(() => {
+      const frame = window.requestAnimationFrame.bind(window);
+      window.requestAnimationFrame = callback => {
+        setTimeout(() => frame(callback), 1000);
+        return 0;
+      };
+    });
+    const outcome = await settlesAt(box, 'opacity', '0.3', {
+      timeout: 1500,
+    }).then(
+      () => 'settled',
+      (error: unknown) => error,
+    );
+    expect(outcome).toBeInstanceOf(FrameStarvationError);
+    const {numbers} = outcome as FrameStarvationError;
+    expect(numbers.frames).toBe(0);
+    expect(numbers.longestGapMs).toBeGreaterThan(FRAME_STARVATION_MS);
+    expect((outcome as Error).message).toMatch(
+      /^settlesAt: the page drew 0 frames while it looked for opacity to settle at 0\.3 in the \d+ ms up to its deadline \(opacity read "1" \(not "0\.3"\)/,
+    );
+  });
+
+  test('settlesAt does not name a stall that starts after its deadline as starvation', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    const stallMs = 500;
+    // Frames come on pace until the wait's deadline, 300 ms after its first
+    // frame request. The first frame after that then holds the main thread
+    // for 500 ms before the wait's check runs.
+    await page.evaluate(
+      ({timeoutMs, holdMs}) => {
+        const frame = window.requestAnimationFrame.bind(window);
+        let firstAt: number | null = null;
+        let stalled = false;
+        window.requestAnimationFrame = callback => {
+          firstAt ??= performance.now();
+          const stallAfter = firstAt + timeoutMs;
+          return frame(time => {
+            if (!stalled && performance.now() > stallAfter) {
+              stalled = true;
+              const end = performance.now() + holdMs;
+              while (performance.now() < end) {
+                // the page's main thread is busy
+              }
+            }
+            callback(time);
+          });
+        };
+      },
+      {timeoutMs: 300, holdMs: stallMs},
+    );
+    const outcome = await settlesAt(box, 'opacity', '0.3', {
+      timeout: 300,
+    }).then(
+      () => 'settled',
+      (error: unknown) => error,
+    );
+    // A starved runner can also leave the page unwatched before the
+    // deadline. That run proves nothing, so it fails by name.
+    if (
+      outcome instanceof FrameStarvationError &&
+      outcome.numbers.longestGapMs < stallMs
+    ) {
+      throw outcome;
+    }
+    expect(outcome).not.toBeInstanceOf(FrameStarvationError);
+    expect((outcome as Error).message).toMatch(
+      /^settlesAt: not settled \d+ ms after it began: opacity read "1" \(not "0\.3"\)/,
+    );
   });
 
   test("waitForAnimation's progress starts after a transition's delay", async ({
