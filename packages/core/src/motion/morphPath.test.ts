@@ -352,6 +352,10 @@ describe('the presentations that move onto the morph are the same rect at every 
     );
     const back = path.restartFrom!(onScreen, 0.5, 'rest');
     const away = path.restartFrom!(onScreen, 0.5, 'source');
+    // An opacity draws clamped to 0 through 1. Past its end, a turn-around
+    // toward the source takes the path below 0, where Popover's curves stop
+    // at 0. Both draw 0, so the proof compares them as drawn.
+    const drawn = (opacity: number) => Math.min(1, Math.max(0, opacity));
     for (const p of [0, 0.25, 0.5, 0.75, 1, 1.05]) {
       for (const [morph, live] of [
         [back, toRest],
@@ -365,7 +369,10 @@ describe('the presentations that move onto the morph are the same rect at every 
           }),
           0.5,
         );
-        expect(morph.opacityAt!(p)).toBeCloseTo(live.opacity.at(p), 9);
+        expect(drawn(morph.opacityAt!(p))).toBeCloseTo(
+          drawn(live.opacity.at(p)),
+          9,
+        );
       }
     }
   });
