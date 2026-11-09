@@ -429,10 +429,32 @@ function isTransparent(color: string): boolean {
 /** The element autoscroll writes to and its visible band in the viewport. */
 interface Scroller {
   readonly element: Element;
-  readonly top: number;
-  readonly bottom: number;
+  top: number;
+  bottom: number;
   readonly max: number;
   position: number;
+}
+
+/** A scroller around the list's own, and its offset as last read. */
+interface OuterScroller {
+  readonly element: Element;
+  position: number;
+}
+
+/**
+ * The scrollers around `inner`, out to the page. Their scrolls move the list
+ * and `inner` on screen, but scroll neither. Empty when `inner` is the page.
+ */
+function outerScrollersOf(inner: Element): OuterScroller[] {
+  const doc = inner.ownerDocument;
+  const page = doc.scrollingElement ?? doc.documentElement;
+  const outer: OuterScroller[] = [];
+  let element = inner;
+  while (element !== page && element.parentElement != null) {
+    element = nearestScroller(element);
+    outer.push({element, position: element.scrollTop});
+  }
+  return outer;
 }
 
 function scrollerOf(list: HTMLElement): Scroller {
@@ -479,7 +501,12 @@ interface DragSession {
   /** The finger's distance from the dragged row's top. */
   readonly grabOffset: number;
   readonly scroller: Scroller;
-  /** How far autoscroll has moved the content since the begin. */
+  /** The scrollers around the scroller, out to the page. */
+  readonly outer: ReadonlyArray<OuterScroller>;
+  /**
+   * How far the list has moved up on screen since the begin. Autoscroll moves
+   * it, and so does any scroll of its scroller or of one around it.
+   */
   scrolled: number;
   lastY: number;
   /** The edge autoscroll's timer, on UIKit's 20 ms clock. */
@@ -1176,6 +1203,7 @@ export class ListReorderController implements ListReorderSession {
     const shown = shownY(row, at);
     const origin = row.getBoundingClientRect().top - shown - tops[dragged];
     const scroller = scrollerOf(list);
+    const outer = outerScrollersOf(scroller.element);
     // Every row gets an identity offset for the session. Otherwise a row's
     // first offset changes how it paints in the middle of the drag, with a
     // layout and a paint. With one in place, neither a move nor a slide lays
@@ -1250,6 +1278,7 @@ export class ListReorderController implements ListReorderSession {
       wrote: true,
       foldArmed: false,
       stopScrollWatch: () => {},
+      outer,
     };
     this.session = session;
     session.stopScrollWatch = this.watchScroll(session);
@@ -1404,15 +1433,25 @@ export class ListReorderController implements ListReorderSession {
     if (view == null) {
       return () => {};
     }
-    const {element} = session.scroller;
+    const page = doc.scrollingElement ?? doc.documentElement;
     // The page's own scroll is reported on the document.
-    const target =
-      element === (doc.scrollingElement ?? doc.documentElement) ? doc : element;
+    const targetOf = (element: Element) => (element === page ? doc : element);
+    const own = targetOf(session.scroller.element);
+    // A scroller around the list's own moves the list on screen too, as when
+    // a wheel at the end of a box scrolls the page.
+    const targets = new Set<EventTarget>([
+      own,
+      ...session.outer.map(around => targetOf(around.element)),
+    ]);
     return subscribeInput(view, 'scroll', event => {
-      if (event.target !== target || this.session !== session) {
+      if (
+        event.target == null ||
+        !targets.has(event.target) ||
+        this.session !== session
+      ) {
         return;
       }
-      if (session.ownScroll) {
+      if (event.target === own && session.ownScroll) {
         session.ownScroll = false;
         return;
       }
@@ -1453,7 +1492,7 @@ export class ListReorderController implements ListReorderSession {
   }
 
   /**
-   * Reads the scroller's offset once and adds what a scroll the engine did
+   * Reads each scroller's offset once and adds what a scroll the engine did
    * not cause moved to the drag. It runs before any write in its frame or
    * task.
    */
@@ -1463,6 +1502,15 @@ export class ListReorderController implements ListReorderSession {
     const position = scroller.element.scrollTop;
     session.scrolled += position - scroller.position;
     scroller.position = position;
+    for (const around of session.outer) {
+      const offset = around.element.scrollTop;
+      const moved = offset - around.position;
+      around.position = offset;
+      // It moves the list and its scroller's band up on screen alike.
+      session.scrolled += moved;
+      scroller.top -= moved;
+      scroller.bottom -= moved;
+    }
   }
 
   private stopAutoscroll(session: DragSession): void {

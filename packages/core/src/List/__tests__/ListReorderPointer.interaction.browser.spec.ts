@@ -13,7 +13,9 @@
  *   scrolls in, and stops at the end. A wheel during a drag scrolls the
  *   page, and the preview and the drop stay under the pointer. Each scrolled
  *   frame reads the scroll offset once at most and forces no layout. A drop
- *   measures the rows in one pass, before its writes, whatever their count. The
+ *   measures the rows in one pass, before its writes, whatever their count. A
+ *   wheel at a box's end scrolls the page or a box around it, and the drop
+ *   still lands under the pointer. The
  *   preview and the insertion line run along a row set in from the list's
  *   start, in either direction. A checked radio in the dragged row stays
  *   checked through the drag
@@ -522,6 +524,116 @@ test('a row held near the bottom of a box the list scrolls in scrolls that box, 
     await story.close();
   }
 });
+
+for (const outer of ['the page', 'the box around it'] as const) {
+  test(`a wheel at the end of a box the list scrolls in scrolls ${outer} during a drag, and the drop lands under the pointer`, async ({
+    browser,
+  }) => {
+    const story = await openFinePointerStory(browser, LONG_STORY);
+    try {
+      const {page} = story;
+      const wrapped = outer === 'the box around it';
+      // The list scrolls in a 400 px box, scrolled to its end. What is around
+      // it can scroll too: the page, or a box that is the box's direct parent.
+      await page.evaluate(inBox => {
+        const root = document.querySelector<HTMLElement>('#storybook-root');
+        if (root == null) {
+          return;
+        }
+        root.style.blockSize = '400px';
+        root.style.overflowY = 'auto';
+        if (inBox) {
+          const around = document.createElement('div');
+          around.id = 'reorder-around';
+          around.style.blockSize = '600px';
+          around.style.overflowY = 'auto';
+          const room = document.createElement('div');
+          room.style.blockSize = '2000px';
+          root.before(around);
+          around.append(root, room);
+        } else {
+          document.body.style.paddingBlockEnd = '2000px';
+        }
+        root.scrollTop = root.scrollHeight;
+      }, wrapped);
+      const order = await labels(page);
+      const target = order[order.length - 4];
+      const {at, rowHeight} = await handleOf(page, target);
+      await page.mouse.move(at.x, at.y);
+      await page.mouse.down();
+      await page.mouse.move(at.x, at.y - rowHeight * 1.5, {steps: 8});
+      await expect(page.locator('[data-astryx-reorder-preview]')).toHaveCount(
+        1,
+      );
+      // Two rows: what is around the box moves it up, and the pointer stays
+      // over it.
+      await page.mouse.wheel(0, rowHeight * 2);
+      // Rendered frames, not time: the wheel's scroll would start within them.
+      await page.evaluate(
+        async () =>
+          new Promise<void>(resolve => {
+            let frames = 0;
+            const tick = () => {
+              frames += 1;
+              if (frames >= 30) {
+                resolve();
+              } else {
+                requestAnimationFrame(tick);
+              }
+            };
+            requestAnimationFrame(tick);
+          }),
+      );
+      // The box is at its end, so the wheel scrolls what is around it, as
+      // browsers do.
+      expect(
+        await page.evaluate(
+          inBox =>
+            inBox
+              ? (document.getElementById('reorder-around')?.scrollTop ?? 0)
+              : window.scrollY,
+          wrapped,
+        ),
+      ).toBeGreaterThan(rowHeight);
+      const pointerY = at.y - rowHeight * 1.5;
+      // The pointer is still over the box.
+      const box = await page.locator('#storybook-root').boundingBox();
+      if (box == null) {
+        throw new Error('no box');
+      }
+      expect(box.y + box.height).toBeGreaterThan(pointerY);
+      // The preview stays under the pointer as the box moves.
+      const preview = await page
+        .locator('[data-astryx-reorder-preview]')
+        .boundingBox();
+      if (preview == null) {
+        throw new Error('no preview');
+      }
+      expect(preview.y).toBeLessThanOrEqual(pointerY);
+      expect(preview.y + preview.height).toBeGreaterThanOrEqual(pointerY);
+      await page.mouse.up();
+      // The row lands under the pointer.
+      await expect
+        .poll(
+          async () =>
+            page.evaluate(
+              ({label, y}) => {
+                const row = Array.from(
+                  document.querySelectorAll('#storybook-root ul > li'),
+                ).find(element => element.textContent?.trim() === label);
+                const box = row?.getBoundingClientRect();
+                return box != null && box.top <= y && y <= box.bottom;
+              },
+              {label: target, y: pointerY},
+            ),
+          {message: 'the dropped row lands under the pointer', timeout: 600},
+        )
+        .toBe(true);
+    } finally {
+      await story.close();
+    }
+  });
+}
 
 test('a checked radio in the dragged row stays checked through the drag and a drop in place', async ({
   browser,
