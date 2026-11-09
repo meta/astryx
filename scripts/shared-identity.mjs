@@ -6,9 +6,9 @@
  * @output The places where a module keeps cross-module identity in module
  *   scope instead of a registered shared key (spec:AST-110 FR3): a
  *   module-local symbol that keys an exported type or that an exported
- *   function reads or writes, and a module-scope registry that an exported
- *   register, subscribe, read or identity function uses, or that is keyed by
- *   a document or window
+ *   function reaches, and module-scope state (a `let`, or a collection that
+ *   changes) that an exported function reaches, directly or through the
+ *   module's own functions, or that is keyed by a document or window
  * @position Read by shared-identity.test.mjs; no Vitest import
  */
 
@@ -30,9 +30,6 @@ export const SOURCE_ROOTS = ['core', 'lab', 'charts', 'richtext', 'vega'].map(
 const SOURCE_FILE = /\.tsx?$/;
 const NOT_SHIPPED =
   /\.(?:test|spec|stories|story|d|bench)\.tsx?$|(?:^|\/)__(?:tests|fixtures|mocks)__\//;
-/** An exported function whose name says it registers, subscribes or recognizes. */
-const IDENTITY_FUNCTION =
-  /^(?:register|unregister|subscribe|is|has|get|read|attach|set|create|use)[A-Z_]/;
 const COLLECTION = /^(?:Map|Set|WeakMap|WeakSet)$/;
 const DOCUMENT_KEY = /^(?:Document|Window)$/;
 
@@ -66,9 +63,12 @@ export function findInSource(file, code) {
   const source = ts.createSourceFile(file, code, ts.ScriptTarget.Latest, true);
   /** @type {Map<string, 'symbol'|'registry'|'document-registry'>} */
   const candidates = new Map();
-  /** @type {Array<{node: import('typescript').Node, exported: boolean, isType: boolean, name: string}>} */
-  const scopes = [];
-  const isExported = node =>
+  /** Top-level functions, classes and types, by name. */
+  /** @type {Map<string, {node: import('typescript').Node, isType: boolean}>} */
+  const scopes = new Map();
+  /** Names the module exports, from modifiers, `export {…}` lists and defaults. */
+  const exported = new Set();
+  const hasExport = node =>
     (ts.getCombinedModifierFlags(node) & ts.ModifierFlags.Export) !== 0;
 
   for (const statement of source.statements) {
@@ -80,6 +80,7 @@ export function findInSource(file, code) {
       for (const declaration of statement.declarationList.declarations) {
         if (!ts.isIdentifier(declaration.name)) continue;
         const name = declaration.name.text;
+        if (hasExport(statement)) exported.add(name);
         const init = declaration.initializer;
         const typeText = declaration.type?.getText(source) ?? '';
         if (
@@ -100,7 +101,10 @@ export function findInSource(file, code) {
                 code,
               ));
           if (COLLECTION.test(ctor) && !isConstant) {
-            const keyType = init.typeArguments?.[0]?.getText(source) ?? '';
+            const keyType =
+              init.typeArguments?.[0]?.getText(source) ??
+              typeText.match(/^\w+<\s*(\w+)/)?.[1] ??
+              '';
             candidates.set(
               name,
               DOCUMENT_KEY.test(keyType) ? 'document-registry' : 'registry',
@@ -113,89 +117,116 @@ export function findInSource(file, code) {
           init &&
           (ts.isArrowFunction(init) || ts.isFunctionExpression(init))
         ) {
-          scopes.push({
-            node: init,
-            exported: isExported(statement),
-            isType: false,
-            name,
-          });
+          scopes.set(name, {node: init, isType: false});
         }
       }
-    } else if (ts.isFunctionDeclaration(statement) && statement.name) {
-      scopes.push({
-        node: statement,
-        exported: isExported(statement),
-        isType: false,
-        name: statement.name.text,
-      });
+    } else if (
+      (ts.isFunctionDeclaration(statement) ||
+        ts.isClassDeclaration(statement)) &&
+      statement.name
+    ) {
+      scopes.set(statement.name.text, {node: statement, isType: false});
+      if (hasExport(statement)) exported.add(statement.name.text);
     } else if (
       ts.isInterfaceDeclaration(statement) ||
       ts.isTypeAliasDeclaration(statement)
     ) {
-      scopes.push({
-        node: statement,
-        exported: isExported(statement),
-        isType: true,
-        name: statement.name.text,
-      });
-    } else if (ts.isClassDeclaration(statement) && statement.name) {
-      scopes.push({
-        node: statement,
-        exported: isExported(statement),
-        isType: false,
-        name: statement.name.text,
-      });
+      scopes.set(statement.name.text, {node: statement, isType: true});
+      if (hasExport(statement)) exported.add(statement.name.text);
+    } else if (
+      ts.isExportDeclaration(statement) &&
+      !statement.moduleSpecifier &&
+      statement.exportClause &&
+      ts.isNamedExports(statement.exportClause)
+    ) {
+      for (const element of statement.exportClause.elements) {
+        exported.add((element.propertyName ?? element.name).text);
+      }
+    } else if (
+      ts.isExportAssignment(statement) &&
+      ts.isIdentifier(statement.expression)
+    ) {
+      exported.add(statement.expression.text);
     }
   }
   if (candidates.size === 0) return [];
 
-  /** Identifiers a node uses, and whether each is a computed key in a type. */
+  /**
+   * The candidates a node uses (and whether each is a computed key in a
+   * type), and the top-level scopes it refers to.
+   */
   const usesIn = node => {
-    /** @type {Map<string, boolean>} name -> used as a computed type key */
+    /** @type {Map<string, boolean>} */
     const used = new Map();
+    const refers = new Set();
     const visit = child => {
-      if (ts.isIdentifier(child) && candidates.has(child.text)) {
-        const parent = child.parent;
-        const asTypeKey =
-          parent &&
-          ts.isComputedPropertyName(parent) &&
-          (ts.isPropertySignature(parent.parent) ||
-            ts.isMethodSignature(parent.parent));
-        used.set(child.text, Boolean(used.get(child.text) || asTypeKey));
+      if (ts.isIdentifier(child)) {
+        if (candidates.has(child.text)) {
+          const parent = child.parent;
+          const asTypeKey =
+            parent &&
+            ts.isComputedPropertyName(parent) &&
+            (ts.isPropertySignature(parent.parent) ||
+              ts.isMethodSignature(parent.parent));
+          used.set(child.text, Boolean(used.get(child.text) || asTypeKey));
+        }
+        if (scopes.has(child.text)) refers.add(child.text);
       }
       ts.forEachChild(child, visit);
     };
     visit(node);
-    return used;
+    return {used, refers};
   };
+  const uses = new Map(
+    [...scopes].map(([name, scope]) => [name, usesIn(scope.node)]),
+  );
 
   /** @type {Map<string, string>} name -> why it crosses modules */
   const found = new Map();
-  for (const scope of scopes) {
-    if (!scope.exported) continue;
-    for (const [name, asTypeKey] of usesIn(scope.node)) {
-      const kind = candidates.get(name);
-      if (found.has(name)) continue;
-      if (kind === 'symbol') {
-        if (scope.isType && asTypeKey) {
-          found.set(name, `keys the exported type ${scope.name}`);
-        } else if (!scope.isType) {
-          found.set(name, `read or written by the exported ${scope.name}`);
+  for (const root of [...exported].sort()) {
+    const scope = scopes.get(root);
+    if (!scope) continue;
+    if (scope.isType) {
+      for (const [name, asTypeKey] of uses.get(root).used) {
+        if (
+          candidates.get(name) === 'symbol' &&
+          asTypeKey &&
+          !found.has(name)
+        ) {
+          found.set(name, `keys the exported type ${root}`);
         }
-      } else if (!scope.isType) {
-        if (kind === 'document-registry') {
-          found.set(
-            name,
-            `a per-document store the exported ${scope.name} uses`,
-          );
-        } else if (IDENTITY_FUNCTION.test(scope.name)) {
-          found.set(name, `a registry the exported ${scope.name} uses`);
+      }
+      continue;
+    }
+    // Everything the exported function reaches through the module's own
+    // functions acts for it.
+    const reached = new Set([root]);
+    const queue = [root];
+    while (queue.length) {
+      const next = queue.pop();
+      for (const name of uses.get(next)?.refers ?? []) {
+        if (!reached.has(name) && !scopes.get(name).isType) {
+          reached.add(name);
+          queue.push(name);
         }
       }
     }
+    for (const name of reached) {
+      for (const used of uses.get(name).used.keys()) {
+        if (found.has(used)) continue;
+        found.set(
+          used,
+          candidates.get(used) === 'document-registry'
+            ? `a per-document store the exported ${root} uses`
+            : candidates.get(used) === 'symbol'
+              ? `read or written by the exported ${root}`
+              : `module state the exported ${root} uses`,
+        );
+      }
+    }
   }
-  // A per-document store counts even when only module-private functions use it:
-  // the components of the package and of a copy share the document.
+  // A per-document store counts even when no export reaches it: the
+  // components of the package and of a copy share the document.
   for (const [name, kind] of candidates) {
     if (kind === 'document-registry' && !found.has(name)) {
       found.set(name, 'a per-document store in module scope');
