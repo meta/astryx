@@ -201,6 +201,9 @@ const GESTURE_USERS = new Set([
   // ButtonGroup: a finger's or a pen's press, tracked across its buttons
   // under the touch presentation.
   'ButtonGroup',
+  // ToggleButton: through ToggleButtonGroup, whose toggles' press is tracked
+  // across them for a finger and a pen under the touch presentation.
+  'ToggleButton',
   // Through AlertDialog: Tokenizer's bottom sheet confirms with an alert, and
   // PowerSearch and Table's filtering render a Tokenizer. Both also reach
   // TimeInput's wheels: PowerSearch's edit popover and Table's filtering.
@@ -209,6 +212,9 @@ const GESTURE_USERS = new Set([
   'Tokenizer',
   // Slider's thumb.
   'Slider',
+  // Resizable: its drag tracks the release velocity that the lift's close and
+  // the handle's spring-back start from.
+  'Resizable',
   // Switch: its press tracking and its drag, for every pointer.
   'Switch',
   // SegmentedControl: its press tracking and its drag, for every pointer.

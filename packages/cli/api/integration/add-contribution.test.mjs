@@ -14,6 +14,7 @@ import {
 import {iconNewSet} from '../icon/new-set/new-set.mjs';
 import {validateLocalIntegration} from './validate-integration.mjs';
 import {NAMESPACE_DOCS_CLI} from '../../foundation/integrations/cli-requirement.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
@@ -50,7 +51,7 @@ function setupBare({files, includeFiles = true} = {}) {
 }
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-add-contrib-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-add-contrib-'));
 });
 
 afterEach(() => {

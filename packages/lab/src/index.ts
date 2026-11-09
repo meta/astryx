@@ -94,12 +94,22 @@ export {
   type TransferListSelectorProps,
 } from './TransferList';
 
+// LineClamp — clamp arbitrary content to N lines (facebook/astryx#4180)
+export {LineClamp, type LineClampProps} from './LineClamp';
+
 // Chat — experimental reasoning display
 export {
   ChatReasoning,
   type ChatReasoningProps,
 } from './ChatReasoning/ChatReasoning';
 export * from './Chat';
+
+// DialogHeroHeader — hero-style Dialog header (meta/astryx#4182)
+export {
+  DialogHeroHeader,
+  type DialogHeroHeaderProps,
+  type DialogHeroHeaderMediaMode,
+} from './DialogHeroHeader';
 
 // Tour — guided product-tour / NUX walkthrough (meta/astryx#4239)
 export {
@@ -341,6 +351,14 @@ export {
 
 // PageControl: UIPageControl's row of page indicators.
 export {PageControl, type PageControlProps} from './PageControl';
+
+// TabBar: the floating bottom tab bar of iOS 26's UITabBarController.
+export {
+  TabBar,
+  TabBarItem,
+  type TabBarItemProps,
+  type TabBarProps,
+} from './TabBar';
 
 // RichTextEditor (RFC meta/astryx#3899) moved out of @astryxdesign/lab into
 // its own package, @astryxdesign/richtext. Import it from there:
