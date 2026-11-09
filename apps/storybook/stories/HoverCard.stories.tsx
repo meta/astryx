@@ -217,6 +217,28 @@ export const TextNodeMultiple: Story = {
 };
 
 /**
+ * A labelled card on a text trigger. The trigger is a role-less span, so it
+ * names the open card through aria-controls and carries no aria-haspopup.
+ */
+export const LabelledTextTrigger: Story = {
+  render: () => (
+    <div style={{padding: 100}}>
+      <p>
+        This feature was created by{' '}
+        <HoverCard
+          content={<ProfileCard />}
+          label="Jane Doe profile"
+          placement="below"
+          isOpen>
+          Jane Doe
+        </HoverCard>{' '}
+        and shipped last week.
+      </p>
+    </div>
+  ),
+};
+
+/**
  * Touch has no hover, so a tap decides instead. A tap-opened card is dismissed
  * by a tap outside it, and a tap on the card's own content leaves it open.
  */
