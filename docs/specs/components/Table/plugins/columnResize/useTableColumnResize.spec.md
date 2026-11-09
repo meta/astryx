@@ -59,7 +59,8 @@ Both are defects to correct there, not variations this record allows.
   promised. No public API, prop, export, or target is added or changed. One
   accessibility correction changes the announced range: a column with no
   maximum width announces a stand-in maximum and its value in words (AR7),
-  where it announced no maximum, so ARIA's default of 100 applied.
+  where it announced no maximum, so assistive technology fell back to a
+  maximum of 100.
 - Migration decision: none. No consumer edit and no codemod.
 
 This specification-only change carries no package Changeset. The implementation
