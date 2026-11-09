@@ -59,8 +59,13 @@ for (const {width, dir, colorScheme} of [
       );
     const starts = geometry.map(item => item.textStart);
     expect(Math.max(...starts) - Math.min(...starts)).toBeLessThanOrEqual(1);
+    // The list follows the page direction, but Markdown gives each item the
+    // direction of its own text, so these English rows stay left-to-right.
+    expect(
+      await migrations.evaluate(list => getComputedStyle(list).direction),
+    ).toBe(dir);
     for (const item of geometry) {
-      expect(item.direction).toBe(dir);
+      expect(item.direction).toBe('ltr');
       expect(item.markerHeight).toBeLessThanOrEqual(item.lineHeight + 1);
       expect(item.markerScrollWidth).toBeLessThanOrEqual(item.markerWidth + 1);
       expect(item.gap).toBeGreaterThan(0);
@@ -89,6 +94,7 @@ for (const {width, dir, colorScheme} of [
           const rtl = getComputedStyle(item).direction === 'rtl';
           return {
             text: (marker.textContent ?? '').trim(),
+            color: getComputedStyle(dot).backgroundColor,
             width: dotBox.width,
             height: dotBox.height,
             isBeforeContent: rtl
@@ -101,6 +107,8 @@ for (const {width, dir, colorScheme} of [
     for (const bullet of bullets) {
       expect(bullet).not.toBeNull();
       expect(bullet?.text).toBe('');
+      // A transparent dot is an invisible bullet.
+      expect(bullet?.color).not.toMatch(/^(transparent|rgba\(.*,\s*0\))$/);
       expect(Math.abs((bullet?.width ?? 0) - 6)).toBeLessThanOrEqual(1);
       expect(Math.abs((bullet?.height ?? 0) - 6)).toBeLessThanOrEqual(1);
       expect(bullet?.isBeforeContent).toBe(true);
