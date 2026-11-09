@@ -361,12 +361,13 @@ describe('Theme', () => {
       writable: true,
       value: [],
     });
+    let unmount = () => {};
     try {
-      render(
+      ({unmount} = render(
         <Theme theme={testTheme}>
           <span>web</span>
         </Theme>,
-      );
+      ));
       expect(
         document.querySelector('[data-astryx-text-size-probe]'),
       ).toBeNull();
@@ -377,6 +378,7 @@ describe('Theme', () => {
         .join('');
       expect(adopted).toContain('env(preferred-text-scale, 1)');
     } finally {
+      unmount();
       vi.unstubAllGlobals();
       delete (document as {adoptedStyleSheets?: unknown}).adoptedStyleSheets;
     }
