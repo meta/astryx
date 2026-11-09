@@ -1485,8 +1485,8 @@ are byte-identical between the two heads and the merge changed none of the
 files the pull request changes, none of the files those changes import
 directly, and none of the shared motion and layer modules that the verification
 row lists. Otherwise the evidence is taken again at the new head. This is an
-exception to DEC-27's exact-head rule for heads that only merge main; DEC-27's
-text is unchanged.
+exception to DEC-27's exact-head rule for heads that only merge main; DEC-27
+holds for every other head.
 
 Rejected: a new take after every main merge.
 
