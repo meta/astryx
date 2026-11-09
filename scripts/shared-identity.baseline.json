@@ -417,18 +417,6 @@
       "status": "allowed",
       "reason": "Deduplicates an idempotent style insertion; a copy can at most insert the same rules again."
     },
-    "packages/core/src/hooks/modalAnnounce.ts:deferredByScope": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/modalAnnounce.ts:held": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/modalAnnounce.ts:presented": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
     "packages/core/src/hooks/scrollGeometrySubscriptions.ts:listeners": {
       "status": "allowed",
       "reason": "Each copy observes for its own subscribers; a second observer changes no result."
@@ -436,34 +424,6 @@
     "packages/core/src/hooks/scrollOwnerRegistry.ts:owners": {
       "status": "open",
       "group": "triage"
-    },
-    "packages/core/src/hooks/useAnnounce.ts:clearTimers": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/useAnnounce.ts:lastJoined": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/useAnnounce.ts:modalRoute": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/useAnnounce.ts:pendingByRegion": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/useAnnounce.ts:pendingFrames": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/useAnnounce.ts:pendingMessages": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/useAnnounce.ts:regions": {
-      "status": "open",
-      "group": "F5 Focus and announce"
     },
     "packages/core/src/hooks/useEntryAnimation.ts:initialPaintComplete": {
       "status": "open",
