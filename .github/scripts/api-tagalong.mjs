@@ -49,6 +49,8 @@ function scopeSection(body) {
 /**
  * The pull request's named scope: the entries of the title's
  * conventional-commit scope, then the `Components:` line under `## Scope`.
+ * `text` is the code spans under `## Scope`: only those name a row, so the
+ * template's checklist prose never does.
  * @param {{title: string, body: string}} input
  */
 export function parseScope({title, body}) {
@@ -56,8 +58,9 @@ export function parseScope({title, body}) {
   const fromTitle = (titleScope ? titleScope[1].split(',') : [])
     .map(s => s.trim())
     .filter(Boolean);
-  const text = scopeSection(body);
-  const line = text.match(/^\s*(?:[-*]\s+)?Components:(.*)$/m);
+  const section = scopeSection(body);
+  const line = section.match(/^\s*(?:[-*]\s+)?Components:(.*)$/m);
+  const text = (section.match(/`[^`\n]+`/g) ?? []).join('\n');
   const fromBody = (line ? line[1].split(',') : [])
     .map(s => s.replace(/`/g, '').trim())
     .filter(Boolean);
@@ -103,6 +106,12 @@ function topName(item) {
     .replace(/`/g, '')
     .split(' ');
   return words.length > 1 ? words[1] : words[0];
+}
+
+/** The component a theme-target row names: `target alert-dialog (AlertDialog)`. */
+function targetOwner(item) {
+  const match = String(item ?? '').match(/^target \S+ \(([^)]+)\)$/);
+  return match ? match[1] : null;
 }
 
 /** Whether `name` starts with the word `prefix` (`Tab` starts `TabList`, not `Tabular`). */
@@ -159,7 +168,13 @@ export function analyze({
     const own = components[pkg] ?? [];
     for (const r of Array.isArray(p?.rows) ? p.rows : []) {
       const name = topName(r.item);
-      const component = componentOf(name, own);
+      const owner = targetOwner(r.item);
+      // A theme target belongs to the exact component it names, never a prefix.
+      const component = owner
+        ? own.includes(owner)
+          ? owner
+          : null
+        : componentOf(name, own);
       const group = component ?? pkg;
       const out = {
         package: pkg,
@@ -185,7 +200,9 @@ export function analyze({
         mentions(text, name) ||
         (out.member != null && mentions(text, `${name}.${out.member}`)) ||
         // A row no component owns is named by a scope entry that starts it.
-        (!component && scope.some(s => startsWithWord(name, s, true)));
+        (!component &&
+          !owner &&
+          scope.some(s => startsWithWord(name, s, true)));
       if (inScope || named) continue;
       // A row a current record decides stays visible but needs no owner.
       const isDecided =

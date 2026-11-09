@@ -481,6 +481,71 @@ describe('own types, removed-only, and decided rows', () => {
   });
 });
 
+describe('theme targets and template prose', () => {
+  const components = {
+    '@astryxdesign/core': [
+      'AlertDialog',
+      'Button',
+      'Layout',
+      'Text',
+      'TextArea',
+    ],
+  };
+  const target = (name, owner) => ({
+    ...row(`target ${name} (${owner})`),
+    entry: 'Theme targets',
+    section: '',
+  });
+
+  it('files a theme target under the exact component it names', () => {
+    const result = analyze({
+      components,
+      changes: changesFile([
+        pkg('@astryxdesign/core', [target('alert-dialog', 'AlertDialog')]),
+      ]),
+      title: 'fix(AlertDialog): x',
+      body: '',
+    });
+    expect(Object.keys(result.rows_by_component)).toEqual(['AlertDialog']);
+    expect(result.tagalongs).toEqual({});
+  });
+
+  it("never lets a component cover another component's target by prefix", () => {
+    const result = analyze({
+      components,
+      changes: changesFile([
+        pkg('@astryxdesign/core', [target('text-area', 'TextArea')]),
+      ]),
+      title: 'fix(Text): x',
+      body: '',
+    });
+    expect(Object.keys(result.tagalongs)).toEqual(['TextArea']);
+  });
+
+  it('does not read the template checklist as naming rows', () => {
+    const template = fs.readFileSync(
+      path.join(REPO, '.github/pull_request_template.md'),
+      'utf8',
+    );
+    const filled = template.replace(/^Components:.*$/m, 'Components: Button');
+    expect(filled).toMatch(/text and artifacts/);
+    expect(filled).toMatch(/layout/);
+    const result = analyze({
+      components,
+      changes: changesFile([
+        pkg('@astryxdesign/core', [
+          target('text', 'Text'),
+          target('layout', 'Layout'),
+          row('interface ButtonProps', 'tone'),
+        ]),
+      ]),
+      title: 'fix(Button): x',
+      body: filled,
+    });
+    expect(Object.keys(result.tagalongs).sort()).toEqual(['Layout', 'Text']);
+  });
+});
+
 describe('size', () => {
   const many = (n, name = 'Item') =>
     Array.from({length: n}, (_, i) => row(`interface ${name}Props`, `p${i}`));
