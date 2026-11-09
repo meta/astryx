@@ -33,6 +33,7 @@ import {
   type ListWindowSegment,
 } from '../../../utils/listWindow';
 import {
+  getSeedViewportHeight,
   getTableVirtualizationConfig,
   type TableVirtualizationCapability,
   type UseTableRowsVirtualizationConfig,
@@ -344,7 +345,7 @@ export function useTableWindow<T>({
     calculateListWindow({
       rowCount: data.length,
       rowHeight: config.rowHeight,
-      viewportHeight: config.viewportHeight,
+      viewportHeight: getSeedViewportHeight(config),
       scrollTop: 0,
       startOffset: 0,
       isMeasured: false,
@@ -404,7 +405,7 @@ export function useTableWindow<T>({
     : last != null && last.config === config
       ? last.geometry
       : {
-          viewportHeight: config?.viewportHeight ?? 0,
+          viewportHeight: config == null ? 0 : getSeedViewportHeight(config),
           scrollTop: 0,
           bodyOffset: 0,
           isMeasured: false,
@@ -414,7 +415,7 @@ export function useTableWindow<T>({
     (last.data !== data ||
       last.keys !== keys ||
       last.config.rowHeight !== config?.rowHeight ||
-      last.config.viewportHeight !== config?.viewportHeight);
+      last.config.initialViewportHeight !== config?.initialViewportHeight);
   const anchorScroll =
     canWindow && !isRejected && hasChangedInputs && config && last
       ? reconcileListAnchor({

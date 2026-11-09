@@ -14,7 +14,7 @@ export default meta;
 function Example() {
   const virtualization = useTableRowsVirtualization({
     rowHeight: 56,
-    viewportHeight: 320,
+    initialViewportHeight: 320,
   });
   return (
     <Table
