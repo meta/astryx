@@ -100,6 +100,10 @@ affects_consumer_docs: [release-process, templates]
       "FR52",
       "FR53",
       "FR54",
+      "FR55",
+      "FR56",
+      "FR57",
+      "FR58",
       "DEC-15",
       "DEC-16",
       "DEC-22",
@@ -109,7 +113,8 @@ affects_consumer_docs: [release-process, templates]
       "DEC-26",
       "DEC-27",
       "DEC-28",
-      "DEC-30"
+      "DEC-30",
+      "DEC-24"
     ]
   }
 }
@@ -147,7 +152,9 @@ one removal merged ahead of the decision to allow it.
 ## Non-goals
 
 - Freezing implementation details or every byte of generated example code.
-- Defining component or template naming conventions.
+- Defining component or template naming conventions, other than the `_experimental`
+  suffix FR21 and DEC-28 define and the `_DEPRECATED` suffix FR56 reserves for the
+  rename step.
 - Treating private packages, canaries, unreleased work, or explicitly marked
   experimental surfaces as stable public API.
 - Replacing the public Release Process, Changesets, migration tooling, or direct
@@ -772,6 +779,107 @@ one removal merged ahead of the decision to allow it.
   (FR35), never in a patch release, and no surface record can make it patch-eligible by
   redefining a release rule. Components keep the rules in this record, including FR3 and
   FR53.
+- **FR55 — A component deprecation is staged.** A public component, or a public prop
+  or subcomponent of one, leaves the stable surface through up to three steps. Each
+  step is its own change with its own Changeset, and a step ships only after the
+  previous step is in a stable release.
+
+  | Step                             | What changes                                                                                                                                                                                                                                                                                                                       | Tag and tier                                                                                                                 | Old usage                                                                  |
+  | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+  | 1. Doc deprecation               | The declarations carry `@deprecated` naming the replacement; consumer docs, CLI templates and blocks, stories, and agent-facing docs teach the replacement (FR29b); a `DEP-*` record in the owning record (FR58) MAY describe the replacement, the migration, and the rename decision (FR57); it describes and never gates (FR28). | `[feat]`, patch (FR7, FR28)                                                                                                  | Works exactly as released; no production-runtime change or warning (FR29). |
+  | 2. Rename deprecation (optional) | The export is renamed to `<Name>_DEPRECATED` (FR56); the released name stops resolving.                                                                                                                                                                                                                                            | `[breaking]`, declared minor (FR31), with an `astryx upgrade` codemod that rewrites imports to the `_DEPRECATED` name (FR8). | Works under the `_DEPRECATED` name with unchanged behavior.                |
+  | 3. Removal                       | The surface, its `_DEPRECATED` export when step 2 ran, and a subpath that existed only for it are removed.                                                                                                                                                                                                                         | `[breaking]`, declared minor (FR31), with the migration and, where the rewrite is mechanical, a codemod (FR8).               | Gone; the Changeset names the replacement and the migration.               |
+
+  Step 1 is the first step of every component deprecation and needs no minor. Steps 2
+  and 3 land in a declared minor; one minor MAY carry step 2 for one surface and step 3
+  for another. Whether step 2 runs is decided per surface under FR57; a surface that
+  skips it goes from step 1 to step 3. A deprecated prop or prop value has no step 2:
+  it is not an export, so it goes from step 1 to step 3 under the coexistence rules of
+  FR29d. The spacing between steps is the structural minimum of FR30 and FR38 and no
+  more: step 1 is in a stable release, with old usage working, before the minor that
+  renames or removes, and step 3 lands in a later declared minor than step 2. This
+  record adds no elapsed-time or release-count minimum (FR30); the owning record
+  (FR58) MAY require a longer transition for its surface and names it there. Release
+  cadence is not a clock (FR36). A removal that lands in a declared
+  minor with no prior deprecation remains admissible under FR28; this requirement
+  governs the path once an owner deprecates a surface instead of removing it outright.
+
+- **FR56 — The rename step changes the export identifier and nothing else.**
+  `<Name>_DEPRECATED` is the released export name with the suffix `_DEPRECATED`
+  appended (`BottomSheetSwitcher_DEPRECATED`). The component export and every export
+  that exists only for it — its props type, its own subcomponents, hooks, and types —
+  take the suffix in the same change, so one codemod run rewrites one import set.
+  Everything else keeps its released identity: the component-root import subpath (the
+  symbol inside it renames; a subpath is removed only at step 3), theme targets, CSS
+  class names, data attributes, template identifiers, documentation catalog identity,
+  the `DEP-*` id, and runtime behavior. The renamed surface keeps every FR29d guarantee
+  under its new name: exported, renderable, accessible, themeable, and explicitly
+  discoverable, with reference docs reachable under the released name and the
+  `_DEPRECATED` name and leading with the replacement. The rename adds no
+  production-runtime behavior (FR29). In the final-patch-to-minor delta (FR39) the
+  rename is one removal under FR39(a): the released name's removal together with its
+  `<Name>_DEPRECATED` export is a single cleanup delta described by the step's one
+  `[breaking]` Changeset, not an additive capability. The `_DEPRECATED` suffix is reserved for this
+  step: a public export carrying it is one whose `@deprecated` declarations and
+  deprecation Changeset are in a stable release (step 1), and its removal is planned.
+- **FR57 — Usage evidence decides the rename step; the owner decides.** The owner of
+  the owning record (FR58) decides whether step 2 runs; when the surface has no
+  current record, an engineering owner rules, as FR42 has maintainers resolve missing
+  authority, and no record is created for the ruling. The `[breaking]` Changeset of
+  step 2, or of step 3 when the rename is skipped, states the decision and its
+  evidence; the Changeset is the declaration (FR42), and a kept `DEP-*` record repeats
+  the ruling in its `rename` row as description (FR7, FR28). The evidence is the usage
+  that remains after maintained surfaces migrate in the deprecation patch (FR29c):
+  imports of the surface the owner finds in public code search and in the downstream
+  consumers the owner knows. The rename runs when remaining imports are unknown or
+  more than the maintainers can migrate themselves, so the in-code marker is the one
+  signal that reaches every remaining caller. It is skipped when every known remaining
+  caller can be migrated by the maintainers or by the step-1 migration, because the
+  rename would then cost a minor without adding a signal. Usage decides only whether
+  the extra step runs; it never changes a change's compatibility class (FR6).
+- **FR58 — Each step projects the lifecycle state.** After each step, every surface
+  that shows the deprecated component agrees on its state:
+
+  | Surface                                                                                                            | After step 1                                                                                                                                                                                                                            | After step 2                                                             | After step 3                                             |
+  | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------- |
+  | Declarations                                                                                                       | `@deprecated` naming the replacement                                                                                                                                                                                                    | `@deprecated` on `<Name>_DEPRECATED`; the released name is absent        | Absent                                                   |
+  | Consumer reference (`astryx component <Name>`, the doc site)                                                       | Leads with the deprecation and the replacement; the reference is retained (FR29b)                                                                                                                                                       | The same, reachable under both names, and shows the `_DEPRECATED` import | Removed; the replacement's reference names the migration |
+  | Maintained guidance (CLI templates and blocks, examples, starter output, agent-facing docs and its component list) | Teaches only the replacement; the component list labels the surface deprecated and names the replacement                                                                                                                                | The same, listing `<Name>_DEPRECATED`                                    | The surface is absent                                    |
+  | Stories                                                                                                            | The surface's own stories are FR29b's labelled explicit reference: titled `(deprecated)`, naming the replacement and the modernization route, and pointing to the replacement's stories; every other story teaches only the replacement | The same, under the `_DEPRECATED` name                                   | Removed                                                  |
+  | `DEP-*` record `state`, when kept                                                                                  | `deprecated`                                                                                                                                                                                                                            | `renamed`                                                                | `removed`                                                |
+  | `CLN-*` record `state`, when kept                                                                                  | Each planned cleanup `pending`                                                                                                                                                                                                          | The rename cleanup `released`; the removal cleanup `pending`             | The removal cleanup `released`                           |
+
+  A `DEP-*` record and its `CLN-*` records are optional description of these steps
+  (FR7, FR28, DEC-18). A `DEP-*` record's `state` has one read point: the merge of
+  the change that ships the step, ahead of the release that carries it. A missing
+  or lagging record never gates a step, and a kept `DEP-*` record that disagrees
+  with the last merged step is a record defect. A kept `DEP-*` record's `state`
+  moves `proposed` (recorded before the doc deprecation merges) → `deprecated`
+  (from the merge of step 1, the doc deprecation) → `renamed` (from the merge of
+  step 2, the rename) → `removed` (from the merge of step 3, the removal), skipping
+  `renamed` when step 2 is skipped. Its `cleanup` row
+  names one `CLN-*` id per breaking step, the rename and the removal, mirroring the one
+  `[breaking]` Changeset each incompatible delta has (FR31); its `rename` row names
+  `<Name>_DEPRECATED` with its `CLN-*` id, or `skipped` with the FR57 evidence, or
+  `undecided`. A `CLN-*` record's `lifecycle` row names its `DEP-*` id, and its `state`
+  moves `pending` → `released`, read, as its name says, from the release that
+  carries the cleanup, not from the merge: between the merge of a breaking step
+  and its release the `DEP-*` record already reads `renamed` or `removed` while the
+  cleanup still reads `pending`. The owning record is the surface's own current
+  record: for a prop, the current record of the component that carries it; for a
+  subcomponent, its own current module record when it has one, otherwise the carrying
+  component's current record; for a whole component, its own current record. While
+  the surface ships under either name (steps 1 and 2), that record stays `current` and
+  states that the surface still works and is deprecated. At the merge of step 3 —
+  the point `removed` is read from — a whole component's own record, and a
+  subcomponent's own module record, are archived:
+  `superseded`, linking the replacement's current record, or `withdrawn` when there is
+  none. The `DEP-*` description then moves to the current record of the replacement or
+  the parent when one exists, or stays only in the released Changesets. A surface with
+  no current record keeps no `DEP-*` record: its Changesets and the deprecation note
+  in its consumer reference are the description, and this requirement creates no
+  record for it.
+
 - **FR59 — Touch work leaves fine-pointer behavior alone unless it has a reason.**
   A change made for touch or coarse-pointer use may change what people using a mouse,
   trackpad, or other fine pointer see or do only to fix a defect those people actually
@@ -844,6 +952,12 @@ questions rather than restating them:
 - [`spec:AST-010` — Structured percentage useResizable configuration system spec](../AST-010/spec.md)
   and [`spec:AST-043` — Date and time input presentation system spec](../AST-043-input-presentation/spec.md)
   own their concrete mappings and any surface-specific deprecation minimums.
+- The owning record (FR58) — the surface's own current record while it ships, then
+  the replacement's or parent's current record after removal — owns that surface's
+  rename decision and its evidence (FR57), any longer transition (FR30), and its
+  `DEP-*` record when one is kept; an engineering owner rules through the Changeset
+  when no current record exists. This spec owns the steps, tiers, and projections
+  (FR55–FR58).
 - [`spec:AST-030` — Positive CI surface routing system spec](../AST-030/spec.md)
   owns pull-request lane routing; this spec owns the compatibility checks each
   affected surface must receive and the exact-main release gate.
@@ -885,6 +999,10 @@ Public lifecycle classification remains in force with these operational effects:
   Changeset; when `main` declares a patch, a deprecation ships first — warnings stay
   at authoring surfaces, production runtime stays unchanged, and an executable
   modernization route precedes warning delivery;
+- a component deprecation is staged: a doc deprecation in a patch, an owner-decided
+  `<Name>_DEPRECATED` rename in a declared minor, and removal in a later declared
+  minor, with the `DEP-*` record, when kept, docs, stories, and agent-facing docs
+  projecting the current step;
 - planned minors use a locked final-patch baseline, and the cut generates the
   release description from the consumed Changesets;
 - minor frequency remains planning guidance and creates no deprecation or pair wait;
@@ -902,6 +1020,8 @@ Public lifecycle classification remains in force with these operational effects:
 - no file path or subpath marks a surface experimental and Core's behavior and
   utility modules without a public contract stay unexported, except through
   the reserved `./internal/*` subpaths (FR21).
+
+FR58 gap: `astryx component --list` labels no deprecated component and names no replacement; `BottomSheetSwitcher` (`component:BottomSheetSwitcher` DEP-0015, step 1) lists only its name and import.
 
 Main declares the next planned version, and Changeset admission uses that declaration
 to refuse `[breaking]` work on a patch plan. Pull-request lint does not compare the
@@ -953,6 +1073,10 @@ lands, maintainers apply its requirement in review and release approval.
 | FR52      | Promotion fixtures plus every checked-in source consumer run before and after codemod promotion                                                                                                                                                                                                                                                                 | staged transform, promoted transform, missing source, ambiguous candidates, changed entry identity                                                                                                                                                                                                                                                                                                      | Evidence hardcodes only `next/`, keeps a duplicate source, silently chooses among candidates, or passes when the promoted transform no longer exposes the same identity and entries                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | FR53      | Changeset classification review against the governing component record's accessibility evidence                                                                                                                                                                                                                                                                 | a fix that replaces documented keyboard or focus behavior to meet an adopted APG pattern's required parts; a fix that changes a role, state, or accessible name to meet WCAG 2.2 A/AA; a fix that adds an optional prop                                                                                                                                                                                 | An accessibility fix is held for a minor, given a coexistence path, or classified `[breaking]`; or a change that needs an app-layer code edit, or that removes, renames, or narrows public surface, ships as an accessibility `[fix]`                                                                                                                                                                                                                                                                                                                                                                                                          |
 | FR54      | Changeset classification review against the surface's current record, then the same tier admission every Changeset receives                                                                                                                                                                                                                                     | a CLI correction the CLI record classifies as `[fix]`; a CLI change the CLI record leaves undecided; a CLI change the CLI record classifies as `[breaking]` on a patch plan; a component change                                                                                                                                                                                                         | A non-component change is classified by a rule this record restates instead of its surface record, a surface rule turns on risk or adoption, a surface-classified `[breaking]` change ships in a patch or a surface rule makes it patch-eligible, or a component change is classified by a surface record                                                                                                                                                                                                                                                                                                                                      |
+| FR55      | Changeset classification review of each step against the declared tier and the previous step's stable release                                                                                                                                                                                                                                                   | doc deprecation on a patch plan; rename on a minor plan; removal on a minor plan; prop deprecation; skipped rename; removal with no prior deprecation on a minor plan                                                                                                                                                                                                                                   | A rename or removal ships in a patch, a step ships before the previous step is in a stable release, a prop receives a rename step, the two breaking steps land in one minor for one surface, cadence is read as a wait, or a missing lifecycle record blocks a step                                                                                                                                                                                                                                                                                                                                                                            |
+| FR56      | Export and declaration comparison against latest stable, theme target and class inventory, and codemod fixtures                                                                                                                                                                                                                                                 | component export, props type, own subcomponent, component-root subpath, theme target, CSS class, reference lookup under both names                                                                                                                                                                                                                                                                      | Anything other than the export identifiers renames, the renamed surface loses an FR29d guarantee, the rename changes production runtime, or the suffix appears on an export whose step-1 deprecation is not in a stable release                                                                                                                                                                                                                                                                                                                                                                                                                |
+| FR57      | Review of the rename ruling and its evidence in the step's `[breaking]` Changeset                                                                                                                                                                                                                                                                               | high remaining usage with rename; every remaining caller migratable with skip                                                                                                                                                                                                                                                                                                                           | The Changeset states no ruling or no evidence, usage changes a compatibility class, or a lifecycle record is required before the step may merge                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| FR58      | Declaration, reference, guidance, and story inspection after each step; kept-record inspection as description                                                                                                                                                                                                                                                   | after step 1; after step 2; after step 3; skipped rename; surface with no current record                                                                                                                                                                                                                                                                                                                | A projection teaches the old surface, a retained story lacks the `(deprecated)` label or the modernization route, a kept record disagrees with the last merged step, a kept `CLN-*` id covers both breaking steps, a retired component's or subcomponent's own record stays current after the merge of step 3, or a record is created only to carry the description                                                                                                                                                                                                                                                                            |
 | FR59      | Pull request review of fine-pointer before-and-after evidence                                                                                                                                                                                                                                                                                                   | a touch change that also fixes a defect fine-pointer users hit; a deliberate cross-device consistency change; a touch-only change; a new fine-pointer look proposed with touch work                                                                                                                                                                                                                     | A touch change alters fine-pointer behavior or appearance with neither reason, shows no fine-pointer before-and-after evidence, or ships a new fine-pointer look without its own owner decision                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | FR60      | Element counts per story at rest and open, fine and coarse pointer, against architecture INV7                                                                                                                                                                                                                                                                   | a surface component at rest; an open layer; a DOM reduction; a recorded exception; an open layer under touch with extra elements                                                                                                                                                                                                                                                                        | An element beyond INV7's budgets with no recorded owner exception, a hidden twin or second presentation, or a DOM reduction that removes a theme target or documented anatomy, or that is classified as breaking; an open layer more than 5 elements over its fine-pointer count, an added element that is themeable, a new anatomy part, or without a job in its record, or a closed layer, trigger, or repeated component above its fine-pointer count                                                                                                                                                                                       |
 | FR3       | Current component contract, latest-stable inspection, and coarse/non-coarse browser evidence                                                                                                                                                                                                                                                                    | Auxiliary numeric steppers hidden with accessible direct entry and keyboard stepping retained; lost entry path; removed public prop or essential action                                                                                                                                                                                                                                                 | A qualifying numeric-stepper adaptation is labeled breaking, or the narrow rule is used to excuse a lost API, essential action, value/validation/callback contract, or accessible entry path                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
@@ -1399,6 +1523,28 @@ such choice. Touch styling and touch-only behavior other records define keep
 their own rules.
 
 Rejected: a touch presentation or open-surface touch mode callers cannot pin.
+
+### DEC-24 — Components retire in stages, and the rename step is optional
+
+**Reference:** `spec:AST-017/DEC-24`
+**Decider:** `cixzhang`, `<P1 date>`; proposed by `imdreamrunner`
+
+A component deprecation begins with a doc deprecation because that step is
+compatible: it ships in the next patch, so the replacement and the deprecation reach
+builders without waiting for a minor. The in-code marker a rename gives — every
+remaining import reads `<Name>_DEPRECATED` in caller source — is worth a `[breaking]`
+minor only where callers remain that the maintainers cannot migrate themselves, so the
+owner decides it per surface from usage evidence, and a low-usage surface removes
+directly after its doc deprecation. The suffix renames the export only; subpaths,
+theme targets, classes, and identifiers keep their released names, so the step costs a
+caller one import rewrite that a codemod performs. The step's Changeset carries the
+ruling and its evidence; lifecycle records stay the optional description DEC-18 makes
+them, so no record gates a step.
+
+Rejected: renaming at the first deprecation, because it would force every deprecation
+into a minor. Rejected: never renaming, because a high-usage surface then has no
+in-code signal in caller source. Rejected: a runtime warning, because FR29 excludes
+production-runtime deprecation behavior.
 
 ### DEC-25 — Touch work changes fine-pointer behavior only for a defect or deliberate consistency
 

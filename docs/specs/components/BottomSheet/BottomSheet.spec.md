@@ -104,9 +104,14 @@ gap note.
   the page
 - Controlled/uncontrolled behavior: unchanged; `isOpen` stays fully controlled,
   and a sheet never writes another sheet's state (FR8)
-- Migration decision: none for callers of BottomSheet. Flows written with
-  `BottomSheetSwitcher` migrate to standalone steps under
-  `component:BottomSheetSwitcher` DEP-0015
+- `sheetId`: the one BottomSheet prop that exists only for a
+  `BottomSheetSwitcher` step — it names the step to the switcher and has no
+  meaning on a standalone sheet. It still works and is deprecated with the
+  switcher (`component:BottomSheetSwitcher` DEP-0015), which owns its
+  migration
+- Migration decision: none for a standalone sheet's callers; a sheet that
+  passes `sheetId` is a switcher step and migrates with its flow to
+  standalone steps under `component:BottomSheetSwitcher` DEP-0015
 
 Consumer migration instructions belong in consumer docs and release notes.
 
