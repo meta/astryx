@@ -9,7 +9,14 @@
  * SYNC: When DateInput.tsx changes, update tests to match new behavior
  */
 
-import {useState} from 'react';
+import {
+  Suspense,
+  startTransition,
+  use,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import {describe, it, expect, vi, beforeEach} from 'vitest';
 import {
   render,
@@ -34,6 +41,38 @@ function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
   const {prose, component} = generateThemeCSS(theme);
   return [prose, component].filter(Boolean).join('\n\n');
 }
+// A transition that suspends for good: React renders its element, then keeps
+// the committed tree and never commits that render.
+const forever = new Promise<never>(() => {});
+function Forever(): null {
+  use(forever);
+  return null;
+}
+function Discardable({
+  children,
+  isPending = false,
+}: {
+  children: ReactNode;
+  isPending?: boolean;
+}) {
+  return (
+    <Suspense fallback={null}>
+      {children}
+      {isPending ? <Forever /> : null}
+    </Suspense>
+  );
+}
+async function discardRender(
+  rerender: (ui: ReactElement) => void,
+  ui: ReactElement,
+): Promise<void> {
+  await act(async () => {
+    startTransition(() => {
+      rerender(<Discardable isPending>{ui}</Discardable>);
+    });
+  });
+}
+
 describe('DateInput', () => {
   it('renders with label', () => {
     render(<DateInput label="Date" onChange={() => {}} />);
@@ -335,6 +374,66 @@ describe('DateInput', () => {
     fireEvent.change(input, {target: {value: '06/15/2026'}});
 
     expect(onChange).toHaveBeenCalledWith('2026-06-15');
+  });
+
+  it('keeps typed text when React discards a render with a value from outside', async () => {
+    const field = (label: string, value: ISODateString) => (
+      <DateInput label={label} value={value} onChange={() => {}} />
+    );
+    const {rerender} = render(
+      <Discardable>{field('Date', '2026-01-01')}</Discardable>,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: '06/1'}});
+    expect(input).toHaveValue('06/1');
+
+    await discardRender(rerender, field('Date', '2026-03-21'));
+    // A committed render with the same value: nothing came from outside.
+    rerender(<Discardable>{field('Start date', '2026-01-01')}</Discardable>);
+
+    expect(input).toHaveValue('06/1');
+  });
+
+  it('reports a typed date once when React discards a render with a value from outside', async () => {
+    const onChange = vi.fn();
+    // The parent keeps its value: the typed date is reported, not accepted.
+    const field = (value: ISODateString) => (
+      <DateInput label="Date" value={value} onChange={onChange} />
+    );
+    const {rerender} = render(<Discardable>{field('2026-01-01')}</Discardable>);
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: '06/15/2026'}});
+    expect(onChange).toHaveBeenCalledExactlyOnceWith('2026-06-15');
+
+    await discardRender(rerender, field('2026-03-21'));
+    // The same date, typed again in the same typing session.
+    fireEvent.change(input, {target: {value: '6/15/2026'}});
+
+    expect(onChange).toHaveBeenCalledOnce();
+  });
+
+  it('keeps typed text when React discards a render that disables the field', async () => {
+    const onChange = vi.fn();
+    const field = (label: string, isDisabled: boolean) => (
+      <DateInput
+        label={label}
+        value="2026-01-01"
+        isDisabled={isDisabled}
+        onChange={onChange}
+      />
+    );
+    const {rerender} = render(
+      <Discardable>{field('Date', false)}</Discardable>,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: '06/15/2026'}});
+    expect(onChange).toHaveBeenCalledOnce();
+
+    await discardRender(rerender, field('Date', true));
+    // A committed render, still enabled: the field was never re-enabled.
+    rerender(<Discardable>{field('Start date', false)}</Discardable>);
+
+    expect(input).toHaveValue('06/15/2026');
   });
 
   it('keeps a typed date that violates constraints and shows the bounds on blur', () => {
