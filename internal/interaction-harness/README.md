@@ -121,7 +121,11 @@ colour change) can meet that count before the motion a test judges starts,
 and a hold that took only them proves nothing about it. So every armed hold
 names the motion it judges, `{judges: {target, property}}` (a list for
 several; `pseudoElement` for a `::before` or `::after`), and `held()` rejects
-when the hold took no animation of it. `judges: 'count-only'` checks nothing:
+when the hold took no animation of it. A judged run that the page cancels after
+the hold (a later style change retargets a CSS transition) fails the next
+`seekAnimations` or `sampleCurve` by name: a read would show a run that the
+hold did not take. A hold whose scope is not on the page within 5 s fails by
+name too. `judges: 'count-only'` checks nothing:
 it marks a call site whose hold does not take its judged motion yet.
 A hold sent from the test (`holdAnimations`, and `animationStoryboard`
 without `held`) takes the same `judges` and rejects the same way: it takes
