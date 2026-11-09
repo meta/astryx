@@ -80,7 +80,14 @@ import type {SearchableItem, SearchSource} from './types';
 import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
-import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
+import {
+  moveFocusLeftBehind,
+  noteFocusWithin,
+  type FocusWithin,
+} from '../utils/focusReturn';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {useFocusLeavingChange} from '../utils/useFocusLeavingChange';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
@@ -514,19 +521,6 @@ export function Typeahead<T extends SearchableItem>({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const tokenRef = useRef<HTMLElement>(null);
-  // Whether the token held focus as it left. Read in the ref's cleanup, which
-  // React runs before it removes the node, while focus is still observable.
-  const tokenHadFocusRef = useRef(false);
-  const setTokenRef = useCallback((node: HTMLElement | null) => {
-    tokenRef.current = node;
-    if (node == null) {
-      return;
-    }
-    return () => {
-      tokenHadFocusRef.current = node.contains(document.activeElement);
-      tokenRef.current = null;
-    };
-  }, []);
 
   // Disabled-reason tooltip. The tooltip listeners attach to the input wrapper
   // (which already exists); a disabled input stays perceivable via
@@ -589,46 +583,48 @@ export function Typeahead<T extends SearchableItem>({
   // The token and the input take turns as the visible control, so when they
   // swap, focus goes to the one that stays. A withdrawn token that held focus
   // (an Action not accepted, the parent clearing the value) hands it to the
-  // input rather than dropping it to the document; a token restored over the
+  // input rather than dropping it to the page; a token restored over the
   // focused input (a clear Action not accepted) takes it, since the input is
-  // now hidden and out of the Tab order. Transitions only, so a token present
-  // on mount leaves autofocus alone; Escape and blur have already moved focus
-  // off the input by the time the token returns, and a token that returns
-  // because the input lost focus takes none. Edit mode focuses the input
-  // itself once the label is in the query.
-  const wasTokenShownRef = useRef(showToken);
+  // now hidden and out of the Tab order. Only a change moves focus, so a
+  // token present on mount leaves autofocus alone. Escape and blur have
+  // already moved focus off the input by the time the token returns, and a
+  // token that returns because the input lost focus takes none. Edit mode
+  // focuses the input itself.
   const isTokenReturningOnBlurRef = useRef(false);
   // Set just before the handoff focuses the input, so that focus opens no
   // suggestions on a `hasEntriesOnFocus` field.
   const focusHandoffRef = useRef(false);
-  useIsomorphicLayoutEffect(() => {
-    // The blur that ends edit mode changes `isEditing`, so this runs for it
-    // and the flag never outlives that blur.
-    const isReturningOnBlur = isTokenReturningOnBlurRef.current;
-    isTokenReturningOnBlurRef.current = false;
-    if (wasTokenShownRef.current === showToken) {
-      return;
-    }
-    wasTokenShownRef.current = showToken;
-    if (showToken) {
-      if (!isReturningOnBlur && document.activeElement === inputRef.current) {
-        focusToken(tokenRef.current);
+  const {ref: modalityRef} = useInteractionModalityTracking();
+  const noteSwapFocus = useFocusLeavingChange(
+    showToken,
+    (wasTokenShown: boolean): FocusWithin | null => {
+      const isReturningOnBlur = isTokenReturningOnBlurRef.current;
+      isTokenReturningOnBlurRef.current = false;
+      if (wasTokenShown) {
+        return noteFocusWithin(tokenRef.current);
       }
-      return;
-    }
-    const tokenHadFocus = tokenHadFocusRef.current;
-    tokenHadFocusRef.current = false;
-    if (
-      tokenHadFocus &&
-      !isEditing &&
-      (document.activeElement == null ||
-        document.activeElement === document.body)
-    ) {
+      return isReturningOnBlur ? null : noteFocusWithin(inputRef.current);
+    },
+    (focus: FocusWithin, isTokenShown: boolean) => {
+      if (isTokenShown) {
+        const token = tokenRef.current;
+        moveFocusLeftBehind(
+          focus,
+          token?.querySelector('button') ?? token,
+          inputRef.current,
+        );
+        return;
+      }
+      // Edit mode focuses the input itself, inside the tap, and that focus
+      // opens the list as usual.
+      if (isEditing) {
+        return;
+      }
       focusHandoffRef.current = true;
-      inputRef.current?.focus();
+      moveFocusLeftBehind(focus, inputRef.current);
       focusHandoffRef.current = false;
-    }
-  }, [showToken, isEditing]);
+    },
+  );
 
   // Enter edit mode: remove token visually, populate input with value label.
   //
@@ -672,13 +668,14 @@ export function Typeahead<T extends SearchableItem>({
       }
 
       if (editingValue && isEditing) {
-        isTokenReturningOnBlurRef.current = true;
+        // The token returns only when there is a value to show.
+        isTokenReturningOnBlurRef.current = optimisticValue != null;
         setIsEditing(false);
         setEditingValue(null);
         // Value was never cleared from parent, so no onChange needed
       }
     },
-    [editingValue, isEditing],
+    [editingValue, isEditing, optimisticValue],
   );
 
   // Focus the token's button once it renders (the next cycle), so keyboard
@@ -785,7 +782,7 @@ export function Typeahead<T extends SearchableItem>({
   const typeaheadContent = (
     <>
       <div
-        ref={useMergedRefs(wrapperRef, disabledMessageTooltip.ref)}
+        ref={useMergedRefs(wrapperRef, disabledMessageTooltip.ref, modalityRef)}
         onClick={handleWrapperClick}
         onBlur={handleBlur}
         // Keys on the field's other controls (clear button, tokens) reach a
@@ -825,6 +822,10 @@ export function Typeahead<T extends SearchableItem>({
             rather than as a second one inside the base. */}
         <BusyIndicatorLaneProvider value={busyLane}>
           <div {...stylex.props(styles.contentLane)}>
+            <LayoutChangeSnapshot
+              value={showToken}
+              onBeforeChange={noteSwapFocus}
+            />
             {showToken && (
               <>
                 {/* The token's button is the field's Tab stop while a value
@@ -836,7 +837,7 @@ export function Typeahead<T extends SearchableItem>({
                   {optimisticValue.label}
                 </span>
                 <Token
-                  ref={setTokenRef}
+                  ref={tokenRef}
                   label={optimisticValue.label}
                   size={size}
                   onClick={handleEnterEditMode}
