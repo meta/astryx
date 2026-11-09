@@ -265,11 +265,6 @@ export function TimeGridView({
       setOpenBlock(null);
     }, []),
   });
-  const popoverRef = useRef(popover);
-  // Syncs the effect's ref with the committed popover.
-  useLayoutEffect(() => {
-    popoverRef.current = popover;
-  });
   // A pointer press on a block while the popover is open would close it by
   // the browser's light dismiss before the click arrives, and the layer then
   // absorbs a show() from that same press. So the press itself decides: a
@@ -332,7 +327,7 @@ export function TimeGridView({
   let openContent: ReactNode = null;
   useEffect(() => {
     if (openBlockKey != null && !paintedBlockKeys.has(openBlockKey)) {
-      popoverRef.current.hide();
+      popover.hide();
       setOpenBlock(null);
     }
   });

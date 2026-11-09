@@ -16,7 +16,6 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
@@ -89,11 +88,6 @@ export function useScheduleViewPopover(
       setOpenKey(null);
     }, []),
   });
-  const popoverRef = useRef(popover);
-  // Syncs the effects' ref with the committed popover.
-  useLayoutEffect(() => {
-    popoverRef.current = popover;
-  });
 
   // A pointer press on a trigger while the popover is open would close it by
   // the browser's light dismiss before the click arrives, and the layer then
@@ -152,7 +146,7 @@ export function useScheduleViewPopover(
     }
     focusSwitchedContentRef.current = false;
     const frame = requestAnimationFrame(() => {
-      const content = popoverRef.current.contentRef.current;
+      const content = popover.contentRef.current;
       if (content == null) {
         return;
       }
@@ -162,7 +156,7 @@ export function useScheduleViewPopover(
       (first ?? content).focus();
     });
     return () => cancelAnimationFrame(frame);
-  }, [openKey]);
+  }, [openKey, popover.contentRef]);
 
   // Triggers painted this render; the popover may stay open only for one of
   // them. When its trigger is gone, focus — inside the popover, or dropped
@@ -171,13 +165,13 @@ export function useScheduleViewPopover(
   const paintedKeys = new Set<string>();
   useEffect(() => {
     if (openKey != null && !paintedKeys.has(openKey)) {
-      const content = popoverRef.current.contentRef.current;
+      const content = popover.contentRef.current;
       const active = document.activeElement;
       const hadFocus =
         active == null ||
         active === document.body ||
         (content?.contains(active) ?? false);
-      popoverRef.current.hide();
+      popover.hide();
       setOpenKey(null);
       if (hadFocus) {
         onTriggerLost?.(openKey);
