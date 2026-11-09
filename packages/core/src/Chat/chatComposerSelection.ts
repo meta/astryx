@@ -134,16 +134,28 @@ export function placeCaretAfterNode(
   selection.addRange(range);
 }
 
-/** Whether `node` ends a line: a line break element, or text that ends in one. */
+/**
+ * Whether the content up to `node` ends a line: the last non-empty node at or
+ * before it is a line break element, or text that ends in one.
+ */
 function endsLine(node: Node | null): boolean {
-  if (node == null) {
+  let current = node;
+  while (
+    current != null &&
+    current.nodeType === Node.TEXT_NODE &&
+    current.textContent === ''
+  ) {
+    current = current.previousSibling;
+  }
+  if (current == null) {
     return false;
   }
-  if (node.nodeName === 'BR') {
+  if (current.nodeName === 'BR') {
     return true;
   }
   return (
-    node.nodeType === Node.TEXT_NODE && (node.textContent ?? '').endsWith('\n')
+    current.nodeType === Node.TEXT_NODE &&
+    (current.textContent ?? '').endsWith('\n')
   );
 }
 

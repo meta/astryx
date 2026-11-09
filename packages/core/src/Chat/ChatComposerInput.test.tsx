@@ -2256,6 +2256,15 @@ describe('ChatComposerInput', () => {
       const textbox = screen.getByRole('textbox');
       act(() => textbox.focus());
       act(() => handle?.insertText('hey\n'));
+      // Chromium leaves an empty text node between a line break and a token.
+      act(() => {
+        textbox.append(document.createTextNode(''));
+        const range = document.createRange();
+        range.selectNodeContents(textbox);
+        range.collapse(false);
+        window.getSelection()!.removeAllRanges();
+        window.getSelection()!.addRange(range);
+      });
       act(() => {
         handle?.insertToken({
           value: '@cindy',
