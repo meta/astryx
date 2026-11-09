@@ -321,11 +321,15 @@ decodes each frame once. A proof reads frames up to
 decode only those. Pass either as `control`: the component passes when it moved on every frame the control
 moved and its longest stall is no longer than the control's. Both are read from
 the same screencast frames, so a compositor animation misses none. A window in
-which the control moved on fewer than four frames fails, since the machine
-presented too little to judge; the failure names the cast's frames in the
-window and its longest gap. When no frame came for longer than
-`FRAME_STARVATION_MS` there too, the machine starved the run, and
-`busyWindowProof` throws `FrameStarvationError` instead of returning a verdict.
+which the control moved on fewer than four frames is under the floor. Under the
+floor, a run with no component failure on the frames shown is too little to
+judge: `busyWindowProof` throws `FrameStarvationError` instead of returning a
+verdict. The error names the control's moves, the cast's frames in the window
+and its longest gap. A component that missed a frame the control moved on, or
+stalled longer than it, failed on frames the compositor presented, so the
+verdict keeps that red. A run the machine starved, with no frame for longer
+than `FRAME_STARVATION_MS`, throws either way. `maxMedianFrameMs` judges the
+cast's pace, not the component, so under the floor it keeps no red.
 A run of frames with no new position counts as
 moved when the change that ends it is a single cast step: the component moves
 under one step a frame there, as on an easing tail, which the cast cannot show
@@ -409,8 +413,13 @@ belongs to its run. A run whose control moved on fewer frames than
 and the pool leaves it out, so it never counts as a pass. A run whose block
 began too late for its motion is left out the same way: its `runs` entry
 is null, and `late` holds its `BusyWindowTooLateError`. The pool reads each
-run without the starvation throw. The pool fails with
-fewer than `minJudgedRuns` judged runs (half of all the runs, rounded up). In each judged run,
+run without the starvation throw. With fewer than `minJudgedRuns` judged runs
+(half of all the runs, rounded up), or a control that moved on fewer than four
+frames over them, the pool is under the floor. Under the floor, a pool with no
+component failure on the frames shown is too little to judge, and it throws
+`FrameStarvationError`. A pool left short of judged runs by a run that began
+too late fails instead, and so does a pool whose judged runs show a component
+red. In each judged run,
 the component must move on every frame its control moved on, so a freeze fails
 its run.
 
