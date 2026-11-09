@@ -1369,7 +1369,10 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   );
 
   const sortedItems = useMemo(() => {
-    const selectedSet = selectedAtOpen ?? new Set<string>();
+    // Closed, the list keeps the order it opens in, so an index picked
+    // before it opens (the opening highlight, a typed match) names the same
+    // option after the selected options move to the top.
+    const selectedSet = selectedAtOpen ?? new Set(optimisticValue);
     const result: MultiSelectorOptionData[] = [];
     let pendingFlat: MultiSelectorOptionData[] = [];
 
@@ -1420,6 +1423,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     searchQuery,
     options,
     selectedAtOpen,
+    optimisticValue,
     hasSelectAll,
     selectAllLabel,
     createQuery,
