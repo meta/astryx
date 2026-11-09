@@ -24,6 +24,8 @@ import {
 import {render, screen, fireEvent, act} from '@testing-library/react';
 import {useTooltip, type TooltipOptions} from './useTooltip';
 import {useLayer} from '../Layer/useLayer';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import type {Ref} from 'react';
 
 // jsdom implements neither the Popover API nor `:popover-open`; mirror
 // Tooltip.test.tsx's shims so the layer can open.
@@ -159,6 +161,169 @@ describe('useTooltip — show delay', () => {
 
     expect(onShow).not.toHaveBeenCalled();
     expect(tooltipElement().matches(':popover-open')).toBe(false);
+  });
+});
+
+// A caller that removes the trigger wiring while its own layer is open, as
+// DropdownMenu's Button does.
+function DetachableHarness({
+  isAttached,
+  ...options
+}: TooltipOptions & {isAttached: boolean}) {
+  // As Button does for DropdownMenu: removing the wiring also disables it.
+  const tooltip = useTooltip({
+    ...options,
+    isEnabled: isAttached && (options.isEnabled ?? true),
+  });
+  return (
+    <div>
+      <button
+        type="button"
+        ref={isAttached ? tooltip.ref : undefined}
+        aria-describedby={tooltip.describedBy}>
+        Trigger
+      </button>
+      {tooltip.renderTooltip('Helpful text')}
+    </div>
+  );
+}
+
+describe('useTooltip — a trigger that detaches and attaches again', () => {
+  it('closes an open tooltip when its trigger stays detached', async () => {
+    const onHide = vi.fn();
+    const {rerender} = render(<DetachableHarness isAttached onHide={onHide} />);
+    fireEvent.mouseEnter(trigger());
+    tick(200);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+
+    rerender(<DetachableHarness isAttached={false} onHide={onHide} />);
+    await act(async () => {});
+    expect(tooltipElement().matches(':popover-open')).toBe(false);
+    expect(onHide).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows on attach for keyboard focus that arrived while detached', async () => {
+    const {rerender} = render(<DetachableHarness isAttached />);
+    rerender(<DetachableHarness isAttached={false} />);
+    await act(async () => {});
+    const matches = trigger().matches.bind(trigger());
+    vi.spyOn(trigger(), 'matches').mockImplementation(
+      selector => selector === ':focus-visible' || matches(selector),
+    );
+    act(() => trigger().focus());
+
+    rerender(<DetachableHarness isAttached />);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+  });
+
+  it('stays closed on attach for pointer focus that arrived while detached', async () => {
+    const {rerender} = render(<DetachableHarness isAttached />);
+    rerender(<DetachableHarness isAttached={false} />);
+    await act(async () => {});
+    act(() => trigger().focus());
+
+    rerender(<DetachableHarness isAttached />);
+    expect(tooltipElement().matches(':popover-open')).toBe(false);
+  });
+});
+
+/** A trigger whose caller merges its own inline ref, as Button and InfoTip do. */
+function InlineRefHarness({
+  label,
+  isShown = true,
+  ...options
+}: TooltipOptions & {label: string; isShown?: boolean}) {
+  const tooltip = useTooltip(options);
+  return (
+    <div>
+      {isShown && (
+        <button
+          type="button"
+          ref={el => {
+            tooltip.ref(el);
+          }}
+          aria-describedby={tooltip.describedBy}>
+          {label}
+        </button>
+      )}
+      {tooltip.renderTooltip('Helpful text')}
+    </div>
+  );
+}
+
+/** A trigger that merges its consumer's ref, as Button does. */
+function MergedRefHarness({
+  consumerRef,
+  ...options
+}: TooltipOptions & {consumerRef: Ref<HTMLButtonElement>}) {
+  const tooltip = useTooltip(options);
+  const ref = useMergedRefs<HTMLButtonElement>(consumerRef, tooltip.ref);
+  return (
+    <div>
+      <button type="button" ref={ref} aria-describedby={tooltip.describedBy}>
+        Trigger
+      </button>
+      {tooltip.renderTooltip('Helpful text')}
+    </div>
+  );
+}
+
+describe('useTooltip — a caller ref that changes on each render', () => {
+  it('keeps a hovered tooltip open when the parent renders again', () => {
+    const onHide = vi.fn();
+    const {rerender} = render(
+      <MergedRefHarness consumerRef={() => {}} onHide={onHide} />,
+    );
+    fireEvent.mouseEnter(trigger());
+    tick(200);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+
+    rerender(<MergedRefHarness consumerRef={() => {}} onHide={onHide} />);
+    rerender(<MergedRefHarness consumerRef={() => {}} onHide={onHide} />);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+    expect(onHide).not.toHaveBeenCalled();
+  });
+
+  it('keeps a tooltip dismissed with Escape closed when the parent renders again', () => {
+    const {rerender} = render(<MergedRefHarness consumerRef={() => {}} />);
+    const matches = trigger().matches.bind(trigger());
+    vi.spyOn(trigger(), 'matches').mockImplementation(
+      selector => selector === ':focus-visible' || matches(selector),
+    );
+    act(() => trigger().focus());
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+    fireEvent.keyDown(trigger(), {key: 'Escape'});
+    expect(tooltipElement().matches(':popover-open')).toBe(false);
+
+    rerender(<MergedRefHarness consumerRef={() => {}} />);
+    expect(tooltipElement().matches(':popover-open')).toBe(false);
+  });
+
+  it('removes its listeners when the caller reports null for a removed trigger', () => {
+    const onShow = vi.fn();
+    const {rerender} = render(
+      <InlineRefHarness label="Trigger" onShow={onShow} />,
+    );
+    const removed = screen.getByRole('button', {name: 'Trigger'});
+    rerender(
+      <InlineRefHarness label="Trigger" onShow={onShow} isShown={false} />,
+    );
+    fireEvent.mouseEnter(removed);
+    tick(1000);
+    expect(onShow).not.toHaveBeenCalled();
+  });
+});
+
+describe('useTooltip — a pending show and isEnabled', () => {
+  it('drops a pending show when the tooltip is disabled, even if it is enabled again before the delay ends', () => {
+    const onShow = vi.fn();
+    const {rerender} = render(<Harness onShow={onShow} />);
+    fireEvent.mouseEnter(trigger());
+    tick(100);
+    rerender(<Harness onShow={onShow} isEnabled={false} />);
+    rerender(<Harness onShow={onShow} />);
+    tick(200);
+    expect(onShow).not.toHaveBeenCalled();
   });
 });
 
@@ -479,5 +644,119 @@ describe('useTooltip — focus returning from a popover the keyboard closed', ()
     expect(showSpy.mock.results.every(r => r.type === 'return')).toBe(true);
     expect(onShow).toHaveBeenCalledTimes(2);
     expect(tooltipElement().matches(':popover-open')).toBe(true);
+  });
+});
+
+describe('useTooltip — focusTrigger="auto" decides when focus arrives', () => {
+  /** jsdom does not match `:focus-visible`; stand it up for keyboard focus. */
+  function asKeyboardFocus(element: HTMLElement) {
+    const realMatches = element.matches.bind(element);
+    vi.spyOn(element, 'matches').mockImplementation((selector: string) =>
+      selector === ':focus-visible' ? true : realMatches(selector),
+    );
+  }
+
+  function RovingMember({onShow}: {onShow: () => void}) {
+    const tooltip = useTooltip({onShow, delay: 0});
+    return (
+      <div>
+        {/* A roving-tabindex member that is not the tab stop when the
+            tooltip attaches. */}
+        <button type="button" tabIndex={-1} ref={tooltip.ref}>
+          Filter
+        </button>
+        {tooltip.renderTooltip('Filter (F)')}
+      </div>
+    );
+  }
+
+  it('opens on keyboard focus of a trigger that was tabindex="-1" when it attached', () => {
+    const onShow = vi.fn();
+    render(<RovingMember onShow={onShow} />);
+    const member = screen.getByRole('button', {name: 'Filter'});
+    asKeyboardFocus(member);
+    // The roving hook moves the tab stop, then focus, as an arrow key does.
+    member.setAttribute('tabindex', '0');
+    fireEvent.focusIn(member);
+    tick(0);
+    expect(onShow).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens on keyboard focus of a focusable trigger it does not list, such as a summary', () => {
+    const onShow = vi.fn();
+    function SummaryTrigger() {
+      const tooltip = useTooltip({onShow, delay: 0});
+      return (
+        <details>
+          <summary ref={tooltip.ref}>More</summary>
+          {tooltip.renderTooltip('Show details')}
+        </details>
+      );
+    }
+    render(<SummaryTrigger />);
+    const summary = screen.getByText('More');
+    asKeyboardFocus(summary);
+    fireEvent.focusIn(summary);
+    tick(0);
+    expect(onShow).toHaveBeenCalledTimes(1);
+  });
+
+  function WrapperTrigger(options: TooltipOptions) {
+    const tooltip = useTooltip({delay: 0, ...options});
+    return (
+      <div>
+        <div ref={tooltip.ref} data-testid="wrapper">
+          <input aria-label="Amount" />
+        </div>
+        {tooltip.renderTooltip('About amounts')}
+      </div>
+    );
+  }
+
+  it('still ignores focus inside a trigger that is not focusable', () => {
+    const onShow = vi.fn();
+    render(<WrapperTrigger onShow={onShow} />);
+    const input = screen.getByLabelText('Amount');
+    asKeyboardFocus(input);
+    fireEvent.focusIn(input);
+    tick(0);
+    expect(onShow).not.toHaveBeenCalled();
+  });
+
+  it('hides when focus that counted leaves, even after the trigger left the tab order', () => {
+    const onShow = vi.fn();
+    const onHide = vi.fn();
+    function FocusableContainer() {
+      const tooltip = useTooltip({onShow, onHide, delay: 0});
+      return (
+        <div>
+          <div ref={tooltip.ref} tabIndex={0} data-testid="container">
+            <button type="button">Inside</button>
+          </div>
+          {tooltip.renderTooltip('About the group')}
+        </div>
+      );
+    }
+    render(<FocusableContainer />);
+    const inside = screen.getByRole('button', {name: 'Inside'});
+    asKeyboardFocus(inside);
+    fireEvent.focusIn(inside);
+    tick(0);
+    expect(onShow).toHaveBeenCalledTimes(1);
+    // A roving hook resets the container's tab stop before moving focus on.
+    screen.getByTestId('container').setAttribute('tabindex', '-1');
+    fireEvent.focusOut(inside);
+    tick(100);
+    expect(onHide).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not hide a hover-opened tooltip when focus leaves a child of a non-focusable trigger', () => {
+    const onHide = vi.fn();
+    render(<WrapperTrigger onHide={onHide} />);
+    fireEvent.mouseEnter(screen.getByTestId('wrapper'));
+    tick(0);
+    fireEvent.focusOut(screen.getByLabelText('Amount'));
+    tick(100);
+    expect(onHide).not.toHaveBeenCalled();
   });
 });

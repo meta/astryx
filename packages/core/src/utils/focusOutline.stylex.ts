@@ -5,23 +5,14 @@
  * @input Uses StyleX and theme color tokens
  * @output Exports shared focus-outline prop builders
  * @position Internal utility for consistent keyboard focus outlines across core components
- *
- * Centralizes the standard Astryx focus outline, shown only for keyboard focus.
- * Every focusable surface drew the same 2px accent ring already; writing it per
- * component meant dozens of identical definitions to keep in step, and they did
- * not stay in step — offsets drifted and one ring was a border-width thick.
- *
- * Every ring in core and lab is drawn from here, with one exception recorded in
- * Switch: its condition is a component-scoped ancestor marker, which cannot be
- * shared without leaking focus state between components. A component may still
- * override the OFFSET (a ring that must sit inset, or clear of a field border);
- * width, style and color are not restated anywhere.
- *
- * Every value comes from the `--focus-outline-*` tokens, which is how a theme
- * restyles the ring: one override reaches every component at once. The
- * `:focus-visible` condition is not themeable and stays here, so a theme can
- * change what the ring looks like but cannot show it to pointer users.
  */
+
+// Every ring in core and lab comes from here, except Switch's: its condition
+// is a component-scoped ancestor marker, which cannot be shared without
+// leaking focus state. A component may override only the offset. The values
+// come from the `--focus-outline-*` tokens, so a theme restyles every ring at
+// once. The `:focus-visible` condition is not themeable, so a theme cannot
+// show the ring to pointer users.
 
 import * as stylex from '@stylexjs/stylex';
 import {focusVars} from '../theme/tokens.stylex';
@@ -158,6 +149,33 @@ export const focusOutlineStyles = stylex.create({
     outlineOffset: {
       default: '0',
       ':has(> :first-child:focus-visible)': FOCUS_OUTLINE_OFFSET,
+    },
+  },
+  /**
+   * Like {@link focusOutlineStyles.focusWithin}, but only for a direct child
+   * with `role="combobox"`: for a control box that paints the ring for its
+   * combobox trigger while sibling controls inside it (a status info-tip, a
+   * clear button) ring themselves. One focus move shows one ring.
+   */
+  focusWithinCombobox: {
+    outlineWidth: {
+      default: '0',
+      ':has(> [role="combobox"]:focus-visible)':
+        focusOutlineLonghands.outlineWidth,
+    },
+    outlineStyle: {
+      default: 'none',
+      ':has(> [role="combobox"]:focus-visible)':
+        focusOutlineLonghands.outlineStyle,
+    },
+    outlineColor: {
+      default: null,
+      ':has(> [role="combobox"]:focus-visible)':
+        focusOutlineLonghands.outlineColor,
+    },
+    outlineOffset: {
+      default: '0',
+      ':has(> [role="combobox"]:focus-visible)': FOCUS_OUTLINE_OFFSET,
     },
   },
   /**

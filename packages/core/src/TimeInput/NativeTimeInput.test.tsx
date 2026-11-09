@@ -10,6 +10,7 @@
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import {TimeInput} from './TimeInput';
+import {InternationalizationProvider} from '../i18n';
 import {InputGroup, InputGroupText} from '../InputGroup';
 import {resetDateSegmentProbe} from '../DateInput/nativeDateSegments';
 import type {ISOTimeString} from '../utils';
@@ -48,6 +49,22 @@ afterEach(() => {
 });
 
 describe('TimeInput nativePicker', () => {
+  it("shows the resting value in the locale's hour cycle", () => {
+    stubPointer(true);
+    render(
+      <InternationalizationProvider locale="de-DE">
+        <TimeInput
+          label="Start time"
+          value={'14:30' as ISOTimeString}
+          onChange={() => {}}
+        />
+      </InternationalizationProvider>,
+    );
+    expect(getNativeTimeInput()).toHaveValue('14:30');
+    expect(screen.getByText('14:30')).toBeInTheDocument();
+    expect(screen.queryByText('2:30 PM')).toBeNull();
+  });
+
   it('uses the browser/OS picker on a coarse pointer by default', () => {
     stubPointer(true);
     render(

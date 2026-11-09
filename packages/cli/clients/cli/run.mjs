@@ -33,11 +33,14 @@ export async function runCli({cliRoot, argv, declinedProjectCli}) {
   if (answered) return answered;
 
   const {
-    program,
+    createProgram,
     loadProjectDebugHandler,
     loadProjectForHelp,
     handleVersionJsonPreflight,
   } = await import('./index.mjs');
+  // Only the commands these arguments need load, before anything below runs,
+  // as the full program did.
+  const program = await createProgram({argv: process.argv.slice(2)});
   const {isJsonMode, toErrorEnvelope} =
     await import('../../foundation/response/json.mjs');
   const {handleCommanderError} = await import('./lib/json-shim.mjs');

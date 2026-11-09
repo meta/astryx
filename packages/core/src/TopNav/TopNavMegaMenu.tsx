@@ -38,6 +38,7 @@ import React, {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {isRenderable} from '../utils/isRenderable';
 import {
   colorVars,
   spacingVars,
@@ -378,6 +379,7 @@ export function TopNavMegaMenu({
   if (renderMode === 'drawer') {
     return (
       <DrawerMegaMenu
+        ref={ref}
         label={label}
         items={items}
         featured={featured}
@@ -537,14 +539,14 @@ function DefaultMegaMenu({
           {...stylex.props(styles.panelContainer)}>
           <div {...stylex.props(styles.panelContent)}>
             {/* Menu items section */}
-            {items != null && (
+            {isRenderable(items) && (
               <Grid columns={2} gap={2} xstyle={styles.menuWrapper}>
                 {items}
               </Grid>
             )}
 
             {/* Featured section */}
-            {featured != null && (
+            {isRenderable(featured) && (
               <div {...stylex.props(styles.featured)}>{featured}</div>
             )}
           </div>
@@ -564,6 +566,7 @@ function DefaultMegaMenu({
 // =============================================================================
 
 function DrawerMegaMenu({
+  ref,
   label,
   items,
   featured,
@@ -572,7 +575,7 @@ function DrawerMegaMenu({
   style,
   onClick: onClickProp,
   ...rest
-}: Pick<TopNavMegaMenuProps, 'label' | 'items' | 'featured'> &
+}: Pick<TopNavMegaMenuProps, 'ref' | 'label' | 'items' | 'featured'> &
   BaseProps<HTMLButtonElement>) {
   const [isExpanded, setIsExpanded] = useState(false);
   const pressable = usePressFeedback();
@@ -582,6 +585,7 @@ function DrawerMegaMenu({
     <div {...stylex.props(styles.drawerSection)}>
       {/* Header toggle — same pattern as TopNavMenu drawer */}
       <button
+        ref={ref}
         type="button"
         {...rest}
         onClick={composeEventHandlers(onClickProp, () =>
@@ -627,7 +631,7 @@ function DrawerMegaMenu({
           {items}
 
           {/* Featured card */}
-          {featured != null && (
+          {isRenderable(featured) && (
             <div {...stylex.props(styles.drawerFeatured)}>{featured}</div>
           )}
         </div>

@@ -65,31 +65,31 @@ public struct AstryxStyle: Sendable {
 
   /// A token color by its CSS name, for code that only has the name. A name
   /// the theme does not define draws clear. New code reads the typed members.
-  public func color(_ token: String) -> Color {
+  func color(_ token: String) -> Color {
     tokens.color.value(named: token) ?? .clear
   }
 
   /// A token size in points by its CSS name, or `fallback` when the theme does
   /// not define it. New code reads the typed members.
-  public func size(_ token: String, _ fallback: CGFloat) -> CGFloat {
+  func size(_ token: String, _ fallback: CGFloat) -> CGFloat {
     tokens.space.value(named: token) ?? tokens.radius.value(named: token)
       ?? tokens.size.value(named: token) ?? tokens.font.number(named: token) ?? fallback
   }
 
   /// A step on the spacing ladder: `space(4)` reads `spacing-4`.
-  public func space(_ step: Int) -> CGFloat {
+  func space(_ step: Int) -> CGFloat {
     size("spacing-\(step)", CGFloat(step) * 4)
   }
 
   /// A token font size grown by Dynamic Type.
-  public func fontSize(_ token: String, _ fallback: CGFloat) -> CGFloat {
+  func fontSize(_ token: String, _ fallback: CGFloat) -> CGFloat {
     size(token, fallback) * textScale
   }
 
   /// The theme's font family at a token size and a token weight. The first
   /// family in the stack that the device has wins; a system family, such as
   /// `-apple-system` or `sans-serif`, is the system font.
-  public func font(
+  func font(
     size token: String,
     _ fallback: CGFloat,
     weight: String,
