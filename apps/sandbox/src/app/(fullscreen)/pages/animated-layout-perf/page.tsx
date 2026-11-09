@@ -45,11 +45,11 @@ import type {AnimatedLayout} from '@astryxdesign/core/hooks';
 
 type Rendering = 'full' | 'virtualized';
 import {
+  formatBenchmarkChange,
   formatCount,
   formatDuration,
   watchLongTasks,
-} from '../diffviewer-perf/benchmark';
-import {formatBenchmarkChange} from '../markdown-perf/benchmark';
+} from '../perfReadings';
 
 interface RunMetrics {
   /** From the change to the glide starting: React's commit and the walk. */
