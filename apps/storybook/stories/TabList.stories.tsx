@@ -1052,54 +1052,67 @@ export const TabsPattern: Story = {
 };
 
 /**
- * A tab's help text: a Tooltip anchored on the Tab, so it describes the tab
- * itself. The tab stays one button; the info glyph is decorative.
+ * A tab's help text: a Tooltip anchored on the Tab through its ref, so it
+ * describes the tab itself. Each Tooltip renders after the TabList, because the
+ * strip holds only tabs. The tab stays one button; the info glyph is decorative.
  */
-function DescribedTab({
-  value,
-  label,
-  description,
-}: {
-  value: string;
-  label: string;
-  description: string;
-}) {
-  const tabRef = useRef<HTMLButtonElement>(null);
-  return (
-    <>
-      <Tab
-        ref={tabRef}
-        value={value}
-        label={label}
-        endContent={<Icon icon="info" size="sm" />}
-      />
-      <Tooltip content={description} anchorRef={tabRef} />
-    </>
-  );
-}
-
 export const DescribedTabs: Story = {
   name: 'Tab With Help Text',
   render: () => {
     const [value, setValue] = useState('general');
+    const generalRef = useRef<HTMLButtonElement>(null);
+    const membersRef = useRef<HTMLButtonElement>(null);
+    const panels = {
+      general: 'Workspace name, language, and time zone.',
+      members: 'People with access to this workspace.',
+      advanced: 'Export, archive, and delete.',
+    };
     return (
-      <TabList
-        value={value}
-        onChange={setValue}
-        role="tablist"
-        aria-label="Settings">
-        <DescribedTab
-          value="general"
-          label="General"
-          description="Name, language, and time zone for this workspace."
+      <div style={{display: 'grid', gap: '12px', maxWidth: '420px'}}>
+        <TabList
+          value={value}
+          onChange={setValue}
+          role="tablist"
+          aria-label="Settings">
+          <Tab
+            ref={generalRef}
+            value="general"
+            label="General"
+            panelId="panel-help-general"
+            endContent={<Icon icon="info" size="sm" />}
+          />
+          <Tab
+            ref={membersRef}
+            value="members"
+            label="Members"
+            panelId="panel-help-members"
+            endContent={<Icon icon="info" size="sm" />}
+          />
+          <Tab
+            value="advanced"
+            label="Advanced"
+            panelId="panel-help-advanced"
+          />
+        </TabList>
+        <Tooltip
+          content="Name, language, and time zone for this workspace."
+          anchorRef={generalRef}
         />
-        <DescribedTab
-          value="members"
-          label="Members"
-          description="Who can open this workspace, and what they can change."
+        <Tooltip
+          content="Who can open this workspace, and what they can change."
+          anchorRef={membersRef}
         />
-        <Tab value="advanced" label="Advanced" />
-      </TabList>
+        {Object.entries(panels).map(([key, text]) => (
+          <div
+            key={key}
+            id={`panel-help-${key}`}
+            role="tabpanel"
+            tabIndex={0}
+            hidden={key !== value}>
+            {text}
+          </div>
+        ))}
+      </div>
     );
   },
 };

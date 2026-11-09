@@ -17,39 +17,41 @@ export const docs = {
   examples: [
     {
       label: 'Describe a tab with help text',
-      code: `import {useRef} from 'react';
+      code: `import {useRef, useState} from 'react';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Tab, TabList} from '@astryxdesign/core/TabList';
 import {Tooltip} from '@astryxdesign/core/Tooltip';
 
-// The tab is one button, so its help text is a Tooltip anchored on the Tab,
-// not a second button inside it. The tooltip describes the tab itself, and
-// the info glyph in endContent is decorative.
-function DescribedTab({value, label, description}) {
-  const tabRef = useRef(null);
+// The tab is one button, so its help text is a Tooltip anchored on the Tab
+// through its ref, not a second button inside it. The tooltip describes the
+// tab itself. Render it after the TabList: the strip holds only tabs. The
+// info glyph in endContent is decorative.
+function SettingsTabs() {
+  const [value, setValue] = useState('general');
+  const generalRef = useRef(null);
   return (
     <>
-      <Tab
-        ref={tabRef}
-        value={value}
-        label={label}
-        endContent={<Icon icon="info" size="sm" />}
+      <TabList value={value} onChange={setValue} role="tablist" aria-label="Settings">
+        <Tab
+          ref={generalRef}
+          value="general"
+          label="General"
+          panelId="panel-general"
+          endContent={<Icon icon="info" size="sm" />}
+        />
+        <Tab value="advanced" label="Advanced" panelId="panel-advanced" />
+      </TabList>
+      <Tooltip
+        content="Name, language, and time zone for this workspace."
+        anchorRef={generalRef}
       />
-      <Tooltip content={description} anchorRef={tabRef} />
+      <div id="panel-general" role="tabpanel" hidden={value !== 'general'}>
+        …
+      </div>
+      <div id="panel-advanced" role="tabpanel" hidden={value !== 'advanced'}>
+        …
+      </div>
     </>
-  );
-}
-
-function SettingsTabs() {
-  return (
-    <TabList value="general" onChange={() => {}} role="tablist" aria-label="Settings">
-      <DescribedTab
-        value="general"
-        label="General"
-        description="Name, language, and time zone for this workspace."
-      />
-      <Tab value="advanced" label="Advanced" />
-    </TabList>
   );
 }`,
     },
@@ -127,7 +129,7 @@ function SettingsTabs() {
       name: 'endContent',
       type: 'ReactNode',
       description:
-        'Content rendered after the label, such as a badge count or status dot. The tab is one button, so endContent holds only non-interactive content: no button, link, InfoTip, or other focusable control. To explain a tab, anchor a Tooltip on the Tab through its ref and put a decorative info Icon here.',
+        'Content rendered after the label, such as a badge count or status dot. The tab is one button, so endContent holds only non-interactive content: no button, link, InfoTip, or other focusable control. To explain a tab, anchor a Tooltip on the Tab through its ref, render it after the TabList, and put a decorative info Icon here.',
       slotElements: [
         {
           __element: 'Icon',
@@ -210,7 +212,7 @@ export const docsZh = {
       name: 'endContent',
       type: 'ReactNode',
       description:
-        '在标签文本之后渲染的内容，例如徽章计数或状态点。标签本身是一个按钮，因此 endContent 只能放非交互内容：不能放按钮、链接、InfoTip 或其他可聚焦控件。要说明一个标签，请通过 ref 把 Tooltip 锚定在 Tab 上，并在这里放一个装饰性的信息 Icon。',
+        '在标签文本之后渲染的内容，例如徽章计数或状态点。标签本身是一个按钮，因此 endContent 只能放非交互内容：不能放按钮、链接、InfoTip 或其他可聚焦控件。要说明一个标签，请通过 ref 把 Tooltip 锚定在 Tab 上，把它渲染在 TabList 之后，并在这里放一个装饰性的信息 Icon。',
     },
     {
       name: 'xstyle',
@@ -238,7 +240,7 @@ export const docsDense = {
     icon: 'Icon shown when not selected.',
     selectedIcon: 'Icon shown when selected; falls back to icon.',
     endContent:
-      'Non-interactive content after the label (badge, status dot). No focusable control: explain a tab with a Tooltip anchored on the Tab (anchorRef) + a decorative info Icon here.',
+      'Non-interactive content after the label (badge, status dot). No focusable control: explain a tab with a Tooltip anchored on the Tab (anchorRef, rendered after TabList) + a decorative info Icon here.',
     xstyle:
       'StyleX styles for layout customization. Must be stylex.create() value, not inline style.',
   },
