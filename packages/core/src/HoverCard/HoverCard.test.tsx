@@ -646,8 +646,7 @@ describe('HoverCard', () => {
     );
     const trigger = screen.getByText('2 hours ago');
     expect(trigger.tagName).toBe('TIME');
-    // The time role supports neither, and emitting either is a critical axe
-    // aria-allowed-attr violation.
+    // ARIA 1.2 supports neither attribute on the time role.
     expect(trigger).not.toHaveAttribute('aria-haspopup');
     expect(trigger).not.toHaveAttribute('aria-expanded');
   });

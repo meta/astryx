@@ -46,11 +46,10 @@ export interface PopupTriggerAttributes {
 
 // The ARIA 1.2 "Supported States and Properties" lists for each attribute,
 // with the subclass roles that inherit it. Both are the narrow reading: a
-// role outside a set is not always a violation, but emitting an attribute on
-// a role that does not support it is a critical aria-allowed-attr defect,
-// while dropping one costs an assistive-technology user only a state they
-// can still infer. Widening a set is safe. Chat/useTriggerMenu.tsx applies
-// the same rule to aria-expanded.
+// role outside a set is not always unsupported, but an attribute on a role
+// that does not support it can be ignored by assistive technology, while
+// dropping one costs a user only a state they can still infer. Widening a set
+// is safe. Chat/useTriggerMenu.tsx applies the same rule to aria-expanded.
 const HASPOPUP_ROLES = new Set([
   'application',
   'button',
