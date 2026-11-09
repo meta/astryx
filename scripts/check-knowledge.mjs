@@ -40,6 +40,7 @@ const {
   isIgnoredComponentKnowledgeSegment,
   isKnowledgeRecordPath,
   isPlatformComponentSpecPath,
+  isValidatedRecordPath,
   locateComponentKnowledgePath,
 } = require('../.github/scripts/knowledge-paths.cjs');
 
@@ -847,7 +848,11 @@ export function readKnowledgeRecordsAtAuthority(
   };
 }
 
-function readKnowledgeRecordsAtRevision(root, revision) {
+function readKnowledgeRecordsAtRevision(
+  root,
+  revision,
+  isRecord = isKnowledgeRecordPath,
+) {
   const paths = execFileSync(
     'git',
     [
@@ -867,7 +872,7 @@ function readKnowledgeRecordsAtRevision(root, revision) {
     {encoding: 'utf8'},
   )
     .split(/\r?\n/)
-    .filter(isKnowledgeRecordPath);
+    .filter(isRecord);
   const objects = readObjects(
     root,
     paths.map(filePath => `${revision}:${filePath}`),
@@ -910,6 +915,16 @@ function originalDecider(line) {
   return line.split(',')[0].replace(/[`@]/g, '').replace(/\.$/, '').trim();
 }
 
+// Only the decider and date fields can hold a placeholder. The rest of the
+// line is free text, such as a decision's subject.
+function hasPlaceholderDecider(line) {
+  const [decider = '', date = ''] = line.split(';')[0].split(',');
+  return (
+    PLACEHOLDER_DECIDER.test(decider) ||
+    PLACEHOLDER_DECIDER.test(date.split('(')[0])
+  );
+}
+
 /**
  * The approval lines a pull request changes or removes, with the account whose
  * approval each change needs (INV31). Records pair by id, so a moved record or
@@ -941,7 +956,7 @@ export function findApprovalLineRewrites(baseRecords, currentRecords) {
     }
     const headDeciders = head ? deciderLines(head.record.content) : new Map();
     for (const [decision, from] of deciderLines(base.record.content)) {
-      if (PLACEHOLDER_DECIDER.test(from)) continue;
+      if (hasPlaceholderDecider(from)) continue;
       const to = headDeciders.get(decision) ?? null;
       if (to?.startsWith(from)) continue;
       changes.push({
@@ -956,14 +971,25 @@ export function findApprovalLineRewrites(baseRecords, currentRecords) {
   return changes;
 }
 
-function currentKnowledgeRecords(root, repositoryFiles) {
+function currentValidatedRecords(root, repositoryFiles) {
   return repositoryFiles
-    .filter(isKnowledgeRecordPath)
+    .filter(isValidatedRecordPath)
     .filter(filePath => fs.existsSync(path.join(root, filePath)))
     .map(filePath => ({
       path: filePath,
       content: fs.readFileSync(path.join(root, filePath), 'utf8'),
     }));
+}
+
+/**
+ * The approval lines the working tree changes since `baseRevision`, in every
+ * validated record: knowledge records and platform component records.
+ */
+export function approvalLineRewritesSince(root, baseRevision, repositoryFiles) {
+  return findApprovalLineRewrites(
+    readKnowledgeRecordsAtRevision(root, baseRevision, isValidatedRecordPath),
+    currentValidatedRecords(root, repositoryFiles),
+  );
 }
 
 function immediateDirectories(directory) {
@@ -2570,10 +2596,7 @@ async function main() {
     );
     const repositoryFiles = repositoryFileList(DEFAULT_ROOT);
     const changes = repositoryFiles
-      ? findApprovalLineRewrites(
-          readKnowledgeRecordsAtRevision(DEFAULT_ROOT, baseRevision),
-          currentKnowledgeRecords(DEFAULT_ROOT, repositoryFiles),
-        )
+      ? approvalLineRewritesSince(DEFAULT_ROOT, baseRevision, repositoryFiles)
       : [];
     for (const change of changes) {
       console.warn(

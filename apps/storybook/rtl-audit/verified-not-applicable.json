@@ -166,6 +166,14 @@
     "reason": "FormLayout arranges caller-owned fields with grid/block flow, logical gaps, and responsive columns. It owns no directional glyph, physical inline placement, transform, scrolling action, dragging, overlay, or keyboard behavior."
   },
   {
+    "component": "core/LayoutFooter",
+    "reason": "LayoutFooter is a block-axis band below the Layout's middle row. Its inner wrapper uses logical padding with the same value on both inline edges, its width is capped at the content width, and it centers inside the footer with marginInline auto. Its only line is on the block-start edge. It owns no directional glyph, physical inline offset or transform, inline ordering, scrolling, dragging, overlay, or keyboard behavior. Caller content follows the document direction."
+  },
+  {
+    "component": "core/LayoutHeader",
+    "reason": "LayoutHeader is a block-axis band above the Layout's middle row. Its inner wrapper uses logical padding with the same value on both inline edges; its width is capped at the content width, and it centers inside the header with marginInline auto. The only per-edge override, paddingBlockEnd, is on the block axis, and its only line is on the block-end edge. It owns no directional glyph, physical inline offset or transform, inline ordering, scrolling, dragging, overlay, or keyboard behavior. Caller content follows the document direction."
+  },
+  {
     "component": "core/Item",
     "reason": "Item places start content, text, and end content in normal flex flow using logical padding, text-align:start, and margin-inline-start:auto. Those slots mirror through CSS direction without component branching; Item owns no directional glyph or directional keyboard behavior."
   },

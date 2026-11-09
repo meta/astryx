@@ -212,6 +212,18 @@ describe('TopNav', () => {
     // positioning context for the mega menu panel.
     expect(nav).not.toHaveStyle({position: 'relative'});
   });
+
+  it('lets the heading column shrink so a long heading can truncate', () => {
+    render(
+      <TopNav
+        label="Main navigation"
+        heading={<span>A very long product name</span>}
+        endContent={<span>End</span>}
+      />,
+    );
+    const column = screen.getByText('A very long product name').parentElement!;
+    expect(getComputedStyle(column).flexShrink).toBe('1');
+  });
 });
 
 describe('TopNavHeading', () => {
@@ -234,6 +246,93 @@ describe('TopNavHeading', () => {
     );
     expect(screen.getByText('Dashboard')).toBeInTheDocument();
     expect(screen.getByTestId('logo')).toBeInTheDocument();
+  });
+
+  // jsdom does not place grid items, so this locks the track that puts
+  // headerEndContent at the inline end when the root is wider than its parts.
+  it('gives the text track the free space so header end content sits at the inline end', () => {
+    const {rerender} = render(
+      <TopNavHeading
+        logo={<span>Logo</span>}
+        heading="Product"
+        headerEndContent={<span>End</span>}
+      />,
+    );
+    const withLogo = screen
+      .getByText('Product')
+      .closest('.astryx-top-nav-heading');
+    expect(withLogo).not.toBeNull();
+    expect(getComputedStyle(withLogo!).gridTemplateColumns).toBe(
+      'auto minmax(0,1fr)',
+    );
+
+    rerender(
+      <TopNavHeading heading="Product" headerEndContent={<span>End</span>} />,
+    );
+    const textOnly = screen
+      .getByText('Product')
+      .closest('.astryx-top-nav-heading');
+    expect(getComputedStyle(textOnly!).gridTemplateColumns).toBe(
+      'minmax(0,1fr)',
+    );
+  });
+
+  it('clips each linked line inside its column and leaves the column overflow visible', () => {
+    render(
+      <TopNavHeading
+        superheading="Suite"
+        superheadingHref="/suite"
+        heading="Product"
+        headingHref="/product"
+        subheading="Account"
+        subheadingHref="/account"
+      />,
+    );
+    for (const name of ['Suite', 'Product', 'Account']) {
+      const link = screen.getByRole('link', {name});
+      const style = getComputedStyle(link);
+      expect(style.overflow).toBe('hidden');
+      expect(style.minWidth).toBe('0');
+      expect(style.maxWidth).toBe('100%');
+    }
+    // The column itself is not a clip, so the link's own focus ring can paint.
+    const column = screen.getByRole('link', {name: 'Product'}).parentElement;
+    expect(getComputedStyle(column!).overflow).toBe('');
+  });
+
+  it('counts the chevron row in the text track when the heading has a menu', () => {
+    const {rerender} = render(
+      <TopNavHeading
+        logo={<span>Logo</span>}
+        heading="Product"
+        menu={<div>Menu</div>}
+      />,
+    );
+    const withLogo = document.querySelector('.astryx-top-nav-heading');
+    expect(getComputedStyle(withLogo!).gridTemplateColumns).toBe(
+      'auto minmax(calc(var(--spacing-7) + var(--spacing-1)),1fr)',
+    );
+
+    rerender(<TopNavHeading heading="Product" menu={<div>Menu</div>} />);
+    const textOnly = document.querySelector('.astryx-top-nav-heading');
+    expect(getComputedStyle(textOnly!).gridTemplateColumns).toBe(
+      'minmax(calc(var(--spacing-7) + var(--spacing-1)),1fr)',
+    );
+  });
+
+  it('gives a logo-only heading a single track', () => {
+    render(
+      <TopNavHeading
+        logo={<span>Logo</span>}
+        headingHref="/home"
+        logoLabel="Home"
+      />,
+    );
+    const root = screen.getByRole('link', {name: 'Home'});
+    expect(root).toHaveClass('astryx-top-nav-heading');
+    expect(getComputedStyle(root).display).toBe('grid');
+    expect(getComputedStyle(root).gridTemplateColumns).toBe('');
+    expect(root.childElementCount).toBe(1);
   });
 
   describe('logo link accessible name', () => {
@@ -591,12 +690,14 @@ describe('TopNavItem', () => {
     );
   });
 
-  it('sets tabIndex to -1 when disabled', () => {
+  it('keeps its tab stop and link role when disabled (spec:AST-085 FR1, FR5)', async () => {
+    const user = userEvent.setup();
     render(<TopNavItem label="Home" href="#" isDisabled />);
-    expect(screen.getByText('Home').closest('a')).toHaveAttribute(
-      'tabIndex',
-      '-1',
-    );
+    const item = screen.getByRole('link', {name: 'Home'});
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+    expect(item).toHaveAttribute('tabIndex', '0');
+    await user.tab();
+    expect(item).toHaveFocus();
   });
 
   describe('disabled items do not navigate', () => {
@@ -611,14 +712,13 @@ describe('TopNavItem', () => {
           isDisabled
         />,
       );
-      // An href-less anchor exposes no link role, so it is not announced
-      // with a live destination.
-      expect(screen.queryByRole('link')).not.toBeInTheDocument();
-      const item = screen.getByText('Home').closest('a') as HTMLAnchorElement;
+      // The href-less anchor keeps the link role and its tab stop, so it is
+      // found and announced as disabled, with no live destination.
+      const item = screen.getByRole('link', {name: 'Home'});
       expect(item).not.toHaveAttribute('href');
       expect(item).not.toHaveAttribute('target');
       expect(item).toHaveAttribute('aria-disabled', 'true');
-      expect(item).toHaveAttribute('tabIndex', '-1');
+      expect(item).toHaveAttribute('tabIndex', '0');
 
       // fireEvent bypasses pointer-events: none, simulating programmatic/AT
       // activation. It returns false when preventDefault was called, i.e.
@@ -641,12 +741,11 @@ describe('TopNavItem', () => {
           />
         </TopNavRenderContext>,
       );
-      expect(screen.queryByRole('link')).not.toBeInTheDocument();
-      const item = screen.getByText('Home').closest('a') as HTMLAnchorElement;
+      const item = screen.getByRole('link', {name: 'Home'});
       expect(item).not.toHaveAttribute('href');
       expect(item).not.toHaveAttribute('target');
       expect(item).toHaveAttribute('aria-disabled', 'true');
-      expect(item).toHaveAttribute('tabIndex', '-1');
+      expect(item).toHaveAttribute('tabIndex', '0');
 
       // fireEvent bypasses pointer-events: none, simulating programmatic/AT
       // activation. It returns false when preventDefault was called.
@@ -654,6 +753,40 @@ describe('TopNavItem', () => {
       expect(notCancelled).toBe(false);
       expect(handleClick).not.toHaveBeenCalled();
     });
+
+    it.each([
+      ['default', undefined],
+      ['drawer', 'drawer' as const],
+    ])(
+      'stays inert from the keyboard once focused (%s mode)',
+      async (_name, mode) => {
+        const user = userEvent.setup();
+        const handleClick = vi.fn();
+        const handleKeyDown = vi.fn();
+        const item = (
+          <TopNavItem
+            label="Home"
+            href="/home"
+            onClick={handleClick}
+            onKeyDown={handleKeyDown}
+            isDisabled
+          />
+        );
+        render(
+          mode ? (
+            <TopNavRenderContext value={mode}>{item}</TopNavRenderContext>
+          ) : (
+            item
+          ),
+        );
+        await user.tab();
+        expect(screen.getByRole('link', {name: 'Home'})).toHaveFocus();
+        await user.keyboard('{Enter}');
+        await user.keyboard(' ');
+        expect(handleClick).not.toHaveBeenCalled();
+        expect(handleKeyDown).not.toHaveBeenCalled();
+      },
+    );
 
     it.each([
       ['default', null],

@@ -31,6 +31,7 @@ import {
   validatePathApplicability,
   validateReviewApplicability,
   validateSchemaEvolution,
+  approvalLineRewritesSince,
   findApprovalLineRewrites,
 } from './check-knowledge.mjs';
 
@@ -924,6 +925,95 @@ describe('approval line history', () => {
       ],
     });
     expect(findApprovalLineRewrites([pendingBase], [head])).toEqual([]);
+  });
+
+  it('reads a placeholder only in the decider and date fields', () => {
+    const decided =
+      '`owner-a`, `2026-11-01`; pending-search Enter, a quiet send';
+    const rewritten = findApprovalLineRewrites(
+      [record({decisions: [['DEC-1', decided]]})],
+      [
+        record({
+          decisions: [
+            [
+              'DEC-1',
+              '`owner-b`, `2026-11-01`; pending-search Enter, a quiet send',
+            ],
+          ],
+        }),
+      ],
+    );
+    expect(rewritten).toEqual([
+      expect.objectContaining({
+        claim: 'DEC-1',
+        from: decided,
+        decider: 'owner-a',
+      }),
+    ]);
+    // A placeholder date, with or without a note, is still a placeholder.
+    for (const placeholder of [
+      '`owner-a`, `<pending>`',
+      '`owner-a`, pending (awaiting the owner)',
+    ]) {
+      expect(
+        findApprovalLineRewrites(
+          [record({decisions: [['DEC-1', placeholder]]})],
+          [record({decisions: [['DEC-1', '`owner-a`, `2026-11-08`']]})],
+        ),
+        placeholder,
+      ).toEqual([]);
+    }
+  });
+
+  it('warns for a platform component record too', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'approval-lines-'));
+    try {
+      const file = 'docs/specs/components/TextInput/TextInput.swift.spec.md';
+      const git = (...args) =>
+        execFileSync('git', ['-C', dir, ...args], {
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            GIT_AUTHOR_NAME: 't',
+            GIT_AUTHOR_EMAIL: 't@example.com',
+            GIT_COMMITTER_NAME: 't',
+            GIT_COMMITTER_EMAIL: 't@example.com',
+          },
+        });
+      const write = approvedBy => {
+        fs.mkdirSync(path.join(dir, path.dirname(file)), {recursive: true});
+        fs.writeFileSync(
+          path.join(dir, file),
+          [
+            '---',
+            'id: component:TextInput/swift',
+            'authority: current',
+            `approved_by: ${approvedBy}`,
+            '---',
+            '',
+            '# TextInput (Swift)',
+            '',
+          ].join('\n'),
+        );
+      };
+      git('init', '-q');
+      write('owner-a');
+      git('add', '-A');
+      git('commit', '-q', '-m', 'base');
+      const base = git('rev-parse', 'HEAD').trim();
+      write('owner-b');
+      expect(approvalLineRewritesSince(dir, base, [file])).toEqual([
+        {
+          path: file,
+          claim: 'approved_by',
+          from: 'owner-a',
+          to: 'owner-b',
+          decider: 'owner-a',
+        },
+      ]);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
   });
 });
 

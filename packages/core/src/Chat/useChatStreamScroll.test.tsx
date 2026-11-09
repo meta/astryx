@@ -379,3 +379,102 @@ describe('useChatStreamScroll — spring cancellation', () => {
     expect(rafQueue).toHaveLength(1);
   });
 });
+
+describe('useChatStreamScroll — the page as the scroller', () => {
+  // A page scrolls its root element, and the browser raises the scroll at
+  // the document. The root's offsetHeight is the page's height; its
+  // clientHeight is the viewport's.
+  const root = document.documentElement;
+
+  function setPageGeometry({
+    scrollHeight,
+    clientHeight,
+  }: {
+    scrollHeight: number;
+    clientHeight: number;
+  }) {
+    Object.defineProperty(root, 'scrollHeight', {
+      value: scrollHeight,
+      configurable: true,
+    });
+    Object.defineProperty(root, 'clientHeight', {
+      value: clientHeight,
+      configurable: true,
+    });
+    Object.defineProperty(root, 'offsetHeight', {
+      value: scrollHeight,
+      configurable: true,
+    });
+  }
+
+  function PageHarness({
+    api,
+  }: {
+    api: {current: UseChatStreamScrollReturn | null};
+  }) {
+    const scrollRef = useRef<HTMLElement>(root);
+    api.current = useChatStreamScroll({scrollRef});
+    return null;
+  }
+
+  function scrollPageTo(top: number, target: EventTarget = document) {
+    root.scrollTop = top;
+    act(() => {
+      target.dispatchEvent(new Event('scroll'));
+    });
+  }
+
+  function renderPage() {
+    const api: {current: UseChatStreamScrollReturn | null} = {current: null};
+    setPageGeometry({scrollHeight: 3000, clientHeight: 700});
+    const utils = render(<PageHarness api={api} />);
+    flushRaf();
+    scrollPageTo(2300);
+    return {api, ...utils};
+  }
+
+  afterEach(() => {
+    for (const property of ['scrollHeight', 'clientHeight', 'offsetHeight']) {
+      Reflect.deleteProperty(root, property);
+    }
+    root.scrollTop = 0;
+  });
+
+  it('opens at the bottom, following, with no scroll button', () => {
+    const {api} = renderPage();
+    expect(root.scrollTop).toBe(2300);
+    expect(api.current!.isScrolledUp).toBe(false);
+    expect(api.current!.isLocked).toBe(true);
+  });
+
+  it('shows the scroll button and stops following when the reader scrolls the page up', () => {
+    const {api} = renderPage();
+    scrollPageTo(2000);
+    expect(api.current!.isScrolledUp).toBe(true);
+    expect(api.current!.isLocked).toBe(false);
+  });
+
+  it('follows again, with no scroll button, once the page comes to rest at the bottom', () => {
+    const {api} = renderPage();
+    scrollPageTo(2000);
+    scrollPageTo(2300);
+    act(() => {
+      document.dispatchEvent(new Event('scrollend'));
+    });
+    expect(api.current!.isScrolledUp).toBe(false);
+    expect(api.current!.isLocked).toBe(true);
+  });
+
+  it('ignores the scroll of an element inside the page', () => {
+    const {api} = renderPage();
+    const panel = document.createElement('div');
+    document.body.append(panel);
+    try {
+      scrollPageTo(2000, panel);
+      expect(api.current!.isScrolledUp).toBe(false);
+      expect(api.current!.isLocked).toBe(true);
+    } finally {
+      panel.remove();
+    }
+  });
+});

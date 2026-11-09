@@ -1374,12 +1374,16 @@ test.describe('spec:AST-105 Coverage', () => {
       const [animation] = (
         doc.getElementById('after') as HTMLElement
       ).getAnimations();
-      await frame(view);
-      await frame(view);
+      // These reads happen as the change commits, before any frame. They take
+      // the glide's start, the last frame time on its timeline, and the
+      // frame's clock. The engines keep these times to the microsecond.
+      const us = (ms: number) => Math.round(ms * 1000) / 1000;
       return {
         gap: performance.now() - view.performance.now(),
         playState: animation.playState,
-        currentTime: Number(animation.currentTime),
+        startTime: us(Number(animation.startTime)),
+        frameTime: us(Number(doc.timeline.currentTime)),
+        now: us(view.performance.now()),
       };
     }, BASE_STYLE);
     test.info().annotations.push({
@@ -1388,11 +1392,12 @@ test.describe('spec:AST-105 Coverage', () => {
     });
     // The frame's clock started well after the page's...
     expect(run.gap).toBeGreaterThan(100);
-    // ...and the row after the change glides from the first frames, rather
-    // than holding its old place until the page's clock comes round.
+    // ...and the row after the change glides from the frame's next frame. Its
+    // start is on the frame's own clock, from that clock's last frame to now.
+    // On the page's clock it would sit `gap` later and hold its old place.
     expect(run.playState).toBe('running');
-    expect(run.currentTime).toBeGreaterThanOrEqual(0);
-    expect(run.currentTime).toBeLessThan(200);
+    expect(run.startTime).toBeGreaterThanOrEqual(run.frameTime);
+    expect(run.startTime).toBeLessThanOrEqual(run.now);
   });
 
   test('nested areas: motion stops at the inner area; an inner area moves as one unit', async ({

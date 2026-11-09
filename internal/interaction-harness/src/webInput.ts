@@ -44,7 +44,7 @@
  *   harness self-test (../src/harness.interaction.browser.spec.ts).
  */
 
-import type {CDPSession, JSHandle, Page, TestInfo} from '@playwright/test';
+import type {CDPSession, JSHandle, Page} from '@playwright/test';
 import type {Engine} from './touch';
 
 /** One wheel step: the page receives exactly `dx`, `dy` CSS px. */
@@ -69,10 +69,11 @@ export interface WheelBurst {
   readonly ctrl?: boolean;
   /**
    * The longest gap the page may see between two received steps, ms (see
-   * `wheelArrivals`): the gap after which the proof's component would treat
-   * the run as more than one gesture. Past it `wheelBurst` throws `WheelPageStallError` when the
-   * page's own handling of the step before caused the gap, and
-   * `WheelPacingError` otherwise.
+   * `wheelArrivals`). Past it, the proof's component would treat the run as
+   * more than one gesture. Past it `wheelBurst` throws
+   * `WheelPageStallError` when the page held the gap, and `WheelPacingError`
+   * otherwise. The page holds it while it handles the step before, or while
+   * it draws no frame.
    */
   readonly maxGapMs?: number;
 }
@@ -84,9 +85,9 @@ export interface WheelBurst {
  * or the gap was no wider than the harness's own spacing of the sends (the
  * page can only widen a gap, so a starved renderer that also held the step
  * lands here). The dispatch stalled before the page, so a loaded runner
- * splits what the driver sent as one gesture. Other work on the page's main
- * thread between steps (timers, frame callbacks) also lands here, so a
- * re-taken run is the runner's or that work's, never the wheel listeners'.
+ * splits what the driver sent as one gesture. Other work between steps that
+ * leaves the page's frames running also lands here. Such a stall is the
+ * runner's or that work's, never the wheel listeners'.
  */
 export class WheelPacingError extends Error {
   constructor(
@@ -102,11 +103,13 @@ export class WheelPacingError extends Error {
 
 /**
  * The page received a wheel burst's steps further apart than the proof's
- * `maxGapMs` while it was still handling the step before. Its own wheel
- * listeners held the main thread, and WebKit dispatches the next step only
- * once it is free. The handling time is page wall time, which on a starved
- * runner includes the page's wait for a CPU. Judge a page stall from a run
- * with CI's CPU limits: there it is the proof's own failure, never re-taken.
+ * `maxGapMs` while its main thread was held. Its own wheel listeners were
+ * still handling the step before, or the page drew no frame across the gap.
+ * WebKit dispatches the next step only once the thread is free. Both
+ * times are page wall time. On a starved runner they include the page's wait
+ * for a CPU, and a renderer held from outside draws no frame either. Judge a
+ * page stall from a run with CI's CPU limits: there it is the proof's own
+ * failure.
  */
 export class WheelPageStallError extends Error {
   constructor(
@@ -114,16 +117,23 @@ export class WheelPageStallError extends Error {
     readonly stall: WheelPageStall,
   ) {
     super(
-      `webInputDriver: the page's own wheel listeners took ${stall.handlingMs.toFixed(0)} ms of page wall time to handle a step, so the next reached it ${stall.gapMs.toFixed(0)} ms later, over its ${maxGapMs} ms: the page split the run. On a starved runner that time includes the page's wait for a CPU: judge a page stall from a run with CI's CPU limits`,
+      stall.frameGapMs == null
+        ? `webInputDriver: the page's own wheel listeners took ${stall.handlingMs.toFixed(0)} ms of page wall time to handle a step, so the next reached it ${stall.gapMs.toFixed(0)} ms later, over its ${maxGapMs} ms: the page split the run. On a starved runner that time includes the page's wait for a CPU: judge a page stall from a run with CI's CPU limits`
+        : `webInputDriver: the page drew no frame for ${stall.frameGapMs.toFixed(0)} ms around a ${stall.gapMs.toFixed(0)} ms gap between two wheel steps, over its ${maxGapMs} ms (engine or page work), while its own wheel listeners took ${stall.handlingMs.toFixed(0)} ms: the page split the run. On a starved runner the renderer draws no frame either: judge a page stall from a run with CI's CPU limits`,
     );
     this.name = 'WheelPageStallError';
   }
 }
 
-/** A gap the page caused: how long it was, and how long the page spent handling the step before it. */
+/**
+ * A gap the page caused: how long it was, and how long the page spent
+ * handling the step before it. `frameGapMs` is set when the page drew no
+ * frame across the gap instead.
+ */
 export interface WheelPageStall {
   readonly gapMs: number;
   readonly handlingMs: number;
+  readonly frameGapMs?: number;
 }
 
 /**
@@ -198,22 +208,25 @@ export function wheelSendGaps(
 
 /**
  * Sorts a burst's gaps past `maxGapMs` by cause. `stamps` are when the
- * received steps reached the page (`wheelArrivals`); `handledAt` is when the
- * page's wheel listeners had finished with each (for a step whose propagation
- * the page stopped, when a task queued at its arrival ran; NaN unseen);
+ * received steps reached the page (`wheelArrivals`). `handledAt` is when the
+ * page's wheel listeners had finished with each, NaN unseen. For a step whose
+ * propagation the page stopped, it is when a task queued at its arrival ran.
  * `sendGapsMs` is how far apart the harness sent the steps behind each gap
- * (`wheelSendGaps`; `null` where unknown). In WebKit, which dispatches a step
- * only once the page's main thread is free, a gap is the page's when the step
- * reached the page within one frame of the listeners finishing the step
- * before, so it was waiting on them, and the gap is more than a frame wider
- * than the harness's own spacing of those steps: the page can only widen a
- * gap, so one no wider than the send spacing is the dispatch's, even when a
- * starved renderer also held the step (a runner whose CPU quota holds the
- * page right after its listeners). Every other gap is the dispatch's, and in
- * Chromium, which stamps a step with its dispatch time, so the page cannot
- * move its stamps, every gap is. Other work on the page's main thread between
- * steps (timers, frame callbacks) counts as the dispatch's, unless it ran
- * before a stopped step's marking task.
+ * (`wheelSendGaps`; `null` where unknown). WebKit dispatches a step only once
+ * the page's main thread is free. There a gap is the page's when the step
+ * reached it within one frame of the listeners finishing the step before. It
+ * waited on them. The gap must also be more than a frame wider than the
+ * harness's own spacing of those steps. The page can only widen a gap, so one
+ * no wider than the send spacing is the dispatch's. That holds even when a
+ * starved renderer also held the step, as a runner whose CPU quota holds the
+ * page right after its listeners does. A WebKit gap is the page's too when
+ * `frames`, the page's frame times, show none across nearly all of it. Then
+ * engine or page work held the main thread, or a starved runner held the
+ * renderer, not the page's wheel listeners.
+ * Every other gap is the dispatch's. In Chromium, which stamps a step with
+ * its dispatch time, the page cannot move its stamps, so every gap is. Other
+ * work between steps that leaves frames running counts as the dispatch's,
+ * unless it ran before a stopped step's marking task.
  */
 export function wheelGapCauses(
   engine: Engine,
@@ -221,6 +234,7 @@ export function wheelGapCauses(
   handledAt: readonly number[],
   maxGapMs: number,
   sendGapsMs: readonly (number | null)[] = [],
+  frames: readonly number[] = [],
 ): {pageStalls: WheelPageStall[]; dispatchStalls: number[]} {
   const pageStalls: WheelPageStall[] = [];
   const dispatchStalls: number[] = [];
@@ -230,13 +244,25 @@ export function wheelGapCauses(
       continue;
     }
     const sendGapMs = sendGapsMs[i - 1];
+    const widened = sendGapMs == null || gapMs > sendGapMs + HELD_BACK_MS;
+    const handlingMs = handledAt[i - 1] - stamps[i - 1];
     const heldBack =
       engine === 'webkit' &&
       Number.isFinite(handledAt[i - 1]) &&
       stamps[i] - handledAt[i - 1] <= HELD_BACK_MS &&
-      (sendGapMs == null || gapMs > sendGapMs + HELD_BACK_MS);
+      widened;
+    const frameGap =
+      engine === 'webkit' && widened
+        ? frameGapAcross(frames, stamps[i - 1], stamps[i])
+        : null;
     if (heldBack) {
-      pageStalls.push({gapMs, handlingMs: handledAt[i - 1] - stamps[i - 1]});
+      pageStalls.push({gapMs, handlingMs});
+    } else if (frameGap != null && frameGap.covered >= gapMs - HELD_BACK_MS) {
+      pageStalls.push({
+        gapMs,
+        handlingMs: Number.isFinite(handlingMs) ? handlingMs : 0,
+        frameGapMs: frameGap.gapMs,
+      });
     } else {
       dispatchStalls.push(gapMs);
     }
@@ -245,32 +271,23 @@ export function wheelGapCauses(
 }
 
 /**
- * Runs a wheel proof through `attempt`, and once more when the page received
- * its burst off pace: `attempt` builds the page's state, sends the burst with
- * `maxGapMs` and makes the spec's assertions, so a re-take starts over. One
- * re-take, two attempts in all, and only on a `WheelPacingError`: any other
- * error (a `WheelPageStallError`, which the page's wheel listeners caused,
- * among them), and a second `WheelPacingError`, fail the test with their own
- * cause. A `WheelPacingError` is the runner's or other work on the page's main
- * thread between steps, so a re-take does not clear the page of that work.
- * Each re-take is listed in the report as a `wheel-retake` annotation.
+ * The page's longest stretch without a frame inside `from` to `to`. It gives
+ * how much of that span the stretch covers, and the whole gap between its two
+ * frames. Null with fewer than two frames.
  */
-export async function retakeOnWheelPacing<T>(
-  testInfo: Pick<TestInfo, 'annotations'>,
-  attempt: (n: 1 | 2) => Promise<T>,
-): Promise<T> {
-  try {
-    return await attempt(1);
-  } catch (error) {
-    if (!(error instanceof WheelPacingError)) {
-      throw error;
+function frameGapAcross(
+  frames: readonly number[],
+  from: number,
+  to: number,
+): {covered: number; gapMs: number} | null {
+  let best: {covered: number; gapMs: number} | null = null;
+  for (let k = 1; k < frames.length; k++) {
+    const covered = Math.min(frames[k], to) - Math.max(frames[k - 1], from);
+    if (covered > 0 && (best == null || covered > best.covered)) {
+      best = {covered, gapMs: frames[k] - frames[k - 1]};
     }
-    testInfo.annotations.push({
-      type: 'wheel-retake',
-      description: error.message,
-    });
-    return attempt(2);
   }
+  return best;
 }
 
 /** A point of a pen stroke. */
@@ -302,9 +319,10 @@ export interface WebInputDriver {
    * handles one step when the next arrives, the engine coalesces them, as it
    * does a trackpad's: the page can receive fewer, larger steps with the same
    * total. Returns how many steps the page received and the gaps between
-   * their arrivals (`wheelArrivals`), ms; with `maxGapMs`, a longer gap throws
-   * `WheelPageStallError` when the page's own handling of the step before
-   * caused it, and `WheelPacingError` otherwise.
+   * their arrivals (`wheelArrivals`), ms. With `maxGapMs`, a longer gap throws
+   * `WheelPageStallError` when the page held it, and `WheelPacingError`
+   * otherwise. The page holds a gap while it handles the step before, or
+   * while it draws no frame.
    */
   wheelBurst(burst: WheelBurst): Promise<{
     readonly receivedSteps: number;
@@ -382,6 +400,14 @@ export interface InputRun {
   stamps: number[];
   /** When the page's first listener received each event. */
   receivedAt: number[];
+  /** When the page drew each frame during the run, with `frames` asked. */
+  frames: number[];
+  /**
+   * True while every event of the run carries the mark `installInputStart`
+   * added before the page's scripts. Then `receivedAt` comes before every
+   * page listener.
+   */
+  startsFirst: boolean;
   /**
    * When the page's own listeners had finished with each event, NaN until
    * seen. An event whose propagation the page stops is marked by a task
@@ -403,27 +429,82 @@ export interface InputRun {
 }
 
 /**
+ * Marks when the page's listeners begin on each trusted event of `types`,
+ * with a passive window capture listener. Added before the page's scripts, it
+ * runs before every page listener, a window capture one included, and
+ * `armInputRun` uses its mark. A page already loaded gets it too. There it
+ * runs after the window capture listeners the page added at load, such as a
+ * gesture host's, so its mark is not used.
+ */
+export async function installInputStart(
+  page: Page,
+  types: readonly string[],
+): Promise<void> {
+  await installInputStartBeforeLoad(page, types);
+  await page.evaluate(inputStartScript(types, false));
+}
+
+/**
+ * Adds the `installInputStart` mark to each page the tab loads next, before
+ * the page's scripts. The page loaded now gets no mark. A driver created after
+ * the next load then uses the mark.
+ */
+export async function installInputStartBeforeLoad(
+  page: Page,
+  types: readonly string[],
+): Promise<void> {
+  await page.addInitScript(inputStartScript(types, true));
+}
+
+function inputStartScript(types: readonly string[], first: boolean): string {
+  return `(() => {
+  if (window.__harnessInputStart) return;
+  const starts = new WeakMap();
+  window.__harnessInputStart = {starts, first: ${first}};
+  for (const type of ${JSON.stringify([...types])}) {
+    window.addEventListener(type, event => {
+      if (event.isTrusted && !starts.has(event)) starts.set(event, performance.now());
+    }, {capture: true, passive: true});
+  }
+})()`;
+}
+
+/**
  * Arms two passive listeners on the window before a run is dispatched. A
  * capture listener stamps each trusted event of `types` before the page's
  * own listeners. A bubble listener, after them, notes when the page has
- * finished with the event. The wheel and touch drivers share it.
+ * finished with the event. The wheel and touch drivers share it. Where
+ * `installInputStart` marked, before the page's scripts, when the page's
+ * listeners began on an event, that mark is the event's `receivedAt`.
  */
 export function armInputRun(
   page: Page,
   types: readonly string[],
+  {frames = false}: {readonly frames?: boolean} = {},
 ): Promise<JSHandle<InputRun>> {
   return page.evaluateHandle(
-    eventTypes => {
+    ([eventTypes, recordFrames]) => {
       const first = {capture: true, passive: true};
       const last = {capture: false, passive: true};
       const index = new WeakMap<Event, number>();
       // A message runs as a task of its own, after the dispatch that queued
       // it: it marks an event whose bubble listener never ran.
       const channel = new MessageChannel();
+      const mark = (
+        window as unknown as {
+          __harnessInputStart?: {
+            starts: WeakMap<Event, number>;
+            first: boolean;
+          };
+        }
+      ).__harnessInputStart;
+      let drawing = recordFrames;
       const run = {
         types: [...eventTypes],
         stamps: [] as number[],
         receivedAt: [] as number[],
+        startsFirst: mark?.first === true,
+        frames: [] as number[],
         handledAt: [] as number[],
         eventTypes: [] as string[],
         pointerTypes: [] as string[],
@@ -431,6 +512,7 @@ export function armInputRun(
         dx: 0,
         dy: 0,
         stop: () => {
+          drawing = false;
           for (const type of eventTypes) {
             window.removeEventListener(type, received, first);
             window.removeEventListener(type, handled, last);
@@ -457,7 +539,13 @@ export function armInputRun(
         const i = run.stamps.length;
         index.set(event, i);
         run.stamps.push(event.timeStamp);
-        run.receivedAt.push(performance.now());
+        const markedAt = run.startsFirst ? mark?.starts.get(event) : undefined;
+        // A page that reopens its document drops the mark's listener but
+        // keeps the mark. Its events go unmarked, and the run reads as before.
+        if (markedAt == null) {
+          run.startsFirst = false;
+        }
+        run.receivedAt.push(markedAt ?? performance.now());
         run.handledAt.push(Number.NaN);
         run.eventTypes.push(event.type);
         run.pointerTypes.push(
@@ -479,9 +567,27 @@ export function armInputRun(
         window.addEventListener(type, received, first);
         window.addEventListener(type, handled, last);
       }
+      // The page's own frames, on the real frame loop: a frozen timer gate
+      // (story.ts) holds only the page's.
+      const frame =
+        (
+          window as unknown as {
+            __harnessTimerGate?: {frame?: typeof requestAnimationFrame};
+          }
+        ).__harnessTimerGate?.frame ??
+        window.requestAnimationFrame.bind(window);
+      const draw = () => {
+        if (drawing) {
+          run.frames.push(performance.now());
+          frame(draw);
+        }
+      };
+      if (recordFrames) {
+        frame(draw);
+      }
       return run;
     },
-    [...types],
+    [[...types], frames] as const,
   );
 }
 
@@ -505,6 +611,7 @@ async function untilRunReceived(
       new Promise<{
         stamps: number[];
         receivedAt: number[];
+        frames: number[];
         handledAt: number[];
         deltas: [number, number][];
         dx: number;
@@ -533,6 +640,7 @@ async function untilRunReceived(
             resolve({
               stamps: run.stamps.slice(),
               receivedAt: run.receivedAt.slice(),
+              frames: run.frames.slice(),
               handledAt: run.handledAt.slice(),
               deltas: run.deltas.slice(),
               dx: run.dx,
@@ -564,6 +672,7 @@ async function untilRunReceived(
       got.handledAt,
       maxGapMs,
       wheelSendGaps(steps, sentAt, got.deltas),
+      got.frames,
     );
     if (pageStalls.length > 0) {
       throw new WheelPageStallError(maxGapMs, pageStalls[0]);
@@ -735,7 +844,7 @@ async function webkitWebInput(page: Page): Promise<WebInputDriver> {
         await page.keyboard.down('Control');
       }
       try {
-        const armed = await armInputRun(page, ['wheel']);
+        const armed = await armInputRun(page, ['wheel'], {frames: true});
         const sentAt = await dispatchOnSchedule(
           steps,
           everyMs,
