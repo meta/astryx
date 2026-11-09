@@ -45,5 +45,15 @@
       "core-layout--no-dividers",
       "core-layout--full-bleed-content"
     ]
+  },
+  "LayoutHeader": {
+    "components": ["Layout"],
+    "stories": [
+      "core-layout--header-states",
+      "core-layout--basic-card",
+      "core-layout--with-sidebar",
+      "core-layout--no-dividers",
+      "core-layout--full-bleed-content"
+    ]
   }
 }
