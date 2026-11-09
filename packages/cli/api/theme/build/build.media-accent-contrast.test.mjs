@@ -120,17 +120,24 @@ function pickScheme(value, surface) {
   return surface === 'dark' ? match[2] : match[1];
 }
 
-/** The color a token takes on a media surface. */
-function surfaceColor(css, surface, token) {
+/**
+ * The color a token takes on the innermost of nested media surfaces, given
+ * outermost first. Each surface resolves what it declares and inherits the
+ * rest from the surface around it.
+ */
+function surfaceColor(css, surfaceChain, token) {
+  const chain = [].concat(surfaceChain);
   const {root, surfaces} = blocks(css);
-  const own = surfaces[surface] ?? {};
-  const fromRoot = name =>
-    root[name] === undefined ? undefined : substitute(root[name], fromRoot);
-  const fromSurface = name =>
-    own[name] === undefined
-      ? fromRoot(name)
-      : substitute(own[name], fromSurface);
-  return pickScheme(fromSurface(token) ?? '', surface);
+  let inherited = name =>
+    root[name] === undefined ? undefined : substitute(root[name], inherited);
+  for (const surface of chain) {
+    const own = surfaces[surface] ?? {};
+    const outer = inherited;
+    const resolve = name =>
+      own[name] === undefined ? outer(name) : substitute(own[name], resolve);
+    inherited = resolve;
+  }
+  return pickScheme(inherited(token) ?? '', chain.at(-1));
 }
 
 /** @param {string} color A `#rgb`, `#rrggbb` or `rgb()` color. */
@@ -170,15 +177,21 @@ describe('accent on media surfaces in built themes', () => {
   });
 
   for (const name of THEMES) {
-    for (const surface of /** @type {const} */ (['dark', 'light'])) {
+    for (const surface of /** @type {const} */ ([
+      'dark',
+      'light',
+      ['light', 'dark'],
+      ['dark', 'light'],
+    ])) {
       for (const token of ACCENT_TOKENS) {
-        it(`${name}: ${token} reads on a ${surface} media surface`, () => {
+        const where = [].concat(surface).reverse().join(' surface inside a ');
+        it(`${name}: ${token} reads on a ${where} media surface`, () => {
           const css = builtCss.get(name);
           const foreground = surfaceColor(css, surface, token);
           const backdrop = surfaceColor(
             css,
             surface,
-            SURFACE_BACKDROP[surface],
+            SURFACE_BACKDROP[[].concat(surface).at(-1)],
           );
           expect(
             contrast(foreground, backdrop),
