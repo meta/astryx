@@ -469,14 +469,6 @@
       "status": "open",
       "group": "triage"
     },
-    "packages/core/src/hooks/useFocusTrap.ts:activeEscapeTrapCount": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/useFocusTrap.ts:activeRegionContainers": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
     "packages/core/src/hooks/useMediaQuery.ts:watches": {
       "status": "allowed",
       "reason": "Each copy observes for its own subscribers; a second observer changes no result."
@@ -492,38 +484,6 @@
     "packages/core/src/i18n/resolve.ts:formatterCache": {
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
-    },
-    "packages/core/src/keyboard/keyboardHeight.ts:focusTakeovers": {
-      "status": "open",
-      "group": "F6 Keyboard"
-    },
-    "packages/core/src/keyboard/keyboardHeight.ts:stores": {
-      "status": "open",
-      "group": "F6 Keyboard"
-    },
-    "packages/core/src/keyboard/keyboardHeight.ts:touchStartWatches": {
-      "status": "open",
-      "group": "F6 Keyboard"
-    },
-    "packages/core/src/keyboard/keyboardLayoutGuide.ts:guides": {
-      "status": "open",
-      "group": "F6 Keyboard"
-    },
-    "packages/core/src/keyboard/keyboardTarget.ts:currentRides": {
-      "status": "open",
-      "group": "F6 Keyboard"
-    },
-    "packages/core/src/keyboard/keyboardTarget.ts:riddenAnimators": {
-      "status": "open",
-      "group": "F6 Keyboard"
-    },
-    "packages/core/src/keyboard/keyboardTarget.ts:targets": {
-      "status": "open",
-      "group": "F6 Keyboard"
-    },
-    "packages/core/src/keyboard/useMobileKeyboard.ts:revealsAtReport": {
-      "status": "open",
-      "group": "F6 Keyboard"
     },
     "packages/core/src/motion/animatedLayout.ts:batches": {
       "status": "open",
@@ -749,14 +709,6 @@
       "status": "allowed",
       "reason": "Deduplicates development warnings; a copy can at most repeat a warning once."
     },
-    "packages/core/src/utils/focusReturn.ts:focusDetachedAtRemovalStart": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/utils/focusReturn.ts:temporaryFocus": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
     "packages/core/src/utils/hitArea.ts:frame": {
       "status": "open",
       "group": "triage"
@@ -814,8 +766,8 @@
       "group": "triage"
     },
     "packages/core/src/utils/layoutViewport.ts:thicknesses": {
-      "status": "open",
-      "group": "F6 Keyboard"
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
     },
     "packages/core/src/utils/plainDate.ts:dateTimeFormats": {
       "status": "allowed",
