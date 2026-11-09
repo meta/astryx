@@ -271,7 +271,7 @@ useIsomorphicLayoutEffect useIsomorphicLayoutEffect hooks/useAnimatedLayout.doc.
 useLayerDismissal useLayerDismissal Layer/Layer.doc.mjs Layer/useLayerDismissal.ts
 useLightbox useLightbox Lightbox/useLightbox.doc.mjs Lightbox/useLightbox.tsx
 useLinkComponent useLinkComponent Link/useLinkComponent.doc.mjs Link/useLinkComponent.ts
-useLinkify useLinkify Link/Link.doc.mjs Link/useLinkify.tsx
+useLinkify useLinkify Link/useLinkify.doc.mjs Link/useLinkify.tsx
 useListFormatter useListFormatter i18n/InternationalizationProvider.doc.mjs i18n/useListFormatter.ts
 useMenuDrillIn useMenuDrillIn DropdownMenu/DropdownMenu.doc.mjs DropdownMenu/useMenuDrillIn.tsx
 useMenuHover useMenuHover hooks/useAnimatedLayout.doc.mjs hooks/useMenuHover.ts
@@ -282,7 +282,7 @@ useOverlay useOverlay Overlay/useOverlay.doc.mjs Overlay/useOverlay.tsx
 useOwnScrollGesture useOwnScrollGesture DateInput/DateInput.doc.mjs DateInput/useOwnScrollGesture.ts
 usePager usePager hooks/useAnimatedLayout.doc.mjs hooks/usePager.ts
 usePointerDragScroll usePointerDragScroll DateInput/DateInput.doc.mjs DateInput/usePointerDragScroll.ts
-usePowerSearchConfig usePowerSearchConfig PowerSearch/PowerSearch.doc.mjs PowerSearch/usePowerSearchConfig.ts
+usePowerSearchConfig usePowerSearchConfig PowerSearch/usePowerSearchConfig.doc.mjs PowerSearch/usePowerSearchConfig.ts
 usePowerSearchSource usePowerSearchSource PowerSearch/PowerSearch.doc.mjs PowerSearch/usePowerSearchSource.ts
 useRenamedProp useRenamedProp hooks/useAnimatedLayout.doc.mjs hooks/useRenamedProp.ts
 useResolvedRequired useResolvedRequired hooks/useAnimatedLayout.doc.mjs hooks/useResolvedRequired.ts
@@ -298,7 +298,7 @@ useSpeechRecognition useSpeechRecognition Chat/Chat.doc.mjs Chat/useSpeechRecogn
 useSwipeAction useSwipeAction Item/Item.doc.mjs Item/useSwipeAction.ts
 useSwitchTouch useSwitchTouch Switch/Switch.doc.mjs Switch/useSwitchTouch.ts
 useTableCellStyles useTableCellStyles Table/Table.doc.mjs Table/useTableCellStyles.ts
-useTableColumnSettingsState useTableColumnSettingsState Table/Table.doc.mjs Table/plugins/columnSettings/useTableColumnSettingsState.tsx
+useTableColumnSettingsState useTableColumnSettingsState Table/plugins/columnSettings/useTableColumnSettingsState.doc.mjs Table/plugins/columnSettings/useTableColumnSettingsState.tsx
 useTableSortableState useTableSortableState Table/plugins/sortable/useTableSortableState.doc.mjs Table/plugins/sortable/useTableSortableState.tsx
 useToastGesture useToastGesture Toast/Toast.doc.mjs Toast/useToastGesture.ts
 useTouchTrigger useTouchTrigger Layer/Layer.doc.mjs Layer/useTouchTrigger.ts

@@ -27,13 +27,17 @@ import {
   armHold,
   blockMainThread,
   BusyWindowTooLateError,
+  BusyFrameUnjudgedError,
   busyWindowProof,
+  type BusyProof,
+  type UnjudgedFrame,
   castStoryboard,
   compareCurve,
   countBetween,
   curveOf,
   drag,
   flick,
+  FrameStarvationError,
   frames,
   freezePageOn,
   freezePageWhen,
@@ -1080,49 +1084,77 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   const castFrames = await cast.stop();
   const tracked = await trackMarker(page, castFrames);
   const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
-  const proof = busyWindowProof(tracked, block, {
-    axis: 'height',
-    settledWithinSteps: ZOOM_SETTLED_STEPS,
-    control,
-  });
-  await writeEvidence(
-    'busy-main-thread/lightbox-double-tap-zoom',
-    {
-      [`${testInfo.project.name}.json`]: JSON.stringify(
-        {
-          block,
-          proof,
-          frames: tracked.map(f => ({
-            t: +(f.t - block.from).toFixed(1),
-            y: f.box?.y ?? null,
-            h: f.box?.height ?? null,
-          })),
-          control: control.map(f => ({
-            t: +(f.t - block.from).toFixed(1),
-            x: f.box?.x ?? null,
-          })),
-        },
-        null,
-        1,
-      ),
-    },
-    testInfo,
-  );
-  const film = await castStoryboard(page, castFrames, {
-    name: 'lightbox-double-tap-zoom-busy-main-thread',
-    zero: block.from,
-    from: block.from - 40,
-    to: proof.judged.to + 40,
-    columns: 8,
-    cellScale: 0.35,
-    data: t => ({h: tracked.find(f => f.t === t)?.box?.height ?? -1}),
-  });
-  await film.write(testInfo, {block, judged: proof.judged});
+  // The run's frames and storyboard, kept whatever the proof concludes.
+  const record = async (
+    result: {proof: BusyProof} | {unjudged: ReadonlyArray<UnjudgedFrame>},
+    judged: {from: number; to: number},
+  ) => {
+    await writeEvidence(
+      'busy-main-thread/lightbox-double-tap-zoom',
+      {
+        [`${testInfo.project.name}.json`]: JSON.stringify(
+          {
+            block,
+            ...result,
+            frames: tracked.map(f => ({
+              t: +(f.t - block.from).toFixed(1),
+              y: f.box?.y ?? null,
+              h: f.box?.height ?? null,
+            })),
+            control: control.map(f => ({
+              t: +(f.t - block.from).toFixed(1),
+              x: f.box?.x ?? null,
+            })),
+          },
+          null,
+          1,
+        ),
+      },
+      testInfo,
+    );
+    const film = await castStoryboard(page, castFrames, {
+      name: 'lightbox-double-tap-zoom-busy-main-thread',
+      zero: block.from,
+      from: block.from - 40,
+      to: judged.to + 40,
+      columns: 8,
+      cellScale: 0.35,
+      data: t => ({h: tracked.find(f => f.t === t)?.box?.height ?? -1}),
+    });
+    await film.write(testInfo, {block, judged});
+  };
+  // Every frame the control moves on is judged by the edge's own step. A
+  // frame the cast's 1 px step cannot show the edge's move on is too little
+  // to judge, and fails by name (`BusyFrameUnjudgedError`). That run keeps its
+  // frames and storyboard too.
+  let proof: BusyProof;
+  try {
+    proof = busyWindowProof(tracked, block, {
+      axis: ZOOM_AXIS,
+      settledWithin: ZOOM_SETTLED_PX,
+      control,
+      judgeEveryFrame: true,
+    });
+  } catch (error) {
+    if (error instanceof BusyFrameUnjudgedError) {
+      await record({unjudged: error.frames}, block);
+    }
+    throw error;
+  }
+  await record({proof}, proof.judged);
   // Judged against the control. A two-core runner's software compositor and
   // the screencast share the core the block spins on. So every compositor
   // animation presents fewer frames there, the control's too. The photo keeps
   // pace with the control, and a main-thread animation would not.
   expect(proof.verdict.failures).toEqual([]);
+  // The verdict, spelled out. The top edge takes a new position on every
+  // frame the control moves, with none excused as under a cast step. The
+  // control moves on at least the verdict's floor of four frames. With
+  // `judgeEveryFrame`, an excused frame throws first, so `belowStep` stays a
+  // guard on that option.
+  expect(proof.control?.movedWith).toBe(proof.control?.moved);
+  expect(proof.control?.belowStep).toBe(0);
+  expect(proof.control?.moved).toBeGreaterThanOrEqual(4);
   expect(proof.monotonic).toBe(true);
 });
 
@@ -1138,13 +1170,24 @@ const ZOOM_TEMPO = 5;
 const ZOOM_BLOCK_MS = 2500;
 
 /**
- * Where the busy zoom proof stops judging, in cast steps from the zoom's
- * end. Near the end, each 60 Hz frame moves the spring about 0.042 of what
- * remains (2π / 2.5 s, critically damped). So within about 23.9 cast steps
- * of its end a frame moves less than one step, and the cast shows plateaus
- * there.
+ * The photo's coordinate the busy zoom proof judges: its top edge. The zoom
+ * grows the photo at both edges, and the cast reads each edge in whole
+ * steps. So near the end the height can show no change for a frame while it
+ * grows almost two steps a frame. The proof's step rules expect one edge's
+ * travel, so the proof judges the top edge.
  */
-const ZOOM_SETTLED_STEPS = 24;
+const ZOOM_AXIS = 'y';
+
+/**
+ * Where the busy zoom proof stops judging, in px of the top edge from its
+ * end. There the edge's move between two cast frames falls under one cast
+ * step. Near the end, each 60 Hz frame moves the spring about 0.042 of what
+ * remains (2π / 2.5 s, critically damped). Chromium casts every frame in 1 px
+ * steps, so its moves fall under a step 23.9 px from the end. Blocked, WebKit
+ * casts a frame only every 116 ms or more, seven 60 Hz frames, in 2 px steps.
+ * Its moves stay over a step until about 8 px from the end, inside 24 px.
+ */
+const ZOOM_SETTLED_PX = 24;
 
 /** Each animated property's curve length, and whether it still runs. */
 function curvesByProperty(runs: ReadonlyArray<ActiveAnimation>) {
@@ -1220,11 +1263,16 @@ for (const pace of ['main-thread', 'frozen'] as const) {
     let failures: ReadonlyArray<string>;
     try {
       failures = busyWindowProof(tracked, block, {
-        axis: 'height',
-        settledWithinSteps: ZOOM_SETTLED_STEPS,
+        axis: ZOOM_AXIS,
+        settledWithin: ZOOM_SETTLED_PX,
         control,
       }).verdict.failures;
     } catch (error) {
+      // A run the machine starved proves nothing, so it fails by name and
+      // never counts as this proof's red.
+      if (error instanceof FrameStarvationError) {
+        throw error;
+      }
       // A zoom that never moved has settled before the window: a red too.
       expect(error).toBeInstanceOf(BusyWindowTooLateError);
       failures = [(error as Error).message];

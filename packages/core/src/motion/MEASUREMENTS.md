@@ -349,14 +349,35 @@ Values Lightbox's zoom stage reads (`uikit/zoomMedia.ts`). Done (UIKit lab and
 Photos, iOS 26.2 simulator, Oct 23 2026; tagged `measured:`): the overshoot
 past the limits, the absence of scale momentum and of a two-finger-tap action,
 the content point under the centroid staying put, Photos' aspect-fill double
-tap and its maximum zoom on 3000 × 2000 and 2000 × 3000 photos, and the 40 pt
-gap between Photos' pages. M-ZM2 confirms that maximum on two other sizes. A
-zoomed pan flicked into an edge coasts and bounces like any scroll view
-(`scroll.*`). UIKit settles a zoom on an eased curve whose length grows with
-the zoom ratio (100 ms plus 300 ms per unit of its log, at most 400 ms).
-Lightbox's zoom settles on `springs.settle` instead, since its main
-interaction is a gesture (`spec:AST-094` FR45).
+tap and its maximum zoom on 3000 × 2000 and 2000 × 3000 photos, the 40 pt gap
+between Photos' pages, and its drag-to-dismiss: the shrink and fades by
+travel, the release rule and the dismissal's springs. M-ZM2 confirms that
+maximum on two other sizes. M-ZM3 measures the cancel distance and M-ZM5 the
+release's projection. A zoomed pan flicked into an edge coasts and bounces
+like any scroll view (`scroll.*`). UIKit settles a zoom on an eased curve
+whose length grows with the zoom ratio (100 ms plus 300 ms per unit of its
+log, at most 400 ms). Lightbox's zoom settles on `springs.settle` instead,
+since its main interaction is a gesture (`spec:AST-094` FR45). Photos returns
+a cancelled drag on critically damped springs (stiffness 877.63 for its
+position, 955.23 for its size). Lightbox's return plays `springs.settle`,
+since only an exit may play a measured spring (`spec:AST-094` FR4).
 
-| ID    | What         | App and gesture                                                      | Extract                                                                   | Method |
-| ----- | ------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------ |
-| M-ZM2 | Maximum zoom | Photos: pinch a 4032 × 3024 and a 1200 × 800 photo as far as it goes | the zoom it settles on against the photo's pixel size and the fitted size | B, C   |
+| ID    | What                     | App and gesture                                                                  | Extract                                                                       | Method |
+| ----- | ------------------------ | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------ |
+| M-ZM2 | Maximum zoom             | Photos: pinch a 4032 × 3024 and a 1200 × 800 photo as far as it goes             | the zoom it settles on against the photo's pixel size and the fitted size     | B, C   |
+| M-ZM3 | Dismiss cancel distance  | Photos: pull a photo down 6–19 pt, bring it back to N pt and lift without moving | the largest N that still cancels                                              | B, C   |
+| M-ZM5 | Dismiss flick projection | Photos: flick a photo down from rest, lifting after 6–19 pt at a range of speeds | the shortest travel that still dismisses at each speed: the projection's rate | B, C   |
+
+## Reorder (UITableView edit-mode reorder)
+
+Subject "table T": a plain `UITableView` in editing mode with reorder controls
+only, 40 rows of 44 pt (rows 6 and 9 at 88 pt where noted), in the UIKit lab
+app. Measured so far: the claim, tracking, the crossing rule for a 44 pt row
+moving past 44 and 88 pt rows below its place and back, the slides, the drop,
+the autoscroll steps, Reduce Motion.
+
+| ID     | Scene                          | Gesture                                                                                                      | Extract                                                                                                                           | Method |
+| ------ | ------------------------------ | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| M-RO26 | table T, one row at 88 pt      | drag the 88 pt row to edge depths 0 to 44 pt and hold; 44 pt rows held 4, 6, 8, 10 pt inside the bottom edge | autoscroll step per 20 ms tick by depth: indexed by the edge depth in points or by a fraction of the row; the exact start inset   | C      |
+| M-RO07 | table T                        | a system touch cancel mid-drag (a call or Control Center); `reloadData` mid-drag                             | does the row return to its origin or move to its slot; positions per frame                                                        | C      |
+| M-RO27 | table T, rows 6 and 9 at 88 pt | drag row 7 (44 pt) up past row 6; drag row 6 (88 pt) down past row 7 and back                                | the dragged row's centre travel at each change of the proposed slot, against `List/reorderModel.ts`'s slot rule (GUESS for these) | C      |

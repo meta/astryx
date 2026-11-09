@@ -32,6 +32,7 @@ import {
   withStorybook,
 } from '@astryxdesign/interaction-harness';
 
+import {paging} from '../../motion/uikit/paging';
 import {nearestStop} from '../snapPagingValue';
 
 const storybook = withStorybook(test);
@@ -139,7 +140,13 @@ async function swipe(
   const from = {x: box.x + box.width / 2 + (rtl ? -half : half), y};
   const to = {x: from.x + (rtl ? px : -px), y};
   const driver = await touchDriver(page);
-  await driver.play(drag(from, to, {durationMs: ms, restMs}));
+  // The paging reads a scrolling surface's release and pages from
+  // `advanceSpeed`. A release the page reads on the other side of it from
+  // the script fails by name, never as the paging's verdict.
+  await driver.play(drag(from, to, {durationMs: ms, restMs}), {
+    release: 'scroll',
+    boundaries: {releasePxPerS: paging.release.advanceSpeed},
+  });
 }
 
 for (const mode of ['paging', 'item'] as const) {
