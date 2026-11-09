@@ -177,7 +177,7 @@ function WorkspaceCard() {
         requirement: '4.5:1',
         states: ['Rest', 'Hover', 'Pointer down', 'Selected'],
         description:
-          'Each label must have at least 4.5:1 contrast with its segment background. Check unselected, Hover, Pointer down, and selected colors as they appear on screen. For Hover and Pointer down, measure the final background after the overlay is applied.',
+          'Each label must have at least 4.5:1 contrast with its segment background. Check unselected, Hover, Pointer down, and selected colors as they appear on screen. For Hover and Pointer down, measure the final background after the overlay is applied. In the first-party themes, labels meet 4.5:1 on the theme\'s own backgrounds: the body, the surface, and a card. The track is translucent, so it takes the color of the page behind it. If you place the control on a custom page color, check the labels on that color.',
       },
       {
         name: 'Essential icon',
