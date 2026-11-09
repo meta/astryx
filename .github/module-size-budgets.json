@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "method": "esbuild ESM bundle of each entry, minified, NODE_ENV production; every package import (React, react-dom, react/jsx-runtime) and every relative import outside the module's scope stays external; then gzip -9 of the output. budgetBytes is that gzipped size.",
+  "method": "esbuild ESM bundle, minified, NODE_ENV production; every package import (React, react-dom, react/jsx-runtime) stays external; then gzip -9 of the output. An engine is its entries with relative imports outside its scope kept external. An adapter is what windowing adds to a bundle that already holds its host and the engine: the host built with the adapter, minus the host built with the adapter modules stubbed out, minus the engine. budgetBytes is the gzipped size.",
   "enforce": "Set when the converged engine lands; over-budget then needs the owner's OK.",
   "modules": [
     {
@@ -15,11 +15,19 @@
     {
       "name": "Table virtualization adapter",
       "role": "adapter",
-      "entries": [
+      "host": {
+        "entries": ["packages/core/src/Table/index.ts"],
+        "scope": "packages/core/src"
+      },
+      "adapter": [
+        "packages/core/src/Table/plugins/virtualization/index.ts",
         "packages/core/src/Table/plugins/virtualization/useTableWindow.ts",
         "packages/core/src/Table/plugins/virtualization/useTableRowsVirtualization.ts"
       ],
-      "scope": "packages/core/src/Table/plugins/virtualization",
+      "engine": {
+        "entries": ["packages/core/src/utils/listWindow.ts"],
+        "scope": "packages/core/src/utils"
+      },
       "budgetBytes": 2000,
       "enforce": false,
       "note": "Over budget until its windowing moves into the converged engine."

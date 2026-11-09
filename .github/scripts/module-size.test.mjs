@@ -77,9 +77,10 @@ function writeAdapterFixture() {
     [
       "import {useMemo} from 'react';",
       "import {windowRange} from '../engine/engine';",
+      `const LABELS = ${JSON.stringify(Array.from({length: 300}, (_, i) => `label-${i}-${(i * 7919) % 1000}`))};`,
       'export function useAdapter(rows: string[]) {',
       '  return useMemo(',
-      "    () => ({range: windowRange(rows.length), label: 'adapter-marker-' + rows.join('|')}),",
+      "    () => ({range: windowRange(rows.length), label: 'adapter-marker-' + rows.join('|'), labels: LABELS}),",
       '    [rows],',
       '  );',
       '}',
@@ -169,7 +170,7 @@ describe('adapter measurement', () => {
       entries: ['lib/adapter/useAdapter.ts'],
       scope: 'lib/adapter',
     });
-    expect(Math.abs(result.minBytes - alone.minBytes)).toBeLessThan(80);
+    expect(Math.abs(result.minBytes - alone.minBytes)).toBeLessThan(150);
   });
 
   it('checks an adapter against its budget by that difference', async () => {

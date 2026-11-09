@@ -50,11 +50,66 @@ const stubGenerated = {
       namespace: 'stub',
     }));
     b.onLoad({filter: /.*/, namespace: 'stub'}, () => ({
-      contents: 'export default {};',
+      contents:
+        'export default {}; export const standaloneMonthCapitalLanguages = []; export const weekdayHeaderNamesByLocale = {};',
       loader: 'js',
     }));
   },
 };
+
+const RESOLVE_SUFFIXES = ['', '.ts', '.tsx', '.js', '/index.ts', '/index.tsx'];
+
+/** The export names of one module, from an esbuild metafile. */
+async function exportNames(file) {
+  const result = await build({
+    entryPoints: [file],
+    bundle: true,
+    format: 'esm',
+    write: false,
+    metafile: true,
+    packages: 'external',
+    loader: {'.css': 'empty'},
+    plugins: [stubGenerated],
+    logLevel: 'silent',
+    outdir: path.dirname(file),
+  });
+  return Object.values(result.metafile.outputs)[0].exports ?? [];
+}
+
+/**
+ * Replace each stubbed module with one that exports the same names, all
+ * undefined, so the host bundle keeps none of the stubbed code.
+ */
+async function stubPlugin(files) {
+  const stubs = new Map();
+  for (const file of files)
+    stubs.set(fs.realpathSync(file), await exportNames(file));
+  return {
+    name: 'module-stub',
+    setup(b) {
+      b.onResolve({filter: /^\./}, args => {
+        if (args.kind === 'entry-point') return null;
+        const base = path.resolve(fs.realpathSync(args.resolveDir), args.path);
+        for (const suffix of RESOLVE_SUFFIXES) {
+          const candidate = base + suffix;
+          if (stubs.has(candidate))
+            return {path: candidate, namespace: 'module-stub'};
+        }
+        return null;
+      });
+      b.onLoad({filter: /.*/, namespace: 'module-stub'}, args => ({
+        contents: (stubs.get(args.path) ?? [])
+          .map(name =>
+            name === 'default'
+              ? 'export default undefined;'
+              : `export const ${name} = undefined;`,
+          )
+          .join('\n'),
+        loader: 'js',
+      }));
+    },
+  };
+}
 
 function gzipSize(code) {
   const out = spawnSync('gzip', ['-9', '-n', '-c'], {
@@ -70,7 +125,7 @@ function gzipSize(code) {
  * @param {{root: string, entries: string[], scope: string}} module
  * @returns {Promise<{code: string, minBytes: number, gzipBytes: number}>}
  */
-export async function bundleModule({root, entries, scope}) {
+export async function bundleModule({root, entries, scope, stub = []}) {
   const scopePath = path.resolve(root, scope);
   if (!fs.existsSync(scopePath))
     throw new Error(`module scope not found: ${scope}`);
@@ -79,6 +134,14 @@ export async function bundleModule({root, entries, scope}) {
   for (const entry of entries)
     if (!fs.existsSync(path.resolve(root, entry)))
       throw new Error(`module entry not found: ${entry}`);
+  for (const file of stub)
+    if (!fs.existsSync(path.resolve(root, file)))
+      throw new Error(`stubbed module not found: ${file}`);
+  const plugins = [scopePlugin(scopeDir), stubGenerated];
+  if (stub.length)
+    plugins.unshift(
+      await stubPlugin(stub.map(file => path.resolve(root, file))),
+    );
   const contents = entries
     .map(entry => `export * from ${JSON.stringify(path.resolve(root, entry))};`)
     .join('\n');
@@ -91,7 +154,7 @@ export async function bundleModule({root, entries, scope}) {
     packages: 'external',
     loader: {'.css': 'empty'},
     define: {'process.env.NODE_ENV': '"production"'},
-    plugins: [scopePlugin(scopeDir), stubGenerated],
+    plugins,
     logLevel: 'silent',
   });
   const code = result.outputFiles[0].text;
@@ -99,6 +162,25 @@ export async function bundleModule({root, entries, scope}) {
     code,
     minBytes: Buffer.byteLength(code),
     gzipBytes: gzipSize(code),
+  };
+}
+
+/**
+ * What an adapter adds to a bundle that already holds its host and the engine:
+ * the host with the adapter, minus the host with the adapter stubbed out,
+ * minus the engine.
+ * @param {{root: string, host: {entries: string[], scope: string},
+ *   adapter: string[], engine: {entries: string[], scope: string}}} entry
+ */
+export async function measureAdapter({root, host, adapter, engine}) {
+  const withAdapter = await bundleModule({root, ...host});
+  const withoutAdapter = await bundleModule({root, ...host, stub: adapter});
+  const engineSize = await bundleModule({root, ...engine});
+  return {
+    minBytes:
+      withAdapter.minBytes - withoutAdapter.minBytes - engineSize.minBytes,
+    gzipBytes:
+      withAdapter.gzipBytes - withoutAdapter.gzipBytes - engineSize.gzipBytes,
   };
 }
 
@@ -114,7 +196,10 @@ export async function checkBudgets({root, config}) {
   const warnings = [];
   const failures = [];
   for (const entry of config.modules ?? []) {
-    const {minBytes, gzipBytes} = await bundleModule({root, ...entry});
+    const {minBytes, gzipBytes} =
+      entry.role === 'adapter'
+        ? await measureAdapter({root, ...entry})
+        : await bundleModule({root, ...entry});
     const measured = {
       name: entry.name,
       role: entry.role ?? null,
