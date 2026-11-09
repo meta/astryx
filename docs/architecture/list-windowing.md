@@ -101,6 +101,7 @@ row-position accuracy (DEC-3).
 - **INV4 gap:** Table windows only inside its own bounded viewport; on a
   scrolling page or inside an outer scroll container it renders every row.
 - **INV5 gap:** Table's adapter (controller and wiring) measures about 5.3 KB.
+- **INV5 gap:** a plain Table that never windows carries about 6.2 KB minified and gzipped of the windowing stack.
 - **INV5 gap:** the chat virtualizer's own code measures 4.7 KB, with no split between shared engine and chat adapter.
 
 ## Change coupling
