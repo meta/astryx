@@ -1748,8 +1748,8 @@ export function useSheetGestures({
       // A pull against the armed edge can never scroll: the chain is at that
       // edge. Its native pan is cancelled before the promotion slop, once the
       // pull passes a tap's wobble, because a later cancel no longer stops a
-      // pan iOS Safari has committed. A mostly sideways move is a horizontal
-      // row's scroll, so it is never cancelled.
+      // pan iOS Safari has committed. Before the sheet's drag begins, a mostly
+      // sideways move is a horizontal row's scroll, so it is not cancelled.
       const opposesTop = armed.top && delta > 0 && chainAtTop(armed.scrollers);
       const opposesBottom =
         armed.bottom && delta < 0 && chainAtBottom(armed.scrollers);
