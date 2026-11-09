@@ -70,17 +70,20 @@ interface HeldTarget {
 
 // Every copy of Core uses this one state, so a swizzled overlay and the
 // package's stack their claims and locks on the same page.
-const state = sharedState('hooks/root-scroll-styles/state', 1, () => ({
-  claims: {
+const state = sharedState('hooks/root-scroll-styles/state', 1, () => {
+  const claims: Record<RootScrollProperty, Claim[]> = {
     overflow: [],
     overscrollBehaviorY: [],
     scrollbarGutter: [],
-  },
-  held: new Map<RootScrollProperty, HeldTarget[]>(),
-  nextClaimId: 0,
-  lockCount: 0,
-  lockListeners: new Set<(isActive: boolean) => void>(),
-}));
+  };
+  return {
+    claims,
+    held: new Map<RootScrollProperty, HeldTarget[]>(),
+    nextClaimId: 0,
+    lockCount: 0,
+    lockListeners: new Set<(isActive: boolean) => void>(),
+  };
+});
 
 /**
  * The element whose `overflow` the viewport uses. That is the root, unless the
