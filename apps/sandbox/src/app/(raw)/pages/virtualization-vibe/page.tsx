@@ -227,11 +227,15 @@ function MeasuredRows({
  * corrected as rows render. ChatVirtualizer opened this case about 574,000 px
  * down the page with an empty viewport, so this case runs on the prototype.
  */
-function MeasuredPageRows({rows}: {rows: Order[]}) {
+function MeasuredPageRows({
+  rows,
+  textScale,
+}: {
+  rows: Order[];
+  textScale: number;
+}) {
   const listRef = useRef<HTMLDivElement>(null);
-  const estimate =
-    56 *
-    (parseFloat(getComputedStyle(document.documentElement).fontSize) / 16 || 1);
+  const estimate = 56 * textScale;
   const modelRef = useRef<FenwickOffsets | null>(null);
   if (modelRef.current == null) {
     modelRef.current = new FenwickOffsets(rows.length, estimate);
@@ -250,7 +254,7 @@ function MeasuredPageRows({rows}: {rows: Order[]}) {
   }, []);
   const observer = useMemo(
     () =>
-      new ResizeObserver(entries => {
+      new ResizeObserver((entries, self) => {
         const listTop = listRef.current
           ? listRef.current.getBoundingClientRect().top + window.scrollY
           : 0;
@@ -259,6 +263,13 @@ function MeasuredPageRows({rows}: {rows: Order[]}) {
         );
         for (const entry of entries) {
           const el = entry.target as HTMLElement;
+          // A row that left the page reports a zero size. It keeps its last
+          // measured size, and the observer lets it go.
+          const size = entry.borderBoxSize[0]?.blockSize ?? el.offsetHeight;
+          if (!el.isConnected || size <= 0) {
+            self.unobserve(el);
+            continue;
+          }
           const index = Number(el.dataset.index);
           const delta = model.set(
             index,
@@ -322,10 +333,8 @@ function MeasuredPageRows({rows}: {rows: Order[]}) {
   );
 }
 
-function TableCase() {
+function TableCase({textScale}: {textScale: number}) {
   const rows = useMemo(() => makeOrders(10_000), []);
-  const textScale =
-    parseFloat(getComputedStyle(document.documentElement).fontSize) / 16 || 1;
   const [sizing, setSizing] = useState<'exact' | 'estimate'>('exact');
   const [scroll, setScroll] = useState<'box' | 'page'>('box');
   const [hint, setHint] = useState<'on' | 'off'>('on');
@@ -425,7 +434,7 @@ function TableCase() {
             on a measured prefix-sum prototype instead.
           </Text>
           <OrderHeader />
-          <MeasuredPageRows rows={rows} />
+          <MeasuredPageRows rows={rows} textScale={textScale} />
         </div>
       )}
     </VStack>
@@ -760,7 +769,7 @@ export default function VirtualizationVibePage() {
       </HStack>
       <Text weight="bold">Try this: {CASES[state.c].tryThis}</Text>
       {state.c === 'table' ? (
-        <TableCase key={`t${state.text}`} />
+        <TableCase key={`t${state.text}`} textScale={state.text / 100} />
       ) : state.c === 'chat' ? (
         <ChatCase key={`c${state.text}`} />
       ) : (
