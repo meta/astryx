@@ -481,6 +481,60 @@ in its last frame, or no frame came after the deadline, and no frame came for
 longer than `FRAME_STARVATION_MS`: it throws `FrameStarvationError`, not
 "still moving".
 
+**Short motions on a starved runner.** A loaded runner can draw no frame for
+longer than a short motion lasts. Choose the evidence from what the proof
+claims:
+
+- **The course of a motion** (it fades, its duration, its values over time,
+  where it ends): hold it and seek it. Arm `armHold(page, scope, {judges})`
+  before the action, then read `held()`. Seek each time with
+  `seekAnimations`, and read `getComputedStyle` there (`sampleCurve` reads
+  transform and opacity). The page holds the run as it starts, so a starved
+  renderer delays the read but never thins it. The bounds stay the same: each
+  read is the exact value at a time the proof chooses.
+- **Which animations run** (opacity only, no fade of its own): take
+  `watchAnimations(scope)` before the action and read `started()` after. The
+  recorder sees a script animation from its creation, and a CSS run from its
+  start event or the next frame. In WebKit a CSS run shorter than a frame gap
+  can start and end inside it; `started()` then fails by name (Engine limits).
+- **What each presented frame shows** (a lens on every frame, motion through a
+  blocked main thread): the frames are the evidence. Take them through
+  `requireFrames`. Start the window at the first frame the page drew after the
+  input, not at the input itself. Keep the window's length and `min`. When the
+  claim also says "at once", bound the time from the input to that frame on
+  its own.
+
+When a course claim moves from live frames to hold and seek, its
+`requireFrames` call goes with the live sampling. Its `min` only said that the
+samples were enough to see the course, and the seeked reads now show the
+course at chosen times. A frame minimum stays where the proof claims something
+about presented frames. There the minimum is the claim, so it never drops or
+lowers.
+
+A starved per-frame window fails `requireFrames` as `FrameStarvationError`:
+fewer than `min` frames, and no frame for longer than `FRAME_STARVATION_MS`
+around them. `requireFrames` counts frames, so a window that holds `min` frames
+passes whatever gap it holds. A starved window stays red. Do not widen the
+window, lower `min` or re-take the run: the remedy is the runner's capacity,
+not the proof. The
+same holds for `waitForRest` when no frame comes for seconds. Real-time touch,
+frame and busy proofs need 1 worker (or CI's profile) for evidence; at 4
+workers they starve each other's browsers.
+
+Arm a hold while nothing under its scope runs. One input can start two runs of
+the same property: a mouse click hovers first, then focuses. The second run
+retargets the property and cancels the first, and a cancelled run leaves the
+held set. So a hold that took the hover run reads none of the focus run. Bring
+the element to rest after the earlier input (hover, then `waitForRest`), then
+arm the hold and press. When no run follows, the earlier input already showed
+the look, so judge that run instead.
+
+Hold and seek reads CSS transitions, CSS animations and Web Animations. A
+motion that script drives frame by frame (a `requestAnimationFrame` spring) has
+no timeline to seek, so its course is a per-frame claim. A held read proves the
+curve, not that frames reached the screen. Frame delivery stays with the
+busy-main-thread proofs.
+
 **No Layout / Paint.** `traceRendering` records a Chromium trace around the
 interaction; `countBetween` counts the steady middle of an animation (its
 first and last frames may commit). A transform/opacity animation does no
@@ -634,6 +688,16 @@ the input through at its time, or at its arrival if that came later within the
 frame. On a starved runner it can be later still, by as long as its main thread
 did not run: `landed()` gives that as `stalledMs`.
 
+Put the finger down before the thaw, so that only the lift races the hold.
+`driver.press(at)` sends only the touch-down and returns the held finger. Its
+`lift()` sends only the touch-up. A frozen page handles the touch-down at
+once, and what it starts stays held until the thaw. A played tap after
+`resumed()` sends its touch-down, waits its hold, then lifts, and a loaded
+runner can make that late. `move(to)` moves a held finger. A finger lifted
+twice, a second finger on a held id, or a play or a tap while a finger is held
+throws by name. An early lift still lets `resumed()` read the first frame after the
+thaw, and `landed()` names it.
+
 `navigator.scheduling.isInputPending()` cannot gate a lift. In Playwright's
 Chromium 149 it reports a queued mouse press or key at once, but never a touch
 sent with `Input.dispatchTouchEvent`. WebKit has no `isInputPending`.
@@ -669,8 +733,10 @@ arrives. So a lift that reaches the page past the 40 ms stillness interval
 after its finger's last move reads as a resting finger. The page releases it
 at 0. Every WebKit play reads its release from the page's own stamps, however
 it is paced, and fails by name when the page's release is not the script's.
-The error is `TouchLiftStallError` when `onEvent` alone carries the scripted
-gap past the stillness interval, however much a loaded runner stretched it.
+It reads each move and the lift at its pointer event's stamp, and the
+touch-down at its touch event's, where Core's gesture host reads them.
+The error is `TouchLiftStallError` when the scripted gap plus `onEvent`'s run
+passes the stillness interval, however much a loaded runner stretched the gap.
 Record what the page did in a listener of its own, or let the script rest
 before the lift. A runner too loaded to dispatch in time stretches a
 gesture the same way, and the play fails with `TouchPacingError`. When the
@@ -684,13 +750,28 @@ proof reads no release from the lift, such as a pinch's end, passes
 A proof whose component decides on a threshold names it in `boundaries`:
 the release speed a pager pages from (`releasePxPerS`), or the hold after
 which it catches the content (`holdMs`). In WebKit the play then fails by
-name when the page read the release, or the first finger's hold from
-touch-down to lift, on the other side of the threshold from the script. A
+name when the page read the release, or the hold from the first touch-down
+to the play's last lift, on the other side of the threshold from the script. A
 scrolling surface reads its release as Core's `scrollVelocity` does: pass
 `release: 'scroll'`. Each pacing error names the longest time the page drew no
 frame during the gesture. A page that drew nothing for 100 ms or more never
 received the gesture as scripted. To read a frame before the gesture, a judged
 play starts one frame later.
+
+When the page's own touch and pointer listeners held an event back, the play
+fails with `TouchPageStallError`, which counts their time from when they began.
+An event that waited for the main thread before them fails as
+`TouchPacingError`. The error names the wait: another page task held the
+thread, or the runner starved it. The driver marks when the page's listeners
+begin with a window capture listener. Created before the page loads, the driver
+adds it before the page's scripts, so it runs first. Created after, it would
+run after the window capture listeners the page added at load, such as a
+gesture host's. So the driver then keeps the old reading: an event's time from
+its stamp counts as the page's listeners'. Create the driver before the page
+loads to tell a wait from the listeners. `openStory` adds the mark before the
+story loads, so on a story page a driver created after it tells them apart
+too. A proof that loads its own page calls `installTouchStartBeforeLoad(page)`
+before it navigates.
 
 A wheel gesture is a run of steps, and `wheel` waits for each step's round
 trip, so on a loaded runner awaited steps land as far apart as a round trip

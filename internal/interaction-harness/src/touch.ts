@@ -168,10 +168,11 @@ export interface PlayOptions {
    * The thresholds the component under test decides on: a release speed it
    * pages from (`releasePxPerS`), a hold it catches after (`holdMs`). The
    * play fails by name when the page read the release on the other side of
-   * a threshold from the script. The first finger's hold from touch-down to
-   * lift fails the same way. Then the proof never judges a gesture the page
-   * did not receive. Only a driver whose page stamps touches on arrival
-   * (WebKit) judges them.
+   * a threshold from the script. The hold from the first touch-down to the
+   * play's last lift fails the same way. Then the proof never judges a
+   * gesture the page did not receive. Only a driver whose page stamps
+   * touches on arrival (WebKit) judges them. A play with `realtime: false`
+   * or `releaseUnread: true` judges none.
    */
   readonly boundaries?: {
     readonly releasePxPerS?: number;
@@ -416,7 +417,10 @@ export interface TouchPacingFault {
   } | null;
   /** For `'boundary'` and `'hold'`: the threshold crossed, px/s or ms. */
   readonly threshold?: number;
-  /** For `'hold'`: the first finger's hold as the page read it, and as scripted, ms. */
+  /**
+   * For `'hold'`: the hold from the first touch-down to the last lift, as the
+   * page read it and as scripted, ms.
+   */
   readonly holdMs?: {readonly page: number; readonly script: number};
   /**
    * The longest time the page drew no frame during the gesture, ms, or null
@@ -782,9 +786,8 @@ export function touchPacingFault(
 }
 
 /**
- * The first finger's hold from touch-down to the lift that ends the play, ms.
- * It gives the page's reading and the script's: a tap's hold, or a drag's
- * whole span.
+ * The hold from a play's first touch-down to its last lift, ms. It gives the
+ * page's reading and the script's: a tap's hold, or a drag's whole span.
  */
 export function readHold(
   steps: readonly TouchEventStep[],
