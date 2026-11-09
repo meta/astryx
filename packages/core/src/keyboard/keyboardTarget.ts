@@ -16,7 +16,7 @@ import {animatorFor, type Animator} from '../motion/animator';
 import {isCoarsePointer} from '../utils/coarsePointer';
 import {subscribeInput} from '../utils/inputStream';
 import {layoutViewportHeight} from '../utils/layoutViewport';
-import {scrollingAncestor} from '../utils/scrollingAncestor';
+import {nearestScroller, scrollingAncestor} from '../utils/scrollingAncestor';
 import {
   KEYBOARD_EPSILON,
   claimTapFocus,
@@ -58,6 +58,8 @@ export function registerKeyboardTarget(element: Element): () => void {
   };
 }
 
+export {nearestScroller};
+
 /** Whether a registered target holds `element`. */
 export function isInsideKeyboardTarget(element: Element): boolean {
   for (
@@ -70,20 +72,6 @@ export function isInsideKeyboardTarget(element: Element): boolean {
     }
   }
   return false;
-}
-
-/**
- * The element that scrolls `element` into view: its nearest ancestor that
- * scrolls on the block axis, or else the document's scroller.
- */
-export function nearestScroller(element: Element): Element {
-  const doc = element.ownerDocument;
-  const scroller = scrollingAncestor(element);
-  return scroller == null ||
-    scroller === doc.body ||
-    scroller === doc.documentElement
-    ? (doc.scrollingElement ?? doc.documentElement)
-    : scroller;
 }
 
 // The element's bottom edge where layout puts it, without the ride's move.

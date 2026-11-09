@@ -52,6 +52,8 @@ describe('brands a swizzled copy shares with the package', () => {
         ['motion/animatedLayout', 'AnimatedLayout'],
         ['CodeBlock/grammar', 'CodeLanguage'],
         ['SnapPaging/snapPagingValue', 'SnapPaging'],
+        ['Markdown/plugins/protocol', 'MarkdownPluginEntry'],
+        ['Markdown/plugins/protocol', 'MarkdownTransform'],
       ];
       fs.writeFileSync(
         check,

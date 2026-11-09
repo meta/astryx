@@ -4,12 +4,14 @@
 
 /**
  * @file useKeyboardHint.tsx
- * @input Uses React, StyleX, Kbd, useLayer, i18n (useComponentTranslator)
+ * @input Uses React, StyleX, Kbd, useLayer, the shared anchored hint
+ *   (hooks/anchoredHint.tsx), i18n (useComponentTranslator)
  * @output Exports useKeyboardHint hook — ephemeral arrow-key navigation hint
  * @position Core hook; shows sighted keyboard users how to navigate composite
  *   widgets that use roving tabindex (single Tab stop, arrows inside)
  *
  * SYNC: When modified, update:
+ * - /packages/core/src/hooks/anchoredHint.tsx
  * - /packages/core/src/hooks/index.ts
  * - /packages/core/src/hooks/useKeyboardHint.doc.mjs
  * - /apps/storybook/stories/useKeyboardHint.stories.tsx
@@ -18,13 +20,6 @@
 
 import React, {useCallback, useEffect, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {
-  colorVars,
-  radiusVars,
-  shadowVars,
-  spacingVars,
-  typeScaleVars,
-} from '../theme/tokens.stylex';
 import {Kbd} from '../Kbd';
 import {useLayer} from '../Layer/useLayer';
 import {
@@ -32,6 +27,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/hooks/useKeyboardHint.generated';
+import {anchoredHintStyles, renderAnchoredHint} from './anchoredHint';
 
 registerEnglishFallback(english);
 
@@ -108,52 +104,6 @@ const ARROW_HINT_KEYS: Record<
   vertical: ['up', 'down'],
   both: ['left', 'right', 'up', 'down'],
 };
-
-const styles = stylex.create({
-  hint: {
-    // Top layer + anchor positioned
-    position: 'fixed',
-    inset: 'auto',
-    margin: 0,
-    borderWidth: 0,
-    borderStyle: 'none',
-
-    // Surface
-    backgroundColor: colorVars['--color-background-popover'],
-    borderRadius: radiusVars['--radius-element'],
-    boxShadow: shadowVars['--shadow-low'],
-    paddingBlockStart: spacingVars['--spacing-1'],
-    paddingBlockEnd: spacingVars['--spacing-1'],
-    paddingInlineStart: spacingVars['--spacing-2'],
-    paddingInlineEnd: spacingVars['--spacing-2'],
-
-    // Typography
-    fontSize: typeScaleVars['--text-supporting-size'],
-    lineHeight: typeScaleVars['--text-supporting-leading'],
-    color: colorVars['--color-text-secondary'],
-    whiteSpace: 'nowrap',
-
-    // Animation
-    opacity: {
-      default: 0,
-      ':popover-open': 1,
-    },
-    transitionProperty: 'opacity, display, overlay',
-    transitionDuration: '150ms',
-    transitionBehavior: 'allow-discrete',
-
-    // Don't capture pointer events (hint floats above content)
-    pointerEvents: 'none',
-  },
-  keys: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: spacingVars['--spacing-1'],
-  },
-  label: {
-    marginInlineStart: spacingVars['--spacing-1'],
-  },
-});
 
 // ---------------------------------------------------------------------------
 // Hook
@@ -321,28 +271,21 @@ export function useKeyboardHint(
   // --- Render the hint element ---
 
   const arrowContent = (
-    <span {...stylex.props(styles.keys)}>
+    <span {...stylex.props(anchoredHintStyles.keys)}>
       {ARROW_HINT_KEYS[orientation].map(key => (
         <Kbd key={key} keys={key} />
       ))}
     </span>
   );
 
-  const hintElement = layer.render(
+  const hintElement = renderAnchoredHint(
+    layer,
     <span aria-hidden="true">
       {arrowContent}
-      <span {...stylex.props(styles.label)}>
+      <span {...stylex.props(anchoredHintStyles.label)}>
         {t('@astryx.keyboardHint.toNavigate')}
       </span>
     </span>,
-    {
-      placement: 'below',
-      alignment: 'start',
-      xstyle: styles.hint,
-      style: {
-        marginBlockStart: spacingVars['--spacing-2'],
-      },
-    },
   );
 
   return {hintElement, onFocus, onBlur, onKeyDown};
