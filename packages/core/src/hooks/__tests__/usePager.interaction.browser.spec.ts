@@ -171,10 +171,17 @@ async function serve(
   window.pager = Pager.createPager({
     count: ${COUNT},
     defaultIndex: ${startIndex},
-    // Notes whether the settle was already running on its curve when the
-    // page was reported.
-    onIndexChange: (i, reason) => window.pagerLog.push('index:' + i + ':' + reason +
-      (document.getAnimations().some(a => a.playState === 'running' && a.startTime != null && a.currentTime > 20) ? ':moving' : '')),
+    // Notes whether the settle had run for two of the page's frames when the
+    // page was reported, counted from the browser's own start. Chromium dates
+    // that start anywhere inside its frame, so the time since it does not
+    // count frames. The frames are the ones the load report records.
+    onIndexChange: (i, reason) => {
+      const now = document.timeline.currentTime;
+      const frames = new Set([...window.frameTimes, now]);
+      const moving = document.getAnimations().some(a => a.playState === 'running' && a.startTime != null &&
+        [...frames].filter(t => t > a.startTime && t <= now).length >= 2);
+      window.pagerLog.push('index:' + i + ':' + reason + (moving ? ':moving' : ''));
+    },
     onSettle: (i, previous) => {
       window.settleTimes.push(performance.now());
       window.pagerLog.push('settle:' + i + ':' + previous);
