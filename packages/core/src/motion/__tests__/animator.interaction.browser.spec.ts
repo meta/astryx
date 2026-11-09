@@ -31,6 +31,7 @@ import {
   countBetween,
   markElement,
   pageTimesOnControls,
+  requireFrames,
   startBusyControl,
   startScreencast,
   traceRendering,
@@ -907,15 +908,16 @@ for (const how of ['in a task', 'in a frame callback of the page'] as const) {
       ahead: second,
       controlStarts: [controlStart, secondStart],
     });
-    const timed = tracked.flatMap(f => {
+    const dated = tracked.flatMap(f => {
       const at = pageTime.get(f.t);
       if (f.box == null || at == null) {
         return [];
       }
-      return at >= run.call - 50 && at <= run.end + 150
-        ? [{x: f.box.x - MARKER_INSET, at}]
-        : [];
+      return [{x: f.box.x - MARKER_INSET, at}];
     });
+    const timed = dated.filter(
+      ({at}) => at >= run.call - 50 && at <= run.end + 150,
+    );
     // The frames fit the first curve up to a start at or after the block's
     // end. After that start, they fit a spring from the value and the velocity
     // on screen there. `skip` fits the same frames to the call's own clock
@@ -981,15 +983,33 @@ for (const how of ['in a task', 'in a frame callback of the page'] as const) {
       description: JSON.stringify({read, timed}),
     });
     // The compositor showed the first curve through the block, and the frames
-    // after it show the call.
-    expect(read.inBlock, JSON.stringify(read)).toBeGreaterThanOrEqual(3);
-    expect(read.after, JSON.stringify(read)).toBeGreaterThanOrEqual(3);
+    // after it show the call. A loaded runner can present no frame for over
+    // 100 ms after the block. Too few frames there cannot tell the call's
+    // clock from the screen's, so such a run fails by name, with its gaps.
+    // The gaps are read on the controls' clock, past the window's edges too.
+    const onClock = dated.map(({x, at}) => ({t: at, x}));
+    requireFrames(onClock, {
+      min: 3,
+      during: 'the first curve played through the block',
+      where: frame => frame.t > run.call && frame.t < run.end,
+    });
+    requireFrames(onClock, {
+      min: 3,
+      during: 'the call played in the 130 ms after the block',
+      where: frame => frame.t > run.end + 20 && frame.t <= run.end + 150,
+    });
     // Within 4 px everywhere: the marker and the controls are read at whole
     // px, so each read adds up to a px.
-    expect(read.worst, JSON.stringify(read)).toBeLessThanOrEqual(4);
+    expect(
+      read.worst,
+      `the frames miss the call, started at a frame after the block from the value and the velocity on screen there, by ${read.worst.toFixed(1)} px (at most 4 px): ${JSON.stringify(read)}`,
+    ).toBeLessThanOrEqual(4);
     // The call's own clock misses the same frames by far more, so the case
     // tells the two apart.
-    expect(read.skip, JSON.stringify(read)).toBeGreaterThan(20);
+    expect(
+      read.skip,
+      `the call's own clock fits the same frames within ${read.skip.toFixed(1)} px, so the case cannot tell the two apart (it needs over 20 px): ${JSON.stringify(read)}`,
+    ).toBeGreaterThan(20);
   });
 }
 
