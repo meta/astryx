@@ -14,6 +14,7 @@
  *   - useCollator                 — provider-bound locale-aware comparison
  *   - useDirection                — hook returning the ambient text direction
  *   - getLocaleDirection          — server-safe locale → direction helper
+ *   - firstStrongDirection        — server-safe text → direction classifier
  *   - Translator                  — interface for consumer-injected runtimes
  *   - CalendarSystem              — the calendars date components can show
  *
@@ -40,6 +41,7 @@ export {useLocale} from './useLocale';
 export {useCollator} from './useCollator';
 export {useDirection} from './useDirection';
 export {getLocaleDirection} from './getLocaleDirection';
+export {firstStrongDirection} from './firstStrongDirection';
 export type {CalendarSystem} from '../utils/calendarSystem';
 export type {Translator} from './translator';
 export type {

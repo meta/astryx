@@ -83,6 +83,7 @@ import {CodeBlockHeaderPlugin} from './CodeBlockHeaderPlugin';
 import {CodePastePlugin} from './CodePastePlugin';
 import {CodeSyntaxPlugin} from './CodeSyntaxPlugin';
 import {CodeTabPlugin} from './CodeTabPlugin';
+import {BlockDirectionPlugin} from './BlockDirectionPlugin';
 import {MarkdownExtensionsPlugin} from './MarkdownExtensionsPlugin';
 import type {RichTextMarkdownExtension} from './markdownExtensions';
 import type {CodeLanguage} from '@astryxdesign/core/CodeBlock';
@@ -734,6 +735,7 @@ export const RichTextEditor = function RichTextEditor({
               <TablePastePlugin />
               <CodeBlockHeaderPlugin codeLanguages={codeLanguages} />
               <CodeSyntaxPlugin codeLanguages={codeLanguages} />
+              <BlockDirectionPlugin />
               {/* Backspace at the very start of a code block makes it a
                   paragraph, instead of merging it into the block above. */}
               <CodeBackspacePlugin />

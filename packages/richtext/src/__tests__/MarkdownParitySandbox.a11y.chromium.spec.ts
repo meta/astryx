@@ -1955,11 +1955,10 @@ for (const [viewport, colorMode] of [
   });
 }
 
-// RichText blocks take the direction of the surface around them, whatever
-// their first strong character. Markdown blocks take the direction of their
-// own text, and the provider's when their text has no strong character.
+// Every surface gives a prose block the direction of its own text, and the
+// provider's when that text has no strongly directional character.
 for (const direction of ['ltr', 'rtl'] as const) {
-  test(`blocks take their surface's direction rule (${direction})`, async ({
+  test(`blocks take their own text's direction (${direction})`, async ({
     page,
   }) => {
     const errors = await openStory(
@@ -1971,30 +1970,39 @@ for (const direction of ['ltr', 'rtl'] as const) {
     await waitForDocument(page, MARKDOWN);
     await waitForDocument(page, RICH_TEXT);
     for (const surface of [MARKDOWN, RICH_TEXT]) {
-      const ownText = surface === MARKDOWN;
-      // RichText: every block, and inside blocks too: table rows and cells,
-      // list items, and paragraphs. Markdown: every prose block and table
-      // cell, read against its own text; a container or wrapper is not
-      // checked, because it takes its parent's direction.
+      // Every prose block reads its own text on both surfaces. A table cell
+      // orders with its table, so the cell carries the direction only where
+      // the surface puts no block inside it: Markdown's cells hold their
+      // text directly, RichText's hold a paragraph.
       const mismatched = await page.evaluate(
-        ({selector, provider, isOwnText}) => {
+        ({selector, provider}) => {
           const strong =
             /[A-Za-z\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u3040-\u9FFF\uAC00-\uD7AF]|([\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF])/u;
-          const expectedFor = (element: Element): string => {
-            if (!isOwnText) {
-              return provider;
-            }
+          const ownTextOf = (element: Element): string => {
             const match = strong.exec(element.textContent ?? '');
             return match == null ? provider : match[1] != null ? 'rtl' : 'ltr';
           };
-          const targets = isOwnText
-            ? ':is([role="paragraph"], p, h1, h2, h3, h4, h5, h6, blockquote, li, th, td)'
-            : ':is([data-parity-block], tr, th, td, li, p)';
-          return [
-            ...document.querySelectorAll(
-              `${selector} [data-parity-body] ${targets}`,
-            ),
-          ]
+          const isCellHoldingABlock = (element: Element): boolean =>
+            /^T[HD]$/.test(element.tagName) &&
+            element.querySelector('p, [role="paragraph"]') !== null;
+          const expectedFor = (element: Element): string =>
+            isCellHoldingABlock(element) ? provider : ownTextOf(element);
+          const targets =
+            ':is([role="paragraph"], p, h1, h2, h3, h4, h5, h6, blockquote, li, th, td)';
+          // Document blocks only. RichText keeps its content inside the
+          // editable element, so a toolbar dialog's own heading — chrome,
+          // which follows the provider like the rest of the furniture — is
+          // outside it. Markdown renders its blocks into the body directly.
+          const body = document.querySelector(`${selector} [data-parity-body]`);
+          const roots = body?.querySelectorAll('[data-lexical-editor]');
+          const scopes =
+            roots != null && roots.length > 0
+              ? [...roots]
+              : body != null
+                ? [body]
+                : [];
+          return scopes
+            .flatMap(scope => [...scope.querySelectorAll(targets)])
             .filter(
               element =>
                 getComputedStyle(element).direction !== expectedFor(element),
@@ -2005,16 +2013,16 @@ for (const direction of ['ltr', 'rtl'] as const) {
                 `${element.tagName} ${(element.textContent ?? '').slice(0, 24)}`,
             );
         },
-        {selector: surface, provider: direction, isOwnText: ownText},
+        {selector: surface, provider: direction},
       );
       expect(mismatched, surface).toEqual([]);
     }
     expect(errors).toEqual([]);
   });
 
-  // Mixed English and Hebrew cells take the document's direction, so each
-  // cell's text starts at the document's start edge, whatever its script.
-  test(`table cells take the provider direction with mixed scripts (${direction})`, async ({
+  // A cell orders with its table, and its text reads its own way, so a
+  // Hebrew cell starts at its own start edge in an English document.
+  test(`table cells read their own text with mixed scripts (${direction})`, async ({
     page,
   }) => {
     await page.setViewportSize(DESKTOP);
@@ -2041,8 +2049,18 @@ for (const direction of ['ltr', 'rtl'] as const) {
             column: (cell as HTMLTableCellElement).cellIndex,
             direction: style.direction,
             paragraphDirection: getComputedStyle(paragraph).direction,
+            // Hebrew is the only strong right-to-left script in the fixture.
+            textDirection: /^[^A-Za-z\u0590-\u05ff]*[\u0590-\u05ff]/.test(
+              (paragraph.textContent ?? '').trim(),
+            )
+              ? 'rtl'
+              : /^[^A-Za-z\u0590-\u05ff]*[A-Za-z]/.test(
+                    (paragraph.textContent ?? '').trim(),
+                  )
+                ? 'ltr'
+                : null,
             startGap:
-              style.direction === 'rtl'
+              getComputedStyle(paragraph).direction === 'rtl'
                 ? box.right - parseFloat(style.paddingRight) - text.right
                 : text.left - box.left - parseFloat(style.paddingLeft),
           };
@@ -2052,10 +2070,13 @@ for (const direction of ['ltr', 'rtl'] as const) {
     // Editor and view, three rows of two cells each.
     expect(cells).toHaveLength(12);
     for (const cell of cells) {
+      // The cell box, and so the column it sits in, orders with the table.
       expect(cell.direction).toBe(direction);
-      expect(cell.paragraphDirection).toBe(direction);
+      // Its prose reads the way the cell's own text reads.
+      expect(cell.paragraphDirection).toBe(cell.textDirection ?? direction);
       if (cell.column === 0) {
-        // The first column is start-aligned: its text touches the start edge.
+        // The first column is start-aligned: its text touches the start edge
+        // of its own paragraph's direction.
         expect(Math.abs(cell.startGap)).toBeLessThanOrEqual(1);
       }
     }
