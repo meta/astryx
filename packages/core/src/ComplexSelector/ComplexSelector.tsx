@@ -640,15 +640,14 @@ export function ComplexSelector<Value>({
       statusVariant: effectiveStatusVariant,
       size: 'sm',
     });
-  // The disabled-reason tooltip attaches to the trigger container. A disabled
-  // trigger keeps its tab stop, so keyboard focus reaches it and shows the
-  // reason; the isDisabled guards still block activation.
+  // The disabled-reason tooltip anchors to the control box and listens on the
+  // trigger button. A disabled trigger keeps its tab stop, so keyboard focus
+  // reaches it and shows the reason; the isDisabled guards still block
+  // activation. The status info-tip in the same box opens only its own
+  // message.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
-    // The container div is not naturally focusable; focusin bubbles up from
-    // the trigger button, so always attach focus listeners.
-    focusTrigger: 'always',
     isEnabled: showsDisabledMessage,
   });
 
@@ -666,7 +665,11 @@ export function ComplexSelector<Value>({
       .join(' ') || undefined;
 
   const triggerRef = useRef<HTMLElement>(null);
-  const triggerButtonRef = useMergedRefs<HTMLElement>(triggerRef, ref);
+  const triggerButtonRef = useMergedRefs<HTMLElement>(
+    triggerRef,
+    ref,
+    disabledMessageTooltip.interactionRef,
+  );
 
   const [isPending, startTransition] = useTransition();
   const [optimisticValue, setOptimisticValue] = useOptimistic(value);
@@ -909,10 +912,9 @@ export function ComplexSelector<Value>({
       <div
         ref={el => {
           popover.triggerRef(el);
-          // Anchor + hover/focus listeners for the disabled-message tooltip.
-          // Handlers are gated internally by isEnabled, and anchor names
-          // compose, so attaching unconditionally is safe.
-          disabledMessageTooltip.ref(el);
+          // The disabled-message tooltip anchors here. Anchor names compose,
+          // so attaching unconditionally is safe.
+          disabledMessageTooltip.positionRef(el);
         }}
         {...pressable}
         onClick={handleControlBoxClick}
