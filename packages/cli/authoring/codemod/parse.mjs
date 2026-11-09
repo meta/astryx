@@ -10,12 +10,14 @@
 import {z} from 'zod';
 import {formatZodError} from '../_shared/errors.mjs';
 
-/** @typedef {import('./type').AstryxCodemod} AstryxCodemod */
-/** @typedef {import('./type').AstryxConfigCodemod} AstryxConfigCodemod */
-/** @typedef {import('./type').AstryxCodemodTransform} AstryxCodemodTransform */
+/** @typedef {import('./type.js').AstryxCodemod} AstryxCodemod */
+/** @typedef {import('./type.js').AstryxConfigCodemod} AstryxConfigCodemod */
+/** @typedef {import('./type.js').AstryxCodemodTransform} AstryxCodemodTransform */
 
 const transform = /** @type {z.ZodType<AstryxCodemodTransform>} */ (
-  z.custom(value => typeof value === 'function', {message: 'Expected a function'})
+  z.custom(value => typeof value === 'function', {
+    message: 'Expected a function',
+  })
 );
 
 const codeCodemodSchema = z
@@ -52,8 +54,8 @@ const codemodEnvelopeSchema = z.discriminatedUnion('type', [
  * Compile-time drift-lock: sealed envelope must infer exactly the public
  * stamped-codemod union.
  *
- * @typedef {import('../_shared/contract').Expect<
- *   import('../_shared/contract').Equal<
+ * @typedef {import('../_shared/contract.js').Expect<
+ *   import('../_shared/contract.js').Equal<
  *     z.infer<typeof codemodEnvelopeSchema>,
  *     AstryxCodemod | AstryxConfigCodemod
  *   >

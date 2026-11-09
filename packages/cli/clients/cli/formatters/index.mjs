@@ -11,7 +11,8 @@
  * which fields to show and in what order.
  *
  * Constraints (deliberately narrow):
- *   - Plain ASCII only. No color, no TTY detection, no width wrapping. Output is
+ *   - Plain ASCII only. No color and no TTY detection. Long lines wrap at a
+ *     fixed {@link WRAP_WIDTH}, never at the terminal's width, so output is
  *     byte-for-byte deterministic whether printed or piped to an agent.
  *   - Renderers return an opaque {@link Block}; `emit` accepts ONLY Blocks, so a
  *     stray string can't leak onto stdout (the compiler rejects `emit('x')`).
@@ -32,6 +33,50 @@ export const ARROW = '->';
 export const BULLET = '-';
 export const ERR = '!!';
 export const WARN = '!';
+
+/** The column long human-output lines wrap at. */
+export const WRAP_WIDTH = 120;
+
+/** The widest first column an inline record pads to; a longer value overhangs. */
+const INLINE_LEAD_MAX = 32;
+
+/**
+ * Characters a terminal draws two columns wide: CJK ideographs and
+ * punctuation, kana, hangul, and fullwidth forms. A line may break between
+ * any two of them.
+ */
+const WIDE_CHAR =
+  /[\u1100-\u115f\u2e80-\u303e\u3041-\u33ff\u3400-\u4dbf\u4e00-\u9fff\ua000-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6]/u;
+
+/**
+ * How many terminal columns a string takes.
+ * @param {string} s
+ * @returns {number}
+ */
+export function displayWidth(s) {
+  let width = 0;
+  for (const ch of String(s)) width += WIDE_CHAR.test(ch) ? 2 : 1;
+  return width;
+}
+
+/**
+ * Cut a line to `width` columns, ending it with `...` when anything was cut.
+ * @param {string} line
+ * @param {number} width
+ * @returns {string}
+ */
+function truncateToWidth(line, width) {
+  if (displayWidth(line) <= width) return line;
+  let out = '';
+  let used = 0;
+  for (const ch of line) {
+    const w = WIDE_CHAR.test(ch) ? 2 : 1;
+    if (used + w > width - 3) break;
+    out += ch;
+    used += w;
+  }
+  return `${out.trimEnd()}...`;
+}
 
 /**
  * An opaque, renderer-produced block of output. Nominal via a private field:
@@ -67,6 +112,16 @@ export class Block {
  * @property {Record<string, string>} [labels] - Rename a key for display.
  * @property {Record<string, (value: any) => string>} [format] - Transform a
  *   value before rendering (e.g. prefix a command with the package manager).
+ * @property {'stacked' | 'inline'} [layout] - `stacked` (the default): one
+ *   `key: value` line per field, a blank line between records. `inline`: one
+ *   record per line, the first field in a padded column and the rest joined by
+ *   ` - `, for a list a reader scans.
+ * @property {'wrap' | 'truncate'} [overflow] - What an inline record longer
+ *   than {@link WRAP_WIDTH} does: `wrap` (the default) continues under the
+ *   first column; `truncate` cuts it to one line.
+ * @property {(item: any) => boolean} [sizesColumn] - Which inline records the
+ *   first column is sized from (default: all). A record left out keeps its
+ *   place and overhangs a narrower column, so adding it changes no other line.
  */
 
 /** @param {unknown} v @returns {boolean} */
@@ -100,7 +155,75 @@ function toAscii(s) {
     .replace(/[\u2018\u2019]/g, "'")
     .replace(/[\u201C\u201D]/g, '"')
     .replace(/\u2026/g, '...')
+    .replace(/\u2192/g, '->')
+    .replace(/\u2190/g, '<-')
     .replace(/\u00a0/g, ' ');
+}
+
+/**
+ * Word-wrap text at `width`, keeping its own line breaks. A word longer than
+ * the width stays whole on a line of its own. Continuation lines start with
+ * `indent`.
+ * @param {string} input
+ * @param {{width?: number, indent?: string}} [options]
+ * @returns {string}
+ */
+export function wrapText(input, {width = WRAP_WIDTH, indent = ''} = {}) {
+  return String(input)
+    .split('\n')
+    .map(line => wrapLine(line, width, indent))
+    .join('\n');
+}
+
+/**
+ * @param {string} line
+ * @param {number} width
+ * @param {string} indent
+ * @returns {string}
+ */
+function wrapLine(line, width, indent) {
+  if (displayWidth(line) <= width) return line;
+  const lead = /^\s*/.exec(line)?.[0] ?? '';
+  // Tokens a line may break between: words, and each wide character on its
+  // own, since CJK text has no spaces to break at. `gap` is what joined a
+  // token to the one before it.
+  /** @type {{text: string, gap: string}[]} */
+  const tokens = [];
+  let gap = '';
+  let word = '';
+  const flush = () => {
+    if (word === '') return;
+    tokens.push({text: word, gap});
+    gap = '';
+    word = '';
+  };
+  for (const ch of line.slice(lead.length)) {
+    if (ch === ' ') {
+      flush();
+      gap = ' ';
+    } else if (WIDE_CHAR.test(ch)) {
+      flush();
+      tokens.push({text: ch, gap});
+      gap = '';
+    } else {
+      word += ch;
+    }
+  }
+  flush();
+  /** @type {string[]} */
+  const out = [];
+  let current = lead;
+  tokens.forEach(({text: token, gap: before}, i) => {
+    const joined = i === 0 ? current + token : current + before + token;
+    if (i > 0 && displayWidth(joined) > width && current.trim() !== '') {
+      out.push(current);
+      current = indent + token;
+    } else {
+      current = joined;
+    }
+  });
+  out.push(current);
+  return out.join('\n');
 }
 
 /**
@@ -177,8 +300,55 @@ export function record(obj, options = {}) {
  * @returns {Block}
  */
 export function records(items, options = {}) {
+  if (options.layout === 'inline') return inlineRecords(items, options);
   const blocks = items.map(o => record(o, options).toString()).filter(Boolean);
   return new Block(blocks.join('\n\n'));
+}
+
+/**
+ * @param {any[]} items
+ * @param {RecordOptions} options
+ * @returns {Block}
+ */
+function inlineRecords(items, options) {
+  const [lead, ...rest] = (options.fields ?? Object.keys(items[0] ?? {})).filter(
+    k => !options.omit?.includes(k),
+  );
+  if (lead == null) return new Block('');
+  /** @param {any} o @param {string} k */
+  const value = (o, k) => {
+    const fmt = options.format?.[k];
+    return fmt ? fmt(o[k]) : renderValue(o[k]);
+  };
+  const leads = items.map(o => (isEmpty(o[lead]) ? '' : value(o, lead)));
+  const sizes = options.sizesColumn ?? (() => true);
+  const column = Math.min(
+    Math.max(
+      0,
+      ...leads.filter((_, i) => sizes(items[i])).map(l => displayWidth(l)),
+    ),
+    INLINE_LEAD_MAX,
+  );
+  const indent = ' '.repeat(column + 2);
+  const lines = items.map((o, i) => {
+    const tail = toAscii(
+      rest
+        .filter(k => !isEmpty(o[k]))
+        .map(k => value(o, k))
+        .join(' - '),
+    );
+    if (tail === '') return toAscii(leads[i]);
+    const head = toAscii(`${leads[i].padEnd(column)}  `);
+    if (options.overflow === 'truncate') {
+      return truncateToWidth(head + tail, WRAP_WIDTH);
+    }
+    // Wrap only the tail, so the padded first column survives the wrap.
+    const [first, ...more] = wrapText(tail, {
+      width: Math.max(20, WRAP_WIDTH - displayWidth(head)),
+    }).split('\n');
+    return [head + first, ...more.map(line => indent + line)].join('\n');
+  });
+  return new Block(lines.join('\n'));
 }
 
 /**
@@ -199,6 +369,17 @@ export function code(source, _options = {}) {
  */
 function isBlock(b) {
   return b instanceof Block;
+}
+
+/**
+ * The text value of a deprecated component's `deprecated` field: the component
+ * to use instead, then the modernization route. Every command that prints a
+ * component result's fields prints it this way.
+ * @param {{replacement: string, description: string}} deprecation
+ * @returns {string}
+ */
+export function formatDeprecation(deprecation) {
+  return `use ${deprecation.replacement}: ${deprecation.description}`;
 }
 
 /**

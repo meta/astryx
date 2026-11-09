@@ -17,7 +17,7 @@ export default function InternationalizationProviderOverrides() {
         },
       }}>
       <Selector
-        style={{width: 300}}
+        controlStyle={{width: 300}}
         label="Billing region"
         options={[
           {value: 'americas', label: 'Americas'},

@@ -57,6 +57,12 @@ const speakingDictation: UseSpeechRecognitionReturn = {
   toggle: () => {},
 };
 
+const clippingDictation: UseSpeechRecognitionReturn = {
+  ...speakingDictation,
+  volume: 0.3,
+  bands: [0.2, 0.2, 0.2, 0.2, 0.2],
+};
+
 const unsupportedDictation: UseSpeechRecognitionReturn = {
   volume: 0,
   rawBands: [0, 0, 0, 0, 0],
@@ -76,7 +82,7 @@ const unsupportedDictation: UseSpeechRecognitionReturn = {
 // =============================================================================
 
 const meta: Meta<typeof ChatDictationButton> = {
-  title: 'Core/ChatDictation',
+  title: 'Core/ChatDictationButton',
   component: ChatDictationButton,
   tags: ['autodocs'],
   parameters: {
@@ -103,14 +109,20 @@ export const Idle: Story = {
   render: () => <ChatDictationButton dictation={idleDictation} />,
 };
 
-/** Listening state — pulsing red record indicator */
+/** Listening state — volume-reactive equalizer bars */
 export const Listening: Story = {
   render: () => <ChatDictationButton dictation={listeningDictation} />,
 };
 
-/** Speaking state — more intense pulse while speech is detected */
+/** Speaking state — stronger equalizer bars */
 export const Speaking: Story = {
   render: () => <ChatDictationButton dictation={speakingDictation} />,
+};
+
+/** Clipping state — bars blend from accent toward the theme's error color */
+export const Clipping: Story = {
+  tags: ['visual-baseline'],
+  render: () => <ChatDictationButton dictation={clippingDictation} />,
 };
 
 /** Unsupported browser — button hidden by default */
@@ -125,8 +137,9 @@ export const Unsupported: Story = {
   ),
 };
 
-/** Unsupported browser — button visible when isHiddenWhenUnsupported is false */
+/** Unsupported browser — button visible but disabled when explicitly retained */
 export const UnsupportedVisible: Story = {
+  tags: ['visual-baseline'],
   render: () => (
     <ChatDictationButton
       dictation={unsupportedDictation}

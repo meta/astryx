@@ -23,6 +23,7 @@ import {
   shadowVars,
 } from '../theme/tokens.stylex';
 import {container} from '../Layout/container.stylex';
+import {containerCornerStyles} from '../Layout/containerCorners.stylex';
 import type {SpacingToken} from '../Layout/container.stylex';
 import {spacingStepToToken} from '../Layout/padding.stylex';
 import type {Elevation, SizeValue, SpacingStep} from '../utils/types';
@@ -60,6 +61,16 @@ const styles = stylex.create({
   card: {
     '--_card-radius': radiusVars['--radius-container'],
     borderRadius: 'var(--_card-radius)',
+    // A card in a flex row or grid cell yields to its track instead of
+    // holding it at the card's min-content width (a long ID or a nowrap row
+    // inside used to widen `1fr` tracks and overflow phone rows).
+    minWidth: 0,
+    // Clip, not scroll: `overflow-x: auto` would make every card a scroll
+    // container, so sticky descendants would stick to the card instead of
+    // the page, and an overflowing card would become an unnamed keyboard tab
+    // stop. Content that cannot wrap is clipped at the card edge; long
+    // values truncate (Text maxLines) and wide content brings its own scroll
+    // region (Table, ScrollableArea).
     overflow: 'clip',
     // Resting elevation is set via --_card-elevation (see elevationStyles).
     // The shadow list also reads --_card-ring so composing surfaces — e.g.
@@ -80,6 +91,11 @@ const styles = stylex.create({
     paddingInlineEnd: `calc(var(--container-padding-inline-end) - ${borderVars['--border-width']})`,
     paddingBlockStart: `calc(var(--container-padding-block-start) - ${borderVars['--border-width']})`,
     paddingBlockEnd: `calc(var(--container-padding-block-end) - ${borderVars['--border-width']})`,
+  },
+  // A full-bleed child reaches under the border, so it takes the outer radius.
+  corners: {
+    '--_container-corner-block-start': 'var(--_card-radius)',
+    '--_container-corner-block-end': 'var(--_card-radius)',
   },
   // Fixed-height cards scroll content; overflow: auto also clips to border-radius
   scrollable: {
@@ -312,6 +328,8 @@ export function Card({
                   paddingOuterY: paddingToken,
                 },
           ),
+          styles.corners,
+          containerCornerStyles.publish,
           // Applied after the container padding so the border-inset calc wins;
           // it reads the --container-padding-* vars set above.
           variant === 'default' && styles.withBorder,

@@ -28,6 +28,11 @@ export interface TableSemanticRowStatus {
 }
 
 export {Table} from './Table';
+export {useTableRowsVirtualization} from './plugins/virtualization';
+export type {
+  UseTableRowsVirtualizationConfig,
+  TableVirtualizationCapability,
+} from './plugins/virtualization';
 export {TableRow} from './TableRow';
 export {TableCell} from './TableCell';
 export {TableHeaderCell} from './TableHeaderCell';
@@ -35,6 +40,7 @@ export {TableHeader} from './TableHeader';
 export {TableBody} from './TableBody';
 export {TableFooter} from './TableFooter';
 export {TableContext} from './TableContext';
+export {TableSelectionToolbar} from './TableSelectionToolbar';
 export {useTableSelection} from './plugins/selection';
 export {useTableSelectionState} from './plugins/selection';
 export {useTableSortable} from './plugins/sortable';
@@ -80,6 +86,8 @@ export type {
   BodyCellRenderProps,
   ScrollWrapperRenderProps,
   BaseTableProps,
+  TableRenderContext,
+  TableRowContext,
 } from './types';
 export type {
   TableProps,
@@ -94,8 +102,10 @@ export type {TableHeaderProps} from './TableHeader';
 export type {TableBodyProps} from './TableBody';
 export type {TableFooterProps} from './TableFooter';
 export type {TableContextValue} from './TableContext';
+export type {TableSelectionToolbarProps} from './TableSelectionToolbar';
 export type {UseTableSelectionConfig} from './plugins/selection';
 export type {
+  TableSelectionState,
   UseTableSelectionStateConfig,
   UseTableSelectionStateResult,
 } from './plugins/selection';

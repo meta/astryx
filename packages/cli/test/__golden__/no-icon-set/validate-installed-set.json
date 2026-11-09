@@ -1,0 +1,38 @@
+{
+  "apiVersion": 1,
+  "type": "integration.validate",
+  "data": {
+    "validated": true,
+    "name": "@acme/glyphs",
+    "version": "1.0.0",
+    "issues": [],
+    "docTypes": {
+      "status": "checked",
+      "docs": 0,
+      "findings": [],
+      "unchecked": []
+    },
+    "docNames": {
+      "status": "checked",
+      "findings": [],
+      "unchecked": []
+    },
+    "blockComponents": {
+      "status": "checked",
+      "findings": [],
+      "unchecked": []
+    },
+    "publicImports": {
+      "status": "checked",
+      "findings": [],
+      "unchecked": []
+    }
+  },
+  "meta": {
+    "answeredBy": {
+      "cli": "<version>",
+      "core": "<version>",
+      "copy": "project"
+    }
+  }
+}

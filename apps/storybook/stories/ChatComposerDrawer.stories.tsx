@@ -82,6 +82,17 @@ export const Collapsed: Story = {
   },
 };
 
+export const CustomCollapsedSummary: Story = {
+  tags: ['visual-baseline'],
+  args: {
+    count: 2,
+    label: 'Attachments',
+    collapsedSummary: <span>2 files ready</span>,
+    defaultIsCollapsed: true,
+    children: attachments,
+  },
+};
+
 export const KeyboardFocus: Story = {
   args: {
     count: 2,

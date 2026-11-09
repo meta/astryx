@@ -7,15 +7,15 @@
  * @input Uses React, StyleX, theme tokens
  * @output Exports ChatComposerDrawer component
  * @position Collapsible drawer panel for ChatComposer.
- *   Supports expanded (full content) and collapsed (count + label) states
- *   with fade animation and grid-template-rows height transition.
+ *   Supports expanded (full content) and collapsed (default or caller-composed
+ *   summary) states with fade animation and grid-template-rows height transition.
  *   The collapse toggle exposes aria-expanded + aria-controls linking it to
  *   the content region (disclosure pattern).
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Chat/ChatComposerDrawer.test.tsx
  * - /packages/core/src/Chat/ChatComposerDrawer.doc.mjs
- * - /packages/core/src/Chat/ChatComposerDrawer.spec.md
+ * - /docs/specs/components/Chat/ChatComposerDrawer.spec.md
  * - /apps/storybook/stories/ChatComposerDrawer.stories.tsx
  * - /packages/core/src/Chat/index.ts (exports)
  * - /packages/cli/assets/templates/blocks/components/ChatComposerDrawer/ (block examples)
@@ -37,7 +37,13 @@ import {mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Chat/ChatComposerDrawer.generated';
+
+registerEnglishFallback(english);
 
 export interface ChatComposerDrawerProps extends BaseProps<HTMLDivElement> {
   ref?: React.Ref<HTMLDivElement>;
@@ -51,10 +57,18 @@ export interface ChatComposerDrawerProps extends BaseProps<HTMLDivElement> {
    */
   count?: number;
   /**
-   * Label shown next to the count in collapsed state.
+   * Label shown next to the count in the default collapsed summary and used to
+   * name the expand/collapse action.
    * @default 'Items'
    */
   label?: string;
+  /**
+   * Visual content for the canonical Collapsed summary anatomy part. Replaces
+   * the complete default Badge and label when count enables collapse. The
+   * component keeps this content presentation-only and owns disclosure
+   * semantics and accessible naming.
+   */
+  collapsedSummary?: ReactNode;
   /**
    * Whether the drawer is collapsed.
    * Uncontrolled by default (internal toggle).
@@ -115,8 +129,8 @@ const styles = stylex.create({
     borderStartEndRadius: radiusVars['--radius-chat'],
   },
 
-  // Toggle row — both the bar handle and badge+label live in the
-  // same grid cell so they crossfade without layout shift.
+  // Toggle row — both the collapsed summary and bar handle live in the same
+  // grid cell so they crossfade without layout shift.
   toggleRow: {
     display: 'grid',
     gridTemplateColumns: '1fr',
@@ -137,6 +151,7 @@ const styles = stylex.create({
     justifySelf: 'start',
     display: 'inline-flex',
     alignItems: 'center',
+    pointerEvents: 'none',
     height: spacingVars['--spacing-5'],
     gap: spacingVars['--spacing-2'],
     borderRadius: radiusVars['--radius-full'],
@@ -234,6 +249,7 @@ export function ChatComposerDrawer({
   children,
   count,
   label: labelFromProps,
+  collapsedSummary,
   isCollapsed: controlledCollapsed,
   defaultIsCollapsed = false,
   onCollapsedChange,
@@ -243,7 +259,7 @@ export function ChatComposerDrawer({
   'data-testid': testId,
   ...htmlProps
 }: ChatComposerDrawerProps): React.ReactElement {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.chat.composerDrawer.label');
   const [internalCollapsed, setInternalCollapsed] =
     useState(defaultIsCollapsed);
@@ -303,12 +319,20 @@ export function ChatComposerDrawer({
             }
           }}>
           <div
+            aria-hidden="true"
+            inert
             {...stylex.props(
               styles.toggleContent,
               !isCollapsed && styles.toggleContentHidden,
             )}>
-            <Badge variant="neutral" label={count} />
-            <span {...stylex.props(styles.collapseLabel)}>{label}</span>
+            {collapsedSummary === undefined ? (
+              <>
+                <Badge variant="neutral" label={count} />
+                <span {...stylex.props(styles.collapseLabel)}>{label}</span>
+              </>
+            ) : (
+              collapsedSummary
+            )}
           </div>
           <div
             {...stylex.props(

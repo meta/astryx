@@ -24,8 +24,10 @@
 import {list} from './list/list.mjs';
 import {registryUpgrade} from './registry/registry.mjs';
 import {run} from './run/run.mjs';
+import {relativeToOrigin, scopeToProject} from './_adapter.mjs';
 import {isValidSemver} from '../../foundation/env/semver.mjs';
 import {getCliInvocation} from '../../foundation/env/package-manager.mjs';
+import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {AstryxError} from '../error.mjs';
 import {logger} from '../logger.mjs';
@@ -53,6 +55,25 @@ export async function upgrade(options = {}, {cwd = process.cwd()} = {}) {
     throw new AstryxError(msg, undefined, ERROR_CODES.ERR_INVALID_ARGUMENT);
   }
 
+  if (options.list) {
+    const ignored = [
+      options.from ? '--from' : null,
+      options.force ? '--force' : null,
+      options.apply ? '--apply' : null,
+      options.path && options.path !== './src' ? '--path' : null,
+      options.codemod ? '--codemod' : null,
+      options.skipCodemod?.length ? '--skip-codemod' : null,
+      options.integration?.length ? '--integration' : null,
+      options.installDeps ? '--install-deps' : null,
+    ].filter(Boolean);
+    if (ignored.length > 0) {
+      const msg = `\`--list\` cannot be combined with ${ignored.join(', ')}: it lists available codemods and does not run a migration.`;
+      logger.error(msg);
+      logger.log('Aborted\n');
+      throw new AstryxError(msg, undefined, ERROR_CODES.ERR_INVALID_ARGUMENT);
+    }
+  }
+
   if (options.registry) {
     const incompatible = [
       options.from ? '--from' : null,
@@ -68,11 +89,18 @@ export async function upgrade(options = {}, {cwd = process.cwd()} = {}) {
       logger.log('Aborted\n');
       throw new AstryxError(msg, undefined, ERROR_CODES.ERR_INVALID_ARGUMENT);
     }
-    return registryUpgrade(options, {cwd});
+    const scoped = scopeToProject(options, cwd);
+    return registryUpgrade(scoped.options, {
+      cwd: scoped.cwd,
+      origin: scoped.origin,
+    });
   }
 
   if (!options.list && !options.from) {
-    const msg = `Missing required --from. Install the target version first, then run \`${getCliInvocation()} upgrade --from <old-version>\`.`;
+    // Outside a project there is no version to install (spec AST-081 FR3).
+    const msg = isOutsideProject(cwd)
+      ? 'Missing required --from. This folder is outside a project; upgrade migrates the code of an app project that installs @astryxdesign/core.'
+      : `Missing required --from. Install the target version first, then run \`${getCliInvocation()} upgrade --from <old-version>\`.`;
     logger.error(msg);
     logger.log('Aborted\n');
     throw new AstryxError(msg, undefined, ERROR_CODES.ERR_INVALID_ARGUMENT);
@@ -89,5 +117,26 @@ export async function upgrade(options = {}, {cwd = process.cwd()} = {}) {
     return list();
   }
 
-  return run(options, {cwd});
+  // A run from a subfolder upgrades the project the folder belongs to, and
+  // names files relative to the folder it ran in.
+  const scoped = scopeToProject(options, cwd);
+  let result;
+  try {
+    result = await run(scoped.options, {
+      cwd: scoped.cwd,
+      origin: scoped.origin,
+    });
+  } catch (err) {
+    // A failure after codemods wrote carries their receipt; name its files
+    // from the folder the command ran in, as a returned receipt does.
+    const receipt = /** @type {any} */ (err)?.receipt;
+    if (err instanceof AstryxError && receipt) {
+      /** @type {any} */ (err).receipt = relativeToOrigin(
+        {type: 'upgrade.run', data: receipt},
+        scoped,
+      ).data;
+    }
+    throw err;
+  }
+  return relativeToOrigin(result, scoped);
 }

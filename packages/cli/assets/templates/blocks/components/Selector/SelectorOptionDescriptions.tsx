@@ -32,7 +32,7 @@ export default function SelectorOptionDescriptions() {
   return (
     <Stack direction="vertical" gap={6}>
       <Selector
-        style={{width: 320}}
+        controlStyle={{width: 320}}
         label="Visibility"
         description="Default trigger: one line at the size token."
         options={VISIBILITY}
@@ -40,7 +40,7 @@ export default function SelectorOptionDescriptions() {
         onChange={setCondensed}
       />
       <Selector
-        style={{width: 320}}
+        controlStyle={{width: 320}}
         label="Visibility"
         description="A stacked SelectorOption: the description gets its own line, and the trigger grows by exactly one line."
         options={VISIBILITY}

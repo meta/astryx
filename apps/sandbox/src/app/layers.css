@@ -1,7 +1,6 @@
 /* Copyright (c) Meta Platforms, Inc. and affiliates. */
 
-/* Layer order declaration — must be the first CSS in the bundle.
-   Separate file because webpack hoists @import content above inline
-   CSS, so an inline @layer statement in globals.css would appear
-   after reset.css and theme.css content in the output. */
+/* Declare layer precedence before importing reset, library, themes and
+   Sandbox CSS. The Vite StyleX plugin also prepends the same declaration to
+   index.html so these layers precede every bundle stylesheet. */
 @layer reset, astryx-base, astryx-theme, product;

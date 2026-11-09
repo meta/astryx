@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-"use strict";
+'use strict';
 
 /**
  * @astryxdesign/build/babel
@@ -10,6 +10,9 @@
  *
  * Library files get 'astryx' prefix (.astryx78zum5), product files get 'x' (.x78zum5).
  */
+
+const path = require('node:path');
+const {isSwizzledSource} = require('./swizzle-marker');
 
 const LIBRARY_PATTERNS = [
   'packages/core/',
@@ -28,16 +31,36 @@ module.exports = function astryxBabelPlugin(api, options) {
     ...stylexOptions
   } = options;
 
+  // StyleX's upstream default is `silent`, which turns unsupported declarations
+  // into missing CSS. Astryx fails closed by default so consumer builds point at
+  // the declaration and the supported replacement instead.
+  const validatedStylexOptions = {
+    propertyValidationMode: 'throw',
+    ...stylexOptions,
+  };
+
   // Build the two sets of options — only classNamePrefix differs
-  const libraryOpts = {...stylexOptions, classNamePrefix: libraryPrefix};
-  const productOpts = {...stylexOptions, classNamePrefix};
+  const libraryOpts = {
+    ...validatedStylexOptions,
+    classNamePrefix: libraryPrefix,
+  };
+  const productOpts = {...validatedStylexOptions, classNamePrefix};
 
   // Create two plugin instances
   const libraryPlugin = stylexPlugin(api, libraryOpts);
   const productPlugin = stylexPlugin(api, productOpts);
 
-  function getPluginAndOpts(filename) {
-    const isLibrary = libraryPatterns.some(p => filename.includes(p));
+  // Each transform's file is classified once, not on every visitor call.
+  const libraryFiles = new WeakMap();
+  function getPluginAndOpts(state) {
+    let isLibrary = libraryFiles.get(state.file);
+    if (isLibrary === undefined) {
+      const filename = state.filename || '';
+      isLibrary =
+        libraryPatterns.some(p => filename.includes(p)) ||
+        (filename !== '' && isSwizzledSource(path.resolve(filename)));
+      if (state.file != null) libraryFiles.set(state.file, isLibrary);
+    }
     return isLibrary
       ? {plugin: libraryPlugin, opts: libraryOpts}
       : {plugin: productPlugin, opts: productOpts};
@@ -45,7 +68,7 @@ module.exports = function astryxBabelPlugin(api, options) {
 
   // Helper: call a visitor function with overridden state.opts
   function callVisitor(visitor, key, path, state) {
-    const {plugin, opts} = getPluginAndOpts(state.filename || '');
+    const {plugin, opts} = getPluginAndOpts(state);
     const v = plugin.visitor[key];
     if (!v) return;
 
@@ -82,18 +105,18 @@ module.exports = function astryxBabelPlugin(api, options) {
       // enter/exit form (Program uses this)
       visitor[key] = {};
       if (sample.enter) {
-        visitor[key].enter = function(path, state) {
+        visitor[key].enter = function (path, state) {
           callVisitor.call(this, 'enter', key, path, state);
         };
       }
       if (sample.exit) {
-        visitor[key].exit = function(path, state) {
+        visitor[key].exit = function (path, state) {
           callVisitor.call(this, 'exit', key, path, state);
         };
       }
     } else {
       // Simple function visitor
-      visitor[key] = function(path, state) {
+      visitor[key] = function (path, state) {
         callVisitor.call(this, 'enter', key, path, state);
       };
     }

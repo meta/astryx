@@ -19,6 +19,7 @@ import {
   compareTime,
   isTimeInRange,
   adjustTime,
+  clampTime,
   type ISOTimeString,
 } from './timeParser';
 
@@ -260,6 +261,17 @@ describe('adjustTime', () => {
     expect(adjustTime('10:00' as ISOTimeString, NaN)).toBe('10:00');
   });
 
+  it('returns the input unchanged for a fractional delta', () => {
+    // `increment` is documented as minutes and typed `number`, so a caller can
+    // hand ArrowUp a fraction. A fractional minute reaching formatISOTime is
+    // not rounded: it pads to "30.5" and the field is left holding a string
+    // that is no longer a parseable time.
+    expect(adjustTime('10:30' as ISOTimeString, 0.5)).toBe('10:30');
+    expect(adjustTime('10:30:45' as ISOTimeString, -0.5, true)).toBe(
+      '10:30:45',
+    );
+  });
+
   it('wraps large negative deltas in constant time', () => {
     expect(adjustTime('10:00' as ISOTimeString, -1440 * 1e7)).toBe('10:00');
     expect(adjustTime('10:00' as ISOTimeString, -1440 * 1e7 - 30)).toBe(
@@ -280,5 +292,26 @@ describe('adjustTime', () => {
   it('wraps around midnight', () => {
     expect(adjustTime('23:30' as ISOTimeString, 60)).toBe('00:30');
     expect(adjustTime('00:30' as ISOTimeString, -60)).toBe('23:30');
+  });
+});
+
+describe('clampTime', () => {
+  const t = (value: string) => value as ISOTimeString;
+
+  it('brings a time outside the bounds onto the bound', () => {
+    expect(clampTime(t('08:00'), t('09:00'))).toBe('09:00');
+    expect(clampTime(t('18:00'), undefined, t('17:00'))).toBe('17:00');
+    expect(clampTime(t('12:00'), t('09:00'), t('17:00'))).toBe('12:00');
+  });
+
+  it('keeps a bound with seconds when the time shows seconds', () => {
+    expect(clampTime(t('08:00:00'), t('09:00:30'), undefined, true)).toBe(
+      '09:00:30',
+    );
+  });
+
+  it('without seconds, gives the nearest whole minute inside a bound between minutes', () => {
+    expect(clampTime(t('08:00'), t('09:00:30'))).toBe('09:01');
+    expect(clampTime(t('18:00'), undefined, t('17:00:30'))).toBe('17:00');
   });
 });

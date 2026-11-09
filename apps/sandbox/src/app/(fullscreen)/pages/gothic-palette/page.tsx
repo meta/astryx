@@ -4,30 +4,74 @@
 
 import {VStack} from '@astryxdesign/core/Layout';
 import {gothicTheme} from '@astryxdesign/theme-gothic/built';
-// `gothicPalettes` is only exported from the source entry, not /built.
-import {gothicPalettes} from '@astryxdesign/theme-gothic';
+import {palette as gothicModePalettes} from '../../../../../../../packages/themes/gothic/src/gothicPalettes.generated';
 import {ThemePalettePreview} from '@/components/ThemePalettePreview';
 import type {TonalColor} from '@/components/ThemePalettePreview';
 
 const GOTHIC =
   '"Manufacturing Consent", "UnifrakturMaguntia", "Old English Text MT", serif';
 
+// Gothic is dark-only: preview the reviewed dark ramps the maintained theme
+// consumes, not the frozen public compatibility snapshot.
 const TONAL_COLORS: TonalColor[] = [
-  {name: 'Gothic Neutral', sourceHex: '#96A0AB', note: 'cool blue-gray', tones: gothicPalettes.neutral},
-  {name: 'Green', sourceHex: '#b3c79a', semantic: 'Success / sage moss', tones: gothicPalettes.green},
-  {name: 'Red', sourceHex: '#c6a6a2', semantic: 'Error / dusty rose', tones: gothicPalettes.red},
-  {name: 'Yellow', sourceHex: '#d3c490', semantic: 'Warning / aged gold', tones: gothicPalettes.yellow},
-  {name: 'Blue', sourceHex: '#a3b5d6', note: 'periwinkle midnight', tones: gothicPalettes.blue},
-  {name: 'Purple', sourceHex: '#b29bc4', note: 'muted plum', tones: gothicPalettes.purple},
-  {name: 'Pink', sourceHex: '#c89aab', note: 'dusty rose', tones: gothicPalettes.pink},
-  {name: 'Cyan', sourceHex: '#a3c2cf', note: 'cathedral mist', tones: gothicPalettes.cyan},
-  {name: 'Orange', sourceHex: '#d3b89a', note: 'warm tan', tones: gothicPalettes.orange},
-  {name: 'Teal', sourceHex: '#a3c2b6', note: 'sage verdigris', tones: gothicPalettes.teal},
+  {
+    name: 'Gothic Neutral',
+    sourceHex: '#5D646B',
+    tones: gothicModePalettes.neutral.dark,
+  },
+  {
+    name: 'Green',
+    sourceHex: '#779E5D',
+    semantic: 'Success / forest moss',
+    tones: gothicModePalettes.green.dark,
+  },
+  {
+    name: 'Red',
+    sourceHex: '#7D5E51',
+    semantic: 'Error / blood crimson',
+    tones: gothicModePalettes.red.dark,
+  },
+  {
+    name: 'Yellow',
+    sourceHex: '#CCA74C',
+    semantic: 'Warning / aged gold',
+    tones: gothicModePalettes.yellow.dark,
+  },
+  {
+    name: 'Blue',
+    sourceHex: '#6170BF',
+    tones: gothicModePalettes.blue.dark,
+  },
+  {
+    name: 'Purple',
+    sourceHex: '#A363BD',
+    tones: gothicModePalettes.purple.dark,
+  },
+  {
+    name: 'Pink',
+    sourceHex: '#B15876',
+    tones: gothicModePalettes.pink.dark,
+  },
+  {
+    name: 'Cyan',
+    sourceHex: '#6A9EB1',
+    tones: gothicModePalettes.cyan.dark,
+  },
+  {
+    name: 'Orange',
+    sourceHex: '#C87A4A',
+    tones: gothicModePalettes.orange.dark,
+  },
+  {
+    name: 'Teal',
+    sourceHex: '#5AA091',
+    tones: gothicModePalettes.teal.dark,
+  },
 ];
 
 const CORE = [
   {hex: '#101314', name: 'Body / Surface'},
-  {hex: '#1a1d20', name: 'Card'},
+  {hex: '#191D20', name: 'Card'},
   {hex: '#24292D', name: 'Popover'},
   {hex: '#495056', name: 'Border emp.'},
   {hex: '#96A0AB', name: 'Text secondary'},

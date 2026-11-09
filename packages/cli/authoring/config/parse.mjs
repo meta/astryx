@@ -12,13 +12,15 @@
 import {z} from 'zod';
 import {formatZodError} from '../_shared/errors.mjs';
 import {parseGapReportHandler} from '../gap-report/parse.mjs';
+import {parseDiscoverSource} from '../discover/parse.mjs';
 
-/** @typedef {import('./type').AstryxConfig} AstryxConfig */
-/** @typedef {import('./type').PostCodemodHook} PostCodemodHook */
-/** @typedef {import('./type').XleComponent} XleComponent */
-/** @typedef {import('./type').DebugConfig} DebugConfig */
-/** @typedef {import('../debug/type').DebugEventHandler} DebugEventHandler */
-/** @typedef {import('../gap-report/type').GapReportHandler} GapReportHandler */
+/** @typedef {import('./type.js').AstryxConfig} AstryxConfig */
+/** @typedef {import('./type.js').PostCodemodHook} PostCodemodHook */
+/** @typedef {import('./type.js').XleComponent} XleComponent */
+/** @typedef {import('./type.js').DebugConfig} DebugConfig */
+/** @typedef {import('../debug/type.js').DebugEventHandler} DebugEventHandler */
+/** @typedef {import('../gap-report/type.js').GapReportHandler} GapReportHandler */
+/** @typedef {import('../discover/type.js').DiscoverSource} DiscoverSource */
 
 // Typed `z.custom` so `z.infer` reproduces the real function type (not `unknown`).
 const buildCommand = /** @type {z.ZodType<PostCodemodHook['buildCommand']>} */ (
@@ -66,6 +68,22 @@ const gapReportHandlerSchema = /** @type {z.ZodType<GapReportHandler>} */ (
   )
 );
 
+// The same check an integration's `discover` named export passes. Typed
+// z.custom preserves the public function type.
+const discoverSourceSchema = /** @type {z.ZodType<DiscoverSource>} */ (
+  z.custom(
+    value => {
+      try {
+        parseDiscoverSource(value, 'discover');
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    {message: 'Expected a discover source function'},
+  )
+);
+
 const configSchema = z
   .object({
     integrations: z.array(z.string()).optional(),
@@ -76,6 +94,7 @@ const configSchema = z
       .optional(),
     debug: debugSchema.optional(),
     gapReport: gapReportHandlerSchema.optional(),
+    discover: discoverSourceSchema.optional(),
     experimental: z
       .object({
         xle: z
@@ -84,6 +103,7 @@ const configSchema = z
           })
           .strict()
           .optional(),
+        iconSet: z.string().min(1).optional(),
       })
       .strict()
       .optional(),
@@ -95,8 +115,8 @@ const configSchema = z
  * {@link AstryxConfig} type. If they drift, `Equal` becomes `false` and
  * `Expect<false>` fails the `tsconfig.authoring-contract.json` typecheck.
  *
- * @typedef {import('../_shared/contract').Expect<
- *   import('../_shared/contract').MutuallyAssignable<z.infer<typeof configSchema>, AstryxConfig>
+ * @typedef {import('../_shared/contract.js').Expect<
+ *   import('../_shared/contract.js').MutuallyAssignable<z.infer<typeof configSchema>, AstryxConfig>
  * >} _ConfigDriftLock
  */
 

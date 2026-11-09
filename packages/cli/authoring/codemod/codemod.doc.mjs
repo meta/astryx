@@ -12,12 +12,13 @@ export const doc = {
   type: 'schema',
   name: 'codemod',
   displayName: 'Astryx Codemod',
-  namespace: 'cli',
+  namespace: 'authoring',
   description:
-    'A codemod module the CLI runs during `astryx upgrade`. Default-export a ' +
+    'A codemod module the CLI runs during `{@command upgrade}`. Default-export a ' +
     "plain object with a `type` discriminant: 'code' rewrites source files, " +
     "'config' rewrites the astryx.config.* file. There is no factory to call.",
-  appliesTo: 'the codemods/ dir of an integration',
+  appliesTo:
+    '`<codemods>/<version>/<id>.{ts,mjs,js}` in an integration package: `<codemods>` is the codemods root of astryx.integration.*, and `<version>` is the exact @astryxdesign/core version (such as 0.7.0) whose upgrade runs the codemod. A file directly in the root never runs.',
   fields: [
     {
       name: 'title',
@@ -44,6 +45,7 @@ export const doc = {
       description:
         'File extensions this codemod applies to. Code codemods only; a ' +
         'config codemod always targets astryx.config.*.',
+      default: "['.tsx', '.ts', '.jsx', '.js', '.mjs', '.cjs']",
       example: "['.tsx', '.ts']",
     },
     {
@@ -58,16 +60,19 @@ export const doc = {
           name: 'file',
           type: 'AstryxCodemodFile',
           description: 'The source file presented to the transform.',
+          required: true,
           fields: [
             {
               name: 'file.path',
               type: 'string',
               description: 'Absolute path to the file being transformed.',
+              required: true,
             },
             {
               name: 'file.source',
               type: 'string',
               description: 'The current source contents of the file.',
+              required: true,
             },
           ],
         },
@@ -75,24 +80,28 @@ export const doc = {
           name: 'api',
           type: 'AstryxCodemodApi',
           description: 'Helpers and context passed as the second argument.',
+          required: true,
           fields: [
             {
               name: 'api.jscodeshift',
               type: 'unknown',
               description:
                 'A jscodeshift instance configured with a parser for the file.',
+              required: true,
             },
             {
               name: 'api.stats',
               type: '(...args: unknown[]) => void',
               description:
-                'Report a statistic (no-op-friendly; provided for jscodeshift parity).',
+                'Accepted for jscodeshift parity. A call does nothing, and upgrade shows nothing for it.',
+              required: true,
             },
             {
               name: 'api.report',
               type: '(...args: unknown[]) => void',
               description:
-                'Report progress (no-op-friendly; provided for jscodeshift parity).',
+                'Accepted for jscodeshift parity. A call does nothing, and upgrade shows nothing for it.',
+              required: true,
             },
           ],
         },
@@ -100,7 +109,7 @@ export const doc = {
     },
     {
       name: 'type',
-      type: "'code'",
+      type: "'code' | 'config'",
       description:
         "Discriminant for the file-transforming variant. Use 'config' for a " +
         'codemod that rewrites astryx.config.* instead (see notes).',

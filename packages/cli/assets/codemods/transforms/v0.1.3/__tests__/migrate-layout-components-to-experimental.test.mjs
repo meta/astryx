@@ -3,6 +3,7 @@
 import {describe, it, expect} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {REPO_ROOT} from '../../../../../test-utils/repo-root.mjs';
 
 /**
  * Invoke the transform directly with a configured jscodeshift api, mirroring
@@ -162,6 +163,52 @@ export default createConfig({
   });
 });
 
+describe('migrate-layout-components-to-experimental — default export by const reference', () => {
+  it('returns null for a generated config with no layout key', async () => {
+    const input = `// Generated Astryx config.
+const config = {
+  integrations: ["@acme/ui"],
+  issuesUrl: "https://example.com/issues",
+};
+
+export default config;
+`;
+    const output = await applyTransform(input);
+    expect(output).toBeNull();
+  });
+
+  it('migrates layout.components in a const-bound object literal', async () => {
+    const input = `const config = {
+  layout: { components: { KpiCard: '@/components/KpiCard' } },
+};
+
+export default config;
+`;
+    const output = await applyTransform(input);
+    expect(output).not.toBeNull();
+    expect(output).toMatch(/const config = \{/);
+    expect(output).toContain('export default config;');
+    expect(output).toMatch(/experimental:\s*\{\s*xle:\s*\{\s*components:\s*\{\s*KpiCard:\s*\{\s*from:\s*['"]@\/components\/KpiCard['"]/);
+    expect(output).not.toMatch(/layout\s*:/);
+  });
+
+  it('migrates layout.components in a const-bound createConfig({ ... }) call', async () => {
+    const input = `import { createConfig } from '@astryxdesign/cli';
+
+const config = createConfig({
+  layout: { components: { KpiCard: '@/components/KpiCard' } },
+});
+
+export default config;
+`;
+    const output = await applyTransform(input);
+    expect(output).not.toBeNull();
+    expect(output).toContain('createConfig(');
+    expect(output).toMatch(/KpiCard:\s*\{\s*from:\s*['"]@\/components\/KpiCard['"]/);
+    expect(output).not.toMatch(/layout\s*:/);
+  });
+});
+
 describe('migrate-layout-components-to-experimental — placement', () => {
   it('adds xle to a pre-existing experimental (no xle)', async () => {
     const input = `export default {
@@ -239,8 +286,69 @@ export default {
     await expect(applyTransform(input)).rejects.toThrow(/cannot be safely migrated/);
   });
 
-  it('throws on a non-object default export (variable reference)', async () => {
-    const input = `const config = { layout: { components: {} } };
+  it('throws when the default export is an identifier with no top-level const binding', async () => {
+    const input = `import config from './base-config.mjs';
+export default config;
+`;
+    await expect(applyTransform(input)).rejects.toThrow(/statically analyze/);
+  });
+
+  it('throws when a const-bound config is mutated after its declaration', async () => {
+    const input = `const config = {};
+config.layout = { components: { KpiCard: '@/components/KpiCard' } };
+export default config;
+`;
+    await expect(applyTransform(input)).rejects.toThrow(/statically analyze/);
+  });
+
+  it('throws when a const-bound config is passed to another call', async () => {
+    const input = `const config = {};
+Object.assign(config, { layout: { components: { KpiCard: '@/components/KpiCard' } } });
+export default config;
+`;
+    await expect(applyTransform(input)).rejects.toThrow(/statically analyze/);
+  });
+
+  it('throws when a const-bound config is aliased', async () => {
+    const input = `const config = {};
+const alias = config;
+alias.layout = { components: { KpiCard: '@/components/KpiCard' } };
+export default config;
+`;
+    await expect(applyTransform(input)).rejects.toThrow(/statically analyze/);
+  });
+
+  it('throws when the const-bound config is also exported with export const', async () => {
+    const input = `export const config = {
+  layout: { components: { KpiCard: '@/components/KpiCard' } },
+};
+export default config;
+`;
+    await expect(applyTransform(input)).rejects.toThrow(/statically analyze/);
+  });
+
+  it('throws when the const-bound config is also exported by name', async () => {
+    const input = `const config = {
+  layout: { components: { KpiCard: '@/components/KpiCard' } },
+};
+export { config };
+export default config;
+`;
+    await expect(applyTransform(input)).rejects.toThrow(/statically analyze/);
+  });
+
+  it('throws when the const-bound config is also exported under another name', async () => {
+    const input = `const config = {
+  layout: { components: { KpiCard: '@/components/KpiCard' } },
+};
+export { config as baseConfig };
+export default config;
+`;
+    await expect(applyTransform(input)).rejects.toThrow(/statically analyze/);
+  });
+
+  it('throws when the default export is bound by a reassignable let', async () => {
+    const input = `let config = { layout: { components: { KpiCard: '@/components/KpiCard' } } };
 export default config;
 `;
     await expect(applyTransform(input)).rejects.toThrow(/statically analyze/);
@@ -257,7 +365,7 @@ describe('migrate-layout-components-to-experimental — end-to-end via runConfig
 
     const originalCwd = process.cwd();
     const tmpDir = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-v013-codemod-test-'),
+      path.join(REPO_ROOT, '.astryx-v013-codemod-test-'),
     );
     try {
       process.chdir(tmpDir);
@@ -306,6 +414,113 @@ describe('migrate-layout-components-to-experimental — end-to-end via runConfig
     }
   });
 
+  it('leaves a generated const-bound config with no layout untouched and reports no error', async () => {
+    const {runConfigCodemod} = await import('../../../run-codemod.mjs');
+    const {default: transform, meta} = await import(
+      '../migrate-layout-components-to-experimental.mjs'
+    );
+    const jscodeshift = (await import('jscodeshift')).default;
+
+    const originalCwd = process.cwd();
+    const tmpDir = fs.mkdtempSync(
+      path.join(REPO_ROOT, '.astryx-v013-codemod-test-'),
+    );
+    const configSource = `// Generated Astryx config.
+const config = {
+  integrations: ["@acme/ui"],
+  issuesUrl: "https://example.com/issues",
+};
+
+export default config;
+`;
+    try {
+      process.chdir(tmpDir);
+      fs.writeFileSync(
+        path.join(tmpDir, 'package.json'),
+        JSON.stringify({name: 'consumer'}),
+      );
+      fs.writeFileSync(path.join(tmpDir, 'astryx.config.mjs'), configSource);
+
+      const entry = {
+        id: 'migrate-layout-components-to-experimental',
+        type: 'config',
+        codemod: {title: meta.title, transform},
+        package: 'core',
+        version: '0.1.3',
+      };
+      const log = {
+        step() {},
+        info() {},
+        success() {},
+        warn() {},
+        error() {},
+        message() {},
+      };
+      const result = runConfigCodemod(entry, {apply: true, log, jscodeshift});
+
+      expect(result.errors).toHaveLength(0);
+      expect(result.filesChanged).toBe(0);
+      expect(
+        fs.readFileSync(path.join(tmpDir, 'astryx.config.mjs'), 'utf-8'),
+      ).toBe(configSource);
+    } finally {
+      process.chdir(originalCwd);
+      fs.rmSync(tmpDir, {recursive: true, force: true});
+    }
+  });
+
+  it('reports an error, not success, for a mutated const-bound config', async () => {
+    const {runConfigCodemod} = await import('../../../run-codemod.mjs');
+    const {default: transform, meta} = await import(
+      '../migrate-layout-components-to-experimental.mjs'
+    );
+    const jscodeshift = (await import('jscodeshift')).default;
+
+    const originalCwd = process.cwd();
+    const tmpDir = fs.mkdtempSync(
+      path.join(REPO_ROOT, '.astryx-v013-codemod-test-'),
+    );
+    const configSource = `const config = {};
+config.layout = { components: { KpiCard: '@/components/KpiCard' } };
+export default config;
+`;
+    try {
+      process.chdir(tmpDir);
+      fs.writeFileSync(
+        path.join(tmpDir, 'package.json'),
+        JSON.stringify({name: 'consumer'}),
+      );
+      fs.writeFileSync(path.join(tmpDir, 'astryx.config.mjs'), configSource);
+
+      const entry = {
+        id: 'migrate-layout-components-to-experimental',
+        type: 'config',
+        codemod: {title: meta.title, transform},
+        package: 'core',
+        version: '0.1.3',
+      };
+      const log = {
+        step() {},
+        info() {},
+        success() {},
+        warn() {},
+        error() {},
+        message() {},
+      };
+      const result = runConfigCodemod(entry, {apply: true, log, jscodeshift});
+
+      expect(result.filesChanged).toBe(0);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].error).toMatch(/statically analyze/);
+      expect(
+        fs.readFileSync(path.join(tmpDir, 'astryx.config.mjs'), 'utf-8'),
+      ).toBe(configSource);
+    } finally {
+      process.chdir(originalCwd);
+      fs.rmSync(tmpDir, {recursive: true, force: true});
+    }
+  });
+
   it('surfaces a thrown bail as a structured error through runConfigCodemod', async () => {
     const {runConfigCodemod} = await import('../../../run-codemod.mjs');
     const {default: transform, meta} = await import(
@@ -315,7 +530,7 @@ describe('migrate-layout-components-to-experimental — end-to-end via runConfig
 
     const originalCwd = process.cwd();
     const tmpDir = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-v013-codemod-test-'),
+      path.join(REPO_ROOT, '.astryx-v013-codemod-test-'),
     );
     try {
       process.chdir(tmpDir);

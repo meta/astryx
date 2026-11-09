@@ -5,7 +5,7 @@
 /**
  * @file useTableSelectionState.tsx
  * @input React, UseTableSelectionConfig type
- * @output Exports useTableSelectionState hook and config types
+ * @output Exports useTableSelectionState hook and public selection state types
  * @position Selection state helper; manages selection set with correct
  *   disabled/selectable filtering. Pairs with useTableSelection.
  *
@@ -19,6 +19,7 @@
  */
 
 import {useCallback, useMemo, useRef} from 'react';
+import {useIsomorphicLayoutEffect} from '../../../hooks/useIsomorphicLayoutEffect';
 import type {UseTableSelectionConfig} from './useTableSelection';
 
 // =============================================================================
@@ -63,11 +64,24 @@ export interface UseTableSelectionStateConfig<
   setSelectedKeys: React.Dispatch<React.SetStateAction<Set<string>>>;
 }
 
+export interface TableSelectionState {
+  /** Complete controlled selection, including keys outside the current view. */
+  readonly selectedKeys: ReadonlySet<string>;
+  /** Number of keys in the complete controlled selection. */
+  readonly selectedCount: number;
+  /** Whether the complete controlled selection contains any keys. */
+  readonly hasSelection: boolean;
+  /** Clear every selected key, including keys outside the current view. */
+  clearSelection: () => void;
+}
+
 export interface UseTableSelectionStateResult<
   T extends Record<string, unknown>,
 > {
   /** Ready-to-use config for useTableSelection. */
   selectionConfig: UseTableSelectionConfig<T>;
+  /** Shared state for selection-aware UI outside the behavior plugin. */
+  selectionState: TableSelectionState;
 }
 
 // =============================================================================
@@ -139,10 +153,13 @@ export function useTableSelectionState<T extends Record<string, unknown>>(
 
   // Use refs to keep onSelectAll stable
   const frozenSelectedIDsRef = useRef(frozenSelectedIDs);
-  frozenSelectedIDsRef.current = frozenSelectedIDs;
-
   const allSelectableIDsRef = useRef(allSelectableIDs);
-  allSelectableIDsRef.current = allSelectableIDs;
+  // Syncs the select-all refs with the committed render. A render that React
+  // discards, as a suspended transition does, must not leave its rows behind.
+  useIsomorphicLayoutEffect(() => {
+    frozenSelectedIDsRef.current = frozenSelectedIDs;
+    allSelectableIDsRef.current = allSelectableIDs;
+  });
 
   const onSelectAll = useCallback(
     ({isAllSelected}: {isAllSelected: boolean}) => {
@@ -206,5 +223,19 @@ export function useTableSelectionState<T extends Record<string, unknown>>(
     ],
   );
 
-  return {selectionConfig};
+  const clearSelection = useCallback(() => {
+    setSelectedKeys(new Set<string>());
+  }, [setSelectedKeys]);
+
+  const selectionState = useMemo(
+    (): TableSelectionState => ({
+      selectedKeys,
+      selectedCount: selectedKeys.size,
+      hasSelection: selectedKeys.size > 0,
+      clearSelection,
+    }),
+    [selectedKeys, clearSelection],
+  );
+
+  return {selectionConfig, selectionState};
 }

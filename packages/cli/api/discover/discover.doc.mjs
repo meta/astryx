@@ -11,23 +11,29 @@ export const doc = {
   type: 'function',
   kind: 'api',
   name: 'discover',
+  namespace: 'cli/api',
   displayName: 'discover()',
-  summary: 'Browse and search components from configured external packages.',
+  summary:
+    'Browse and search integrations: the ones a project has and, through the official list and discover sources, the ones it could add.',
   description:
-    'Explores components contributed by configured external packages and integrations ' +
-    'the ones that declare a components root. With no query it lists those packages; ' +
-    'an @scope/name query browses one package; @scope/name/Component (or a free-text ' +
-    "term that resolves to a single component) returns that component's validated doc; " +
-    'a free-text term with several matches returns the candidate list.',
+    'Lists the integrations a project loads and the official packages it declares, then the packages it could add: ' +
+    'the official Astryx packages first, from the list the CLI carries, then whatever the discover sources of the ' +
+    'project and its integrations list, with what each one adds per kind. An @scope/name query shows one package with every ' +
+    'version its source knows; @scope/name@version shows one version; @scope/name/Component returns an installed ' +
+    "component's validated doc, and any other item path returns that item. A free-text term searches every item and " +
+    'package. Discover only reads: it prints the command that adds a package and never runs it.' +
+    " In global mode: with `cwd` outside a project, integrations installed next to this CLI package globally are listed as installed; inside a project, only the project's own are, and the compatible global ones are listed in `meta.available` with source `installed for this computer` and an `install` command. See {@link namespace:global} and {@link generic:computer-integrations}.",
   importPath: '@astryxdesign/cli/api',
   signature:
-    'discover(query?: string, options?: DiscoverOptions): Promise<DiscoverListResponse | DiscoverDetailResponse | DiscoverDetailDocResponse | DiscoverSearchResponse>',
+    'discover(query?: string, options?: DiscoverOptions): Promise<DiscoverListResponse | DiscoverDetailResponse | DiscoverDetailDocResponse | DiscoverItemResponse | DiscoverSearchResponse>',
   keywords: [
     'discover',
     'packages',
     'integrations',
     'external',
     'components',
+    'catalog',
+    'versions',
     'search',
   ],
   params: [
@@ -35,13 +41,39 @@ export const doc = {
       name: 'query',
       type: 'string',
       description:
-        'An @scope/name package, an @scope/name/Component path, or a free-text term. Omit to list all configured packages.',
+        'A package (@scope/name, optionally @version), an item path (@scope/name/<item>), or a free-text term. Omit to list packages.',
     },
     {
       name: 'options.components',
       type: 'boolean',
       description:
-        'List components only. A CLI display flag consumed by the renderer; the programmatic response shape is unchanged.',
+        'In the CLI package list, print every component, and every other item, of each package instead of the first 10. A display flag for the CLI renderer; the programmatic response is unchanged.',
+    },
+    {
+      name: 'options.type',
+      type: "'component' | 'template' | 'doc' | 'theme' | 'codemod' | 'agent-doc'",
+      description:
+        'Only one kind: in the list, packages that add it; in a search, items of that kind.',
+    },
+    {
+      name: 'options.installed',
+      type: 'boolean',
+      description:
+        'Only what the project has. Cannot be set with options.available.',
+      default: 'false',
+    },
+    {
+      name: 'options.available',
+      type: 'boolean',
+      description:
+        'Only what the project could add. Cannot be set with options.installed.',
+      default: 'false',
+    },
+    {
+      name: 'options.limit',
+      type: 'number',
+      description: 'Max number of search results, a positive integer.',
+      default: '20',
     },
     {
       name: 'options.lang',
@@ -59,21 +91,27 @@ export const doc = {
     {
       type: 'discover.list',
       description:
-        'The configured external packages (name, category, components, version, description). When empty it carries meta.configured to distinguish "nothing configured" from "configured but nothing discovered".',
+        'What the project has: the integrations it loads and the official packages it declares (package, the npm package and always equal to name; name, category, components, version, and a list per other kind they add), official packages first. meta.available lists what the project could add, official packages first, each with its package and the command that adds it; inside a project, an integration installed for the computer that the project does not install is listed there too, with source `installed for this computer` and the install command for the project in `install`. meta.sources reports each source, the official list last. When it lists no integration it carries meta.configured.',
     },
     {
       type: 'discover.detail',
-      description: 'A single package entry, for an @scope/name query.',
+      description:
+        "One package: its package (the npm package the result is about), what the shown version adds, whether the project has it, its versions and latest release when a source knows them, and the command that adds it when the project does not have it. An entry from the official list lists the newest release this CLI knows as latest and the project's Core version; its add command pins the project's Core version, else the Core range it declares (quoted), else the latest release. A version or item the official list does not show answers ERR_UNKNOWN_PACKAGE.",
     },
     {
       type: 'discover.detail.doc',
       description:
-        'The validated ComponentDoc for one external component: an @scope/name/Component query, or a free-text term that resolves to exactly one component.',
+        'The validated ComponentDoc for one installed component, for an @scope/name/Component query, plus package, the npm package that owns the component.',
+    },
+    {
+      type: 'discover.item',
+      description:
+        'One item that is not an installed component: its kind, name, the package and version that add it, and whether the project has the package. The envelope\'s package names the same package.',
     },
     {
       type: 'discover.search',
       description:
-        'The query echoed back plus the matching {package, component} pairs, when a free-text term matches several components.',
+        'The query echoed back plus every matching item and package, each with its kind and whether the project has it, even when one name matches exactly or only one item matches; total is set when the limit cut the list.',
     },
   ],
   throws: [
@@ -82,16 +120,20 @@ export const doc = {
       when: 'the query is a non-string value, or a free-text search is run with an empty query',
     },
     {
+      code: 'ERR_INVALID_OPTION',
+      when: 'options.type is not a known kind, options.limit is not a positive integer, or options.installed and options.available are both set',
+    },
+    {
       code: 'ERR_UNKNOWN_PACKAGE',
-      when: 'the @scope/name package is not among the configured packages',
+      when: 'neither the project, the official list, nor any discover source has the package',
     },
     {
       code: 'ERR_UNKNOWN_COMPONENT',
-      when: 'the component is not found in the named @scope/name package',
+      when: 'the item is not in the named package',
     },
     {
       code: 'ERR_NOT_FOUND',
-      when: 'a free-text term matches no component in any package',
+      when: 'a free-text term matches nothing, or the requested version is not published',
     },
     {
       code: 'ERR_INVALID_DOC',
@@ -99,10 +141,14 @@ export const doc = {
     },
   ],
   examples: [
-    {label: 'List packages', code: 'const {data} = await discover();'},
+    {label: 'List packages', code: 'const {data, meta} = await discover();'},
     {label: 'Browse a package', code: "await discover('@acme/ui');"},
+    {label: 'One version', code: "await discover('@acme/ui@2.1.0');"},
     {label: 'Show a component doc', code: "await discover('@acme/ui/Button');"},
-    {label: 'Free-text search', code: "await discover('button');"},
+    {
+      label: 'Search templates to add',
+      code: "await discover('dashboard', {type: 'template', available: true});",
+    },
   ],
   command: 'discover',
   related: ['component', 'search', 'template'],

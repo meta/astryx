@@ -68,7 +68,7 @@ function AdaptiveDialog({
         label={title}
         purpose={purpose}
         height={bottomSheetHeight}>
-        <VStack gap={4} style={{padding: 'var(--spacing-4)'}}>
+        <VStack gap={4}>
           <Heading level={3}>{title}</Heading>
           {children}
           {footer}

@@ -84,6 +84,24 @@ describe('resolveLayerPortalTarget', () => {
     expect(target).toBe(root.querySelector('#host'));
   });
 
+  it('keeps a safe layer position inside its nearest dialog', () => {
+    const root = mount(
+      '<div id="host"><table><tbody><tr><td><dialog><div id="inline"><template></template></div></dialog></td></tr></tbody></table></div>',
+    );
+    const target = resolveLayerPortalTarget(root.querySelector('#inline'));
+
+    expect(target).toBeNull();
+  });
+
+  it('walks out of unsafe hosts without crossing the nearest dialog', () => {
+    const root = mount(
+      '<div id="host"><table><tbody><tr><td><dialog id="dialog"><p><span id="inline"><template></template></span></p></dialog></td></tr></tbody></table></div>',
+    );
+    const target = resolveLayerPortalTarget(root.querySelector('#inline'));
+
+    expect(target).toBe(root.querySelector('#dialog'));
+  });
+
   it('stops at the nearest safe ancestor rather than the body', () => {
     const root = mount(
       '<section id="outer"><li id="host"><p><span id="t">t</span></p></li></section>',

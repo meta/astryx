@@ -13,7 +13,12 @@ const meta: Meta<typeof ChatTokenizedText> = {
   parameters: {layout: 'centered'},
   decorators: [
     Story => (
-      <div style={{width: 500, padding: 40}}>
+      <div
+        style={{
+          boxSizing: 'border-box',
+          width: 'min(500px, calc(100vw - 32px))',
+          padding: 16,
+        }}>
         <Story />
       </div>
     ),
@@ -136,5 +141,25 @@ export const IconAndCustomTokens: Story = {
         </ChatTokenizedText>
       </ChatMessageBubble>
     </ChatMessage>
+  ),
+};
+
+/** Empty token values are ignored in a narrow message. */
+export const EmptyValueNarrow: Story = {
+  render: () => (
+    <div style={{maxWidth: 288}}>
+      <ChatMessage sender="user">
+        <ChatMessageBubble>
+          <ChatTokenizedText
+            tokens={[
+              {value: '', label: 'Ignored'},
+              {value: '@alice', label: '@Alice Rivera', variant: 'blue'},
+            ]}>
+            A longer localized message for @alice remains readable in a narrow
+            conversation when an empty token definition is present.
+          </ChatTokenizedText>
+        </ChatMessageBubble>
+      </ChatMessage>
+    </div>
   ),
 };

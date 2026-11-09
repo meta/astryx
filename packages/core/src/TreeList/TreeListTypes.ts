@@ -11,7 +11,8 @@
  * - /packages/core/src/TreeList/index.ts
  */
 
-import type {ReactNode} from 'react';
+import type {CSSProperties, ReactNode} from 'react';
+import type {StyleXStyles} from '@stylexjs/stylex';
 import type {TreeListVariantMap} from './index';
 
 /** Spacing density for tree list items. */
@@ -62,4 +63,13 @@ export interface TreeListItemData {
 
   /** Whether the item is initially expanded. Only meaningful for items with children. */
   isExpanded?: boolean;
+
+  /** StyleX styles applied to the item's row element. */
+  xstyle?: StyleXStyles;
+
+  /** Class applied to the item's row element. */
+  className?: string;
+
+  /** Inline styles applied to the item's row element. */
+  style?: CSSProperties;
 }

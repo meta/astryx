@@ -1,10 +1,17 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {afterEach, describe, expect, it} from 'vitest';
-import {themePaletteGenerate} from './generate.mjs';
+import {isErrorCode} from '../../../../foundation/response/error-codes.mjs';
+import {
+  PALETTE_JSON_FORMAT_VERSION,
+  PALETTE_TYPESCRIPT_FORMAT_VERSION,
+  themePaletteGenerate,
+} from './generate.mjs';
+import {PALETTE_GENERATOR_VERSION} from './generator.mjs';
 
 const temporaryDirectories = [];
 
@@ -77,7 +84,12 @@ describe('themePaletteGenerate', () => {
       fs.readFileSync(path.join(cwd, 'ocean.palette.receipt.json'), 'utf-8'),
     );
     expect(receipt.recipe).toBe('astryx-oklch-v1');
-    expect(receipt.candidateSha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(receipt.generatorVersion).toBe('palette-generator-v1');
+    expect(receipt.candidateFormatVersion).toBe('palette-typescript-v1');
+    expect(receipt.candidateSha256).toBe(
+      createHash('sha256').update(candidate).digest('hex'),
+    );
+    expect(receipt).toEqual(result.data.generationReceipt);
     expect(candidate).toContain('// prettier-ignore');
     expect(candidate).toContain("export const black = '#000000' as const;");
     expect(candidate).toContain("export const white = '#ffffff' as const;");
@@ -99,6 +111,150 @@ describe('themePaletteGenerate', () => {
     expect(written).toEqual(result.data.candidate);
     expect(written).toMatchObject({black: '#000000', white: '#ffffff'});
     expect(result.data.receipt).toBe('ocean.palette.receipt.json');
+  });
+
+  it('names the generator and the format of the exact bytes each receipt covers', () => {
+    expect(PALETTE_GENERATOR_VERSION).toBe('palette-generator-v1');
+    expect(PALETTE_TYPESCRIPT_FORMAT_VERSION).toBe('palette-typescript-v1');
+    expect(PALETTE_JSON_FORMAT_VERSION).toBe('palette-json-v1');
+
+    const cwd = fixture();
+    const sha256 = file =>
+      createHash('sha256')
+        .update(fs.readFileSync(path.join(cwd, file)))
+        .digest('hex');
+    const printed = themePaletteGenerate('palette.config.json', {}, {cwd}).data
+      .generationReceipt;
+    const typescript = themePaletteGenerate(
+      'palette.config.json',
+      {out: 'ocean.palette.ts'},
+      {cwd},
+    ).data.generationReceipt;
+    const json = themePaletteGenerate(
+      'palette.config.json',
+      {out: 'ocean-json.palette.json'},
+      {cwd},
+    ).data.generationReceipt;
+
+    // Existing receipt fields keep their positions; the versions sit beside
+    // the digest they qualify.
+    expect(Object.keys(typescript)).toEqual([
+      'schemaVersion',
+      'recipe',
+      'generatorVersion',
+      'candidateFormatVersion',
+      'candidateSha256',
+      'request',
+      'diagnostics',
+    ]);
+    expect(typescript).toMatchObject({
+      generatorVersion: PALETTE_GENERATOR_VERSION,
+      candidateFormatVersion: PALETTE_TYPESCRIPT_FORMAT_VERSION,
+      candidateSha256: sha256('ocean.palette.ts'),
+    });
+    expect(json).toMatchObject({
+      generatorVersion: PALETTE_GENERATOR_VERSION,
+      candidateFormatVersion: PALETTE_JSON_FORMAT_VERSION,
+      candidateSha256: sha256('ocean-json.palette.json'),
+    });
+    // Without an output path, the receipt covers the canonical JSON bytes.
+    expect(printed).toEqual(json);
+    // Only the serialized bytes differ between formats, never the generation.
+    expect(typescript.candidateSha256).not.toBe(json.candidateSha256);
+    expect({
+      ...typescript,
+      candidateFormatVersion: null,
+      candidateSha256: null,
+    }).toEqual({...json, candidateFormatVersion: null, candidateSha256: null});
+    for (const [file, receipt] of [
+      ['ocean.palette.receipt.json', typescript],
+      ['ocean-json.palette.receipt.json', json],
+    ]) {
+      expect(
+        JSON.parse(fs.readFileSync(path.join(cwd, file), 'utf-8')),
+      ).toEqual(receipt);
+    }
+  });
+
+  it('writes candidate JSON byte-identical to the recipe fixtures', () => {
+    const families = [
+      {id: 'neutral', name: 'Neutral', seed: '#777777', kind: 'neutral'},
+      {id: 'blue', name: 'Blue', seed: '#0074e2'},
+      {id: 'orange', name: 'Orange', seed: '#d57113'},
+    ];
+    const fixtures = [
+      [
+        {families},
+        3755,
+        '11c40191d508274d89d631bb4e1cb662f70ff0dce6c0dec101c317f9f69d3e25',
+      ],
+      [
+        {
+          modeStrategy: 'light-only',
+          stops: [20, 50, 80],
+          families: [
+            {
+              id: 'blue',
+              name: 'Blue',
+              seed: '#0074e2',
+              anchors: [
+                {mode: 'light', stop: 50, color: '#1682d5', policy: 'exact'},
+              ],
+            },
+          ],
+        },
+        327,
+        'c42929be3c4b5cb857cada078f62bb5a2242c1a22cfa4ae7546a18592540f7f3',
+      ],
+      [
+        {
+          modeStrategy: 'dark-only',
+          stops: [40],
+          families: [{id: 'red', name: 'Red', seed: '#d62830'}],
+        },
+        258,
+        '88d3d69865c74c7fb14347b9967575285a7d44ab893087a08bc842bb66b29bbb',
+      ],
+      [
+        {
+          stops: [60, 80, 95],
+          families: [
+            {id: 'green', name: 'Green', seed: '#358a3a'},
+            {id: 'teal', name: 'Teal', seed: '#0c7365'},
+            {id: 'cyan', name: 'Cyan', seed: '#0c6f82'},
+          ],
+        },
+        910,
+        '873821574fdbe3357304dbc06986bd2e5ec88af80d0f36305626fd826c3cf07b',
+      ],
+    ];
+
+    for (const [request, bytes, sha256] of fixtures) {
+      const cwd = fixture();
+      fs.writeFileSync(
+        path.join(cwd, 'palette.config.json'),
+        JSON.stringify(request),
+      );
+
+      const printed = themePaletteGenerate('palette.config.json', {}, {cwd});
+      expect(printed.data.generationReceipt).toMatchObject({
+        candidateFormatVersion: 'palette-json-v1',
+        candidateSha256: sha256,
+      });
+
+      const result = themePaletteGenerate(
+        'palette.config.json',
+        {out: 'candidate.json'},
+        {cwd},
+      );
+      const written = fs.readFileSync(path.join(cwd, 'candidate.json'));
+      expect(written.length).toBe(bytes);
+      expect(createHash('sha256').update(written).digest('hex')).toBe(sha256);
+      expect(result.data.generationReceipt).toMatchObject({
+        candidateFormatVersion: 'palette-json-v1',
+        candidateSha256: sha256,
+      });
+    }
   });
 
   it('preserves mixed decimal and integer stop order in every artifact', () => {
@@ -266,5 +422,24 @@ describe('themePaletteGenerate', () => {
     expect(() =>
       themePaletteGenerate('palette.config.json', {}, {cwd}),
     ).toThrow('Could not parse palette config');
+  });
+
+  it('reports an output path it cannot use with a registered error code', () => {
+    const cwd = fixture();
+    fs.writeFileSync(path.join(cwd, 'blocker'), '');
+
+    for (const options of [
+      {out: 'blocker/ocean.palette.json'},
+      {preview: 'blocker/ocean.palette.html'},
+    ]) {
+      let error;
+      try {
+        themePaletteGenerate('palette.config.json', options, {cwd});
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error).toMatchObject({code: 'ERR_WRITE_FAILED'});
+      expect(isErrorCode(error.code)).toBe(true);
+    }
   });
 });

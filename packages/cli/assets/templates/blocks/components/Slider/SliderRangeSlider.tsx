@@ -12,7 +12,7 @@ export default function SliderRangeSlider() {
       label="Price range"
       value={value}
       onChange={setValue}
-      style={{width: 300}}
+      containerStyle={{width: 300}}
     />
   );
 }

@@ -9,12 +9,15 @@ import {afterEach, describe, expect, it} from 'vitest';
 import {
   BACKGROUND_NETWORK_GUARD,
   CAPTURE_CONTEXT_SECURITY,
+  applyGlobals,
   blockExternalNetwork,
   isSameOrigin,
   partitionCapturePlan,
   partitionScoutStories,
   serveDirectory,
   storyLoadGlobals,
+  storyUsesPlayFunction,
+  waitForStoryFinished,
 } from './capture.mjs';
 
 const roots = [];
@@ -121,6 +124,85 @@ describe('capture plan partitioning', () => {
       .map((partition, worker) => (partition.some(shot => shot.storyId === 'a') ? worker : null))
       .filter(worker => worker !== null);
     expect(aWorkers).toHaveLength(1);
+  });
+});
+
+describe('Storybook interaction lifecycle', () => {
+  it('waits for the initial story play function to finish', async () => {
+    let timeout;
+    const page = {
+      waitForFunction: async (predicate, storyId, options) => {
+        timeout = options.timeout;
+        globalThis.__STORYBOOK_PREVIEW__ = {
+          selectionStore: {selection: {storyId}},
+          currentRender: {phase: 'playing'},
+        };
+        expect(predicate(storyId)).toBe(false);
+        globalThis.__STORYBOOK_PREVIEW__.currentRender.phase = 'finished';
+        expect(predicate(storyId)).toBe(true);
+        delete globalThis.__STORYBOOK_PREVIEW__;
+      },
+    };
+
+    await waitForStoryFinished(page, 'core-sidenav--resizable-in-app-shell');
+    expect(timeout).toBe(30000);
+  });
+
+  it('detects interaction stories so capture can reload them per environment', async () => {
+    const page = {
+      evaluate: async (predicate, storyId) => {
+        globalThis.__STORYBOOK_PREVIEW__ = {
+          selectionStore: {selection: {storyId}},
+          currentRender: {story: {playFunction: () => {}}},
+        };
+        try {
+          return predicate(storyId);
+        } finally {
+          delete globalThis.__STORYBOOK_PREVIEW__;
+        }
+      },
+    };
+
+    await expect(storyUsesPlayFunction(page, 'example')).resolves.toBe(true);
+  });
+
+  it('waits for the selected story to finish after a global update', async () => {
+    const listeners = new Map();
+    const channel = {
+      on: (name, listener) => listeners.set(name, listener),
+      off: name => listeners.delete(name),
+      emit: (name, payload) => {
+        if (name !== 'updateGlobals') return;
+        expect(payload).toEqual({
+          globals: {astryxTheme: 'probe', colorMode: 'dark'},
+        });
+        queueMicrotask(() => {
+          listeners
+            .get('storyFinished')
+            ?.({storyId: 'other', status: 'success'});
+          listeners
+            .get('storyFinished')
+            ?.({storyId: 'example', status: 'success'});
+        });
+      },
+    };
+    const page = {
+      evaluate: async (callback, value) => {
+        globalThis.__STORYBOOK_ADDONS_CHANNEL__ = channel;
+        try {
+          return await callback(value);
+        } finally {
+          delete globalThis.__STORYBOOK_ADDONS_CHANNEL__;
+        }
+      },
+    };
+
+    await applyGlobals(
+      page,
+      {astryxTheme: 'probe', colorMode: 'dark'},
+      'example',
+    );
+    expect(listeners.has('storyFinished')).toBe(false);
   });
 });
 

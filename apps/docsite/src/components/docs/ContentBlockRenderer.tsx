@@ -37,7 +37,18 @@ export function ContentBlockRenderer({block}: {block: ContentBlock}) {
       );
     case 'list':
       return <ListBlock items={block.items ?? []} listStyle={block.style} />;
-    default:
+    default: {
+      const type = (block as {type?: unknown}).type;
+      if (
+        type === 'workflow' ||
+        type === 'collection' ||
+        type === 'reference'
+      ) {
+        throw new Error(
+          `Documentation block "${type}" requires the compiled graph renderer.`,
+        );
+      }
       return null;
+    }
   }
 }

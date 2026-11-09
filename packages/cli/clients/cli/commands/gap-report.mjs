@@ -7,7 +7,7 @@
 import {gapReport as gapReportApi} from '../../../api/gap-report/gap-report.mjs';
 import {NO_RESULT_SET, resultSet} from '../../../foundation/debug/index.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
-import {emit, record, records, section} from '../formatters/index.mjs';
+import {emit, record, records, section, text} from '../formatters/index.mjs';
 import {cliError} from '../lib/cli-error.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {doc as gapReportCommand} from './gap-report.doc.mjs';
@@ -19,7 +19,7 @@ export function registerGapReport(program) {
     fn: gapReportFn,
     action: async (
       /** @type {string|undefined} */ component,
-      /** @type {{category?: string, reason?: string, additionalContext?: string, package?: string, confirmPublic?: boolean, listCategories?: boolean}} */ options,
+      /** @type {{category?: string, reason?: string, additionalContext?: string, package?: string, confirmPublic?: boolean, listCategories?: boolean, to?: string}} */ options,
     ) => {
       /** @type {Awaited<ReturnType<typeof gapReportApi>>} */
       let result;
@@ -35,6 +35,7 @@ export function registerGapReport(program) {
           package: options.package,
           confirmPublic: options.confirmPublic,
           listCategories: options.listCategories,
+          to: options.to,
         });
       } catch (error) {
         const err =
@@ -55,6 +56,18 @@ export function registerGapReport(program) {
         result.type === 'gap-report.file' &&
         (result.data.status === 'failed' || result.data.status === 'partial');
 
+      // stderr in both modes, so a caller that reads only the exit code or the
+      // JSON envelope still sees which delivery failed and why.
+      if (isFailure && result.type === 'gap-report.file') {
+        for (const delivery of result.data.deliveries) {
+          if (delivery.status === 'failed') {
+            console.error(
+              `gap-report: delivery to ${delivery.handler} failed: ${delivery.message ?? 'no message'}`,
+            );
+          }
+        }
+      }
+
       if (program.opts().json) {
         jsonOut(result);
         if (isFailure) process.exitCode = 1;
@@ -66,6 +79,9 @@ export function registerGapReport(program) {
           section('Gap report categories'),
           records(result.data, {fields: ['value', 'label']}),
         );
+        if (result.meta) {
+          emit(...destinationBlocks(result.meta.destinations, result.meta.ask));
+        }
         return answered;
       }
 
@@ -107,8 +123,26 @@ export function registerGapReport(program) {
         );
       }
 
+      if (result.data.destinations && result.data.ask) {
+        emit(...destinationBlocks(result.data.destinations, result.data.ask));
+      }
+
       if (isFailure) process.exitCode = 1;
       return answered;
     },
   });
+}
+
+/**
+ * The destinations a report can go to, then the line telling an agent to ask
+ * the person (architecture:cli-surface INV36).
+ * @param {import('../../../api/gap-report/gap-report.type.mjs').GapReportDestination[]} destinations
+ * @param {string} ask
+ */
+function destinationBlocks(destinations, ask) {
+  return [
+    section('Destinations'),
+    records(destinations, {fields: ['to', 'default', 'issuesUrl']}),
+    text(ask),
+  ];
 }

@@ -4,7 +4,12 @@
 /**
  * Generates apps/docsite/src/generated/playground-scope.ts
  *
- * Maps every Astryx module available in the playground preview iframe.
+ * Maps Core exports and the integration packages this build documents into
+ * the preview iframe.
+ * @input Core package exports, the admitted integration packages recorded by
+ *   generate-data.mjs, and the content target
+ * @output The runtime module scope used by copyable Playground examples
+ * @position Build-time companion to component and block registry generation
  * This runs as part of `pnpm generate` (before dev/build) so new components
  * are picked up automatically — no manual maintenance needed.
  *
@@ -14,11 +19,20 @@
 import {readFileSync, writeFileSync, mkdirSync} from 'node:fs';
 import {dirname, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {getTarget} from './resolve-content-root.mjs';
+import {readAdmittedIntegrationPackages} from '../src/lib/integrationTargets.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 const CORE_PKG = resolve(ROOT, '../../packages/core/package.json');
 const OUT = resolve(ROOT, 'src/generated/playground-scope.ts');
+// The packages generate-data.mjs admitted for this target (canary: every
+// configured integration; latest: the stable releases in its content
+// snapshot), so the scope and the registries describe the same packages.
+const integrationPackages = readAdmittedIntegrationPackages(
+  resolve(ROOT, 'src/generated'),
+  getTarget(),
+);
 
 const HEADER = `// Copyright (c) Meta Platforms, Inc. and affiliates.
 
@@ -136,7 +150,7 @@ const pgClassForProp = (prop: string, value: PGStyleValue): string => {
   if (value != null && typeof value === 'object') {
     for (const [cond, condVal] of Object.entries(value)) {
       if (condVal == null) continue;
-      const decl = '.' + cls + pgPseudoSuffix(cond) + '{' + pgKebab(prop) + ':' + pgCssValue(prop, condVal) + '}';
+      const decl = pgSelector(cls, cond) + '{' + pgKebab(prop) + ':' + pgCssValue(prop, condVal) + '}';
       pgInject(pgWrapAtRule(cond, decl));
     }
   } else {
@@ -147,6 +161,27 @@ const pgClassForProp = (prop: string, value: PGStyleValue): string => {
 
 const pgPseudoSuffix = (cond: string): string =>
   cond === 'default' || cond.startsWith('@') ? '' : cond;
+
+// A marker rides along as a class so an ancestor can be named in a selector.
+// Tagged with a prop key rather than a bare string because \`props\` only keeps
+// string values, and this way one shows up in className like any other class.
+const PG_MARKER_PROP = '--pg-marker';
+const PG_DEFAULT_MARKER = 'pgmarkdefault';
+let pgMarkerSeq = 0;
+const pgMarker = (cls: string): Record<string, unknown> => ({
+  $$css: true,
+  [PG_MARKER_PROP]: cls,
+});
+
+// Every other condition narrows the element's own selector, so it appends.
+// \`when.ancestor\` instead qualifies a *parent*, which has to prepend — hence a
+// tag the rule builder can spot rather than another pseudo suffix.
+const PG_ANCESTOR_TAG = '%pg-ancestor%';
+
+const pgSelector = (cls: string, cond: string): string =>
+  cond.startsWith(PG_ANCESTOR_TAG)
+    ? cond.slice(PG_ANCESTOR_TAG.length) + ' .' + cls
+    : '.' + cls + pgPseudoSuffix(cond);
 
 const pgWrapAtRule = (cond: string, decl: string): string =>
   cond.startsWith('@') ? cond + '{' + decl + '}' : decl;
@@ -191,6 +226,15 @@ const stylexMock = {
   },
   defineVars: <T extends Record<string, unknown>>(tokens: T): T => tokens,
   keyframes: (kf: Record<string, Record<string, string>>) => kf,
+  defaultMarker: () => pgMarker(PG_DEFAULT_MARKER),
+  defineMarker: () => pgMarker('pgmark' + pgMarkerSeq++),
+  when: {
+    ancestor: (cond: string, marker?: Record<string, unknown>) =>
+      PG_ANCESTOR_TAG +
+      '.' +
+      ((marker?.[PG_MARKER_PROP] as string) ?? PG_DEFAULT_MARKER) +
+      cond,
+  },
   types: {
     angle: (v: string) => v,
     color: (v: string) => v,
@@ -220,6 +264,13 @@ for (const {specifier, identifier} of nestedModules) {
 }
 lines.push('');
 
+// Use the same configured package roots as the canary component/block catalog.
+// Otherwise an example's import silently resolves to an empty placeholder.
+for (const [index, pkg] of integrationPackages.entries()) {
+  lines.push(`import * as Integration${index} from '${pkg}';`);
+}
+lines.push('');
+
 // ── Theme imports ──────────────────────────────────────────────────────
 for (const t of SCOPE_THEMES) {
   lines.push(`import {${t.name}} from '${t.pkg}${t.subpath}';`);
@@ -227,9 +278,11 @@ for (const t of SCOPE_THEMES) {
 lines.push('');
 
 // ── Theme + tokens ──────────────────────────────────────────────────
-lines.push("import {Theme} from '@astryxdesign/core/theme';");
+lines.push("import {Theme, defineTheme} from '@astryxdesign/core/theme';");
 lines.push("import type {DefinedTheme} from '@astryxdesign/core/theme';");
-lines.push("import {createElement, type ComponentProps} from 'react';");
+lines.push(
+  "import {createContext, createElement, useContext, type ComponentProps} from 'react';",
+);
 lines.push(
   "import * as astryxTokens from '@astryxdesign/core/theme/tokens.stylex';",
 );
@@ -239,6 +292,12 @@ lines.push('');
 // camelCase, so the PascalCase component scan skips it — add it explicitly so
 // templates using useMediaQuery etc. render.
 lines.push("import * as Hooks from '@astryxdesign/core/hooks';");
+lines.push('');
+
+// ── Utils ──────────────────────────────────────────────────────────────
+// camelCase too, and skipped for the same reason. Page templates mirror their
+// directional icons in right-to-left with `rtlStyles` from here.
+lines.push("import * as Utils from '@astryxdesign/core/utils';");
 lines.push('');
 
 // ── Icon and chart libraries ───────────────────────────────────────────
@@ -266,7 +325,17 @@ lines.push(`const SCOPE_THEMES: Record<string, DefinedTheme> = {
 ${themeEntries}
 };
 
+const IsNestedTheme = createContext(false);
+
 const ControlledTheme = (props: ComponentProps<typeof Theme>) => {
+  const isNested = useContext(IsNestedTheme);
+  // A nested Theme is part of what the code being previewed is showing — a
+  // poster's display face, a slider track painted as a spectrum — so it keeps
+  // the theme and mode it asked for. Only the outermost one answers to the
+  // playground's theme and mode pickers.
+  if (isNested) {
+    return createElement(Theme, props);
+  }
   const win =
     typeof window !== 'undefined'
       ? (window as unknown as Record<string, unknown>)
@@ -275,7 +344,11 @@ const ControlledTheme = (props: ComponentProps<typeof Theme>) => {
     (win?.__xds_preview_mode__ as 'light' | 'dark' | 'system') || 'system';
   const themeName = (win?.__xds_preview_theme__ as string) || 'default';
   const theme = SCOPE_THEMES[themeName] ?? ${SCOPE_THEMES[0].name};
-  return createElement(Theme, {...props, theme, mode});
+  return createElement(
+    IsNestedTheme.Provider,
+    {value: true},
+    createElement(Theme, {...props, theme, mode}),
+  );
 };`);
 lines.push('');
 
@@ -300,6 +373,24 @@ lines.push('  stylex: {default: stylexMock, ...stylexMock},');
 // Recharts comes before Astryx so Astryx components win global name collisions.
 lines.push('  recharts: Recharts,');
 
+// Core entries follow these so Core keeps precedence for unqualified globals.
+//
+// Whole-package admission is deliberate (owner-ratified): every export of a
+// configured integration is available so a NEW integration component needs no
+// scope edits. Each package keeps its own namespace entry, so QUALIFIED
+// imports (`import {Chart} from '@astryxdesign/charts'`) always resolve to
+// their own package. For UNQUALIFIED globals the preview runner iterates this
+// map in insertion order with later-wins (see runner.ts buildGlobalScope), so
+// on shared export names a later-configured integration shadows an earlier
+// one — @astryxdesign/lab and @astryxdesign/charts currently share 14 names
+// (Chart, ChartAxis, ChartGrid, ChartTooltip, ChartLegend, useChart,
+// useChartColors, getChartColors, getChartColorsFromResolver, compactNumber,
+// currency, percent, shortDate, monthYear), which charts wins — and the Core
+// entries below shadow every integration. Covered by playground-scope.test.ts.
+for (const [index, pkg] of integrationPackages.entries()) {
+  lines.push(`  '${pkg}': Integration${index},`);
+}
+
 // themes
 for (const t of SCOPE_THEMES) {
   lines.push(`  '${t.pkg}': {default: ${t.name}, ${t.name}},`);
@@ -307,13 +398,18 @@ for (const t of SCOPE_THEMES) {
 }
 
 // Theme (controlled wrapper)
-lines.push("  '@astryxdesign/core/theme': {Theme: ControlledTheme},");
+lines.push(
+  "  '@astryxdesign/core/theme': {Theme: ControlledTheme, defineTheme},",
+);
 
 // tokens.stylex
 lines.push("  '@astryxdesign/core/theme/tokens.stylex': astryxTokens,");
 
 // hooks (useMediaQuery, etc.)
 lines.push("  '@astryxdesign/core/hooks': Hooks,");
+
+// utils (rtlStyles, etc.)
+lines.push("  '@astryxdesign/core/utils': Utils,");
 
 // Per-component and nested-module subpath entries
 for (const name of components) {
@@ -350,6 +446,7 @@ writeFileSync(OUT, lines.join('\n'));
 console.log(`✓ Generated ${OUT}`);
 console.log(`  ${components.length} components`);
 console.log(`  ${nestedModules.length} nested modules`);
+console.log(`  ${integrationPackages.length} integration packages`);
 console.log(`  ${SCOPE_THEMES.length} themes`);
 console.log(
   `  lucide-react icons + ${HEROICON_VARIANTS.length} heroicon variants`,

@@ -1,6 +1,11 @@
 {
   "//": "Focused typecheck for the authoring surface. checkJs is on so the JSDoc drift-locks (Expect<Equal<z.infer<schema>, PublicType>>) in each parser are evaluated — a sealed schema that drifts from its public type fails here.",
   "extends": "./tsconfig.strict.json",
-  "include": ["authoring/**/*.mjs", "authoring/**/*.ts"],
+  "include": [
+    "authoring/**/*.mjs",
+    "authoring/**/*.ts",
+    "test/authoring-types/**/*.mjs",
+    "test/authoring-types/**/*.ts"
+  ],
   "exclude": ["**/*.test.mjs"]
 }

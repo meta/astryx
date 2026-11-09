@@ -9,5 +9,19 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   isShowcase: true,
-  componentsUsed: ['VisuallyHidden', 'IconButton', 'Card', 'HStack', 'VStack', 'Text', 'Icon'],
+  componentsUsed: [
+    'VisuallyHidden',
+    'IconButton',
+    'Card',
+    'HStack',
+    'VStack',
+    'Text',
+    'Icon',
+  ],
+  icons: {
+    ArrowDownTrayIcon: 'download',
+    ShareIcon: 'share',
+    SpeakerWaveIcon: 'audio',
+    TrashIcon: 'delete',
+  },
 };

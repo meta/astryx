@@ -14,7 +14,7 @@
 
 import {parseHook} from '../hook/parse.mjs';
 
-/** @typedef {import('../types').FunctionDoc} FunctionDoc */
+/** @typedef {import('../types.js').FunctionDoc} FunctionDoc */
 
 /**
  * Validate an unknown value as a stamped function doc, or throw.

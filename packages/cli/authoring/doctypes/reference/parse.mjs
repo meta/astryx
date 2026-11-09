@@ -9,7 +9,7 @@
 import {GenericDocKindSchema} from '../_schema.mjs';
 import {formatZodError} from '../../_shared/errors.mjs';
 
-/** @typedef {import('../types').ReferenceDoc} ReferenceDoc */
+/** @typedef {import('../types.js').ReferenceDoc} ReferenceDoc */
 
 /**
  * Validate an unknown value as a stamped reference/topic doc, or throw.
@@ -23,8 +23,11 @@ export function parseReference(input, label = 'reference doc') {
   if (!result.success) {
     throw new Error(formatZodError(label, result.error));
   }
-  // The schema is permissive (it also accepts legacy generic docs), so it is
-  // deliberately looser than the rich public type; cast through unknown at this
-  // validated boundary.
-  return /** @type {ReferenceDoc} */ (/** @type {unknown} */ (result.data));
+  const doc = result.data;
+  return /** @type {ReferenceDoc} */ ({
+    ...doc,
+    title: doc.title ?? doc.displayName ?? doc.name,
+    description: doc.description ?? '',
+    sections: doc.sections ?? [],
+  });
 }

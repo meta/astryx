@@ -13,10 +13,13 @@
  * colors automatically adapt to any theme's color system. Themes can also
  * set an explicit syntax theme via defineTheme({ syntax: dracula }).
  *
- * 14-token architecture validated against 11 community code themes.
- * All themes map cleanly to these 14 slots.
+ * 14 token colours and the code background, validated against 11 community
+ * code themes — all of them map cleanly to those slots — plus five diff row
+ * slots (added, removed, header paints; added and removed markers) that default
+ * to semantic tokens, so a syntax theme that does not set them keeps a
+ * readable diff.
  *
- * @see https://github.com/facebook/astryx/issues/1148
+ * @see https://github.com/meta/astryx/issues/1148
  */
 
 export const syntaxTokenDefaults = {
@@ -51,6 +54,33 @@ export const syntaxTokenDefaults = {
   '--color-syntax-punctuation': 'var(--color-text-secondary)',
   // background -> muted surface
   '--color-syntax-background': 'var(--color-background-muted)',
+  // Diff rows (CodeBlock isDiff): whole-row tints behind unchanged syntax
+  // colours. Added/removed derive from the semantic success/error muted
+  // tokens at 25% strength: at full strength the secondary-grey syntax
+  // tokens (operator, punctuation, comment) fall under 4.5:1 on the tints
+  // in light; at 25% every default token clears it on both schemes with
+  // margin while the tint still reads against the plain row. Header rows
+  // (@@, and ---/+++ before the first hunk) sit on the muted surface.
+  '--color-syntax-added':
+    'color-mix(in srgb, var(--color-success-muted) 25%, transparent)',
+  '--color-syntax-removed':
+    'color-mix(in srgb, var(--color-error-muted) 25%, transparent)',
+  '--color-syntax-diff-header': 'var(--color-background-muted)',
+  // The margin of a changed row — its line number and +/- glyph — in the
+  // default theme's tinted-text tokens, made for tinted surfaces; a defined
+  // syntax theme that leaves them unset follows its own punctuation colour
+  // (see defineSyntaxTheme). Code text keeps the syntax theme's colours.
+  '--color-syntax-added-marker': 'var(--color-text-green)',
+  '--color-syntax-removed-marker': 'var(--color-text-red)',
 } as const;
 
 export type SyntaxTokenName = keyof typeof syntaxTokenDefaults;
+
+/** The five diff row slots: optional in a syntax theme, defaulted when unset. */
+export const DIFF_SYNTAX_TOKEN_NAMES = [
+  '--color-syntax-added',
+  '--color-syntax-removed',
+  '--color-syntax-diff-header',
+  '--color-syntax-added-marker',
+  '--color-syntax-removed-marker',
+] as const satisfies ReadonlyArray<SyntaxTokenName>;

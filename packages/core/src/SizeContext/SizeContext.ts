@@ -4,7 +4,7 @@
 
 /**
  * @file SizeContext.ts
- * @input React createContext, use
+ * @input Layer-scoped React context, use
  * @output Exports SizeContext, useSize, ElementSize, SizeProvider
  * @position Context provider; consumed by Button, TextInput, TabList, Selector, etc.
  *
@@ -13,7 +13,8 @@
  * fallback — an explicit `size` prop always wins.
  */
 
-import {createContext, use} from 'react';
+import {use} from 'react';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 
 /**
  * Standard element sizes used across interactive components.
@@ -25,7 +26,11 @@ export type ElementSize = 'sm' | 'md' | 'lg';
  *
  * `null` means no container is providing a size — components use their own default.
  */
-export const SizeContext = createContext<ElementSize | null>(null);
+export const SizeContext = createLayerScopedContext<ElementSize | null>(
+  'SizeContext',
+  1,
+  null,
+);
 SizeContext.displayName = 'SizeContext';
 
 /**

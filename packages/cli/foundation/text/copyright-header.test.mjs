@@ -3,7 +3,7 @@
 /**
  * @file Unit tests for the shared copyright-header stripper.
  *
- * Two commands copy repo files into a consumer's project (`theme add`,
+ * Two commands copy repo files into a consumer's project (`theme eject`,
  * `init --features theme`); this is what keeps our boilerplate out of their
  * tree. The BOM/shebang cases are the ones worth pinning — a naive strip
  * corrupts the file rather than merely leaving a stray comment.

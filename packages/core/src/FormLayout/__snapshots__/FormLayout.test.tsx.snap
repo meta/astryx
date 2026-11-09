@@ -2,7 +2,7 @@
 
 exports[`FormLayout > matches snapshot for horizontal direction 1`] = `
 <div
-  class="astryx-form-layout horizontal FormLayout__styles.base xdt5ytf x18g69wz FormLayout__styles.horizontal xrvj5dj x1mt1orb xu6a5m6"
+  class="astryx-form-layout FormLayout__styles.base xdt5ytf x18g69wz FormLayout__styles.horizontal xrvj5dj x1mt1orb xu6a5m6"
   data-direction="horizontal"
   data-testid="layout"
 >
@@ -17,7 +17,7 @@ exports[`FormLayout > matches snapshot for horizontal direction 1`] = `
 
 exports[`FormLayout > matches snapshot for horizontal-labels direction 1`] = `
 <div
-  class="astryx-form-layout horizontal-labels FormLayout__styles.base xdt5ytf FormLayout__styles.horizontalLabels xrvj5dj x1pmbctz xlaq8a2 x7a106z xedohl4 x1rpgqan x1a1jff"
+  class="astryx-form-layout FormLayout__styles.base xdt5ytf FormLayout__styles.horizontalLabels xrvj5dj x1pmbctz xlaq8a2 x7a106z xedohl4 x1rpgqan x1a1jff x1q32nj3"
   data-direction="horizontal-labels"
   data-testid="layout"
 >
@@ -32,7 +32,7 @@ exports[`FormLayout > matches snapshot for horizontal-labels direction 1`] = `
 
 exports[`FormLayout > matches snapshot for vertical direction 1`] = `
 <div
-  class="astryx-form-layout vertical FormLayout__styles.base x78zum5 xdt5ytf x18g69wz"
+  class="astryx-form-layout FormLayout__styles.base x78zum5 xdt5ytf x18g69wz"
   data-direction="vertical"
   data-testid="layout"
 >

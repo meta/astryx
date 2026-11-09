@@ -40,6 +40,7 @@ export const docs = {
     bestPractices: [
       {guidance: true, description: 'Use the hook directly when building custom collapsible components that need Astryx collapsible behavior without Collapsible wrapper.'},
       {guidance: true, description: 'For accordion behavior, wrap items in CollapsibleGroup and pass unique value props.'},
+      {guidance: false, description: 'Pass local isOpen, defaultIsOpen, or onOpenChange expecting them to run for a value-bound group item; the group owns that state and notification path.'},
       {guidance: false, description: 'Implement your own open/close state when useCollapsible already provides it; the hook handles group coordination automatically.'},
     ],
   },
@@ -66,6 +67,7 @@ export const docsDense = {
     bestPractices: [
       {guidance: true, description: 'Use directly when building custom collapsible components needing Astryx collapsible behavior w/o Collapsible wrapper.'},
       {guidance: true, description: 'For accordion behavior, wrap items in CollapsibleGroup + pass unique value props.'},
+      {guidance: false, description: 'Pass local open state or callbacks expecting them to run for a value-bound group item; the group owns state + notifications.'},
       {guidance: false, description: 'Implement your own open/close state when useCollapsible already provides it; hook handles group coordination automatically.'},
     ],
   },

@@ -564,24 +564,22 @@ export default function MotionBugsPage() {
       <DemoCard
         title="The drawer exit, cut short"
         question="Slide 410ms, unmount at 250ms. Drag either slider: at what point does an exit stop being an exit?"
-        badges={<Badge variant="error" label="Confirmed in lab" />}>
+        badges={<Badge variant="success" label="Resolved before Core" />}>
         <DemoBody>
           <Text type="supporting">
-            <strong>The brief is right, to the millisecond.</strong>{' '}
-            <code>lab/Drawer/Drawer.tsx:459</code> hardcodes a <code>250</code>
-            ms close timer, while <code>:157</code> and <code>:219</code> set
-            the panel and scrim transitions to <code>--duration-medium</code> —
-            410ms. The dialog is closed at 61% of its own travel, so the last
-            160ms of the slide never renders.
+            <strong>This was the lab failure.</strong> The former implementation
+            hardcoded a <code>250</code>ms close timer while the panel and scrim
+            transitions used <code>--duration-medium</code> (410ms by default).
+            The dialog closed at 61% of its own travel, so the last 160ms of the
+            slide never rendered.
           </Text>
           <Text type="supporting" color="secondary">
-            The reduced-motion branch beside it is the tell: the same expression
-            picks <code>10</code>ms when the user asks for less motion, which
-            means someone thought carefully about the timer and still had to
-            restate the duration by hand. Nothing in either package derives a
-            timer from its transition; MobileNav is the only component that even
-            tries, and it does it by reading <code>getComputedStyle</code>. That
-            is the argument for the JS token mirror in one file.
+            Drawer now waits for the actual transform transition and uses a
+            computed-duration backstop in{' '}
+            <code>core/Drawer/useDrawerDialogPresence.ts</code>. Theme motion
+            can no longer desynchronize the visual exit from native-host
+            release; the sliders below preserve the original failure as an
+            interactive explanation of why the fix matters.
           </Text>
         </DemoBody>
         <DemoBody>

@@ -81,4 +81,50 @@ describe('ChatComposerDrawer', () => {
     fireEvent.keyDown(toggle, {key: ' '});
     expect(onCollapsedChange).toHaveBeenLastCalledWith(false);
   });
+
+  it('preserves the Badge and label as the default collapsed summary', () => {
+    const {container} = render(
+      <ChatComposerDrawer count={3} label="Attachments" defaultIsCollapsed>
+        <span>Drawer content</span>
+      </ChatComposerDrawer>,
+    );
+
+    expect(container.querySelector('.astryx-badge')).toHaveTextContent('3');
+    expect(screen.getByText('Attachments')).toBeInTheDocument();
+  });
+
+  it('replaces the complete collapsed summary with caller content', () => {
+    const {container} = render(
+      <ChatComposerDrawer
+        count={3}
+        label="Attachments"
+        collapsedSummary={<button type="button">Files ready</button>}
+        defaultIsCollapsed>
+        <span>Drawer content</span>
+      </ChatComposerDrawer>,
+    );
+
+    const toggle = screen.getByRole('button', {name: /Attachments/});
+    const customSummary = screen.getByText('Files ready');
+    const summaryBoundary = customSummary.closest('[inert]');
+    expect(toggle).not.toHaveAccessibleName(/Files ready/);
+    expect(summaryBoundary).toHaveAttribute('aria-hidden', 'true');
+    expect(container.querySelector('.astryx-badge')).toBeNull();
+    expect(screen.queryByText('Attachments')).toBeNull();
+    expect(
+      screen.queryByRole('button', {name: 'Files ready'}),
+    ).not.toBeInTheDocument();
+  });
+
+  it('does not expose collapsedSummary when count is omitted', () => {
+    render(
+      <ChatComposerDrawer collapsedSummary={<span>Files ready</span>}>
+        <span>Drawer content</span>
+      </ChatComposerDrawer>,
+    );
+
+    expect(screen.queryByText('Files ready')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.getByText('Drawer content')).toBeInTheDocument();
+  });
 });

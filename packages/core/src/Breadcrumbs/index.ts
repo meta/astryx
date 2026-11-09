@@ -42,6 +42,10 @@ export {
   type DropdownMenuDividerProps as BreadcrumbMenuDividerProps,
 } from '../DropdownMenu/DropdownMenuDivider';
 export {
+  DropdownMenuGroup as BreadcrumbMenuGroup,
+  type DropdownMenuGroupProps as BreadcrumbMenuGroupProps,
+} from '../DropdownMenu/DropdownMenuGroup';
+export {
   DropdownMenuCheckboxItem as BreadcrumbMenuCheckboxItem,
   type DropdownMenuCheckboxItemProps as BreadcrumbMenuCheckboxItemProps,
 } from '../DropdownMenu/DropdownMenuCheckboxItem';

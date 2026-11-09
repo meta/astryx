@@ -61,30 +61,38 @@ afterEach(() => {
 
 describe('no raw stable identifier is recorded', () => {
   it('hands the handler the hash and never the session id itself', () => {
-    vi.stubEnv('ASTRYX_AGENT_ID', 'astryx-test-agent');
-    vi.stubEnv('ASTRYX_AGENT_SESSION_ID', RAW_SESSION);
+    vi.stubEnv('AGENT', 'astryx-test-agent');
+    vi.stubEnv('AGENT_SESSION_ID', RAW_SESSION);
     const event = collectEvent();
 
     expect(event.env.agentSessionId).toBe(null);
     expect(event.env.agentSessionIdHash).toBe(RAW_SESSION_HASH);
-    expect(event.env.agentSessionIdSource).toBe('ASTRYX_AGENT_SESSION_ID');
+    expect(event.env.agentSessionIdSource).toBe('AGENT_SESSION_ID');
     // Not just the field: nowhere in the record at all.
     expect(JSON.stringify(event)).not.toContain(RAW_SESSION);
   });
 
-  it('never records one from the metadata env var either', () => {
+  it('reads no Astryx-owned variable, so a session left in one is never recorded', () => {
+    // spec:AST-017 FR14: the CLI reads no Astryx-owned environment variable.
+    // A value left in a removed one records nothing, raw or hashed.
+    vi.stubEnv('AGENT', '');
+    vi.stubEnv('AGENT_SESSION_ID', '');
+    vi.stubEnv('ASTRYX_AGENT_ID', 'metadata-agent');
+    vi.stubEnv('ASTRYX_AGENT_SESSION_ID', RAW_SESSION);
     vi.stubEnv(
       'ASTRYX_AGENT_METADATA',
       JSON.stringify({id: 'metadata-agent', session_id: RAW_SESSION}),
     );
     const event = collectEvent();
     expect(event.env.agentSessionId).toBe(null);
-    expect(event.env.agentSessionIdHash).toBe(RAW_SESSION_HASH);
+    expect(event.env.agentSessionIdHash).toBe(null);
+    expect(event.env.agentSessionIdSource).toBe(null);
     expect(JSON.stringify(event)).not.toContain(RAW_SESSION);
+    expect(JSON.stringify(event)).not.toContain('metadata-agent');
   });
 
   it('still joins runs of one session, which is what the raw value was for', () => {
-    vi.stubEnv('ASTRYX_AGENT_SESSION_ID', RAW_SESSION);
+    vi.stubEnv('AGENT_SESSION_ID', RAW_SESSION);
     const first = collectEvent().env.agentSessionIdHash;
     resetRecorder();
     const second = collectEvent().env.agentSessionIdHash;
@@ -101,9 +109,9 @@ describe('no raw stable identifier is recorded', () => {
 
 describe('environment free text is scrubbed', () => {
   it('scrubs a credential pasted into the agent identity', () => {
-    // ASTRYX_AGENT_ID is free text: whatever the invoking tool exports lands
+    // AGENT is free text: whatever the invoking tool exports lands
     // here, and `env` used to skip the scrubbing pass entirely.
-    vi.stubEnv('ASTRYX_AGENT_ID', 'ghp_abcdefghijklmnopqrstuvwxyz01');
+    vi.stubEnv('AGENT', 'ghp_abcdefghijklmnopqrstuvwxyz01');
     const event = collectEvent();
     expect(event.env.agentIdentity).toBe(REDACTED);
     expect(event.env.agent).toBe(REDACTED);
@@ -117,7 +125,7 @@ describe('environment free text is scrubbed', () => {
   });
 
   it('rewrites an absolute path in the agent identity', () => {
-    vi.stubEnv('ASTRYX_AGENT_ID', '/users/someone/tools/my-agent');
+    vi.stubEnv('AGENT', '/users/someone/tools/my-agent');
     const event = collectEvent();
     expect(event.env.agentIdentity).not.toContain('/users/someone');
     expect(event.env.agentIdentity).toContain('…');
@@ -125,7 +133,7 @@ describe('environment free text is scrubbed', () => {
 
   it('keeps ordinary free text readable', () => {
     // Scrubbing that ate every agent name would make the field worthless.
-    vi.stubEnv('ASTRYX_AGENT_ID', 'astryx-test-agent');
+    vi.stubEnv('AGENT', 'astryx-test-agent');
     expect(collectEvent().env.agentIdentity).toBe('astryx-test-agent');
   });
 });
@@ -135,11 +143,11 @@ describe('derived environment facts survive verbatim', () => {
     // `isSensitiveKey` matches the substring "session", so a key-based pass
     // over `env` would blank the hash — and with it the only way to join the
     // runs of one session, which is the whole reason the raw id can go.
-    vi.stubEnv('ASTRYX_AGENT_SESSION_ID', RAW_SESSION);
+    vi.stubEnv('AGENT_SESSION_ID', RAW_SESSION);
     const event = collectEvent();
     expect(event.env.agentSessionIdHash).toBe(RAW_SESSION_HASH);
     expect(event.env.agentSessionIdHash).not.toBe(REDACTED);
-    expect(event.env.agentSessionIdSource).toBe('ASTRYX_AGENT_SESSION_ID');
+    expect(event.env.agentSessionIdSource).toBe('AGENT_SESSION_ID');
   });
 
   it('keeps the machine and runtime facts exactly as captured', () => {

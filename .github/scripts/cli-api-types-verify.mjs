@@ -92,13 +92,20 @@ if (!fs.existsSync(path.join(pkgDir, 'foundation', 'discovery', 'template-adapte
 }
 console.log('\u2713 tarball ships the generated foundation declarations');
 fs.symlinkSync(CORE_DIR, path.join(nm, 'core'), 'dir');
+// The scratch area sits inside packages/cli, so without a package.json of its
+// own the consumer would resolve `@astryxdesign/cli` through package
+// self-reference to the workspace sources instead of the extracted tarball.
+fs.writeFileSync(
+  path.join(VERIFY_DIR, 'package.json'),
+  JSON.stringify({name: 'packed-cli-consumer', private: true, type: 'module'}),
+);
 
 // 3. Type-check a representative consumer against the packed types.
 const scenario = `
 import {
   component, docs, blog, discover, template, hook, search, build, swizzle,
-  gapReport, upgrade, init, doctor, layoutExpand, layoutCheck, layoutGrammar,
-  themeBuild, themeAdd, themeList, listThemes,
+  gapReport, upgrade, init, doctor,
+  themeBuild, themeAdd, themeTemplate, themeList, listThemes,
   integrationAdd, integrationAddComponent, integrationAddDoc,
   integrationAddTemplate, integrationAddCodemod, integrationAddAgentDoc,
   integrationAddTheme, integrationPackCheck,
@@ -106,7 +113,9 @@ import {
 } from '@astryxdesign/cli/api';
 import type {
   ComponentOptions, SearchOptions, UpgradeOptions, GapReportOptions,
-  ComponentDetailResponse, SearchResponse, UpgradeRunResponse,
+  BatchResponse, BatchRow, ComponentBatchCandidate, ComponentBatchResponse,
+  ComponentBatchResult, ComponentSingleResponse, ComponentDetailResponse,
+  SearchResponse, UpgradeRunResponse,
   GapReportReceiptResponse, GapReportCategoriesResponse, Logger,
   IntegrationAddComponentOptions, IntegrationAddDocOptions,
   IntegrationAddTemplateOptions, IntegrationAddCodemodOptions,
@@ -118,14 +127,22 @@ import type {
 async function main() {
   const r = await component('Button');
   if (r.type === 'component.detail') { const n: string = r.data.name; void n; }
+  const batch = await component(['Button']) as ComponentBatchResponse;
+  const sharedBatch: BatchResponse<
+    'component.batch', ComponentSingleResponse, ComponentBatchCandidate
+  > = batch;
+  const sharedRow: BatchRow<ComponentSingleResponse, ComponentBatchCandidate> | undefined =
+    sharedBatch.data.results[0];
+  const componentRow: ComponentBatchResult | undefined = batch.data.results[0];
+  void [sharedBatch, sharedRow, componentRow];
   const s: SearchOptions = { limit: 5, type: 'component' };
   const l: Logger = logger; l.setSilent(false); l.log('x');
   void ({} as ComponentOptions); void ({} as UpgradeOptions); void ({} as GapReportOptions);
   void ({} as ComponentDetailResponse); void ({} as SearchResponse); void ({} as UpgradeRunResponse);
   void ({} as GapReportReceiptResponse); void ({} as GapReportCategoriesResponse);
   void [docs, blog, discover, template, hook, search, build, swizzle, gapReport, upgrade, init,
-    doctor, layoutExpand, layoutCheck, layoutGrammar, themeBuild, themeAdd, themeList,
-    listThemes, validateIntegration, summarizeIssues, AstryxError, s];
+    doctor, themeBuild, themeAdd, themeTemplate,
+    themeList, listThemes, validateIntegration, summarizeIssues, AstryxError, s];
 }
 void main;
 
@@ -234,4 +251,72 @@ if (errors.length > 0) {
 console.log(
   '\u2713 packaged @astryxdesign/cli/api + /authoring type-check for a strict consumer',
 );
+
+// 4. The authoring surface alone, as an integration package sees it: with
+// `nodenext` resolution (a relative import without its extension does not
+// resolve there) and with no Node types installed. The authoring declarations
+// must need nothing beyond what they ship.
+const authoringScenario = `
+import type {
+  AstryxConfig, AstryxIntegration, ComponentDoc, HookDoc, FunctionDoc,
+  ReferenceDoc, TemplateDoc, SchemaDoc, CommandDoc, EnumDoc, NamespaceDoc,
+} from '@astryxdesign/cli/authoring';
+import {parseDoc, parseConfig, parseIntegration} from '@astryxdesign/cli/authoring';
+import type {BlockTemplateDoc, UsageDoc} from '@astryxdesign/cli/doc';
+import type {PostCodemodCommand} from '@astryxdesign/cli/config';
+import type {AstryxIntegration as SubpathIntegration} from '@astryxdesign/cli/integration';
+import type {AstryxCodemod} from '@astryxdesign/cli/codemod';
+import type {DebugEvent} from '@astryxdesign/cli/debug';
+import type {PageTemplateDoc} from '@astryxdesign/cli/template';
+
+export const component: ComponentDoc = {
+  name: 'Badge', displayName: 'Badge', props: [], usage: {description: 'A badge.'},
+};
+export const block = {
+  type: 'block', name: 'badge-counts', displayName: 'Badge counts', aspectRatio: 1,
+} satisfies BlockTemplateDoc;
+export const page = {type: 'page', name: 'settings', displayName: 'Settings'} satisfies PageTemplateDoc;
+export const command: PostCodemodCommand = {
+  command: 'pnpm', args: ['install'], options: {env: {CI: '1'}},
+};
+const doc = parseDoc({} as unknown);
+if (doc.type === 'enum') void doc.members;
+export type Surface = [
+  AstryxConfig, AstryxIntegration, SubpathIntegration, AstryxCodemod, DebugEvent,
+  HookDoc, FunctionDoc, ReferenceDoc, TemplateDoc, SchemaDoc, CommandDoc, EnumDoc,
+  NamespaceDoc, UsageDoc,
+];
+void [parseConfig, parseIntegration];
+`;
+fs.writeFileSync(path.join(VERIFY_DIR, 'authoring.mts'), authoringScenario);
+for (const [label, options] of [
+  ['nodenext resolution and no Node types', {module: 'nodenext', moduleResolution: 'nodenext'}],
+  ['bundler resolution and no Node types', {module: 'esnext', moduleResolution: 'bundler'}],
+]) {
+  const config = path.join(VERIFY_DIR, 'tsconfig.authoring.json');
+  fs.writeFileSync(
+    config,
+    JSON.stringify(
+      {
+        extends: '../../../tsconfig.json',
+        compilerOptions: {noEmit: true, skipLibCheck: false, types: [], ...options},
+        files: ['authoring.mts'],
+      },
+      null,
+      2,
+    ),
+  );
+  const run = spawnSync(tsc, ['--project', config], {cwd: ROOT, encoding: 'utf8'});
+  if (run.error) fail('failed to run tsc', String(run.error));
+  const out = `${run.stdout || ''}\n${run.stderr || ''}`;
+  const found = out.split('\n').filter(line => /error TS/.test(line));
+  if (run.status !== 0 || found.length > 0) {
+    fail(
+      `the packaged authoring types do not type-check with ${label}`,
+      (found.length > 0 ? found.join('\n') : out).trim(),
+    );
+  }
+  console.log(`\u2713 packaged authoring types type-check with ${label}`);
+}
+
 console.log('\nAll published type-surface checks passed.');

@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 4,
+  "extends": 3,
+  "kinds": {
+    "system-spec": {
+      "template": "docs/templates/knowledge/system-spec.md",
+      "requiredFrontmatter": [
+        "schema_version",
+        "template_version",
+        "kind",
+        "id",
+        "authority",
+        "archive_reason",
+        "superseded_by",
+        "approved_by",
+        "approved_at",
+        "phase",
+        "owners",
+        "affects_architecture",
+        "affects_families",
+        "affects_contributing",
+        "affects_consumer_docs"
+      ],
+      "requiredSections": [
+        "Intent",
+        "Non-goals",
+        "Requirements",
+        "Current-state impact",
+        "Verification",
+        "Decision log",
+        "Open questions"
+      ],
+      "currentNonEmptyFields": ["owners"]
+    }
+  },
+  "approvalOwners": ["cixzhang", "imdreamrunner", "josephfarina"]
+}

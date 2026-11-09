@@ -5,6 +5,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {Project} from './project.mjs';
 import {BUNDLED_THEME_PACKAGE} from '../discovery/theme-discovery.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
@@ -15,6 +16,7 @@ function installThemeIntegration(packageName, slug) {
     ...packageName.split('/'),
   );
   const themeDir = path.join(packageDir, 'themes', slug);
+  const stem = `${slug.replace(/-([a-z0-9])/gu, (_, character) => character.toUpperCase())}Theme`;
   fs.mkdirSync(themeDir, {recursive: true});
   fs.writeFileSync(
     path.join(packageDir, 'package.json'),
@@ -22,33 +24,24 @@ function installThemeIntegration(packageName, slug) {
   );
   fs.writeFileSync(
     path.join(packageDir, 'astryx.integration.mjs'),
-    `export default {themes: './themes'};\n`,
+    `export default {themes: './themes'};
+`,
   );
   fs.writeFileSync(
-    path.join(packageDir, 'themes', 'manifest.json'),
-    JSON.stringify({
-      version: 1,
-      themes: [
-        {
-          slug,
-          displayName: 'Ocean',
-          description: 'Blue and calm.',
-          maintained: true,
-          entry: 'oceanTheme.ts',
-          exportName: 'oceanTheme',
-          files: ['oceanTheme.ts'],
-        },
-      ],
-    }),
+    path.join(themeDir, `${stem}.doc.mjs`),
+    `/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */
+export default {type: 'theme', name: '${slug}', displayName: 'Ocean', description: 'Blue and calm.', maintained: true};
+`,
   );
   fs.writeFileSync(
-    path.join(themeDir, 'oceanTheme.ts'),
-    `export const oceanTheme = {};\n`,
+    path.join(themeDir, `${stem}.ts`),
+    `export const ${stem} = {};
+`,
   );
 }
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-project-themes-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-project-themes-'));
   fs.writeFileSync(
     path.join(tmpDir, 'package.json'),
     JSON.stringify({
@@ -99,7 +92,7 @@ describe('Project themes', () => {
     ]);
   });
 
-  it('records an invalid integration theme catalog as an issue', async () => {
+  it('records an invalid integration theme descriptor as an issue', async () => {
     installThemeIntegration('@acme/themes', 'ocean');
     fs.rmSync(
       path.join(

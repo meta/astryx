@@ -17,6 +17,7 @@ export const docs = {
       {guidance: true, description: 'Spacing and alignment alone create visual grouping. Not everything needs a container; try removing the card and see if the grouping is still clear from whitespace and typography.'},
       {guidance: true, description: 'Keep padding consistent across sibling cards so they align visually in a grid or list.'},
       {guidance: true, description: 'Pair a card with Layout when you need a structured header, scrollable content, and footer with actions.'},
+      {guidance: true, description: 'Let cards share a row or grid on a phone: a card shrinks to fit its track and clips content that cannot wrap at its edge. Truncate long IDs, hashes, and URLs with Text maxLines={1} (the full value shows in a tooltip), and give wide content its own scroll region: Table scrolls by itself; put code or other wide content in a ScrollableArea.'},
       {guidance: false, description: 'Default to cards for visual grouping. A heading + Stack with proper spacing creates hierarchy without adding borders everywhere. Cards should be the exception, not the default.'},
       {guidance: false, description: 'Wrap page sections in cards. "General Settings", "Notification Preferences", form groups: these are page regions, use Section or heading + stack.'},
       {guidance: false, description: 'Create identical card grids (icon + heading + text, repeated). Vary the layout or question whether cards are needed at all.'},
@@ -32,7 +33,7 @@ export const docs = {
     {
       name: 'width',
       type: 'SizeValue',
-      description: 'Width of the card (number = pixels, string = used as-is).',
+      description: 'Width of the card (number = pixels, string = used as-is). In a flex row or grid track this is the preferred width: the card shrinks below it when the row is narrower. To hold the width in a flex row, wrap the card in StackItem (static by default) and let the row wrap or scroll. In Grid, set a consumer minWidth on the Card and size the track accordingly.',
     },
     {
       name: 'height',
@@ -74,6 +75,46 @@ export const docs = {
       description:
         'Resting shadow depth. `none` is flat; `low`/`med`/`high` map to the shadow token scale. Raise a card only when it needs to float above surrounding content.',
       default: "'none'",
+    },
+  ],
+  examples: [
+    {
+      label: 'Cards sharing a row on a phone, with long IDs',
+      code: `
+import {Card} from '@astryxdesign/core/Card';
+import {Grid} from '@astryxdesign/core/Grid';
+import {VStack} from '@astryxdesign/core/VStack';
+import {Heading} from '@astryxdesign/core/Heading';
+import {Text} from '@astryxdesign/core/Text';
+
+const payouts = [
+  {label: 'Payout', amount: '$1,240.00', id: 'po_1Q8ZK4X7M2N5P3R6T9V1W4YB'},
+  {label: 'Refund', amount: '-$86.50', id: 're_3NfK9Lm2Qx7Vb4Tz8Rw1Hy6C'},
+  {label: 'Adjustment', amount: '$12.00', id: 'adj_7Hq2Wm9Kx4Lz8Vn3Rb6Tf1PD'},
+];
+
+// Each card takes one grid track and shrinks with it, so three cards fit a
+// 390px phone without widening the page. The ID cannot wrap, so it truncates
+// with maxLines={1} (the full value shows in a tooltip) instead of running
+// past the card edge.
+function PayoutCards() {
+  return (
+    <Grid columns={3} gap={3}>
+      {payouts.map(payout => (
+        <Card key={payout.id}>
+          <VStack gap={1}>
+            <Heading level={3}>{payout.label}</Heading>
+            <Text hasTabularNumbers>{payout.amount}</Text>
+            <Text type="supporting" maxLines={1}>
+              {payout.id}
+            </Text>
+          </VStack>
+        </Card>
+      ))}
+    </Grid>
+  );
+}
+`,
     },
   ],
   playground: {
@@ -118,6 +159,7 @@ export const docsZh = {
       {guidance: true, description: 'Spacing and alignment alone create visual grouping. Not everything needs a container; try removing the card and see if the grouping is still clear from whitespace and typography.'},
       {guidance: true, description: 'Keep padding consistent across sibling cards so they align visually in a grid or list.'},
       {guidance: true, description: 'Pair a card with Layout when you need a structured header, scrollable content, and footer with actions.'},
+      {guidance: true, description: 'Let cards share a row or grid on a phone: a card shrinks to fit its track and clips content that cannot wrap at its edge. Truncate long IDs, hashes, and URLs with Text maxLines={1} (the full value shows in a tooltip), and give wide content its own scroll region: Table scrolls by itself; put code or other wide content in a ScrollableArea.'},
       {guidance: false, description: 'Default to cards for visual grouping. A heading + Stack with proper spacing creates hierarchy without adding borders everywhere. Cards should be the exception, not the default.'},
       {guidance: false, description: 'Wrap page sections in cards. "General Settings", "Notification Preferences", form groups: these are page regions, use Section or heading + stack.'},
       {guidance: false, description: 'Create identical card grids (icon + heading + text, repeated). Vary the layout or question whether cards are needed at all.'},
@@ -168,6 +210,7 @@ export const docsDense = {
       {guidance: true, description: 'Spacing + alignment alone create visual grouping. Not everything needs a container; try removing the card; if grouping still reads from whitespace + typography, skip it.'},
       {guidance: true, description: 'Keep padding consistent across sibling cards so they align visually in a grid or list.'},
       {guidance: true, description: 'Pair a card w/ Layout when you need a structured header, scrollable content, and footer with actions.'},
+      {guidance: true, description: 'Card shrinks to its row/grid track, clips unwrappable content at its edge. Long IDs/hashes/URLs → Text maxLines={1} (tooltip shows full value). Wide content → own scroll region (Table scrolls itself; ScrollableArea otherwise).'},
       {guidance: false, description: 'Default to cards for grouping. Heading + Stack w/ proper spacing creates hierarchy w/o borders everywhere. Cards are the exception, not the default.'},
       {guidance: false, description: 'Wrap page sections in cards. "General Settings", "Notification Preferences", form groups are page regions; use Section or heading + stack.'},
       {guidance: false, description: 'Create identical card grids (icon + heading + text, repeated). Vary the layout or question whether cards are needed at all.'},

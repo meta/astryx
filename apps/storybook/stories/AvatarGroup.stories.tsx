@@ -3,6 +3,7 @@ import type {Meta, StoryObj} from '@storybook/react';
 import * as stylex from '@stylexjs/stylex';
 import {AvatarGroup, AvatarGroupOverflow} from '@astryxdesign/core/AvatarGroup';
 import {Avatar} from '@astryxdesign/core/Avatar';
+import {HoverCard} from '@astryxdesign/core/HoverCard';
 import {StatusDot} from '@astryxdesign/core/StatusDot';
 import {
   spacingVars,
@@ -307,6 +308,23 @@ export const StaticFacepile: Story = {
     <AvatarGroup size="lg">
       {USERS.slice(0, 4).map(u => (
         <Avatar key={u.key} src={u.src} name={u.name} />
+      ))}
+      <AvatarGroupOverflow count={USERS.length - 4} />
+    </AvatarGroup>
+  ),
+};
+
+/**
+ * Each avatar wrapped in a HoverCard. The avatars still overlap, and hovering
+ * one shows that person's card.
+ */
+export const WithHoverCards: Story = {
+  render: () => (
+    <AvatarGroup size="lg" data-testid="avatar-group-hover-cards">
+      {USERS.slice(0, 4).map(u => (
+        <HoverCard key={u.key} content={u.name}>
+          <Avatar src={u.src} name={u.name} tooltip={false} />
+        </HoverCard>
       ))}
       <AvatarGroupOverflow count={USERS.length - 4} />
     </AvatarGroup>

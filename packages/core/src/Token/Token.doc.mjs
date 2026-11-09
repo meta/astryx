@@ -55,7 +55,7 @@ export const docs = {
       name: 'href',
       type: 'string',
       description:
-        'Link URL. When provided, the token renders as an <a> element.',
+        'Link URL. When provided, the token renders as an <a> element. The destination follows the shared navigation rule described on the Link `href` prop.',
     },
     {
       name: 'description',
@@ -88,7 +88,7 @@ export const docs = {
     },
   ],  theming: {
     targets: [
-      {className: 'astryx-token', visualProps: ['color', 'size']},
+      {className: 'astryx-token', visualProps: ['color', 'size'], states: ['disabled']},
     ],
   },
   usage: {
@@ -193,7 +193,7 @@ export const docsZh = {
   ],
   theming: {
     targets: [
-      {className: 'astryx-token', visualProps: ['color', 'size']},
+      {className: 'astryx-token', visualProps: ['color', 'size'], states: ['disabled']},
     ],
   },
   usage: {
@@ -241,7 +241,7 @@ export const docsDense = {
     isDisabled: 'Reduces opacity, blocks interactions.',
     onRemove: 'Fired on remove button click. Renders X button when provided.',
     onClick: 'Click handler. Renders <span> w/ invisible <button> inside for a11y.',
-    href: 'Link URL. Renders as <a> element.',
+    href: 'Link URL. Renders as <a> element. Follows the shared navigation rule (see Link href).',
     description: 'A11y description via aria-description on root.',
     endContent: 'Content after label, before remove button.',
     isLabelHidden: 'Visually hides label w/ screen-reader-only clip; stays accessible.',
