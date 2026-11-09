@@ -5,16 +5,15 @@
  * @input Uses a Playwright `Page`, a `Locator` for the animated element, and
  *   the Web Animations API in the page (CSS transitions and CSS animations are
  *   Web Animations too)
- * @output `holdAnimations` (pause every running animation and describe it),
- *   `armHold` (the page holds what an action starts, as soon as it runs,
- *   and checks that it took the motion the test judges),
- *   `seekAnimations` (move them to t ms from the held origin, each keeping
- *   its offset), `sampleCurve` (the presented
- *   transform/opacity at each t, with the individual `translate`, `rotate` and
- *   `scale` properties composed in), `releaseAnimations`, `curveOf`, which
- *   picks one channel out of the samples for ./math's `compareCurve`, and the
- *   animation-state waits `waitForAnimation`, `watchAnimations` and
- *   `waitForRest`.
+ * @output `holdAnimations` pauses every running animation and describes it.
+ *   `armHold` makes the page hold what an action starts, as soon as it runs,
+ *   and checks that it took the motion the test judges. `seekAnimations`
+ *   moves them to t ms from the held origin, each keeping its offset, and
+ *   `releaseAnimations` lets them go. `sampleCurve` reads the presented
+ *   transform/opacity at each t, with the individual `translate`, `rotate`
+ *   and `scale` properties composed in. `curveOf` picks one channel out of
+ *   the samples for ./math's `compareCurve`. The animation-state waits are
+ *   `waitForAnimation`, `watchAnimations`, `waitForRest` and `settlesAt`.
  * @position Curve sampling: the exact presented value of an animation at a
  *   fixed time, independent of frame timing, so a curve can be compared with
  *   the UIKit reference to a fraction of a pixel. A paused animation's effect
@@ -2212,4 +2211,189 @@ export async function waitForRest(
   if (rested == null) {
     throw new Error('waitForRest: still moving at the deadline');
   }
+}
+
+/** What the page saw by the end of a `settlesAt` wait. */
+interface SettleOutcome {
+  readonly settled: boolean;
+  /** No frame came for longer than the starvation gap before the deadline. */
+  readonly starved: boolean;
+  /** The value the last check read. */
+  readonly seen: string;
+  /** The animations still unfinished, described for the error. */
+  readonly unfinished: readonly string[];
+  /** From the start of the wait to its end, ms. */
+  readonly spanMs: number;
+  /** From the last frame before the deadline to the deadline, ms. */
+  readonly unwatchedMs: number;
+}
+
+/**
+ * Resolves once `locator`'s element shows `property` at `value` and no
+ * animation inside it is left unfinished. Held final keyframes count until
+ * their end, where `waitForRest` reads them as rest. The page checks once a
+ * frame, on its real frames, so a frozen timer gate does not hold it.
+ *
+ * Its deadline is `waitForRest`'s. Past `timeout` ms it rejects, and names
+ * the property, the last value it read and the animations still unfinished.
+ * It throws `FrameStarvationError` with the same names instead when the
+ * page drew no frame for longer than `FRAME_STARVATION_MS` before the
+ * deadline. A stall after the deadline does not count, because the page was
+ * watched up to it. An animation that repeats forever never finishes, so a
+ * wait under one reaches the deadline.
+ */
+export async function settlesAt(
+  locator: Locator,
+  property: string,
+  value: string,
+  {timeout = 5_000}: {timeout?: number} = {},
+): Promise<void> {
+  // The page-side wait answers at its own deadline; the read gets a second
+  // more, so only an element that is gone runs it out.
+  const outcome = await withinTimeout(
+    'settlesAt',
+    locator,
+    Date.now() + timeout + 1_000,
+    async evaluateTimeout =>
+      locator.evaluate(
+        (element, {prop, expected, ms, starvationMs}) =>
+          new Promise<SettleOutcome>(resolve => {
+            // The wait uses the page's real frames, timers and clock, so a
+            // frozen timer gate does not hold it.
+            const gate = (
+              window as unknown as {
+                __harnessTimerGate?: {
+                  frame: typeof requestAnimationFrame;
+                  now?: () => number;
+                  timeout?: typeof setTimeout;
+                  clearTimeout?: typeof clearTimeout;
+                };
+              }
+            ).__harnessTimerGate;
+            const frame = gate?.frame ?? requestAnimationFrame;
+            const realNow = gate?.now ?? (() => performance.now());
+            const later = gate?.timeout ?? setTimeout;
+            const clearTimer = gate?.clearTimeout ?? clearTimeout;
+            const startedAt = realNow();
+            const deadline = startedAt + ms;
+            let lastFrame = startedAt;
+            let seen = '';
+            let ended = false;
+            const unfinished = () =>
+              element
+                .getAnimations({subtree: true})
+                .filter(animation => animation.playState !== 'finished');
+            const describe = (animation: Animation) => {
+              const effect = animation.effect as KeyframeEffect | null;
+              const target = effect?.target ?? null;
+              const where =
+                target == null
+                  ? 'no element'
+                  : `${target.tagName.toLowerCase()}${target.id === '' ? '' : `#${target.id}`}${effect?.pseudoElement ?? ''}`;
+              const css = animation as Animation & {
+                transitionProperty?: string;
+                animationName?: string;
+              };
+              const label =
+                css.transitionProperty ?? css.animationName ?? animation.id;
+              const end = Number(
+                effect?.getComputedTiming().endTime ?? Infinity,
+              );
+              const at = Math.round(Number(animation.currentTime ?? 0));
+              const length = Number.isFinite(end)
+                ? `${Math.round(end)} ms`
+                : 'forever';
+              return `${animation.constructor.name}${label === '' ? '' : ` ${label}`} on ${where}, ${animation.playState} at ${at} of ${length}`;
+            };
+            const finish = (
+              settled: boolean,
+              starved: boolean,
+              unwatchedMs: number,
+            ) => {
+              ended = true;
+              clearTimer(deadlineTimer);
+              const listed = settled ? [] : unfinished().map(describe);
+              resolve({
+                settled,
+                starved,
+                seen,
+                unfinished:
+                  listed.length > 5
+                    ? [...listed.slice(0, 5), `${listed.length - 5} more`]
+                    : listed,
+                spanMs: realNow() - startedAt,
+                unwatchedMs,
+              });
+            };
+            // A frame that never comes cannot reach the deadline check in
+            // `check`, so this timer gives the verdict instead.
+            const deadlineTimer = later(
+              () => {
+                if (!ended) {
+                  const unwatched = Math.max(0, deadline - lastFrame);
+                  finish(false, unwatched > starvationMs, unwatched);
+                }
+              },
+              ms + starvationMs + 1,
+            );
+            const check = (frameBefore: number) => {
+              seen = getComputedStyle(element).getPropertyValue(prop);
+              if (seen === expected && unfinished().length === 0) {
+                finish(true, false, 0);
+              } else if (realNow() > deadline) {
+                // Only the span from the frame before this one to the
+                // deadline went unwatched. A stall after the deadline does
+                // not hide the value read before it.
+                const unwatched = Math.max(0, deadline - frameBefore);
+                finish(false, unwatched > starvationMs, unwatched);
+              } else {
+                frame(onFrame);
+              }
+            };
+            const onFrame = () => {
+              if (!ended) {
+                const frameBefore = lastFrame;
+                lastFrame = realNow();
+                check(frameBefore);
+              }
+            };
+            check(startedAt);
+          }),
+        {
+          prop: property,
+          expected: value,
+          ms: timeout,
+          starvationMs: FRAME_STARVATION_MS,
+        },
+        {timeout: evaluateTimeout},
+      ),
+  );
+  if (outcome == null) {
+    throw new Error(
+      `settlesAt: ${property} did not settle at ${value} by the deadline, and the page did not answer`,
+    );
+  }
+  if (outcome.settled) {
+    return;
+  }
+  const read =
+    outcome.seen === value
+      ? `${property} read ${JSON.stringify(outcome.seen)}`
+      : `${property} read ${JSON.stringify(outcome.seen)} (not ${JSON.stringify(value)})`;
+  const running =
+    outcome.unfinished.length === 0
+      ? 'no animation under it was unfinished'
+      : `unfinished under it: ${outcome.unfinished.join('; ')}`;
+  if (outcome.starved) {
+    throw new FrameStarvationError({
+      by: 'settlesAt',
+      frames: 0,
+      during: `it looked for ${property} to settle at ${value} in the ${Math.round(outcome.unwatchedMs)} ms up to its deadline (${read}; ${running})`,
+      min: 1,
+      longestGapMs: outcome.unwatchedMs,
+    });
+  }
+  throw new Error(
+    `settlesAt: not settled ${Math.round(outcome.spanMs)} ms after it began: ${read}; ${running}`,
+  );
 }
