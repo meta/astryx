@@ -96,7 +96,7 @@ beforeEach(() => {
   );
   writeLibrary(
     '@acme/more-digits',
-    'export function Digit1Icon(props) { return null; }\n',
+    'export function Digit1Icon(props) { return null; }\nexport function StarIcon(props) { return null; }\n',
   );
   writeLibrary(
     '@acme/both-digits',
@@ -268,6 +268,26 @@ describe('library names that start with a digit once the prefix comes off', () =
     ]);
     expect(refused.code).not.toBe(0);
     expect(JSON.stringify(refused.body)).toContain(
+      'The icon id \\"7\\" starts with a digit, and an export name cannot. Pass --id with an id that starts with a letter.',
+    );
+    expect(fs.readFileSync(setFile('digits', 'icons.json'), 'utf-8')).toBe(
+      before,
+    );
+    // A library name the set does not export yet is refused the same way.
+    const refusedFree = await json([
+      'experimental',
+      'icon',
+      'add',
+      'StarIcon',
+      '--from',
+      '@acme/more-digits',
+      '--id',
+      '7',
+      '--definition',
+      'close',
+    ]);
+    expect(refusedFree.code).not.toBe(0);
+    expect(JSON.stringify(refusedFree.body)).toContain(
       'The icon id \\"7\\" starts with a digit, and an export name cannot. Pass --id with an id that starts with a letter.',
     );
     expect(fs.readFileSync(setFile('digits', 'icons.json'), 'utf-8')).toBe(

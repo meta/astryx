@@ -98,6 +98,15 @@ export async function iconAdd(exportName, options) {
     all = false,
   } = options ?? {};
   refuseOutsideProject(cwd, 'experimental icon add', 'the icon-set package');
+  // An export name cannot start with a digit, and an id the author gives has
+  // no library prefix to keep.
+  if (givenId != null && /^[0-9]/u.test(givenId)) {
+    throw new AstryxError(
+      `The icon id "${givenId}" starts with a digit, and an export name cannot. Pass --id with an id that starts with a letter.`,
+      undefined,
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
   // The docs' kebab-case (`ai-helper`) names the same new definition.
   const newDefinition =
     givenNewDefinition == null
