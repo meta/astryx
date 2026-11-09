@@ -21,7 +21,7 @@ import {
 import {readFileSync} from 'node:fs';
 import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {createRef, useState} from 'react';
+import {Suspense, createRef, startTransition, use, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {DropdownMenu, type DropdownMenuTriggerProps} from './DropdownMenu';
 import {DropdownMenuItem} from './DropdownMenuItem';
@@ -3158,6 +3158,51 @@ describe('DropdownMenu entrance under a finger', () => {
 
     await entrance.end();
     expect(isInHeldLayer(item('Edit'))).toBe(false);
+  });
+
+  it('takes no touch while it enters, after React discards a render that pins it to a popover', async () => {
+    // A transition that suspends for good: React renders it, then keeps the
+    // committed tree and never commits that render.
+    const forever = new Promise<never>(() => {});
+    function Forever(): null {
+      use(forever);
+      return null;
+    }
+    function Screen({
+      presentation,
+      isPending = false,
+    }: {
+      presentation?: 'popover';
+      isPending?: boolean;
+    }) {
+      return (
+        <Suspense fallback={null}>
+          <DropdownMenu
+            button={{label: 'Actions'}}
+            presentation={presentation}
+            items={[
+              {label: 'Edit', onClick: () => {}},
+              {label: 'Delete', onClick: () => {}},
+            ]}
+          />
+          {isPending ? <Forever /> : null}
+        </Suspense>
+      );
+    }
+    stubPointer('coarse');
+    stubEntrance();
+    const {rerender} = render(<Screen />);
+    await act(async () => {
+      startTransition(() => {
+        rerender(<Screen presentation="popover" isPending />);
+      });
+    });
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+
+    // The committed menu is not pinned, so its entrance holds the layer.
+    expect(isInHeldLayer(item('Edit'))).toBe(true);
   });
 
   it('lets go at once when it closes during its entrance', async () => {

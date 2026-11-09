@@ -40,6 +40,7 @@ import React, {
   useCallback,
   useEffect,
   useId,
+  useInsertionEffect,
   useMemo,
   useRef,
   useState,
@@ -1254,7 +1255,11 @@ function DropdownMenuPopover({
             entrance: popover.contentRef.current ?? layer,
           });
   }, [listRef, pressTouchModel, popover.contentRef]);
-  holdEntranceRef.current = holdEntrance;
+  // Syncs the show's entrance hold with the committed one, ahead of the
+  // controlled-open layout effect above, which can show the menu then.
+  useInsertionEffect(() => {
+    holdEntranceRef.current = holdEntrance;
+  });
   // The layer runtime's input hold: an unmount during the entrance releases it.
   useEffect(
     () => () => {
@@ -1413,7 +1418,11 @@ function DropdownMenuPopover({
       holdInvokerThroughPress(buttonRef.current, popover.id);
     }
   }, [popover.id]);
-  holdOpeningPressRef.current = holdOpeningPress;
+  // Syncs the show's trigger hold with the committed one, ahead of the
+  // controlled-open layout effect above, which can show the menu then.
+  useInsertionEffect(() => {
+    holdOpeningPressRef.current = holdOpeningPress;
+  });
 
   // A mouse opens on press-down; a finger held on the trigger opens after
   // the long-press delay. Pressing the trigger of an open menu closes it, and
@@ -1479,7 +1488,11 @@ function DropdownMenuPopover({
     // does. `presentation="popover"` pins the pointer model.
     touchModel: pressTouchModel,
   });
-  cancelMenuPressRef.current = menuPress.cancel;
+  // Syncs the hide's gesture cancel with the committed one, ahead of the
+  // controlled-open layout effect above, which can hide the menu then.
+  useInsertionEffect(() => {
+    cancelMenuPressRef.current = menuPress.cancel;
+  });
 
   const handleButtonClick = useCallback(
     (e: React.MouseEvent<HTMLElement>) => {
