@@ -610,24 +610,30 @@ as it does a trackpad's.
 WebKit dispatches a step only once the page's main thread is free, and the
 steps it holds meanwhile reach the page coalesced into one, stamped like the
 step before it, so the burst times each WebKit step by when the page's first
-listener received it (`wheelArrivals`). Two things can split a run past
+listener received it (`wheelArrivals`). Three things can split a run past
 `maxGapMs`. When a step reached the page within one frame of its own wheel
 listeners finishing the step before, and the gap is more than a frame wider
 than the harness's own spacing of those sends, those listeners held it back:
 the burst throws `WheelPageStallError`, the page split the gesture, and the
 proof fails. A page can only widen a gap, so one no wider than the send
 spacing is the dispatch's even when a starved renderer also held the step.
-Otherwise the dispatch stalled before the page (a loaded runner) and it throws
-`WheelPacingError` with the gaps. A proof never re-takes itself: a
-`WheelPacingError` stays red, named as the runner's. Where one shows in CI's
-profile, fix the wheel's delivery, not the proof. The burst times the
+When the page drew no frame across nearly all of a widened gap, engine or page
+work held the main thread: the burst records the page's frames and throws
+`WheelPageStallError` with the frame gap, the arrival gap and the listeners'
+time. A starved runner's renderer draws no frame either, so judge such a stall
+from a run with CI's CPU limits. Otherwise the dispatch stalled before the
+page (a loaded runner) and it throws `WheelPacingError` with the gaps. A proof
+never re-takes itself: a `WheelPacingError` stays red, named as the runner's.
+Where one shows in CI's profile, fix the wheel's delivery, not the proof. The
+burst times the
 page's handling with a listener on the window that runs after the page's own.
 A step whose propagation the page stops is marked by a task queued when it
 arrived, and never later than the next step's arrival. So its handling, with
 any work queued before that task, counts as the page's. Other main-thread work
-between steps (timers, frames) still counts as the dispatch's stall. Chromium
-stamps a step with its dispatch time, so a page that holds its main thread does
-not widen the gaps there, and every gap past `maxGapMs` is a `WheelPacingError`.
+between steps that leaves frames running still counts as the dispatch's stall.
+Chromium stamps a step with its dispatch time, so a page that holds its main
+thread does not widen the gaps there, and every gap past `maxGapMs` is a
+`WheelPacingError`.
 
 The WebKit input command is reached through Playwright's in-process server
 object, so it needs a locally launched browser (the default), not `connect()`.
