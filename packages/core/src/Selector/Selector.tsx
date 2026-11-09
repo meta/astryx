@@ -77,7 +77,7 @@ import {useCombobox, useSelectedItemOverlayMargin} from './hooks';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useTypeahead} from '../hooks/useTypeahead';
-import {useResolvedRequired} from '../hooks/useResolvedRequired';
+import {useResolvedOptionality} from '../hooks/useResolvedRequired';
 import {SelectorOption} from './SelectorOption';
 import {SelectorRowLayoutContext} from './SelectorRowLayoutContext';
 import {getInputARIA, isImeKeyEvent, mergeProps} from '../utils';
@@ -106,7 +106,6 @@ import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {VisuallyHidden} from '../VisuallyHidden';
-import {FormLayoutContext} from '../FormLayout/FormLayoutContext';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
 import {SelectorBottomSheet} from './SelectorBottomSheet';
 import {useSelectorPresentation} from './useSelectorPresentation';
@@ -1171,8 +1170,10 @@ export function Selector<T extends SelectorOptionType>(
     containerClassName,
     containerStyle,
   });
-  const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
-  const {defaultOptionality} = use(FormLayoutContext);
+  const {
+    isRequired: isEffectivelyRequired,
+    showsRequiredMarker: isLabelRequiredMarkerShown,
+  } = useResolvedOptionality({isRequired, isOptional});
   const placeholder = placeholderFromProps ?? t('@astryx.selector.placeholder');
   const searchPlaceholder =
     searchPlaceholderFromProps ?? t('@astryx.selector.searchPlaceholder');
@@ -2047,8 +2048,7 @@ export function Selector<T extends SelectorOptionType>(
   // its description; the search combobox carries aria-required while open.
   const isSearchTrigger = hasSearch && !isEffectivelyReadOnly;
   const isLabelRequiredInName =
-    isRequired &&
-    defaultOptionality !== 'required' &&
+    isLabelRequiredMarkerShown &&
     !inputGroup &&
     (callerAriaLabel == null || ariaLabelledByProp != null);
   const hasRequiredDescription =
