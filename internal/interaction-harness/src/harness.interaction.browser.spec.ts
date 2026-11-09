@@ -106,6 +106,7 @@ import {
   sampleCurve,
   sampleRects,
   seekAnimations,
+  settlesAt,
   springStep,
   startCompositorTrace,
   startScreencast,
@@ -4705,6 +4706,217 @@ test.describe('animation state', () => {
     expect(settledAt).toBeGreaterThanOrEqual(running.to);
     const transform = await box.evaluate(el => getComputedStyle(el).transform);
     expect(parseTransform(transform).translateY).toBeCloseTo(100, 1);
+  });
+
+  test('settlesAt waits for the value, which can come after every animation has ended', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // No animation runs: a page timer sets the value 300 ms from now.
+    await box.evaluate(el => {
+      setTimeout(() => {
+        (el as HTMLElement).style.opacity = '0.25';
+      }, 300);
+    });
+    await settlesAt(box, 'opacity', '0.25');
+    expect(await box.evaluate(el => getComputedStyle(el).opacity)).toBe('0.25');
+  });
+
+  test('settlesAt resolves only once every animation inside the element has finished', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // The box fades for 300 ms, and a child inside it slides for 2 s. The
+    // value comes first, and the wait ends with the slide.
+    await box.evaluate(el => {
+      const child = document.createElement('div');
+      el.append(child);
+      child.animate(
+        [{transform: 'translateX(0px)'}, {transform: 'translateX(40px)'}],
+        {duration: 2000},
+      );
+      const target = el as HTMLElement;
+      target.style.transition = 'opacity 300ms linear';
+      void target.offsetWidth;
+      target.style.opacity = '0.5';
+    });
+    await settlesAt(box, 'opacity', '0.5');
+    const unfinished = await box.evaluate(
+      el =>
+        el
+          .getAnimations({subtree: true})
+          .filter(animation => animation.playState !== 'finished').length,
+    );
+    expect(unfinished).toBe(0);
+  });
+
+  test("settlesAt keeps checking while a frozen timer gate holds the page's frames", async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await installTimerGate(page);
+    await freezeTimers(page);
+    // Waits for real frames, which the frozen gate does not hold.
+    const realFrames = async (count: number) =>
+      page.evaluate(
+        async n =>
+          new Promise<void>(resolve => {
+            const {frame} = (
+              window as unknown as {
+                __harnessTimerGate: {frame: typeof requestAnimationFrame};
+              }
+            ).__harnessTimerGate;
+            let left = n;
+            const tick = () => {
+              left -= 1;
+              if (left <= 0) {
+                resolve();
+              } else {
+                frame(tick);
+              }
+            };
+            frame(tick);
+          }),
+        count,
+      );
+    let outcome: unknown = 'waiting';
+    const wait = settlesAt(box, 'opacity', '0.75').then(
+      () => {
+        outcome = 'settled';
+      },
+      (error: unknown) => {
+        outcome = error;
+      },
+    );
+    await realFrames(2);
+    await box.evaluate(el => {
+      (el as HTMLElement).style.opacity = '0.75';
+    });
+    // The wait answers on the first real frame after the change. That
+    // answer comes back before the answer to five more frames.
+    await realFrames(5);
+    expect(outcome).toBe('settled');
+    await wait;
+    await thawTimers(page);
+  });
+
+  test('settlesAt names the property, the last value and what still runs at its deadline', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    const message = async (wait: Promise<void>) =>
+      wait.then(
+        () => 'settled',
+        (error: unknown) => (error as Error).message,
+      );
+    // The value never comes. A starved runner can leave the page unwatched
+    // before the deadline. Then FrameStarvationError carries the same names,
+    // so either error matches.
+    expect(
+      await message(settlesAt(box, 'opacity', '0.3', {timeout: 300})),
+    ).toMatch(
+      /^settlesAt: .*opacity read "1" \(not "0\.3"\); no animation under it was unfinished/,
+    );
+    // The value is there, but a child slides forever, so the box never
+    // settles.
+    await box.evaluate(el => {
+      const child = document.createElement('div');
+      child.id = 'slider';
+      el.append(child);
+      child.animate(
+        [{transform: 'translateX(0px)'}, {transform: 'translateX(40px)'}],
+        {duration: 400, iterations: Infinity},
+      );
+    });
+    expect(
+      await message(settlesAt(box, 'opacity', '1', {timeout: 300})),
+    ).toMatch(
+      /^settlesAt: .*opacity read "1"; unfinished under it: Animation on div#slider, running at \d+ of forever/,
+    );
+  });
+
+  test('settlesAt on a page starved of frames fails by name, with what it last read', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // Each frame now comes 1,000 ms after the one before, as on a starved
+    // machine.
+    await page.evaluate(() => {
+      const frame = window.requestAnimationFrame.bind(window);
+      window.requestAnimationFrame = callback => {
+        setTimeout(() => frame(callback), 1000);
+        return 0;
+      };
+    });
+    const outcome = await settlesAt(box, 'opacity', '0.3', {
+      timeout: 1500,
+    }).then(
+      () => 'settled',
+      (error: unknown) => error,
+    );
+    expect(outcome).toBeInstanceOf(FrameStarvationError);
+    const {numbers} = outcome as FrameStarvationError;
+    expect(numbers.frames).toBe(0);
+    expect(numbers.longestGapMs).toBeGreaterThan(FRAME_STARVATION_MS);
+    expect((outcome as Error).message).toMatch(
+      /^settlesAt: the page drew 0 frames while it looked for opacity to settle at 0\.3 in the \d+ ms up to its deadline \(opacity read "1" \(not "0\.3"\)/,
+    );
+  });
+
+  test('settlesAt does not name a stall that starts after its deadline as starvation', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    const stallMs = 500;
+    // Frames come on pace until the wait's deadline, 300 ms after its first
+    // frame request. The first frame after that then holds the main thread
+    // for 500 ms before the wait's check runs.
+    await page.evaluate(
+      ({timeoutMs, holdMs}) => {
+        const frame = window.requestAnimationFrame.bind(window);
+        let firstAt: number | null = null;
+        let stalled = false;
+        window.requestAnimationFrame = callback => {
+          firstAt ??= performance.now();
+          const stallAfter = firstAt + timeoutMs;
+          return frame(time => {
+            if (!stalled && performance.now() > stallAfter) {
+              stalled = true;
+              const end = performance.now() + holdMs;
+              while (performance.now() < end) {
+                // the page's main thread is busy
+              }
+            }
+            callback(time);
+          });
+        };
+      },
+      {timeoutMs: 300, holdMs: stallMs},
+    );
+    const outcome = await settlesAt(box, 'opacity', '0.3', {
+      timeout: 300,
+    }).then(
+      () => 'settled',
+      (error: unknown) => error,
+    );
+    // A starved runner can also leave the page unwatched before the
+    // deadline. That run proves nothing, so it fails by name.
+    if (
+      outcome instanceof FrameStarvationError &&
+      outcome.numbers.longestGapMs < stallMs
+    ) {
+      throw outcome;
+    }
+    expect(outcome).not.toBeInstanceOf(FrameStarvationError);
+    expect((outcome as Error).message).toMatch(
+      /^settlesAt: not settled \d+ ms after it began: opacity read "1" \(not "0\.3"\)/,
+    );
   });
 
   test("waitForAnimation's progress starts after a transition's delay", async ({
