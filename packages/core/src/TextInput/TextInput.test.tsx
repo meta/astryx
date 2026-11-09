@@ -1026,7 +1026,12 @@ describe('TextInput', () => {
         <TextInput label="Name" value="hello" onChange={onChange} hasClear />,
       );
       await user.click(screen.getByRole('button', {name: 'Clear Name'}));
-      expect(onChange).toHaveBeenCalledWith('', null);
+      expect(onChange).toHaveBeenCalledWith(
+        '',
+        expect.objectContaining({
+          target: screen.getByRole('textbox', {name: 'Name'}),
+        }),
+      );
     });
 
     it('calls onChange then changeAction with empty string when clear is clicked', async () => {
@@ -1048,9 +1053,43 @@ describe('TextInput', () => {
         />,
       );
       await user.click(screen.getByRole('button', {name: 'Clear Name'}));
-      expect(onChange).toHaveBeenCalledWith('', null);
-      expect(changeAction).toHaveBeenCalledWith('', null);
+      const input = screen.getByRole('textbox', {name: 'Name'});
+      expect(onChange).toHaveBeenCalledWith(
+        '',
+        expect.objectContaining({target: input}),
+      );
+      expect(changeAction).toHaveBeenCalledWith(
+        '',
+        expect.objectContaining({target: input}),
+      );
       expect(order).toEqual(['onChange', 'changeAction']);
+    });
+
+    it('does not run changeAction when onChange calls preventDefault on clear', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn(
+        (_value: string, e: React.ChangeEvent<HTMLInputElement>) => {
+          e.preventDefault();
+        },
+      );
+      const changeAction = vi.fn();
+      render(
+        <TextInput
+          label="Name"
+          value="hello"
+          onChange={onChange}
+          changeAction={changeAction}
+          hasClear
+        />,
+      );
+      await user.click(screen.getByRole('button', {name: 'Clear Name'}));
+      expect(onChange).toHaveBeenCalledWith(
+        '',
+        expect.objectContaining({
+          target: screen.getByRole('textbox', {name: 'Name'}),
+        }),
+      );
+      expect(changeAction).not.toHaveBeenCalled();
     });
 
     it('presents optimistic empty value and aria-busy while clear changeAction is pending', async () => {
