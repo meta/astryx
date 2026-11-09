@@ -382,10 +382,23 @@ test('a mouse close under reduced motion moves the sheet no further', async ({
   // uses the events' own times: CDP delivers them back to back.
   const lift = await read();
   const gap = Math.round(lift.upStamp - lift.moveStamp);
-  await expect(
-    dialog,
-    `the release did not ask the sheet to close: the drag read as a still release (${gap} ms from the last move to the lift), so its projection stayed short of the dismiss line`,
-  ).not.toHaveAttribute('aria-modal', 'true', {timeout: 2_000});
+  // Read the DOM, not the accessibility tree: a closing dialog leaves the
+  // tree, so a role locator finds nothing once the close has started.
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () =>
+            document
+              .querySelector('dialog[open]')
+              ?.getAttribute('aria-modal') ?? null,
+        ),
+      {
+        message: `the release did not ask the sheet to close: the drag read as a still release (${gap} ms from the last move to the lift), so its projection stayed short of the dismiss line`,
+        timeout: 2_000,
+      },
+    )
+    .toBeNull();
   await expect(dialog).toBeHidden({timeout: 2_000});
   await expect
     .poll(async () => (await read()).done, {timeout: 2_000})
