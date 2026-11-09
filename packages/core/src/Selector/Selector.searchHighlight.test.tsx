@@ -46,7 +46,7 @@ describe('Selector: the highlight follows the query', () => {
         hasSearch
       />,
     );
-    await user.click(screen.getByRole('button', {name: 'Fruit'}));
+    await user.click(screen.getByRole('button', {name: /^Fruit\b/}));
     const search = screen.getByRole('combobox', h);
     await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}');
     await user.type(search, 'b');
@@ -68,7 +68,7 @@ describe('Selector: the highlight follows the query', () => {
         hasSearch
       />,
     );
-    await user.click(screen.getByRole('button', {name: 'Fruit'}));
+    await user.click(screen.getByRole('button', {name: /^Fruit\b/}));
     const search = screen.getByRole('combobox', h);
     await user.keyboard(
       '{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}',
@@ -114,7 +114,7 @@ describe('Selector: the highlight follows the query', () => {
         hasSearch
       />,
     );
-    await user.click(screen.getByRole('button', {name: 'Fruit'}));
+    await user.click(screen.getByRole('button', {name: /^Fruit\b/}));
     const search = screen.getByRole('combobox', h);
     await user.type(search, 'ch');
     expect(activeOption(search)?.textContent).toContain('Cherry');
@@ -132,7 +132,7 @@ describe('Selector: the highlight follows the query', () => {
         hasSearch
       />,
     );
-    await user.click(screen.getByRole('button', {name: 'Fruit'}));
+    await user.click(screen.getByRole('button', {name: /^Fruit\b/}));
     const search = screen.getByRole('combobox', h);
     await user.type(search, 'avo');
     // Avocado is the only match and it is disabled: nothing is highlighted,
@@ -150,7 +150,7 @@ describe('Selector: the highlight follows the query', () => {
         hasSearch
       />,
     );
-    await user.click(screen.getByRole('button', {name: 'Fruit'}));
+    await user.click(screen.getByRole('button', {name: /^Fruit\b/}));
     const search = screen.getByRole('combobox', h);
     await user.keyboard('{ArrowUp}');
     await user.type(search, 'ap');
@@ -172,7 +172,7 @@ describe('MultiSelector: a query change clears the highlight', () => {
         hasSearch
       />,
     );
-    await user.click(screen.getByRole('button', {name: 'Fruit'}));
+    await user.click(screen.getByRole('button', {name: /^Fruit\b/}));
     const search = screen.getByRole('combobox', h);
     await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}');
     await user.type(search, 'b');
