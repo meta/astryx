@@ -30,11 +30,24 @@ const THEMES = fs
   }))
   .filter(({manifest}) => manifest.private !== true);
 
-/** The format Node and bundlers read a file in, from its extension. */
+/** The format Node, bundlers and TypeScript read a file in, from its name. */
 function formatOf(file, packageType) {
-  if (file.endsWith('.mjs')) return 'esm';
-  if (file.endsWith('.cjs')) return 'cjs';
+  if (/\.(?:mjs|d\.mts)$/.test(file)) return 'esm';
+  if (/\.(?:cjs|d\.cts)$/.test(file)) return 'cjs';
   return packageType === 'module' ? 'esm' : 'cjs';
+}
+
+/**
+ * The runtime file and the declaration file one condition resolves to. A
+ * condition holds a path, or `{types, default}`; a `types` beside the
+ * conditions applies to each of them.
+ */
+function resolveCondition(entry, condition) {
+  const target = entry[condition];
+  if (typeof target === 'string') {
+    return {runtime: target, types: entry.types};
+  }
+  return {runtime: target.default, types: target.types ?? entry.types};
 }
 
 describe('theme package module formats', () => {
@@ -45,20 +58,39 @@ describe('theme package module formats', () => {
   for (const {name, manifest} of THEMES) {
     describe(name, () => {
       it('reads ./built, an ES module, as an ES module for import and require', () => {
-        const built = manifest.exports['./built'];
         for (const condition of ['import', 'require']) {
-          expect(formatOf(built[condition], manifest.type), condition).toBe(
-            'esm',
+          const {runtime} = resolveCondition(
+            manifest.exports['./built'],
+            condition,
           );
+          expect(formatOf(runtime, manifest.type), condition).toBe('esm');
         }
       });
 
       it('reads the source entry in the format tsup writes for each condition', () => {
         const source = manifest.exports['.'];
-        expect(formatOf(source.import, manifest.type)).toBe('esm');
-        expect(formatOf(source.require, manifest.type)).toBe('cjs');
+        const imported = resolveCondition(source, 'import');
+        const required = resolveCondition(source, 'require');
+        expect(formatOf(imported.runtime, manifest.type)).toBe('esm');
+        expect(formatOf(required.runtime, manifest.type)).toBe('cjs');
         expect(formatOf(manifest.main, manifest.type)).toBe('cjs');
-        expect(manifest.module).toBe(source.import);
+        expect(manifest.module).toBe(imported.runtime);
+      });
+
+      it('gives each condition declarations in the format of its runtime file', () => {
+        // TypeScript reads a declaration file in the format its name and the
+        // package's type give it, and checks imports against that format.
+        for (const [subpath, entry] of Object.entries(manifest.exports)) {
+          for (const condition of ['import', 'require']) {
+            if (typeof entry !== 'object' || !(condition in entry)) continue;
+            const {runtime, types} = resolveCondition(entry, condition);
+            if (types === undefined || !/\.[cm]?js$/.test(runtime)) continue;
+            expect(
+              formatOf(types, manifest.type),
+              `${subpath} ${condition}: ${types} for ${runtime}`,
+            ).toBe(formatOf(runtime, manifest.type));
+          }
+        }
       });
     });
   }
