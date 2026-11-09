@@ -191,6 +191,46 @@ async function fixture(page: Page) {
 }
 
 /**
+ * Starts a chain of 4 ms timers in the test process. It records how late each
+ * woke, when, and how long the process ran while that timer waited. A runner
+ * whose CPU quota stalls the process wakes them late, as it wakes the touch
+ * pacer late. The process then runs little in the wait. Harness code that
+ * holds the process wakes them late too, but the process runs through the
+ * wait.
+ */
+function startWakeControl(): {
+  stop(): {
+    readonly at: number;
+    readonly lateMs: number;
+    readonly ranMs: number;
+  }[];
+} {
+  const wakes: {at: number; lateMs: number; ranMs: number}[] = [];
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const arm = () => {
+    const due = Date.now() + 4;
+    const cpu = process.cpuUsage();
+    timer = setTimeout(() => {
+      const now = Date.now();
+      const ran = process.cpuUsage(cpu);
+      wakes.push({
+        at: now,
+        lateMs: now - due,
+        ranMs: (ran.user + ran.system) / 1000,
+      });
+      arm();
+    }, 4);
+  };
+  arm();
+  return {
+    stop() {
+      clearTimeout(timer);
+      return wakes;
+    },
+  };
+}
+
+/**
  * Waits until a cast holds `min` frames. A cast sends a frame only when the
  * screen changes, and a loaded runner sends fewer of them. Past `capMs`
  * with fewer, the run is starved, and fails as such.
@@ -237,19 +277,22 @@ test.describe('touch input', () => {
     );
     // One take: a fresh page, the script played, and the harness's record of
     // when each step left (`dispatchedAt`) and when its dispatch was answered.
+    // A control timer runs in the test process beside it.
     const take = async () => {
       await fixture(page);
       const driver = await touchDriver(page);
       const answeredAt: number[] = [];
       // Taken before the harness reads its own clock to schedule the script.
       const playStart = Date.now();
+      const control = startWakeControl();
       const played = await driver.play(script, {
         onEvent: () => {
           answeredAt.push(Date.now());
         },
       });
+      const wakes = control.stop();
       const log = await readInputLog(page);
-      return {played, answeredAt, playStart, log};
+      return {played, answeredAt, playStart, wakes, log};
     };
     const checkInput = (log: readonly InputRecord[]) => {
       const moves = log.filter(r => r.type === 'pointermove');
@@ -292,81 +335,123 @@ test.describe('touch input', () => {
     // the dispatch (it answers only once the page has the event), so a driver
     // that holds the moves and sends them in a burst fails.
     //
-    // This take watches every step (`onEvent`), so each step leaves at its
-    // scripted time and none waits for WebKit's answer to the one before.
+    // This take watches every step (`onEvent`), so the test records when
+    // WebKit answered each step's dispatch.
     //
-    // The pacing is bounded from above too. The harness waits only while it
-    // is ahead of the script and sends a late step at once, so a move it
-    // waited for (it left more than 2 ms after the step before was answered)
-    // must leave on time (no more than 2 ms after its scripted time). A harness
-    // that paces slowly waits past every move's time: sending each step at
-    // twice its time leaves every move both waited for and late. A harness
-    // whose send itself outlasts the step's spacing never waits, so a move
-    // behind such a send is off pace too. A runner whose CPU quota holds the
-    // test process also wakes the harness late from a wait, or holds a send,
-    // on a few moves (in a container capped at 3 CPUs, where the quota stalls
-    // the process for about 100 ms at a time), so a take is off pace when more
-    // than half its moves are. It is re-taken once, and a second such take
-    // fails. Under CPU starvation (a 3-CPU cap with 16 workers, with the
-    // software compositor's threads matched to the cap by LP_NUM_THREADS), a
-    // pacer the cap throttles falls behind and need not wait, so the pacing
-    // check can miss a slow pacer there (sending each step at twice its time
-    // failed 8 of 20 runs), and the quota slows some sends past the step's
-    // spacing, which reads like a harness whose send is slow (the real test
-    // passed 40 of 40 there, re-taken 9 times).
-    for (const attempt of [1, 2] as const) {
-      const {played, answeredAt, playStart, log} = await take();
-      const {moves} = checkInput(log);
-      const sentAt = played.map(step => step.dispatchedAt);
-      const moveSteps = played.flatMap((step, i) =>
-        step.type === 'touchMove' ? [i] : [],
+    // The pacing is bounded from above too. A WebKit play keeps each gap, less
+    // ANSWER_SLACK_MS, after WebKit answered the step before (`pacedDeadline`),
+    // so a stall stretches the gesture. A move must leave no more than 2 ms
+    // after that paced deadline, and a step's send must not outlast the
+    // spacing to the next. A harness that sends each step at twice its time
+    // leaves every move later than that. One whose send is that slow stretches
+    // the next gap by the send, less ANSWER_SLACK_MS. A runner whose CPU quota
+    // stalls the test process also wakes the harness late, or holds a send.
+    // A chain of 4 ms control timers then wakes late too: when the harness
+    // woke, or while it sent. A control timer wakes no more than 4 ms less
+    // late than the harness in the same stall. A move off pace by no more than
+    // that is the runner's: the test names it and does not fail. Harness code
+    // that holds the process delays the control timers too, but the process
+    // runs through that wait. So a control wake counts only when the process
+    // ran for less than half of its wait. A take fails when more than half
+    // its moves are off pace while the control woke on time.
+    const {played, answeredAt, playStart, wakes, log} = await take();
+    const {moves} = checkInput(log);
+    const sentAt = played.map(step => step.dispatchedAt);
+    const moveSteps = played.flatMap((step, i) =>
+      step.type === 'touchMove' ? [i] : [],
+    );
+    expect(moveSteps).toHaveLength(moves.length);
+    const timeOrigin = await page.evaluate(() => performance.timeOrigin);
+    for (const [m, i] of moveSteps.entries()) {
+      // Against the clock before play() started, not the start event's
+      // send, which can itself leave late. Date.now() counts whole
+      // milliseconds, hence the 1 ms.
+      expect(sentAt[i] - playStart).toBeGreaterThanOrEqual(played[i].t - 1);
+      // 2 ms of rounding between the two processes' clocks.
+      expect(timeOrigin + moves[m].timeStamp).toBeGreaterThanOrEqual(
+        sentAt[i] - 2,
       );
-      expect(moveSteps).toHaveLength(moves.length);
-      const timeOrigin = await page.evaluate(() => performance.timeOrigin);
-      for (const [m, i] of moveSteps.entries()) {
-        // Against the clock before play() started, not the start event's
-        // send, which can itself leave late. Date.now() counts whole
-        // milliseconds, hence the 1 ms.
-        expect(sentAt[i] - playStart).toBeGreaterThanOrEqual(played[i].t - 1);
-        // 2 ms of rounding between the two processes' clocks.
-        expect(timeOrigin + moves[m].timeStamp).toBeGreaterThanOrEqual(
-          sentAt[i] - 2,
+      expect(timeOrigin + moves[m].timeStamp).toBeLessThanOrEqual(
+        answeredAt[i] + 2,
+      );
+      if (m > 0) {
+        expect(moves[m].timeStamp).toBeGreaterThanOrEqual(
+          moves[m - 1].timeStamp,
         );
-        expect(timeOrigin + moves[m].timeStamp).toBeLessThanOrEqual(
-          answeredAt[i] + 2,
-        );
-        if (m > 0) {
-          expect(moves[m].timeStamp).toBeGreaterThanOrEqual(
-            moves[m - 1].timeStamp,
-          );
-        }
       }
-      // Lateness against the latest the play clock can have started: the
-      // start event's send.
-      const waitedLate = moveSteps.filter(
-        i =>
-          sentAt[i] - answeredAt[i - 1] > 2 &&
-          sentAt[i] - sentAt[0] - played[i].t > 2,
-      );
-      // A move behind a send that took longer than the step's spacing: a
-      // harness whose send itself is that slow never waits, and paces every
-      // move at the send's speed.
-      const slowSent = moveSteps.filter(
-        i => answeredAt[i - 1] - sentAt[i - 1] > played[i].t - played[i - 1].t,
-      );
-      const offPace = new Set([...waitedLate, ...slowSent]);
-      if (offPace.size <= moves.length / 2) {
-        return;
-      }
-      const lateMs = waitedLate.map(i =>
-        Math.round(sentAt[i] - sentAt[0] - played[i].t),
-      );
-      const note = `take ${attempt}: ${offPace.size} of ${moves.length} moves off pace: ${waitedLate.length} left late after the harness waited for them${lateMs.length > 0 ? ` (${lateMs.join(', ')} ms late)` : ''}, ${slowSent.length} followed a send slower than the step`;
-      if (attempt === 2) {
-        throw new Error(`touch pacing: ${note}`);
-      }
-      testInfo.annotations.push({type: 'touch-retake', description: note});
     }
+    // How late the control woke between two times, ms. With no wake in that
+    // span, the first wake after it. A wake through which the process ran for
+    // half its wait or more counts as on time. The test process itself held
+    // it, not the runner.
+    const controlLateMs = (from: number, to: number) => {
+      const within = wakes.filter(wake => wake.at >= from && wake.at <= to);
+      const next = wakes.find(wake => wake.at > to);
+      return Math.max(
+        0,
+        ...(within.length > 0 ? within : next == null ? [] : [next]).map(
+          wake => (wake.ranMs < (4 + wake.lateMs) / 2 ? wake.lateMs : 0),
+        ),
+      );
+    };
+    // Each move's paced deadline, from the latest the play clock can have
+    // started (the start event's send) and WebKit's answer to the step
+    // before.
+    const offPace = moveSteps.flatMap((i, move) => {
+      const spacing = played[i].t - played[i - 1].t;
+      const deadline = Math.max(
+        sentAt[0] + played[i].t,
+        answeredAt[i - 1] + spacing - ANSWER_SLACK_MS,
+      );
+      const lateMs = sentAt[i] - deadline;
+      const sendMs = answeredAt[i - 1] - sentAt[i - 1];
+      return [
+        // The control wakes that a stall ending at the harness's own wake
+        // delayed too.
+        ...(lateMs > 2
+          ? [
+              {
+                move,
+                why: 'left late',
+                ms: lateMs,
+                runnerMs: controlLateMs(sentAt[i] - 2, sentAt[i] + 8),
+              },
+            ]
+          : []),
+        ...(sendMs > spacing
+          ? [
+              {
+                move,
+                why: 'followed a slow send',
+                ms: sendMs - ANSWER_SLACK_MS,
+                runnerMs: controlLateMs(sentAt[i - 1], answeredAt[i - 1] + 4),
+              },
+            ]
+          : []),
+      ];
+    });
+    const runner = offPace.filter(move => move.ms <= move.runnerMs + 4);
+    const harness = offPace.filter(move => move.ms > move.runnerMs + 4);
+    // A move can be off pace for both reasons: it counts once.
+    const countMoves = (list: typeof offPace) =>
+      new Set(list.map(entry => entry.move)).size;
+    const describe = (list: typeof offPace) =>
+      list
+        .map(
+          move =>
+            `${move.why} by ${Math.round(move.ms)} ms (control ${Math.round(move.runnerMs)} ms late)`,
+        )
+        .join(', ');
+    if (runner.length > 0) {
+      testInfo.annotations.push({
+        type: 'touch-runner-late',
+        description: `${countMoves(runner)} of ${moves.length} moves were off pace while the runner woke a control timer as late: ${describe(runner)}`,
+      });
+    }
+    expect(
+      countMoves(harness),
+      `touch pacing: ${countMoves(harness)} of ${moves.length} moves off pace while the control woke on time: ${describe(harness)}`,
+    ).toBeLessThanOrEqual(moves.length / 2);
   });
 
   test("a page whose pointer listener holds its main thread changes a paced flick's release itself: TouchPageStallError, never the runner's", async ({

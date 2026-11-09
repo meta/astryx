@@ -52,9 +52,8 @@ import {
   toTouchEvents,
   touchArrivalsFrom,
   touchDriver,
-  TouchPacingError,
   touchPacingFault,
-  TouchPageStallError,
+  touchPlayError,
   touchStoryboard,
   traceRendering,
   trackMarker,
@@ -1014,7 +1013,8 @@ async function flickFromTheEdge(page: Page, busyLiftMs?: number) {
   }
   // ~60 px of travel at ~1200 px/s: p + 0.35·v is well past half.
   const script = flick({x: left + 6, y: 400}, {velocity: {x: 1200, y: 0}});
-  const run = await armInputRun(page, TOUCH_INPUT_TYPES);
+  // With the page's frames, so a starved runner's late move reads as such.
+  const run = await armInputRun(page, TOUCH_INPUT_TYPES, {frames: true});
   // The page reads the release from when the moves arrive: pace on spacing.
   await driver.play(script, {pacing: 'spacing'});
   await waitForRest(card(page, 'screen-General'));
@@ -1023,8 +1023,9 @@ async function flickFromTheEdge(page: Page, busyLiftMs?: number) {
   } catch (error) {
     // A starved runner delivers the moves late, so the page reads a release
     // far from the script's. Past half of it, the run did not deliver the
-    // flick this test describes. It fails by name, as the page's when its own
-    // listeners held a move.
+    // flick this test describes. It fails by name. It is the page's when its
+    // own listeners held a move. It is the starved runner's when the page drew
+    // no frame across the late gap.
     const record = await run.evaluate(recorded => {
       recorded.stop();
       return {
@@ -1032,17 +1033,14 @@ async function flickFromTheEdge(page: Page, busyLiftMs?: number) {
         pointerTypes: recorded.pointerTypes.slice(),
         stamps: recorded.stamps.slice(),
         handledAt: recorded.handledAt.slice(),
+        frames: recorded.frames.slice(),
       };
     });
-    const fault = touchPacingFault(
-      toTouchEvents(script),
-      touchArrivalsFrom(record),
-      0.5,
-    );
+    const steps = toTouchEvents(script);
+    const arrivals = touchArrivalsFrom(record);
+    const fault = touchPacingFault(steps, arrivals, 0.5);
     if (fault != null) {
-      throw fault.heldByPage == null
-        ? new TouchPacingError(fault)
-        : new TouchPageStallError({...fault, heldByPage: fault.heldByPage});
+      throw touchPlayError(steps, arrivals, fault, [], record.frames);
     }
     throw error;
   }
