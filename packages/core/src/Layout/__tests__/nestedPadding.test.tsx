@@ -10,17 +10,16 @@
  *
  * A Layout's `padding` belongs to its own regions. A nested Layout without
  * `padding` takes the nearest padding container's inset (Card, Section,
- * Dialog) or the default, and never an ancestor Layout's value. AppShell's
- * internal Layout uses `padding={0}`, so before this was scoped every page
- * Layout inside AppShell lost its default inset.
+ * Dialog) or the default, and never an ancestor Layout's value, so a page
+ * Layout inside AppShell, whose internal Layout uses `padding={0}`, keeps its
+ * default inset.
  *
  * jsdom neither inherits custom properties nor keeps logical padding
  * declarations, so `resolvedInset` reproduces the cascade from the injected
  * StyleX rules: it reads the region's republished
  * `--container-padding-inline-start` (the same expression as its applied
  * inline-start padding) and substitutes each `var()` from the nearest
- * declaring ancestor. The pixel results are verified in a browser; see the
- * pull request description.
+ * declaring ancestor. Browser tests verify the pixel results.
  */
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
@@ -325,6 +324,25 @@ describe('LayoutPanel inset publication', () => {
       );
       expect(publishedPanelInset(panel, 'block-end')).toBe('var(--spacing-4)');
     }
+  });
+
+  it('publishes a zero Layout padding on its outer edges', () => {
+    render(
+      <Layout
+        padding={0}
+        start={<LayoutPanel data-testid="start-panel">Start</LayoutPanel>}
+        content={<LayoutContent>Body</LayoutContent>}
+      />,
+    );
+    expect(publishedPanelInset('start-panel', 'inline-start')).toBe(
+      'var(--spacing-0)',
+    );
+    expect(publishedPanelInset('start-panel', 'inline-end')).toBe(
+      'var(--spacing-4)',
+    );
+    expect(publishedPanelInset('start-panel', 'block-start')).toBe(
+      'var(--spacing-0)',
+    );
   });
 
   it('publishes an explicit padding on every edge', () => {

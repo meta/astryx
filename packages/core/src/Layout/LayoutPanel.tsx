@@ -143,7 +143,7 @@ export interface LayoutPanelProps extends BaseProps<HTMLDivElement> {
    * Adds a themed border on the appropriate edge.
    * - Start panel: border on end edge (right in LTR)
    * - End panel: border on start edge (left in LTR)
-   * When false, spacing collapse is applied automatically for seamless visual flow.
+   * When false and `padding` is unset, the panel and the content share one gap.
    *
    * Note: When using `resizable` with an adjacent `ResizeHandle hasDivider`,
    * set this to `false` to avoid a double-line artifact.
@@ -152,9 +152,10 @@ export interface LayoutPanelProps extends BaseProps<HTMLDivElement> {
   hasDivider?: boolean;
 
   /**
-   * Internal padding of the panel using the spacing scale.
+   * Internal padding of the panel on every edge, using the spacing scale.
    * Accepts numeric spacing steps: 0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10.
-   * Overrides the default padding from the layout container.
+   * Replaces the automatic inset and the gap shared with the content.
+   * `0` is full bleed.
    */
   padding?: SpacingStep;
 

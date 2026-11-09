@@ -36,14 +36,14 @@ export const docs = {
       name: 'hasDivider',
       type: 'boolean',
       description:
-        "Line on the edge that faces the content: the inline end in the start slot, the inline start in the end slot. Without it, the panel and the content share one gap. The Layout's defaultHasDividers does not apply. Beside a ResizeHandle that draws its own line, leave it false.",
+        "Line on the edge that faces the content: the inline end in the start slot, the inline start in the end slot. Without it and without padding, the panel and the content share one gap. The Layout's defaultHasDividers does not apply. Beside a ResizeHandle that draws its own line, leave it false.",
       default: 'false',
     },
     {
       name: 'padding',
       type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
       description:
-        'Internal padding on every edge, using the spacing scale. Replaces the automatic inset from the Layout. 0 is full bleed.',
+        'Internal padding on every edge, using the spacing scale. Replaces the automatic inset and the gap shared with the content. 0 is full bleed.',
     },
     {
       name: 'isScrollable',
@@ -97,14 +97,14 @@ export const docsZh = {
       name: 'hasDivider',
       type: 'boolean',
       description:
-        '朝向内容一侧边缘的分隔线：在 start 插槽中位于行内结束边，在 end 插槽中位于行内起始边。不设置时，面板与内容共用一个间距。Layout 的 defaultHasDividers 不适用。旁边的 ResizeHandle 自带分隔线时，请保持为 false。',
+        '朝向内容一侧边缘的分隔线：在 start 插槽中位于行内结束边，在 end 插槽中位于行内起始边。不设置此项且未设置 padding 时，面板与内容共用一个间距。Layout 的 defaultHasDividers 不适用。旁边的 ResizeHandle 自带分隔线时，请保持为 false。',
       default: 'false',
     },
     {
       name: 'padding',
       type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
       description:
-        '使用间距比例设置四边的内边距，替换来自 Layout 的自动内边距。0 表示全出血。',
+        '使用间距比例设置四边的内边距，替换自动内边距以及与内容共用的间距。0 表示全出血。',
     },
     {
       name: 'isScrollable',
@@ -151,9 +151,9 @@ export const docsDense = {
   propDescriptions: {
     children: 'Panel content.',
     hasDivider:
-      'Line on the content-facing edge (start slot: inline end; end slot: inline start); else panel and content share one gap. Layout defaultHasDividers does not apply. False beside a ResizeHandle with its own line.',
+      'Line on the content-facing edge (start slot: inline end; end slot: inline start); without it and padding, panel and content share one gap. Layout defaultHasDividers does not apply. False beside a ResizeHandle with its own line.',
     padding:
-      'Padding on every edge; replaces the Layout inset. 0 is full bleed.',
+      'Padding on every edge; replaces the automatic inset and the shared gap. 0 is full bleed.',
     isScrollable: 'Enable scrollable overflow.',
     label:
       'Accessible label for landmark element; also names the region while it scrolls (default "Content").',
