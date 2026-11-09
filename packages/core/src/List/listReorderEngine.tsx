@@ -442,8 +442,29 @@ interface OuterScroller {
 }
 
 /**
- * The scrollers around `inner`, out to the page. Their scrolls move the list
- * and `inner` on screen, but scroll neither. Empty when `inner` is the page.
+ * Whether `element`, or an ancestor of it below `until`, is fixed. A fixed
+ * element inside a transformed, filtered or contained ancestor still scrolls
+ * with the page. The walk stops at it too, so a drag there does not follow
+ * the page's scroll.
+ */
+function isFixedBelow(element: Element, until: Element): boolean {
+  const view = element.ownerDocument.defaultView;
+  for (
+    let node: Element | null = element;
+    node != null && node !== until;
+    node = node.parentElement
+  ) {
+    if (view?.getComputedStyle(node).position === 'fixed') {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * The scrollers around `inner`, out to the page, whose scrolls move `inner`
+ * on screen. A fixed element ends the walk: what is outside it scrolls without
+ * moving it. Empty when `inner` is the page.
  */
 function outerScrollersOf(inner: Element): OuterScroller[] {
   const doc = inner.ownerDocument;
@@ -451,7 +472,11 @@ function outerScrollersOf(inner: Element): OuterScroller[] {
   const outer: OuterScroller[] = [];
   let element = inner;
   while (element !== page && element.parentElement != null) {
-    element = nearestScroller(element);
+    const next = nearestScroller(element);
+    if (isFixedBelow(element, next)) {
+      break;
+    }
+    element = next;
     outer.push({element, position: element.scrollTop});
   }
   return outer;
@@ -1506,7 +1531,8 @@ export class ListReorderController implements ListReorderSession {
       const offset = around.element.scrollTop;
       const moved = offset - around.position;
       around.position = offset;
-      // It moves the list and its scroller's band up on screen alike.
+      // An outer scroll moves the list and its scroller's band on screen by
+      // the same amount.
       session.scrolled += moved;
       scroller.top -= moved;
       scroller.bottom -= moved;

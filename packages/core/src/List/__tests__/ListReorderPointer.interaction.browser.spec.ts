@@ -525,7 +525,11 @@ test('a row held near the bottom of a box the list scrolls in scrolls that box, 
   }
 });
 
-for (const outer of ['the page', 'the box around it'] as const) {
+for (const outer of [
+  'the page',
+  'the box around it',
+  'the page under a fixed box',
+] as const) {
   test(`a wheel at the end of a box the list scrolls in scrolls ${outer} during a drag, and the drop lands under the pointer`, async ({
     browser,
   }) => {
@@ -533,29 +537,40 @@ for (const outer of ['the page', 'the box around it'] as const) {
     try {
       const {page} = story;
       const wrapped = outer === 'the box around it';
+      const fixed = outer === 'the page under a fixed box';
       // The list scrolls in a 400 px box, scrolled to its end. What is around
       // it can scroll too: the page, or a box that is the box's direct parent.
-      await page.evaluate(inBox => {
-        const root = document.querySelector<HTMLElement>('#storybook-root');
-        if (root == null) {
-          return;
-        }
-        root.style.blockSize = '400px';
-        root.style.overflowY = 'auto';
-        if (inBox) {
-          const around = document.createElement('div');
-          around.id = 'reorder-around';
-          around.style.blockSize = '600px';
-          around.style.overflowY = 'auto';
-          const room = document.createElement('div');
-          room.style.blockSize = '2000px';
-          root.before(around);
-          around.append(root, room);
-        } else {
-          document.body.style.paddingBlockEnd = '2000px';
-        }
-        root.scrollTop = root.scrollHeight;
-      }, wrapped);
+      // A fixed box stays put while the page scrolls under it.
+      await page.evaluate(
+        ([inBox, isFixed]) => {
+          const root = document.querySelector<HTMLElement>('#storybook-root');
+          if (root == null) {
+            return;
+          }
+          root.style.blockSize = '400px';
+          root.style.overflowY = 'auto';
+          if (isFixed) {
+            root.style.position = 'fixed';
+            root.style.insetBlockStart = '0';
+            root.style.insetInlineStart = '0';
+            root.style.inlineSize = '800px';
+          }
+          if (inBox) {
+            const around = document.createElement('div');
+            around.id = 'reorder-around';
+            around.style.blockSize = '600px';
+            around.style.overflowY = 'auto';
+            const room = document.createElement('div');
+            room.style.blockSize = '2000px';
+            root.before(around);
+            around.append(root, room);
+          } else {
+            document.body.style.paddingBlockEnd = '2000px';
+          }
+          root.scrollTop = root.scrollHeight;
+        },
+        [wrapped, fixed] as const,
+      );
       const order = await labels(page);
       const target = order[order.length - 4];
       const {at, rowHeight} = await handleOf(page, target);
