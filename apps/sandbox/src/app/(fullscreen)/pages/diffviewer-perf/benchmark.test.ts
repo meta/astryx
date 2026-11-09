@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, expect, it} from 'vitest';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 import {createDiffFile} from '../../../../../../../packages/lab/src/DiffViewer/createDiffFile';
 import {
   countLines,
@@ -10,6 +10,7 @@ import {
   MULTI_FILE_WORKLOADS,
   SINGLE_FILE_LINES,
   type DiffBenchmarkWorkload,
+  watchLongTasks,
 } from './benchmark';
 
 /** Added plus removed lines in the diff DiffViewer renders, per file. */
@@ -132,5 +133,29 @@ describe('DiffViewer performance workloads', () => {
   it('formats heap readings', () => {
     expect(formatMegabytes(null)).toBe('—');
     expect(formatMegabytes(3 * 1_048_576)).toBe('3.0 MB');
+  });
+});
+
+describe('watchLongTasks', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('reads no value when the browser has no Long Tasks API', () => {
+    vi.stubGlobal('PerformanceObserver', undefined);
+    expect(watchLongTasks()()).toBeNull();
+  });
+
+  it('counts the long tasks it observed until stopped', () => {
+    class FakeObserver {
+      static supportedEntryTypes = ['longtask'];
+      observe() {}
+      disconnect() {}
+      takeRecords() {
+        return [{duration: 60}, {duration: 90}];
+      }
+    }
+    vi.stubGlobal('PerformanceObserver', FakeObserver);
+    expect(watchLongTasks()()).toEqual({count: 2, totalMs: 150});
   });
 });
