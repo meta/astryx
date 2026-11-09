@@ -1,5 +1,20 @@
 # @astryxdesign/richtext
 
+# 0.7.12
+
+#### Documentation
+
+- `RichTextView`, `RichTextEditorToolbar` and `RichTextEditorAutoLinkPlugin` each ship a doc file, so `astryx component`, `astryx discover` and the docs list their props, defaults and usage. (#10407)
+- A source comment in the editor theme now says that core `Markdown` gives each block the direction of its own text, while the editor keeps blocks in the surface's direction. (#10293)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+
+---
+
 # 0.7.11
 
 #### Fixes
