@@ -447,7 +447,7 @@ const styles = stylex.create({
   },
   // The caption's text sits on the Counter's backing, line by line, so it
   // keeps 4.5:1 over a light theme's translucent backdrop. The backing is
-  // inline, so the caption box keeps its size and place.
+  // inline, so the caption keeps its line height and place.
   captionBacking: {
     backgroundColor: `color-mix(in srgb, ${colorVars['--color-on-light']} 75%, transparent)`,
     borderRadius: radiusVars['--radius-full'],
