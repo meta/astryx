@@ -1684,6 +1684,28 @@ describe('GestureHost', () => {
       touch('touchend', row, [moved], [], 32);
     });
 
+    it('measures the wobble along the pan\u2019s axis: a pan that claims drags off its axis holds only from 5 px along it', () => {
+      const {list, row} = mount(
+        '<div id="list" style="overflow-y: auto"><div id="row"></div></div>',
+      );
+      scrollable(list, {scrollTop: 0, scrollHeight: 1000, clientHeight: 400});
+      const pan = new PanGestureRecognizer({
+        name: 'sheet',
+        direction: 'down',
+        scrollEdge: true,
+        axisRatio: 0.5,
+      });
+      detachers.push(host.attach(row, pan));
+      const finger = {id: 1, x: 50, y: 100};
+      touch('touchstart', row, [finger], [finger], 0);
+      const at = (x: number, y: number, time: number) =>
+        touch('touchmove', row, [{...finger, x, y}], [{...finger, x, y}], time);
+      // 6 px across but 4 px along: still a tap's wobble.
+      expect(at(56, 104, 16).defaultPrevented).toBe(false);
+      expect(at(56, 105, 32).defaultPrevented).toBe(true);
+      touch('touchend', row, [{...finger, x: 56, y: 105}], [], 48);
+    });
+
     it('waits out the same wobble for a horizontal scroll-edge pan over content with no scroller (a back swipe from the content)', () => {
       const {row} = mount('<div id="row"></div>');
       const pan = new PanGestureRecognizer({
