@@ -6,12 +6,13 @@
  * @input Built Lightbox stories (LTR and the RTL story global) and real
  *   Chromium/WebKit keyboard input
  * @output Browser evidence that the gallery's Left/Right arrow keys move in
- *   the direction of the matching on-screen button, in both directions
+ *   the direction of the matching on-screen button, in both directions, and
+ *   that Tab and Shift+Tab wrap inside the open viewer at both ends
  * @position Cross-browser proof for Lightbox's direction-aware gallery keys
  *   (design:bidirectionality DR6, DR11)
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -76,3 +77,63 @@ for (const direction of ['ltr', 'rtl'] as const) {
     await expect(dialog).toContainText('1 / 4');
   });
 }
+
+// Focuses the viewer's last tabbable control, presses Tab, and expects the
+// first; then the reverse with Shift+Tab. Focus must never reach the page or
+// the browser's own UI.
+async function expectTabWrapsInside(page: Page) {
+  const ends = async () =>
+    page.evaluate(() => {
+      const dialog = document.querySelector('dialog[open]');
+      if (dialog == null) {
+        return null;
+      }
+      const tabbable = [
+        ...dialog.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]',
+        ),
+      ].filter(
+        el =>
+          el.tabIndex >= 0 &&
+          !el.hasAttribute('disabled') &&
+          el.getClientRects().length > 0,
+      );
+      tabbable.forEach((el, i) => el.setAttribute('data-tab-index', String(i)));
+      return tabbable.length;
+    });
+  const count = await ends();
+  expect(count).toBeGreaterThan(0);
+  const at = (i: number) =>
+    page.locator(`dialog[open] [data-tab-index="${i}"]`);
+  const last = (count ?? 1) - 1;
+
+  await at(last).focus();
+  await page.keyboard.press('Tab');
+  await expect(at(0)).toBeFocused();
+
+  await at(0).focus();
+  await page.keyboard.press('Shift+Tab');
+  await expect(at(last)).toBeFocused();
+}
+
+test('Tab and Shift+Tab wrap inside an open gallery', async ({page}) => {
+  await openGallery(page, 'ltr');
+  await expectTabWrapsInside(page);
+});
+
+test('Tab and Shift+Tab wrap inside an open single image, zoomed or not', async ({
+  page,
+}) => {
+  await page.route(/picsum\.photos/, async route => route.abort());
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-lightbox--with-zoom&viewMode=story`,
+  );
+  await page.getByRole('button', {name: 'Open with zoom'}).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await expectTabWrapsInside(page);
+
+  // Zoomed in, the same controls stay the only stops.
+  await page.locator('dialog[open] [tabindex="0"]').first().focus();
+  await page.keyboard.press('+');
+  await expectTabWrapsInside(page);
+});

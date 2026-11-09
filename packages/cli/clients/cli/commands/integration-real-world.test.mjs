@@ -11,7 +11,11 @@ import {afterEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {runCli} from '../../../test-utils/run-cli.mjs';
+import {requireNatively} from '../../../test-utils/native-require.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('../../../test-utils/run-cli.mjs')} */
+const {runCli} = require('../../../test-utils/run-cli.mjs');
 
 let rootDir;
 const CLI_BIN = path.join(

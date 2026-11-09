@@ -23,7 +23,12 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {expect, test, type Browser, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Browser,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   DEFAULT_STORYBOOK_DIR,
@@ -127,13 +132,13 @@ const CASES: Case[] = [
     'disabled-row',
     'with-disabled-items',
     'keyboard-last-row',
-    'Disabled — aria-disabled row, muted, skipped by focus',
+    'Disabled — aria-disabled row, muted, reached by focus',
   ),
   c(
     'disabled-row-dark',
     'with-disabled-items',
     'keyboard-last-row',
-    'Disabled — aria-disabled row, muted, skipped by focus',
+    'Disabled — aria-disabled row, muted, reached by focus',
     {mode: 'dark'},
   ),
   c(
@@ -531,20 +536,12 @@ function assertClaimedState(
   }
   if (state.startsWith('disabled-row')) {
     expectAnchored();
-    const disabledIndexes = rows.flatMap((row, index) =>
-      row.disabled ? [index] : [],
+    expect(rows.at(-1)?.disabled, `${state}: a trailing disabled row`).toBe(
+      true,
     );
-    const lastEnabled = rows.reduce(
-      (last, row, index) => (row.disabled ? last : index),
-      -1,
-    );
-    expect(disabledIndexes.length, `${state}: a disabled row`).toBeGreaterThan(
-      0,
-    );
-    // End lands on the last enabled row: the trailing disabled row is skipped.
-    expect(lastEnabled).toBeLessThan(rows.length - 1);
-    expect(observed.focusedRowIndex).toBe(lastEnabled);
-    expect(focusedRow?.disabled).toBe(false);
+    // End lands on the last row: the keys reach the trailing disabled row.
+    expect(observed.focusedRowIndex).toBe(rows.length - 1);
+    expect(focusedRow?.disabled).toBe(true);
     return;
   }
   if (state.startsWith('destructive-row')) {

@@ -234,10 +234,12 @@ component BreadcrumbMenuRadioItem(props: DropdownMenuRadioItemProps)
 component BreadcrumbMenuSubMenu(props: DropdownMenuSubMenuProps)
   prop children: ReactNode
   prop data-testid?: string
+  prop delay?: number = 150
   prop description?: ReactNode
   prop footer?: ReactNode
   prop hasSpinner?: boolean = false
   prop header?: ReactNode
+  prop hideDelay?: number = 200
   prop icon?: ReactNode | IconType
   prop isDisabled?: boolean = false
   prop label: ReactNode
@@ -295,6 +297,7 @@ component ButtonGroup(props: ButtonGroupProps)
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component Calendar(props: CalendarProps)
+  prop calendar?: CalendarSystem
   prop dateConstraints?: ReadonlyArray<(date: Date) => boolean>
   prop defaultValue?: ISODateString
   prop focusDate?: ISODateString
@@ -336,7 +339,7 @@ component Carousel(props: CarouselProps)
   prop hasButtons?: boolean = true
   prop hasEdgeFade?: boolean = true
   prop hasLoop?: boolean = false
-  prop hasSnap?: boolean = false
+  prop hasSnap?: boolean | SnapPaging = false
   prop padding?: SpacingStep = undefined (no padding)
   prop ref?: React.Ref<HTMLDivElement>
   prop xstyle?: StyleXStyles
@@ -397,6 +400,7 @@ component ChatComposerDrawer(props: ChatComposerDrawerProps)
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component ChatComposerInput(props: ChatComposerInputProps)
   prop debounceMs?: number = 150
+  prop enterKeyHint?: EnterKeyHint = 'send'
   prop handleRef?: React.Ref<ChatComposerInputHandle>
   prop hasHistory?: boolean = true
   prop isDisabled?: boolean = false
@@ -569,7 +573,9 @@ component CheckboxList(props: CheckboxListProps)
   prop hasDividers?: boolean = false
   prop isDisabled?: boolean = false
   prop isLabelHidden?: boolean = false
+  prop isOptional?: boolean = false
   prop isReadOnly?: boolean = false
+  prop isRequired?: boolean = false
   prop label: string
   prop onChange?: (values: string[]) => void
   prop ref?: React.Ref<HTMLDivElement>
@@ -637,8 +643,10 @@ component CodeBlock(props: CodeBlockProps)
   prop language?: string | CodeLanguage = 'plaintext'
   prop maxHeight?: number | string
   prop onCopy?: () => void
+  prop onCopyError?: (error: unknown) => void
   prop ref?: React.Ref<HTMLPreElement>
   prop size?: 'sm' | 'md'
+  prop startLineNumber?: number = 1
   prop syntaxTheme?: SyntaxThemeDefinition
   prop title?: string
   prop tokenizer?: (code: string, language: string) => { type: string; start: number; end: number }[] @deprecated
@@ -845,10 +853,12 @@ component ContextMenuRadioItem(props: DropdownMenuRadioItemProps)
 component ContextMenuSubMenu(props: DropdownMenuSubMenuProps)
   prop children: ReactNode
   prop data-testid?: string
+  prop delay?: number = 150
   prop description?: ReactNode
   prop footer?: ReactNode
   prop hasSpinner?: boolean = false
   prop header?: ReactNode
+  prop hideDelay?: number = 200
   prop icon?: ReactNode | IconType
   prop isDisabled?: boolean = false
   prop label: ReactNode
@@ -860,6 +870,7 @@ component ContextMenuSubMenu(props: DropdownMenuSubMenuProps)
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component DateInput(props: DateInputProps)
+  prop calendar?: CalendarSystem = the InternationalizationProvider's calendar, else `'gregory'`
   prop changeAction?: (value: ISODateString | undefined) => void | Promise<void>
   prop containerClassName?: string
   prop containerStyle?: CSSProperties
@@ -895,6 +906,7 @@ component DateInput(props: DateInputProps)
   prop width?: SizeValue
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component DateRangeInput(props: DateRangeInputProps)
+  prop calendar?: CalendarSystem = the InternationalizationProvider's calendar, else `'gregory'`
   prop changeAction?: (value: DateRange | null) => void | Promise<void>
   prop containerClassName?: string
   prop containerStyle?: CSSProperties
@@ -930,6 +942,7 @@ component DateRangeInput(props: DateRangeInputProps)
   prop width?: SizeValue
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component DateTimeInput(props: DateTimeInputProps)
+  prop calendar?: CalendarSystem = the InternationalizationProvider's calendar, else `'gregory'`
   prop changeAction?: (value: ISODateTimeString | undefined) => void | Promise<void>
   prop containerClassName?: string
   prop containerStyle?: CSSProperties
@@ -1042,7 +1055,7 @@ component DropdownMenu(props: DropdownMenuProps)
   prop onClick?: () => void
   prop onOpenChange?: (isOpen: boolean) => void
   prop placement?: LayerPlacement = 'below'
-  prop presentation?: DropdownMenuPresentation = 'popover'
+  prop presentation?: DropdownMenuPresentation
   prop renderTrigger?: (props: DropdownMenuTriggerProps) => ReactNode
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
@@ -1105,10 +1118,12 @@ component DropdownMenuRadioItem(props: DropdownMenuRadioItemProps)
 component DropdownMenuSubMenu(props: DropdownMenuSubMenuProps)
   prop children: ReactNode
   prop data-testid?: string
+  prop delay?: number = 150
   prop description?: ReactNode
   prop footer?: ReactNode
   prop hasSpinner?: boolean = false
   prop header?: ReactNode
+  prop hideDelay?: number = 200
   prop icon?: ReactNode | IconType
   prop isDisabled?: boolean = false
   prop label: ReactNode
@@ -1165,11 +1180,12 @@ component FieldLabel(props: FieldLabelProps)
   prop ref?: React.Ref<HTMLLabelElement>
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
-component FieldStatus @deprecated
+component FieldStatus(props: FieldStatusProps)
+  overload (props: FieldStatusProps & { variant: 'tooltip' }) => React.JSX.Element @deprecated
   prop message: string
   prop ref?: React.Ref<HTMLDivElement>
   prop type: InputStatusType
-  prop variant: FieldStatusVariant = 'attached'
+  prop variant?: FieldStatusVariant = 'attached'
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component FileInput(props: FileInputProps)
@@ -1324,6 +1340,13 @@ component IconButton(props: IconButtonProps)
   prop width?: SizeValue
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
+component InfoTip(props: InfoTipProps)
+  prop content: ReactNode
+  prop label?: string = A translated "More information"
+  prop ref?: Ref<HTMLButtonElement>
+  prop size?: InfoTipSize = 'sm'
+  prop xstyle?: StyleXStyles
+  inherits HTMLAttributes
 component InputClearButton(props: InputClearButtonProps)
   prop iconClassName?: string
   prop label: string
@@ -1350,6 +1373,7 @@ component InputGroupText(props: InputGroupTextProps)
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component InternationalizationProvider(props: InternationalizationProviderProps)
+  prop calendar?: CalendarSystem
   prop children: ReactNode
   prop dir?: 'ltr' | 'rtl'
   prop locale: Locale
@@ -1441,7 +1465,7 @@ component LayoutPanel(props: LayoutPanelProps)
   prop label?: string
   prop padding?: SpacingStep
   prop ref?: React.Ref<HTMLDivElement>
-  prop resizable?: ResizableProps
+  prop resizable?: ResizableRegion | ResizableProps
   prop role?: AriaRole
   prop width?: SizeValue
   prop xstyle?: StyleXStyles
@@ -1487,6 +1511,7 @@ component LinkProvider(props: LinkProviderProps)
   prop children: ReactNode
   prop component: LinkComponentType
 component List(props: ListProps)
+  prop animatedLayout?: AnimatedLayout
   prop children: ReactNode
   prop data-testid?: string
   prop density?: ListDensity = 'balanced'
@@ -1496,6 +1521,7 @@ component List(props: ListProps)
   prop header?: ReactNode
   prop listStyle?: ListMarkerStyle = 'none'
   prop ref?: React.Ref<HTMLUListElement | HTMLOListElement>
+  prop reorderable?: Reorderable
   prop start?: number = 1
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
@@ -1507,6 +1533,7 @@ component ListItem(props: ListItemProps)
   prop interactiveRef?: React.RefObject<HTMLElement | null>
   prop isDisabled?: boolean = false
   prop isSelected?: boolean = false
+  prop itemKey?: string | number
   prop label: ReactNode
   prop onClick?: (e: React.MouseEvent) => void
   prop ref?: React.Ref<HTMLLIElement>
@@ -1588,7 +1615,7 @@ component MoreMenu(props: MoreMenuProps)
   prop label?: string = 'More options'
   prop onOpenChange?: (isOpen: boolean) => void
   prop placement?: LayerPlacement = 'below'
-  prop presentation?: DropdownMenuPresentation = 'popover'
+  prop presentation?: DropdownMenuPresentation
   prop ref?: React.Ref<HTMLButtonElement>
   prop size?: ButtonSize = 'md'
   prop variant?: ButtonVariant = 'ghost'
@@ -1818,6 +1845,7 @@ component PowerSearch(props: PowerSearchProps)
   prop onFocus?: (e: React.FocusEvent) => void
   prop placeholder?: string = 'Search...'
   prop popoverSaveButtonLabel?: string = 'Apply'
+  prop presentation?: PowerSearchPresentation = 'adaptive'
   prop ref?: React.Ref<HTMLDivElement>
   prop resultCount?: number | string
   prop size?: PowerSearchSize = 'md'
@@ -1846,6 +1874,7 @@ component PowerSearchToken(props: PowerSearchTokenProps)
   prop onClick?: () => void
   prop onRemove?: () => void
   prop operator: PowerSearchOperator
+  prop timezoneID?: string
 component ProgressBar(props: ProgressBarProps)
   prop data-testid?: string
   prop formatValueLabel?: (value: number, max: number) => string = (value, max) => `${Math.round((value / max) * 100)}%`
@@ -1918,7 +1947,7 @@ component ResizeHandle(props: ResizeHandleProps)
   prop pillPlacement?: PillPlacement = 'auto'
   prop position?: 'inline' | 'overlay' = 'inline'
   prop ref?: React.Ref<HTMLDivElement>
-  prop resizable?: ResizableProps
+  prop resizable?: ResizableRegion | ResizableProps
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component ScrollableArea(props: ScrollableAreaProps)
@@ -2062,7 +2091,7 @@ component SideNav(props: SideNavProps)
   prop handleRef?: React.Ref<SideNavImperativeCollapseHandle> @deprecated
   prop header?: ReactNode
   prop ref?: React.Ref<HTMLElement>
-  prop resizable?: boolean | ResizableConfig = false
+  prop resizable?: boolean | ResizableConfig | ResizableRegion = false
   prop style?: React.CSSProperties
   prop topContent?: ReactNode
   prop xstyle?: StyleXStyles
@@ -2312,6 +2341,7 @@ component Table
   prop scrollWrapper?: ComponentType<{ children: ReactNode; htmlProps?: HTMLAttributes<HTMLDivElement> & { ref?: Ref<HTMLDivElement> }; xstyle?: StyleXStyles[]; beforeTable?: ReactNode; afterTable?: ReactNode }>
   prop textOverflow?: 'wrap' | 'truncate' = 'wrap'
   prop verticalAlign?: TableVerticalAlign = 'middle'
+  prop virtualization?: BaseTableProps<T>['virtualization']
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component TableBody(props: TableBodyProps)
@@ -2387,6 +2417,7 @@ component Text(props: TextProps)
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component TextArea(props: TextAreaProps)
+  prop autoCapitalize?: AutoCapitalize
   prop autoComplete?: React.TextareaHTMLAttributes<HTMLTextAreaElement>['autoComplete']
   prop changeAction?: (value: string, e: ChangeEvent<HTMLTextAreaElement>) => void | Promise<void>
   prop containerClassName?: string
@@ -2397,9 +2428,12 @@ component TextArea(props: TextAreaProps)
   prop controlXstyle?: StyleXStyles
   prop description?: string
   prop disabledMessage?: string
+  prop enterKeyHint?: EnterKeyHint
+  prop hasAutoCorrect?: boolean
   prop hasAutoFocus?: boolean = false
   prop hasSpellCheck?: boolean = true
   prop htmlName?: string
+  prop inputMode?: InputMode
   prop isDisabled?: boolean = false
   prop isLabelHidden?: boolean = false
   prop isLoading?: boolean = false
@@ -2424,6 +2458,7 @@ component TextArea(props: TextAreaProps)
   prop width?: SizeValue
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component TextInput(props: TextInputProps)
+  prop autoCapitalize?: AutoCapitalize
   prop autoComplete?: React.InputHTMLAttributes<HTMLInputElement>['autoComplete']
   prop changeAction?: (value: string, e: ChangeEvent<HTMLInputElement>) => void | Promise<void>
   prop containerClassName?: string
@@ -2434,9 +2469,13 @@ component TextInput(props: TextInputProps)
   prop controlXstyle?: StyleXStyles
   prop description?: string
   prop disabledMessage?: string
+  prop enterKeyHint?: EnterKeyHint
+  prop hasAutoCorrect?: boolean
   prop hasAutoFocus?: boolean = false
   prop hasClear?: boolean = false
+  prop hasSpellCheck?: boolean
   prop htmlName?: string
+  prop inputMode?: InputMode
   prop isDisabled?: boolean = false
   prop isLabelHidden?: boolean = false
   prop isLoading?: boolean = false
@@ -2530,6 +2569,7 @@ component Timestamp(props: TimestampProps)
   prop isTimezoneShown?: boolean = false
   prop ref?: React.Ref<HTMLTimeElement>
   prop size?: TextSize
+  prop timezoneID?: string
   prop tooltipEntries?: ReadonlyArray<TimestampTooltipEntry> = undefined — a single default row with the full absolute time in the viewer's own time zone
   prop type?: TextType = 'supporting'
   prop value: string | number
@@ -2591,6 +2631,7 @@ component Token(props: TokenProps)
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component Tokenizer(props: TokenizerProps)
+  overload <T extends SearchableItem>(props: Omit<TokenizerProps<T>, 'ref'> & { ref?: React.Ref<HTMLInputElement | HTMLButtonElement> }) => React.JSX.Element
   prop containerClassName?: string
   prop containerStyle?: CSSProperties
   prop containerXstyle?: StyleXStyles
@@ -2624,6 +2665,7 @@ component Tokenizer(props: TokenizerProps)
   prop onFocus?: (e: React.FocusEvent) => void
   prop onKeyDown?: React.KeyboardEventHandler<HTMLElement>
   prop placeholder?: string
+  prop presentation?: TokenizerPresentation = 'adaptive'
   prop ref?: React.Ref<HTMLInputElement>
   prop renderItem?: (item: T) => ReactNode
   prop renderToken?: (item: T, onRemove: () => void) => ReactNode
@@ -2837,6 +2879,7 @@ component VisuallyHidden(props: VisuallyHiddenProps)
 
 ```text
 hook useAnimatedLayout: ({…}: UseAnimatedLayoutOptions) => AnimatedLayout
+hook useAnimator: (ref: RefObject<HTMLElement | null>) => AnimatorHandle
 hook useAnnounce: ({…}?: UseAnnounceOptions) => AnnounceFn
 hook useAppShellMobile: () => AppShellMobileContextValue
 hook useAvatarGroup: () => AvatarGroupContextValue | null
@@ -2852,7 +2895,7 @@ hook useChatLayoutContext: () => ChatLayoutContextValue | null
 hook useChatNewMessages: ({…}: UseChatNewMessagesOptions) => UseChatNewMessagesReturn
 hook useChatPasteAsToken: ({…}: UseChatPasteAsTokenOptions) => UseChatPasteAsTokenReturn
 hook useChatStreamScroll: ({…}: UseChatStreamScrollOptions) => UseChatStreamScrollReturn
-hook useClickableContainer: ({…}: UseClickableContainerOptions) => ClickableContainerResult
+hook useClickableContainer: (options: UseClickableContainerOptions) => ClickableContainerResult
 hook useClipboard: (options?: UseClipboardOptions) => UseClipboardReturn
 hook useCollapsible: (options: UseCollapsibleOptions) => UseCollapsibleReturn
 hook useCollator: (options?: Intl.CollatorOptions) => Intl.Collator
@@ -2861,6 +2904,7 @@ hook useCommandPaletteContext: () => CommandPaletteContextValue | null
 hook useContainerReveal: (options?: UseContainerRevealOptions) => UseContainerRevealReturn
 hook useDevWarning: (component: string, message: string, condition?: boolean) => void
 hook useDirection: () => 'ltr' | 'rtl'
+hook useDragToSnapPoints: (ref: RefObject<HTMLElement | null>, options: DragToSnapPointsOptions) => UseDragToSnapPointsResult
 hook useDropdownMenuContext: () => DropdownMenuContextValue | null
 hook useEntryAnimation: (preset?: EntryAnimationPreset) => StyleXStyles | null
 hook useFocusTrap: <T extends HTMLElement = HTMLElement>(options: UseFocusTrapOptions) => UseFocusTrapReturn<T>
@@ -2900,6 +2944,7 @@ hook useOutlineFromDOM: (containerRef: React.RefObject<HTMLElement | null>) => O
 hook useOutlineFromMarkdown: <Node extends MarkdownExtensionNode = never>(markdown: string, options?: ParseOutlineFromMarkdownOptions<Node>) => OutlineItem[]
 hook useOverflow: (itemCount: number, options?: UseOverflowOptions) => UseOverflowReturn
 hook useOverlay: ({…}?: UseOverlayOptions) => UseOverlayResult
+hook usePanGesture: (ref: RefObject<Element | null>, options: PanGestureOptions) => void
 hook usePopover: (options?: UsePopoverOptions) => UsePopoverReturn
 hook usePowerSearchConfig: <const D extends ReadonlyArray<FieldDefinition>>(definitions: D, configName?: string) => { config: PowerSearchConfig; applyFilters: <T extends InferData<D>>(filters: ReadonlyArray<PowerSearchFilter>, data: ReadonlyArray<T>) => T[] }
 hook usePressFeedback: () => typeof pressableProps
@@ -2913,6 +2958,7 @@ hook useSelectedItemOffset: ({…}: UseSelectedItemOffsetOptions) => UseSelected
 hook useSideNavCollapse: () => SideNavCollapseState
 hook useSideNavRenderMode: () => SideNavRenderMode
 hook useSize: <T extends string = ElementSize>(sizeProp?: T, defaultSize?: T) => T
+hook useSnapPaging: (options?: SnapPagingOptions) => SnapPaging
 hook useSpeechRecognition: (options?: UseSpeechRecognitionOptions) => UseSpeechRecognitionReturn
 hook useStepperContext: () => StepperContextValue
 hook useStreamingText: (targetText: string, isStreaming: boolean, options?: UseStreamingTextOptions) => string
@@ -2926,8 +2972,9 @@ hook useTableFiltering: <T extends Record<string, unknown>>(config: UseTableFilt
 hook useTableGroupedRows: <T extends Record<string, unknown>>(config: UseTableGroupedRowsConfig<T>) => UseTableGroupedRowsResult<T>
 hook useTablePagination: <T extends Record<string, unknown>>(config: UseTablePaginationConfig) => TablePlugin<T>
 hook useTableRowExpansion: <T extends Record<string, unknown>>(config: UseTableRowExpansionConfig<T>) => TablePlugin<T>
-hook useTableRowIndex: <T extends Record<string, unknown>>(config: UseTableRowIndexConfig<T>) => TablePlugin<T>
+hook useTableRowIndex: <T extends Record<string, unknown>>(config?: UseTableRowIndexConfig<T>) => TablePlugin<T>
 hook useTableRowStatus: <T extends Record<string, unknown>>(config: UseTableRowStatusConfig<T>) => TablePlugin<T>
+hook useTableRowsVirtualization: ({…}: UseTableRowsVirtualizationConfig) => TableVirtualizationCapability
 hook useTableSelection: <T extends Record<string, unknown>>(config: UseTableSelectionConfig<T>) => TablePlugin<T>
 hook useTableSelectionState: <T extends Record<string, unknown>>(config: UseTableSelectionStateConfig<T>) => UseTableSelectionStateResult<T>
 hook useTableSortable: <T extends Record<string, unknown>, TSortKey extends string = string>(config: UseTableSortableConfig<TSortKey>) => TablePlugin<T>
@@ -2960,10 +3007,14 @@ function compactDefinition: (points?: Readonly<Pick<WidthBreakpoints, 'md'>>) =>
 function compareTime: (a: ISOTimeString | undefined, b: ISOTimeString | undefined) => number
 function composeEventHandlers: <E extends SyntheticEvent>(...handlers: (((event: E) => void) | undefined)[]) => (event: E) => void
 function container: ({…}: ContainerOptions) => readonly [Readonly<{ readonly boxSizing: stylex.StyleXClassNameFor<"boxSizing", "border-box">; readonly paddingInlineStart: stylex.StyleXClassNameFor<"paddingIn … #72b9b91f
+function createAnimator: (element: HTMLElement) => Animator
 function createCodeLanguage: ({…}: CreateCodeLanguageOptions) => CodeLanguage
+function createDragToSnapPoints: (element: HTMLElement, options: DragToSnapPointsOptions) => DragToSnapPoints
 function createISOTimeString: (value: string) => ISOTimeString | null
 function createIncrementalState: <MathEnabled extends boolean = false>() => IncrementalState<MathEnabled>
+function createPanGesture: (element: Element, options: PanGestureOptions) => PanGesture
 function createPowerSearchConfig: <const D extends ReadonlyArray<FieldDefinition>>(definitions: D, configName?: string) => { config: PowerSearchConfig; applyFilters: <T extends InferData<D>>(filters: ReadonlyArray<PowerSearchFilter>, data: ReadonlyArray<T>) => T[] }
+function createReorderable: <TKey extends string | number = string | number, TTo = number>(options: ReorderableOptions<TKey, TTo>) => Reorderable<TKey, TTo>
 function createStaticSource: <T extends SearchableItem>(items: T[], options?: CreateStaticSourceOptions<T>) => SearchSource<T>
 function dateToISO: (pd: PlainDate) => ISODateString
 function decodeMarkdownCharacterReferences: (text: string) => string
@@ -2984,7 +3035,7 @@ function formatDisplayTime12h: (time: ISOTimeString | undefined, includeSeconds?
 function formatDisplayTime24h: (time: ISOTimeString | undefined, includeSeconds?: boolean) => string
 function formatHex: (r: number, g: number, b: number) => string
 function formatISOTime: (time: ParsedTime, includeSeconds?: boolean) => ISOTimeString
-function formatSharedDate: (pd: PlainDate, format: SharedDateFormat, locale?: Locale) => string
+function formatSharedDate: (pd: PlainDate, format: SharedDateFormat, locale?: Locale, calendar?: CalendarSystem) => string
 function generateAdaptationCSS: (theme: DefinedTheme, warnings?: string[]) => ThemeCSSOutput
 function generateColumns: <T extends Record<string, unknown>>(data: T[]) => TableColumn<T>[]
 function generateOnMediaCSS: (theme: DefinedTheme, warnings?: string[]) => string
@@ -3152,7 +3203,7 @@ const WIDTH_BREAKPOINT_NAMES: readonly ["sm", "md", "lg", "xl", "2xl"]
 const borderDefaults: { readonly '--border-width': "1px" }
 const borderVars: stylex.VarGroup<Readonly<{ readonly '--border-width': "1px" }>, symbol>
 const colorDefaults: object
-  --color-accent: 'light-dark(#0064E0, #2694FE)'
+  --color-accent: 'light-dark(#0064E0, #0171E3)'
   --color-accent-muted: 'light-dark(#0082FB33, #0082FB3F)'
   --color-on-accent: 'light-dark(#FFFFFF, #FFFFFF)'
   --color-neutral: 'light-dark(rgba(5, 54, 89, 0.1), rgba(223, 226, 229, 0.2))'
@@ -3250,7 +3301,7 @@ const colorDefaults: object
   --color-border-yellow: 'light-dark(#C58600, #B47700)'
   --color-icon-yellow: 'light-dark(#FBC02D, #FFEE58)'
   --color-text-yellow: 'light-dark(#753F07, #FBCE03)'
-const colorVars: stylex.VarGroup<Readonly<{ readonly '--color-accent': "light-dark(#0064E0, #2694FE)"; readonly '--color-accent-muted': "light-dark(#0082FB33, #0082FB3F)"; reado … #a042f923
+const colorVars: stylex.VarGroup<Readonly<{ readonly '--color-accent': "light-dark(#0064E0, #0171E3)"; readonly '--color-accent-muted': "light-dark(#0082FB33, #0082FB3F)"; reado … #9de1262f
 const dataTokenDefaults: object
   --color-data-categorical-blue: 'light-dark(#0171E3, #0171E3)'
   --color-data-categorical-orange: 'light-dark(#EB6E00, #EB6E00)'
@@ -3320,7 +3371,8 @@ const durationDefaults: object
   --duration-slow-min: '730ms'
   --duration-slow: '975ms'
   --duration-slow-max: '1300ms'
-const durationVars: stylex.VarGroup<Readonly<{ readonly '--duration-fast-min': "130ms"; readonly '--duration-fast': "175ms"; readonly '--duration-fast-max': "230ms"; readonly '--du … #4dd3e52f
+  --duration-exit: 'var(--duration-fast)'
+const durationVars: stylex.VarGroup<Readonly<{ readonly '--duration-fast-min': "130ms"; readonly '--duration-fast': "175ms"; readonly '--duration-fast-max': "230ms"; readonly '--du … #f2df5593
 const easeDefaults: object
   --ease-standard: 'cubic-bezier(0.24, 1, 0.4, 1)'
   --ease-entrance: 'cubic-bezier(0.24, 1, 0.4, 1)'
@@ -3341,11 +3393,11 @@ const focusVars: stylex.VarGroup<Readonly<{ readonly '--focus-outline-width': "2
 const fontWeightDefaults: { readonly '--font-weight-normal': "400"; readonly '--font-weight-medium': "500"; readonly '--font-weight-semibold': "600"; readonly '--font-weight-bold': "700" }
 const fontWeightVars: stylex.VarGroup<Readonly<{ readonly '--font-weight-normal': "400"; readonly '--font-weight-medium': "500"; readonly '--font-weight-semibold': "600"; readonly '--font-weight-bold': "700" }>, symbol>
 const indicatorScope: ReturnType<typeof stylex.defineMarker>
-const inputStatusBorderStyles: Readonly<{ readonly warning: Readonly<{ readonly borderColor: stylex.StyleXClassNameFor<"borderColor", "var(--color-text-warning)"> }>; readonly error: Readonly … #a9ac1cbc
+const inputStatusBorderStyles: Readonly<{ readonly warning: Readonly<{ readonly borderColor: stylex.StyleXClassNameFor<"borderColor", "var(--color-text-warning)" | "Highlight"> }>; readonly e … #739ff723
 const inputStatusFocusStyles: Readonly<{ readonly warning: Readonly<{ readonly borderColor: stylex.StyleXClassNameFor<"borderColor", "var(--color-text-warning)"> }>; readonly error: Readonly … #a9ac1cbc
-const inputStatusFocusWithinStyles: Readonly<{ readonly warning: Readonly<{ readonly borderColor: stylex.StyleXClassNameFor<"borderColor", "var(--color-text-warning)"> }>; readonly error: Readonly … #a9ac1cbc
+const inputStatusFocusWithinStyles: Readonly<{ readonly warning: Readonly<{ readonly borderColor: stylex.StyleXClassNameFor<"borderColor", "var(--color-text-warning)" | "Highlight"> }>; readonly e … #739ff723
 const inputStatusHoverShadowStyles: Readonly<{ readonly warning: Readonly<{ readonly boxShadow: stylex.StyleXClassNameFor<"boxShadow", "none" | { readonly '@media (hover: hover)': stylex.StyleXVar … #de6f47e5
-const inputWrapperStyles: Readonly<{ readonly base: Readonly<{ readonly boxSizing: stylex.StyleXClassNameFor<"boxSizing", "border-box">; readonly position: stylex.StyleXClassNameFor<"pos … #2e7e1cc8
+const inputWrapperStyles: Readonly<{ readonly base: Readonly<{ readonly boxSizing: stylex.StyleXClassNameFor<"boxSizing", "border-box">; readonly position: stylex.StyleXClassNameFor<"pos … #ba795170
 const interactionOverlayStyles: Readonly<{ readonly backgroundColor: Readonly<{ readonly backgroundColor: stylex.StyleXClassNameFor<"backgroundColor", "light-dark(#0536590C, #FFFFFF0C)" | "lig … #3522ad34
 const overlayPaddingReset: Readonly<{ readonly reset: Readonly<{ readonly '--container-padding-inline-start': stylex.StyleXClassNameFor<"--container-padding-inline-start", "0px">; readonl … #15cd7287
 const radiusDefaults: object
@@ -3479,7 +3531,28 @@ const typographyVars: stylex.VarGroup<Readonly<{ readonly '--font-family-body': 
 ```text
 interface AlertDialogProps extends BaseProps<HTMLDialogElement> (props of AlertDialog)
 interface AnimatedLayout
-  [AREA]: () => Element | null
+  @astryxdesign/core/animated-layout/v1?: never
+interface Animator extends AnimatorHandle
+  animate: (target: AnimatorValues, options?: AnimatorAnimateOptions) => Promise<void>
+  decay: (velocity: AnimatorDecayVelocity) => Promise<void>
+  destroy: () => void
+  get: () => AnimatorSnapshot
+  getVelocity: () => AnimatorSnapshot
+  set: (values: AnimatorValues) => void
+  stop: () => void
+interface AnimatorAnimateOptions
+  velocity?: AnimatorValues
+type AnimatorChannel = 'x' | 'y' | 'scale' | 'rotate' | 'opacity'
+type AnimatorDecayVelocity = AnimatorValues
+interface AnimatorHandle
+  animate: (target: AnimatorValues, options?: AnimatorAnimateOptions) => Promise<void>
+  decay: (velocity: AnimatorDecayVelocity) => Promise<void>
+  get: () => AnimatorSnapshot
+  getVelocity: () => AnimatorSnapshot
+  set: (values: AnimatorValues) => void
+  stop: () => void
+type AnimatorSnapshot = Readonly<Record<AnimatorChannel, number>>
+type AnimatorValues = Partial<Record<AnimatorChannel, number>>
 type AnnounceFn = (message: string, politeness?: AnnouncePoliteness) => void
 type AnnouncePoliteness = 'polite' | 'assertive'
 type AppShellBreakpoint = WidthBreakpointName | 'none'
@@ -3502,6 +3575,7 @@ interface AppShellVariantMap
 type AspectRatioFit = 'cover' | 'contain' | 'center'
 interface AspectRatioProps extends BaseProps<HTMLDivElement> (props of AspectRatio)
 type AspectRatioShape = 'rectangle' | 'ellipse'
+type AutoCapitalize = 'off' | 'none' | 'on' | 'sentences' | 'words' | 'characters'
 interface AvatarGroupContextValue
   numericSize: number
   overlap: number
@@ -3561,6 +3635,7 @@ interface BaseTableProps<T extends Record<string, unknown>> extends BaseProps<HT
   rowIndexStart?: number = 1
   scrollWrapper?: ComponentType<{ children: ReactNode; htmlProps?: HTMLAttributes<HTMLDivElement> & { ref?: Ref<HTMLDivElement> }; xstyle?: StyleXStyles[]; beforeTable?: ReactNode; afterTable?: ReactNode }>
   textOverflow?: 'wrap' | 'truncate' = 'wrap'
+  virtualization?: TableVirtualizationCapability
   xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 interface BaseTypeaheadProps<T extends SearchableItem> extends Omit<BaseProps<HTMLElement>, 'onChange'> (props of BaseTypeahead)
@@ -3667,10 +3742,12 @@ interface BreadcrumbMenuSection
 interface BreadcrumbMenuSubMenuProps extends DropdownMenuSubMenuBaseProps
   children: ReactNode
   data-testid?: string
+  delay?: number = 150
   description?: ReactNode
   footer?: ReactNode
   hasSpinner?: boolean = false
   header?: ReactNode
+  hideDelay?: number = 200
   icon?: ReactNode | IconType
   isDisabled?: boolean = false
   label: ReactNode
@@ -3709,6 +3786,7 @@ interface CalendarDay
 interface CalendarHandle
   navigateTo: (date: ISODateString) => void
 type CalendarProps = CalendarSingleProps | CalendarRangeProps (props of Calendar)
+type CalendarSystem = 'gregory' | 'iso8601' | 'buddhist' | 'roc' | 'japanese' | 'persian' | 'indian' | 'hebrew' | 'chinese' | 'dangi' | 'coptic' | 'ethiopic' | 'ethioaa' | 'islamic-c … #85e5f84c
 interface CardProps extends BaseProps<HTMLDivElement> (props of Card)
 type CardVariant = keyof CardVariantMap
 interface CardVariantMap
@@ -3821,10 +3899,11 @@ interface ClickableCardProps extends BaseProps (props of ClickableCard)
 interface ClickableContainerResult
   onClick: (event: MouseEvent<HTMLElement>) => void
   onMouseUp: (event: MouseEvent<HTMLElement>) => void
+  onPointerDown: (event: PointerEvent<HTMLElement>) => void
 interface CodeBlockProps extends BaseProps<HTMLPreElement> (props of CodeBlock)
 type CodeColor = 'primary' | 'secondary' | 'inherit'
 type CodeLanguage
-  [LANGUAGE]: true
+  @astryxdesign/core/code-language/v1?: never
   fileExtensions: ReadonlyArray<string>
   fileNames: ReadonlyArray<string>
   identifiers: ReadonlyArray<string>
@@ -4009,10 +4088,12 @@ type ContextMenuSection = DropdownMenuSection
 interface ContextMenuSubMenuProps extends DropdownMenuSubMenuBaseProps
   children: ReactNode
   data-testid?: string
+  delay?: number = 150
   description?: ReactNode
   footer?: ReactNode
   hasSpinner?: boolean = false
   header?: ReactNode
+  hideDelay?: number = 200
   icon?: ReactNode | IconType
   isDisabled?: boolean = false
   label: ReactNode
@@ -4153,6 +4234,14 @@ interface DividerVariantMap
   strong: true
   subtle: true
 type DomainTokenName = SyntaxTokenName | DataTokenName
+interface DragToSnapPoints
+  destroy: () => void
+  settleTo: (index: number) => void
+interface DragToSnapPointsOptions
+  axis: 'x' | 'y'
+  flickThreshold?: number
+  onSettle: (index: number) => void
+  snapPoints: ReadonlyArray<number>
 interface DrawerHeaderProps extends BaseProps<HTMLDivElement> (props of DrawerHeader)
 interface DrawerProps extends BaseProps<HTMLDialogElement> (props of Drawer)
 type DropdownMenuButtonProps = Omit<ButtonProps, 'onClick'>
@@ -4212,6 +4301,7 @@ type ElementSize = 'sm' | 'md' | 'lg'
 interface EmptyOperatorValue
   type: 'empty'
 interface EmptyStateProps extends BaseProps<HTMLDivElement> (props of EmptyState)
+type EnterKeyHint = 'enter' | 'done' | 'go' | 'next' | 'previous' | 'search' | 'send'
 interface EntityListOperatorValue
   isArbitraryStringAllowed?: boolean = false
   renderItem?: (item: SearchableItem) => ReactNode
@@ -4258,13 +4348,7 @@ interface FieldStatusInput
   messageID?: string
   type: FieldStatusType
 type FieldStatusPlacement = keyof FieldStatusVariantMap | 'tooltip'
-interface FieldStatusProps extends BaseProps<HTMLDivElement>
-  message: string
-  ref?: React.Ref<HTMLDivElement>
-  type: InputStatusType
-  variant?: FieldStatusVariant = 'attached'
-  xstyle?: StyleXStyles
-  inherits AriaAttributes, DOMAttributes, HTMLAttributes
+interface FieldStatusProps extends BaseProps<HTMLDivElement> (props of FieldStatus)
 type FieldStatusType = 'warning' | 'error' | 'success'
 type FieldStatusVariant = keyof FieldStatusVariantMap
 interface FieldStatusVariantMap
@@ -4470,6 +4554,8 @@ type IndicatorRegistrySource = DefinedTheme | string | null | undefined
 type IndicatorSize = 'sm' | 'md'
 type IndicatorState<F extends IndicatorFamily = IndicatorFamily> = IndicatorFamilyMap[F]
 type InferData<D extends ReadonlyArray<FieldDefinition>> = { [F in D[number] as F['key']]: FieldTypeToJS[F['type']] }
+interface InfoTipProps extends Pick<BaseProps, 'xstyle' | 'className' | 'style'> (props of InfoTip)
+type InfoTipSize = IconSize
 type InlineNode<Extension extends MarkdownExtensionNode = never> = { type: 'text'; content: string } | { type: 'bold'; children: InlineNode<Extension>[] } | { type: 'italic'; children: InlineNode<Extension>[] } | { type: 'strik … #7f5046d1
 type InlineNodeWithMath<Extension extends MarkdownExtensionNode = never> = { type: 'text'; content: string } | { type: 'bold'; children: InlineNodeWithMath<Extension>[] } | { type: 'italic'; children: InlineNodeWithMath<Extension>[] }  … #7144a813
 interface InputARIA
@@ -4485,6 +4571,7 @@ interface InputGroupContextValue
 interface InputGroupProps extends Omit<BaseProps<HTMLDivElement>, 'children'> (props of InputGroup)
 type InputGroupSize = 'sm' | 'md' | 'lg'
 interface InputGroupTextProps extends BaseProps<HTMLDivElement> (props of InputGroupText)
+type InputMode = 'none' | 'text' | 'tel' | 'url' | 'email' | 'numeric' | 'decimal' | 'search'
 type InputSize = 'sm' | 'md' | 'lg'
 interface InputStatus
   message?: string
@@ -4497,6 +4584,7 @@ interface IntegerOperatorValue
   units?: string
 type InteractiveRole = 'link' | 'button' | 'inert'
 interface InternationalizationContextValue
+  calendar?: CalendarSystem
   direction: 'ltr' | 'rtl'
   locale: Locale
   messages: MessagesByLocale
@@ -4871,6 +4959,16 @@ interface PaginationVariantMap
   input: true
   none: true
   pages: true
+interface PanGesture
+  destroy: () => void
+interface PanGestureEvent
+  state: PanGestureState
+  translation: { x: number; y: number }
+  velocity: { x: number; y: number }
+interface PanGestureOptions
+  axis?: 'x' | 'y'
+  onPan: (event: PanGestureEvent) => void
+type PanGestureState = 'began' | 'changed' | 'ended' | 'cancelled'
 type ParseOptions<Plugins extends ReadonlyArray<MarkdownPluginEntry> = readonly []> = CommonParseOptions<Plugins> & { math?: false | undefined }
 interface ParseOutlineFromMarkdownOptions<Node extends MarkdownExtensionNode = never>
   isFinal?: boolean
@@ -4946,6 +5044,7 @@ interface PowerSearchOperatorWithLabel extends PowerSearchOperatorBase
   key: string
   label: string
   value: OperatorValue
+type PowerSearchPresentation = AdaptivePresentation
 interface PowerSearchProps extends Omit<BaseProps<HTMLElement>, 'onChange'> (props of PowerSearch)
 type PowerSearchSize = 'sm' | 'md' | 'lg'
 interface PowerSearchTokenProps (props of PowerSearchToken)
@@ -4991,6 +5090,15 @@ type RadiusVarName = keyof typeof radiusDefaults
 interface RelativeDateFilterPreset
   label: string
   value: string
+interface ReorderMove<TKey extends string | number = string | number, TTo = number>
+  key: TKey
+  to: TTo
+interface Reorderable<TKey extends string | number = string | number, TTo = number>
+  [reorderableBrand]: { readonly key: TKey; readonly to: TTo }
+  start: (key: TKey) => void
+interface ReorderableOptions<TKey extends string | number = string | number, TTo = number>
+  isReorderable?: (key: TKey) => boolean
+  onReorder: (move: ReorderMove<TKey, TTo>) => void
 interface ResizableConfig
   autoSaveId?: string
   defaultIsCollapsed?: boolean
@@ -5223,6 +5331,10 @@ interface SliderSingleProps extends SliderBaseProps
   valueDisplay?: 'tooltip' | 'text' | 'none' = "tooltip"
   width?: SizeValue
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
+interface SnapPaging
+  @astryxdesign/core/snap-paging/v1?: never
+interface SnapPagingOptions
+  pages?: 'view' | 'item' = 'view'
 type SourceRange
   end: number
   start: number
@@ -5364,15 +5476,16 @@ interface TableFooterProps extends BaseProps<HTMLTableSectionElement> (props of 
 interface TableHeaderCellProps extends BaseProps<HTMLTableCellElement> (props of TableHeaderCell)
 interface TableHeaderProps extends BaseProps<HTMLTableSectionElement> (props of TableHeader)
 interface TablePlugin<T extends Record<string, unknown> = Record<string, unknown>>
-  transformBodyCell?: (props: BodyCellRenderProps, column: TableColumn<T>, item: T, columnIndex: number, columns: ReadonlyArray<TableColumn<T>>) => BodyCellRenderProps
-  transformBodyRow?: (props: BodyRowRenderProps, item: T, index: number) => BodyRowRenderProps
+  rowModel?: TableRenderContext['rowModel']
+  transformBodyCell?: (props: BodyCellRenderProps, column: TableColumn<T>, item: T, columnIndex: number, columns: ReadonlyArray<TableColumn<T>>, context?: TableRowContext) => BodyCellRenderProps
+  transformBodyRow?: (props: BodyRowRenderProps, item: T, index: number, context?: TableRowContext) => BodyRowRenderProps
   transformColumns?: (columns: TableColumn<T>[]) => TableColumn<T>[]
   transformHeaderCell?: (props: HeaderCellRenderProps, column: TableColumn<T>, columnIndex: number, columns: ReadonlyArray<TableColumn<T>>) => HeaderCellRenderProps
   transformHeaderRow?: (props: HeaderRowRenderProps) => HeaderRowRenderProps
-  transformScrollWrapper?: (props: ScrollWrapperRenderProps) => ScrollWrapperRenderProps
+  transformScrollWrapper?: (props: ScrollWrapperRenderProps, context?: TableRenderContext) => ScrollWrapperRenderProps
   transformTable?: (props: TableRenderProps) => TableRenderProps
   transformTableContext?: (children: ReactNode) => ReactNode
-interface TableProps<T extends Record<string, unknown>> extends Omit<BaseTableProps<T>, 'plugins' | 'components'>
+interface TableProps<T extends Record<string, unknown>> extends TableAppearanceProps<T>
   children?: ReactNode
   columns?: TableColumn<T>[]
   data?: T[]
@@ -5389,11 +5502,26 @@ interface TableProps<T extends Record<string, unknown>> extends Omit<BaseTablePr
   scrollWrapper?: ComponentType<{ children: ReactNode; htmlProps?: HTMLAttributes<HTMLDivElement> & { ref?: Ref<HTMLDivElement> }; xstyle?: StyleXStyles[]; beforeTable?: ReactNode; afterTable?: ReactNode }>
   textOverflow?: 'wrap' | 'truncate' = 'wrap'
   verticalAlign?: TableVerticalAlign = 'middle'
+  virtualization?: BaseTableProps<T>['virtualization']
   xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
+interface TableRenderContext
+  headerRowCount: number
+  logicalRowCount: number
+  mode: 'data' | 'children'
+  rowModel: 'flat' | 'tree' | 'grouped' | 'detail' | 'custom'
+  viewport: React.RefObject<HTMLDivElement | null>
 interface TableRenderProps
   htmlProps: HTMLAttributes<HTMLTableElement>
   xstyle: StyleXStyles[]
+interface TableRowContext
+  headerRowCount: number
+  identityStatus: 'valid' | 'missing' | 'invalid' | 'duplicate'
+  key: string | number | undefined
+  kind: 'product' | 'synthetic' | 'unknown'
+  logicalIndex: number
+  logicalRowCount: number
+  render: TableRenderContext
 interface TableRowProps extends BaseProps<HTMLTableRowElement> (props of TableRow)
 interface TableRowStatus
   color: TableRowStatusColor | (string & {})
@@ -5425,7 +5553,9 @@ interface TableTreeRowMeta
   isExpanded: boolean
   level: number
 type TableVerticalAlign = 'middle' | 'top' | 'bottom'
-interface TextAreaProps extends Omit<FieldInputBaseProps, 'onChange' | 'defaultValue'> (props of TextArea)
+interface TableVirtualizationCapability
+  [capabilityBrand]: Readonly<UseTableRowsVirtualizationConfig>
+interface TextAreaProps extends Omit<FieldInputBaseProps, 'onChange' | 'defaultValue'>, TextEntryTraitProps (props of TextArea)
 type TextAreaSize = 'sm' | 'md' | 'lg'
 interface TextAreaStatus
   message?: string
@@ -5440,13 +5570,13 @@ interface TextColorMap
   primary: true
   secondary: true
 type TextDisplay = 'inline' | 'block'
-interface TextInputProps extends Omit<FieldInputBaseProps, 'onChange' | 'defaultValue'> (props of TextInput)
+interface TextInputProps extends Omit<FieldInputBaseProps, 'onChange' | 'defaultValue'>, TextEntryTraitProps (props of TextInput)
 type TextInputSize = keyof typeof sizeStyles
 interface TextInputStatus
   message?: string
   type: InputStatusType
 type TextInputStatusType = 'warning' | 'error' | 'success'
-type TextInputType = 'text' | 'password' | 'email'
+type TextInputType = 'text' | 'password' | 'email' | 'search' | 'tel' | 'url'
 type TextJustify = 'start' | 'center' | 'end'
 interface TextProps extends Omit<BaseProps, 'children'> (props of Text)
 type TextSize = '4xs' | '3xs' | '2xs' | 'xsm' | 'sm' | 'base' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl'
@@ -5620,6 +5750,7 @@ interface TokenizerHandle
   blur: () => void
   focus: () => void
 type TokenizerOverflowBehavior = 'none' | 'unfocusedInline' | 'unfocusedLayer'
+type TokenizerPresentation = AdaptivePresentation
 interface TokenizerProps<T extends SearchableItem> extends Omit<FieldInputBaseProps<HTMLInputElement>, 'onChange' | 'onFocus' | 'onBlur' | 'onKeyDown'> (props of Tokenizer)
 type TokenizerSize = 'sm' | 'md' | 'lg'
 interface TokenizerStatus
@@ -5645,10 +5776,12 @@ interface TooltipProps (props of Tooltip)
 interface TooltipReturn
   anchorId: string
   describedBy: string
+  hide: () => void
   interactionRef: RefCallback<HTMLElement>
   positionRef: RefCallback<HTMLElement>
   ref: RefCallback<HTMLElement>
   renderTooltip: (children: ReactNode, props?: Omit<ContextRenderProps, 'positioning'>) => ReactNode
+  show: () => void
 type TooltipTouchTrigger = LayerTouchTrigger
 interface TopNavHeadingProps extends BaseProps<HTMLElement> (props of TopNavHeading)
 interface TopNavItemProps extends BaseProps<HTMLAnchorElement> (props of TopNavItem)
@@ -5729,6 +5862,7 @@ interface UseCalendarConstraintsReturn
   maxDate: PlainDate | null
   minDate: PlainDate | null
 interface UseCalendarDaysOptions
+  calendar?: CalendarSystem = 'gregory'
   hasVariableRowCount?: boolean
   month: number
   weekStartsOn?: DayOfWeek
@@ -5739,6 +5873,7 @@ interface UseCalendarDaysReturn
   totalCells: number
   weeks: CalendarDay[][]
 interface UseCalendarNavigationOptions
+  calendar?: CalendarSystem = 'gregory'
   focusDate?: ISODateString
   initialValue?: ISODateString
   numberOfMonths?: 1 | 2
@@ -5749,6 +5884,7 @@ interface UseCalendarNavigationReturn
   monthYearLabel: string
   navigateMonth: (delta: number, focusedDate?: ISODateString, offset?: number) => void
   pendingFocus: ISODateString | null
+  visibleCalendarMonths: { year: number; month: number }[]
   visibleMonths: PlainDate[]
 interface UseChatComposerTokensOptions
   editableRef: React.RefObject<HTMLDivElement | null>
@@ -5840,6 +5976,8 @@ interface UseContainerRevealOptions
 interface UseContainerRevealReturn
   getContainerProps: (options?: ContainerRevealOptions) => { className?: string; style?: CSSProperties }
   getContentRevealProps: (options?: ContentRevealOptions) => { className?: string; style?: CSSProperties }
+interface UseDragToSnapPointsResult
+  settleTo: (index: number) => void
 interface UseFocusTrapOptions
   isActive: boolean
   onEscape?: () => void
@@ -5854,8 +5992,8 @@ interface UseGridFocusOptions
   isCellFocusable?: (cell: HTMLElement) => boolean
   onNavigateAfter?: (column: number, offset: number) => void
   onNavigateBefore?: (column: number, offset: number) => void
-  onPageDown?: () => void
-  onPageUp?: () => void
+  onPageDown?: (event: React.KeyboardEvent) => void
+  onPageUp?: (event: React.KeyboardEvent) => void
 interface UseGridFocusReturn<T extends HTMLElement = HTMLElement>
   focusCell: (index: number) => void
   focusFirst: () => void
@@ -5932,8 +6070,8 @@ interface UseListFocusReturn<T extends HTMLElement = HTMLElement>
 interface UseLongPressHandlers
   cancel: () => void
   moveTo: (point: { x: number; y: number }) => boolean
-  onTouchCancel: () => void
-  onTouchEnd: () => void
+  onTouchCancel: (e?: React.TouchEvent) => void
+  onTouchEnd: (e?: React.TouchEvent) => void
   onTouchMove: (e: React.TouchEvent) => void
   onTouchStart: (e: React.TouchEvent) => void
   start: (point: { x: number; y: number }) => void
@@ -6115,6 +6253,7 @@ interface UseTableRowExpansionConfig<T extends Record<string, unknown>>
   expandedKeys: Set<string>
   getIsItemExpandable?: (item: T) => boolean = all rows expandable
   getRowKey: (item: T) => string
+  getRowLabel?: (item: T) => string
   hasRowClickExpansion?: boolean = false (only the chevron toggles expansion).
   onToggle: (key: string) => void
   panelVariant?: 'muted' | 'transparent' = 'transparent'
@@ -6126,6 +6265,9 @@ interface UseTableRowIndexConfig<T extends Record<string, unknown>>
   startFrom?: number = 1
 interface UseTableRowStatusConfig<T extends Record<string, unknown>>
   getStatus: (item: T) => (TableRowStatus & { status?: never }) | TableSemanticRowStatus | null
+interface UseTableRowsVirtualizationConfig
+  rowHeight: number
+  viewportHeight: number
 interface UseTableSelectionConfig<T extends Record<string, unknown>>
   getIsAllSelected: () => boolean
   getIsIndeterminate?: () => boolean
@@ -6137,7 +6279,7 @@ interface UseTableSelectionConfig<T extends Record<string, unknown>>
   onSelectAll: (event: { isAllSelected: boolean }) => void
   onSelectItem: (event: { item: T; isSelected: boolean }) => void
 interface UseTableSelectionStateConfig<T extends Record<string, unknown>>
-  data: T[]
+  data?: T[]
   getIsItemEnabled?: (item: T) => boolean = () => true
   getIsItemSelectable?: (item: T) => boolean = () => true
   idKey: (keyof T & string) | ((item: T) => string)
@@ -6168,6 +6310,7 @@ interface UseTableStickyColumnsConfig
   endKeys?: string[]
   startKeys?: string[]
 interface UseTableTreeDataConfig<T extends Record<string, unknown>>
+  getRowLabel?: (item: T) => string
   getRowMeta: (item: T) => TableTreeRowMeta | undefined
   hasExpandAllControl?: boolean = false
   hasExpandableRows: boolean
@@ -6947,6 +7090,8 @@ EmptyStateProps (.)
 ### Also exported from an earlier entry point
 
 ```text
+AutoCapitalize (.)
+EnterKeyHint (.)
 Field (.)
 FieldContainerStyleProps (.)
 FieldControlStyleProps (.)
@@ -6963,6 +7108,7 @@ FieldStatusType (.)
 FieldStatusVariant (.)
 FieldStatusVariantMap (.)
 InputClearButton (.)
+InputMode (.)
 InputSize (.)
 InputStatus (.)
 InputStatusType (.)
@@ -7140,6 +7286,16 @@ useIndicator (.)
 
 ```text
 indicatorScope (.)
+```
+
+## `./InfoTip`
+
+### Also exported from an earlier entry point
+
+```text
+InfoTip (.)
+InfoTipProps (.)
+InfoTipSize (.)
 ```
 
 ## `./InputGroup`
@@ -7675,7 +7831,7 @@ interface MarkdownPluginCapabilities
 type MarkdownPluginData = MarkdownAstDataValue
 type MarkdownPluginDefinition<Name extends string, Node extends MarkdownExtensionNode<Name> = never> = MarkdownSyntaxPluginDefinition<Name, Node> | MarkdownTransformPluginDefinition<Name, Node>
 interface MarkdownPluginEntry<Node extends MarkdownExtensionNode = MarkdownExtensionNode>
-  [markdownPluginNode]: Node
+  @astryxdesign/core/markdown-plugin-node/v1: Node
   apiVersion: 1
   name: string
 interface MarkdownSourceDecoration
@@ -7719,7 +7875,7 @@ interface MarkdownTokenizerInput
   offset: number
   source: string
 interface MarkdownTransform<Node extends MarkdownExtensionNode = never>
-  [markdownTransformNode]?: Node
+  @astryxdesign/core/markdown-transform-node/v1?: Node
 interface MarkdownTransformContext
   display: 'inline' | 'block'
   isFinal: boolean
@@ -8178,6 +8334,7 @@ PowerSearchOperator (.)
 PowerSearchOperatorBase (.)
 PowerSearchOperatorWithI18nKey (.)
 PowerSearchOperatorWithLabel (.)
+PowerSearchPresentation (.)
 PowerSearchProps (.)
 PowerSearchSize (.)
 PowerSearchToken (.)
@@ -8196,7 +8353,7 @@ usePowerSearchConfig (.)
 ### Functions
 
 ```text
-function formatFilterValue: (_config: InternalConfig, operatorValue: OperatorValue, filterValue: FilterValue, maxLength: number, t: TranslatorFn, locale: Locale, timezoneID?: string) => string
+function formatFilterValue: (_config: InternalConfig, operatorValue: OperatorValue, filterValue: FilterValue, maxLength: number, t: TranslatorFn, locale: Locale, timezoneID?: string, calendar?: CalendarSystem) => string
 ```
 
 ### Types
@@ -8426,6 +8583,16 @@ SliderRangeProps (.)
 SliderSingleProps (.)
 ```
 
+## `./SnapPaging`
+
+### Also exported from an earlier entry point
+
+```text
+SnapPaging (.)
+SnapPagingOptions (.)
+useSnapPaging (.)
+```
+
 ## `./Spinner`
 
 ### Also exported from an earlier entry point
@@ -8580,8 +8747,10 @@ TableHeaderCellProps (.)
 TableHeaderProps (.)
 TablePlugin (.)
 TableProps (.)
+TableRenderContext (.)
 TableRenderProps (.)
 TableRow (.)
+TableRowContext (.)
 TableRowProps (.)
 TableRowStatus (.)
 TableSelectionState (.)
@@ -8596,6 +8765,7 @@ TableSortableColumnConfig (.)
 TableTextOverflow (.)
 TableTreeRowMeta (.)
 TableVerticalAlign (.)
+TableVirtualizationCapability (.)
 UseTableColumnResizeConfig (.)
 UseTableColumnSettingsConfig (.)
 UseTableColumnSettingsStateConfig (.)
@@ -8607,6 +8777,7 @@ UseTablePaginationConfig (.)
 UseTableRowExpansionConfig (.)
 UseTableRowIndexConfig (.)
 UseTableRowStatusConfig (.)
+UseTableRowsVirtualizationConfig (.)
 UseTableSelectionConfig (.)
 UseTableSelectionStateConfig (.)
 UseTableSelectionStateResult (.)
@@ -8635,6 +8806,7 @@ useTablePagination (.)
 useTableRowExpansion (.)
 useTableRowIndex (.)
 useTableRowStatus (.)
+useTableRowsVirtualization (.)
 useTableSelection (.)
 useTableSelectionState (.)
 useTableSortable (.)
@@ -8703,7 +8875,7 @@ const capsizeStyles: Readonly<{ readonly enabled: Readonly<{ readonly textBoxEdg
 const colorStyles: Readonly<{ readonly primary: Readonly<{ readonly color: stylex.StyleXClassNameFor<"color", "light-dark(#0A1317, #DFE2E5)"> }>; readonly secondary: Readonly<{ re … #ee16b085
 const decorationStyles: Readonly<{ readonly strikethrough: Readonly<{ readonly textDecoration: stylex.StyleXClassNameFor<"textDecoration", "line-through"> }> }>
 const defaultWeightByTypeStyles: Readonly<{ readonly body: Readonly<{ readonly fontWeight: stylex.StyleXClassNameFor<"fontWeight", "var(--font-weight-normal)"> }>; readonly large: Readonly<{ re … #7b93196d
-const displayStyles: Readonly<{ readonly inline: Readonly<{ readonly display: stylex.StyleXClassNameFor<"display", "inline"> }>; readonly block: Readonly<{ readonly display: stylex. … #58a69ee2
+const displayStyles: Readonly<{ readonly inline: Readonly<{ readonly display: stylex.StyleXClassNameFor<"display", "inline">; readonly overflowWrap: stylex.StyleXClassNameFor<"overf … #81cb0621
 const justifyStyles: Readonly<{ readonly start: Readonly<{ readonly textAlign: stylex.StyleXClassNameFor<"textAlign", "start"> }>; readonly center: Readonly<{ readonly textAlign: st … #8d088e19
 const sizeByLevelStyles: Readonly<{ readonly 1: Readonly<{ readonly fontSize: stylex.StyleXClassNameFor<"fontSize", "var(--font-size-2xl)">; readonly lineHeight: stylex.StyleXClassNameF … #c4a3a9df
 const sizeByTypeStyles: Readonly<{ readonly body: Readonly<{ readonly fontSize: stylex.StyleXClassNameFor<"fontSize", "var(--font-size-base)">; readonly lineHeight: stylex.StyleXClassN … #2041d898
@@ -8859,6 +9031,7 @@ Tokenizer (.)
 TokenizerChange (.)
 TokenizerHandle (.)
 TokenizerOverflowBehavior (.)
+TokenizerPresentation (.)
 TokenizerProps (.)
 TokenizerSize (.)
 TokenizerStatus (.)
@@ -9004,6 +9177,8 @@ AnnouncePoliteness (.)
 ClickableContainerResult (.)
 ContainerRevealOptions (.)
 ContentRevealOptions (.)
+DragToSnapPoints (.)
+DragToSnapPointsOptions (.)
 EntryAnimationPreset (.)
 Hotkey (.)
 INTERACTIVE_SELECTORS (.)
@@ -9018,6 +9193,10 @@ MenuPressEvent (.)
 MenuPressGesture (.)
 MenuPressPointerType (.)
 MenuPressStep (.)
+PanGesture (.)
+PanGestureEvent (.)
+PanGestureOptions (.)
+PanGestureState (.)
 ScrollAxis (.)
 ScrollAxisState (.)
 ScrollKeyboardAccess (.)
@@ -9034,6 +9213,7 @@ UseClipboardOptions (.)
 UseClipboardReturn (.)
 UseContainerRevealOptions (.)
 UseContainerRevealReturn (.)
+UseDragToSnapPointsResult (.)
 UseFocusTrapOptions (.)
 UseFocusTrapReturn (.)
 UseGridFocusOptions (.)
@@ -9066,11 +9246,13 @@ hasTextSelection (.)
 isMenuPressActivation (.)
 menuPressStep (.)
 useAnimatedLayout (.)
+useAnimator (.)
 useAnnounce (.)
 useClickableContainer (.)
 useClipboard (.)
 useContainerReveal (.)
 useDevWarning (.)
+useDragToSnapPoints (.)
 useEntryAnimation (.)
 useFocusTrap (.)
 useGridFocus (.)
@@ -9087,6 +9269,7 @@ useMediaQuery (.)
 useMenuPress (.)
 useMergedRefs (.)
 useOverflow (.)
+usePanGesture (.)
 usePressFeedback (.)
 useScrollLock (.)
 useScrollOverflow (.)
@@ -9101,6 +9284,7 @@ useTypeahead (.)
 ### Also exported from an earlier entry point
 
 ```text
+CalendarSystem (.)
 Catalog (.)
 InternationalizationContext (.)
 InternationalizationContextValue (.)
@@ -9838,6 +10022,7 @@ var --container-padding-block-end (./astryx.css)
 var --container-padding-block-start (./astryx.css)
 var --container-padding-inline-end (./astryx.css)
 var --container-padding-inline-start (./astryx.css)
+var --duration-exit (./astryx.css)
 var --duration-fast (./astryx.css)
 var --duration-fast-max (./astryx.css)
 var --duration-fast-min (./astryx.css)

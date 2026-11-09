@@ -20,6 +20,10 @@ import {parseTimeInput, type ISOTimeString} from './timeParser';
 
 const iso = (time: string) => time as ISOTimeString;
 
+// Some names differ between CLDR 47 and CLDR 48. Any other version expects
+// the CLDR 48 names, so new locale data fails here first.
+const isCldr47 = process.versions.cldr?.startsWith('47.') ?? false;
+
 describe('resolveHourFormat', () => {
   it.each([
     ['en', '12h'],
@@ -150,7 +154,10 @@ describe('parseLocaleTime', () => {
   });
 
   it('reads twelve-hour text whose pattern differs from the 24-hour one', () => {
-    expect(parseLocaleTime('অপৰাহ্ন ২.৩০', 'as')).toBe('14:30');
+    // Assamese names the afternoon "PM" in CLDR 47 and "অপৰাহ্ন" in CLDR 48.
+    const asText = `${isCldr47 ? 'PM' : 'অপৰাহ্ন'} ২.৩০`;
+    expect(formatLocaleTime(iso('14:30'), 'as', '12h')).toBe(asText);
+    expect(parseLocaleTime(asText, 'as')).toBe('14:30');
     expect(parseLocaleTime('ɣetrɔ ga 2:30', 'ee')).toBe('14:30');
     expect(parseLocaleTime('Klock 2.30:05 PM', 'nds', true)).toBe('14:30:05');
     expect(parseLocaleTime('2h30:05 PM', 'oc', true)).toBe('14:30:05');

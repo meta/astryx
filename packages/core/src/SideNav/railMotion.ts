@@ -12,9 +12,9 @@
  * @position Internal to SideNav (`component:SideNav` FR6, DEC-2); AppShell's
  *   content area moves through the context (`component:AppShell` FR17)
  *
- * Collapsing or expanding the rail plays one motion on one clock, the
- * `springs.settle` role the animated-layout module reads (`spec:AST-105`
- * FR4). The rail is FR9's edge reveal in its inline two-state form, which
+ * Collapsing or expanding the rail plays one motion on one clock: the
+ * theme's move curve, which the animated-layout module plays. The rail is
+ * FR9's edge reveal in its inline two-state form, which
  * the module produces (`architecture:react-component-runtime` INV12): layout
  * snaps to the final rail width at once, nothing animates a width, and the
  * module clips the rail's inline-end edge from the width it shows to the new
@@ -43,7 +43,6 @@
  * SideNavRailMotion.test.tsx.
  */
 
-import {createContext} from 'react';
 import {
   createAnimatedLayout,
   holdLayoutEdge,
@@ -52,6 +51,7 @@ import {
   type LayoutEdgeHold,
   type LayoutSwap,
 } from '../motion/animatedLayout';
+import {createSharedContext} from '../utils/sharedContext';
 
 /** What AppShell lends its SideNav; outside AppShell, nothing. */
 export interface SideNavShell {
@@ -69,7 +69,11 @@ export interface SideNavShell {
   landContent(): void;
 }
 
-export const SideNavShellContext = createContext<SideNavShell | null>(null);
+export const SideNavShellContext = createSharedContext<SideNavShell | null>(
+  'SideNavShellContext',
+  1,
+  null,
+);
 SideNavShellContext.displayName = 'SideNavShellContext';
 
 /** A SideNav outside AppShell holds its own handle over its parent. */

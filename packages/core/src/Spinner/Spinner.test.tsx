@@ -9,12 +9,27 @@
  * SYNC: When Spinner.tsx changes, update tests to match new behavior
  */
 
-import {describe, it, expect, vi, afterEach} from 'vitest';
+import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
+import {createRef, Profiler, StrictMode} from 'react';
 import {render, screen} from '@testing-library/react';
+import {SPINNER_ARC_FRACTION} from './spinnerRotor';
 import {Spinner} from './Spinner';
+import {SpinnerOwnerContext} from './SpinnerOwnerContext';
 import {InternationalizationProvider} from '../i18n';
 import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
+import {getAllInjectedCss} from '../__tests__/forcedColors';
+import {declaredValue} from '../__tests__/stylexDeclarations';
+
+const {announce} = vi.hoisted(() => ({announce: vi.fn()}));
+vi.mock('../hooks/useAnnounce', () => ({useAnnounce: () => announce}));
+
+beforeEach(() => {
+  announce.mockClear();
+  vi.spyOn(document, 'readyState', 'get').mockReturnValue('complete');
+});
+
+afterEach(() => vi.restoreAllMocks());
 
 /** sm/md/lg/xl, as Spinner.tsx defines them. */
 const SIZES = {
@@ -27,8 +42,19 @@ const SIZES = {
 const ring = (testId = 'spinner') =>
   screen.getByTestId(testId).querySelector('svg') as SVGSVGElement;
 
+/** The track's svg and the arc's svg, in that order. */
+const rings = (testId = 'spinner') => [
+  ...screen.getByTestId(testId).querySelectorAll('svg'),
+];
+
+/** The box that turns: the arc's svg sits inside it, the track's does not. */
+const rotor = (testId = 'spinner') =>
+  rings(testId)[1].parentElement as HTMLSpanElement;
+
 const circles = (testId = 'spinner') => {
-  const [track, arc] = [...ring(testId).querySelectorAll('circle')];
+  const [track, arc] = [
+    ...screen.getByTestId(testId).querySelectorAll('circle'),
+  ];
   return {track, arc};
 };
 
@@ -39,6 +65,7 @@ describe('Spinner', () => {
   it('renders with default props', () => {
     render(<Spinner data-testid="spinner" />);
     expect(screen.getByTestId('spinner')).toBeInTheDocument();
+    expect(announce).toHaveBeenCalledExactlyOnceWith('Loading', 'polite');
   });
 
   it('renders with size sm', () => {
@@ -85,6 +112,7 @@ describe('Spinner', () => {
       'aria-label',
       'Chargement',
     );
+    expect(announce).toHaveBeenCalledExactlyOnceWith('Chargement', 'polite');
   });
 
   it('keeps an explicit aria-label over the localized default', () => {
@@ -99,13 +127,17 @@ describe('Spinner', () => {
       'aria-label',
       'Veuillez patienter',
     );
+    expect(announce).toHaveBeenCalledExactlyOnceWith(
+      'Veuillez patienter',
+      'polite',
+    );
   });
 
   it('does not duplicate a visible string label as aria-label', () => {
     render(<Spinner label="Fetching data" data-testid="spinner" />);
-    const status = screen.getByRole('status');
-    expect(status).not.toHaveAttribute('aria-label');
-    expect(status).toHaveAttribute('aria-labelledby');
+    const image = screen.getByRole('progressbar', {name: 'Fetching data'});
+    expect(image).not.toHaveAttribute('aria-label');
+    expect(image).toHaveAttribute('aria-labelledby');
   });
 
   it('uses explicit aria-label over string label', () => {
@@ -116,7 +148,7 @@ describe('Spinner', () => {
         data-testid="spinner"
       />,
     );
-    expect(screen.getByRole('status')).toHaveAttribute(
+    expect(screen.getByRole('progressbar')).toHaveAttribute(
       'aria-label',
       'Please wait',
     );
@@ -140,7 +172,10 @@ describe('Spinner', () => {
 
   it('defaults aria-label to "Loading" for ReactNode label without explicit aria-label', () => {
     render(<Spinner label={<span>Rich content</span>} data-testid="spinner" />);
-    expect(screen.getByRole('status')).toHaveAttribute('aria-label', 'Loading');
+    expect(screen.getByRole('progressbar')).toHaveAttribute(
+      'aria-label',
+      'Loading',
+    );
   });
 
   it('accepts data-testid', () => {
@@ -245,15 +280,15 @@ describe('Spinner', () => {
 });
 
 describe('Spinner ring', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
   it('draws the ring in SVG', () => {
     render(<Spinner data-testid="spinner" />);
-    const svg = ring();
-    expect(svg).not.toBeNull();
-    expect(svg.querySelectorAll('circle')).toHaveLength(2);
+    // The track and the arc each have their own svg: the track stays put and
+    // the arc's svg sits in the rotor that turns.
+    const [trackSvg, arcSvg] = rings();
+    expect(trackSvg.querySelectorAll('circle')).toHaveLength(1);
+    expect(arcSvg.querySelectorAll('circle')).toHaveLength(1);
+    expect(trackSvg.parentElement).toBe(screen.getByTestId('spinner'));
+    expect(rotor().parentElement).toBe(screen.getByTestId('spinner'));
     expect(screen.getByTestId('spinner').querySelector('canvas')).toBeNull();
   });
 
@@ -265,11 +300,17 @@ describe('Spinner ring', () => {
       );
       // No viewBox: one user unit is one px, so the attributes below mean px.
       // They are the no-stylesheet fallback; CSS sizes the frame from the box.
+      // The track's are zero, so without a stylesheet the arc alone fills
+      // the box rather than sitting beside a second disc.
       const frame = diameter + border * 2;
-      const svg = ring();
-      expect(svg.getAttribute('viewBox')).toBeNull();
-      expect(Number(svg.getAttribute('width'))).toBe(frame);
-      expect(Number(svg.getAttribute('height'))).toBe(frame);
+      const [track, arc] = rings();
+      for (const svg of [track, arc]) {
+        expect(svg.getAttribute('viewBox')).toBeNull();
+      }
+      expect(Number(arc.getAttribute('width'))).toBe(frame);
+      expect(Number(arc.getAttribute('height'))).toBe(frame);
+      expect(Number(track.getAttribute('width'))).toBe(0);
+      expect(Number(track.getAttribute('height'))).toBe(0);
       for (const c of [circles().track, circles().arc]) {
         expect(c.getAttribute('cx')).toBe('50%');
         expect(c.getAttribute('cy')).toBe('50%');
@@ -302,13 +343,14 @@ describe('Spinner ring', () => {
   // because nothing tied them.
   it('sizes the frame from CSS, not from the size constant', () => {
     render(<Spinner data-testid="spinner" />);
-    const svg = ring();
     // No viewBox, and the circles centre on the box rather than on a centre
     // in user units — together that is what lets CSS size the frame from
     // `--_spinner-box-size`, the same composed var the span is sized from, so
     // a themed diameter moves both. The px attributes remain as the
     // no-stylesheet fallback and CSS outranks them whenever one is present.
-    expect(svg.getAttribute('viewBox')).toBeNull();
+    for (const svg of rings()) {
+      expect(svg.getAttribute('viewBox')).toBeNull();
+    }
     for (const c of [circles().track, circles().arc]) {
       expect(c.getAttribute('cx')).toBe('50%');
       expect(c.getAttribute('cy')).toBe('50%');
@@ -362,21 +404,112 @@ describe('Spinner ring', () => {
   );
 
   it('schedules no frame where the Web Animations API is absent', () => {
-    expect(SVGElement.prototype).not.toHaveProperty('getAnimations');
+    expect(HTMLElement.prototype).not.toHaveProperty('getAnimations');
     const raf = vi.spyOn(window, 'requestAnimationFrame');
     render(<Spinner data-testid="spinner" />);
     expect(ring()).not.toBeNull();
     expect(raf).not.toHaveBeenCalled();
   });
 
+  it('draws the arc at the shared rotor fraction', () => {
+    render(<Spinner size="xl" data-testid="spinner" />);
+    const arc = rotor().querySelector('circle');
+    const circumference = Math.PI * 28;
+    expect(arc?.getAttribute('stroke-dasharray')).toBe(
+      `${circumference * SPINNER_ARC_FRACTION} ${circumference * (1 - SPINNER_ARC_FRACTION)}`,
+    );
+  });
+
+  // The ring turns on the compositor: only the rotor moves, and only by
+  // `transform`, a property the browser animates without the main thread. A
+  // paint animation such as `stroke-dashoffset` would repaint the arc on the
+  // main thread every frame. It would stop while a script runs;
+  // `SpinnerMotion.a11y.chromium.spec.ts` holds the frames.
+  it('turns the arc by rotating the rotor, with nothing else animated', () => {
+    render(<Spinner data-testid="spinner" />);
+    const css = getAllInjectedCss();
+    const name = declaredValue(rotor(), 'animation-name');
+    expect(name).toBeTruthy();
+    expect(declaredValue(rotor(), 'animation-timing-function')).toBe('linear');
+    expect(declaredValue(rotor(), 'animation-iteration-count')).toBe(
+      'infinite',
+    );
+    // Its keyframes turn it by whole turns, by transform and nothing else.
+    // (jsdom's CSSOM lowercases the name in the rule but not in the at-rule.)
+    const keyframes = new RegExp(
+      `@keyframes ${name}\\s*\\{([\\s\\S]*?\\})\\s*\\}`,
+      'i',
+    ).exec(css)?.[1];
+    expect(keyframes).toMatch(/rotate\(0deg\)/);
+    expect(keyframes).not.toMatch(/stroke|width|height|top|left/);
+    // One iteration holds many turns, and its duration is that many periods,
+    // so each turn still takes one period. Chromium wakes the main thread at
+    // each iteration boundary while React listens for `animationiteration`.
+    const endDegrees = Math.max(
+      ...[...(keyframes ?? '').matchAll(/rotate\((\d+)deg\)/g)].map(m =>
+        Number(m[1]),
+      ),
+    );
+    const turns = endDegrees / 360;
+    expect(Number.isInteger(turns)).toBe(true);
+    expect(turns).toBeGreaterThanOrEqual(100);
+    const duration = declaredValue(rotor(), 'animation-duration') ?? '';
+    expect(duration).toMatch(
+      new RegExp(
+        `^calc\\(var\\(--_astryx-pre-tempo-duration-slow-min,.*\\) \\* ${turns}\\)$`,
+      ),
+    );
+    // Its own compositing layer from the first frame.
+    expect(declaredValue(rotor(), 'will-change')).toBe('transform');
+    // Nothing else in the spinner animates: not the arc, not the track.
+    for (const el of [
+      ...screen.getByTestId('spinner').querySelectorAll('svg, circle'),
+    ]) {
+      expect(declaredValue(el, 'animation-name')).toBeNull();
+    }
+    expect(css).not.toMatch(/@keyframes[^{]*\{[^}]*stroke-dashoffset/);
+  });
+
+  it('renders once and never again while the ring turns', () => {
+    vi.useFakeTimers({
+      toFake: ['requestAnimationFrame', 'setTimeout', 'setInterval'],
+    });
+    let renders = 0;
+    const onRender = () => {
+      renders += 1;
+    };
+    try {
+      render(
+        <Profiler id="spinner" onRender={onRender}>
+          {Array.from({length: 20}, (_, i) => (
+            <Spinner key={i} data-testid={`spinner-${i}`} />
+          ))}
+        </Profiler>,
+      );
+      expect(renders).toBe(1);
+      // Ten seconds of frames and timers: the motion is CSS only.
+      vi.advanceTimersByTime(10_000);
+      expect(renders).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps the track out of the rotor', () => {
+    render(<Spinner data-testid="spinner" />);
+    expect(rotor().contains(circles().arc)).toBe(true);
+    expect(rotor().contains(circles().track)).toBe(false);
+    expect(rotor().getAttribute('aria-hidden')).toBe('true');
+  });
+
   it('pins every ring to the timeline origin in a single frame', () => {
     const animations: {startTime: number | null}[] = [];
-    const getAnimations = vi.fn(function (this: SVGElement) {
+    const getAnimations = vi.fn(function (this: HTMLElement) {
       const a = {startTime: null as number | null};
       animations.push(a);
       return [a];
     });
-    Object.defineProperty(SVGElement.prototype, 'getAnimations', {
+    Object.defineProperty(HTMLElement.prototype, 'getAnimations', {
       value: getAnimations,
       configurable: true,
       writable: true,
@@ -394,7 +527,7 @@ describe('Spinner ring', () => {
       const {container} = render(
         <>
           {Array.from({length: 5}, (_, i) => (
-            <Spinner key={i} />
+            <Spinner key={i} data-testid={`spinner-${i}`} />
           ))}
         </>,
       );
@@ -404,10 +537,10 @@ describe('Spinner ring', () => {
       frames.forEach(cb => cb(0));
       expect(animations).toHaveLength(5);
       expect(animations.every(a => a.startTime === 0)).toBe(true);
-      // The dash animation lives on the arc <circle>, a descendant of the
-      // <svg> this ref sits on, not the <svg> itself (#6253) — subtree:true
-      // is what lets getAnimations() find it from here.
-      expect(getAnimations).toHaveBeenCalledWith({subtree: true});
+      // The rotation lives on the rotor itself, the element the ref sits on.
+      expect(getAnimations.mock.contexts).toEqual(
+        Array.from({length: 5}, (_, i) => rotor(`spinner-${i}`)),
+      );
       // The pin runs on the branch the other shade cases cannot reach, so the
       // no-read assertion is made here too.
       expect(
@@ -417,7 +550,7 @@ describe('Spinner ring', () => {
       ).toEqual([]);
     } finally {
       // @ts-expect-error — removing the stub restores jsdom's real surface
-      delete SVGElement.prototype.getAnimations;
+      delete HTMLElement.prototype.getAnimations;
     }
   });
 });
@@ -480,5 +613,231 @@ describe('geometry var registration', () => {
     vi.resetModules();
     await expect(import('./Spinner')).resolves.toBeDefined();
     expect(registerProperty).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('shared announcement lifecycle', () => {
+  it('announces once per appearance, including a new appearance with the same words', () => {
+    const view = (loading: boolean) => (
+      <StrictMode>{loading && <Spinner label="Loading results" />}</StrictMode>
+    );
+    const {rerender} = render(view(false));
+    expect(announce).not.toHaveBeenCalled();
+
+    rerender(view(true));
+    expect(announce).toHaveBeenCalledExactlyOnceWith(
+      'Loading results',
+      'polite',
+    );
+    rerender(view(true));
+    expect(announce).toHaveBeenCalledTimes(1);
+
+    rerender(view(false));
+    rerender(view(true));
+    expect(announce.mock.calls).toEqual([
+      ['Loading results', 'polite'],
+      ['Loading results', 'polite'],
+    ]);
+  });
+
+  it('announces when the label changes', () => {
+    const {rerender} = render(<Spinner label="Loading results" />);
+
+    expect(announce).toHaveBeenCalledExactlyOnceWith(
+      'Loading results',
+      'polite',
+    );
+
+    rerender(<Spinner label="Saving results" />);
+
+    expect(announce.mock.calls).toEqual([
+      ['Loading results', 'polite'],
+      ['Saving results', 'polite'],
+    ]);
+  });
+
+  it('stays silent with a caller role other than progressbar, as it shipped (AST-017 FR53)', () => {
+    const {rerender} = render(<Spinner aria-label="Searching" role="img" />);
+    rerender(<Spinner aria-label="Searching again" role="img" />);
+    expect(
+      screen.getByRole('img', {name: 'Searching again'}),
+    ).toBeInTheDocument();
+    expect(announce).not.toHaveBeenCalled();
+
+    rerender(<Spinner aria-label="Searching once more" />);
+    expect(announce).toHaveBeenCalledExactlyOnceWith(
+      'Searching once more',
+      'polite',
+    );
+  });
+
+  it('stays silent inside a Core owner, and announces once it stands alone (AST-086 FR8)', () => {
+    const {rerender} = render(
+      <SpinnerOwnerContext value={true}>
+        <Spinner aria-label="Loading results" />
+      </SpinnerOwnerContext>,
+    );
+    expect(
+      screen.getByRole('progressbar', {name: 'Loading results'}),
+    ).toBeInTheDocument();
+    expect(announce).not.toHaveBeenCalled();
+
+    rerender(
+      <SpinnerOwnerContext value={false}>
+        <Spinner aria-label="Loading results" />
+      </SpinnerOwnerContext>,
+    );
+    expect(announce).toHaveBeenCalledExactlyOnceWith(
+      'Loading results',
+      'polite',
+    );
+  });
+
+  it('stays silent when app code hides it with aria-hidden', () => {
+    const {rerender} = render(<Spinner label="Loading events" aria-hidden />);
+    rerender(<Spinner label="Loading events" aria-hidden />);
+    expect(screen.queryByRole('progressbar')).toBeNull();
+    expect(announce).not.toHaveBeenCalled();
+  });
+
+  it('announces a stacked rich label word by word, not run together (AST-086 FR7)', () => {
+    const {rerender} = render(<div />);
+    rerender(
+      <Spinner
+        aria-label="Fetching data"
+        label={
+          <div style={{display: 'flex', flexDirection: 'column'}}>
+            <span>Fetching data</span>
+            <span>This may take a moment</span>
+          </div>
+        }
+      />,
+    );
+    expect(announce).toHaveBeenCalledWith(
+      'Fetching data This may take a moment',
+      'polite',
+    );
+  });
+
+  it('keeps directly hidden and ancestor-hidden indicators silent', () => {
+    render(
+      <>
+        <Spinner aria-hidden="true" role={undefined} />
+        <Spinner aria-hidden="true" label="Decorative label" />
+        <div aria-hidden="true">
+          <Spinner />
+        </div>
+        <div hidden>
+          <Spinner />
+        </div>
+      </>,
+    );
+    expect(announce).not.toHaveBeenCalled();
+  });
+
+  it('leaves announcements to existing live containers', () => {
+    const view = (loading: boolean) => (
+      <>
+        <div role="log">{loading && <Spinner />}</div>
+        <div aria-live="polite">{loading && <Spinner />}</div>
+        <div aria-live="assertive">{loading && <Spinner />}</div>
+      </>
+    );
+    const {rerender} = render(view(false));
+    rerender(view(true));
+    expect(announce).not.toHaveBeenCalled();
+  });
+
+  it('preserves refs when switching between labeled and unlabeled roots', () => {
+    const ref = createRef<HTMLSpanElement>();
+    const {rerender, unmount} = render(
+      <Spinner ref={ref} data-testid="spinner" />,
+    );
+    expect(ref.current).toBe(screen.getByTestId('spinner'));
+    rerender(
+      <Spinner ref={ref} label="Loading results" data-testid="spinner" />,
+    );
+    expect(ref.current).toBe(screen.getByTestId('spinner'));
+    expect(announce).toHaveBeenLastCalledWith('Loading results', 'polite');
+    unmount();
+    expect(ref.current).toBeNull();
+  });
+
+  it('stays silent during page load and announces a later text change', () => {
+    const readyState = vi
+      .spyOn(document, 'readyState', 'get')
+      .mockReturnValue('loading');
+    const {rerender} = render(<Spinner aria-label="Loading records" />);
+    expect(announce).not.toHaveBeenCalled();
+    readyState.mockReturnValue('complete');
+    rerender(<Spinner aria-label="Loading records" />);
+    expect(announce).not.toHaveBeenCalled();
+    rerender(<Spinner aria-label="Saving records" />);
+    expect(announce).toHaveBeenCalledExactlyOnceWith(
+      'Saving records',
+      'polite',
+    );
+  });
+
+  it('announces rendered ReactNode text and changes without changing the progressbar name', () => {
+    function LoadingLabel() {
+      return (
+        <span>
+          <strong>Fetch</strong>ing records
+          <span aria-hidden="true"> decoration</span>
+          <span hidden> hidden</span>
+        </span>
+      );
+    }
+    const {rerender} = render(
+      <Spinner label={<LoadingLabel />} aria-label="Please wait" />,
+    );
+    expect(screen.getByRole('progressbar')).toHaveAccessibleName('Please wait');
+    expect(announce).toHaveBeenCalledExactlyOnceWith(
+      'Fetching records',
+      'polite',
+    );
+    rerender(<Spinner label={<LoadingLabel />} aria-label="Please wait" />);
+    expect(announce).toHaveBeenCalledTimes(1);
+    rerender(
+      <Spinner label={<em>Saving records</em>} aria-label="Please wait" />,
+    );
+    expect(screen.getByRole('progressbar')).toHaveAccessibleName('Please wait');
+    expect(announce.mock.calls).toEqual([
+      ['Fetching records', 'polite'],
+      ['Saving records', 'polite'],
+    ]);
+  });
+
+  it('announces the aria-labelledby name and its updates instead of the default', () => {
+    const view = (name: string) => (
+      <>
+        <Spinner aria-labelledby="upload-label" aria-label="Please wait" />
+        <span id="upload-label">{name}</span>
+      </>
+    );
+    const {rerender} = render(view('Uploading files'));
+    expect(screen.getByRole('progressbar')).toHaveAccessibleName(
+      'Uploading files',
+    );
+    expect(announce).toHaveBeenCalledExactlyOnceWith(
+      'Uploading files',
+      'polite',
+    );
+    rerender(view('Uploading files'));
+    expect(announce).toHaveBeenCalledTimes(1);
+    rerender(view('Saving files'));
+    expect(screen.getByRole('progressbar')).toHaveAccessibleName(
+      'Saving files',
+    );
+    expect(announce.mock.calls).toEqual([
+      ['Uploading files', 'polite'],
+      ['Saving files', 'polite'],
+    ]);
+  });
+
+  it('uses the accessible-name fallback for a textless ReactNode label', () => {
+    render(<Spinner label={<span aria-hidden="true">Decoration</span>} />);
+    expect(announce).toHaveBeenCalledExactlyOnceWith('Loading', 'polite');
   });
 });

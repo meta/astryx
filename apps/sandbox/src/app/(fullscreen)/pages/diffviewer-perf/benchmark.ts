@@ -142,8 +142,9 @@ interface EditedLines {
 }
 
 /**
- * `createDiffFile` shows a file with more changed lines than this as one
- * replaced block, so a sparse-edited file must not go above it.
+ * Most changed lines in a sparse-edited file. It stays under the limit past
+ * which `createDiffFile` shows one replaced block, so sparse edits always get
+ * a line diff.
  */
 const DIFF_EDIT_LIMIT = 2000;
 /** A site replaces up to three lines and inserts up to two more. */

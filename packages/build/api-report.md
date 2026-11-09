@@ -27,7 +27,17 @@ module.exports
 ### Functions
 
 ```text
-function withAstryx: (nextConfig?: {}) => { transpilePackages: any[]; webpack: (config: any, context: any) => any }
+function withAstryx: (nextConfig?: {}) => { transpilePackages: any[]; turbopack: {} } | { transpilePackages: any[]; webpack: (config: any, context: any) => any }
+```
+
+## `./next/postcss`
+
+### Values
+
+```text
+module.exports
+  (call): (options?: { cwd?: string | undefined } | undefined) => { postcssPlugin: string; Once(root: any, { result }: { result: any }): Promise<void> }
+  postcss: boolean
 ```
 
 ## `./postcss`
