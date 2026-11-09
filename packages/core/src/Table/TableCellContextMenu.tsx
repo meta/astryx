@@ -14,7 +14,16 @@
  * before the load and replays it when the menu arrives.
  */
 
-import {lazy, Suspense, useEffect, useRef, type ReactNode} from 'react';
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ComponentType,
+  type ReactNode,
+} from 'react';
 import type {
   ContextMenuExternalTrigger,
   ContextMenuTriggerHandlers,
@@ -39,18 +48,50 @@ let menuModule: Promise<TableContextMenuModule> | null = null;
 /**
  * Starts loading the table context menu, once. The returned promise settles
  * when the module has loaded; a cell with actions renders its menu a tick
- * later.
+ * later. A failed load (a dropped connection, a removed chunk) is not kept,
+ * so the next call asks the module loader again.
  */
 export async function loadTableContextMenu(): Promise<TableContextMenuModule> {
-  menuModule ??= import('./tableContextMenu');
+  menuModule ??= import('./tableContextMenu').catch((error: unknown) => {
+    menuModule = null;
+    throw error;
+  });
   return menuModule;
 }
 
-const LazyTableContextMenu = lazy(async () =>
-  loadTableContextMenu().then(mod => ({
-    default: mod.TableContextMenuForTrigger,
-  })),
-);
+/** Starts the load for an early invocation. The lazy menu reports a failure. */
+function preloadTableContextMenu(): void {
+  loadTableContextMenu().catch(() => {});
+}
+
+type LazyMenuProps = ComponentProps<typeof TableContextMenuForTrigger> & {
+  onUnavailable: () => void;
+};
+
+/** Renders in place of the menu when it failed to load. */
+function MenuUnavailable({onUnavailable}: LazyMenuProps): ReactNode {
+  // Syncs the cell with the failed load: it drops its held invocation and
+  // stops holding, so the browser's own menu returns.
+  useEffect(onUnavailable, [onUnavailable]);
+  return null;
+}
+
+// React.lazy keeps a rejection, so a failed load resolves to MenuUnavailable
+// instead of throwing, and later renders get a new lazy that loads again.
+function createLazyTableContextMenu() {
+  return lazy(async () => {
+    try {
+      const mod = await loadTableContextMenu();
+      return {default: mod.TableContextMenuForTrigger};
+    } catch {
+      LazyTableContextMenu = createLazyTableContextMenu();
+      return {default: MenuUnavailable};
+    }
+  });
+}
+
+let LazyTableContextMenu: ComponentType<LazyMenuProps> =
+  createLazyTableContextMenu();
 
 /** An invocation that arrived before the menu, replayed when it attaches. */
 type HeldInvocation = {
@@ -124,6 +165,18 @@ function CellTrigger({
   // cell's own detector follows that press to its end, even if the menu
   // attaches during it, because the menu's detector never saw it start.
   const earlyPressRef = useRef(false);
+  // True after this cell's menu failed to load, until a later load succeeds.
+  const [isMenuUnavailable, setMenuUnavailable] = useState(false);
+  const onMenuUnavailable = useRef(() => {
+    dropHeldInvocation(triggerRef);
+    setMenuUnavailable(true);
+  }).current;
+  const retryMenu = () => {
+    loadTableContextMenu().then(
+      () => setMenuUnavailable(false),
+      () => {},
+    );
+  };
 
   const triggerHandle = useRef<ContextMenuExternalTrigger>({
     triggerRef,
@@ -137,8 +190,8 @@ function CellTrigger({
       if (held == null) {
         return;
       }
-      // Replay after the commit that attached the menu, so its layer is
-      // anchored before it opens. A press or key since the hold drops it.
+      // Replay after the commit that attached the menu, so the menu anchors its
+      // layer before it opens. A press or key since the hold drops it.
       queueMicrotask(() => {
         if (
           handlersRef.current !== handlers ||
@@ -198,6 +251,10 @@ function CellTrigger({
             handlers.onContextMenu(event);
             return;
           }
+          if (isMenuUnavailable) {
+            retryMenu();
+            return;
+          }
           // Hold the invocation until the menu loads. Then the browser's own
           // menu does not open.
           event.preventDefault();
@@ -207,7 +264,7 @@ function CellTrigger({
             kind: 'contextmenu',
             event,
           });
-          void loadTableContextMenu();
+          preloadTableContextMenu();
         }}
         onTouchStart={event => {
           const handlers = handlersRef.current;
@@ -215,9 +272,13 @@ function CellTrigger({
             handlers.onTouchStart(event);
             return;
           }
+          if (isMenuUnavailable) {
+            retryMenu();
+            return;
+          }
           earlyPressRef.current = true;
           earlyLongPress.onTouchStart(event);
-          void loadTableContextMenu();
+          preloadTableContextMenu();
         }}
         onTouchMove={event => {
           if (earlyPressRef.current) {
@@ -244,9 +305,13 @@ function CellTrigger({
         }}>
         {children}
       </ContextMenuTrigger>
-      {isHydrating ? null : (
+      {isHydrating || isMenuUnavailable ? null : (
         <Suspense fallback={null}>
-          <LazyTableContextMenu actions={actions} trigger={triggerHandle} />
+          <LazyTableContextMenu
+            actions={actions}
+            trigger={triggerHandle}
+            onUnavailable={onMenuUnavailable}
+          />
         </Suspense>
       )}
     </>
