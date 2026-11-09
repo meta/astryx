@@ -3,8 +3,8 @@
 /**
  * @file TableCellContextMenu.loadFailure.test.tsx
  * @output Tests that a failed load of the table context menu keeps the table
- *   mounted, drops the held invocation, returns the browser's own menu, and
- *   lets a later render load the menu again
+ *   mounted, drops the held invocation and any early long press, returns the
+ *   browser's own menu, and lets a later render or invocation load it again
  * @position Validates TableCellContextMenu's load-failure path. Each test
  *   starts from a fresh module registry and a fresh mock of the menu module.
  */
@@ -92,6 +92,36 @@ describe('TableCellContextMenu menu load failure', () => {
 
     expect(loader.calls).toBe(2);
     expect(fireEvent.contextMenu(screen.getByText('Bob'))).toBe(false);
+    await waitFor(() => {
+      expect(
+        screen.getByRole('menuitem', {name: 'Copy', hidden: true}),
+      ).toBeTruthy();
+    });
+  });
+  it('ends an early long press when the menu fails to load before its deadline', async () => {
+    loader.failures = 1;
+    await renderTable('Alice');
+    const cell = screen.getByText('Alice');
+    fireEvent.touchStart(cell, {touches: [{clientX: 10, clientY: 10}]});
+    await settle();
+    // Past the long-press deadline, then lifted: nothing may be held.
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 650));
+    });
+    fireEvent.touchEnd(cell, {touches: []});
+
+    // A right-click retries the load; a held long press would open on attach.
+    expect(fireEvent.contextMenu(cell)).toBe(true);
+    const {loadTableContextMenu} = await import('./TableCellContextMenu');
+    await act(async () => {
+      await loadTableContextMenu();
+    });
+    await settle();
+    expect(loader.calls).toBe(2);
+    expect(screen.queryByRole('menu', {hidden: true})).toBeNull();
+
+    // The retried menu works for the next right-click.
+    expect(fireEvent.contextMenu(cell)).toBe(false);
     await waitFor(() => {
       expect(
         screen.getByRole('menuitem', {name: 'Copy', hidden: true}),

@@ -167,10 +167,6 @@ function CellTrigger({
   const earlyPressRef = useRef(false);
   // True after this cell's menu failed to load, until a later load succeeds.
   const [isMenuUnavailable, setMenuUnavailable] = useState(false);
-  const onMenuUnavailable = useRef(() => {
-    dropHeldInvocation(triggerRef);
-    setMenuUnavailable(true);
-  }).current;
   const retryMenu = () => {
     loadTableContextMenu().then(
       () => setMenuUnavailable(false),
@@ -238,6 +234,15 @@ function CellTrigger({
       }
     },
   });
+
+  // A failed load ends this cell's early press too, so its long press cannot
+  // hold an invocation that no menu will open.
+  const onMenuUnavailable = useRef(() => {
+    earlyLongPress.cancel();
+    earlyPressRef.current = false;
+    dropHeldInvocation(triggerRef);
+    setMenuUnavailable(true);
+  }).current;
 
   return (
     <>
