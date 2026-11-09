@@ -1062,13 +1062,11 @@ function BaseTableInner<T extends Record<string, unknown>>({
   const runtimeValue = useMemo(
     () => ({
       ...runtime,
-      // A windowed Table's wrapper scrolls in both axes. A declared first-frame
-      // height bounds it; with none, it fills its block-sized parent.
-      viewportHeight: windowPlan.isWindowed
-        ? (config?.initialViewportHeight ?? ('fill' as const))
-        : undefined,
+      // A windowed Table's wrapper scrolls in both axes and takes its height
+      // from its parent. initialViewportHeight only seeds the first window.
+      hasBlockViewport: windowPlan.isWindowed,
     }),
-    [runtime, windowPlan.isWindowed, config?.initialViewportHeight],
+    [runtime, windowPlan.isWindowed],
   );
   return (
     <TableRuntimeContext value={runtimeValue}>

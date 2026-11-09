@@ -108,6 +108,8 @@ interface ValidationState {
   layoutRevision: number | undefined;
   isPositionWidthMeasured: boolean;
   totalHeight: number;
+  /** The last height-limit reading, so an unchanged one sets no state. */
+  isUnbounded: boolean | undefined;
 }
 interface Violation {
   data: unknown[];
@@ -267,6 +269,27 @@ function hasClippedRowNumber(cell: HTMLTableCellElement): boolean {
  * Rows in `checkedRows` passed since the last layout invalidation, so only
  * newly mounted rows are read.
  */
+/**
+ * Whether the scroll area has no height limit from its parent: it is as tall
+ * as its content and holds more rows than the first window. Undefined before
+ * it is measured.
+ */
+function isScrollAreaUnbounded(
+  viewport: HTMLDivElement,
+  rowCount: number,
+  config: Readonly<UseTableRowsVirtualizationConfig>,
+): boolean | undefined {
+  const content = viewport.firstElementChild;
+  if (viewport.clientHeight <= 0 || !(content instanceof HTMLElement)) {
+    return undefined;
+  }
+  return (
+    viewport.scrollHeight <= viewport.clientHeight + 1 &&
+    Math.abs(content.offsetHeight - viewport.clientHeight) <= 1 &&
+    rowCount > Math.ceil(getSeedViewportHeight(config) / config.rowHeight) + 4
+  );
+}
+
 function getGeometryViolation(
   body: HTMLTableSectionElement,
   viewport: HTMLDivElement,
@@ -369,11 +392,30 @@ export function useTableWindow<T>({
   const [tracking, setTracking] = useState<WindowTracking | undefined>();
   const focusNoteRef = useRef<FocusWithin | null>(null);
   const [positionWidths, setPositionWidths] = useState(EMPTY_POSITION_WIDTHS);
+  const [unboundedFor, setUnboundedFor] = useState<
+    | {
+        data: T[];
+        keys: (string | number)[];
+        config: object | undefined;
+        unbounded: boolean;
+      }
+    | undefined
+  >();
+  const isUnbounded =
+    unboundedFor?.data === data &&
+    unboundedFor.keys === keys &&
+    unboundedFor.config === config &&
+    unboundedFor.unbounded;
   const validationRef = useRef<ValidationState | null>(null);
   useDevWarningPerMessage(
     'Table',
     `${violation?.reason} Rendering all rows without fixed constraints.`,
     isRejected,
+  );
+  useDevWarningPerMessage(
+    'Table',
+    "Windowing found no height limit: the Table's scroll area is as tall as all of its rows, so every row renders. Give the Table's parent a height, such as a fixed height or a flex child with min-height: 0.",
+    isUnbounded && canWindow,
   );
   // Focus return reads the last input, so only a windowed table tracks it.
   useInteractionModalityTrackingFor(viewport, canWindow);
@@ -585,6 +627,7 @@ export function useTableWindow<T>({
         layoutRevision: undefined,
         isPositionWidthMeasured: false,
         totalHeight: Number.NaN,
+        isUnbounded: undefined,
       };
       validationRef.current = state;
     }
@@ -639,6 +682,18 @@ export function useTableWindow<T>({
     );
     if (reason) {
       setViolation({data, keys, config, reason});
+      return;
+    }
+    // A scroll area as tall as its content has no height limit from its
+    // parent, so the window holds every row.
+    const unbounded = isScrollAreaUnbounded(
+      viewport.current,
+      data.length,
+      config,
+    );
+    if (unbounded !== undefined && unbounded !== state.isUnbounded) {
+      state.isUnbounded = unbounded;
+      setUnboundedFor({data, keys, config, unbounded});
     }
   }, [
     isWindowed,

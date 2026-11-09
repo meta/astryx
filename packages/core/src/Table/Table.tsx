@@ -131,8 +131,8 @@ const tableStyles = stylex.create({
 });
 
 const scrollWrapperStyles = stylex.create({
-  viewport: (height: number) => ({height, maxHeight: height}),
-  fillViewport: {
+  // A windowed table scrolls inside the height its parent gives it.
+  blockViewport: {
     height: '100%',
     minHeight: 0,
   },
@@ -223,8 +223,7 @@ function TableScrollWrapper({
       ? undefined
       : (tableName?.label ?? t('@astryx.table.label'));
   const runtime = use(TableRuntimeContext);
-  const viewportHeight = runtime?.viewportHeight;
-  const hasBlockViewport = viewportHeight != null;
+  const hasBlockViewport = runtime?.hasBlockViewport === true;
   const {getViewportProps, getContentProps, state} = useScrollableArea({
     axis: hasBlockViewport ? 'both' : 'inline',
     keyboardAccess: {owner: 'content'},
@@ -263,9 +262,7 @@ function TableScrollWrapper({
         // theme restyles through the focus-outline tokens.
         focusOutlineStyles.focusVisible,
         scrollWrapperStyles.focusRingInset,
-        typeof viewportHeight === 'number'
-          ? scrollWrapperStyles.viewport(viewportHeight)
-          : viewportHeight === 'fill' && scrollWrapperStyles.fillViewport,
+        hasBlockViewport && scrollWrapperStyles.blockViewport,
         ...(pluginStyles ?? []),
       ),
       pluginClassName,
