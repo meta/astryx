@@ -173,7 +173,7 @@ The owner approved the budget in INV5. It is set from the 2026-11-09 measurement
 **Reference:** `architecture:list-windowing/DEC-6`
 **Decider:** `cixzhang`, `2026-11-09`
 
-> For humberto the public api probably just needs the initialViewportHeight
+> For humberto the public api probabyl just needs the initialViewportHeight
 > rename
 
 > Va a
