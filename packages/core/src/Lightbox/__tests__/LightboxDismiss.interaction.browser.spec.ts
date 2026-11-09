@@ -21,6 +21,7 @@ import {
 } from '@astryxdesign/a11y-spec/playwright';
 import {
   type ActiveAnimation,
+  armHold,
   blockMainThread,
   type BusyRun,
   type BusyWindow,
@@ -605,11 +606,14 @@ test('under Reduce Motion the dismissal fades the photo out in place', async ({
 }) => {
   await page.emulateMedia({reducedMotion: 'reduce'});
   const v = await openViewer(page);
-  await v.driver.play(pullDown(v.centre, 110));
-  await waitForAnimation(v.photo);
-  const held = await holdAnimations(page, v.photo, {
+  // The fade runs 200 ms and the viewer closes at its end. A hold sent from
+  // here after the lift can arrive after the fade ends on a busy machine. So
+  // the page holds the fade itself as it starts.
+  const hold = await armHold(page, v.photo, {
     judges: {target: v.photo, property: 'opacity'},
   });
+  await v.driver.play(pullDown(v.centre, 110));
+  const held = await hold.held();
   const samples = await sampleCurve(v.photo, [0, 50]);
   await releaseAnimations(page);
   // Under reduced motion, a fade of 200 ms or less.
