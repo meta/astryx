@@ -35,6 +35,7 @@
  */
 
 import {useCallback, useEffect, useRef, useState} from 'react';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {scrollingAncestor} from '../utils/scrollingAncestor';
 import type {OutlineItem} from './types';
 
@@ -232,14 +233,25 @@ export function useScrollSpy({
   // Latest scroll-position resolver, so a navigation can resume tracking when
   // the user scrolls during the programmatic scroll.
   const syncRef = useRef<(() => void) | null>(null);
-  // Keep latest items/callback in refs so the scroll listener effect doesn't
-  // re-subscribe on every render (items is a fresh array each render).
+  // The scroll listener reads the items and the callback through refs, so it
+  // does not subscribe again on each render. Items is a new array each
+  // render. Each ref is written at commit: a render React discards must not
+  // leave its values.
   const itemsRef = useRef(items);
-  itemsRef.current = items;
+  // Syncs the scroll listener's items with the committed props.
+  useIsomorphicLayoutEffect(() => {
+    itemsRef.current = items;
+  });
   const onActiveIdChangeRef = useRef(onActiveIdChange);
-  onActiveIdChangeRef.current = onActiveIdChange;
+  // Syncs the listeners' callback with the committed props.
+  useIsomorphicLayoutEffect(() => {
+    onActiveIdChangeRef.current = onActiveIdChange;
+  });
   const itemIds = items.map(item => item.id).join('\n');
-  activeIdRef.current = isControlled ? activeId : uncontrolledActiveId;
+  // Syncs the scroll listener's active item with the committed one.
+  useIsomorphicLayoutEffect(() => {
+    activeIdRef.current = isControlled ? activeId : uncontrolledActiveId;
+  });
 
   /**
    * The element whose scroll position drives the outline: the explicit
@@ -310,6 +322,7 @@ export function useScrollSpy({
 
   const setActiveId = (nextActiveId: string) => {
     if (!isControlled) {
+      activeIdRef.current = nextActiveId;
       setUncontrolledActiveId(nextActiveId);
     }
     onActiveIdChange?.(nextActiveId);
