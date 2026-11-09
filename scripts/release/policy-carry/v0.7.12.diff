@@ -266,7 +266,7 @@ index 06d9db55411..f824d6ca219 100644
 -          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
 +          FILES_PATH: ${{ steps.scope.outputs.changed_files_path || steps.everything.outputs.path }}
 diff --git a/scripts/release/active-release.mjs b/scripts/release/active-release.mjs
-index 7eae88e71bd..a6f1732c5c5 100644
+index 7eae88e71bd..02d05a4b359 100644
 --- a/scripts/release/active-release.mjs
 +++ b/scripts/release/active-release.mjs
 @@ -14,2 +14,2 @@
@@ -291,7 +291,7 @@ index 7eae88e71bd..a6f1732c5c5 100644
 @@ -364 +375 @@ function git(root, args) {
 -  return execFileSync('git', args, {cwd: root, encoding: 'utf8'}).trim();
 +  return gitRaw(root, args).trim();
-@@ -709,7 +720,352 @@ function listActiveBranches(root) {
+@@ -709,7 +720,355 @@ function listActiveBranches(root) {
 -const RELEASE_OUTPUT_PATTERNS = [
 -  /^packages\/(?:[^/]+|themes\/[^/]+)\/package\.json$/,
 -  /^packages\/(?:[^/]+|themes\/[^/]+)\/CHANGELOG\.md$/,
@@ -300,7 +300,7 @@ index 7eae88e71bd..a6f1732c5c5 100644
 -  /^packages\/cli\/assets\/codemods\/transforms\/(?:next|v\d+\.\d+\.\d+)\//,
 -  /^pnpm-lock\.yaml$/,
 +const RELEASE_TEST_REPAIR_FORBIDDEN_STATEMENT =
-+  /(?:unbounded changed statement|\b(?:expect|assert)\s*[.(]|\b(?:expect|assert)[A-Z]\w*\s*\(|\.(?:not\.)?to[A-Z]\w*\s*\(|\b(?:test|it|describe)(?:\.[A-Za-z]+)*\.(?:skip|fixme|fail|slow|skipIf|runIf)\b|\b(?:skip|fixme)\s*:\s*true\b|\breturn\b|timeout|retr(?:y|ies)|\b(?:disableRules|disabledRules|excludeRules)\b|\btoMatch(?:Inline)?Snapshot\b)/i;
++  /(?:unbounded changed statement|\b(?:expect|assert)\s*[.(]|\b(?:expect|assert)[A-Z]\w*\s*\(|\.(?:not\.)?to[A-Z]\w*\s*\(|\b(?:skip|fixme|fail|slow)\s*\(|\b(?:test|it|describe)(?:\.[A-Za-z]+)*\.(?:skip|fixme|fail|slow|skipIf|runIf)\b|\b(?:skip|fixme)\s*:\s*true\b|\breturn\b|timeout|retr(?:y|ies)|\b(?:disableRules|disabledRules|excludeRules)\b|\btoMatch(?:Inline)?Snapshot\b)/i;
 +
 +function changedStatementsFromDiff(diff) {
 +  const statements = [];
@@ -399,7 +399,7 @@ index 7eae88e71bd..a6f1732c5c5 100644
 +        )
 +        .sort((a, b) => a.close - a.open - (b.close - b.open))[0];
 +      const changedCode = masked.slice(range.start, range.end).trim();
-+      if (!changedCode || /^[{}()[\],]*$/.test(changedCode)) {
++      if (!changedCode) {
 +        if (
 +          /@(?:vitest-environment|jest-environment|ts-check|ts-nocheck)|(?:eslint|prettier)-(?:disable|enable)/i.test(
 +            lines[index].text,
@@ -485,6 +485,9 @@ index 7eae88e71bd..a6f1732c5c5 100644
 +    );
 +
 +  for (const entry of entries) {
++    const status = entry.split('\t', 1)[0];
++    if (status !== 'M')
++      errors.push(`release test repair may only modify an existing test: ${entry}`);
 +    const files = diffEntryFiles(entry);
 +    if (files === null) {
 +      errors.push(`invalid diff entry: ${entry}`);
@@ -651,7 +654,7 @@ index 7eae88e71bd..a6f1732c5c5 100644
 +  /^\.github\/workflows\/ci\.yml$/,
 +  /^docs\/release\.md$/,
 +  /^docs\/specs\/AST-(?:017|030)\/spec\.md$/,
-@@ -718,2 +1074,157 @@ const RELEASE_OUTPUT_PATTERNS = [
+@@ -718,2 +1077,159 @@ const RELEASE_OUTPUT_PATTERNS = [
 -function isReleaseOutputPath(file) {
 -  return RELEASE_OUTPUT_PATTERNS.some(pattern => pattern.test(file));
 +function isAncestor(root, ancestor, descendant) {
@@ -713,6 +716,8 @@ index 7eae88e71bd..a6f1732c5c5 100644
 +    errors.push(
 +      'release policy carry must contain exactly one non-merge commit',
 +    );
++  if (git(root, ['rev-parse', `${head}^`]) !== baseCommit)
++    errors.push('release policy carry commit must directly follow the release head');
 +  if (!isAncestor(root, source, mainRef))
 +    errors.push('release policy carry source is not merged on current main');
 +  if (
@@ -811,7 +816,7 @@ index 7eae88e71bd..a6f1732c5c5 100644
 +    files: candidateEntries.length,
 +    bundleDigest: manifest ? sha256(canonicalJson(manifest)) : null,
 +  };
-@@ -729,8 +1240,3 @@ function validateReleaseDiff(entries, {plan, baseChangesets} = {}) {
+@@ -729,8 +1245,3 @@ function validateReleaseDiff(entries, {plan, baseChangesets} = {}) {
 -    const [status, ...files] = entry.split('\t');
 -    const isMove = status?.startsWith('R') || status?.startsWith('C');
 -    const expectedPaths = isMove ? 2 : 1;
@@ -823,7 +828,7 @@ index 7eae88e71bd..a6f1732c5c5 100644
 +    const [status] = entry.split('\t');
 +    const files = diffEntryFiles(entry);
 +    if (files === null) {
-@@ -1265,0 +1772,29 @@ async function main() {
+@@ -1265,0 +1777,29 @@ async function main() {
 +  if (command === 'validate-policy-carry') {
 +    const base = required(values, 'base');
 +    const head = required(values, 'head');
@@ -853,7 +858,7 @@ index 7eae88e71bd..a6f1732c5c5 100644
 +    );
 +    return;
 +  }
-@@ -1274,7 +1809,25 @@ async function main() {
+@@ -1274,7 +1814,25 @@ async function main() {
 -    const errors = [
 -      ...validateIdentity(marker, plan),
 -      ...validateReleaseDiff(raw ? raw.split('\n') : [], {
@@ -886,17 +891,17 @@ index 7eae88e71bd..a6f1732c5c5 100644
 +      ];
 +    }
 +    const errors = [...validateIdentity(marker, plan), ...diffErrors];
-@@ -1285,0 +1839 @@ async function main() {
+@@ -1285,0 +1844 @@ async function main() {
 +        kind,
-@@ -1287 +1841,2 @@ async function main() {
+@@ -1287 +1846,2 @@ async function main() {
 -        files: raw ? raw.split('\n').length : 0,
 +        files: entries.length,
 +        ...(sourceCommit ? {sourceCommit, patchId} : {}),
-@@ -1399,0 +1955 @@ export {
+@@ -1399,0 +1960 @@ export {
 +  changedStatementsFromDiff,
-@@ -1404,0 +1961 @@ export {
+@@ -1404,0 +1966 @@ export {
 +  isReleaseTestRepairPath,
-@@ -1411,0 +1969 @@ export {
+@@ -1411,0 +1974 @@ export {
 +  validateReleaseTestRepair,
 diff --git a/scripts/release/release-paths.mjs b/scripts/release/release-paths.mjs
 new file mode 100644

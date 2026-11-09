@@ -514,6 +514,20 @@ describe('active release branch authority', () => {
       }).errors;
 
     expect(
+      repair({
+        entries: [
+          'R100\tpackages/core/src/BottomSheet/__tests__/BottomSheetScrimClock.a11y.browser.spec.ts\tpackages/core/src/BottomSheet/__tests__/BottomSheetScrimClock.a11y.browser.spec.ts.disabled',
+        ],
+      }),
+    ).toContain(
+      'release test repair may only modify an existing test: R100\tpackages/core/src/BottomSheet/__tests__/BottomSheetScrimClock.a11y.browser.spec.ts\tpackages/core/src/BottomSheet/__tests__/BottomSheetScrimClock.a11y.browser.spec.ts.disabled',
+    );
+    expect(
+      repair({entries: ['A\tpackages/core/src/Button/Button.test.tsx']}),
+    ).toContain(
+      'release test repair may only modify an existing test: A\tpackages/core/src/Button/Button.test.tsx',
+    );
+    expect(
       repair({entries: ['M\tpackages/core/src/Button/Button.tsx']}),
     ).toContain(
       'release test repair contains a non-test path: packages/core/src/Button/Button.tsx',
@@ -546,6 +560,10 @@ describe('active release branch authority', () => {
       'test.skip(true, "flaky");',
       'test.fail();',
       'test.slow();',
+      'skip();',
+      'ctx.fixme();',
+      'testInfo.skip();',
+      'test.info().fail();',
       'it.skipIf(process.platform === "darwin")();',
       'describe.runIf(false)();',
       'const timeoutMs = 2_000;',

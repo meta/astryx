@@ -718,7 +718,7 @@ function listActiveBranches(root) {
 }
 
 const RELEASE_TEST_REPAIR_FORBIDDEN_STATEMENT =
-  /(?:unbounded changed statement|\b(?:expect|assert)\s*[.(]|\b(?:expect|assert)[A-Z]\w*\s*\(|\.(?:not\.)?to[A-Z]\w*\s*\(|\b(?:test|it|describe)(?:\.[A-Za-z]+)*\.(?:skip|fixme|fail|slow|skipIf|runIf)\b|\b(?:skip|fixme)\s*:\s*true\b|\breturn\b|timeout|retr(?:y|ies)|\b(?:disableRules|disabledRules|excludeRules)\b|\btoMatch(?:Inline)?Snapshot\b)/i;
+  /(?:unbounded changed statement|\b(?:expect|assert)\s*[.(]|\b(?:expect|assert)[A-Z]\w*\s*\(|\.(?:not\.)?to[A-Z]\w*\s*\(|\b(?:skip|fixme|fail|slow)\s*\(|\b(?:test|it|describe)(?:\.[A-Za-z]+)*\.(?:skip|fixme|fail|slow|skipIf|runIf)\b|\b(?:skip|fixme)\s*:\s*true\b|\breturn\b|timeout|retr(?:y|ies)|\b(?:disableRules|disabledRules|excludeRules)\b|\btoMatch(?:Inline)?Snapshot\b)/i;
 
 function changedStatementsFromDiff(diff) {
   const statements = [];
@@ -817,7 +817,7 @@ function changedStatementsFromDiff(diff) {
         )
         .sort((a, b) => a.close - a.open - (b.close - b.open))[0];
       const changedCode = masked.slice(range.start, range.end).trim();
-      if (!changedCode || /^[{}()[\],]*$/.test(changedCode)) {
+      if (!changedCode) {
         if (
           /@(?:vitest-environment|jest-environment|ts-check|ts-nocheck)|(?:eslint|prettier)-(?:disable|enable)/i.test(
             lines[index].text,
@@ -903,6 +903,9 @@ function validateReleaseTestRepair({
     );
 
   for (const entry of entries) {
+    const status = entry.split('\t', 1)[0];
+    if (status !== 'M')
+      errors.push(`release test repair may only modify an existing test: ${entry}`);
     const files = diffEntryFiles(entry);
     if (files === null) {
       errors.push(`invalid diff entry: ${entry}`);
@@ -1130,6 +1133,8 @@ function validateReleasePolicyCarryAtRef(
     errors.push(
       'release policy carry must contain exactly one non-merge commit',
     );
+  if (git(root, ['rev-parse', `${head}^`]) !== baseCommit)
+    errors.push('release policy carry commit must directly follow the release head');
   if (!isAncestor(root, source, mainRef))
     errors.push('release policy carry source is not merged on current main');
   if (
