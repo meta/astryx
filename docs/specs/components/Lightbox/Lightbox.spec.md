@@ -89,16 +89,8 @@ the requirement it misses and the person it affects.
 - **Video controls (FR7).** A video's native controls are taken as a 48 px
   band at its bottom edge, since browsers expose no control geometry; a
   browser that places controls elsewhere pages from them.
-- **Tab containment (FR4).** Tab from the viewer's last control can move focus
-  to the browser's own interface.
-- **Zoom reset key (AR3).** `0` does not return a zoomed photo to its fitted
-  size.
 - **Zoom announcement (AR4).** A zoom change announces "zoomed in" or "zoomed
   out" without the zoom level.
-- **Announcements outside the open viewer (AR4).** Position and zoom messages
-  are sent from above the modal Lightbox renders, so they reach the page body
-  and a screen-reader user does not hear them while the viewer is open
-  (`spec:AST-086` FR14).
 - **Fine-pointer gestures (FR11).** FR11's drag paging (FR7) and drag to
   close (FR8) are not built for a mouse, a pen or a trackpad: a drag on a
   fitted photo does nothing.
