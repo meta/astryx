@@ -164,7 +164,8 @@ function measurements() {
 // Known gaps, each for its own theme fix. A pair leaves this list when it
 // passes, and the last test fails until it does.
 const KNOWN_GAPS = new Set([
-  // Secondary text already falls under 4.5:1 on the plain page background.
+  // Chocolate light secondary text is under 4.5:1 (WCAG 1.4.3) on its own
+  // backgrounds; its colour is an owner decision.
   'chocolate light on --color-background-surface',
   'chocolate light on --color-background-body',
   'chocolate light on --color-background-card',
