@@ -2699,7 +2699,7 @@ test(
 );
 
 test.describe('a tap that wobbles keeps its click', () => {
-  test('a tap on a pushed screen\u2019s row that drifts 3 px toward the back swipe keeps every move, and Chromium runs its click: the content back swipe waits out a tap\u2019s wobble (spec:AST-094 FR19, DEC-29)', async ({
+  test('a tap on a pushed screen\u2019s row that drifts 3 px toward the back swipe keeps every move, and Chromium runs its click: the content back swipe waits out a tap\u2019s wobble (spec:AST-094 FR19, DEC-30)', async ({
     page,
   }) => {
     // A pushed screen: the content back swipe can pop it.

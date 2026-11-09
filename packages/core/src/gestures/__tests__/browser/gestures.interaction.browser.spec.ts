@@ -1328,7 +1328,7 @@ test('scroll edge: at the top the pull is the sheet’s at once', async ({
   expect(await scrollTop(page, 'sheetBody')).toBe(0);
 });
 
-test("scroll edge: at the top the sheet leaves a tap's wobble to the browser, then cancels the pull's moves from the one that reaches 5 px, before it begins (spec:AST-094 FR19, DEC-29)", async ({
+test("scroll edge: at the top the sheet leaves a tap's wobble to the browser, then cancels the pull's moves from the one that reaches 5 px, before it begins (spec:AST-094 FR19, DEC-30)", async ({
   page,
   browserName,
 }) => {
@@ -1350,7 +1350,7 @@ test("scroll edge: at the top the sheet leaves a tap's wobble to the browser, th
   expect(await scrollTop(page, 'sheetBody')).toBe(0);
 });
 
-test('scroll edge: at the top a tap that wobbles under 5 px keeps every move, so WebKit keeps its click (spec:AST-094 FR19, DEC-29)', async ({
+test('scroll edge: at the top a tap that wobbles under 5 px keeps every move, so WebKit keeps its click (spec:AST-094 FR19, DEC-30)', async ({
   page,
   browserName,
 }) => {

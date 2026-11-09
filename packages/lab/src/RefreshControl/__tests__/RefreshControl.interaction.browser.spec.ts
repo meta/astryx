@@ -1542,7 +1542,7 @@ test('the end slides from its start, even when the page is busy as the refresh e
 });
 
 test.describe('a tap that wobbles keeps its click', () => {
-  test('a tap at the top that drifts 3 px down keeps every move: the pull never cancels a tap\u2019s wobble (spec:AST-094 FR19, DEC-29)', async ({
+  test('a tap at the top that drifts 3 px down keeps every move: the pull never cancels a tap\u2019s wobble (spec:AST-094 FR19, DEC-30)', async ({
     page,
   }) => {
     const {driver, start} = await openRefresh(page);

@@ -432,14 +432,11 @@ export class PanGestureRecognizer extends GestureRecognizer {
   }
 
   /**
-   * A scroll-edge pan holds its finger once it has moved a tap's wobble along
-   * the pan's axis. It holds only while every scroller under it is at its
-   * edge and the finger pulls away from that edge, the pan's own way. There
-   * the browser would only rubber-band (`spec:AST-094` FR19, DEC-18). Inside
-   * the wobble the moves stay the browser's, so a tap keeps its click. It
-   * still begins at its hysteresis. A move the content can still scroll stays
-   * the browser's, and so does every move while a second finger is down (a
-   * pinch).
+   * Inside a tap's wobble the moves stay the browser's, so WebKit keeps the
+   * tap's click. Past it, at an edge where the browser would only rubber-band,
+   * the pan holds the finger before it begins (`spec:AST-094` FR19, DEC-18).
+   * A move the content can still scroll stays the browser's, and so does every
+   * move while a second finger is down (a pinch).
    */
   protected override keepsTouch(touchId: number): boolean {
     const touch = this.touches.get(touchId);

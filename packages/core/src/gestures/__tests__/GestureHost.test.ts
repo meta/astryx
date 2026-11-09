@@ -1633,7 +1633,7 @@ describe('GestureHost', () => {
       return {list, pan, at, lift};
     }
 
-    it('leaves a tap\u2019s wobble under 5 px to the browser, then cancels the moves from the one that reaches 5 px while every scroller under the finger is at its edge and the finger pulls away from it; the pan still begins at 10 px (spec:AST-094 FR19, DEC-29)', () => {
+    it('leaves a tap\u2019s wobble under 5 px to the browser, then cancels the moves from the one that reaches 5 px while every scroller under the finger is at its edge and the finger pulls away from it; the pan still begins at 10 px (spec:AST-094 FR19, DEC-30)', () => {
       const {pan, at, lift} = sheetOverList(0);
       // WebKit ends a touch's click when one of its moves is cancelled.
       expect(at(102, 16).defaultPrevented).toBe(false);
