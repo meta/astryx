@@ -41,6 +41,8 @@ verified_by:
     packages/core/src/Layer/layerExitCopy.test.ts,
     packages/core/src/Layer/presentationHold.test.tsx,
     packages/core/src/Layer/__tests__/layerExitCopy.interaction.browser.spec.ts,
+    packages/core/src/Layer/layerEntranceSide.test.ts,
+    packages/core/src/Layer/__tests__/LayerEntranceSide.interaction.browser.spec.ts,
     packages/core/src/Popover/Popover.test.tsx,
     packages/core/src/DropdownMenu/DropdownMenu.test.tsx,
     packages/core/src/ContextMenu/ContextMenu.test.tsx,
@@ -631,6 +633,13 @@ layers use Layer rendering without joining Escape/platform dismissal.
 - **INV18 — Only a shown layer's trigger is an anchor.**
   A trigger carries its CSS anchor name only while its layer is shown; a closed trigger is not an anchor, so a surface that moves around it keeps its transform animation off the main thread.
   A layer that animates out through a CSS transition or keyframe animation it declares for its closed state counts as shown until those animations end; an animation a script starts is not tracked.
+- **INV20 — An entrance starts from the side its layer lands on.** On the
+  pointer path an anchored layer's entrance slides from, and scales about,
+  the side it lands on after any flip. So it never slides onto its trigger.
+  It scales about the point where the layer meets its trigger: on the edge
+  that faces the trigger, on the trigger's center line. A layer that covers
+  its trigger's center has no side: its entrance scales about that center
+  and does not slide.
 
 This record does not make future eligible-owner, branch-association, global-host,
 or browser-support requirements current. It does not own component focus entry or

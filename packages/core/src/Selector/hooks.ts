@@ -20,6 +20,7 @@
 import {useCallback, useState} from 'react';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {writeLayerEntranceSide} from '../Layer/layerEntranceSide';
 import {LAYER_KEYBOARD_INSET_PROPERTY} from '../Layer/useLayerKeyboardClearance';
 import {isImeKeyEvent} from '../utils/ime';
 import {layoutViewportHeight} from '../utils/layoutViewport';
@@ -255,6 +256,16 @@ export function useSelectedItemOverlayMargin({
     // eslint-disable-next-line @eslint-react/set-state-in-effect -- selector popover position is derived from DOM layout
     setIsPositioned(isOpen);
   }, [isOpen, selectedItemIndex, listboxId, listboxRef, anchorRef]);
+
+  // The list moves over its trigger in the commit that applies the margin,
+  // after the layer runtime read the side at the show. The entrance takes
+  // the list's side again here, before the first paint.
+  useIsomorphicLayoutEffect(() => {
+    const layer = listboxRef.current?.closest<HTMLElement>('[popover]');
+    if (isOpen && marginBlockStart != null && layer != null) {
+      writeLayerEntranceSide(layer, anchorRef.current);
+    }
+  }, [isOpen, marginBlockStart, listboxRef, anchorRef]);
 
   return {marginBlockStart, isPositioned};
 }

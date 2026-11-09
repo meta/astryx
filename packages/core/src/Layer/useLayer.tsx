@@ -41,6 +41,7 @@ import {layerTextReset} from './layerTextReset.stylex';
 import {layerStructureReset} from './layerStructureReset.stylex';
 import {layerViewportInset} from './layerViewportInset.stylex';
 import {keyboardLiftStyle, useLayerKeyboardClearance} from './LayerTouch';
+import {writeLayerEntranceSide} from './layerEntranceSide';
 import {LAYER_ANCHORED_ATTRIBUTE} from './layerKeyboardClearance';
 import {settledBox} from './settledBox';
 import {layerInsetProperties} from './layerInset';
@@ -625,6 +626,21 @@ function keepAnchorClear(layer: HTMLElement, anchor: HTMLElement | null): void {
   if (anchor && failsAnchor(layer, anchor)) {
     placeAfresh(layer);
   }
+}
+
+/**
+ * Gives a shown layer's entrance the side the layer landed on, after the
+ * fallback list and `keepAnchorClear` placed it. Only an anchored layer has
+ * a side; any other layer clears it.
+ */
+function writeEntranceSide(
+  layer: HTMLElement,
+  trigger: HTMLElement | null,
+): void {
+  writeLayerEntranceSide(
+    layer,
+    layer.hasAttribute(LAYER_ANCHORED_ATTRIBUTE) ? trigger : null,
+  );
 }
 
 /**
@@ -1549,6 +1565,7 @@ function useLayerImplementation(
       if (keepsAnchorClear) {
         keepAnchorClear(popover, triggerRef.current);
       }
+      writeEntranceSide(popover, triggerRef.current);
       isOpenRef.current = true;
       setIsOpen(true);
       onShow?.();
@@ -2041,6 +2058,7 @@ function useLayerImplementation(
           if (keepsAnchorClear) {
             keepAnchorClear(el, triggerRef.current);
           }
+          writeEntranceSide(el, triggerRef.current);
         } else {
           afterPopoverOperations(el.ownerDocument, () => {
             const current = popoverRef.current;
@@ -2048,10 +2066,12 @@ function useLayerImplementation(
               isOpenRef.current &&
               current === el &&
               openedPopoverRef.current !== el &&
-              showPopoverElement(el) &&
-              keepsAnchorClear
+              showPopoverElement(el)
             ) {
-              keepAnchorClear(el, triggerRef.current);
+              if (keepsAnchorClear) {
+                keepAnchorClear(el, triggerRef.current);
+              }
+              writeEntranceSide(el, triggerRef.current);
             }
           });
         }
