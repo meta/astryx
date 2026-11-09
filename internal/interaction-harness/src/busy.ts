@@ -39,6 +39,7 @@ import {
   type FrameStats,
   type TrackedFrame,
 } from './frames';
+import {TARGET_WAIT_MS} from './target-wait';
 
 /** The control's colour, apart from the component's marker (`MARKER_RGB`). */
 export const CONTROL_RGB: readonly [number, number, number] = [0, 255, 255];
@@ -439,6 +440,11 @@ export interface BlockedWindow extends BusyWindow {
  * so the block waits one frame more. An animation rebuilt at every frame never
  * qualifies: at the timeout the wait rejects and names that.
  *
+ * The page waits up to `TARGET_WAIT_MS` for `during` to be on the page. Past
+ * it, the wait fails by name: the element is gone, or it never came. An
+ * element that leaves the page while the wait looks runs no animation again.
+ * So the wait fails at once, and names when it left.
+ *
  * It counts only while it still moves: before its curve's held tail (where
  * its keyframes end in a run of identical values, read as `waitForRest`
  * reads it). A block in that tail would judge an animation that has stopped.
@@ -668,6 +674,14 @@ export async function blockMainThread(
         // The animations that counted at the frame before, pending ones too.
         let seen = new Set<Animation>();
         const tick = () => {
+          if (!element.isConnected) {
+            reject(
+              new Error(
+                `BusyDuringGone ${JSON.stringify({leftAtMs: realNow() - (deadline - wait)})}`,
+              ),
+            );
+            return;
+          }
           const present = element.getAnimations({subtree: true}).filter(counts);
           const ran = present.filter(
             a =>
@@ -765,14 +779,29 @@ export async function blockMainThread(
       wait: timeout,
       fillHolds,
     },
+    {timeout: TARGET_WAIT_MS},
   );
   try {
     const [, held] = await Promise.all([defined, waited]);
     return held;
   } catch (error) {
-    const late = /BusyWindowTooLate (\{.*\})/.exec(
-      error instanceof Error ? error.message : String(error),
-    );
+    // `during.evaluate` waits TARGET_WAIT_MS for the element.
+    if (error instanceof Error && error.name === 'TimeoutError') {
+      throw new Error(
+        `blockMainThread: during ${during.toString()} is not on the page after ${TARGET_WAIT_MS} ms: it is gone, or it never came`,
+        {cause: error},
+      );
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    const gone = /BusyDuringGone (\{.*\})/.exec(message);
+    if (gone != null) {
+      const {leftAtMs} = JSON.parse(gone[1]) as {leftAtMs: number};
+      throw new Error(
+        `blockMainThread: during ${during.toString()} left the page ${leftAtMs.toFixed(0)} ms into the wait, before an animation of it ran: it is gone`,
+        {cause: error},
+      );
+    }
+    const late = /BusyWindowTooLate (\{.*\})/.exec(message);
     if (late == null) {
       throw error;
     }

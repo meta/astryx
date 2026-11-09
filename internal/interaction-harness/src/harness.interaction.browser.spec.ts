@@ -1858,6 +1858,45 @@ test.describe('frame evidence', () => {
     await control.remove();
   });
 
+  test("blockMainThread names a `during` element that left the page before the wait, within the target's wait", async ({
+    page,
+  }) => {
+    await page.setContent(
+      '<div id="gone" style="width:100px;height:100px">gone</div>',
+    );
+    const gone = page.locator('#gone');
+    await gone.evaluate(el => el.remove());
+    await expect(blockMainThread(page, 100, {during: gone})).rejects.toThrow(
+      "blockMainThread: during locator('#gone') is not on the page after 5000 ms: it is gone, or it never came",
+    );
+  });
+
+  test('blockMainThread names a `during` element that leaves the page while it waits, at the next look', async ({
+    page,
+  }) => {
+    await page.setContent(
+      '<div id="leaves" style="width:100px;height:100px">leaves</div>',
+    );
+    const leaves = page.locator('#leaves');
+    // The page removes it on its own, well after the wait starts and well
+    // before the wait's 5 s timeout.
+    await leaves.evaluate(el => {
+      setTimeout(() => el.remove(), 1500);
+    });
+    const error = await blockMainThread(page, 100, {during: leaves}).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    const message = error instanceof Error ? error.message : String(error);
+    const left =
+      /^blockMainThread: during locator\('#leaves'\) left the page (\d+) ms into the wait, before an animation of it ran: it is gone$/.exec(
+        message,
+      );
+    expect(left, message).not.toBeNull();
+    // Seen at a look soon after it left, not at the wait's timeout.
+    expect(Number(left?.[1])).toBeLessThan(5_000);
+  });
+
   test('a control started ahead runs half a leg ahead of the first, in the strip below, and the two read every frame', async ({
     page,
   }, testInfo) => {
