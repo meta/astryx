@@ -7,14 +7,4 @@
  * this file into the resolved version folder.
  */
 
-import migrateListEdgeCompensationToEdge, {
-  meta as migrateListEdgeCompensationToEdgeMeta,
-} from './migrate-list-edge-compensation-to-edge.mjs';
-
-export default [
-  {
-    name: 'migrate-list-edge-compensation-to-edge',
-    transform: migrateListEdgeCompensationToEdge,
-    meta: migrateListEdgeCompensationToEdgeMeta,
-  },
-];
+export default [];

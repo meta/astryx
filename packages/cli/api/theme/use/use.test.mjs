@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import {themeAdd} from '../add/add.mjs';
 import {themeUse} from './use.mjs';
 import {parseThemeModuleRecord} from '../../../foundation/config/theme-state.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
@@ -44,7 +45,7 @@ function installThemes() {
 }
 
 beforeEach(async () => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-theme-use-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-theme-use-'));
   fs.mkdirSync(path.join(tmpDir, 'src'));
   fs.writeFileSync(
     path.join(tmpDir, 'package.json'),
@@ -92,7 +93,7 @@ describe('themeUse', () => {
   it('names theme add when the slug is not added', async () => {
     await expect(themeUse('missing', {cwd: tmpDir})).rejects.toMatchObject({
       code: 'ERR_UNKNOWN_THEME',
-      message: expect.stringContaining('astryx theme add missing'),
+      message: expect.stringContaining(' theme add missing`'),
     });
   });
 });

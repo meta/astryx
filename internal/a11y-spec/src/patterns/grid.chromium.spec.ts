@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope ^(internal/a11y-spec/src/patterns/grid|internal/a11y-spec/src/harness|packages/core/src/Calendar/|packages/core/src/hooks/useGridFocus|apps/storybook/stories/CalendarGridA11y)
 
 /**
  * @file grid.chromium.spec.ts
@@ -7,7 +8,7 @@
  * @position Contract self-test, Chromium lane
  */
 
-import {expect, test, type CDPSession, type Page} from '@playwright/test';
+import {expect, test, type CDPSession, type Page} from '../playwright';
 import {describeExpectation, requiredLayers} from '../contract';
 import {checkAccessibilitySpec, type ExpectationResult} from '../check';
 import {

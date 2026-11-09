@@ -1,0 +1,19 @@
+Results for "experimental" (3)
+name:        authoring/field-reference
+section:     config
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs authoring/field-reference config
+parent:      pnpm exec astryx docs authoring/field-reference --index
+name:        authoring/field-reference
+section:     schema-doc
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs authoring/field-reference schema-doc
+parent:      pnpm exec astryx docs authoring/field-reference --index
+name:        authoring/field-reference
+section:     template-doc
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs authoring/field-reference template-doc
+parent:      pnpm exec astryx docs authoring/field-reference --index

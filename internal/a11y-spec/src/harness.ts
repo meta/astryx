@@ -208,6 +208,16 @@ export interface Harness {
    * harness only puts the pointer there.
    */
   clickBeside(subject: Subject): Promise<void>;
+  /**
+   * Real-browser layer: move a mouse pointer onto the subject and leave it
+   * resting there, the way a mouse user hovers a control to see its hint.
+   */
+  hover(subject: Subject): Promise<void>;
+  /**
+   * Real-browser layer: move the pointer to a point in the viewport that is
+   * off the subject and every related subject, the way a mouse user moves on.
+   */
+  pointerAway(): Promise<void>;
   /** Real-browser layer: type text into the focused subject. */
   typeText(subject: Subject, text: string): Promise<void>;
   /** Real-browser layer: select and delete all text from the subject. */

@@ -8,8 +8,10 @@
 import {describe, expect, it} from 'vitest';
 import {
   linkBlocks,
+  linkFields,
   linkSections,
   parseLinkTarget,
+  textFields,
   unlinkText,
 } from './links.mjs';
 
@@ -58,14 +60,20 @@ describe('linkBlocks', () => {
     const {content, problems} = await linkBlocks(
       [
         {type: 'prose', text: 'Check it with {@link command:doctor}.'},
-        {type: 'list', style: 'unordered', items: ['See {@link @acme/kit:generic:setup}']},
+        {
+          type: 'list',
+          style: 'unordered',
+          items: ['See {@link @acme/kit:generic:setup}'],
+        },
         {type: 'table', headers: ['Doc'], rows: [['{@link command:doctor}']]},
         {type: 'code', lang: 'js', code: '{@link command:doctor}'},
       ],
       resolve,
     );
     expect(problems).toEqual([]);
-    expect(content[0].text).toBe('Check it with `astryx docs cli/commands/doctor`.');
+    expect(content[0].text).toBe(
+      'Check it with `astryx docs cli/commands/doctor`.',
+    );
     expect(content[1].items).toEqual(['See `astryx docs acme/setup`']);
     expect(content[2].rows).toEqual([['`astryx docs cli/commands/doctor`']]);
     // Code is an example: it is shown as written.
@@ -74,7 +82,12 @@ describe('linkBlocks', () => {
 
   it('shows a link written in code ticks as written', async () => {
     const {content, problems} = await linkBlocks(
-      [{type: 'prose', text: 'Write `{@link <target>}` to link; {@link command:doctor} checks it.'}],
+      [
+        {
+          type: 'prose',
+          text: 'Write `{@link <target>}` to link; {@link command:doctor} checks it.',
+        },
+      ],
       resolve,
     );
     expect(problems).toEqual([]);
@@ -172,7 +185,10 @@ describe('linkBlocks', () => {
         },
       ],
       resolve,
-    ).then(({sections, problems}) => ({content: sections[0].content, problems}));
+    ).then(({sections, problems}) => ({
+      content: sections[0].content,
+      problems,
+    }));
     expect(content[0].text).toBe('See {@link command:nope}.');
     expect(content[1].link).toBeNull();
     expect(problems.map(p => [p.section, p.target])).toEqual([
@@ -187,6 +203,83 @@ describe('unlinkText', () => {
   it('keeps the name of each link, for an index', () => {
     expect(unlinkText('Run {@link command:theme build} or {@link x}.')).toBe(
       'Run theme build or x.',
+    );
+  });
+});
+
+describe('linkFields', () => {
+  /** A component doc with a link in every kind of text field, and in code. */
+  const DOC = {
+    name: 'AcmeButton',
+    description: 'Run {@link command:doctor} first.',
+    usage: {
+      description: 'Set it up: {@link @acme/kit:generic:setup}.',
+      bestPractices: [
+        {guidance: true, description: 'Check with {@link command:doctor}.'},
+      ],
+    },
+    props: [
+      {
+        name: 'tone',
+        type: '{@link command:doctor}',
+        default: "'{@link command:doctor}'",
+        description: 'Like `{@link command:doctor}`, or {@link generic:nope}.',
+      },
+    ],
+    propDescriptions: {tone: 'See {@link command:doctor}.'},
+    examples: [
+      {label: 'From {@link command:doctor}', code: '{@link command:doctor}'},
+    ],
+    playground: {defaults: {label: '{@link command:doctor}'}},
+  };
+
+  it('resolves each text field and leaves names, types, defaults, and code as written', async () => {
+    const {doc, problems} = await linkFields(DOC, resolve);
+    expect(doc).toEqual({
+      ...DOC,
+      description: 'Run `astryx docs cli/commands/doctor` first.',
+      usage: {
+        description: 'Set it up: `astryx docs acme/setup`.',
+        bestPractices: [
+          {
+            guidance: true,
+            description: 'Check with `astryx docs cli/commands/doctor`.',
+          },
+        ],
+      },
+      props: [
+        {
+          ...DOC.props[0],
+          description:
+            'Like `{@link command:doctor}`, or {@link generic:nope}.',
+        },
+      ],
+      propDescriptions: {tone: 'See `astryx docs cli/commands/doctor`.'},
+      examples: [
+        {
+          label: 'From `astryx docs cli/commands/doctor`',
+          code: '{@link command:doctor}',
+        },
+      ],
+    });
+    expect(problems).toEqual([
+      {
+        target: 'generic:nope',
+        message: expect.any(String),
+        field: 'props[0].description',
+      },
+    ]);
+  });
+
+  it('names the same text fields textFields reads', async () => {
+    const {problems} = await linkFields(DOC, async target => ({
+      problem: `no ${target}`,
+    }));
+    const fields = textFields(DOC)
+      .filter(({text}) => text.replace(/`[^`]*`/g, '').includes('{@link'))
+      .map(({field}) => field);
+    expect([...new Set(problems.map(problem => problem.field))]).toEqual(
+      fields,
     );
   });
 });

@@ -1,16 +1,23 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect, vi} from 'vitest';
-import {createRef} from 'react';
-import {render, screen, fireEvent} from '@testing-library/react';
+import {createRef, useEffect, useRef} from 'react';
+import {act, render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Carousel, type CarouselHandle} from './Carousel';
+import {
+  makeSnapPaging,
+  type HeldRowListener,
+} from '../SnapPaging/snapPagingValue';
 
 // Mock ResizeObserver (not available in jsdom)
 class MockResizeObserver {
+  /** The shared observer, so a test can deliver a resize. */
+  static last: MockResizeObserver | null = null;
   callback: ResizeObserverCallback;
   constructor(callback: ResizeObserverCallback) {
     this.callback = callback;
+    MockResizeObserver.last = this;
   }
   observe() {}
   unobserve() {}
@@ -43,12 +50,130 @@ describe('Carousel', () => {
       </Carousel>,
     );
     // APG carousel pattern: each slide container is role=group with
-    // aria-roledescription="slide" and an "N of M" accessible name.
-    const slides = screen.getAllByRole('group');
+    // aria-roledescription="slide" and an "N of M" accessible name. (The
+    // scroll area around them is a group too, named like the carousel.)
+    const slides = screen.getAllByRole('group', {name: /^Slide /});
     expect(slides).toHaveLength(3);
     slides.forEach((slide, i) => {
       expect(slide).toHaveAttribute('aria-roledescription', 'slide');
       expect(slide).toHaveAccessibleName(`Slide ${i + 1} of 3`);
+    });
+  });
+
+  describe('scroll area (spec:AST-025 FR12)', () => {
+    function getScroller() {
+      return screen.getByRole('group', {name: 'Photos'});
+    }
+
+    function setOverflow(el: HTMLElement, overflowing: boolean) {
+      Object.defineProperty(el, 'scrollWidth', {
+        value: overflowing ? 500 : 200,
+        configurable: true,
+      });
+      Object.defineProperty(el, 'clientWidth', {
+        value: 200,
+        configurable: true,
+      });
+      fireEvent.scroll(el);
+    }
+
+    it('is a group named like the carousel', () => {
+      render(
+        <Carousel aria-label="Photos">
+          <div>One</div>
+          <div>Two</div>
+        </Carousel>,
+      );
+      const scroller = getScroller();
+      expect(scroller).toHaveAttribute('role', 'group');
+      expect(scroller).toHaveAccessibleName('Photos');
+      // It is the region's scroll container, not a slide.
+      expect(scroller).not.toHaveAttribute('aria-roledescription');
+      expect(scroller.parentElement).toBe(
+        screen.getByRole('region', {name: 'Photos'}),
+      );
+    });
+
+    // Named by its owner (spec:AST-025 FR12): the caller's label above, else
+    // the carousel's translated default.
+    it("takes the carousel's translated default name when the caller gives none", () => {
+      render(
+        <Carousel>
+          <div>One</div>
+          <div>Two</div>
+        </Carousel>,
+      );
+      const scroller = screen.getByRole('group', {name: 'Carousel'});
+      expect(scroller).toHaveAccessibleName('Carousel');
+      expect(scroller.parentElement).toBe(
+        screen.getByRole('region', {name: 'Carousel'}),
+      );
+    });
+
+    it('takes a tab stop only while its content overflows', () => {
+      render(
+        <Carousel aria-label="Photos">
+          <div>One</div>
+          <div>Two</div>
+        </Carousel>,
+      );
+      const scroller = getScroller();
+      // Fitting: out of the tab order, still focusable from script (FR2).
+      setOverflow(scroller, false);
+      expect(scroller).toHaveAttribute('tabindex', '-1');
+      act(() => scroller.focus());
+      expect(scroller).toHaveFocus();
+      act(() => scroller.blur());
+      // Overflowing: a tab stop.
+      setOverflow(scroller, true);
+      expect(scroller).toHaveAttribute('tabindex', '0');
+      // Fitting again: leaves the tab order.
+      setOverflow(scroller, false);
+      expect(scroller).toHaveAttribute('tabindex', '-1');
+    });
+
+    // The content can come to overflow, or stop, with the scroll area
+    // keeping its size: the tab stop follows it.
+    it('follows its content: slides added or removed, or a slide that grows, move the tab stop', async () => {
+      const slides = (count: number) =>
+        Array.from({length: count}, (_, i) => <div key={i}>Slide {i}</div>);
+      const view = render(<Carousel aria-label="Photos">{slides(1)}</Carousel>);
+      const scroller = getScroller();
+      // A 200 px scroll area; 150 px of content per slide, plus what a slide
+      // grows by.
+      let grown = 0;
+      Object.defineProperty(scroller, 'clientWidth', {
+        value: 200,
+        configurable: true,
+      });
+      Object.defineProperty(scroller, 'scrollWidth', {
+        configurable: true,
+        get: () => scroller.children.length * 150 + grown,
+      });
+      expect(scroller).toHaveAttribute('tabindex', '-1');
+
+      view.rerender(<Carousel aria-label="Photos">{slides(2)}</Carousel>);
+      await act(async () => {});
+      expect(scroller).toHaveAttribute('tabindex', '0');
+
+      view.rerender(<Carousel aria-label="Photos">{slides(1)}</Carousel>);
+      await act(async () => {});
+      expect(scroller).toHaveAttribute('tabindex', '-1');
+
+      // The one slide's content grows past the scroll area.
+      grown = 100;
+      const observer = MockResizeObserver.last;
+      act(() => {
+        observer?.callback(
+          [
+            {
+              target: scroller.firstElementChild,
+            } as unknown as ResizeObserverEntry,
+          ],
+          observer,
+        );
+      });
+      expect(scroller).toHaveAttribute('tabindex', '0');
     });
   });
 
@@ -131,6 +256,75 @@ describe('Carousel', () => {
     expect(screen.getByLabelText('Scroll right')).toBeInTheDocument();
   });
 
+  it('unmounts while the paging holds the row, with no flushSync in the commit', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let report: HeldRowListener | undefined;
+    // A stand-in paging: it reports a held row, and hands the row back as it
+    // detaches, as the pager does.
+    const paging = makeSnapPaging((_element, onHeld) => {
+      report = onHeld;
+      return {
+        detach: () => {
+          onHeld?.({offset: 0, travel: 400});
+          onHeld?.(null);
+        },
+        move: () => {},
+        moveHeld: () => false,
+      };
+    });
+    const view = render(
+      <Carousel aria-label="Held" hasSnap={paging}>
+        <div>Item 1</div>
+        <div>Item 2</div>
+      </Carousel>,
+    );
+    act(() => report?.({offset: 150, travel: 400}));
+    expect(screen.getByLabelText('Scroll left')).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    // The detach runs in an effect cleanup, inside React's commit.
+    view.unmount();
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+
+  it('scrolls from an Effect after a slide is added, with no flushSync in the commit', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // A stand-in paging: a move takes the row over and reports it at once,
+    // as the pager does.
+    const paging = makeSnapPaging((_element, onHeld) => ({
+      detach: () => {},
+      move: () => {
+        onHeld?.({offset: 150, travel: 400});
+      },
+      moveHeld: () => false,
+    }));
+    function Grows({count}: {count: number}) {
+      const ref = useRef<CarouselHandle>(null);
+      useEffect(() => {
+        if (count > 2) {
+          ref.current?.scrollNext();
+        }
+      }, [count]);
+      return (
+        <Carousel handleRef={ref} aria-label="Grows" hasSnap={paging}>
+          {Array.from({length: count}, (_, i) => (
+            <div key={i}>Item {i + 1}</div>
+          ))}
+        </Carousel>
+      );
+    }
+    const view = render(<Grows count={2} />);
+    view.rerender(<Grows count={3} />);
+    expect(screen.getByLabelText('Scroll left')).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+
   it('disables edge scroll buttons instead of removing them from the tab order', () => {
     // In jsdom there is no measurable overflow, so both edges are at rest and
     // the scroll buttons are in their hidden/inert state. They must stay
@@ -147,8 +341,12 @@ describe('Carousel', () => {
     const right = screen.getByLabelText('Scroll right');
     expect(left).toBeInTheDocument();
     expect(right).toBeInTheDocument();
-    expect(left).toBeDisabled();
-    expect(right).toBeDisabled();
+    expect(left).toHaveAttribute('aria-disabled', 'true');
+    expect(right).toHaveAttribute('aria-disabled', 'true');
+    // Disabled buttons stay focusable (spec:AST-085 FR1), so the hidden pill
+    // around each is inert: an invisible button is never a Tab stop.
+    expect(left.closest('[inert]')).not.toBeNull();
+    expect(right.closest('[inert]')).not.toBeNull();
   });
 
   describe('Shift + wheel horizontal scroll', () => {
@@ -179,12 +377,33 @@ describe('Carousel', () => {
       );
       const scroller = getScroller();
       makeOverflowing(scroller);
+      // The row measures its overflow again on a scroll.
+      fireEvent.scroll(scroller);
       const scrollBy = vi.fn();
       scroller.scrollBy = scrollBy;
 
       fireEvent.wheel(scroller, {shiftKey: true, deltaY: 120, deltaX: 0});
 
       expect(scrollBy).toHaveBeenCalledWith({left: 120, behavior: 'auto'});
+    });
+
+    it("stops the browser's own scroll, so a notch scrolls the row once", () => {
+      render(
+        <Carousel aria-label="Wheel">
+          <div>Item 1</div>
+          <div>Item 2</div>
+        </Carousel>,
+      );
+      const scroller = getScroller();
+      makeOverflowing(scroller);
+      // The row measures its overflow again on a scroll.
+      fireEvent.scroll(scroller);
+      scroller.scrollBy = vi.fn();
+
+      // A listener that called preventDefault() makes dispatch return false.
+      expect(
+        fireEvent.wheel(scroller, {shiftKey: true, deltaY: 120, deltaX: 0}),
+      ).toBe(false);
     });
 
     it('does not translate wheel without Shift held', () => {
@@ -196,6 +415,8 @@ describe('Carousel', () => {
       );
       const scroller = getScroller();
       makeOverflowing(scroller);
+      // The row measures its overflow again on a scroll.
+      fireEvent.scroll(scroller);
       const scrollBy = vi.fn();
       scroller.scrollBy = scrollBy;
 
@@ -214,12 +435,70 @@ describe('Carousel', () => {
       );
       const scroller = getScroller();
       makeOverflowing(scroller);
+      // The row measures its overflow again on a scroll.
+      fireEvent.scroll(scroller);
       const scrollBy = vi.fn();
       scroller.scrollBy = scrollBy;
 
       fireEvent.wheel(scroller, {shiftKey: true, deltaY: 120, deltaX: 40});
 
       expect(scrollBy).not.toHaveBeenCalled();
+    });
+
+    it('reads no style or layout on a wheel over the row, with Shift or without', () => {
+      render(
+        <Carousel aria-label="Wheel">
+          <div>Item 1</div>
+          <div>Item 2</div>
+        </Carousel>,
+      );
+      const scroller = getScroller();
+      let reads = 0;
+      for (const [name, value] of [
+        ['scrollWidth', 500],
+        ['clientWidth', 200],
+      ] as const) {
+        Object.defineProperty(scroller, name, {
+          configurable: true,
+          get: () => {
+            reads += 1;
+            return value;
+          },
+        });
+      }
+      fireEvent.scroll(scroller);
+      scroller.scrollBy = vi.fn();
+      reads = 0;
+      const style = vi.spyOn(window, 'getComputedStyle');
+
+      fireEvent.wheel(scroller, {deltaY: 120});
+      fireEvent.wheel(scroller, {shiftKey: true, deltaY: 120});
+      const styles = style.mock.calls.length;
+      style.mockRestore();
+
+      expect({reads, styles}).toEqual({reads: 0, styles: 0});
+      expect(scroller.scrollBy).toHaveBeenCalledTimes(1);
+    });
+
+    it('adds no wheel listener to a row with nothing to scroll', () => {
+      const addEventListener = vi.spyOn(
+        HTMLElement.prototype,
+        'addEventListener',
+      );
+      render(
+        <Carousel aria-label="Wheel">
+          <div>Item 1</div>
+        </Carousel>,
+      );
+      const scroller = getScroller();
+      const wheels = addEventListener.mock.contexts.filter(
+        (element, call) =>
+          element === scroller &&
+          addEventListener.mock.calls[call][0] === 'wheel',
+      );
+      addEventListener.mockRestore();
+
+      expect(wheels).toHaveLength(0);
     });
 
     it('does not intercept when there is no horizontal overflow', () => {
@@ -283,8 +562,12 @@ describe('Carousel', () => {
       // At the start edge: without loop the left button would be disabled.
       makeOverflowing(scroller, 0);
 
-      expect(screen.getByLabelText('Scroll left')).toBeEnabled();
-      expect(screen.getByLabelText('Scroll right')).toBeEnabled();
+      expect(screen.getByLabelText('Scroll left')).not.toHaveAttribute(
+        'aria-disabled',
+      );
+      expect(screen.getByLabelText('Scroll right')).not.toHaveAttribute(
+        'aria-disabled',
+      );
     });
 
     it('wraps to the start when pressing next at the end', () => {
@@ -519,7 +802,7 @@ describe('Carousel', () => {
       fireEvent.scroll(el);
     }
 
-    it('hands focus to the opposite button when the edge disables the one in use', async () => {
+    it('hands focus to the scroll area when the edge disables the one in use', async () => {
       const user = userEvent.setup();
       render(
         <Carousel aria-label="Gallery">
@@ -535,8 +818,8 @@ describe('Carousel', () => {
       const next = screen.getByLabelText('Scroll right');
       await user.click(next);
 
-      expect(next).toBeDisabled();
-      expect(document.activeElement).toBe(screen.getByLabelText('Scroll left'));
+      expect(next).toHaveAttribute('aria-disabled', 'true');
+      expect(document.activeElement).toBe(getScroller());
       expect(document.activeElement).not.toBe(document.body);
     });
 
@@ -558,10 +841,8 @@ describe('Carousel', () => {
       const previous = screen.getByLabelText('Scroll left');
       await user.click(previous);
 
-      expect(previous).toBeDisabled();
-      expect(document.activeElement).toBe(
-        screen.getByLabelText('Scroll right'),
-      );
+      expect(previous).toHaveAttribute('aria-disabled', 'true');
+      expect(document.activeElement).toBe(getScroller());
     });
 
     it('hands off under RTL, where the scroll axis is inverted', async () => {
@@ -604,8 +885,8 @@ describe('Carousel', () => {
       const next = screen.getByLabelText('Scroll right');
       await user.click(next);
 
-      expect(next).toBeDisabled();
-      expect(document.activeElement).toBe(screen.getByLabelText('Scroll left'));
+      expect(next).toHaveAttribute('aria-disabled', 'true');
+      expect(document.activeElement).toBe(getScroller());
     });
 
     it('hands off when scroll-snap carries the container past what the press asked for', async () => {
@@ -625,8 +906,8 @@ describe('Carousel', () => {
       const next = screen.getByLabelText('Scroll right');
       await user.click(next);
 
-      expect(next).toBeDisabled();
-      expect(document.activeElement).toBe(screen.getByLabelText('Scroll left'));
+      expect(next).toHaveAttribute('aria-disabled', 'true');
+      expect(document.activeElement).toBe(getScroller());
     });
 
     it('falls back to the scroll container when the carousel stops overflowing', async () => {
@@ -650,8 +931,14 @@ describe('Carousel', () => {
 
       await user.click(screen.getByLabelText('Scroll right'));
 
-      expect(screen.getByLabelText('Scroll right')).toBeDisabled();
-      expect(screen.getByLabelText('Scroll left')).toBeDisabled();
+      expect(screen.getByLabelText('Scroll right')).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
+      expect(screen.getByLabelText('Scroll left')).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
       expect(document.activeElement).toBe(scroller);
       expect(document.activeElement).not.toBe(document.body);
     });
@@ -680,7 +967,10 @@ describe('Carousel', () => {
       scroller.scrollLeft = 200;
       fireEvent.scroll(scroller);
 
-      expect(screen.getByLabelText('Scroll right')).toBeDisabled();
+      expect(screen.getByLabelText('Scroll right')).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
       expect(document.activeElement).toBe(document.body);
     });
 
@@ -701,7 +991,7 @@ describe('Carousel', () => {
       // rather than loosening the guard -- is caught.
       await user.click(screen.getByLabelText('Scroll right'));
 
-      expect(document.activeElement).toBe(screen.getByLabelText('Scroll left'));
+      expect(document.activeElement).toBe(getScroller());
     });
 
     it('does not move focus on a press that leaves the direction available', async () => {
@@ -718,7 +1008,7 @@ describe('Carousel', () => {
       const next = screen.getByLabelText('Scroll right');
       await user.click(next);
 
-      expect(next).toBeEnabled();
+      expect(next).not.toHaveAttribute('aria-disabled');
       expect(document.activeElement).toBe(next);
     });
 
@@ -735,7 +1025,7 @@ describe('Carousel', () => {
       const next = screen.getByLabelText('Scroll right');
       await user.click(next);
 
-      expect(next).toBeEnabled();
+      expect(next).not.toHaveAttribute('aria-disabled');
       expect(document.activeElement).toBe(next);
     });
 
@@ -748,8 +1038,7 @@ describe('Carousel', () => {
         </Carousel>,
       );
       makeScrollable(getScroller(), 400);
-      const previous = screen.getByLabelText('Scroll left');
-      const focus = vi.spyOn(previous, 'focus');
+      const focus = vi.spyOn(getScroller(), 'focus');
 
       await user.click(screen.getByLabelText('Scroll right'));
 
@@ -789,8 +1078,7 @@ describe('Carousel', () => {
       makeScrollable(getScroller(), 400);
       await user.click(screen.getByLabelText('Scroll right'));
 
-      const previous = screen.getByLabelText('Scroll left');
-      expect(document.activeElement).toBe(previous);
+      expect(document.activeElement).toBe(getScroller());
       // Park focus outside and re-render: the transition is spent, so nothing
       // may pull focus back in.
       const outside = document.createElement('button');

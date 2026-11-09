@@ -61,7 +61,7 @@ export const doc = {
     {
       type: 'theme.palette.generate',
       description:
-        'The candidate, generation receipt, summary counts, and optional file-write receipt.',
+        'The candidate, summary counts, optional file-write result, and generationReceipt. The generationReceipt identifies generatorVersion `palette-generator-v1` and candidateFormatVersion `palette-typescript-v1` or `palette-json-v1` beside the candidate digest.',
     },
   ],
   throws: [

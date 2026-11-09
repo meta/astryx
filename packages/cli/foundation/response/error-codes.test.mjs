@@ -113,6 +113,7 @@ describe('error codes: shipped set', () => {
     'ERR_NO_SOURCE',
     'ERR_PALETTE_GENERATION',
     'ERR_PATH_TRAVERSAL',
+    'ERR_PROJECT_REQUIRED',
     'ERR_SIGNAL_TERMINATED',
     'ERR_THEME_INVALID',
     'ERR_THEME_LOAD',
@@ -133,6 +134,7 @@ describe('error codes: shipped set', () => {
     'ERR_UNKNOWN_THEME',
     'ERR_UNKNOWN_TOPIC',
     'ERR_VERSION_DETECT',
+    'ERR_VERSIONS_UNAVAILABLE',
     'ERR_WRITE_FAILED',
   ];
 
@@ -254,6 +256,15 @@ describe('error codes: human mode stays clean', () => {
     expect(stderr).toContain('No component named');
     expect(stderr).not.toContain('ERR_UNKNOWN_COMPONENT');
     expect(stdout).not.toContain('ERR_UNKNOWN_COMPONENT');
+  });
+
+  it('refuses --built with a doctor integration check', async () => {
+    const json = await runCli(['--json', 'doctor', '--built', 'dist', 'integration', 'validate']);
+    expect(json.status).toBe(1);
+    expect(JSON.parse(json.stdout)).toMatchObject({code: 'ERR_INVALID_OPTION'});
+    const text = await runCli(['doctor', '--built', 'dist', 'integration', 'docs']);
+    expect(text.status).toBe(1);
+    expect(text.stderr).toContain('goes with `doctor` alone');
   });
 
   it('unknown subcommand exits 1, with the code in JSON and not in text', async () => {

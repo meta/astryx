@@ -18,4 +18,5 @@ export const doc = {
   isReady: true,
   isHiddenFromOverview: true,
   category: 'Login - Basic',
+  icons: {CubeIcon: 'package'},
 };

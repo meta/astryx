@@ -14,6 +14,7 @@
  */
 
 import {findComponent, loadValidatedDoc} from '../../_adapter.mjs';
+import {linkComponentResponse} from '../../../component/_adapter.mjs';
 import {levenshteinDistance} from '../../../../foundation/text/string-utils.mjs';
 import {AstryxError} from '../../../error.mjs';
 import {ERROR_CODES} from '../../../../foundation/response/error-codes.mjs';
@@ -27,7 +28,18 @@ import {ERROR_CODES} from '../../../../foundation/response/error-codes.mjs';
  * @returns {Promise<import('../../discover.type.mjs').DiscoverDetailDocResponse>}
  */
 export async function docFromResult(result, opts) {
-  return {type: 'discover.detail.doc', data: await loadValidatedDoc(result, opts)};
+  const data = await loadValidatedDoc(result, opts);
+  // Its `{@link}`s read as the commands that open their docs, as
+  // `astryx component` prints them (spec:AST-047 FR9).
+  const linked = await linkComponentResponse(
+    {type: 'component.detail', package: result.pkg.name, data},
+    process.cwd(),
+  );
+  return {
+    type: 'discover.detail.doc',
+    package: result.pkg.name,
+    data: linked.data,
+  };
 }
 
 /**

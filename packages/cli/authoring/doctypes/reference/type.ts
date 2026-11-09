@@ -137,12 +137,16 @@ export interface ReferenceDoc extends AuthoredDocGraphFields {
    *  `replaces: 'getting-started'` on a doc named `getting-started` swaps the
    *  content, and on a doc named something else swaps it and leaves the old
    *  name as an alias, so `astryx docs getting-started` still resolves.
+   *  A route (`'authoring/quick-start'`) names a guide the docs tree
+   *  places: readers who open that route get this doc.
    *  Ignored on a built-in topic (there is nothing above it to replace). */
   replaces?: string;
   /** Name of an existing topic this doc merges onto, section by section: a
    *  section whose title matches one in the base replaces it, and a section
-   *  the base does not have is appended. For correcting or adding to a topic
-   *  rather than owning it — `replaces` and `extends` are exclusive. */
+   *  the base does not have is added where its `before` or `after` says, else
+   *  at the end. A route (`'authoring/quick-start'`) names a guide the
+   *  docs tree places. For correcting or adding to a topic rather than owning
+   *  it — `replaces` and `extends` are exclusive. */
   extends?: string;
   /** Ordered sections that make up the doc. */
   sections: ReferenceSection[];
@@ -170,6 +174,14 @@ export interface ReferenceSection {
    *  `reference` block includes another doc from its canonical source, so a
    *  guide never copies a schema's fields or a command's options. */
   content: (ReferenceContentBlock | ReferenceDocBlock)[];
+  /** In a doc that `extends` a topic, the key of the base section (as
+   *  `astryx docs <topic> --index` shows it) to add this section before,
+   *  when it replaces none. Set `before` or `after`, not both; with neither,
+   *  the section is added at the end. Ignored on any other doc. */
+  before?: string;
+  /** In a doc that `extends` a topic, the key of the base section to add this
+   *  section after, when it replaces none. */
+  after?: string;
   /** Preview type for token tables in this section. When set, the docsite
    *  renders a visual preview column using the token's computed CSS value
    *  from the current theme. Omit for non-token sections. */

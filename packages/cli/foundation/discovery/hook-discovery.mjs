@@ -12,6 +12,13 @@ import {levenshteinDistance} from '../text/string-utils.mjs';
 
 const SKIP_DIRS = new Set(['utils', '__tests__', 'node_modules']);
 
+// A hook's doc outside src/hooks/: a `use…` hook, or a `create…` factory
+// documented as one (its doc typed `HookDoc`, such as createReorderable).
+const HOOK_DOC_FILE_RE = /^(?:use|create)[A-Z]\w*\.doc\.mjs$/;
+
+// Matches the top-level `relatedHooks: [...]` field in a hook .doc.mjs file.
+const RELATED_HOOKS_RE = /(?:^|\n) {0,4}relatedHooks:\s*\[([^\]]*)\]/;
+
 // Matches the top-level `category: 'categoryName'` field in a hook .doc.mjs file.
 const CATEGORY_RE = /(?:^|\n) {0,4}category:\s*['"]([^'"]+)['"]/;
 
@@ -29,6 +36,25 @@ function readHookMeta(docPath) {
     };
   } catch {
     return {category: null};
+  }
+}
+
+/**
+ * Whether a `create…` factory's doc names its own `use…` hook in
+ * `relatedHooks`, as createAnimator's names useAnimator. Such a factory is
+ * listed beside that hook, not on its own.
+ * @param {string} docPath
+ * @param {string} hookName
+ * @returns {boolean}
+ */
+function isBesideOwnHook(docPath, hookName) {
+  if (!hookName.startsWith('create')) return false;
+  const ownHook = `use${hookName.slice('create'.length)}`;
+  try {
+    const related = RELATED_HOOKS_RE.exec(fs.readFileSync(docPath, 'utf-8'));
+    return related != null && related[1].includes(`'${ownHook}'`);
+  } catch {
+    return false;
   }
 }
 
@@ -70,7 +96,8 @@ export function discoverHooks(coreDir) {
     }
   }
 
-  // 2. Scan ALL component directories for files matching use*.doc.mjs
+  // 2. Scan ALL component directories for hook docs: use*.doc.mjs, and
+  // create*.doc.mjs for a factory documented as a hook (createReorderable)
   if (pathExists(srcDir)) {
     const topEntries = listDirEntries(srcDir);
     for (const entry of topEntries) {
@@ -120,14 +147,10 @@ function scanDirForHookDocs(dirPath, hookCategories) {
   for (const entry of entries) {
     if (entry.isDirectory() && !SKIP_DIRS.has(entry.name)) {
       scanDirForHookDocs(path.join(dirPath, entry.name), hookCategories);
-    } else if (
-      entry.isFile() &&
-      entry.name.startsWith('use') &&
-      entry.name.endsWith('.doc.mjs')
-    ) {
+    } else if (entry.isFile() && HOOK_DOC_FILE_RE.test(entry.name)) {
       const hookName = hookNameFromFile(entry.name);
-      if (!hookCategories.has(hookName)) {
-        const docPath = path.join(dirPath, entry.name);
+      const docPath = path.join(dirPath, entry.name);
+      if (!hookCategories.has(hookName) && !isBesideOwnHook(docPath, hookName)) {
         const {category} = readHookMeta(docPath);
         hookCategories.set(hookName, category || 'Other');
       }

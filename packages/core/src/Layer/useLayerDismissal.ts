@@ -7,8 +7,8 @@
  * @input Uses React hooks, the layer stack, and LayerDepthContext
  * @output Exports useLayerDismissal + its option/return types
  * @position The API overlays use to join the shared dismissal stack. Wraps
- *   layerStack (registration + the single Escape listener) and reads nesting
- *   depth from LayerDepthContext.
+ *   layerStack (registration + the Escape listener on each layer's document)
+ *   and reads nesting depth from LayerDepthContext.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Layer/index.ts
@@ -48,7 +48,10 @@ export interface UseLayerDismissalOptions {
   /**
    * This layer's container element, read lazily. Optional: supply it when the
    * layer cannot wrap its content in `LayerDepthProvider` (a bare focus trap
-   * renders nothing), so nesting can still be recovered from the DOM.
+   * renders nothing), so nesting can still be recovered from the DOM. Its
+   * document is also the layer's: the stack listens there and ranks the layer
+   * among that document's layers. Without it, the layer belongs to the global
+   * `document`.
    */
   getContainer?: () => HTMLElement | null;
   /**
@@ -94,12 +97,12 @@ export interface UseLayerDismissalReturn {
 /**
  * Join the shared layer dismissal stack for as long as this layer is active.
  *
- * The layer does NOT attach a key listener — the stack owns one listener and
- * routes each Escape press to the top-most REGISTERED layer, so one press
- * dismisses exactly one of them. Dialog (and what is built on it, including
- * CommandPalette), Popover and the menus built on it, ContextMenu, Tooltip,
- * HoverCard, Lightbox, MobileNav, BottomSheet, BottomSheetSwitcher and
- * `Drawer` register today.
+ * The layer does NOT attach a key listener — the stack owns one listener per
+ * document and routes each Escape press to the top-most REGISTERED layer of
+ * the document it arrived in, so one press dismisses exactly one of them.
+ * Dialog (and what is built on it, including CommandPalette), Popover and the
+ * menus built on it, ContextMenu, Tooltip, HoverCard, Lightbox, MobileNav,
+ * BottomSheet, BottomSheetSwitcher and `Drawer` register today.
  *
  * `DropdownMenuSubMenu` and `PowerSearchEditPopover` still run their own Escape
  * listeners. They stay safe next to the stack only because each claims the press
@@ -120,6 +123,19 @@ export interface UseLayerDismissalReturn {
  */
 export function useLayerDismissal(
   options: UseLayerDismissalOptions,
+): UseLayerDismissalReturn {
+  return useKeyedLayerDismissal(options, null);
+}
+
+/**
+ * `useLayerDismissal` that registers again whenever `registrationKey`
+ * changes. A layer whose container can move to another document passes a key
+ * that changes with the document, so the stack listens where the layer now is.
+ * Internal: not exported from the package.
+ */
+export function useKeyedLayerDismissal(
+  options: UseLayerDismissalOptions,
+  registrationKey: unknown,
 ): UseLayerDismissalReturn {
   const {
     isActive,
@@ -152,6 +168,8 @@ export function useLayerDismissal(
 
   const isRegistered = isActive && isEnabled;
 
+  // Syncs the shared dismissal stack with `isRegistered`. A registered layer
+  // gets Escape and outside presses in stack order.
   useEffect(() => {
     if (!isRegistered) {
       wasRegisteredRef.current = false;
@@ -169,7 +187,7 @@ export function useLayerDismissal(
       isPresent: () => isPresentRef.current?.() ?? true,
       dismiss: () => onDismissRef.current(),
     });
-  }, [isRegistered, depth, escapeBehavior]);
+  }, [isRegistered, depth, escapeBehavior, registrationKey]);
 
   const shouldDismissOnCloseRequest = useCallback(
     () =>

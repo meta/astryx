@@ -17,11 +17,13 @@
 
 import {detailView} from '../../../foundation/doc-compiler/lenses.mjs';
 import {
+  childIdentity,
   compileTopic,
   guideEntry,
   nodeContent,
   placeLinks,
   resolveDocsArgument,
+  stabilityOf,
   unknownTopicError,
 } from '../_adapter.mjs';
 
@@ -62,6 +64,7 @@ export async function nodeView(catalog, tree, node, read) {
     package: node.provider,
     title: node.title,
     summary: node.summary,
+    ...stabilityOf(tree, node),
     breadcrumb: tree
       .ancestors(node)
       .map(ancestor => ({route: ancestor.route, title: ancestor.title})),
@@ -70,7 +73,7 @@ export async function nodeView(catalog, tree, node, read) {
           name: slot.name,
           title: slot.title,
           children: slot.children.map(route =>
-            childIdentity(/** @type {TreeNode} */ (tree.get(route))),
+            childIdentity(tree, /** @type {TreeNode} */ (tree.get(route))),
           ),
         }))
       : read.depth >= 1
@@ -83,22 +86,6 @@ export async function nodeView(catalog, tree, node, read) {
     view.childCount = countChildren(slots);
   }
   return view;
-}
-
-/**
- * The fields every child carries: what it is, and the route that opens it.
- * @param {TreeNode} child
- * @returns {import('../docs.type.mjs').DocsNodeChild}
- */
-function childIdentity(child) {
-  return {
-    route: child.route,
-    name: child.route.slice(child.route.lastIndexOf('/') + 1),
-    package: child.provider,
-    kind: child.kind,
-    title: child.title,
-    summary: child.summary,
-  };
 }
 
 /**
@@ -150,7 +137,7 @@ async function slotsBelow(catalog, tree, slots, level, read) {
  * @returns {Promise<import('../docs.type.mjs').DocsNodeChild>}
  */
 async function childBelow(catalog, tree, child, level, read) {
-  const view = childIdentity(child);
+  const view = childIdentity(tree, child);
   if (read.detail !== 'brief') {
     Object.assign(view, await childText(catalog, tree, child, read.lang));
   }

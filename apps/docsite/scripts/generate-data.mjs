@@ -17,6 +17,9 @@
  *   - templateRegistry.ts  — page templates including playground source
  *   - templateMetadataRegistry.ts — lightweight page-template metadata
  *   - docsRegistry.ts      — long-form documentation topics from CLI docs/
+ *   - blogRegistry.ts      — blog posts (plus canary-only test fixtures)
+ *   - blogExampleAssets.ts — each post's live-example assets, loaded on demand
+ *   - searchLinks.json     — search destinations and document presentation metadata
  */
 
 import * as fs from 'node:fs';
@@ -31,28 +34,55 @@ import {
 import {
   GUIDE_NAMESPACE_PAGES,
   GUIDE_PAGE_NAMESPACES,
+  ROOT_PAGE_ALIASES,
+  movedGuideRedirects,
   mergeFlatTopics,
   namespacePage,
   routeSlug,
+  sectionAnchors,
+  withCliCommands,
   withoutResolvedTokens,
 } from './docs-pages.mjs';
+import {
+  DOCSITE_CLI_COMMAND,
+  DOCSITE_PACKAGE_MANAGER,
+  GLOBAL_PAGE,
+  GLOBAL_PAGE_CLI_COMMAND,
+  getCliInvocation,
+  prefixCliCommands,
+  runWithDocPackageManager,
+  runWithCliDoor,
+} from './lib/cli-command.mjs';
 import {
   docs as readDocs,
   template as queryTemplates,
 } from '@astryxdesign/cli/api';
+import {
+  discoverAll,
+  pkgOf,
+  replaceDemoContent,
+} from '../../../packages/cli/foundation/discovery/template-adapter.mjs';
 import docsiteConfig from '../astryx.config.mjs';
 import {
   integrationContentEnabled,
   integrationPackagesForTarget,
 } from '../src/lib/integrationTargets.mjs';
 import {expandWorkspaceDirs} from '../../../scripts/lib/workspace-globs.mjs';
+import {componentStability} from './lib/component-stability.mjs';
 import {projectThemingDoc} from './lib/theming-doc.mjs';
+import {searchLinkTables} from '../src/lib/searchLinks.mjs';
+import {exampleAnchorId} from '../src/lib/exampleAnchor.mjs';
 import {collectBlogImages} from './lib/blog-images.mjs';
 import {
   buildTypeDefinitionIndex,
   collectPropTypeRefs,
 } from '../src/lib/typeDefinitions.mjs';
-import {generateShadcnRegistryForTarget} from './generate-shadcn-registry.mjs';
+import {
+  generateShadcnRegistryForTarget,
+  registrySkipNotices,
+  reportRegistrySkips,
+} from './generate-shadcn-registry.mjs';
+import {createPublishedImportJudge} from './published-exports.mjs';
 import {
   blockRegistryIdentity,
   resolveShadcnRegistryOrigin,
@@ -534,6 +564,18 @@ function sanitizeForJson(obj) {
   );
 }
 
+/**
+ * A component doc's `deprecated` (what replaces it), copied for the registry;
+ * null when the component is not deprecated. `replacementDisplayName` is
+ * resolved once every package's components are known.
+ * @param {{deprecated?: {replacement: string, description: string}}} doc
+ */
+function deprecationOf(doc) {
+  if (!doc.deprecated) return null;
+  const {replacement, description} = doc.deprecated;
+  return {replacement, replacementDisplayName: replacement, description};
+}
+
 function extractStringArrayField(content, field) {
   const re = new RegExp(`${field}:\\s*\\[([^\\]]*)\\]`);
   const match = re.exec(content);
@@ -625,6 +667,7 @@ async function generateComponentRegistry() {
                 ? projectThemingDoc(sanitizeForJson(d.theming))
                 : null,
               playground: d.playground ? sanitizeForJson(d.playground) : null,
+              stability: d.stability,
             };
             break;
           }
@@ -698,6 +741,7 @@ async function generateComponentRegistry() {
               description: doc.description || parentMeta.topDescription || '',
               keywords: parentMeta.keywords ?? keywords,
               hidden: parentMeta.hidden ?? hidden,
+              deprecated: deprecationOf(doc),
               registry,
               parentDoc: doc.subComponentOf,
               props: isHookEntry
@@ -736,6 +780,7 @@ async function generateComponentRegistry() {
                 : doc.playground
                   ? sanitizeForJson(doc.playground)
                   : (parentMeta.playground ?? null),
+              stability: componentStability(pkg.name, doc, parentMeta),
             });
           }
         } else if (doc.components && doc.components.length > 0) {
@@ -762,6 +807,7 @@ async function generateComponentRegistry() {
               description: doc.description || topDescription,
               keywords,
               hidden,
+              deprecated: deprecationOf(doc),
               registry,
               parentDoc: name,
               props: sanitizeForJson(doc.props),
@@ -772,6 +818,7 @@ async function generateComponentRegistry() {
               relatedComponents: null,
               relatedHooks: null,
               playground,
+              stability: componentStability(pkg.name, doc),
             });
           }
           for (const sub of doc.components) {
@@ -830,6 +877,7 @@ async function generateComponentRegistry() {
               description: sub.description || topDescription,
               keywords,
               hidden,
+              deprecated: null,
               registry: sub.registry ? sanitizeForJson(sub.registry) : null,
               parentDoc: doc.name,
               props: isHookEntry
@@ -854,6 +902,7 @@ async function generateComponentRegistry() {
                 : sub.playground
                   ? sanitizeForJson(sub.playground)
                   : playground,
+              stability: componentStability(pkg.name, sub, doc),
             });
           }
         } else if (doc.params) {
@@ -875,6 +924,7 @@ async function generateComponentRegistry() {
             description: topDescription,
             keywords,
             hidden,
+            deprecated: null,
             registry,
             parentDoc: dirPrimaryDoc,
             props: [],
@@ -889,6 +939,7 @@ async function generateComponentRegistry() {
             relatedComponents: doc.relatedComponents || null,
             relatedHooks: doc.relatedHooks || null,
             playground: null,
+            stability: componentStability(pkg.name, doc),
           });
         } else {
           // Simple/standalone component
@@ -910,6 +961,7 @@ async function generateComponentRegistry() {
             description: topDescription,
             keywords,
             hidden,
+            deprecated: deprecationOf(doc),
             registry,
             parentDoc: null,
             props: Array.isArray(doc.props) ? sanitizeForJson(doc.props) : [],
@@ -920,6 +972,7 @@ async function generateComponentRegistry() {
             relatedComponents: null,
             relatedHooks: null,
             playground,
+            stability: componentStability(pkg.name, doc),
           });
         }
       }
@@ -982,6 +1035,24 @@ async function generateComponentRegistry() {
       }
       componentOwners.set(entry.name, packageName);
     }
+  }
+
+  // A deprecated component's notice links its replacement, so the replacement
+  // must be a documented component; its display name labels the link.
+  const entriesByName = new Map(
+    Object.values(allComponents)
+      .flat()
+      .map(entry => [entry.name, entry]),
+  );
+  for (const entry of entriesByName.values()) {
+    if (!entry.deprecated) continue;
+    const replacement = entriesByName.get(entry.deprecated.replacement);
+    if (!replacement || replacement.deprecated) {
+      throw new Error(
+        `${entry.name} is deprecated in favor of "${entry.deprecated.replacement}", which is not a documented, non-deprecated component. Set \`deprecated.replacement\` to the \`name\` of the component to use instead.`,
+      );
+    }
+    entry.deprecated.replacementDisplayName = replacement.displayName;
   }
 
   const content = `// Auto-generated by scripts/generate-data.mjs — do not edit
@@ -1120,11 +1191,26 @@ export interface DerivedVar {
   replaces?: boolean;
 }
 
+export interface ComponentIconSlotState {
+  name: string;
+  type: string;
+  description: string;
+}
+
+export interface ComponentIconSlot {
+  slot: string;
+  description: string;
+  fallback: string;
+  state?: ComponentIconSlotState[];
+  whenNull: string;
+}
+
 export interface ThemingDoc {
   container?: boolean;
   targets: ThemingTarget[];
   vars?: ComponentVar[];
   derived?: DerivedVar[];
+  componentIcons?: ComponentIconSlot[];
 }
 
 export interface HookParamDoc {
@@ -1171,6 +1257,14 @@ export interface ComponentEntry {
   hidden: boolean;
   /** Whether this component is ready for the stable documentation line. */
   isReady: boolean;
+  /** \`'lab'\` for a component of the Lab package (spec:AST-017 FR27),
+   *  \`'experimental'\` for a surface whose doc, or whose family's doc,
+   *  declares \`stability: 'experimental'\` (spec:AST-017 FR21), and null for
+   *  a stable one. */
+  stability: 'experimental' | 'lab' | null;
+  /** What replaces a deprecated component, from its doc's \`deprecated\`;
+   *  null when it is not deprecated. */
+  deprecated: ComponentDeprecation | null;
   registry: {slug?: string; aliases?: string[]} | null;
   parentDoc: string | null;
   props: PropDoc[];
@@ -1184,6 +1278,15 @@ export interface ComponentEntry {
   relatedComponents: string[] | null;
   relatedHooks: string[] | null;
   playground: PlaygroundConfig | null;
+}
+
+export interface ComponentDeprecation {
+  /** \`name\` of the documented component to use instead. */
+  replacement: string;
+  /** That component's display name. */
+  replacementDisplayName: string;
+  /** The modernization route, in a sentence or two. */
+  description: string;
 }
 
 export type ElementDescriptor = ComponentSlotElement;
@@ -1431,6 +1534,9 @@ export const groupedComponents: Record<string, GroupedComponents> = ${JSON.strin
 
 // ── 3. Block Registry ──────────────────────────────────────────────────
 
+/** The authored file of each integration block, by block `dirName`. */
+const integrationBlockFiles = new Map();
+
 async function generateBlockRegistry() {
   console.log('Generating block registry...');
 
@@ -1496,6 +1602,11 @@ async function generateBlockRegistry() {
     } catch {
       /* ignore */
     }
+    // Displayed source: the Code tab, Open in Playground, and the MCP server
+    // show each demo-content element as the placeholder a copy writes, and keep
+    // fixture media. The live preview renders the original file (see
+    // writeBlockPreview). A use that cannot be replaced safely fails the build.
+    source = replaceDemoContent(source).source;
 
     const resolvedName = meta.name || basename;
     blocks.push({
@@ -1534,6 +1645,7 @@ async function generateBlockRegistry() {
     const integrationBlocks = templateList.data.filter(entry =>
       CONFIGURED_COMPONENT_PACKAGES.has(entry.package),
     );
+    const discovered = await discoverAll(DOCSITE_ROOT);
     for (const entry of integrationBlocks) {
       const shown = await queryTemplates(entry.id, {
         show: true,
@@ -1541,8 +1653,20 @@ async function generateBlockRegistry() {
         package: entry.package,
         cwd: DOCSITE_ROOT,
       });
+      const dirName = `${entry.package}-${entry.id}`.replace(
+        /[^a-zA-Z0-9_-]/g,
+        '-',
+      );
+      const authored = discovered.find(
+        t =>
+          t.type === 'block' &&
+          t.dirName === entry.id &&
+          pkgOf(t) === entry.package,
+      );
+      if (!authored) throw new Error(`No authored file for ${dirName}`);
+      integrationBlockFiles.set(dirName, authored.filePath);
       blocks.push({
-        dirName: `${entry.package}-${entry.id}`.replace(/[^a-zA-Z0-9_-]/g, '-'),
+        dirName,
         name: entry.name,
         displayName: entry.displayName || entry.name,
         description: entry.description,
@@ -1657,6 +1781,10 @@ async function generateTemplateRegistry() {
       /* ignore */
     }
 
+    // Displayed source, like each block's: the playground and the MCP server
+    // hand out the demo-content replacement a copy applies, with fixture media.
+    source = replaceDemoContent(source).source;
+
     templates.push({
       slug: dir.name,
       name: doc.name || dir.name,
@@ -1754,10 +1882,16 @@ async function docsTreePages() {
       continue;
     }
     routes.push(...(await treeRoutes(root)));
-    const full = await namespacePage(readDocs, root);
+    const full = await namespacePage(readDocs, root, {
+      aliases: ROOT_PAGE_ALIASES.get(root) ?? [],
+    });
     if (!full) continue;
     pages.push(full.page);
-    Object.assign(redirects, full.redirects);
+    Object.assign(
+      redirects,
+      full.redirects,
+      movedGuideRedirects(root, full.redirects),
+    );
   }
   while (pending.length > 0) {
     const route = pending.shift();
@@ -1878,7 +2012,7 @@ async function generateDocsRegistry() {
   // slug (a former flat topic keeps its URL), and each guide under it
   // redirects to its section there. Guides under GUIDE_PAGE_NAMESPACES keep a
   // flat page whose slug is the route with "/" as "-", so
-  // `cli/integrations/quick-start` is /docs/cli-integrations-quick-start.
+  // `cli/component-lookups` is /docs/cli-component-lookups.
   const tree = await docsTreePages();
   for (const page of tree.pages) {
     if (docTopics.some(topic => topic.topic === page.topic)) {
@@ -1901,6 +2035,28 @@ async function generateDocsRegistry() {
   }
 
   docTopics.sort((a, b) => a.topic.localeCompare(b.topic));
+  // Docs write commands as bare `astryx ...`. The site shows them as
+  // `npx @astryxdesign/cli ...`, which runs before any install, and as plain
+  // `astryx ...` on the global mode page, whose readers installed it. Each is
+  // a docsite door name, and goes through the CLI's picker like any other.
+  const cliStem = runWithCliDoor(DOCSITE_CLI_COMMAND, () =>
+    getCliInvocation(DOCSITE_ROOT),
+  );
+  const globalStem = runWithCliDoor(GLOBAL_PAGE_CLI_COMMAND, () =>
+    getCliInvocation(DOCSITE_ROOT),
+  );
+  for (const topic of docTopics) {
+    const stem = topic.topic === GLOBAL_PAGE ? globalStem : cliStem;
+    topic.sections = withCliCommands(
+      topic.sections,
+      (text, lang = null) =>
+        // The CLI rendered the doc tokens as it compiled the doc (for npm,
+        // under runWithDocPackageManager below), so only bare commands are
+        // prefixed here.
+        prefixCliCommands(text, stem, lang),
+      stem,
+    );
+  }
 
   const content = `// Auto-generated by scripts/generate-data.mjs — do not edit
 
@@ -1962,6 +2118,46 @@ export const docRedirects: Record<string, string> = ${JSON.stringify(docRedirect
     `${JSON.stringify(docRedirects, null, 2)}\n`,
   );
   return {docTopics, docsCount: docTopics.length};
+}
+
+/**
+ * The tables the search panel opens a CLI search result through
+ * (src/lib/searchLinks.mjs): this build's doc pages, redirects, section
+ * anchors, component and template pages, and the page each block shows on.
+ * The search API (app/api/search/route.ts) reads them.
+ */
+function generateSearchLinks({
+  docTopics,
+  allComponents,
+  templates,
+  blocks,
+  packages,
+}) {
+  const docRedirects = JSON.parse(
+    fs.readFileSync(path.join(OUT_DIR, 'docRedirects.json'), 'utf-8'),
+  );
+  const tables = searchLinkTables({
+    docTopics,
+    docRedirects,
+    components: Object.values(allComponents)
+      .flat()
+      .map(c => c.name),
+    templates: templates.map(t => t.slug),
+    blocks,
+    // The package pages /docs/[topic] serves; theme packages show on /themes.
+    packagePages: packages
+      .map(p => p.name)
+      .filter(name => !name.startsWith('@astryxdesign/theme-'))
+      .map(name => name.replace('@astryxdesign/', '')),
+    sectionAnchors,
+  });
+  fs.writeFileSync(
+    path.join(OUT_DIR, 'searchLinks.json'),
+    `${JSON.stringify(tables)}\n`,
+  );
+  console.log(
+    `  wrote ${path.relative(REPO_ROOT, path.join(OUT_DIR, 'searchLinks.json'))}`,
+  );
 }
 
 async function generateThemeRegistry(packages) {
@@ -2120,6 +2316,17 @@ function blockSourcePath(block) {
     'blocks',
     block.category,
     `${block.dirName}.tsx`,
+  );
+}
+
+function templateSourcePath(template) {
+  return path.join(
+    CLI_ROOT,
+    'assets',
+    'templates',
+    'pages',
+    template.slug,
+    'page.tsx',
   );
 }
 
@@ -2307,6 +2514,7 @@ function generateExampleRegistry(blocks, availableRegistryPaths) {
         entries.push({
           exampleFor: block.exampleFor,
           basename: base,
+          anchorId: exampleAnchorId(block.dirName),
           registryItemPath,
           name: block.name || block.dirName,
           description: block.description || '',
@@ -2322,6 +2530,7 @@ function generateExampleRegistry(blocks, availableRegistryPaths) {
         entries.push({
           exampleFor: target,
           basename,
+          anchorId: exampleAnchorId(block.dirName),
           registryItemPath,
           name: block.name || block.dirName,
           description: block.description || `Example using ${target}.`,
@@ -2342,7 +2551,7 @@ function generateExampleRegistry(blocks, availableRegistryPaths) {
       const exampleLines = orderExamplesByDoc(component, examples)
         .map(
           entry =>
-            `    {name: ${JSON.stringify(entry.name)}, description: ${JSON.stringify(entry.description)}, registryItemPath: ${JSON.stringify(entry.registryItemPath)}, source: ${JSON.stringify(entry.source)}, load: () => import('./examples/${entry.basename}')},`,
+            `    {name: ${JSON.stringify(entry.name)}, anchorId: ${JSON.stringify(entry.anchorId)}, description: ${JSON.stringify(entry.description)}, registryItemPath: ${JSON.stringify(entry.registryItemPath)}, source: ${JSON.stringify(entry.source)}, load: () => import('./examples/${entry.basename}')},`,
         )
         .join('\n');
       return `  '${component}': [\n${exampleLines}\n  ],`;
@@ -2354,6 +2563,7 @@ import type {ComponentType} from 'react';
 
 export interface ExampleEntry {
   name: string;
+  anchorId: string;
   description: string;
   registryItemPath: string | null;
   source: string;
@@ -2380,14 +2590,34 @@ async function generateBlogRegistry() {
   const POSTS_DIR = path.join(DOCSITE_ROOT, 'src', 'content', 'blog', 'posts');
 
   // Single source of truth for discovery + validation (shared with tests).
-  const {discoverPosts, collectTypes, collectTags} = await import(
-    pathToFileURL(path.join(DOCSITE_ROOT, 'src', 'lib', 'blog', 'posts.mjs'))
-      .href
-  );
+  const {discoverPosts, collectTypes, collectTags, collectExampleAssets} =
+    await import(
+      pathToFileURL(path.join(DOCSITE_ROOT, 'src', 'lib', 'blog', 'posts.mjs'))
+        .href
+    );
 
   // Local development and every draft/preview deployment use the canary target.
   const includeDrafts = DOCSITE_TARGET === 'canary';
   const posts = discoverPosts(POSTS_DIR, {includeDrafts});
+  // Test fixtures (spec:AST-033 FR22): canary-only posts that the post and
+  // plain-text routes serve but the index, feed and sitemap never list.
+  const FIXTURES_DIR = path.join(
+    DOCSITE_ROOT,
+    'src',
+    'content',
+    'blog',
+    'fixtures',
+  );
+  const fixturePosts = includeDrafts
+    ? discoverPosts(FIXTURES_DIR, {includeDrafts: true})
+    : [];
+  for (const fixture of fixturePosts) {
+    if (posts.some(p => p.slug === fixture.slug)) {
+      throw new Error(
+        `Blog fixture "${fixture.slug}" has the same slug as a post`,
+      );
+    }
+  }
   const types = collectTypes(posts);
   const tags = collectTags(posts);
 
@@ -2412,6 +2642,12 @@ export const blogTags: string[] = ${JSON.stringify(tags)};
 export const blogPostCount = ${posts.length};
 
 /**
+ * Test fixture posts (canary only): the post and plain-text routes serve them,
+ * but the index, feed and sitemap read only blogPosts.
+ */
+export const blogFixturePosts: BlogPost[] = ${JSON.stringify(fixturePosts, null, 2)};
+
+/**
  * Site-absolute paths of every dark-mode image variant found under
  * public/blog (files named "<name>.dark.<ext>"). ThemedImage consults this to
  * decide whether a body image has a dark counterpart — a definitive,
@@ -2429,6 +2665,42 @@ export const blogImageSizes: Record<string, {width: number; height: number}> =
   ${JSON.stringify(imageSizes, null, 2)};
 `;
   writeRegistry('blogRegistry.ts', content);
+
+  // Each post's example assets, loaded on demand inside the preview frame
+  // that runs that post's live examples (spec:AST-033 FR22).
+  const assetEntries = [
+    ...posts.map(p => ({slug: p.slug, dir: POSTS_DIR})),
+    ...fixturePosts.map(p => ({slug: p.slug, dir: FIXTURES_DIR})),
+  ]
+    .map(({slug, dir}) => ({slug, assets: collectExampleAssets(dir, slug)}))
+    .filter(({assets}) => assets.length > 0);
+  const assetLines = assetEntries.map(({slug, assets}) => {
+    const loaders = assets.map(({specifier, file}) => {
+      const target = path
+        .relative(OUT_DIR, file)
+        .replace(/\\/g, '/')
+        .replace(/\.(tsx?|jsx?)$/, '');
+      return `    ${JSON.stringify(specifier)}: () => import(${JSON.stringify(target)}),`;
+    });
+    return `  ${JSON.stringify(slug)}: {\n${loaders.join('\n')}\n  },`;
+  });
+  writeRegistry(
+    'blogExampleAssets.ts',
+    `// Auto-generated by scripts/generate-data.mjs — do not edit
+
+/**
+ * Each blog post's example assets, by post slug and then by the relative
+ * specifier its live examples import (spec:AST-033 FR22).
+ */
+export const blogExampleAssets: Record<
+  string,
+  Record<string, () => Promise<unknown>>
+> = {
+${assetLines.join('\n')}
+};
+`,
+  );
+
   return {blogPostCount: posts.length, blogTypeCount: types.length};
 }
 
@@ -2493,19 +2765,36 @@ async function main() {
   const {blocks, blockCount} = await generateBlockRegistry();
   generatePackageStyles(packages, blocks, allComponents);
   const {templates, templateCount} = await generateTemplateRegistry();
-  const {docsCount} = await generateDocsRegistry();
+  const {docTopics, docsCount} = await generateDocsRegistry();
+  generateSearchLinks({docTopics, allComponents, templates, blocks, packages});
   const {blogPostCount} = await generateBlogRegistry();
   const shadcnCounts = generateShadcnRegistryForTarget({
     target: DOCSITE_TARGET,
     outDir: path.join(DOCSITE_ROOT, 'public', 'shadcn'),
     packages,
     allComponents,
-    blocks,
-    templates,
+    // The registries carry displayed source. A shadcn install is a copy, so it
+    // starts from the file as authored.
+    blocks: blocks.map(block => ({
+      ...block,
+      authoredSourcePath:
+        blockSourcePath(block) ?? integrationBlockFiles.get(block.dirName),
+    })),
+    templates: templates.map(template => ({
+      ...template,
+      authoredSourcePath: templateSourcePath(template),
+    })),
     cliRoot: CLI_ROOT,
     dependencyTag: DOCSITE_TARGET === 'canary' ? 'canary' : null,
     externalDependencySpecs: registryExternalDependencySpecs(),
+    // Production installs the published packages, so an example that imports
+    // a name they lack waits for the release that adds it.
+    publishedImports:
+      DOCSITE_TARGET === 'latest'
+        ? createPublishedImportJudge(CONTENT_ROOT, packages)
+        : null,
   });
+  reportRegistrySkips(registrySkipNotices(shadcnCounts));
   checkShadcnRouteLock(shadcnCounts.contracts, {
     allowSubset: DOCSITE_TARGET === 'latest',
   });
@@ -2552,7 +2841,8 @@ export const shadcnRegistryIsPreview = ${registryIsPreview};
   console.log('Done.');
 }
 
-main().catch(err => {
+// Every `{@pm}` step on the site reads as npm, whatever this checkout uses.
+runWithDocPackageManager(DOCSITE_PACKAGE_MANAGER, main).catch(err => {
   console.error(err);
   process.exit(1);
 });

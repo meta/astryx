@@ -11,6 +11,9 @@
  * highlight source. Mouse hover moves focus onto the pointed-at item so the
  * one focus highlight follows the pointer — instead of a separate `:hover`
  * background leaving the keyboard-focused item highlighted at the same time.
+ * That focus follows the last input (`architecture:interaction-modality` INV1):
+ * after a pointer press it does not match `:focus-visible`, so a keyboard-only
+ * focus style does not paint on the row under the mouse.
  *
  * SYNC: When modified, update the item components that use it:
  * - /packages/core/src/DropdownMenu/DropdownMenuItem.tsx
@@ -20,6 +23,7 @@
  */
 
 import type {PointerEvent} from 'react';
+import {focusForLastInput} from '../utils/focusReturn';
 
 /**
  * Move focus to a menu item as the pointer moves over it, so hover and
@@ -39,6 +43,14 @@ export function focusMenuItemOnHover(
     // stationary pointer, whose next pointerenter focuses it again — a
     // runaway auto-scroll loop. Keyboard navigation scrolls via its own
     // highlight handling; hover must never scroll.
-    el.focus({preventScroll: true});
+    // A plain focus() inherits :focus-visible from the element focused before
+    // it (the menu after a pointer open), so after a pointer press it is moved
+    // with the browser's focusVisible option instead. After a key press the
+    // keyboard is the last input and the indicator stays. A browser without
+    // the option (Chrome and Edge before 145, Safari before 18.4) ignores it,
+    // and the row may then match :focus-visible as it did before.
+    // The menu activates the modality tracking this reads (its press model,
+    // or the Breadcrumbs menu trigger).
+    focusForLastInput(el, {preventScroll: true});
   }
 }

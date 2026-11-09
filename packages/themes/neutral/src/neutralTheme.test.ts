@@ -24,13 +24,6 @@ function contrastRatio(foreground: string, background: string): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-const statusFill = {
-  accent: 'var(--astryx-theme-neutral-color-status-fill-accent)',
-  success: 'var(--astryx-theme-neutral-color-status-fill-success)',
-  warning: 'var(--astryx-theme-neutral-color-status-fill-warning)',
-  error: 'var(--astryx-theme-neutral-color-status-fill-error)',
-} as const;
-
 const lightDark = (light: string, dark: string) =>
   `light-dark(${light}, ${dark})`;
 
@@ -81,17 +74,50 @@ describe('neutral theme palette mappings', () => {
         neutralPalettes.neutral.light[10],
         neutralPalettes.neutral.dark[95],
       ),
-      '--color-success': lightDark(
+      '--color-info': lightDark('#0074e2', '#6d9cfe'),
+      '--color-info-muted': lightDark(
+        neutralPalettes.blue.light[85],
+        `${neutralPalettes.blue.dark[75]}3D`,
+      ),
+      '--color-on-info': lightDark(
+        neutralPalettes.neutral.light[100],
+        neutralPalettes.neutral.dark[5],
+      ),
+      // Strong status fills: Neutral's released Badge fill colours.
+      '--color-success': lightDark('#198100', '#64af4c'),
+      '--color-warning': '#ffce2f',
+      '--color-error': lightDark('#c9303a', '#ff705d'),
+      '--color-text-info': lightDark(
+        neutralPalettes.blue.light[45],
+        neutralPalettes.blue.dark[80],
+      ),
+      '--color-text-success': lightDark(
+        neutralPalettes.green.light[45],
+        neutralPalettes.green.light[75],
+      ),
+      '--color-text-warning': lightDark(
+        neutralPalettes.yellow.light[45],
+        neutralPalettes.yellow.light[80],
+      ),
+      '--color-text-error': lightDark(
+        neutralPalettes.red.light[45],
+        neutralPalettes.red.dark[80],
+      ),
+      '--color-on-info-muted': lightDark(
+        neutralPalettes.blue.light[25],
+        neutralPalettes.blue.dark[80],
+      ),
+      '--color-on-success-muted': lightDark(
         neutralPalettes.green.light[25],
-        neutralPalettes.green.light[80],
+        neutralPalettes.green.light[75],
       ),
-      '--color-warning': lightDark(
+      '--color-on-warning-muted': lightDark(
         neutralPalettes.yellow.light[25],
-        neutralPalettes.yellow.light[85],
+        neutralPalettes.yellow.light[80],
       ),
-      '--color-error': lightDark(
+      '--color-on-error-muted': lightDark(
         neutralPalettes.red.light[25],
-        neutralPalettes.red.dark[85],
+        neutralPalettes.red.dark[80],
       ),
       '--color-background-red': lightDark(
         neutralPalettes.red.light[85],
@@ -274,59 +300,284 @@ describe('neutral theme palette mappings', () => {
   });
 });
 
+// A wash of `color` at `alpha` (0-255) over `background`, as the browser
+// composites `--color-neutral`, the hover tint.
+function composite(color: string, alpha: number, background: string): string {
+  const channel = (hex: string, offset: number) =>
+    Number.parseInt(hex.slice(offset + 1, offset + 3), 16);
+  return `#${[0, 2, 4]
+    .map(offset =>
+      Math.round(
+        (channel(color, offset) * alpha +
+          channel(background, offset) * (255 - alpha)) /
+          255,
+      )
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('')}`;
+}
+
+describe('neutral selected fill', () => {
+  // `--color-accent-muted` fills a selected row, a range, a highlighted line
+  // and a pressed preset. It must stand apart from every surface it sits on,
+  // and from the hover tint on that surface, in both modes.
+  const [, lightFill, darkFill] =
+    /^light-dark\((#[0-9a-f]{6}), (#[0-9a-f]{6})\)$/i.exec(
+      String(neutralTheme.tokens?.['--color-accent-muted']),
+    ) ?? [];
+  const modes = [
+    {
+      name: 'light',
+      fill: lightFill,
+      surface: neutralPalettes.neutral.light[100],
+      body: neutralPalettes.neutral.light[95],
+      tint: neutralPalettes.neutral.light[0],
+      alpha: 0x0f,
+    },
+    {
+      name: 'dark',
+      fill: darkFill,
+      surface: neutralPalettes.neutral.dark[15],
+      body: neutralPalettes.neutral.dark[10],
+      tint: neutralPalettes.neutral.dark[100],
+      alpha: 0x1a,
+    },
+  ];
+
+  it.each(modes)(
+    'stands apart from the surface, the body and their hover tints in $name mode',
+    ({fill, surface, body, tint, alpha}) => {
+      for (const background of [
+        surface,
+        body,
+        composite(tint, alpha, surface),
+        composite(tint, alpha, body),
+      ]) {
+        expect(contrastRatio(fill, background)).toBeGreaterThanOrEqual(1.15);
+      }
+    },
+  );
+
+  // The text that sits on the fill keeps normal-text AA: a selected row's
+  // secondary text (scoped up on selected rows) and the muted syntax colours
+  // on a highlighted code line.
+  const pair = (value: unknown): [string, string] => {
+    const match = /^light-dark\((#[0-9a-f]{6}), (#[0-9a-f]{6})\)$/i.exec(
+      String(value),
+    );
+    if (match == null) {
+      throw new Error(`not a light-dark pair: ${String(value)}`);
+    }
+    return [match[1], match[2]];
+  };
+  const foregrounds = {
+    'item selected --color-text-secondary': pair(
+      neutralTheme.components?.item?.selected?.['--color-text-secondary'],
+    ),
+    'tree-list-item selected --color-text-secondary': pair(
+      neutralTheme.components?.['tree-list-item']?.selected?.[
+        '--color-text-secondary'
+      ],
+    ),
+    'citation variant:number --color-text-secondary': pair(
+      neutralTheme.components?.citation?.['variant:number']?.[
+        '--color-text-secondary'
+      ],
+    ),
+    'file-input mode:dropzone --color-text-secondary': pair(
+      neutralTheme.components?.['file-input']?.['mode:dropzone']?.[
+        '--color-text-secondary'
+      ],
+    ),
+    '--color-syntax-comment': pair(
+      neutralTheme.tokens['--color-syntax-comment'],
+    ),
+    '--color-syntax-operator': pair(
+      neutralTheme.tokens['--color-syntax-operator'],
+    ),
+    '--color-syntax-punctuation': pair(
+      neutralTheme.tokens['--color-syntax-punctuation'],
+    ),
+  };
+  // Every token colour reads on a highlighted line, not only the muted ones.
+  it.each(
+    [
+      'keyword',
+      'string',
+      'comment',
+      'number',
+      'function',
+      'type',
+      'variable',
+      'operator',
+      'constant',
+      'tag',
+      'attribute',
+      'property',
+      'punctuation',
+    ].map(token => `--color-syntax-${token}`),
+  )('%s reads at 4.5:1 on a highlighted line in both modes', token => {
+    const [light, dark] = pair(neutralTheme.tokens[token]);
+    expect(contrastRatio(light, lightFill)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(dark, darkFill)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  // A selected row also shows the hover overlay over its fill
+  // (`--color-overlay-hover`: black at 0x0D in light, white at 0x0D in dark).
+  it.each([
+    'item selected --color-text-secondary',
+    'tree-list-item selected --color-text-secondary',
+  ] as const)('%s reads at 4.5:1 on the hovered fill', name => {
+    const [light, dark] = foregrounds[name];
+    const lightHovered = composite(
+      neutralPalettes.neutral.light[0],
+      0x0d,
+      lightFill,
+    );
+    const darkHovered = composite(
+      neutralPalettes.neutral.dark[100],
+      0x0d,
+      darkFill,
+    );
+    expect(contrastRatio(light, lightHovered)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(dark, darkHovered)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('scopes the lifted secondary text to selected rows, numbered citations and dropzones in the generated CSS', () => {
+    const css = generateThemeCSS(neutralTheme).component;
+    for (const target of ['item', 'tree-list-item']) {
+      expect(css).toMatch(
+        new RegExp(
+          `\\.astryx-${target}\\[data-selected="selected"\\][^{]*\\{[^}]*--color-text-secondary`,
+        ),
+      );
+    }
+    expect(css).toMatch(
+      /\.astryx-citation\[data-variant="number"\][^{]*\{[^}]*--color-text-secondary/,
+    );
+    expect(css).toMatch(
+      /\.astryx-file-input\[data-mode="dropzone"\][^{]*\{[^}]*--color-text-secondary/,
+    );
+  });
+  it.each(Object.entries(foregrounds))(
+    '%s reads at 4.5:1 on the fill in both modes',
+    (_, [light, dark]) => {
+      expect(contrastRatio(light, lightFill)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(dark, darkFill)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+});
+
 describe('neutral syntax contrast', () => {
   it('keeps light CodeBlock comments and operators at normal-text AA', () => {
     const background = neutralPalettes.neutral.light[100];
     for (const token of ['comment', 'operator'] as const) {
       expect(neutralTheme.tokens[`--color-syntax-${token}`]).toBe(
         lightDark(
-          neutralPalettes.neutral.light[45],
-          neutralPalettes.neutral.dark[65],
+          neutralPalettes.neutral.light[35],
+          neutralPalettes.neutral.dark[75],
         ),
       );
       expect(
-        contrastRatio(neutralPalettes.neutral.light[45], background),
+        contrastRatio(neutralPalettes.neutral.light[35], background),
       ).toBeGreaterThanOrEqual(4.5);
     }
   });
 });
 
-describe('neutral theme-local status mappings', () => {
-  it('preserves the independently approved component status fills', () => {
-    expect(neutralTheme.localTokens).toMatchObject({
-      '--astryx-theme-neutral-color-status-fill-accent':
-        'light-dark(#0074e2, #6d9cfe)',
-      '--astryx-theme-neutral-color-status-fill-success':
-        'light-dark(#198100, #64af4c)',
-      '--astryx-theme-neutral-color-status-fill-warning': '#ffce2f',
-      '--astryx-theme-neutral-color-status-fill-error':
-        'light-dark(#c9303a, #ff705d)',
+describe('neutral semantic status roles', () => {
+  it('keeps public plain-surface and on-muted roles on reviewed palette stops', () => {
+    expect(neutralTheme.tokens).toMatchObject({
+      '--color-text-info': lightDark(
+        neutralPalettes.blue.light[45],
+        neutralPalettes.blue.dark[80],
+      ),
+      '--color-text-success': lightDark(
+        neutralPalettes.green.light[45],
+        neutralPalettes.green.light[75],
+      ),
+      '--color-text-warning': lightDark(
+        neutralPalettes.yellow.light[45],
+        neutralPalettes.yellow.light[80],
+      ),
+      '--color-text-error': lightDark(
+        neutralPalettes.red.light[45],
+        neutralPalettes.red.dark[80],
+      ),
+      '--color-on-info-muted': lightDark(
+        neutralPalettes.blue.light[25],
+        neutralPalettes.blue.dark[80],
+      ),
+      '--color-on-success-muted': lightDark(
+        neutralPalettes.green.light[25],
+        neutralPalettes.green.light[75],
+      ),
+      '--color-on-warning-muted': lightDark(
+        neutralPalettes.yellow.light[25],
+        neutralPalettes.yellow.light[80],
+      ),
+      '--color-on-error-muted': lightDark(
+        neutralPalettes.red.light[25],
+        neutralPalettes.red.dark[80],
+      ),
     });
-    expect(neutralTheme.tokens).not.toHaveProperty(
-      '--astryx-theme-neutral-color-status-fill-accent',
+    expect(neutralTheme.localTokens).not.toHaveProperty(
+      '--astryx-theme-neutral-color-status-emphasized-info',
     );
   });
 
-  it('shares each status fill across the components with the same role', () => {
-    expect(neutralTheme.components?.badge?.['variant:info']).toMatchObject({
-      backgroundColor: statusFill.accent,
+  it('keeps only the released accent local token, unused by Neutral itself', () => {
+    expect(neutralTheme.localTokens).toEqual({
+      '--astryx-theme-neutral-color-status-fill-accent': lightDark(
+        '#0074e2',
+        '#6d9cfe',
+      ),
     });
-    expect(
-      neutralTheme.components?.['status-dot']?.['variant:success'],
-    ).toEqual({
-      backgroundColor: statusFill.success,
+    const css = JSON.stringify({
+      tokens: neutralTheme.tokens,
+      components: neutralTheme.components,
     });
-    expect(
-      neutralTheme.components?.['avatar-status-dot']?.['variant:error'],
-    ).toEqual({backgroundColor: statusFill.error});
-    expect(
-      neutralTheme.components?.['step-indicator']?.['status:warning'],
-    ).toEqual({'--color-warning': statusFill.warning});
-    expect(
-      neutralTheme.components?.['progress-bar']?.['variant:accent'],
-    ).toEqual({
-      '--color-accent': statusFill.accent,
+    expect(css).not.toContain('--astryx-theme-neutral-');
+  });
+
+  it('uses public semantic roles on plain and pale surfaces while preserving fill roles', () => {
+    expect(neutralTheme.tokens).toMatchObject({
+      '--color-info': lightDark('#0074e2', '#6d9cfe'),
+      // Strong status fills: Neutral's released Badge fill colours.
+      '--color-success': lightDark('#198100', '#64af4c'),
+      '--color-warning': '#ffce2f',
+      '--color-error': lightDark('#c9303a', '#ff705d'),
     });
+    expect(neutralTheme.components).not.toHaveProperty('icon');
+    expect(neutralTheme.components).not.toHaveProperty('text-input');
+    expect(neutralTheme.components).not.toHaveProperty('text-area-counter');
+    expect(neutralTheme.components?.badge).not.toHaveProperty('variant:info');
+    // Status and accent variants read the portable roles, not overrides.
+    expect(neutralTheme.components).not.toHaveProperty('status-dot');
+    expect(neutralTheme.components).not.toHaveProperty('step-indicator');
+    expect(neutralTheme.components).not.toHaveProperty('avatar-status-dot');
+    expect(neutralTheme.components?.['progress-bar']).not.toHaveProperty(
+      'variant:accent',
+    );
+    expect(
+      neutralTheme.components?.button?.['variant:destructive'],
+    ).toMatchObject({
+      backgroundColor: 'var(--color-error-muted)',
+      color: 'var(--color-on-error-muted)',
+    });
+  });
+
+  it('keeps plain-surface status roles at their required contrast on the page background in light mode', () => {
+    const surface = neutralPalettes.neutral.light[95];
+    for (const foreground of [
+      neutralPalettes.blue.light[45],
+      neutralPalettes.green.light[45],
+      neutralPalettes.yellow.light[45],
+      neutralPalettes.red.light[45],
+    ]) {
+      expect(contrastRatio(foreground, surface)).toBeGreaterThanOrEqual(4.5);
+    }
   });
 
   it('does not adopt the unapproved table row-status target', () => {
@@ -334,63 +585,15 @@ describe('neutral theme-local status mappings', () => {
   });
 });
 
-describe('neutral Banner tint mappings', () => {
-  it('uses a dedicated muted info surface without changing categorical blue', () => {
-    const mutedAccent = 'var(--astryx-theme-neutral-color-status-muted-accent)';
-    expect(neutralTheme.localTokens).toMatchObject({
-      '--astryx-theme-neutral-color-status-muted-accent': lightDark(
-        neutralPalettes.blue.light[85],
-        `${neutralPalettes.blue.dark[75]}3D`,
-      ),
-    });
-    expect(neutralTheme.components?.banner?.['status:info']).toMatchObject({
-      '--color-accent-muted': mutedAccent,
-    });
+describe('neutral Banner and destructive Button', () => {
+  it('paint with the portable roles and no Neutral-only overrides', () => {
+    expect(neutralTheme.components).not.toHaveProperty('banner');
     expect(neutralTheme.tokens['--color-background-blue']).toBe(
       lightDark(neutralPalettes.blue.light[85], neutralPalettes.blue.dark[25]),
     );
-  });
-
-  it('keeps the error background on the semantic muted token', () => {
-    expect(
-      neutralTheme.components?.banner?.['status:error'],
-    ).not.toHaveProperty('--color-error-muted');
-  });
-
-  it('uses light overlays in light mode and dark overlays in dark mode', () => {
-    expect(neutralTheme.localTokens).toMatchObject({
-      '--astryx-theme-neutral-color-on-tint-neutral':
-        'light-dark(#fafafa4D, #0a0a0a4D)',
-      '--astryx-theme-neutral-color-on-tint-overlay-hover':
-        'light-dark(#fafafa1A, #0a0a0a1A)',
-      '--astryx-theme-neutral-color-on-tint-overlay-pressed':
-        'light-dark(#fafafa33, #0a0a0a33)',
-    });
-    expect(neutralTheme.components?.banner?.base).toMatchObject({
-      '--color-neutral': 'var(--astryx-theme-neutral-color-on-tint-neutral)',
-      '--color-overlay-hover':
-        'var(--astryx-theme-neutral-color-on-tint-overlay-hover)',
-      '--color-overlay-pressed':
-        'var(--astryx-theme-neutral-color-on-tint-overlay-pressed)',
-    });
-  });
-});
-
-describe('neutral destructive Button interaction treatment', () => {
-  it('uses component-scoped red palette overlays', () => {
-    expect(neutralTheme.localTokens).toMatchObject({
-      '--astryx-theme-neutral-color-destructive-overlay-hover':
-        'light-dark(#ff7f770D, #ee736c0D)',
-      '--astryx-theme-neutral-color-destructive-overlay-pressed':
-        'light-dark(#ff7f771A, #ee736c1A)',
-    });
-    expect(
-      neutralTheme.components?.button?.['variant:destructive'],
-    ).toMatchObject({
-      '--color-overlay-hover':
-        'var(--astryx-theme-neutral-color-destructive-overlay-hover)',
-      '--color-overlay-pressed':
-        'var(--astryx-theme-neutral-color-destructive-overlay-pressed)',
+    expect(neutralTheme.components?.button?.['variant:destructive']).toEqual({
+      backgroundColor: 'var(--color-error-muted)',
+      color: 'var(--color-on-error-muted)',
     });
   });
 });

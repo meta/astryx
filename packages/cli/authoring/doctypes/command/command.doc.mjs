@@ -48,18 +48,20 @@ export const doc = {
     {
       name: 'description',
       type: 'string',
-      description: 'Longer help body / when-to-use.',
+      description:
+        'Longer body / when-to-use. `astryx docs` prints it after the summary; `--help` shows only the summary.',
     },
     {
       name: 'namespace',
       type: 'string',
       description:
-        "Optional in the type, but every doc the CLI ships declares it. The group that reads this doc. The CLI's commands use 'cli/commands', which the docs tree adopts: each is the leaf `cli/commands/<name>`. Every command doc the CLI ships declares one, and `astryx doctor` fails on one that is missing or that nothing reads.",
+        "Optional in the type, but every doc the CLI ships declares it. The group that reads this doc. The CLI's commands use 'cli/commands', which the docs tree adopts: each is the leaf `cli/commands/<name>`, spaces as hyphens (`theme build` is `cli/commands/theme-build`). Every command doc the CLI ships declares one, and `astryx doctor` fails on one that is missing or that nothing reads.",
     },
     {
       name: 'aliases',
       type: 'string[]',
-      description: 'Alternate slugs that also resolve to this doc.',
+      description:
+        'Reserved: other names for this doc. Nothing reads it today, so they do not resolve to it.',
     },
     {
       name: 'fn',
@@ -83,13 +85,13 @@ export const doc = {
           name: 'args[].param',
           type: 'string',
           description:
-            'FunctionDoc param this arg binds to (inherits its description).',
+            "FunctionDoc param this arg binds to; `astryx docs` shows that param's description when the arg has none.",
         },
         {
           name: 'args[].description',
           type: 'string',
           description:
-            'Override description (else inherited from the referenced param).',
+            "Override description. `--help` shows an argument's description only when it sets this.",
         },
         {
           name: 'args[].required',
@@ -126,7 +128,7 @@ export const doc = {
           name: 'options[].description',
           type: 'string',
           description:
-            'Override/explicit description (required when `cliOnly`).',
+            'Override/explicit description. Nothing requires it: a flag with neither this nor `param` shows no description.',
         },
         {
           name: 'options[].choices',
@@ -143,7 +145,7 @@ export const doc = {
           name: 'options[].cliOnly',
           type: 'boolean',
           description:
-            'True for CLI-only flags with no function param (e.g. --json).',
+            'True for CLI-only flags with no function param (e.g. --verbose). Nothing reads it.',
         },
       ],
     },
@@ -197,6 +199,12 @@ export const doc = {
       ],
     },
     {
+      name: 'outsideProject',
+      type: "'same' | 'refuse' | 'own'",
+      description:
+        'What the command does outside a project. `same`: the answer it gives in a new project. `refuse`: it writes nothing and fails, naming the app project or integration package it needs. `own`: something else. Every `refuse` and `own` command also carries an `In global mode:` note in its `notes` that tells readers exactly what it does. Every command and subcommand declares one, and `astryx manifest` publishes it; a command that only groups subcommands declares none. The CLI tests run every command in an empty folder and check what it does against this value; `astryx doctor` does not check it.',
+    },
+    {
       name: 'deprecated',
       type: 'string',
       description: 'Deprecation notice — a DEP-* id and the replacement.',
@@ -220,13 +228,13 @@ export const doc = {
   type: 'command',
   name: 'search',
   displayName: 'astryx search',
-  summary: 'Find components, hooks, docs, and templates.',
-  namespace: 'cli',
+  summary: 'Find components, hooks, docs, templates, and themes.',
+  namespace: 'cli/commands',
   fn: 'search',
   args: [{name: 'query', param: 'query', required: true}],
   options: [
-    {flag: '--type <domain>', param: 'options.type', choices: ['component', 'hook', 'doc', 'template']},
-    {flag: '--json', cliOnly: true, description: 'Emit the typed JSON envelope.'},
+    {flag: '--type <domain>', param: 'options.type', choices: ['component', 'hook', 'doc', 'template', 'theme']},
+    {flag: '--verbose', cliOnly: true, description: "Also print each result's score and match reason."},
   ],
   examples: [{label: 'Terminal', cli: 'astryx search button --json'}],
   exitCodes: [{code: 1, when: 'The --type value is not a known domain.'}],
@@ -241,7 +249,7 @@ export const doc = {
     },
     {
       type: 'prose',
-      text: "Bind an arg/option to a function param via `param` so it inherits that param's description. Use `cliOnly: true` for flags with no function param (e.g. `--json`); those must supply their own `description`.",
+      text: "Bind an arg/option to a function param via `param` so it inherits that param's description: an option's in `--help` and `astryx docs`, an arg's in `astryx docs` only. Mark a flag with no function param (e.g. `--verbose`) `cliOnly: true` and give it its own `description`; nothing checks either. `--json` is a global flag, so a command doc does not declare it.",
     },
   ],
 };

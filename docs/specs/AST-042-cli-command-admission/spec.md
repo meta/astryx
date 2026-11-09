@@ -18,6 +18,14 @@ affects_consumer_docs: []
 
 # CLI command admission and programmatic parity system spec
 
+<!-- path-applicability:v1 -->
+
+```json
+{
+  "paths": ["packages/cli/clients/cli/**", "packages/cli/api/**"]
+}
+```
+
 ## Intent
 
 Agents learn the Astryx CLI from its help, its manifest, and their own notes, and

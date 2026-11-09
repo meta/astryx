@@ -14,15 +14,15 @@
  * - /packages/core/src/FormLayout/index.ts (exports if types change)
  */
 
-import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 
 /**
  * Direction of form field arrangement.
  *
  * - `'vertical'` — Fields stack top-to-bottom (default). Most common.
- * - `'horizontal'` — Fields arrange left-to-right, wrapping when needed.
- * - `'horizontal-labels'` — Fields stack vertically but labels sit to the left
- *   of their inputs (settings/admin panel pattern).
+ * - `'horizontal'` — Fields occupy one `1fr` grid track per child in logical inline order.
+ * - `'horizontal-labels'` — Fields stack vertically while labels sit beside
+ *   their inputs on the inline-start side (settings/admin panel pattern).
  */
 export type FormLayoutDirection =
   'vertical' | 'horizontal' | 'horizontal-labels';
@@ -44,8 +44,8 @@ export type FormOptionality = 'optional' | 'required';
  * for spatial arrangement, and `defaultOptionality` so a field can suppress the
  * indicator that merely restates the form-wide default.
  */
-export const FormLayoutContext = createContext<{
+export const FormLayoutContext = createLayerScopedContext<{
   direction: FormLayoutDirection;
   defaultOptionality?: FormOptionality;
-}>({direction: 'vertical'});
+}>('FormLayoutContext', 1, {direction: 'vertical'});
 FormLayoutContext.displayName = 'FormLayoutContext';

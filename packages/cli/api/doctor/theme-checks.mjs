@@ -15,7 +15,10 @@ import {
   discoverDoctorThemes,
   discoverDoctorUnmigratedCopies,
   findDoctorCoreDir,
+  doctorElementPropOrigins,
+  doctorStylesheetImports,
   findDoctorInstalledPackage,
+  realDoctorFile,
   isLocalThemeOwner,
   listDoctorThemePackages,
   listProjectSourceFiles,
@@ -32,7 +35,10 @@ import {
   themeRecordOwner,
   validateThemePrivateInputs,
 } from './_adapter.mjs';
-import {getCliInvocation} from '../../foundation/env/package-manager.mjs';
+import {
+  getCliInvocation,
+  formatCliCommand,
+} from '../../foundation/env/package-manager.mjs';
 import {satisfiesRange} from '../../foundation/env/semver.mjs';
 import {logger} from '../logger.mjs';
 
@@ -69,7 +75,7 @@ function unavailableChecks(message, moduleError = null) {
       moduleError && id === 'theme-module' ? moduleError.message : message,
     ...(moduleError && id === 'theme-module'
       ? {
-          fix: 'Keep one CLI-generated astryx-themes.ts or astryx-themes.js file, then run `astryx theme add <slug>`.',
+          fix: `Keep one CLI-generated astryx-themes.ts or astryx-themes.js file, then run \`${formatCliCommand('theme add <slug>')}\`.`,
         }
       : {}),
   }));
@@ -132,8 +138,12 @@ function walkAst(value, visit) {
   }
 }
 
-/** @param {string} source */
-function moduleSpecifiers(source) {
+/**
+ * @param {string} source
+ * @param {{runtimeOnly?: boolean}} [options] - skip type-only imports and
+ *   re-exports, which the build erases
+ */
+function moduleSpecifiers(source, options = {}) {
   const values = new Set();
   walkAst(parseModule(source), node => {
     if (
@@ -142,7 +152,11 @@ function moduleSpecifiers(source) {
         'ExportNamedDeclaration',
         'ExportAllDeclaration',
       ].includes(node.type) &&
-      typeof node.source?.value === 'string'
+      typeof node.source?.value === 'string' &&
+      !(
+        options.runtimeOnly &&
+        (node.importKind === 'type' || node.exportKind === 'type')
+      )
     ) {
       values.add(node.source.value);
     }
@@ -404,17 +418,247 @@ function appPackageNamesTheme(cwd) {
 }
 
 /**
+ * Whether one import specifier names a theme's built module or stylesheet.
+ * @param {string} specifier
+ * @param {string} file - the importing file
+ * @param {ResolvedAppTheme} theme
+ */
+function importsTheme(specifier, file, theme) {
+  if (theme.source === 'local') {
+    return (
+      specifierTargets(specifier, file, theme.moduleFile) ||
+      specifierTargets(specifier, file, theme.stylesheetFile)
+    );
+  }
+  return specifier === theme.module || specifier === theme.stylesheet;
+}
+
+const CORE_THEME_SOURCES = new Set([
+  '@astryxdesign/core',
+  '@astryxdesign/core/theme',
+]);
+
+/**
+ * The base a `defineTheme({extends: base})` call extends, for
+ * {@link doctorElementPropOrigins}: a theme made that way stands for its base.
+ * @param {any} init
+ * @returns {any}
+ */
+function definedThemeBase(init) {
+  if (
+    init?.type !== 'CallExpression' ||
+    init.callee?.type !== 'Identifier' ||
+    init.callee.name !== 'defineTheme'
+  ) {
+    return null;
+  }
+  const options = init.arguments?.[0];
+  if (options?.type !== 'ObjectExpression') return null;
+  const base = options.properties.find(
+    (/** @type {any} */ property) =>
+      property.type === 'ObjectProperty' &&
+      !property.computed &&
+      (property.key?.name ?? property.key?.value) === 'extends',
+  );
+  return base?.value ?? null;
+}
+
+/**
+ * The themes the app wires itself, without a generated theme module or a
+ * package.json `astryx.theme`. A theme is wired when the app's own source
+ * imports its built module or stylesheet ({@link resolveDoctorThemeImports}
+ * names them: the imports `theme add` writes), or when the app passes it to
+ * Core's `Theme`: {@link doctorElementPropOrigins} follows the `theme` value through
+ * module-scope aliases, `defineTheme({extends})`, re-exports and installed
+ * packages to where it is declared, which must be inside an installed theme
+ * package or be a local theme's built module. Only themes the app can load
+ * count: a theme whose package is not installed is never wired. A `theme`
+ * value whose origin is anything else (a prop, a function result, a lookup)
+ * is reported as unconfirmed, never as missing. The scan reads app source only
+ * (no dependencies, build output, links or type-only imports) within the
+ * bounded source walk, and executes nothing.
+ * @param {string} cwd
+ * @returns {Promise<{
+ *   wired: Array<{slug: string, owner: string, file: string}>,
+ *   unconfirmed: Array<{file: string}>,
+ * }>}
+ */
+export async function themeImportWiring(cwd) {
+  const none = {wired: [], unconfirmed: []};
+  let state;
+  try {
+    state = readThemeState(cwd);
+  } catch {
+    return none;
+  }
+  // A generated module or `astryx.theme` already decides the result.
+  if (state.configured || appPackageNamesTheme(cwd)) return none;
+  const projectDir = state.projectDir;
+  /** @type {DiscoveredTheme[]} */
+  let available;
+  try {
+    available = await discoverDoctorThemes(projectDir);
+  } catch {
+    return none;
+  }
+  const ownerCounts = new Map();
+  for (const theme of available) {
+    const owner = themeRecordOwner(theme);
+    ownerCounts.set(owner, (ownerCounts.get(owner) ?? 0) + 1);
+  }
+  /** @type {Map<string, string | null>} */
+  const installedDirs = new Map();
+  const installedDir = (/** @type {string} */ owner) => {
+    if (!installedDirs.has(owner)) {
+      const dir = findDoctorInstalledPackage(projectDir, owner);
+      installedDirs.set(owner, dir ? realDoctorFile(dir) : null);
+    }
+    return installedDirs.get(owner) ?? null;
+  };
+  // Only themes the app can load: local themes, and package themes whose
+  // package is installed (discovery also lists the CLI's bundled themes).
+  /** @type {ResolvedAppTheme[]} */
+  const themes = [];
+  for (const theme of available) {
+    let resolved;
+    try {
+      resolved = resolveDoctorThemeImports(theme, {
+        cwd: projectDir,
+        ownerThemeCount: ownerCounts.get(themeRecordOwner(theme)) ?? 1,
+      });
+    } catch {
+      // A theme without built imports cannot be wired by importing them.
+      continue;
+    }
+    if (resolved.source === 'local' || installedDir(resolved.owner)) {
+      themes.push(resolved);
+    }
+  }
+  if (themes.length === 0) return none;
+  /**
+   * The theme a `Theme` value's origin is, or null.
+   * @param {{file: string, name: string} | null} origin
+   */
+  const themeAt = origin => {
+    const file = origin ? realDoctorFile(origin.file) : null;
+    if (!origin || !file) return null;
+    const local = themes.find(
+      theme =>
+        theme.source === 'local' && realDoctorFile(theme.moduleFile) === file,
+    );
+    if (local) return local;
+    const owned = themes.filter(theme => {
+      const dir = theme.source === 'local' ? null : installedDir(theme.owner);
+      return dir != null && file.startsWith(`${dir}${path.sep}`);
+    });
+    const named = owned.filter(theme => theme.exportName === origin.name);
+    if (named.length === 1) return named[0];
+    return owned.length === 1 ? owned[0] : null;
+  };
+  /** @type {Map<string, {slug: string, owner: string, file: string}>} */
+  const wired = new Map();
+  const keyOf = (/** @type {ResolvedAppTheme} */ theme) =>
+    `${theme.owner}\u0000${theme.slug}`;
+  /** @type {Set<string>} */
+  const unconfirmed = new Set();
+  for (const file of listProjectSourceFiles(projectDir, '', {
+    stylesheets: true,
+  })) {
+    let source;
+    try {
+      source = readTextFile(file);
+    } catch {
+      continue;
+    }
+    const shown = relative(projectDir, file);
+    const candidates = themes.filter(
+      theme =>
+        !wired.has(keyOf(theme)) &&
+        (theme.source === 'local'
+          ? source.includes(path.basename(theme.moduleFile)) ||
+            source.includes(path.basename(theme.stylesheetFile))
+          : source.includes(theme.module) || source.includes(theme.stylesheet)),
+    );
+    if (candidates.length > 0) {
+      let specifiers;
+      try {
+        specifiers =
+          path.extname(file) === '.css'
+            ? doctorStylesheetImports(source)
+            : moduleSpecifiers(source, {runtimeOnly: true});
+      } catch {
+        specifiers = new Set();
+      }
+      for (const theme of candidates) {
+        if ([...specifiers].some(spec => importsTheme(spec, file, theme))) {
+          wired.set(keyOf(theme), {
+            slug: theme.slug,
+            owner: theme.owner,
+            file: shown,
+          });
+        }
+      }
+    }
+    if (path.extname(file) === '.css' || !source.includes('theme=')) continue;
+    for (const origin of doctorElementPropOrigins(file, {
+      sources: CORE_THEME_SOURCES,
+      name: 'Theme',
+      prop: 'theme',
+      unwrap: definedThemeBase,
+    })) {
+      const theme = themeAt(origin);
+      if (!theme) {
+        unconfirmed.add(shown);
+      } else if (!wired.has(keyOf(theme))) {
+        wired.set(keyOf(theme), {
+          slug: theme.slug,
+          owner: theme.owner,
+          file: shown,
+        });
+      }
+    }
+  }
+  // In discovery order, so the report does not depend on the file walk.
+  return {
+    wired: themes.flatMap(theme => {
+      const found = wired.get(keyOf(theme));
+      return found ? [found] : [];
+    }),
+    unconfirmed: [...unconfirmed].sort().map(file => ({file})),
+  };
+}
+
+/**
+ * The pass message's list of themes wired by import, each with the file that
+ * imports it.
+ * @param {Array<{slug: string, file: string}>} wired
+ */
+function wiredByImportList(wired) {
+  const shown = wired.slice(0, 5).map(({slug, file}) => `${slug} (${file})`);
+  const more = wired.length - shown.length;
+  return more > 0 ? `${shown.join(', ')} and ${more} more` : shown.join(', ');
+}
+
+/**
  * The `themes` check that every released doctor report carries. Its id is
  * stable, so it stays beside the app-theme checks. Without a generated theme
  * module it reports what it always has: whether an `@astryxdesign/theme-*`
  * package is installed, and whether the app's package.json names a theme in
- * `astryx.theme`. With a generated module it reports the overall result of the
- * app-theme checks.
+ * `astryx.theme`, or else whether the app's own source imports a theme's built
+ * module or stylesheet ({@link themeImportWiring}). With a generated module it
+ * reports the overall result of the app-theme checks.
  * @param {string} cwd
  * @param {DoctorCheck[]} appChecks - the checks {@link checkAppThemes} returned
+ * @param {{wired: Array<{slug: string, file: string}>, unconfirmed: Array<{file: string}>}} [wiring] -
+ *   what {@link themeImportWiring} returned
  * @returns {DoctorCheck}
  */
-export function checkThemes(cwd, appChecks) {
+export function checkThemes(
+  cwd,
+  appChecks,
+  wiring = {wired: [], unconfirmed: []},
+) {
+  const wiredByImport = wiring.wired;
   const label = 'Theme packages';
   const managed = appChecks.some(
     check => APP_THEME_CHECK_IDS.has(check.id) && check.status !== 'info',
@@ -472,6 +716,14 @@ export function checkThemes(cwd, appChecks) {
 
   const run = getCliInvocation(cwd);
   const packages = listDoctorThemePackages(cwd);
+  if (packages.length === 0 && wiredByImport.length > 0) {
+    return {
+      id: 'themes',
+      label,
+      status: 'pass',
+      message: `Themes wired by import: ${wiredByImportList(wiredByImport)}.`,
+    };
+  }
   if (packages.length === 0) {
     return {
       id: 'themes',
@@ -482,6 +734,24 @@ export function checkThemes(cwd, appChecks) {
     };
   }
   const names = packages.join(', ');
+  if (!appPackageNamesTheme(cwd) && wiredByImport.length > 0) {
+    return {
+      id: 'themes',
+      label,
+      status: 'pass',
+      message: `Theme package(s) installed (${names}); wired by import: ${wiredByImportList(wiredByImport)}.`,
+    };
+  }
+  if (!appPackageNamesTheme(cwd) && wiring.unconfirmed.length > 0) {
+    const files = wiring.unconfirmed.map(({file}) => file).join(', ');
+    return {
+      id: 'themes',
+      label,
+      status: 'info',
+      message: `Theme package(s) installed (${names}); ${files} pass${wiring.unconfirmed.length === 1 ? 'es' : ''} a theme to Theme that doctor could not trace to a theme import, so it could not confirm which theme is wired.`,
+      fix: `If no theme is applied, add one with \`${run} theme add <slug>\`.`,
+    };
+  }
   if (!appPackageNamesTheme(cwd)) {
     return {
       id: 'themes',
@@ -736,7 +1006,7 @@ export async function checkAppThemes(cwd) {
       label: 'App imports the theme module',
       status: 'warn',
       message: `Could not prove that project source imports ${state.module.path}${importEvidence.parseFailures ? `; ${importEvidence.parseFailures} source file(s) could not be parsed` : ''}.`,
-      fix: `Import {themes, defaultThemeSlug} from the generated module and {Theme} from '@astryxdesign/core', then render <Theme theme={themes[defaultThemeSlug]}>.`,
+      fix: `Import {themes, defaultThemeSlug} from the generated module and {Theme} from '@astryxdesign/core/theme', then render <Theme theme={themes[defaultThemeSlug]}>.`,
     });
   }
 
@@ -794,6 +1064,16 @@ export async function checkAppThemes(cwd) {
       message:
         'Could not check local build freshness until every local output resolves.',
     });
+  } else if (localThemes.length > 0 && !findDoctorCoreDir(state.projectDir)) {
+    // A build reads Core, and doctor reads only the Core the project
+    // installed, never the one the answering copy carries (spec AST-081 FR3).
+    checks.push({
+      id: 'theme-local-builds',
+      label: 'Local theme build freshness',
+      status: 'info',
+      message:
+        "The project's Core isn't installed, so local theme builds were not checked. Install the project's dependencies, then run doctor again.",
+    });
   } else if (localThemes.length === 0) {
     checks.push({
       id: 'theme-local-builds',
@@ -817,7 +1097,7 @@ export async function checkAppThemes(cwd) {
           const receipt = await themeBuild(
             path.join(availableTheme.sourceDir, availableTheme.entry),
             {check: true},
-            {cwd: state.projectDir},
+            {cwd: state.projectDir, projectCore: true},
           );
           if (
             receipt == null ||

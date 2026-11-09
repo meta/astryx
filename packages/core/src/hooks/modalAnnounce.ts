@@ -1,0 +1,477 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+'use client';
+
+/**
+ * @file modalAnnounce.ts
+ * @input The live-region internals of useAnnounce and DOM dialog state
+ * @output Installs the modal route into useAnnounce as it loads, and exports
+ *   the presentation bookkeeping that ModalAnnounceProvider drives
+ * @position Core a11y internal (AST-086 FR14) that decides where a message
+ *   from inside an Astryx modal is heard. Only ModalAnnounceProvider loads it.
+ *
+ * SYNC: not exported from /packages/core/src/hooks/index.ts.
+ */
+
+import {
+  announceMessage,
+  clearModalRegion,
+  clearRegion,
+  forwardWaiting,
+  handleOf,
+  installModalRoute,
+  isOpenModal,
+  modalRegion,
+  unexposedWords,
+  writeModalRegion,
+  type AnnouncePoliteness,
+  type AnnounceReceipt,
+  type ModalAnnounceScope,
+  type WaitingWords,
+  type WithdrawAnnouncement,
+} from './useAnnounce';
+
+/**
+ * Whether what is written inside `dialog` reaches assistive technology: open
+ * as a modal, and not taken out of the accessibility tree by `inert` or
+ * `aria-hidden` — a BottomSheet, standalone or a switcher step, stays open
+ * through its exit motion in exactly that state.
+ */
+export function isExposed(dialog: HTMLDialogElement): boolean {
+  return (
+    isOpenModal(dialog) &&
+    !dialog.inert &&
+    dialog.getAttribute('aria-hidden') !== 'true'
+  );
+}
+
+/**
+ * The nearest open native modal dialog among the Astryx modals enclosing a
+ * caller: a scrimless BottomSheet or Drawer is a dialog that is open but not
+ * modal, so the walk continues to the modal above it.
+ */
+function enclosingOpenModal(
+  scope: ModalAnnounceScope | null,
+): HTMLDialogElement | null {
+  for (let s = scope; s != null; s = s.parent) {
+    const dialog = s.dialogRef.current;
+    if (isOpenModal(dialog)) {
+      return dialog;
+    }
+  }
+  return null;
+}
+
+// The dialogs the providers have seen open, in the order they were last
+// presented. `showModal()` sets `open` as it is called, so the order of the
+// attribute records is the top-layer order, and the last one still open as a
+// modal is the modal on top.
+const presented: HTMLDialogElement[] = [];
+
+export function notePresented(dialog: HTMLDialogElement): void {
+  const at = presented.indexOf(dialog);
+  if (at !== -1) {
+    presented.splice(at, 1);
+  }
+  if (dialog.open) {
+    presented.push(dialog);
+  }
+}
+
+export function forgetPresented(dialog: HTMLDialogElement): void {
+  const at = presented.indexOf(dialog);
+  if (at !== -1) {
+    presented.splice(at, 1);
+  }
+}
+
+/**
+ * The modal on top among the ones Astryx renders: the last presented that is
+ * open, modal and exposed. One above it that is exiting (open, not exposed)
+ * is on its way out and does not count — the step the person went back to
+ * is on top while the step they left fades.
+ */
+function topExposedModal(): HTMLDialogElement | null {
+  for (let i = presented.length - 1; i >= 0; i -= 1) {
+    if (isExposed(presented[i])) {
+      return presented[i];
+    }
+  }
+  return null;
+}
+
+/**
+ * The channel exposed to the person right now, other than `except`, read
+ * down the top-layer order: the first dialog that is exposed is it; a dialog
+ * still open as a modal but not exposed — one running its exit above the
+ * rest — covers everything beneath it, so nothing is exposed yet
+ * (`'covered'`); the page body (`null`) is exposed once no native modal is
+ * open.
+ */
+function nextExposedChannel(
+  except: HTMLDialogElement,
+): HTMLDialogElement | 'covered' | null {
+  for (let i = presented.length - 1; i >= 0; i -= 1) {
+    const dialog = presented[i];
+    if (dialog !== except && isExposed(dialog)) {
+      return dialog;
+    }
+    // `except` itself, still an open modal through its exit, covers what is
+    // beneath it as any other exiting modal does.
+    if (isOpenModal(dialog)) {
+      return 'covered';
+    }
+  }
+  // A modal presented in this same task is not in the list yet (its
+  // attribute record is delivered after the task): the document still knows
+  // it. With no presentation order to go by, the last such dialog in the
+  // document stands for the one on top.
+  let fallback: HTMLDialogElement | null = null;
+  for (const dialog of document.querySelectorAll('dialog')) {
+    if (dialog !== except && !presented.includes(dialog) && isExposed(dialog)) {
+      fallback = dialog;
+    }
+  }
+  return fallback;
+}
+
+/** Whether any native modal dialog is open in the document right now. */
+function isAnyModalOpen(): boolean {
+  for (const dialog of document.querySelectorAll('dialog')) {
+    if (isOpenModal(dialog)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Words that wait for an exiting modal's real close. Their dialog left the
+// accessibility tree for its exit but is still an open native modal, or such
+// a dialog covers their channel. They are delivered when a dialog closes or
+// theirs is exposed again. Each text keeps its announcers' receipts. An entry
+// is gone once delivered, so a receipt never reaches equal words held later.
+interface HeldWords extends WaitingWords {
+  readonly receipts: AnnounceReceipt[];
+}
+const held = new Map<
+  HTMLDialogElement,
+  Record<AnnouncePoliteness, HeldWords[]>
+>();
+
+/** Hold `message` for `dialog`, for the announcer `receipt` stands for. */
+function hold(
+  dialog: HTMLDialogElement,
+  message: string,
+  politeness: AnnouncePoliteness,
+  receipt: AnnounceReceipt,
+): void {
+  let slot = held.get(dialog);
+  if (slot == null) {
+    slot = {polite: [], assertive: []};
+    held.set(dialog, slot);
+  }
+  let words = slot[politeness].find(entry => entry.text === message);
+  if (words == null) {
+    words = {text: message, receipts: []};
+    slot[politeness].push(words);
+  }
+  words.receipts.push(receipt);
+  const entry = words;
+  receipt.withdraw = () => dropHeldShare(dialog, politeness, entry, receipt);
+}
+
+/** One announcer takes back its share of `words`, while they are held. */
+function dropHeldShare(
+  dialog: HTMLDialogElement,
+  politeness: AnnouncePoliteness,
+  words: HeldWords,
+  receipt: AnnounceReceipt,
+): void {
+  const slot = held.get(dialog);
+  const at = words.receipts.indexOf(receipt);
+  if (slot == null || !slot[politeness].includes(words) || at < 0) {
+    return;
+  }
+  words.receipts.splice(at, 1);
+  if (words.receipts.length === 0) {
+    slot[politeness] = slot[politeness].filter(entry => entry !== words);
+    if (slot.polite.length === 0 && slot.assertive.length === 0) {
+      held.delete(dialog);
+    }
+  }
+}
+
+/** Drop what `dialog` holds for `politeness`: the owner took it back. */
+function dropHeld(
+  dialog: HTMLDialogElement,
+  politeness: AnnouncePoliteness,
+): void {
+  const slot = held.get(dialog);
+  if (slot == null) {
+    return;
+  }
+  slot[politeness] = [];
+  if (slot.polite.length === 0 && slot.assertive.length === 0) {
+    held.delete(dialog);
+  }
+}
+
+/** Deliver what `dialog` held, now that a channel may be exposed. */
+function releaseHeld(dialog: HTMLDialogElement): void {
+  const slot = held.get(dialog);
+  if (slot == null) {
+    return;
+  }
+  held.delete(dialog);
+  for (const politeness of ['polite', 'assertive'] as const) {
+    // One delivery per announcer, so each receipt follows its words.
+    forwardWaiting(slot[politeness], text =>
+      isExposed(dialog)
+        ? announceInModalRouted(dialog, text, politeness)
+        : // Holds again if still nothing is exposed.
+          deliverBeyond(dialog, text, politeness),
+    );
+  }
+}
+
+export function releaseAllHeld(): void {
+  for (const dialog of [...held.keys()]) {
+    releaseHeld(dialog);
+  }
+}
+
+/**
+ * Deliver `message` through the channel exposed now that `dialog` is not:
+ * the modal on top, the page body once no modal is open, or — while the
+ * dialog is still an open modal through its exit, with nothing exposed —
+ * held until it closes.
+ */
+function deliverBeyond(
+  dialog: HTMLDialogElement,
+  message: string,
+  politeness: AnnouncePoliteness,
+): WithdrawAnnouncement | null {
+  const next = nextExposedChannel(dialog);
+  if (next === 'covered' || (next == null && isAnyModalOpen())) {
+    // An exiting modal — this one, or one above the next candidate — is
+    // still open and covers what is beneath it: nothing is exposed until
+    // it closes.
+    const receipt: AnnounceReceipt = {withdraw: null};
+    hold(dialog, message, politeness, receipt);
+    return handleOf(receipt);
+  }
+  if (next != null) {
+    return announceInModalRouted(next, message, politeness);
+  }
+  return announceMessage(message, politeness);
+}
+
+/**
+ * Move whatever `dialog`'s containers hold that assistive technology has not
+ * had yet to the channel exposed now. Called when the dialog stops being
+ * exposed — closed, taken inert or `aria-hidden` for its exit, or unmounted
+ * while open — so a message sent just before is not lost.
+ */
+export function handOffUnexposed(dialog: HTMLDialogElement): void {
+  for (const politeness of ['polite', 'assertive'] as const) {
+    // One delivery per announcer, so each receipt follows its words and a
+    // `hasReplace` instance's next message can still take its own back.
+    forwardWaiting(takeUnexposed(dialog, politeness), text =>
+      deliverBeyond(dialog, text, politeness),
+    );
+  }
+}
+
+/**
+ * An empty message from inside `dialog`: withdraw the words its region for
+ * `politeness` holds or is about to hold, and the words of that urgency
+ * waiting for the dialog's real close, so a status taken back while the
+ * dialog exits ("3 results", then the query is cleared) is not delivered
+ * after all once the dialog has closed.
+ */
+function withdrawFromModal(
+  dialog: HTMLDialogElement,
+  politeness: AnnouncePoliteness,
+): void {
+  clearModalRegion(dialog, politeness);
+  dropHeld(dialog, politeness);
+}
+
+/**
+ * Take the unexposed words out of a dialog's region, with their receipts,
+ * clearing it.
+ */
+function takeUnexposed(
+  dialog: HTMLDialogElement,
+  politeness: AnnouncePoliteness,
+): WaitingWords[] {
+  const region = modalRegion(dialog, politeness);
+  if (region == null) {
+    return [];
+  }
+  const waiting = unexposedWords(region);
+  clearModalRegion(dialog, politeness);
+  return waiting;
+}
+
+function announceInModalRouted(
+  dialog: HTMLDialogElement,
+  message: string,
+  politeness: AnnouncePoliteness = 'polite',
+): WithdrawAnnouncement | null {
+  if (!isExposed(dialog)) {
+    return deliverBeyond(dialog, message, politeness);
+  }
+  const top = topExposedModal();
+  if (top != null && top !== dialog && presented.includes(dialog)) {
+    // Covered by a later Astryx modal: the owner is not operable until that
+    // one closes, and a message announced meanwhile is not heard — the
+    // container is clear before this modal is on top again.
+    clearModalRegion(dialog, politeness);
+    return null;
+  }
+  return writeModalRegion(dialog, message, politeness, {
+    isExposed: () => isExposed(dialog),
+    redirect: waiting =>
+      forwardWaiting(waiting, text => deliverBeyond(dialog, text, politeness)),
+  });
+}
+
+// Messages from callers whose modal is presented in this commit wait one
+// frame for the route. An empty message among them withdraws the earlier
+// ones of its urgency. Before the frame, a receipt drops its announcer's
+// share. The frame points the receipt at its write.
+interface Deferred {
+  frame: number;
+  words: Record<AnnouncePoliteness, HeldWords[]>;
+  clears: Record<AnnouncePoliteness, boolean>;
+}
+const deferredByScope = new WeakMap<ModalAnnounceScope, Deferred>();
+
+function deferUntilPresented(
+  scope: ModalAnnounceScope,
+  message: string,
+  politeness: AnnouncePoliteness,
+): WithdrawAnnouncement | null {
+  let deferred = deferredByScope.get(scope);
+  if (deferred == null) {
+    const created: Deferred = {
+      frame: requestAnimationFrame(() => {
+        deferredByScope.delete(scope);
+        const opened = enclosingOpenModal(scope);
+        for (const urgency of ['polite', 'assertive'] as const) {
+          if (created.clears[urgency]) {
+            if (opened != null) {
+              withdrawFromModal(opened, urgency);
+            } else {
+              clearRegion(urgency);
+            }
+          }
+          // One write per announcer, so each can take back its own share.
+          forwardWaiting(created.words[urgency], text =>
+            opened != null
+              ? announceInModalRouted(opened, text, urgency)
+              : announceMessage(text, urgency),
+          );
+        }
+      }),
+      words: {polite: [], assertive: []},
+      clears: {polite: false, assertive: false},
+    };
+    deferred = created;
+    deferredByScope.set(scope, deferred);
+  }
+  const waiting = deferred;
+  if (!message) {
+    // Taken back: the receipts of what waited have nothing left to take.
+    for (const words of waiting.words[politeness]) {
+      for (const receipt of words.receipts) {
+        receipt.withdraw = null;
+      }
+    }
+    waiting.words[politeness] = [];
+    waiting.clears[politeness] = true;
+    return null;
+  }
+  let words = waiting.words[politeness].find(entry => entry.text === message);
+  if (words == null) {
+    words = {text: message, receipts: []};
+    waiting.words[politeness].push(words);
+  }
+  const entry = words;
+  const receipt: AnnounceReceipt = {withdraw: null};
+  receipt.withdraw = () => {
+    // Before the frame: drop this announcer's share of the waiting words.
+    const at = entry.receipts.indexOf(receipt);
+    if (at < 0) {
+      return;
+    }
+    entry.receipts.splice(at, 1);
+    if (entry.receipts.length === 0) {
+      waiting.words[politeness] = waiting.words[politeness].filter(
+        other => other !== entry,
+      );
+    }
+  };
+  entry.receipts.push(receipt);
+  return handleOf(receipt);
+}
+
+/**
+ * Whether a provider nearer than the first open modal in the chain is meant
+ * to be open but its dialog is not open yet: the caller sits inside a modal
+ * being presented in this commit, which will be the one on top.
+ */
+function isBeingPresented(scope: ModalAnnounceScope | null): boolean {
+  for (let s = scope; s != null; s = s.parent) {
+    const dialog = s.dialogRef.current;
+    if (isOpenModal(dialog)) {
+      return false;
+    }
+    if (s.isOpen && (dialog == null || !dialog.open)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * `useAnnounce` from inside `scope`, resolved per call: the same owner is
+ * sometimes inside a modal and sometimes not, and the modal it is in may have
+ * just opened or closed.
+ */
+function announceFromScope(
+  scope: ModalAnnounceScope,
+  message: string,
+  politeness: AnnouncePoliteness,
+): WithdrawAnnouncement | null {
+  if (isBeingPresented(scope)) {
+    // The message comes in the commit that opens its modal, before the
+    // Dialog's Effect calls showModal(), because that Effect runs after its
+    // content's. Choose the route a frame later, not the modal beneath that
+    // the new one will cover. An empty message in the same commit withdraws
+    // what waits. A caller in a modal that is meant to be closed waits for
+    // nothing: it takes the route of where it is now.
+    return deferUntilPresented(scope, message, politeness);
+  }
+  const dialog = enclosingOpenModal(scope);
+  if (!message) {
+    // An empty message clears any lingering status, including messages
+    // joined but not yet exposed and words held for the dialog's close.
+    if (dialog != null) {
+      withdrawFromModal(dialog, politeness);
+    } else {
+      clearRegion(politeness);
+    }
+    return null;
+  }
+  if (dialog != null) {
+    return announceInModalRouted(dialog, message, politeness);
+  }
+  return announceMessage(message, politeness);
+}
+
+installModalRoute({
+  announce: announceFromScope,
+  announceInModal: announceInModalRouted,
+});

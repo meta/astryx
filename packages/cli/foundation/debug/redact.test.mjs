@@ -305,7 +305,7 @@ describe('credential scrubbing', () => {
   });
 
   it.each([
-    ['a URL', 'GET https://api.github.com/repos/facebook/astryx/pulls/4812'],
+    ['a URL', 'GET https://api.github.com/repos/meta/astryx/pulls/4812'],
     ['a websocket URL', 'ws://localhost:5173/hmr/client'],
     ['a proxy URL', 'http://127.0.0.1:8931/a/b/c'],
     ['a time', 'elapsed 12:30 done'],
@@ -510,9 +510,14 @@ describe('cost on hostile input', () => {
     ['deep paths', '/a/b/c/d/e/f '.repeat(38_000)],
     ['stack frames', '    at fn (file:///opt/x/y/z.mjs:1:2)\n'.repeat(13_000)],
   ])('scrubs 500KB of %s in well under a second', (_label, input) => {
-    const started = Date.now();
+    // CPU time this process spent, not wall time: on a busy runner the other
+    // test files' processes share the CPU, and wall time then grows with
+    // their load, while backtracking that blows up grows this process's own
+    // CPU time. The Node project runs each file in its own forked process.
+    const started = process.cpuUsage();
     big(input);
-    expect(Date.now() - started).toBeLessThan(1000);
+    const {user, system} = process.cpuUsage(started);
+    expect((user + system) / 1000).toBeLessThan(1000);
   });
 });
 

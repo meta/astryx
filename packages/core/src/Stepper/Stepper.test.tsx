@@ -10,6 +10,7 @@ import {useStepperContext} from './StepperContext';
 import {useLayer} from '../Layer/useLayer';
 import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
+import {getForcedColorsRules} from '../__tests__/forcedColors';
 
 describe('Stepper', () => {
   it('renders an ordered list of steps (not a nav landmark)', () => {
@@ -55,6 +56,48 @@ describe('Stepper', () => {
     );
     expect(screen.getByTestId('step-2')).not.toHaveAttribute('aria-current');
   });
+
+  it.each([
+    ['horizontal', 'separated'],
+    ['vertical', 'separated'],
+    ['horizontal', 'on-track'],
+    ['vertical', 'on-track'],
+  ] as const)(
+    'keeps aria-current on the in-progress step over a caller’s (%s, %s)',
+    (orientation, indicatorPosition) => {
+      render(
+        <Stepper
+          activeStep={1}
+          orientation={orientation}
+          indicatorPosition={indicatorPosition}>
+          <Step
+            step={0}
+            label="Step 1"
+            data-testid="step-0"
+            aria-current="page"
+          />
+          <Step
+            step={1}
+            label="Step 2"
+            data-testid="step-1"
+            aria-current="false"
+          />
+          <Step
+            step={2}
+            label="Step 3"
+            data-testid="step-2"
+            aria-current="true"
+          />
+        </Stepper>,
+      );
+      expect(screen.getByTestId('step-0')).not.toHaveAttribute('aria-current');
+      expect(screen.getByTestId('step-1')).toHaveAttribute(
+        'aria-current',
+        'step',
+      );
+      expect(screen.getByTestId('step-2')).not.toHaveAttribute('aria-current');
+    },
+  );
 
   it('renders descriptions when provided', () => {
     render(
@@ -184,17 +227,75 @@ describe('Stepper', () => {
     expect(handleClick).toHaveBeenCalledWith(2);
   });
 
-  it('does not render buttons for disabled steps', () => {
+  it('keeps a disabled step focusable and aria-disabled, and never activates it (spec:AST-085 FR1, FR2, FR5)', async () => {
+    const user = userEvent.setup();
+    const handleClick = vi.fn();
     render(
-      <Stepper activeStep={2} onStepClick={() => {}}>
+      <Stepper activeStep={2} onStepClick={handleClick}>
         <Step step={0} label="Step 1" isDisabled />
         <Step step={1} label="Step 2" />
         <Step step={2} label="Step 3" />
       </Stepper>,
     );
-    expect(
-      screen.queryByRole('button', {name: /Go to step 1: Step 1/}),
-    ).not.toBeInTheDocument();
+    const disabled = screen.getByRole('button', {name: /Go to step 1: Step 1/});
+    expect(disabled).toHaveAttribute('aria-disabled', 'true');
+    expect(disabled).not.toHaveAttribute('disabled');
+    await user.click(disabled);
+    disabled.focus();
+    await user.keyboard('{Enter}');
+    await user.keyboard(' ');
+    expect(handleClick).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['separated', {}],
+    ['on-track horizontal', {indicatorPosition: 'on-track'}],
+    [
+      'on-track vertical',
+      {indicatorPosition: 'on-track', orientation: 'vertical'},
+    ],
+  ] as const)(
+    "describes a disabled step with its reason, the step's description, %s (spec:AST-085 FR5)",
+    (_layout, layout) => {
+      render(
+        <Stepper activeStep={1} onStepClick={() => {}} {...layout}>
+          <Step step={0} label="Setup" />
+          <Step
+            step={1}
+            label="Permissions"
+            description="Requires admin role"
+            isDisabled
+          />
+        </Stepper>,
+      );
+      const step = screen.getByRole('button', {
+        name: /Go to step 2: Permissions/,
+      });
+      expect(step).toHaveAccessibleDescription('Requires admin role');
+      expect(
+        screen.getByRole('button', {name: /Go to step 1: Setup/}),
+      ).not.toHaveAttribute('aria-describedby');
+    },
+  );
+
+  it('keeps focus on a step that becomes disabled while focused (spec:AST-085 FR4)', () => {
+    const {rerender} = render(
+      <Stepper activeStep={2} onStepClick={() => {}}>
+        <Step step={0} label="Step 1" />
+        <Step step={1} label="Step 2" />
+      </Stepper>,
+    );
+    const step = screen.getByRole('button', {name: /Go to step 1: Step 1/});
+    step.focus();
+    rerender(
+      <Stepper activeStep={2} onStepClick={() => {}}>
+        <Step step={0} label="Step 1" isDisabled />
+        <Step step={1} label="Step 2" />
+      </Stepper>,
+    );
+    const after = screen.getByRole('button', {name: /Go to step 1: Step 1/});
+    expect(after).toHaveFocus();
+    expect(after).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('does not render buttons when onStepClick is not provided', () => {
@@ -609,7 +710,7 @@ describe('Stepper', () => {
       expect(handleClick).toHaveBeenCalledWith(0);
     });
 
-    it('tabs through steps in document order, skipping disabled ones', async () => {
+    it('tabs through steps in document order, disabled ones included', async () => {
       const user = userEvent.setup();
       render(
         <Stepper activeStep={3} onStepClick={() => {}}>
@@ -622,7 +723,11 @@ describe('Stepper', () => {
       expect(
         screen.getByRole('button', {name: 'Go to step 1: One, completed'}),
       ).toHaveFocus();
-      // The disabled step renders no button, so Tab lands on step 3 next.
+      // The disabled step keeps its tab stop (spec:AST-085 FR1).
+      await user.tab();
+      expect(
+        screen.getByRole('button', {name: 'Go to step 2: Two, completed'}),
+      ).toHaveFocus();
       await user.tab();
       expect(
         screen.getByRole('button', {name: 'Go to step 3: Three, completed'}),
@@ -1456,6 +1561,46 @@ describe('Stepper', () => {
       },
     );
 
+    it('measures the list only while it is mounted and horizontal', () => {
+      const observed = new Set<Element>();
+      class ResizeObserverStub {
+        observe(element: Element) {
+          observed.add(element);
+        }
+        unobserve(element: Element) {
+          observed.delete(element);
+        }
+        disconnect() {
+          observed.clear();
+        }
+      }
+      vi.stubGlobal('ResizeObserver', ResizeObserverStub);
+      const stepper = (orientation: 'horizontal' | 'vertical') => (
+        <Stepper activeStep={0} orientation={orientation}>
+          <Step step={0} label="Account" />
+          <Step step={1} label="Review" />
+        </Stepper>
+      );
+      try {
+        const view = render(stepper('horizontal'));
+        const horizontalList = screen.getByRole('list');
+        expect(observed.has(horizontalList)).toBe(true);
+
+        view.rerender(stepper('vertical'));
+        expect(observed.has(horizontalList)).toBe(false);
+        expect(observed.has(screen.getByRole('list'))).toBe(false);
+
+        view.rerender(stepper('horizontal'));
+        const list = screen.getByRole('list');
+        expect(observed.has(list)).toBe(true);
+
+        view.unmount();
+        expect(observed.has(list)).toBe(false);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
     it('stops the controls at both ends of the sequence', () => {
       const onStepClick = vi.fn();
       // Disabled the Astryx way: aria-disabled, so the control keeps its place
@@ -2014,5 +2159,54 @@ describe('step-label and step-description theme targets', () => {
     expect(container.querySelectorAll('.astryx-step-description')).toHaveLength(
       2,
     );
+  });
+});
+
+describe('clickable step text reading', () => {
+  // axe-core's Label in Name rule joins a button's text nodes with nothing
+  // between them, aria-hidden ones included, so a number badge next to a label
+  // reads as one word ("1Account") that the step's name does not contain.
+  // Whitespace between them changes nothing on screen (the rows are flex
+  // containers) and keeps the two words apart.
+  it.each([
+    ['vertical', 'separated'],
+    ['horizontal', 'separated'],
+    ['vertical', 'on-track'],
+    ['horizontal', 'on-track'],
+  ] as const)(
+    'keeps the number and label apart in a %s %s step',
+    (orientation, indicatorPosition) => {
+      render(
+        <Stepper
+          orientation={orientation}
+          indicatorPosition={indicatorPosition}
+          activeStep={0}
+          label="Steps"
+          onStepClick={() => {}}>
+          <Step step={0} label="Account" indicator="number" />
+          <Step step={1} label="Payment" indicator="number" />
+        </Stepper>,
+      );
+
+      const button = screen.getByRole('button', {name: /Account/});
+      expect(button.textContent).toMatch(/1\s+Account/);
+      expect(button.textContent).not.toMatch(/1Account/);
+    },
+  );
+});
+
+// jsdom cannot emulate forced colors, so this asserts the compiled rule the
+// number badge fill relies on (architecture:theme-tokens INV11).
+describe('Step number badge forced colors', () => {
+  it('keeps a visible boundary on the badge fill', () => {
+    render(
+      <Stepper activeStep={0}>
+        <Step step={0} label="First" indicator="number" />
+        <Step step={1} label="Second" indicator="number" />
+      </Stepper>,
+    );
+    const css = getForcedColorsRules();
+    expect(css).toContain('outline-style: solid;');
+    expect(css).toContain('outline-color: canvastext;');
   });
 });

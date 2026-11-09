@@ -4,31 +4,29 @@
 
 /**
  * @file useScrollOverflow.ts
- * @input Uses React useRef, useState, useCallback, useEffect
- * @output Exports useScrollOverflow hook for tracking scroll position edges
+ * @input React refs, state and effects, and react-dom's flushSync
+ * @output useScrollOverflow, which tracks the overflow at the scroll edges,
+ *   and the internal useShownScrollOverflow, which can also measure from a
+ *   position its caller reports
  * @position Core hook; used by Carousel and TabList for fade-edge and button
  *   state
- *
- * Observes a scroll container and reports whether content overflows at the
- * start, end, or both edges. Updates on every scroll, and on a resize while
- * the container is rendered: a layout read on an element the browser is not
- * rendering (an ancestor with `display: none`, or a `content-visibility:
- * hidden` subtree) either answers zeros or makes the browser lay out that
- * whole hidden subtree for the answer, so a resize observation delivered for
- * a hidden container, and the measurement at registration inside one, are
- * skipped; the hook keeps its last state until the resize observation that
- * follows the reveal (one frame after it paints). A scroll is measured
- * whether or not the container is rendered: a scroll of a hidden container
- * is script's (a selected tab revealed under a hidden panel), its layout is
- * already the scroll's, and a reveal at the same size brings no resize to
- * measure it with.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/hooks/index.ts
  */
 
 import {useState, useCallback, useEffect, useRef} from 'react';
+import {flushSync} from 'react-dom';
 import {observeResize} from '../utils/sharedResizeObserver';
+
+/**
+ * Where the content is shown while something other than scrolling moves it:
+ * its offset toward the end, and how far it travels.
+ */
+export interface ShownPosition {
+  readonly offset: number;
+  readonly travel: number;
+}
 
 export interface ScrollOverflowState {
   /** Content overflows the start (left in LTR, right in RTL) */
@@ -53,10 +51,56 @@ function isRendered(el: HTMLElement): boolean {
 }
 
 /**
+ * Observes what changes `el`'s overflow besides its scroll: its own size,
+ * each child's size, the children added or removed, and its class or style.
+ * Returns the teardown, which ends every observation.
+ */
+function observeContent(el: HTMLElement, measure: () => void): () => void {
+  const unobserveContainer = observeResize(el, measure);
+  const unobserveChildren = new Map<Element, () => void>();
+  const followChildren = () => {
+    const children = new Set(el.children);
+    for (const [child, unobserve] of unobserveChildren) {
+      if (!children.has(child)) {
+        unobserve();
+        unobserveChildren.delete(child);
+      }
+    }
+    for (const child of children) {
+      if (!unobserveChildren.has(child)) {
+        unobserveChildren.set(child, observeResize(child, measure));
+      }
+    }
+  };
+  followChildren();
+  const mutations =
+    typeof MutationObserver === 'function'
+      ? new MutationObserver(() => {
+          followChildren();
+          measure();
+        })
+      : null;
+  mutations?.observe(el, {
+    childList: true,
+    attributes: true,
+    attributeFilter: ['class', 'style'],
+  });
+  return () => {
+    mutations?.disconnect();
+    for (const unobserve of unobserveChildren.values()) {
+      unobserve();
+    }
+    unobserveChildren.clear();
+    unobserveContainer();
+  };
+}
+
+/**
  * Tracks scroll overflow state for a horizontally scrollable container.
  *
  * Returns a ref callback to attach to the scroll container and a state
- * object that updates as the user scrolls or the container resizes.
+ * object that updates as the user scrolls, the container resizes, or its
+ * content changes.
  *
  * @example
  * ```
@@ -65,51 +109,81 @@ function isRendered(el: HTMLElement): boolean {
  * ```
  */
 export function useScrollOverflow() {
+  const {scrollRef, overflowStart, overflowEnd, hasOverflow} =
+    useShownScrollOverflow();
+  return {scrollRef, overflowStart, overflowEnd, hasOverflow};
+}
+
+/**
+ * `useScrollOverflow`, plus `followShown`: while snap paging holds a row, its
+ * scroll offset stays where the hold began and its items move. The caller
+ * reports where the row is shown, and the edges follow it. A live report
+ * commits an edge change before it returns. A report that the caller's own
+ * call into the paging raises passes `isLive` false. That call can run inside
+ * React's commit, so the report takes React's scheduling. Null measures the
+ * scroll offset again from the next frame, when the handed-back offset is
+ * current. Internal: not exported from the hooks entry.
+ */
+export function useShownScrollOverflow() {
   const elRef = useRef<HTMLElement | null>(null);
   const unobserveRef = useRef<(() => void) | null>(null);
+  const shownRef = useRef<ShownPosition | null>(null);
+  const releaseFrameRef = useRef(0);
 
   const [state, setState] = useState<ScrollOverflowState>({
     overflowStart: false,
     overflowEnd: false,
     hasOverflow: false,
   });
+  // The edges last set, so a measure that changes no edge renders nothing.
+  const edgesRef = useRef(state);
 
-  const measureNow = useCallback((el: HTMLElement) => {
+  const measureNow = useCallback((el: HTMLElement, isLive = false) => {
     const tolerance = 1;
-    const {scrollLeft, scrollWidth, clientWidth} = el;
-    const maxScroll = scrollWidth - clientWidth;
+    const shown = shownRef.current;
+    const offset = shown?.offset ?? Math.abs(el.scrollLeft);
+    const maxScroll = shown?.travel ?? el.scrollWidth - el.clientWidth;
 
-    const overflowStart = Math.abs(scrollLeft) > tolerance;
-    const overflowEnd = Math.abs(scrollLeft) < maxScroll - tolerance;
-    const hasOverflow = scrollWidth > clientWidth + tolerance;
+    const overflowStart = offset > tolerance;
+    const overflowEnd = offset < maxScroll - tolerance;
+    const hasOverflow = maxScroll > tolerance;
 
-    setState(prev => {
-      if (
-        prev.overflowStart === overflowStart &&
-        prev.overflowEnd === overflowEnd &&
-        prev.hasOverflow === hasOverflow
-      ) {
-        return prev;
-      }
-      return {overflowStart, overflowEnd, hasOverflow};
-    });
+    const prev = edgesRef.current;
+    if (
+      prev.overflowStart === overflowStart &&
+      prev.overflowEnd === overflowEnd &&
+      prev.hasOverflow === hasOverflow
+    ) {
+      return;
+    }
+    const next = {overflowStart, overflowEnd, hasOverflow};
+    edgesRef.current = next;
+    if (isLive) {
+      // A live report comes from the paging's frame or event. An edge change
+      // commits there, before the paging can hand the row back.
+      // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the buttons must change in the frame the row leaves its edge
+      flushSync(() => setState(next));
+    } else {
+      setState(next);
+    }
   }, []);
 
-  // Registration and resize: only a rendered container. A hidden one has no
-  // edges to report, and reading its layout would make the browser render
-  // the hidden subtree it sits in; the resize observation that follows the
-  // reveal measures again.
+  // Only a rendered container is measured at registration and on a resize or
+  // content change. A layout read on a hidden one makes the browser render
+  // its hidden subtree. The resize observation after the reveal measures
+  // again.
   const measure = useCallback(() => {
     const el = elRef.current;
-    if (el && isRendered(el)) {
+    // A held row's edges come from where it is shown, which reads no layout.
+    // So the paging's own style writes force no layout here.
+    if (el && (shownRef.current != null || isRendered(el))) {
       measureNow(el);
     }
   }, [measureNow]);
 
-  // A scroll: measured hidden or not. Script scrolled the hidden container
-  // (its layout is already the scroll's), and a reveal at the same size
-  // brings no resize observation, so this is the read that keeps the edges
-  // right for it.
+  // A scroll is measured hidden or not. Script scrolled the hidden container,
+  // so its layout is already current. A reveal at the same size brings no
+  // resize observation, so this read keeps the edges right.
   const measureOnScroll = useCallback(() => {
     const el = elRef.current;
     if (el) {
@@ -117,19 +191,46 @@ export function useScrollOverflow() {
     }
   }, [measureNow]);
 
+  const followShown = useCallback(
+    (shown: ShownPosition | null, isLive = true) => {
+      cancelAnimationFrame(releaseFrameRef.current);
+      const el = elRef.current;
+      if (shown != null) {
+        shownRef.current = shown;
+        if (el) {
+          measureNow(el, isLive);
+        }
+        return;
+      }
+      if (shownRef.current == null || el == null) {
+        shownRef.current = null;
+        return;
+      }
+      // Keep the reported edges until the next frame, when the scroll offset
+      // is current. Otherwise an edge flickers.
+      releaseFrameRef.current = requestAnimationFrame(() => {
+        shownRef.current = null;
+        measure();
+      });
+    },
+    [measure, measureNow],
+  );
+
   const scrollRef = useCallback(
     (el: HTMLElement | null) => {
       if (elRef.current) {
         unobserveRef.current?.();
         unobserveRef.current = null;
         elRef.current.removeEventListener('scroll', measureOnScroll);
+        cancelAnimationFrame(releaseFrameRef.current);
+        shownRef.current = null;
       }
 
       elRef.current = el;
 
       if (el) {
         el.addEventListener('scroll', measureOnScroll, {passive: true});
-        unobserveRef.current = observeResize(el, measure);
+        unobserveRef.current = observeContent(el, measure);
       }
     },
     [measure, measureOnScroll],
@@ -137,6 +238,7 @@ export function useScrollOverflow() {
 
   useEffect(() => {
     return () => {
+      cancelAnimationFrame(releaseFrameRef.current);
       if (elRef.current) {
         unobserveRef.current?.();
         unobserveRef.current = null;
@@ -147,6 +249,7 @@ export function useScrollOverflow() {
 
   return {
     scrollRef,
+    followShown,
     ...state,
   };
 }

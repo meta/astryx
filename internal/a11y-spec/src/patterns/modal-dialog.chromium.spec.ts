@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y release-only
 
 /**
  * @file modal-dialog.chromium.spec.ts
@@ -8,7 +9,7 @@
  * @position Real-browser self-test of the contract, not a component binding.
  */
 
-import {expect, test, type CDPSession, type Page} from '@playwright/test';
+import {expect, test, type CDPSession, type Page} from '../playwright';
 import {
   MissingBindingCapability,
   checkAccessibilitySpec,
