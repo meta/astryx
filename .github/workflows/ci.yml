@@ -302,6 +302,8 @@ jobs:
           mkdir -p "$TRUSTED_POLICY/scripts/release" "$TRUSTED_POLICY/scripts/lib"
           git show "origin/$RELEASE_BRANCH:scripts/release/active-release.mjs" \
             > "$TRUSTED_POLICY/scripts/release/active-release.mjs"
+          git show "origin/$RELEASE_BRANCH:scripts/release/release-paths.mjs" \
+            > "$TRUSTED_POLICY/scripts/release/release-paths.mjs"
           git show "origin/$RELEASE_BRANCH:scripts/lib/workspace-globs.mjs" \
             > "$TRUSTED_POLICY/scripts/lib/workspace-globs.mjs"
           VALIDATOR="$TRUSTED_POLICY/scripts/release/active-release.mjs"
@@ -381,6 +383,8 @@ jobs:
           mkdir -p "$TRUSTED_POLICY/scripts/release" "$TRUSTED_POLICY/scripts/lib"
           git show "origin/${{ github.base_ref }}:scripts/release/active-release.mjs" \
             > "$TRUSTED_POLICY/scripts/release/active-release.mjs"
+          git show "origin/${{ github.base_ref }}:scripts/release/release-paths.mjs" \
+            > "$TRUSTED_POLICY/scripts/release/release-paths.mjs"
           git show "origin/${{ github.base_ref }}:scripts/lib/workspace-globs.mjs" \
             > "$TRUSTED_POLICY/scripts/lib/workspace-globs.mjs"
 
@@ -473,6 +477,8 @@ jobs:
           mkdir -p "$TRUSTED_POLICY/scripts/release" "$TRUSTED_POLICY/scripts/lib"
           git show origin/main:scripts/release/active-release.mjs \
             > "$TRUSTED_POLICY/scripts/release/active-release.mjs"
+          git show origin/main:scripts/release/release-paths.mjs \
+            > "$TRUSTED_POLICY/scripts/release/release-paths.mjs"
           git show origin/main:scripts/lib/workspace-globs.mjs \
             > "$TRUSTED_POLICY/scripts/lib/workspace-globs.mjs"
 

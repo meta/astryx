@@ -39,6 +39,7 @@ const CLASSIFIER_FILES = new Set([
   '.github/scripts/change-scope.cjs',
   '.github/scripts/knowledge-paths.cjs',
   'scripts/component-packages.cjs',
+  'scripts/release/release-paths.mjs',
 ]);
 const AUDIT_FILE = '.github/scripts/component-audit-scope.cjs';
 const OFFICIAL_PACKAGES = 'packages/cli/assets/discover/official-packages.json';
@@ -213,6 +214,8 @@ describe('per-job scope step', () => {
         '.changeset/frozen.md',
         'packages/core/CHANGELOG.md',
         'packages/core/package.json',
+        'packages/cli/assets/codemods/__tests__/registry.test.mjs',
+        'packages/cli/assets/codemods/transforms/v1.2.3/__tests__/upgrade.test.mjs',
       ),
     });
     expect(outputs).toMatchObject({
@@ -302,8 +305,9 @@ describe('per-job scope step', () => {
       f0: `${BASE_SHA}:.github/scripts/change-scope.cjs`,
       f1: `${BASE_SHA}:.github/scripts/knowledge-paths.cjs`,
       f2: `${BASE_SHA}:scripts/component-packages.cjs`,
-      f3: `${BASE_SHA}:${AUDIT_FILE}`,
-      f4: `${BASE_SHA}:${OFFICIAL_PACKAGES}`,
+      f3: `${BASE_SHA}:scripts/release/release-paths.mjs`,
+      f4: `${BASE_SHA}:${AUDIT_FILE}`,
+      f5: `${BASE_SHA}:${OFFICIAL_PACKAGES}`,
     });
     expect(contentCalls.filter(call => call.rest)).toEqual([]);
   });

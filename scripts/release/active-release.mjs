@@ -11,8 +11,8 @@
  * @output fail-closed receipts plus the cut-time release description frozen in the plan digest
  * @position single authority used by release CI, stable publishing, and branch cleanup
  *
- * CI copies this file and lib/workspace-globs.mjs alone as trusted policy, so
- * it imports nothing else at module load.
+ * CI copies this file, release-paths.mjs, and lib/workspace-globs.mjs as
+ * trusted policy.
  */
 
 import crypto from 'node:crypto';
@@ -22,6 +22,12 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {expandWorkspaceDirs} from '../lib/workspace-globs.mjs';
+import {
+  classifyReleaseDiff,
+  diffEntryFiles,
+  isReleaseOutputPath,
+  isReleaseTestRepairPath,
+} from './release-paths.mjs';
 
 const ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -707,47 +713,71 @@ function listActiveBranches(root) {
   return active.sort();
 }
 
-const RELEASE_OUTPUT_PATTERNS = [
-  /^packages\/(?:[^/]+|themes\/[^/]+)\/package\.json$/,
-  /^packages\/(?:[^/]+|themes\/[^/]+)\/CHANGELOG\.md$/,
-  /^packages\/cli\/assets\/codemods\/registry\.mjs$/,
-  /^packages\/cli\/assets\/codemods\/__tests__\/registry\.test\.mjs$/,
-  /^packages\/cli\/assets\/codemods\/transforms\/(?:next|v\d+\.\d+\.\d+)\//,
-  /^pnpm-lock\.yaml$/,
-];
-
-function isReleaseOutputPath(file) {
-  return RELEASE_OUTPUT_PATTERNS.some(pattern => pattern.test(file));
-}
-
-const RELEASE_TEST_REPAIR_PATTERNS = [
-  /(?:^|\/)__tests__\//,
-  /\.(?:spec|test)\.[cm]?[jt]sx?$/,
-  /^internal\/interaction-harness\//,
-];
-const RELEASE_TEST_REPAIR_FORBIDDEN_LINE =
+const RELEASE_TEST_REPAIR_FORBIDDEN_STATEMENT =
   /(?:\b(?:expect|assert)\s*[.(]|\b(?:expect|assert)[A-Z]\w*\s*\(|\.(?:not\.)?to[A-Z]\w*\s*\(|\b(?:test|it|describe)(?:\.[A-Za-z]+)*\.(?:skip|fixme|fail|slow|skipIf|runIf)\b|\b(?:skip|fixme)\s*:\s*true\b|\breturn\b|timeout|retr(?:y|ies)|\b(?:disableRules|disabledRules|excludeRules)\b|\btoMatch(?:Inline)?Snapshot\b)/i;
 
-function isReleaseTestRepairPath(file) {
-  return (
-    RELEASE_TEST_REPAIR_PATTERNS.some(pattern => pattern.test(file)) &&
-    !file.includes('/__snapshots__/') &&
-    !file.endsWith('.snap')
-  );
-}
+function changedStatementsFromDiff(diff) {
+  const statements = [];
+  let oldLines = [];
+  let newLines = [];
 
-function diffEntryFiles(entry) {
-  const [status, ...files] = entry.split('\t');
-  const isMove = status?.startsWith('R') || status?.startsWith('C');
-  const expectedPaths = isMove ? 2 : 1;
-  return !status || files.length !== expectedPaths || files.some(file => !file)
-    ? null
-    : files;
+  const addChangedStatements = lines => {
+    for (let index = 0; index < lines.length; index += 1) {
+      if (!lines[index].changed) continue;
+      let start = index;
+      while (
+        start > 0 &&
+        !/[;{}]\s*(?:\/\/.*)?$/.test(lines[start - 1].text)
+      ) {
+        start -= 1;
+      }
+      let end = index;
+      while (
+        end + 1 < lines.length &&
+        !/[;{}]\s*(?:\/\/.*)?$/.test(lines[end].text)
+      ) {
+        end += 1;
+      }
+      statements.push(
+        lines
+          .slice(start, end + 1)
+          .map(line => line.text)
+          .join('\n'),
+      );
+    }
+  };
+  const flush = () => {
+    addChangedStatements(oldLines);
+    addChangedStatements(newLines);
+    oldLines = [];
+    newLines = [];
+  };
+
+  for (const line of diff.split('\n')) {
+    if (line.startsWith('@@')) {
+      flush();
+      continue;
+    }
+    if (/^(?:diff --git |index |--- |\+\+\+ )/.test(line)) continue;
+    const marker = line[0];
+    const text = line.slice(1);
+    if (marker === ' ') {
+      oldLines.push({changed: false, text});
+      newLines.push({changed: false, text});
+    } else if (marker === '-') {
+      oldLines.push({changed: true, text});
+    } else if (marker === '+') {
+      newLines.push({changed: true, text});
+    }
+  }
+  flush();
+  return [...new Set(statements)];
 }
 
 function validateReleaseTestRepair({
   entries,
   changedLines,
+  changedStatements,
   commitCount,
   mergeCommitCount,
   patchId,
@@ -778,10 +808,10 @@ function validateReleaseTestRepair({
         errors.push(`release test repair contains a non-test path: ${file}`);
     }
   }
-  for (const line of changedLines) {
-    if (RELEASE_TEST_REPAIR_FORBIDDEN_LINE.test(line))
+  for (const statement of changedStatements ?? changedLines ?? []) {
+    if (RELEASE_TEST_REPAIR_FORBIDDEN_STATEMENT.test(statement))
       errors.push(
-        `release test repair changes an assertion, test control, timeout, retry, or snapshot: ${line}`,
+        `release test repair changes an assertion, test control, timeout, retry, or snapshot: ${statement}`,
       );
   }
 
@@ -866,14 +896,9 @@ function validateReleaseTestRepairAtRef(
     .split('\n')
     .filter(Boolean);
   const diff = git(root, ['diff', '--binary', `${mergeBase}..${head}`]);
-  const changedLines = git(root, [
-    'diff',
-    '--unified=0',
-    `${mergeBase}..${head}`,
-  ])
-    .split('\n')
-    .filter(line => /^[+-]/.test(line) && !/^(?:\+\+\+|---)/.test(line))
-    .map(line => line.slice(1));
+  const changedStatements = changedStatementsFromDiff(
+    git(root, ['diff', '--unified=20', `${mergeBase}..${head}`]),
+  );
   const patchId = stablePatchId(root, diff);
   const changeDigest = exactChangeDigest(diff);
   const files = [
@@ -915,7 +940,7 @@ function validateReleaseTestRepairAtRef(
   return {
     ...validateReleaseTestRepair({
       entries,
-      changedLines,
+      changedStatements,
       commitCount: commits.length,
       mergeCommitCount: mergeCommits.length,
       patchId,
@@ -929,6 +954,7 @@ function validateReleaseTestRepairAtRef(
 
 const RELEASE_POLICY_CARRY_PATTERNS = [
   /^scripts\/release\/active-release(?:\.test)?\.mjs$/,
+  /^scripts\/release\/release-paths\.mjs$/,
   /^\.github\/actions\/test-scope\/action\.yml$/,
   /^\.github\/scripts\/test-scope-action\.test\.mjs$/,
   /^\.github\/workflows\/ci\.yml$/,
@@ -1676,18 +1702,11 @@ async function main() {
     const raw = git(root, ['diff', '--name-status', `${base}...${head}`]);
     const entries = raw ? raw.split('\n') : [];
     const baseChangesets = changesetMapAtRef(root, base);
-    const testRepairCandidate =
-      entries.length > 0 &&
-      entries.every(entry => {
-        const files = diffEntryFiles(entry);
-        return files !== null && files.every(isReleaseTestRepairPath);
-      });
-    let kind = 'version-bump';
+    const kind = classifyReleaseDiff(entries);
     let sourceCommit = null;
     let patchId = null;
     let diffErrors;
-    if (testRepairCandidate) {
-      kind = 'test-repair';
+    if (kind === 'test-repair') {
       const repair = validateReleaseTestRepairAtRef(root, {
         base,
         head,
@@ -1698,8 +1717,12 @@ async function main() {
       sourceCommit = repair.sourceCommit;
       patchId = repair.patchId;
       diffErrors = repair.errors;
-    } else {
+    } else if (kind === 'version-bump') {
       diffErrors = validateReleaseDiff(entries, {plan, baseChangesets});
+    } else {
+      diffErrors = [
+        'release candidate contains paths outside the generated version bump or test-repair classes',
+      ];
     }
     const errors = [...validateIdentity(marker, plan), ...diffErrors];
     if (errors.length) throw new Error(errors.join('\n'));
@@ -1823,6 +1846,7 @@ export {
   buildPlan,
   canaryEligibility,
   canonicalJson,
+  changedStatementsFromDiff,
   compareVersions,
   computePlanDigest,
   declaredVersionAtRef,

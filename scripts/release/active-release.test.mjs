@@ -24,6 +24,7 @@ import {
   buildMarker,
   buildPlan,
   canaryEligibility,
+  changedStatementsFromDiff,
   declaredVersionAtRef,
   isReleaseTestRepairPath,
   latestStableVersion,
@@ -474,6 +475,16 @@ describe('active release branch authority', () => {
       baseChangesets: new Map(),
     };
     expect(isReleaseTestRepairPath(valid.entries[0].split('\t')[1])).toBe(true);
+    expect(
+      isReleaseTestRepairPath(
+        'packages/cli/assets/codemods/transforms/v0.7.12/__tests__/remove-old-api.test.mjs',
+      ),
+    ).toBe(false);
+    expect(
+      isReleaseTestRepairPath(
+        'packages/cli/assets/codemods/__tests__/registry.test.mjs',
+      ),
+    ).toBe(false);
     expect(validateReleaseTestRepair(valid)).toEqual({
       errors: [],
       sourceCommit,
@@ -533,6 +544,21 @@ describe('active release branch authority', () => {
         `release test repair changes an assertion, test control, timeout, retry, or snapshot: ${line}`,
       );
     }
+    const changedStatements = changedStatementsFromDiff(`diff --git a/test.mjs b/test.mjs
+--- a/test.mjs
++++ b/test.mjs
+@@ -1,5 +1,5 @@
+ await expect.poll(() => count).toBeGreaterThan(
+-  0,
++  1,
+ );
+ after();`);
+    expect(changedStatements).toContain(
+      'await expect.poll(() => count).toBeGreaterThan(\n  1,\n);',
+    );
+    expect(repair({changedLines: undefined, changedStatements})).toContain(
+      'release test repair changes an assertion, test control, timeout, retry, or snapshot: await expect.poll(() => count).toBeGreaterThan(\n  1,\n);',
+    );
     expect(repair({commitCount: 2})).toContain(
       'release test repair must contain exactly one non-merge commit',
     );

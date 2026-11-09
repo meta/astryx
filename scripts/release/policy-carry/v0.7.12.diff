@@ -1,32 +1,46 @@
 diff --git a/.github/actions/test-scope/action.yml b/.github/actions/test-scope/action.yml
-index eb8aa34cfb0..c0d718764f4 100644
+index eb8aa34cfb0..20cea1c4423 100644
 --- a/.github/actions/test-scope/action.yml
 +++ b/.github/actions/test-scope/action.yml
-@@ -17,8 +17,9 @@
- #   classifier, an API error, an empty file list or one GitHub truncates)
- #   puts everything in scope (spec:AST-030 FR3, FR4). A classifier that rejects the change (a spec-only PR with a
- #   Changeset) fails the step, as the old scope job failed its dependents.
+@@ -20,2 +20,3 @@
 -# - A release-branch pull request is the generated version bump: spec-only and
 -#   tooling-only, with `release_bump` true.
 +# - A release-branch generated bump keeps its narrow lane. Any other candidate
 +#   runs every test lane; the trusted release validator then admits only the
 +#   proven test-repair class and rejects every broader change.
- #
- # The job must be checked out first: this is a local action.
- 
-@@ -79,7 +80,7 @@ outputs:
-       classifier predates it reports nothing, which runs every test.
-     value: ${{ steps.scope.outputs.vitest_full_suite }}
-   release_bump:
+@@ -55,0 +57,7 @@ inputs:
++  lab-only-specs:
++    description: >-
++      Optional pattern over changed paths. On a Lab-only change, a changed file
++      that matches it is still this job's work: `applies` holds, and
++      `lab_specs_path` lists those files, so the job runs only them.
++    required: false
++    default: ''
+@@ -82 +90 @@ outputs:
 -    description: The PR targets a release branch (the generated version bump).
 +    description: The PR targets a release branch and must pass release validation.
-     value: ${{ steps.scope.outputs.release_bump }}
-   decided:
-     description: >-
-@@ -169,6 +170,21 @@ runs:
-             for (const [key, value] of Object.entries(values)) core.setOutput(key, value);
-             core.info(Object.entries(values).map(([k, v]) => `${k}=${v}`).join(' '));
-           };
+@@ -89,0 +98,5 @@ outputs:
++  truncated:
++    description: >-
++      `true` when the step could not decide because GitHub truncated the pull
++      request's file list (3,000 files); a re-run cannot decide such a scope.
++    value: ${{ steps.scope.outputs.truncated }}
+@@ -114,0 +128,5 @@ outputs:
++  lab_specs_path:
++    description: >-
++      With `lab-only-specs`: on a Lab-only change, a file listing the changed
++      files that match it, one per line; empty otherwise.
++    value: ${{ steps.scope.outputs.lab_specs_path }}
+@@ -118 +136,2 @@ outputs:
+-      Lab only), `touches` holds, and any `requires-head-file` is present.
++      Lab only), `touches` holds, and any `requires-head-file` is present. On a
++      Lab-only change it also holds when `lab_specs_path` lists a file.
+@@ -130,0 +150 @@ runs:
++        SCOPE_LAB_ONLY_SPECS: ${{ inputs.lab-only-specs }}
+@@ -150,0 +171,2 @@ runs:
++            truncated: 'false',
++            lab_specs_path: '',
+@@ -171,0 +194,15 @@ runs:
 +          const writeChangedFiles = files => {
 +            const changedFilesPath = path.join(
 +              process.env.RUNNER_TEMP || os.tmpdir(),
@@ -42,13 +56,8 @@ index eb8aa34cfb0..c0d718764f4 100644
 +            fs.writeFileSync(changedFilesPath, `${changed.join('\n')}\n`);
 +            return changedFilesPath;
 +          };
- 
-           if (context.eventName !== 'pull_request') {
-             core.info(`${context.eventName}: not a pull request, so everything is in scope.`);
-@@ -177,16 +193,61 @@ runs:
-           }
-           const pr = context.payload.pull_request;
-           if (pr.base.ref.startsWith('release/v')) {
+@@ -179,14 +215,0 @@ runs:
+-          if (pr.base.ref.startsWith('release/v')) {
 -            core.info('Release-branch pull request: the generated version bump.');
 -            report({
 -              ...everything,
@@ -59,88 +68,111 @@ index eb8aa34cfb0..c0d718764f4 100644
 -              touches: 'false',
 -              applies: 'false',
 -            });
-+            let releaseFiles;
-+            try {
-+              releaseFiles = await github.paginate(github.rest.pulls.listFiles, {
-+                ...context.repo,
-+                pull_number: pr.number,
-+                per_page: 100,
-+              });
-+              if (releaseFiles.length >= 3000)
-+                throw new Error('GitHub truncated the file list at 3000');
-+              if (releaseFiles.length === 0)
-+                throw new Error('GitHub listed no changed files');
-+            } catch (error) {
-+              core.warning(
-+                `Release-branch scope could not be decided (${error.message}); every test lane runs and the release validator still decides the change.`,
-+              );
+-            return;
+-          }
+-
+@@ -214,0 +238 @@ runs:
++                'scripts/release/release-paths.mjs',
+@@ -238 +262,6 @@ runs:
+-              report({...everything, decided: 'false'});
 +              report({
 +                ...everything,
-+                ...(audit ? auditAll : {}),
-+                release_bump: 'true',
++                release_bump: String(pr.base.ref.startsWith('release/v')),
 +                decided: 'false',
++                truncated: String(/truncated the file list/.test(error.message)),
 +              });
+@@ -247,0 +277,34 @@ runs:
++
++            if (pr.base.ref.startsWith('release/v')) {
++              const releaseKind = execFileSync(
++                'node',
++                [
++                  path.join(root, 'scripts/release/release-paths.mjs'),
++                  '--classify',
++                ],
++                {encoding: 'utf8', input: `${nameStatus}\n`},
++              ).trim();
++              if (releaseKind === 'version-bump') {
++                core.info('Release-branch pull request: the generated version bump.');
++                report({
++                  ...everything,
++                  ...(audit ? auditNone : {}),
++                  spec_only: 'true',
++                  tooling_only: 'true',
++                  release_bump: 'true',
++                  touches: 'false',
++                  applies: 'false',
++                });
++              } else {
++                core.info(
++                  `Release-branch ${releaseKind} candidate: every test lane runs; the release validator decides whether the change is allowed.`,
++                );
++                report({
++                  ...everything,
++                  ...(audit ? auditAll : {}),
++                  release_bump: 'true',
++                  changed_files_path: writeChangedFiles(files),
++                });
++              }
 +              return;
 +            }
-+            const releaseOutput = file =>
-+              file.startsWith('.changeset/') ||
-+              /^packages\/(?:[^/]+|themes\/[^/]+)\/(?:package\.json|CHANGELOG\.md)$/.test(file) ||
-+              /^packages\/cli\/assets\/codemods\/(?:registry\.mjs|__tests__\/registry\.test\.mjs|transforms\/(?:next|v\d+\.\d+\.\d+)\/)/.test(file) ||
-+              file === 'pnpm-lock.yaml';
-+            const generatedOnly = releaseFiles.every(file =>
-+              [file.filename, file.previous_filename]
-+                .filter(Boolean)
-+                .every(releaseOutput),
-+            );
-+            if (generatedOnly) {
-+              core.info('Release-branch pull request: the generated version bump.');
-+              report({
-+                ...everything,
-+                ...(audit ? auditNone : {}),
-+                spec_only: 'true',
-+                tooling_only: 'true',
-+                release_bump: 'true',
-+                touches: 'false',
-+                applies: 'false',
-+              });
-+            } else {
-+              core.info(
-+                'Release-branch non-generated candidate: every test lane runs; the release validator must prove the narrow test-repair class.',
-+              );
-+              report({
-+                ...everything,
-+                ...(audit ? auditAll : {}),
-+                release_bump: 'true',
-+                changed_files_path: writeChangedFiles(releaseFiles),
-+              });
+@@ -284 +347,17 @@ runs:
+-            let applies = String(!specialized && touches === 'true');
++            // A Lab-only change skips Lab source, but a changed file the job
++            // names (an interaction spec) still runs, alone.
++            const labOnly =
++              classified.lab_only === 'true' &&
++              !['spec_only', 'docsite_only', 'tooling_only'].some(key => classified[key] === 'true');
++            const labSpecs =
++              labOnly && process.env.SCOPE_LAB_ONLY_SPECS
++                ? files
++                    .filter(f => f.status !== 'removed' && new RegExp(process.env.SCOPE_LAB_ONLY_SPECS).test(f.filename))
++                    .map(f => f.filename)
++                : [];
++            let labSpecsPath = '';
++            if (labSpecs.length > 0) {
++              labSpecsPath = path.join(process.env.RUNNER_TEMP || os.tmpdir(), 'test-scope-lab-specs.txt');
++              fs.writeFileSync(labSpecsPath, `${labSpecs.join('\n')}\n`);
 +            }
-             return;
-           }
- 
++            let applies = String((!specialized && touches === 'true') || labSpecs.length > 0);
+@@ -289 +368 @@ runs:
+-            if (!specialized && headFile && !files.some(f => f.filename === headFile || f.previous_filename === headFile)) {
++            if ((!specialized || labSpecs.length > 0) && headFile && !files.some(f => f.filename === headFile || f.previous_filename === headFile)) {
+@@ -325,6 +404 @@ runs:
+-              // A file, not an output value: a large pull request's list would
+-              // not fit an environment variable.
+-              const changedFilesPath = path.join(process.env.RUNNER_TEMP || os.tmpdir(), 'test-scope-changed-files.txt');
+-              const changed = [...new Set(files.flatMap(f => [f.filename, f.previous_filename].filter(Boolean)))];
+-              fs.writeFileSync(changedFilesPath, `${changed.join('\n')}\n`);
+-              componentScope.changed_files_path = changedFilesPath;
++              componentScope.changed_files_path = writeChangedFiles(files);
+@@ -332 +406 @@ runs:
+-            report({...everything, ...classified, ...componentScope, release_bump: 'false', touches, applies, head_file_present: headFilePresent});
++            report({...everything, ...classified, ...componentScope, release_bump: 'false', touches, applies, head_file_present: headFilePresent, lab_specs_path: labSpecsPath});
 diff --git a/.github/scripts/test-scope-action.test.mjs b/.github/scripts/test-scope-action.test.mjs
-index caa564da490..c0c572c6d8e 100644
+index caa564da490..cf3f20c1493 100644
 --- a/.github/scripts/test-scope-action.test.mjs
 +++ b/.github/scripts/test-scope-action.test.mjs
-@@ -203,9 +203,14 @@ describe('per-job scope step', () => {
-     expect(skipped.outputs.applies).toBe('false');
-   });
- 
+@@ -41,0 +42 @@ const CLASSIFIER_FILES = new Set([
++  'scripts/release/release-paths.mjs',
+@@ -139,0 +141 @@ async function decide({
++    SCOPE_LAB_ONLY_SPECS: inputs['lab-only-specs'] ?? '',
+@@ -179,0 +182 @@ describe('per-job scope step', () => {
++        'lab_specs_path',
+@@ -183,0 +187 @@ describe('per-job scope step', () => {
++        'truncated',
+@@ -206 +210 @@ describe('per-job scope step', () => {
 -  it('marks a release-branch pull request as the generated version bump', async () => {
 +  it('keeps a generated release-branch pull request on the narrow bump lane', async () => {
-     const {outputs} = await decide({
-       context: pullRequestContext('release/v1.2.3'),
+@@ -208,0 +213,7 @@ describe('per-job scope step', () => {
 +      files: changed(
 +        '.changeset/frozen.md',
 +        'packages/core/CHANGELOG.md',
 +        'packages/core/package.json',
++        'packages/cli/assets/codemods/__tests__/registry.test.mjs',
++        'packages/cli/assets/codemods/transforms/v1.2.3/__tests__/upgrade.test.mjs',
 +      ),
-     });
-     expect(outputs).toMatchObject({
-       release_bump: 'true',
-@@ -215,6 +220,29 @@ describe('per-job scope step', () => {
-     });
-   });
- 
+@@ -217,0 +229,49 @@ describe('per-job scope step', () => {
 +  it('runs every lane for a release-branch test-repair candidate', async () => {
 +    const {outputs} = await decide({
 +      context: pullRequestContext('release/v1.2.3'),
@@ -164,103 +196,287 @@ index caa564da490..c0c572c6d8e 100644
 +    );
 +  });
 +
-   it('classifies the PR file list with the classifier read from the base commit', async () => {
-     const {outputs, contentCalls} = await decide({
-       files: changed('packages/core/src/Button/Button.tsx'),
-@@ -540,9 +568,14 @@ describe('per-job scope step', () => {
-       expect(contentCalls).toContainEqual({file: AUDIT_FILE, ref: BASE_SHA});
-     });
- 
++  it.each([
++    ['an empty file list', []],
++    ['an API failure', new Error('unavailable')],
++    [
++      'a truncated file list',
++      Array.from({length: 3000}, (_, index) => ({
++        filename: `packages/core/src/Test${index}.test.ts`,
++        status: 'modified',
++      })),
++    ],
++  ])('runs every lane when release scope has %s', async (_, files) => {
++    const {outputs} = await decide({
++      context: pullRequestContext('release/v1.2.3'),
++      files,
++      inputs: {'component-audit': 'true'},
++    });
++    expect(outputs).toMatchObject({
++      release_bump: 'true',
++      decided: 'false',
++      full_suite: 'true',
++      vitest_full_suite: 'true',
++      force_full_component_audits: 'true',
++      applies: 'true',
++    });
++  });
++
+@@ -248,2 +308,3 @@ describe('per-job scope step', () => {
+-      f3: `${BASE_SHA}:${AUDIT_FILE}`,
+-      f4: `${BASE_SHA}:${OFFICIAL_PACKAGES}`,
++      f3: `${BASE_SHA}:scripts/release/release-paths.mjs`,
++      f4: `${BASE_SHA}:${AUDIT_FILE}`,
++      f5: `${BASE_SHA}:${OFFICIAL_PACKAGES}`,
+@@ -324,0 +386,51 @@ describe('per-job scope step', () => {
++  it('still runs a changed interaction spec on the Lab-only lane, alone (spec:AST-030 FR26)', async () => {
++    const spec =
++      'packages/lab/src/NavigationStack/__tests__/NavigationStack.interaction.browser.spec.ts';
++    const inputs = {
++      paths: INTERACTION_PATHS,
++      'lab-only-specs': '\\.interaction\\.browser\\.spec\\.ts$',
++      'requires-head-file': 'playwright.interaction.config.ts',
++    };
++    const headFiles = ['playwright.interaction.config.ts'];
++    const {outputs} = await decide({files: changed(spec), inputs, headFiles});
++    expect(outputs).toMatchObject({lab_only: 'true', applies: 'true'});
++    expect(fs.readFileSync(outputs.lab_specs_path, 'utf8')).toBe(`${spec}\n`);
++    // Lab source beside the spec adds nothing: only the spec runs.
++    const both = await decide({
++      files: changed(
++        'packages/lab/src/NavigationStack/NavigationStack.tsx',
++        spec,
++      ),
++      inputs,
++      headFiles,
++    });
++    expect(both.outputs.applies).toBe('true');
++    expect(fs.readFileSync(both.outputs.lab_specs_path, 'utf8')).toBe(
++      `${spec}\n`,
++    );
++    // Lab source alone runs none.
++    const source = await decide({
++      files: changed('packages/lab/src/NavigationStack/NavigationStack.tsx'),
++      inputs,
++      headFiles,
++    });
++    expect(source.outputs).toMatchObject({
++      lab_only: 'true',
++      applies: 'false',
++      lab_specs_path: '',
++    });
++    // A deleted spec has nothing to run.
++    const removed = await decide({
++      files: [{filename: spec, status: 'removed'}],
++      inputs,
++      headFiles,
++    });
++    expect(removed.outputs).toMatchObject({
++      applies: 'false',
++      lab_specs_path: '',
++    });
++    // A head cut before the interaction config still skips.
++    const old = await decide({files: changed(spec), inputs});
++    expect(old.outputs.applies).toBe('false');
++  });
++
+@@ -382 +494 @@ describe('per-job scope step', () => {
+-  ])('puts everything in scope when %s', async (_, options) => {
++  ])('puts everything in scope when %s', async (name, options) => {
+@@ -386,0 +499,4 @@ describe('per-job scope step', () => {
++    // Only a truncated file list is one a re-run cannot decide.
++    expect(outputs.truncated).toBe(
++      name === 'GitHub truncates the file list' ? 'true' : 'false',
++    );
+@@ -543 +659 @@ describe('per-job scope step', () => {
 -    it('applies no audit to a release-branch pull request', async () => {
 +    it('applies no audit to the generated release-branch pull request', async () => {
-       const {outputs} = await decide({
-         context: pullRequestContext('release/v1.2.3'),
+@@ -545,0 +662,5 @@ describe('per-job scope step', () => {
 +        files: changed(
 +          '.changeset/frozen.md',
 +          'packages/core/CHANGELOG.md',
 +          'packages/core/package.json',
 +        ),
-         inputs,
-       });
-       expect(outputs).toMatchObject({
+@@ -836,0 +958,39 @@ describe('the temporary policy folder', () => {
++
++describe('the contract job on a pull request GitHub truncates', () => {
++  it('lists every file and runs, never fails, on an undecided scope', async () => {
++    const ci = yaml.parse(
++      fs.readFileSync(
++        path.join(import.meta.dirname, '../workflows/ci.yml'),
++        'utf8',
++      ),
++    );
++    const job = ci.jobs['pr-component-a11y-contracts'];
++    const scopeStep = job.steps.find(step => step.id === 'scope');
++    const {outputs} = await decide({
++      files: Array.from({length: 3001}, (_, i) => ({
++        filename: `packages/core/src/Button/file${i}.tsx`,
++        status: 'modified',
++      })),
++      inputs: scopeStep.with,
++    });
++    expect(outputs).toMatchObject({applies: 'true', decided: 'false'});
++    expect(outputs.changed_files_path ?? '').toBe('');
++    // The workflow's own conditions, read against these outputs.
++    const holds = condition =>
++      Function(
++        'outputs',
++        `return (${condition
++          .replace(
++            /steps\.scope\.outputs\.(\w+)/g,
++            (_, key) => `(outputs.${key} ?? '')`,
++          )
++          .replace(/ == /g, ' === ')
++          .replace(/ != /g, ' !== ')});`,
++      )(outputs);
++    const step = name => job.steps.find(candidate => candidate.name === name);
++    expect(holds(step('Require the changed-file list').if)).toBe(false);
++    expect(holds(step('List every file when the scope is undecided').if)).toBe(
++      true,
++    );
++  });
++});
 diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
-index 06d9db55411..3539c1140ce 100644
+index 06d9db55411..f824d6ca219 100644
 --- a/.github/workflows/ci.yml
 +++ b/.github/workflows/ci.yml
-@@ -371,10 +371,11 @@ jobs:
-           ref: ${{ github.event.pull_request.head.sha }}
-           fetch-depth: 0
- 
+@@ -303,0 +304,2 @@ jobs:
++          git show "origin/$RELEASE_BRANCH:scripts/release/release-paths.mjs" \
++            > "$TRUSTED_POLICY/scripts/release/release-paths.mjs"
+@@ -374 +376 @@ jobs:
 -      - name: Fetch release refs, base, and trusted release policy
 +      - name: Fetch release refs, base, main, and trusted release policy
-         run: |
-           git fetch origin '+refs/heads/release/v*:refs/remotes/origin/release/v*'
+@@ -377 +379,2 @@ jobs:
 -          git fetch origin "${{ github.base_ref }}" --depth=50
 +          git fetch origin "${{ github.base_ref }}" --depth=200
 +          git fetch origin 'main:refs/remotes/origin/main'
-           TRUSTED_POLICY="$RUNNER_TEMP/release-policy"
-           mkdir -p "$TRUSTED_POLICY/scripts/release" "$TRUSTED_POLICY/scripts/lib"
-           git show "origin/${{ github.base_ref }}:scripts/release/active-release.mjs" \
-@@ -385,12 +386,13 @@ jobs:
-       - name: Setup Node and pnpm
-         uses: ./.github/actions/setup
- 
+@@ -381,0 +385,2 @@ jobs:
++          git show "origin/${{ github.base_ref }}:scripts/release/release-paths.mjs" \
++            > "$TRUSTED_POLICY/scripts/release/release-paths.mjs"
+@@ -388 +393 @@ jobs:
 -      - name: Require generated-only release bookkeeping
 +      - name: Require generated release bookkeeping or a proven test repair
-         run: |
-           node "$RUNNER_TEMP/release-policy/scripts/release/active-release.mjs" validate-diff \
-             --root "$GITHUB_WORKSPACE" \
-             --base "origin/${{ github.base_ref }}" \
+@@ -393 +398,2 @@ jobs:
 -            --head "${{ github.event.pull_request.head.sha }}"
 +            --head "${{ github.event.pull_request.head.sha }}" \
 +            --main-ref origin/main
- 
-       - name: Validate branch, head, plan, versions, and Changeset consumption
-         run: |
+@@ -472,0 +479,2 @@ jobs:
++          git show origin/main:scripts/release/release-paths.mjs \
++            > "$TRUSTED_POLICY/scripts/release/release-paths.mjs"
+@@ -4291,0 +4300,9 @@ jobs:
++      # When the scope could not be decided, every file counts as changed.
++      - name: List every file when the scope is undecided
++        id: everything
++        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == '' && steps.scope.outputs.decided == 'false'
++        run: |
++          git ls-files > "$RUNNER_TEMP/every-file.txt"
++          echo "path=$RUNNER_TEMP/every-file.txt" >> "$GITHUB_OUTPUT"
++          echo "::notice title=Every contract in scope::The scope could not be decided, so every file counts as changed."
++
+@@ -4295 +4312 @@ jobs:
+-        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == ''
++        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == '' && steps.scope.outputs.decided != 'false'
+@@ -4315 +4332 @@ jobs:
+-          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
++          FILES_PATH: ${{ steps.scope.outputs.changed_files_path || steps.everything.outputs.path }}
+@@ -4326 +4343 @@ jobs:
+-          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
++          FILES_PATH: ${{ steps.scope.outputs.changed_files_path || steps.everything.outputs.path }}
+@@ -4411 +4428 @@ jobs:
+-          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
++          FILES_PATH: ${{ steps.scope.outputs.changed_files_path || steps.everything.outputs.path }}
 diff --git a/scripts/release/active-release.mjs b/scripts/release/active-release.mjs
-index 7eae88e71bd..6815b8491fc 100644
+index 7eae88e71bd..caf458f5f3a 100644
 --- a/scripts/release/active-release.mjs
 +++ b/scripts/release/active-release.mjs
-@@ -17,6 +17,7 @@
- 
- import crypto from 'node:crypto';
- import fs from 'node:fs';
+@@ -14,2 +14,2 @@
+- * CI copies this file and lib/workspace-globs.mjs alone as trusted policy, so
+- * it imports nothing else at module load.
++ * CI copies this file, release-paths.mjs, and lib/workspace-globs.mjs as
++ * trusted policy.
+@@ -19,0 +20 @@ import fs from 'node:fs';
 +import os from 'node:os';
- import path from 'node:path';
- import {execFileSync} from 'node:child_process';
- import {fileURLToPath} from 'node:url';
-@@ -719,6 +720,317 @@ function isReleaseOutputPath(file) {
-   return RELEASE_OUTPUT_PATTERNS.some(pattern => pattern.test(file));
- }
- 
-+const RELEASE_TEST_REPAIR_PATTERNS = [
-+  /(?:^|\/)__tests__\//,
-+  /\.(?:spec|test)\.[cm]?[jt]sx?$/,
-+  /^internal\/interaction-harness\//,
-+];
-+const RELEASE_TEST_REPAIR_FORBIDDEN_LINE =
+@@ -23,0 +25,6 @@ import {expandWorkspaceDirs} from '../lib/workspace-globs.mjs';
++import {
++  classifyReleaseDiff,
++  diffEntryFiles,
++  isReleaseOutputPath,
++  isReleaseTestRepairPath,
++} from './release-paths.mjs';
+@@ -709,7 +716,247 @@ function listActiveBranches(root) {
+-const RELEASE_OUTPUT_PATTERNS = [
+-  /^packages\/(?:[^/]+|themes\/[^/]+)\/package\.json$/,
+-  /^packages\/(?:[^/]+|themes\/[^/]+)\/CHANGELOG\.md$/,
+-  /^packages\/cli\/assets\/codemods\/registry\.mjs$/,
+-  /^packages\/cli\/assets\/codemods\/__tests__\/registry\.test\.mjs$/,
+-  /^packages\/cli\/assets\/codemods\/transforms\/(?:next|v\d+\.\d+\.\d+)\//,
+-  /^pnpm-lock\.yaml$/,
++const RELEASE_TEST_REPAIR_FORBIDDEN_STATEMENT =
 +  /(?:\b(?:expect|assert)\s*[.(]|\b(?:expect|assert)[A-Z]\w*\s*\(|\.(?:not\.)?to[A-Z]\w*\s*\(|\b(?:test|it|describe)(?:\.[A-Za-z]+)*\.(?:skip|fixme|fail|slow|skipIf|runIf)\b|\b(?:skip|fixme)\s*:\s*true\b|\breturn\b|timeout|retr(?:y|ies)|\b(?:disableRules|disabledRules|excludeRules)\b|\btoMatch(?:Inline)?Snapshot\b)/i;
 +
-+function isReleaseTestRepairPath(file) {
-+  return (
-+    RELEASE_TEST_REPAIR_PATTERNS.some(pattern => pattern.test(file)) &&
-+    !file.includes('/__snapshots__/') &&
-+    !file.endsWith('.snap')
-+  );
-+}
++function changedStatementsFromDiff(diff) {
++  const statements = [];
++  let oldLines = [];
++  let newLines = [];
 +
-+function diffEntryFiles(entry) {
-+  const [status, ...files] = entry.split('\t');
-+  const isMove = status?.startsWith('R') || status?.startsWith('C');
-+  const expectedPaths = isMove ? 2 : 1;
-+  return !status || files.length !== expectedPaths || files.some(file => !file)
-+    ? null
-+    : files;
++  const addChangedStatements = lines => {
++    for (let index = 0; index < lines.length; index += 1) {
++      if (!lines[index].changed) continue;
++      let start = index;
++      while (
++        start > 0 &&
++        !/[;{}]\s*(?:\/\/.*)?$/.test(lines[start - 1].text)
++      ) {
++        start -= 1;
++      }
++      let end = index;
++      while (
++        end + 1 < lines.length &&
++        !/[;{}]\s*(?:\/\/.*)?$/.test(lines[end].text)
++      ) {
++        end += 1;
++      }
++      statements.push(
++        lines
++          .slice(start, end + 1)
++          .map(line => line.text)
++          .join('\n'),
++      );
++    }
++  };
++  const flush = () => {
++    addChangedStatements(oldLines);
++    addChangedStatements(newLines);
++    oldLines = [];
++    newLines = [];
++  };
++
++  for (const line of diff.split('\n')) {
++    if (line.startsWith('@@')) {
++      flush();
++      continue;
++    }
++    if (/^(?:diff --git |index |--- |\+\+\+ )/.test(line)) continue;
++    const marker = line[0];
++    const text = line.slice(1);
++    if (marker === ' ') {
++      oldLines.push({changed: false, text});
++      newLines.push({changed: false, text});
++    } else if (marker === '-') {
++      oldLines.push({changed: true, text});
++    } else if (marker === '+') {
++      newLines.push({changed: true, text});
++    }
++  }
++  flush();
++  return [...new Set(statements)];
 +}
 +
 +function validateReleaseTestRepair({
 +  entries,
 +  changedLines,
++  changedStatements,
 +  commitCount,
 +  mergeCommitCount,
 +  patchId,
@@ -291,10 +507,10 @@ index 7eae88e71bd..6815b8491fc 100644
 +        errors.push(`release test repair contains a non-test path: ${file}`);
 +    }
 +  }
-+  for (const line of changedLines) {
-+    if (RELEASE_TEST_REPAIR_FORBIDDEN_LINE.test(line))
++  for (const statement of changedStatements ?? changedLines ?? []) {
++    if (RELEASE_TEST_REPAIR_FORBIDDEN_STATEMENT.test(statement))
 +      errors.push(
-+        `release test repair changes an assertion, test control, timeout, retry, or snapshot: ${line}`,
++        `release test repair changes an assertion, test control, timeout, retry, or snapshot: ${statement}`,
 +      );
 +  }
 +
@@ -379,14 +595,9 @@ index 7eae88e71bd..6815b8491fc 100644
 +    .split('\n')
 +    .filter(Boolean);
 +  const diff = git(root, ['diff', '--binary', `${mergeBase}..${head}`]);
-+  const changedLines = git(root, [
-+    'diff',
-+    '--unified=0',
-+    `${mergeBase}..${head}`,
-+  ])
-+    .split('\n')
-+    .filter(line => /^[+-]/.test(line) && !/^(?:\+\+\+|---)/.test(line))
-+    .map(line => line.slice(1));
++  const changedStatements = changedStatementsFromDiff(
++    git(root, ['diff', '--unified=20', `${mergeBase}..${head}`]),
++  );
 +  const patchId = stablePatchId(root, diff);
 +  const changeDigest = exactChangeDigest(diff);
 +  const files = [
@@ -428,7 +639,7 @@ index 7eae88e71bd..6815b8491fc 100644
 +  return {
 +    ...validateReleaseTestRepair({
 +      entries,
-+      changedLines,
++      changedStatements,
 +      commitCount: commits.length,
 +      mergeCommitCount: mergeCommits.length,
 +      patchId,
@@ -442,13 +653,15 @@ index 7eae88e71bd..6815b8491fc 100644
 +
 +const RELEASE_POLICY_CARRY_PATTERNS = [
 +  /^scripts\/release\/active-release(?:\.test)?\.mjs$/,
++  /^scripts\/release\/release-paths\.mjs$/,
 +  /^\.github\/actions\/test-scope\/action\.yml$/,
 +  /^\.github\/scripts\/test-scope-action\.test\.mjs$/,
 +  /^\.github\/workflows\/ci\.yml$/,
 +  /^docs\/release\.md$/,
 +  /^docs\/specs\/AST-(?:017|030)\/spec\.md$/,
-+];
-+
+@@ -718,2 +965,155 @@ const RELEASE_OUTPUT_PATTERNS = [
+-function isReleaseOutputPath(file) {
+-  return RELEASE_OUTPUT_PATTERNS.some(pattern => pattern.test(file));
 +function isAncestor(root, ancestor, descendant) {
 +  try {
 +    execFileSync('git', ['merge-base', '--is-ancestor', ancestor, descendant], {
@@ -461,7 +674,35 @@ index 7eae88e71bd..6815b8491fc 100644
 +  }
 +}
 +
-+function validateReleasePolicyCarryAtRef(root, {base, head, source, mainRef}) {
++function patchBuildsHead(root, base, head, patch) {
++  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-policy-carry-'));
++  const index = path.join(temp, 'index');
++  const env = {...process.env, GIT_INDEX_FILE: index};
++  try {
++    execFileSync('git', ['read-tree', base], {cwd: root, env, stdio: 'ignore'});
++    execFileSync('git', ['apply', '--cached', '--whitespace=nowarn'], {
++      cwd: root,
++      env,
++      input: patch.endsWith('\n') ? patch : `${patch}\n`,
++      stdio: ['pipe', 'ignore', 'ignore'],
++    });
++    const tree = execFileSync('git', ['write-tree'], {
++      cwd: root,
++      env,
++      encoding: 'utf8',
++    }).trim();
++    return tree === git(root, ['rev-parse', `${head}^{tree}`]);
++  } catch {
++    return false;
++  } finally {
++    fs.rmSync(temp, {recursive: true, force: true});
++  }
++}
++
++function validateReleasePolicyCarryAtRef(
++  root,
++  {base, head, source, mainRef, manifestPath, releaseBranch},
++) {
 +  const errors = [];
 +  const baseCommit = git(root, ['rev-parse', base]);
 +  const commits = git(root, ['rev-list', `${baseCommit}..${head}`])
@@ -480,11 +721,45 @@ index 7eae88e71bd..6815b8491fc 100644
 +    );
 +  if (!isAncestor(root, source, mainRef))
 +    errors.push('release policy carry source is not merged on current main');
-+  const sourceParents = git(root, ['rev-list', '--parents', '-n', '1', source])
-+    .split(/\s+/)
-+    .filter(Boolean);
-+  if (sourceParents.length !== 2)
-+    errors.push('release policy carry source must be one non-merge commit');
++  if (
++    !/^scripts\/release\/policy-carry\/v\d+\.\d+\.\d+\.json$/.test(manifestPath)
++  )
++    errors.push('release policy carry manifest path is invalid');
++
++  const manifest = jsonAtRef(root, source, manifestPath);
++  if (
++    manifest?.schemaVersion !== 1 ||
++    manifest.releaseBranch !== releaseBranch ||
++    manifest.base !== baseCommit ||
++    !/^scripts\/release\/policy-carry\/v\d+\.\d+\.\d+\.diff$/.test(
++      manifest?.patch ?? '',
++    ) ||
++    !/^[0-9a-f]{64}$/.test(manifest?.patchSha256 ?? '') ||
++    !manifest?.targets ||
++    Array.isArray(manifest.targets) ||
++    typeof manifest.targets !== 'object'
++  ) {
++    errors.push(
++      'release policy carry manifest does not match this branch and base',
++    );
++  }
++
++  const targets =
++    manifest?.targets &&
++    !Array.isArray(manifest.targets) &&
++    typeof manifest.targets === 'object'
++      ? Object.entries(manifest.targets).sort(([a], [b]) => a.localeCompare(b))
++      : [];
++  for (const [file, digest] of targets) {
++    if (
++      !RELEASE_POLICY_CARRY_PATTERNS.some(pattern => pattern.test(file)) ||
++      !/^[0-9a-f]{64}$/.test(digest)
++    ) {
++      errors.push(
++        `release policy carry manifest has an invalid target: ${file}`,
++      );
++    }
++  }
 +
 +  const candidateEntries = git(root, [
 +    'diff',
@@ -494,73 +769,69 @@ index 7eae88e71bd..6815b8491fc 100644
 +  ])
 +    .split('\n')
 +    .filter(Boolean);
-+  const sourceEntries =
-+    sourceParents.length === 2
-+      ? git(root, ['diff', '--name-status', sourceParents[1], source])
-+          .split('\n')
-+          .filter(Boolean)
-+      : [];
-+  const filesFor = (entries, label) => {
-+    const found = new Set();
-+    for (const entry of entries) {
-+      const files = diffEntryFiles(entry);
-+      if (files === null) {
-+        errors.push(`invalid ${label} diff entry: ${entry}`);
-+        continue;
-+      }
-+      for (const file of files) {
-+        found.add(file);
-+        if (!RELEASE_POLICY_CARRY_PATTERNS.some(pattern => pattern.test(file)))
-+          errors.push(
-+            `release policy ${label} contains an unauthorized path: ${file}`,
-+          );
-+      }
-+    }
-+    return [...found].sort();
-+  };
-+  const candidateFiles = filesFor(candidateEntries, 'carry');
-+  const sourceFiles = filesFor(sourceEntries, 'source');
-+  if (canonicalJson(candidateFiles) !== canonicalJson(sourceFiles))
-+    errors.push(
-+      'release policy carry file set does not match its reviewed main commit',
-+    );
-+
-+  const comparedFiles = [
-+    ...new Set([...candidateFiles, ...sourceFiles]),
++  const candidateFiles = [
++    ...new Set(
++      candidateEntries.flatMap(entry => {
++        const files = diffEntryFiles(entry);
++        if (files === null) {
++          errors.push(`invalid release policy carry diff entry: ${entry}`);
++          return [];
++        }
++        return files;
++      }),
++    ),
 +  ].sort();
-+  const candidateDigests = fileDigestsAtRef(root, head, comparedFiles);
-+  const sourceDigests = fileDigestsAtRef(root, source, comparedFiles);
-+  for (const file of comparedFiles) {
-+    if (candidateDigests.get(file) !== sourceDigests.get(file))
++  const targetFiles = targets.map(([file]) => file);
++  for (const file of candidateFiles) {
++    if (!RELEASE_POLICY_CARRY_PATTERNS.some(pattern => pattern.test(file)))
 +      errors.push(
-+        `release policy carry file does not match its reviewed main content: ${file}`,
++        `release policy carry contains an unauthorized path: ${file}`,
 +      );
 +  }
-+  const treeDigest = sha256(
-+    canonicalJson(
-+      comparedFiles.map(file => [file, sourceDigests.get(file) ?? null]),
-+    ),
-+  );
-+  return {errors, files: candidateEntries.length, treeDigest};
-+}
++  if (canonicalJson(candidateFiles) !== canonicalJson(targetFiles))
++    errors.push(
++      'release policy carry file set does not match its reviewed bundle',
++    );
 +
- function validateReleaseDiff(entries, {plan, baseChangesets} = {}) {
-   const errors = [];
-   const planned = plan
-@@ -1263,6 +1575,30 @@ async function main() {
-     console.log(JSON.stringify(marker));
-     return;
-   }
++  const candidateDigests = fileDigestsAtRef(root, head, candidateFiles);
++  for (const [file, digest] of targets) {
++    if (candidateDigests.get(file) !== digest)
++      errors.push(
++        `release policy carry file does not match its reviewed bundle: ${file}`,
++      );
++  }
++
++  const patchContent = manifest?.patch
++    ? filesAtRef(root, source, [manifest.patch]).get(manifest.patch)
++    : null;
++  const patch = patchContent?.toString('utf8') ?? '';
++  if (!patch || sha256(patchContent) !== manifest?.patchSha256)
++    errors.push(
++      'release policy carry patch does not match its manifest digest',
++    );
++  else if (!patchBuildsHead(root, baseCommit, head, patch))
++    errors.push('release policy carry patch does not build the candidate head');
++
++  return {
++    errors,
++    files: candidateEntries.length,
++    bundleDigest: manifest ? sha256(canonicalJson(manifest)) : null,
++  };
+@@ -1265,0 +1666,29 @@ async function main() {
 +  if (command === 'validate-policy-carry') {
 +    const base = required(values, 'base');
 +    const head = required(values, 'head');
 +    const source = required(values, 'source');
 +    const mainRef = required(values, 'main-ref');
++    const manifestPath = required(values, 'manifest');
++    const releaseBranch = required(values, 'release-branch');
 +    const result = validateReleasePolicyCarryAtRef(root, {
 +      base,
 +      head,
 +      source,
 +      mainRef,
++      manifestPath,
++      releaseBranch,
 +    });
 +    if (result.errors.length) throw new Error(result.errors.join('\n'));
 +    console.log(
@@ -569,19 +840,14 @@ index 7eae88e71bd..6815b8491fc 100644
 +        base,
 +        head,
 +        source,
++        manifest: manifestPath,
 +        files: result.files,
-+        treeDigest: result.treeDigest,
++        bundleDigest: result.bundleDigest,
 +      }),
 +    );
 +    return;
 +  }
-   if (command === 'validate-diff') {
-     const base = required(values, 'base');
-     const head = required(values, 'head');
-@@ -1271,20 +1607,43 @@ async function main() {
-       git(root, ['show', `${base}:${RELEASE_DIR}/${PLAN_FILE}`]),
-     );
-     const raw = git(root, ['diff', '--name-status', `${base}...${head}`]);
+@@ -1274,7 +1703,25 @@ async function main() {
 -    const errors = [
 -      ...validateIdentity(marker, plan),
 -      ...validateReleaseDiff(raw ? raw.split('\n') : [], {
@@ -591,18 +857,11 @@ index 7eae88e71bd..6815b8491fc 100644
 -    ];
 +    const entries = raw ? raw.split('\n') : [];
 +    const baseChangesets = changesetMapAtRef(root, base);
-+    const testRepairCandidate =
-+      entries.length > 0 &&
-+      entries.every(entry => {
-+        const files = diffEntryFiles(entry);
-+        return files !== null && files.every(isReleaseTestRepairPath);
-+      });
-+    let kind = 'version-bump';
++    const kind = classifyReleaseDiff(entries);
 +    let sourceCommit = null;
 +    let patchId = null;
 +    let diffErrors;
-+    if (testRepairCandidate) {
-+      kind = 'test-repair';
++    if (kind === 'test-repair') {
 +      const repair = validateReleaseTestRepairAtRef(root, {
 +        base,
 +        head,
@@ -613,36 +872,23 @@ index 7eae88e71bd..6815b8491fc 100644
 +      sourceCommit = repair.sourceCommit;
 +      patchId = repair.patchId;
 +      diffErrors = repair.errors;
-+    } else {
++    } else if (kind === 'version-bump') {
 +      diffErrors = validateReleaseDiff(entries, {plan, baseChangesets});
++    } else {
++      diffErrors = [
++        'release candidate contains paths outside the generated version bump or test-repair classes',
++      ];
 +    }
 +    const errors = [...validateIdentity(marker, plan), ...diffErrors];
-     if (errors.length) throw new Error(errors.join('\n'));
-     console.log(
-       JSON.stringify({
-         base,
-         head,
+@@ -1285,0 +1733 @@ async function main() {
 +        kind,
-         planDigest: marker.planDigest,
+@@ -1287 +1735,2 @@ async function main() {
 -        files: raw ? raw.split('\n').length : 0,
 +        files: entries.length,
 +        ...(sourceCommit ? {sourceCommit, patchId} : {}),
-       }),
-     );
-     return;
-@@ -1402,6 +1761,7 @@ export {
-   declaredVersionAtRef,
-   filesAtRef,
-   nextPlannedVersion,
+@@ -1399,0 +1849 @@ export {
++  changedStatementsFromDiff,
+@@ -1404,0 +1855 @@ export {
 +  isReleaseTestRepairPath,
-   isStableReleasePackage,
-   latestStableVersion,
-   listActiveBranches,
-@@ -1409,6 +1769,7 @@ export {
-   validateIdentity,
-   validateRefMarker,
-   validateReleaseDiff,
+@@ -1411,0 +1863 @@ export {
 +  validateReleaseTestRepair,
-   validateReleaseState,
-   validateReleaseMergeBack,
-   validateHistoricalReleaseMergeBack,

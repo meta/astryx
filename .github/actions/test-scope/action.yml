@@ -213,66 +213,6 @@ runs:
             return;
           }
           const pr = context.payload.pull_request;
-          if (pr.base.ref.startsWith('release/v')) {
-            let releaseFiles;
-            try {
-              releaseFiles = await github.paginate(github.rest.pulls.listFiles, {
-                ...context.repo,
-                pull_number: pr.number,
-                per_page: 100,
-              });
-              if (releaseFiles.length >= 3000)
-                throw new Error('GitHub truncated the file list at 3000');
-              if (releaseFiles.length === 0)
-                throw new Error('GitHub listed no changed files');
-            } catch (error) {
-              core.warning(
-                `Release-branch scope could not be decided (${error.message}); every test lane runs and the release validator still decides the change.`,
-              );
-              report({
-                ...everything,
-                ...(audit ? auditAll : {}),
-                release_bump: 'true',
-                decided: 'false',
-                truncated: String(/truncated the file list/.test(error.message)),
-              });
-              return;
-            }
-            const releaseOutput = file =>
-              file.startsWith('.changeset/') ||
-              /^packages\/(?:[^/]+|themes\/[^/]+)\/(?:package\.json|CHANGELOG\.md)$/.test(file) ||
-              /^packages\/cli\/assets\/codemods\/(?:registry\.mjs|__tests__\/registry\.test\.mjs|transforms\/(?:next|v\d+\.\d+\.\d+)\/)/.test(file) ||
-              file === 'pnpm-lock.yaml';
-            const generatedOnly = releaseFiles.every(file =>
-              [file.filename, file.previous_filename]
-                .filter(Boolean)
-                .every(releaseOutput),
-            );
-            if (generatedOnly) {
-              core.info('Release-branch pull request: the generated version bump.');
-              report({
-                ...everything,
-                ...(audit ? auditNone : {}),
-                spec_only: 'true',
-                tooling_only: 'true',
-                release_bump: 'true',
-                touches: 'false',
-                applies: 'false',
-              });
-            } else {
-              core.info(
-                'Release-branch non-generated candidate: every test lane runs; the release validator must prove the narrow test-repair class.',
-              );
-              report({
-                ...everything,
-                ...(audit ? auditAll : {}),
-                release_bump: 'true',
-                changed_files_path: writeChangedFiles(releaseFiles),
-              });
-            }
-            return;
-          }
-
           let files;
           let root;
           // The base's policy files are copied to a temporary folder that
@@ -295,6 +235,7 @@ runs:
                 '.github/scripts/change-scope.cjs',
                 '.github/scripts/knowledge-paths.cjs',
                 'scripts/component-packages.cjs',
+                'scripts/release/release-paths.mjs',
                 ...(audit ? ['.github/scripts/component-audit-scope.cjs'] : []),
                 // Data, not code: the Lab entry check reads the base's copy.
                 'packages/cli/assets/discover/official-packages.json',
@@ -320,6 +261,7 @@ runs:
               core.warning(`Scope could not be decided (${error.message}); everything is in scope.`);
               report({
                 ...everything,
+                release_bump: String(pr.base.ref.startsWith('release/v')),
                 decided: 'false',
                 truncated: String(/truncated the file list/.test(error.message)),
               });
@@ -332,6 +274,40 @@ runs:
                 ? `R100\t${f.previous_filename}\t${f.filename}`
                 : `${STATUS[f.status] ?? 'M'}\t${f.filename}`)
               .join('\n');
+
+            if (pr.base.ref.startsWith('release/v')) {
+              const releaseKind = execFileSync(
+                'node',
+                [
+                  path.join(root, 'scripts/release/release-paths.mjs'),
+                  '--classify',
+                ],
+                {encoding: 'utf8', input: `${nameStatus}\n`},
+              ).trim();
+              if (releaseKind === 'version-bump') {
+                core.info('Release-branch pull request: the generated version bump.');
+                report({
+                  ...everything,
+                  ...(audit ? auditNone : {}),
+                  spec_only: 'true',
+                  tooling_only: 'true',
+                  release_bump: 'true',
+                  touches: 'false',
+                  applies: 'false',
+                });
+              } else {
+                core.info(
+                  `Release-branch ${releaseKind} candidate: every test lane runs; the release validator decides whether the change is allowed.`,
+                );
+                report({
+                  ...everything,
+                  ...(audit ? auditAll : {}),
+                  release_bump: 'true',
+                  changed_files_path: writeChangedFiles(files),
+                });
+              }
+              return;
+            }
             const outputFile = path.join(root, 'classification');
             fs.writeFileSync(outputFile, '');
             // GitHub's patch text for the Lab entry files, handed over as data:
