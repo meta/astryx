@@ -1401,14 +1401,13 @@ Rejected: cancelling moves only after the pan begins.
 ### DEC-30 — A scroll-edge pan waits out a tap's wobble
 
 **Reference:** `spec:AST-094/DEC-30`
-**Decider:** Specs consistency ruling, `2026-11-09`, applying DEC-18 and DEC-29
+**Decider:** Specs consistency ruling, `2026-11-09`, applying DEC-18
 
 The shared scroll-edge pan holds a finger only once travel along its axis
-reaches a tap's 5 px wobble (DEC-29's commit point), so a tap's click survives
-in every component that uses it; the same trade applies (a wobble toward the
-edge from 5 px until the pan begins at 10 pt loses its click). Mobile Safari
-commits its native pan on a kept first move of 5 px and not on one of 4 px (iOS
-26.2 simulator, measured Nov 9 2026).
+reaches a tap's 5 px wobble, so a tap's click survives in every component that
+uses it. The trade: a wobble toward the edge from 5 px until the pan begins at
+10 pt loses its click. Mobile Safari commits its native pan on a kept first
+move of 5 px and not on one of 4 px (iOS 26.2 simulator, measured Nov 9 2026).
 
 ### DEC-25 — A pager pages as UIKit measures it
 
