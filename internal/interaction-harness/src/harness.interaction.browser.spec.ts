@@ -121,6 +121,7 @@ import {
   trackBrightness,
   TouchPacingError,
   TouchPageStallError,
+  TOUCH_STILLNESS_MS,
   touchStoryboard,
   TouchLiftStallError,
   traceRendering,
@@ -440,27 +441,42 @@ test.describe('touch input', () => {
       browserName !== 'webkit',
       'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
     );
-    // Each pointer move queues a 60 ms task, as a component's timer can. The
-    // listeners themselves return at once, and the next move waits for the
-    // task before they begin. The driver comes first, so its mark does too.
+    // The move before the last queues a 200 ms task, as a component's timer
+    // can. The listeners themselves return at once. The last move waits for
+    // the task before they begin, so its answer and the lift come late. The
+    // task outlasts the move's spacing and the stillness interval by far. So
+    // a runner that sends the last move late still finds it running. The
+    // driver comes first, so its mark does too.
     const driver = await touchDriver(page);
+    const script = drag(
+      {x: 200, y: 400},
+      {x: 200, y: 300},
+      {durationMs: 100, hz: 60},
+    );
+    // The script's frames are the touch-down, the moves and the lift.
+    const stallingMove = script.length - 3;
     await page.route('http://task-stalling-page.test/', route =>
       route.fulfill({
         contentType: 'text/html',
-        body: '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>addEventListener("pointermove",()=>{setTimeout(()=>{const end=performance.now()+60;while(performance.now()<end){}},0)});</script>',
+        body: `<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>let moves=0;addEventListener("pointermove",event=>{moves+=1;window.lastMoveHeldMs=performance.now()-event.timeStamp;if(moves===${stallingMove})setTimeout(()=>{const end=performance.now()+200;while(performance.now()<end){}},0)});</script>`,
       }),
     );
     await page.goto('http://task-stalling-page.test/');
-    const outcome = await driver
-      .play(
-        drag({x: 200, y: 400}, {x: 200, y: 300}, {durationMs: 100, hz: 60}),
-        {pacing: 'spacing'},
-      )
-      .then(
-        () => 'resolved',
-        (error: unknown) => error,
-      );
-    expect(outcome).toBeInstanceOf(TouchPacingError);
+    const outcome = await driver.play(script, {pacing: 'spacing'}).then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
+    const lastMoveHeldMs = await page.evaluate(
+      () => (window as unknown as {lastMoveHeldMs?: number}).lastMoveHeldMs,
+    );
+    const held =
+      lastMoveHeldMs == null
+        ? 'no move reached the page'
+        : `the task held the last move ${lastMoveHeldMs.toFixed(0)} ms`;
+    expect(
+      outcome,
+      `${held}; past the ${TOUCH_STILLNESS_MS} ms stillness interval the lift comes late`,
+    ).toBeInstanceOf(TouchPacingError);
     expect(String(outcome)).toMatch(
       /an event waited \d+ ms for the main thread before the page's listeners began/,
     );
