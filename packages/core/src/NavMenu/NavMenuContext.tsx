@@ -12,8 +12,9 @@
  * - /packages/core/src/NavMenu/index.ts
  */
 
-import {createContext, use} from 'react';
+import {use} from 'react';
 import {createLayerScopedContext} from '../Layer/layerScopedContext';
+import {createSharedContext} from '../utils/sharedContext';
 
 export type NavHeadingMenuSize = 'sm' | 'md' | 'lg';
 
@@ -27,7 +28,11 @@ export interface NavHeadingCloseContextValue {
 }
 
 export const NavHeadingCloseContext =
-  createContext<NavHeadingCloseContextValue | null>(null);
+  createSharedContext<NavHeadingCloseContextValue | null>(
+    'NavHeadingCloseContext',
+    1,
+    null,
+  );
 NavHeadingCloseContext.displayName = 'NavHeadingCloseContext';
 
 export function useNavHeadingCloseContext(): NavHeadingCloseContextValue | null {
@@ -40,9 +45,9 @@ export function useNavHeadingCloseContext(): NavHeadingCloseContextValue | null 
  * expanded SideNavHeading, FR7). NavHeadingMenu calls it for a mouse released
  * outside, never on an item's selection.
  */
-export const NavHeadingDismissContext = createContext<{
+export const NavHeadingDismissContext = createSharedContext<{
   dismiss: () => void;
-} | null>(null);
+} | null>('NavHeadingDismissContext', 1, null);
 NavHeadingDismissContext.displayName = 'NavHeadingDismissContext';
 
 /**
@@ -55,7 +60,11 @@ export interface NavHeadingMenuContextValue {
 }
 
 export const NavHeadingMenuContext =
-  createLayerScopedContext<NavHeadingMenuContextValue | null>(null);
+  createLayerScopedContext<NavHeadingMenuContextValue | null>(
+    'NavHeadingMenuContext',
+    1,
+    null,
+  );
 NavHeadingMenuContext.displayName = 'NavHeadingMenuContext';
 
 export function useNavHeadingMenuContext(): NavHeadingMenuContextValue | null {

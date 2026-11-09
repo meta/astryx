@@ -4,7 +4,7 @@
 
 /**
  * @file SideNavCollapseContext.ts
- * @input React createContext, use
+ * @input createSharedContext, use
  * @output Exports SideNavCollapseContext and useSideNavCollapse hook
  * @position Internal context for sidenav collapse state
  *
@@ -14,7 +14,8 @@
  * takes the controlled `collapsible` config as a prop instead.
  */
 
-import {createContext, use} from 'react';
+import {use} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 
 export interface SideNavCollapseState {
   /** Whether the sidenav is currently collapsed */
@@ -52,11 +53,15 @@ export interface SideNavImperativeCollapseHandle {
   getCollapseState: () => SideNavCollapseState | null;
 }
 
-export const SideNavCollapseContext = createContext<SideNavCollapseState>({
-  isCollapsed: false,
-  toggle: () => {},
-  isCollapsible: false,
-});
+export const SideNavCollapseContext = createSharedContext<SideNavCollapseState>(
+  'SideNavCollapseContext',
+  1,
+  {
+    isCollapsed: false,
+    toggle: () => {},
+    isCollapsible: false,
+  },
+);
 SideNavCollapseContext.displayName = 'SideNavCollapseContext';
 
 /**

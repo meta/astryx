@@ -116,6 +116,10 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/MultiSelector/MultiSelector.generated';
 
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
+
 registerEnglishFallback(english);
 
 // Sentinel value for the select-all item in keyboard navigation
@@ -1205,6 +1209,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   // Read by the live region above so it speaks what this element renders.
   const emptyStateRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLElement>(null);
+
   // A hover moves the highlight too, but the focus ring follows the shared
   // interaction modality (architecture:interaction-modality INV1): it is read
   // whenever a key or the pointer moves the highlight, so an action cell
@@ -1844,6 +1849,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     onTriggerClick,
     onKeyDown: onComboboxKeyDown,
     onItemMouseEnter: onComboboxItemMouseEnter,
+    setHighlightedIndex,
   } = useMultiCombobox({
     selectableItems: sortedItems,
     isDisabled: isDisabled || isEffectivelyReadOnly,
@@ -1873,6 +1879,16 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       [getActionCellIdForActivate],
     ),
   });
+
+  // A new query is a new list: the old highlight's index would name another
+  // row, or one past the end, so it is cleared. With no row highlighted, Left
+  // and Right stay the search field's caret keys. Adjusted during render
+  // rather than in an effect.
+  const [highlightedQuery, setHighlightedQuery] = useState(searchQuery);
+  if (highlightedQuery !== searchQuery) {
+    setHighlightedQuery(searchQuery);
+    setHighlightedIndex(-1);
+  }
 
   const {isKeyboardHighlight, onKeyDown, onItemMouseEnter} =
     useKeyboardHighlight(
