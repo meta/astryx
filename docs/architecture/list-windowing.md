@@ -90,7 +90,7 @@ row-position accuracy (DEC-3).
 - **INV4 — Container and page scroll.** Every virtualizer, the shared engine
   and each consumer, works both inside a container scroll area and with page
   (document) scroll.
-- **INV5 — Size budget.** The shared windowing engine stays at or under 4.9 KB minified and gzipped, the size of the smallest comparable full-featured library (virtua's Virtualizer plus WindowVirtualizer) built with the same settings (esbuild, ESM, minified, React external, gzip -9). Each component's adapter stays at or under 2 KB on the same measure. A change over either budget needs the owner's decision.
+- **INV5 — Size budget.** The shared windowing engine stays at or under 4.9 KB minified and gzipped, the size of the smallest comparable full-featured library (virtua's Virtualizer plus WindowVirtualizer) built with the same settings (esbuild, ESM, minified, React external, gzip -9). Each component's adapter stays at or under 2 KB on the same measure. An adapter's size is what windowing adds to a bundle that already holds its host component and the engine: its own code plus the wiring it adds inside the host component, with the engine, React and Core helpers the host already uses left out. A change over either budget needs the owner's decision.
 
 ## Current-state impact
 
