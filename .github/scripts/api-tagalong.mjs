@@ -137,7 +137,7 @@ function componentOf(name, components) {
 const escapeRegExp = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const mentions = (text, word) =>
   !!word &&
-  new RegExp(`(?<![\\w$@/-])${escapeRegExp(word)}(?![\\w$-])`).test(text);
+  new RegExp(`(?<![\\w$@/-])${escapeRegExp(word)}(?![\\w$.-])`).test(text);
 
 const shortName = pkg => pkg.replace(/^@[^/]+\//, '');
 

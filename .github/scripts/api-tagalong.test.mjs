@@ -546,6 +546,26 @@ describe('theme targets and template prose', () => {
   });
 });
 
+describe('member names in code spans', () => {
+  it('names only that member when a code span names Name.member', () => {
+    const result = run({
+      changes: changesFile([
+        pkg('@astryxdesign/core', [
+          row('interface ItemProps', 'onClick'),
+          row('interface ItemProps', 'size', 'changed'),
+          row('hook useItemState'),
+        ]),
+      ]),
+      title: 'fix(List): x',
+      body: body(['Components: List', '', 'Also adds `ItemProps.onClick`.']),
+    });
+    expect(result.tagalongs.Item.map(r => `${r.name}.${r.member}`)).toEqual([
+      'ItemProps.size',
+      'useItemState.null',
+    ]);
+  });
+});
+
 describe('size', () => {
   const many = (n, name = 'Item') =>
     Array.from({length: n}, (_, i) => row(`interface ${name}Props`, `p${i}`));
