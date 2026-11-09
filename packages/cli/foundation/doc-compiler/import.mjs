@@ -145,11 +145,18 @@ export function importTemplateModule(file) {
 
 /**
  * Import a module natively, by file URL: how the docs API, search, and the
- * unchecked component and hook readers have always imported docs.
+ * unchecked component and hook readers have always imported docs. A `.ts`
+ * file goes through jiti, as {@link importDocModule} imports it: Node cannot
+ * strip types from a file under node_modules, and below 22.18 it does not
+ * strip types at all, so a plain import of an installed or linked
+ * integration's `.doc.ts` fails.
  * @param {string} file
  * @returns {Promise<any>}
  */
 export function importNativeModule(file) {
+  if (file.endsWith('.ts')) {
+    return importDocModule(file);
+  }
   return importCurrent(
     file,
     'native',
