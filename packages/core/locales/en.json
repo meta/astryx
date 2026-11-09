@@ -1447,6 +1447,10 @@
     "defaultMessage": "New messages",
     "description": "Text on a floating pill at the bottom of a chat viewport when unseen messages arrive below the fold; clicking scrolls to bottom. Keep short — narrow pill."
   },
+  "@astryx.chatVirtualizer.label": {
+    "defaultMessage": "Messages",
+    "description": "Accessible name of a lab ChatVirtualizer's own scroll container, which keyboard users can focus and scroll, when the caller gives no label."
+  },
   "@astryx.chatLayoutScrollButton.scrollToBottom": {
     "defaultMessage": "Scroll to bottom",
     "description": "Visible tooltip AND screen-reader label for a small down-arrow button that scrolls the chat viewport to its latest message."

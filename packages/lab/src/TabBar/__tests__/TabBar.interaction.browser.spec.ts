@@ -36,6 +36,7 @@ import {
   installPageFreeze,
   installTimerGate,
   markElement,
+  MARKER_RGB,
   merge,
   openStory,
   PARTIAL_LIFT_SKIP,
@@ -53,7 +54,7 @@ import {
   touchDriver,
   touchStoryboard,
   traceRendering,
-  trackMarker,
+  trackMarkers,
   waitForAnimation,
   waitForRest,
   watchAnimations,
@@ -1384,8 +1385,9 @@ test('the slide keeps advancing every frame while the main thread is blocked', a
   const block = await blocking;
   await page.waitForTimeout(150);
   const castFrames = await cast.stop();
-  const tracked = await trackMarker(page, castFrames);
-  const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
+  const [tracked, control] = await trackMarkers(page, castFrames, {
+    colors: [MARKER_RGB, CONTROL_RGB],
+  });
   const proof = busyWindowProof(
     tracked,
     {from: block.from, to: block.to},

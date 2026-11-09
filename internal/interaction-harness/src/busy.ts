@@ -118,6 +118,11 @@ export async function trackControl(
  * the first control is there, the one ahead is mid-leg, so the two read
  * every frame. Track it with `trackControl(page, frames, {ahead: true})`, and
  * keep the marker out of its strip too (the top `2 * CONTROL_SIDE + 4` px).
+ *
+ * A WebKit busy proof dates its frames on the controls' clock. Without the
+ * control ahead, a frame stamped late near the first control's turn keeps its
+ * lateness. A proof that judges every frame near a turn starts the one ahead
+ * too, and passes its frames to `busyWindowProof` as `ahead`.
  */
 export async function startBusyControl(
   page: Page,
@@ -265,6 +270,15 @@ const CONTROL_AGREE_MS = 20;
  * gives are under 120 ms apart, and a stamp 60 ms late could pick either.
  */
 const CONTROL_EDGE = 36;
+/**
+ * The least time between two dated frames, ms, far under a frame interval.
+ * The proof matches frames by time, so no two may share one.
+ */
+const DATED_GAP_MS = 0.01;
+/** One display interval, ms: the compositor presents at most once in one. */
+const DISPLAY_FRAME_MS = 1000 / 60;
+/** How close the controls' clock reads a time, ms: one px of travel. */
+const CONTROL_READ_MS = CONTROL_LEG_MS / CONTROL_TRAVEL;
 
 /**
  * The compositor's clock in each frame of `control` (`startBusyControl`'s box,
@@ -288,6 +302,17 @@ const CONTROL_EDGE = 36;
 export function controlClock(
   control: readonly TrackedFrame[],
 ): Map<number, number> {
+  return readControlClock(control).readings;
+}
+
+/**
+ * `controlClock`'s readings, with the origin they count from (epoch ms, the
+ * stamps' clock), or a null origin when no frame has a reading.
+ */
+function readControlClock(control: readonly TrackedFrame[]): {
+  readonly readings: Map<number, number>;
+  readonly origin: number | null;
+} {
   const cycle = 2 * CONTROL_LEG_MS;
   const usable = control.flatMap((frame, i) => {
     const x = frame.box?.x;
@@ -305,7 +330,7 @@ export function controlClock(
   });
   const clock = new Map<number, number>();
   if (usable.length === 0) {
-    return clock;
+    return {readings: clock, origin: null};
   }
   const onCycle = (a: number, b: number) => {
     const d = Math.abs(a - b) % cycle;
@@ -344,7 +369,264 @@ export function controlClock(
       Math.abs(out - expected) <= Math.abs(back - expected) ? out : back,
     );
   }
-  return clock;
+  return {readings: clock, origin: anchored};
+}
+
+/**
+ * Each control frame's time on the page clock, epoch ms, by its cast stamp. It
+ * is read from the busy controls' positions: the first control's clock, else
+ * the one `ahead`. The stamp only picks the control's cycle, so a stamp that
+ * runs late moves no reading. Each control counts from its start
+ * (`controlStarts`), or else from the origin that most of its frames' stamps
+ * agree with (`controlClock`). A frame with no reading has no time here.
+ * Frames tracked from the same screencast share its stamps, so a spec looks
+ * their times up here. The busy proofs date their frames from these times.
+ */
+export function pageTimesOnControls(
+  control: readonly TrackedFrame[],
+  {
+    ahead,
+    controlStarts,
+  }: {
+    /** The control started `ahead`, from the same screencast. */
+    readonly ahead?: readonly TrackedFrame[];
+    /** When the first control started, then the one ahead (`startBusyControl`). */
+    readonly controlStarts?: readonly [number, number?];
+  } = {},
+): Map<number, number> {
+  const cycle = 2 * CONTROL_LEG_MS;
+  const readers = [
+    {...readControlClock(control), start: controlStarts?.[0]},
+    ...(ahead == null
+      ? []
+      : [{...readControlClock(ahead), start: controlStarts?.[1]}]),
+  ].flatMap(({readings, origin, start}) => {
+    const from = start ?? origin;
+    return from == null ? [] : [{readings, from}];
+  });
+  const times = new Map<number, number>();
+  for (const {t: stamp} of [...control, ...(ahead ?? [])]) {
+    if (times.has(stamp)) {
+      continue;
+    }
+    for (const {readings, from} of readers) {
+      const ms = readings.get(stamp);
+      if (ms != null) {
+        times.set(
+          stamp,
+          from + ms + Math.round((stamp - from - ms) / cycle) * cycle,
+        );
+        break;
+      }
+    }
+  }
+  return times;
+}
+
+/**
+ * Each stamp's time on the page clock: its own reading where it has one
+ * (`pageTimesOnControls`).
+ *
+ * A stamp with no reading keeps its stamp's distance from the nearest stamp
+ * whose reading agrees with it, within `CONTROL_AGREE_MS`. Such a stamp is
+ * near a turn, or repeats a position. A late stamp's distance would carry its
+ * lateness. Without such a stamp, the nearest stamp with a reading serves.
+ * Dropping the frame would thin both series every half cycle.
+ *
+ * The times keep the stamps' order: a cast delivers frames in the order they
+ * were drawn. Two agreeing stamps can differ in lateness by twice
+ * `CONTROL_AGREE_MS`, so the stamps without a reading between them could
+ * swap. So such a stamp never passes the next stamp with a reading. Each time
+ * comes at least `DATED_GAP_MS` after the time of the stamp before it, since
+ * the proof matches frames by time. `read` holds the stamps whose time is
+ * their own reading. Null when no stamp has a reading.
+ */
+function controlPageTimes(
+  stamps: readonly number[],
+  control: readonly TrackedFrame[],
+  ahead: readonly TrackedFrame[] | undefined,
+  controlStarts: readonly [number, number?] | undefined,
+): {times: Map<number, number>; read: ReadonlySet<number>} | null {
+  const own = pageTimesOnControls(control, {ahead, controlStarts});
+  const read = new Map<number, number>();
+  for (const stamp of stamps) {
+    const ms = own.get(stamp);
+    if (ms != null) {
+      read.set(stamp, ms);
+    }
+  }
+  if (read.size === 0) {
+    return null;
+  }
+  const dated = [...read.keys()];
+  const agreeing = dated.filter(
+    stamp => Math.abs(stamp - (read.get(stamp) ?? stamp)) <= CONTROL_AGREE_MS,
+  );
+  const anchors = agreeing.length > 0 ? agreeing : dated;
+  const times = new Map<number, number>();
+  for (const stamp of stamps) {
+    const own = read.get(stamp);
+    if (own != null) {
+      times.set(stamp, own);
+      continue;
+    }
+    let nearest = anchors[0];
+    for (const other of anchors) {
+      if (Math.abs(other - stamp) < Math.abs(nearest - stamp)) {
+        nearest = other;
+      }
+    }
+    times.set(stamp, (read.get(nearest) ?? nearest) + stamp - nearest);
+  }
+  const order = [...stamps].sort((a, b) => a - b);
+  let ceiling = Number.POSITIVE_INFINITY;
+  for (const stamp of [...order].reverse()) {
+    const own = read.get(stamp);
+    if (own == null) {
+      times.set(stamp, Math.min(times.get(stamp) ?? stamp, ceiling));
+    } else {
+      ceiling = own;
+    }
+  }
+  let floor = Number.NEGATIVE_INFINITY;
+  for (const stamp of order) {
+    floor = Math.max(times.get(stamp) ?? stamp, floor + DATED_GAP_MS);
+    times.set(stamp, floor);
+  }
+  return {times, read: new Set(read.keys())};
+}
+
+/**
+ * The component's and the control's frames dated on the controls' clock
+ * (`controlPageTimes`), in the cast's order, which those times keep. Both
+ * series come from one screencast, so each frame takes the same time in both.
+ * `stampOf` gives each dated time's stamp, and `readTimes` holds the times
+ * that are a frame's own reading. Null when the controls give no reading:
+ * the proof then judges the cast's stamps.
+ */
+function datedOnControlClock(
+  tracked: readonly TrackedFrame[],
+  control: readonly TrackedFrame[],
+  ahead: readonly TrackedFrame[] | undefined,
+  controlStarts: readonly [number, number?] | undefined,
+): {
+  tracked: TrackedFrame[];
+  control: TrackedFrame[];
+  stampOf: ReadonlyMap<number, number>;
+  readTimes: ReadonlySet<number>;
+} | null {
+  if (control.length === 0) {
+    return null;
+  }
+  const stamps = [...new Set([...tracked, ...control].map(frame => frame.t))];
+  const dating = controlPageTimes(stamps, control, ahead, controlStarts);
+  if (dating == null) {
+    return null;
+  }
+  const {times, read} = dating;
+  const date = (frames: readonly TrackedFrame[]) =>
+    [...frames]
+      .sort((a, b) => a.t - b.t)
+      .map(frame => ({...frame, t: times.get(frame.t) ?? frame.t}));
+  return {
+    tracked: date(tracked),
+    control: date(control),
+    stampOf: new Map([...times].map(([stamp, time]) => [time, stamp])),
+    readTimes: new Set([...read].map(stamp => times.get(stamp) ?? Number.NaN)),
+  };
+}
+
+/**
+ * The dated frames at display rate: at most one each display interval, read
+ * to the px (`CONTROL_READ_MS`). A frame under one interval after the last one
+ * kept is left out, and the earlier one stays. WebKit's compositor can draw
+ * two frames 6 to 9 ms apart, and a curve then shows no new step between them.
+ * Only frames whose time is their own reading count. A frame dated from a
+ * neighbour always stays. Its time is too rough to call it early, and leaving
+ * it out could hide a held frame. Near a turn without the control ahead, such
+ * a frame can then read as held, a false red that `ahead` removes. Both
+ * series keep the same frames.
+ */
+function atDisplayRate<
+  T extends {
+    readonly tracked: readonly TrackedFrame[];
+    readonly control: readonly TrackedFrame[];
+    readonly readTimes: ReadonlySet<number>;
+  },
+>(dated: T): T {
+  const times = [
+    ...new Set([...dated.tracked, ...dated.control].map(frame => frame.t)),
+  ].sort((a, b) => a - b);
+  const kept = new Set<number>();
+  let last = Number.NEGATIVE_INFINITY;
+  for (const t of times) {
+    if (!dated.readTimes.has(t)) {
+      kept.add(t);
+      continue;
+    }
+    // To a nanosecond, so float error never drops a frame one read early.
+    if (t - last + 1e-6 >= DISPLAY_FRAME_MS - CONTROL_READ_MS) {
+      kept.add(t);
+      last = t;
+    }
+  }
+  return {
+    ...dated,
+    tracked: dated.tracked.filter(frame => kept.has(frame.t)),
+    control: dated.control.filter(frame => kept.has(frame.t)),
+  };
+}
+
+/**
+ * Pairs of judged frames one display interval apart, with the control moved
+ * between them. On such a pair, a fade that holds every other frame shows no
+ * step. Each frame finds its control frame by time. A pair without both counts
+ * as unmatched.
+ */
+function displayIntervalPairs(
+  tracked: readonly TrackedFrame[],
+  control: readonly TrackedFrame[],
+  judged: {readonly from: number; readonly to: number},
+): {pairs: number; unmatched: number} {
+  const controlAt = new Map(control.map(frame => [frame.t, frame]));
+  const inside = tracked.filter(
+    frame => frame.t >= judged.from && frame.t <= judged.to,
+  );
+  let pairs = 0;
+  let unmatched = 0;
+  for (let i = 1; i < inside.length; i += 1) {
+    const [a, b] = [inside[i - 1], inside[i]];
+    if (b.t - a.t >= 2 * DISPLAY_FRAME_MS - CONTROL_READ_MS) {
+      continue;
+    }
+    const [from, to] = [controlAt.get(a.t), controlAt.get(b.t)];
+    if (from == null || to == null) {
+      unmatched += 1;
+    } else if (from.box?.x !== to.box?.x) {
+      pairs += 1;
+    }
+  }
+  return {pairs, unmatched};
+}
+
+/**
+ * The judged part on the cast's own stamps, from the first frame judged to
+ * the last. A caller selects the judged frames from its own cast by them.
+ */
+function judgedOnStamps(
+  judged: {readonly from: number; readonly to: number},
+  dated: {
+    readonly tracked: readonly TrackedFrame[];
+    readonly stampOf: ReadonlyMap<number, number>;
+  },
+): {readonly from: number; readonly to: number} {
+  const inside = dated.tracked.filter(
+    frame =>
+      frame.box != null && frame.t >= judged.from && frame.t <= judged.to,
+  );
+  const from = dated.stampOf.get(inside.at(0)?.t ?? Number.NaN);
+  const to = dated.stampOf.get(inside.at(-1)?.t ?? Number.NaN);
+  return from == null || to == null ? judged : {from, to};
 }
 
 /** What the control presented in the judged part (see `busyWindowProof`). */
@@ -798,7 +1080,12 @@ export interface BusyProof extends FrameStats {
   readonly window: BusyWindow;
   /**
    * The part of the window judged: inside the margins, up to `settledWithin`,
-   * and from `onScreenFromMs` when that is set.
+   * and from `onScreenFromMs` when that is set. On a WebKit cast dated on the
+   * controls' clock, it runs from the cast's stamp of the first frame judged
+   * to that of the last. So a caller selects the judged part by its stamps.
+   * Frames the display-rate keep left out fall inside it too. Only this part
+   * moves back to the stamps. The summary's times, its stall and its control
+   * read stay on the controls' clock.
    */
   readonly judged: {readonly from: number; readonly to: number};
   /**
@@ -1036,7 +1323,7 @@ function motionStepPx(values: readonly number[]): number {
  * compositor animation presents fewer frames there, the control too. The
  * component passes when:
  * - the control moved on at least `minJudgedFrames` frames of the judged part
- *   (fewer: the machine presented too little to judge, which fails);
+ *   (fewer: the compositor presented too little to judge, as below);
  * - the component moved on every frame the control moved: both are read from
  *   the same screencast frames, so a compositor animation misses none;
  * - its longest stall is no longer than the control's.
@@ -1063,13 +1350,35 @@ function motionStepPx(values: readonly number[]): number {
  * `maxMedianFrameMs`, when given, still applies; `minMovedFraction` and the
  * absolute stall, frame and motion limits do not.
  *
- * With a control, a run the machine starved of frames proves nothing. So it
- * throws `FrameStarvationError` with its numbers and returns no verdict. A
- * starved run has two marks. Its control moved on fewer than
- * `minJudgedFrames` frames, and the cast showed no frame for longer than
- * `FRAME_STARVATION_MS` in the block. Without a control, a block with no
- * frame is a frozen animation's, and it fails the verdict. `pooledBusyProof`
- * reads each run without the throw and judges the runs together.
+ * A WebKit cast with a control is judged on the controls' clock, not on its
+ * stamps. WebKit stamps the frame after a delivery gap about 60 ms late,
+ * carrying one frame of motion. So each frame takes its time from the
+ * controls' positions (`controlClock`), the component's and the control's
+ * alike. A frame with no reading keeps its stamp's distance from the nearest
+ * frame whose stamp agrees with its reading. The dated frames keep the cast's
+ * order. Without the control `ahead`, a late frame near the first control's
+ * turn keeps its lateness. Chromium casts and casts with no control are
+ * judged on their stamps.
+ *
+ * A WebKit proof keeps one dated frame per display interval, the earlier
+ * one. A frame with no reading always stays. The proof judges motion on every
+ * kept frame the control moved. Its cast rarely shows two frames one interval
+ * apart, so it judges no 30 Hz cadence. A note in the summary says so, with
+ * the count of such pairs.
+ *
+ * With a control, a window whose control moved on fewer than
+ * `minJudgedFrames` frames of the judged part is under the floor. Under the
+ * floor, a run with no component failure on the frames shown is too little to
+ * judge. It throws `FrameStarvationError` and returns no verdict. The error
+ * names the control's moves, the floor, the cast's frames in the block and its
+ * longest gap. A component that missed a frame the control moved on, or
+ * stalled longer than it, failed on frames the compositor presented. The
+ * verdict keeps that red, unless the machine starved the run: no frame for
+ * longer than `FRAME_STARVATION_MS`. `maxMedianFrameMs` judges the cast's
+ * pace, not the component, so under the floor it keeps no red. Without a
+ * control, a block with no frame is a frozen animation's, and it fails the
+ * verdict. `pooledBusyProof` reads each run without the throw and judges the
+ * runs together.
  *
  * With `judgeEveryFrame`, a frame the cast could not show the component's
  * step on is too little to judge (the frames `belowStep` counts). When the
@@ -1080,8 +1389,15 @@ function motionStepPx(values: readonly number[]): number {
 export function busyWindowProof(
   ...args: Parameters<typeof readBusyWindow>
 ): BusyProof {
-  const {proof, starvation, unjudged} = readBusyWindow(...args);
-  if (starvation != null) {
+  const {proof, starvation, unjudged, componentFailed} = readBusyWindow(
+    ...args,
+  );
+  // Under the control's floor, a cast that kept pace still shows a missed
+  // frame or a longer stall. That failure is the component's red.
+  if (
+    starvation != null &&
+    (starvation.longestGapMs > FRAME_STARVATION_MS || !componentFailed)
+  ) {
     throw new FrameStarvationError(starvation);
   }
   // A failed verdict is the component's red, whatever else the cast hid.
@@ -1098,8 +1414,75 @@ export function busyWindowProof(
  */
 export const BUSY_PROOF_LOOKAROUND_MS = 250;
 
-/** The proof `busyWindowProof` returns, and the starvation it throws. */
+/**
+ * The proof `busyWindowProof` returns, and the starvation it throws. A WebKit
+ * cast with a control is judged on the controls' clock
+ * (`datedOnControlClock`); any other cast on its stamps. WebKit stamps the
+ * frame after a delivery gap about 60 ms late, carrying one frame of motion.
+ */
 function readBusyWindow(
+  tracked: readonly TrackedFrame[],
+  window: BusyWindow,
+  {
+    ahead,
+    controlStarts,
+    ...options
+  }: NonNullable<Parameters<typeof judgeBusyWindow>[2]> & {
+    /**
+     * The control started `ahead` (`startBusyControl`), tracked from the same
+     * screencast (`trackControl` with `ahead`). It dates the WebKit frames
+     * that fall near the first control's turns, where that control gives no
+     * time.
+     */
+    ahead?: readonly TrackedFrame[];
+    /**
+     * When the first control started, then the one ahead (each
+     * `startBusyControl`'s `start`). Without them, each control counts from
+     * the origin that most of its frames' stamps agree with.
+     */
+    controlStarts?: readonly [number, number?];
+  } = {},
+): ReturnType<typeof judgeBusyWindow> {
+  const {control} = options;
+  const dated =
+    control != null && control.every(frame => frame.engine === 'webkit')
+      ? datedOnControlClock(tracked, control, ahead, controlStarts)
+      : null;
+  if (dated == null) {
+    return judgeBusyWindow(tracked, window, options);
+  }
+  const shown = atDisplayRate(dated);
+  const read = judgeBusyWindow(
+    shown.tracked,
+    window,
+    {...options, control: shown.control},
+    dated.tracked,
+  );
+  // A WebKit cast rarely shows two frames one interval apart, so the proof
+  // cannot judge a 30 Hz cadence there. It says so, with the count.
+  const {pairs, unmatched} = displayIntervalPairs(
+    shown.tracked,
+    shown.control,
+    read.proof.judged,
+  );
+  const note =
+    `cadence not judged: ${pairs} display-interval pairs` +
+    (unmatched > 0
+      ? `, ${unmatched} without a control frame at their time`
+      : '');
+  return {
+    ...read,
+    proof: {
+      ...read.proof,
+      judged: judgedOnStamps(read.proof.judged, shown),
+      notes: [...read.proof.notes, note],
+      summary: `${read.proof.summary}; note: ${note}`,
+    },
+  };
+}
+
+/** `readBusyWindow` on the frames it judges, dated. */
+function judgeBusyWindow(
   tracked: readonly TrackedFrame[],
   window: BusyWindow,
   {
@@ -1192,10 +1575,23 @@ function readBusyWindow(
      */
     judgeEveryFrame?: boolean;
   } = {},
+  /**
+   * The frames the cast drew, dated. In WebKit they are the frames before the
+   * display-rate keep, so a frame left out never lengthens the cast's gap.
+   */
+  drawn: readonly TrackedFrame[] = tracked,
 ): {
   proof: BusyProof;
   starvation: FrameShortfall | null;
   unjudged: readonly UnjudgedFrame[];
+  /**
+   * The component failed on frames the control moved on: it missed one, or
+   * stalled longer than the control. The cast's median interval is no part
+   * of it.
+   */
+  componentFailed: boolean;
+  /** The frames the cast drew in the block, and its longest gap there, ms. */
+  cast: {frames: number; longestGapMs: number};
 } {
   let end = window.to - marginMs;
   if (settledWithin != null && settledWithinSteps != null) {
@@ -1776,6 +2172,7 @@ function readBusyWindow(
   }
   const failures: string[] = [];
   let starvation: FrameShortfall | null = null;
+  const cast = castFramesIn(drawn, window);
   if (stats.frames === 0 && controlRead == null) {
     failures.push('no frame presented in the judged part');
   } else if (stats.medianFrameMs > maxMedianFrameMs) {
@@ -1784,34 +2181,25 @@ function readBusyWindow(
     );
   }
   if (controlRead != null) {
-    if (controlRead.moved < minJudgedFrames) {
-      // How starved the cast was over the whole block, as the pacing and
-      // frame errors say it. Every frame the cast delivered counts, with the
-      // component on screen or not.
-      const blockFrames = tracked
-        .filter(f => f.t > window.from && f.t < window.to)
-        .map(f => f.t);
-      const castEdges = [window.from, ...blockFrames, window.to];
-      const castGapMs = Math.max(
-        ...castEdges.slice(1).map((t, k) => t - castEdges[k]),
-      );
-      // The control is a compositor animation: when it moved too little and
-      // no frame came for that long, the machine starved the run.
-      if (castGapMs > FRAME_STARVATION_MS) {
-        starvation = {
-          by: 'busyWindowProof',
-          during: `a ${Math.round(window.to - window.from)} ms block held the main thread, and the control moved on ${controlRead.moved} of them`,
-          frames: blockFrames.length,
-          min: minJudgedFrames,
-          longestGapMs: castGapMs,
-        };
-      }
-      failures.push(
-        `the control moved on ${controlRead.moved} frames in the judged part, under ${minJudgedFrames}: the compositor presented too little in this window to judge (the cast delivered ${blockFrames.length} frame${blockFrames.length === 1 ? '' : 's'} in the ${Math.round(window.to - window.from)} ms block, none for ${Math.round(castGapMs)} ms)`,
-      );
-    }
     const visible = controlRead.movedWith - controlRead.belowStep;
-    if (visible < minJudgedFrames) {
+    if (controlRead.moved < minJudgedFrames) {
+      // The control is a compositor animation. When it moved on too few
+      // frames, the compositor presented too little to judge the component,
+      // however long the cast's longest gap was.
+      starvation = {
+        by: 'busyWindowProof',
+        during: `a ${Math.round(window.to - window.from)} ms block held the main thread, and the control moved on ${controlRead.moved} of them`,
+        frames: cast.frames,
+        min: minJudgedFrames,
+        longestGapMs: cast.longestGapMs,
+        ...(cast.longestGapMs > FRAME_STARVATION_MS
+          ? {}
+          : {
+              cause:
+                'the compositor presented too little in this window to judge, so the run proves nothing about the motion',
+            }),
+      };
+    } else if (visible < minJudgedFrames) {
       failures.push(
         `the component showed a new position on ${visible} of the control's frames, under ${minJudgedFrames}: too little motion in this window to judge`,
       );
@@ -1892,7 +2280,29 @@ function readBusyWindow(
     verdict: {pass: failures.length === 0, failures},
     summary,
   };
-  return {proof, starvation, unjudged};
+  const componentFailed =
+    controlRead != null &&
+    (controlRead.movedWith < controlRead.moved ||
+      controlRead.componentStallMs > controlRead.longestStallMs);
+  return {proof, starvation, unjudged, componentFailed, cast};
+}
+
+/**
+ * The frames the cast delivered inside `window`, with the component on screen
+ * or not, and the longest gap between them and the window's edges, ms.
+ */
+function castFramesIn(
+  tracked: readonly TrackedFrame[],
+  window: {readonly from: number; readonly to: number},
+): {frames: number; longestGapMs: number} {
+  const inside = tracked
+    .filter(f => f.t > window.from && f.t < window.to)
+    .map(f => f.t);
+  const edges = [window.from, ...inside, window.to];
+  return {
+    frames: inside.length,
+    longestGapMs: Math.max(...edges.slice(1).map((t, k) => t - edges[k])),
+  };
 }
 
 /** One run of a pooled busy proof (see `pooledBusyProof`). */
@@ -1903,6 +2313,10 @@ export interface BusyRun {
   readonly control: readonly TrackedFrame[];
   /** The run's block (`blockMainThread`). */
   readonly window: BusyWindow;
+  /** The control started `ahead`, from the same screencast (see `busyWindowProof`). */
+  readonly ahead?: readonly TrackedFrame[];
+  /** When the run's controls started (see `busyWindowProof`). */
+  readonly controlStarts?: readonly [number, number?];
 }
 
 export interface PooledBusyProof {
@@ -1956,12 +2370,23 @@ export interface PooledBusyProof {
  *   control's.
  * `maxMedianFrameMs`, when given, applies to every run. A main-thread
  * animation still fails: in every run the control moves and it does not.
+ *
+ * With fewer judged runs than `minJudgedRuns`, or a control that moved on
+ * fewer than `minJudgedFrames` frames over them, the pool is under the floor.
+ * Under the floor, a pool with no component failure on the frames shown is too
+ * little to judge, and it throws `FrameStarvationError`. A pool left short of
+ * judged runs by a run that began too late keeps its failure instead. So does a
+ * pool whose judged runs show a component red.
  */
 export function pooledBusyProof(
   runs: readonly BusyRun[],
   options: Omit<
     NonNullable<Parameters<typeof busyWindowProof>[2]>,
-    'control' | 'minMovedFraction' | 'judgeEveryFrame'
+    | 'control'
+    | 'ahead'
+    | 'controlStarts'
+    | 'minMovedFraction'
+    | 'judgeEveryFrame'
   > & {
     /** The fewest frames a run's control must move on for the run to count. */
     minRunFrames?: number;
@@ -1984,19 +2409,31 @@ export function pooledBusyProof(
     );
   }
   const late: (BusyWindowTooLateError | null)[] = [];
+  const failedRuns: boolean[] = [];
+  const runCasts: ({frames: number; longestGapMs: number} | null)[] = [];
   const proofs = runs.map(run => {
     try {
-      const {proof} = readBusyWindow(run.tracked, run.window, {
-        ...windowOptions,
-        control: run.control,
-      });
+      const {proof, componentFailed, cast} = readBusyWindow(
+        run.tracked,
+        run.window,
+        {
+          ...windowOptions,
+          control: run.control,
+          ahead: run.ahead,
+          controlStarts: run.controlStarts,
+        },
+      );
       late.push(null);
+      failedRuns.push(componentFailed);
+      runCasts.push(cast);
       return proof;
     } catch (error) {
       if (!(error instanceof BusyWindowTooLateError)) {
         throw error;
       }
       late.push(error);
+      failedRuns.push(false);
+      runCasts.push(null);
       return null;
     }
   });
@@ -2017,20 +2454,17 @@ export function pooledBusyProof(
       ? `${runs.length} runs`
       : `the ${judgedReads.length} judged runs of ${runs.length}`;
   const failures: string[] = [];
-  if (judgedReads.length < minJudgedRuns) {
+  if (judgedReads.length < minJudgedRuns && lateRuns > 0) {
     failures.push(
-      lateRuns === 0
-        ? `${judgedReads.length} of ${runs.length} runs judged, under ${minJudgedRuns}: the compositor presented too little in the others to judge`
-        : `${judgedReads.length} of ${runs.length} runs judged, under ${minJudgedRuns}: ${lateRuns} began too late for their motion, and the compositor presented too little in any other to judge`,
+      `${judgedReads.length} of ${runs.length} runs judged, under ${minJudgedRuns}: ${lateRuns} began too late for their motion, and the compositor presented too little in any other to judge`,
     );
   }
-  if (judgedReads.length > 0 && moved < minJudgedFrames) {
-    failures.push(
-      `the control moved on ${moved} frames over ${over}, under ${minJudgedFrames}: the compositor presented too little in these windows to judge`,
-    );
-  }
+  // Too few control frames or judged runs is too little to judge. A judged
+  // run's component red still fails: a frame it missed, or a longer stall.
+  const tooFewFrames = judgedReads.length > 0 && moved < minJudgedFrames;
+  const tooFewRuns = judgedReads.length < minJudgedRuns && lateRuns === 0;
   const visible = movedWith - total('belowStep');
-  if (judgedReads.length > 0 && visible < minJudgedFrames) {
+  if (!tooFewFrames && judgedReads.length > 0 && visible < minJudgedFrames) {
     failures.push(
       `the component showed a new position on ${visible} of the control's frames over ${over}, under ${minJudgedFrames}: too little motion in these windows to judge`,
     );
@@ -2064,6 +2498,43 @@ export function pooledBusyProof(
       );
     }
   });
+  // A pool whose compositor presented too little proves nothing about the
+  // motion, as one starved window does. A run that began too late keeps the
+  // pool's failure. So does a judged run's component red.
+  const lateFailure = judgedReads.length < minJudgedRuns && lateRuns > 0;
+  const componentFailed = failedRuns.some((failed, i) => judged[i] && failed);
+  if ((tooFewFrames || tooFewRuns) && !lateFailure && !componentFailed) {
+    const casts = runCasts.filter(
+      (cast, i): cast is {frames: number; longestGapMs: number} =>
+        cast != null && (tooFewRuns || judged[i]),
+    );
+    const frames = casts.reduce((sum, cast) => sum + cast.frames, 0);
+    const longestGapMs = Math.max(...casts.map(cast => cast.longestGapMs));
+    throw new FrameStarvationError(
+      tooFewRuns
+        ? {
+            by: 'pooledBusyProof',
+            during: `${runs.length} blocks held the main thread, and ${judgedReads.length} of them had enough control frames to judge`,
+            frames,
+            min: minJudgedRuns,
+            longestGapMs,
+            cause: `${judgedReads.length} of ${runs.length} runs judged, under ${minJudgedRuns}, and the control moved on ${moved} frames over them: the compositor presented too little in the others to judge, so the pool proves nothing about the motion`,
+          }
+        : {
+            by: 'pooledBusyProof',
+            during: `the blocks of ${over} held the main thread, and the control moved on ${moved} of them`,
+            frames,
+            min: minJudgedFrames,
+            longestGapMs,
+            ...(longestGapMs > FRAME_STARVATION_MS
+              ? {}
+              : {
+                  cause:
+                    'the compositor presented too little in these windows to judge, so the pool proves nothing about the motion',
+                }),
+          },
+    );
+  }
   const summary =
     `${runs.length} runs pooled` +
     (judgedReads.length === runs.length

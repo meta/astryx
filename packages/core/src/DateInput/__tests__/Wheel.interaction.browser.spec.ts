@@ -52,6 +52,7 @@ import {
   toTouchEvents,
   traceRendering,
   trackMarker,
+  trackMarkers,
   type waitForAnimation,
   waitForRest,
   watchAnimations,
@@ -559,12 +560,10 @@ test('the coast keeps advancing every frame while the main thread is blocked', a
   await page.waitForTimeout(150);
   const presented = await compositor.stop();
   const castFrames = await cast.stop();
-  const tracks: Awaited<ReturnType<typeof trackMarker>>[] = [];
-  for (const rgb of STRIP_MARKER_RGB) {
-    tracks.push(await trackMarker(page, castFrames, {rgb}));
-  }
-  const controlFrames = await trackMarker(page, castFrames, {
-    rgb: CONTROL_RGB,
+  // Each frame is decoded once for every marker colour and the control. On a
+  // loaded machine, the decoding takes most of this test's time.
+  const [controlFrames, ...tracks] = await trackMarkers(page, castFrames, {
+    colors: [CONTROL_RGB, ...STRIP_MARKER_RGB],
   });
   await control.remove();
   // Every marker colour, and the control, is in the recorded frames.
