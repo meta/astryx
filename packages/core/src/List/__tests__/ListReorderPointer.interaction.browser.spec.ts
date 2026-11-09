@@ -16,7 +16,8 @@
  *   measures the rows in one pass, before its writes, whatever their count. The
  *   preview and the insertion line run along a row set in from the list's
  *   start, in either direction. A checked radio in the dragged row stays
- *   checked through the drag
+ *   checked through the drag. With a mouse, the handle keeps a plain
+ *   button's text selection and callout
  * @position Beside ListReorderTouch.interaction.browser.spec.ts, which proves
  *   the hold under a finger
  */
@@ -737,4 +738,38 @@ test('a pen keeps the hold where the primary pointer is coarse: a quick stroke m
     ...strokeDown(at, rowHeight * 2.5, HOLD_MS),
   ]);
   await expect.poll(async () => labels(page)).toEqual(movedTwoDown(before));
+});
+
+test("with a mouse the handle keeps a plain button's text selection and callout", async ({
+  browser,
+}) => {
+  const story = await openFinePointerStory(browser);
+  try {
+    const {page} = story;
+    const handle = page.getByRole('button', {name: 'Reorder Inbox'});
+    await expect(handle).toBeVisible();
+    const styles = await handle.evaluate(element => {
+      const read = (el: Element) => {
+        const style = getComputedStyle(el) as CSSStyleDeclaration & {
+          webkitUserSelect?: string;
+        };
+        return {
+          userSelect: style.userSelect,
+          webkitUserSelect: style.webkitUserSelect ?? '',
+          callout: style.getPropertyValue('-webkit-touch-callout'),
+        };
+      };
+      const plain = document.createElement('button');
+      element.parentElement?.append(plain);
+      const result = {handle: read(element), plain: read(plain)};
+      plain.remove();
+      return result;
+    });
+    // No style of its own: a held finger's lock comes from the gesture host.
+    // Chromium has no `-webkit-touch-callout`, so that value is compared in
+    // WebKit only.
+    expect(styles.handle).toEqual(styles.plain);
+  } finally {
+    await story.close();
+  }
 });
