@@ -1,0 +1,321 @@
+{
+  "$comment": "Module-scope cross-module identity the FR3 check knows about (spec:AST-110 FR3, FR7). \"open\" names the fix group that removes the entry; \"allowed\" gives the approved reason. A new hit or a stale entry fails scripts/shared-identity.test.mjs.",
+  "entries": {
+    "packages/core/src/Chat/useChatStreamScroll.ts:following": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/Icon/globalIconRegistry.tsx:globalRegistry": {
+      "status": "open",
+      "group": "F8 Public registries"
+    },
+    "packages/core/src/Layer/gestureCounter.ts:pressPointerId": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/layerStack.ts:composingDocuments": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/layerStack.ts:layerCountByDocument": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/layerSurfacePress.ts:surfaces": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/modalOutlet.ts:listeners": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/outsidePress.ts:outsideDismissals": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/popoverOperations.ts:browserHidesByDocument": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/popoverOperations.ts:ownOperationsByDocument": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/popoverOperations.ts:settledCallbacksByDocument": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/toastHost.tsx:hostListeners": {
+      "status": "open",
+      "group": "F2 Toast host"
+    },
+    "packages/core/src/Layer/toastHost.tsx:registeredHost": {
+      "status": "open",
+      "group": "F2 Toast host"
+    },
+    "packages/core/src/List/listLayoutUpdates.ts:reportedRows": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/Markdown/ast.ts:markdownAstLegacyCodeLanguage": {
+      "status": "open",
+      "group": "F11 Markdown protocol metadata"
+    },
+    "packages/core/src/Markdown/parser.ts:incrementalCaches": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/Markdown/parser.ts:incrementalStateMode": {
+      "status": "open",
+      "group": "F11 Markdown protocol metadata"
+    },
+    "packages/core/src/Markdown/plugins/protocol.ts:markdownSourceLinesDefinition": {
+      "status": "allowed",
+      "reason": "Deliberately unshared: a shared key would let any module forge trust or a parse claim."
+    },
+    "packages/core/src/Markdown/plugins/protocol.ts:markdownTransformClaim": {
+      "status": "allowed",
+      "reason": "Deliberately unshared: a shared key would let any module forge trust or a parse claim."
+    },
+    "packages/core/src/Markdown/plugins/protocol.ts:markdownTransformHasRenderer": {
+      "status": "open",
+      "group": "F11 Markdown protocol metadata"
+    },
+    "packages/core/src/Markdown/plugins/protocol.ts:markdownTransformPluginName": {
+      "status": "open",
+      "group": "F11 Markdown protocol metadata"
+    },
+    "packages/core/src/Markdown/plugins/protocol.ts:markdownTransformSourceUnchanged": {
+      "status": "open",
+      "group": "F11 Markdown protocol metadata"
+    },
+    "packages/core/src/Markdown/plugins/protocol.ts:markdownTransformTrusted": {
+      "status": "allowed",
+      "reason": "Deliberately unshared: a shared key would let any module forge trust or a parse claim."
+    },
+    "packages/core/src/Markdown/plugins/semanticFence.ts:markdownFenceProposal": {
+      "status": "open",
+      "group": "F11 Markdown protocol metadata"
+    },
+    "packages/core/src/Resizable/createResizable.ts:internals": {
+      "status": "open",
+      "group": "F9 Resizable"
+    },
+    "packages/core/src/Resizable/resizablePane.ts:lent": {
+      "status": "open",
+      "group": "F9 Resizable"
+    },
+    "packages/core/src/Resizable/resizablePane.ts:propsRegions": {
+      "status": "open",
+      "group": "F9 Resizable"
+    },
+    "packages/core/src/Resizable/resizablePane.ts:resizeHandles": {
+      "status": "open",
+      "group": "F9 Resizable"
+    },
+    "packages/core/src/Resizable/useResizable.ts:collapseControls": {
+      "status": "open",
+      "group": "F9 Resizable"
+    },
+    "packages/core/src/Resizable/useResizable.ts:effectiveMaxima": {
+      "status": "open",
+      "group": "F9 Resizable"
+    },
+    "packages/core/src/SnapPaging/snapPagingValue.ts:attachments": {
+      "status": "allowed",
+      "reason": "The attach and the scroll calls run in the same copy; the paging value is shared."
+    },
+    "packages/core/src/Table/plugins/virtualization/useTableRowsVirtualization.ts:capabilityBrand": {
+      "status": "open",
+      "group": "F1 Table capability and plugins"
+    },
+    "packages/core/src/Table/tableColumnAdmission.ts:heightSafe": {
+      "status": "open",
+      "group": "F1 Table capability and plugins"
+    },
+    "packages/core/src/Table/tableColumnAdmission.ts:logicalRenderers": {
+      "status": "open",
+      "group": "F1 Table capability and plugins"
+    },
+    "packages/core/src/Table/tableRowContextUsage.ts:countIndependentPlugins": {
+      "status": "open",
+      "group": "F1 Table capability and plugins"
+    },
+    "packages/core/src/Table/tableRuntime.ts:ownedScrollWrappers": {
+      "status": "open",
+      "group": "F1 Table capability and plugins"
+    },
+    "packages/core/src/gestures/fingerScroll.ts:watches": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/gestures/gestureSync.ts:syncingDepth": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/gestures/haptics.ts:nextLabelId": {
+      "status": "open",
+      "group": "F13 Haptic label ids"
+    },
+    "packages/core/src/gestures/pageHold.ts:holdsByDocument": {
+      "status": "open",
+      "group": "F3 Scroll lock"
+    },
+    "packages/core/src/hooks/rootScrollStyles.ts:lockCount": {
+      "status": "open",
+      "group": "F3 Scroll lock"
+    },
+    "packages/core/src/hooks/rootScrollStyles.ts:lockListeners": {
+      "status": "open",
+      "group": "F3 Scroll lock"
+    },
+    "packages/core/src/hooks/scrollGeometrySubscriptions.ts:listeners": {
+      "status": "allowed",
+      "reason": "Each copy observes for its own subscribers; a second observer changes no result."
+    },
+    "packages/core/src/hooks/scrollOwnerRegistry.ts:owners": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/hooks/useAnnounce.ts:modalRoute": {
+      "status": "open",
+      "group": "F5 Focus and announce"
+    },
+    "packages/core/src/hooks/useEntryAnimation.ts:initialPaintComplete": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/hooks/useFocusTrap.ts:activeEscapeTrapCount": {
+      "status": "open",
+      "group": "F5 Focus and announce"
+    },
+    "packages/core/src/hooks/useFocusTrap.ts:activeRegionContainers": {
+      "status": "open",
+      "group": "F5 Focus and announce"
+    },
+    "packages/core/src/hooks/useMenuPress.ts:isModelActivation": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/hooks/useScrollLock.ts:activeLock": {
+      "status": "open",
+      "group": "F3 Scroll lock"
+    },
+    "packages/core/src/hooks/useScrollLock.ts:lockCount": {
+      "status": "open",
+      "group": "F3 Scroll lock"
+    },
+    "packages/core/src/keyboard/keyboardHeight.ts:focusTakeovers": {
+      "status": "open",
+      "group": "F6 Keyboard"
+    },
+    "packages/core/src/keyboard/keyboardHeight.ts:stores": {
+      "status": "open",
+      "group": "F6 Keyboard"
+    },
+    "packages/core/src/keyboard/keyboardHeight.ts:touchStartWatches": {
+      "status": "open",
+      "group": "F6 Keyboard"
+    },
+    "packages/core/src/keyboard/keyboardLayoutGuide.ts:guides": {
+      "status": "open",
+      "group": "F6 Keyboard"
+    },
+    "packages/core/src/keyboard/keyboardTarget.ts:targets": {
+      "status": "open",
+      "group": "F6 Keyboard"
+    },
+    "packages/core/src/keyboard/useMobileKeyboard.ts:revealsAtReport": {
+      "status": "open",
+      "group": "F6 Keyboard"
+    },
+    "packages/core/src/motion/animatedLayout.ts:changeStarts": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animator.ts:frameDepth": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animator.ts:waitingCalls": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/roles.ts:pathOfGroup": {
+      "status": "allowed",
+      "reason": "Each copy registers and reads its own motion role tables; lookups never cross copies."
+    },
+    "packages/core/src/motion/roles.ts:roleIdOfPath": {
+      "status": "allowed",
+      "reason": "Each copy registers and reads its own motion role tables; lookups never cross copies."
+    },
+    "packages/core/src/motion/roles.ts:roleOfLeaf": {
+      "status": "allowed",
+      "reason": "Each copy registers and reads its own motion role tables; lookups never cross copies."
+    },
+    "packages/core/src/motion/roles.ts:rolesById": {
+      "status": "allowed",
+      "reason": "Each copy registers and reads its own motion role tables; lookups never cross copies."
+    },
+    "packages/core/src/motion/roles.ts:tablesById": {
+      "status": "allowed",
+      "reason": "Each copy registers and reads its own motion role tables; lookups never cross copies."
+    },
+    "packages/core/src/reorderable/createReorderable.ts:reorderableBrand": {
+      "status": "open",
+      "group": "F10 Reorderable type"
+    },
+    "packages/core/src/theme/dynamicType.ts:sharedSyncs": {
+      "status": "allowed",
+      "reason": "Each copy writes the same reader text-size variables to the document root; the duplicate sync is idempotent."
+    },
+    "packages/core/src/theme/themeRegistry.ts:themeRegistry": {
+      "status": "open",
+      "group": "F8 Public registries"
+    },
+    "packages/core/src/utils/calendarDateParser.ts:lexicons": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/utils/calendarSystem.ts:supportedCalendars": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
+    "packages/core/src/utils/focusReturn.ts:focusDetachedAtRemovalStart": {
+      "status": "open",
+      "group": "F5 Focus and announce"
+    },
+    "packages/core/src/utils/layoutViewport.ts:thicknesses": {
+      "status": "open",
+      "group": "F6 Keyboard"
+    },
+    "packages/core/src/utils/rowMotion.ts:motions": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/sharedResizeObserver.ts:callbacks": {
+      "status": "allowed",
+      "reason": "Each copy observes for its own subscribers; a second observer changes no result."
+    },
+    "packages/core/src/utils/windowExtent.ts:stopObserving": {
+      "status": "allowed",
+      "reason": "Each copy observes for its own subscribers; a second observer changes no result."
+    },
+    "packages/core/src/utils/windowExtent.ts:windowWidth": {
+      "status": "allowed",
+      "reason": "Each copy observes for its own subscribers; a second observer changes no result."
+    },
+    "packages/core/src/utils/windowExtent.ts:windowWidthListeners": {
+      "status": "allowed",
+      "reason": "Each copy observes for its own subscribers; a second observer changes no result."
+    },
+    "packages/richtext/src/markdownExtensionNode.ts:decorators": {
+      "status": "open",
+      "group": "F12 RichText extensions"
+    },
+    "packages/richtext/src/markdownExtensions.ts:extensionPlugin": {
+      "status": "open",
+      "group": "F12 RichText extensions"
+    }
+  }
+}
