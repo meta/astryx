@@ -92,6 +92,26 @@ describe('theme package module formats', () => {
           }
         }
       });
+      it('publishes every file its export map points at', () => {
+        // npm ships only what `files` lists, so a path outside it resolves to
+        // nothing for consumers even though it exists in the repository.
+        const included = manifest.files.filter(entry => !entry.startsWith('!'));
+        const published = file => {
+          const relative = file.replace(/^\.\//, '');
+          return included.some(
+            entry => relative === entry || relative.startsWith(`${entry}/`),
+          );
+        };
+        const targets = [];
+        const collect = value => {
+          if (typeof value === 'string') targets.push(value);
+          else if (value && typeof value === 'object') {
+            Object.values(value).forEach(collect);
+          }
+        };
+        collect(manifest.exports);
+        expect(targets.filter(target => !published(target))).toEqual([]);
+      });
     });
   }
 });
