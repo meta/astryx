@@ -1,5 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import fs from 'node:fs';
+
 import {describe, expect, it} from 'vitest';
 import {
   closePageQuietly,
@@ -158,6 +160,24 @@ describe('one retry for a story that errored', () => {
     ]);
     // Each failed attempt replaced its page.
     expect(pool.recoveries).toHaveLength(2);
+  });
+});
+
+describe('the audit passes that retry', () => {
+  it('the D1 and D5+D6 passes opt in to one retry; the curated pass does not', () => {
+    const source = fs.readFileSync(
+      new URL('../../apps/storybook/rtl-audit/rtl-audit.mjs', import.meta.url),
+      'utf8',
+    );
+    const pass = phase => {
+      const start = source.indexOf(`phase: '${phase}'`);
+      return source.slice(source.lastIndexOf('mapPool(', start), start);
+    };
+    for (const phase of ['D1', 'D5+D6']) {
+      expect(pass(phase), phase).toMatch(/\bretry: true\b/);
+      expect(pass(phase), phase).toContain('onRetried');
+    }
+    expect(source.match(/\bretry: true\b/g)).toHaveLength(2);
   });
 });
 

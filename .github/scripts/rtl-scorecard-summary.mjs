@@ -13,6 +13,8 @@
 
 import fs from 'node:fs';
 
+import {retriesLine} from '../../apps/storybook/rtl-audit/rtl-audit-shards.mjs';
+
 const args = process.argv.slice(2);
 const arg = name => {
   const index = args.indexOf(`--${name}`);
@@ -206,8 +208,7 @@ if (!fs.existsSync(reportPath)) {
     }
     out.push('');
   }
-  const ids = [...new Set(retried.map(retry => retry.storyId))].sort();
-  out.push(`\`rtl-audit-retries: ${retried.length} [${ids.join(' ')}]\``);
+  out.push(`\`${retriesLine(retried)}\``);
   out.push('');
   out.push('### Curated precision (D2 order / D3 behavior / D4 overlay)');
   out.push('');
