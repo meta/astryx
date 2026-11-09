@@ -4,8 +4,8 @@
 
 /**
  * @file TableCellContextMenu.tsx
- * @input React (lazy, Suspense), ContextMenuTrigger, useLongPress,
- *   useIsHydrating, useInteractionModalityTracking
+ * @input React (lazy, Suspense), createModuleLoader, ContextMenuTrigger,
+ *   useLongPress, useIsHydrating, useInteractionModalityTracking
  * @output TableCellContextMenu, loadTableContextMenu
  * @position Renders a cell's `contextMenuActions` for TableCell and
  * TableHeaderCell. The menu code loads only for cells that have actions. The
@@ -34,6 +34,7 @@ import {useLongPress} from '../hooks/useLongPress';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {currentGesture} from '../Layer/gestureCounter';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {createModuleLoader} from '../utils/moduleLoader';
 import type {StyleXStyles} from '../theme/types';
 import type {TableContextActions} from './types';
 import type {TableContextMenuForTrigger} from './tableContextMenu';
@@ -43,7 +44,9 @@ interface TableContextMenuModule {
   TableContextMenuForTrigger: typeof TableContextMenuForTrigger;
 }
 
-let menuModule: Promise<TableContextMenuModule> | null = null;
+const tableContextMenu = createModuleLoader<TableContextMenuModule>(
+  async () => import('./tableContextMenu'),
+);
 
 /**
  * Starts loading the table context menu, once. The returned promise settles
@@ -51,13 +54,7 @@ let menuModule: Promise<TableContextMenuModule> | null = null;
  * later. A failed load (a dropped connection, a removed chunk) is not kept,
  * so the next call asks the module loader again.
  */
-export async function loadTableContextMenu(): Promise<TableContextMenuModule> {
-  menuModule ??= import('./tableContextMenu').catch((error: unknown) => {
-    menuModule = null;
-    throw error;
-  });
-  return menuModule;
-}
+export const loadTableContextMenu = tableContextMenu.load;
 
 /** Starts the load for an early invocation. The lazy menu reports a failure. */
 function preloadTableContextMenu(): void {
