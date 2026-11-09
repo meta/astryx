@@ -21,7 +21,9 @@ import {fileURLToPath} from 'node:url';
 const require = createRequire(import.meta.url);
 const {
   COMPONENT_PACKAGES,
+  documentedComponentsOutsideComponentDirectories,
   flatPackageComponentNames,
+  nestedPackageComponentNames,
 } = require('../../scripts/component-packages.cjs');
 
 const MAX_COMPONENTS = 3;
@@ -73,18 +75,24 @@ function componentFolders(src) {
 }
 
 /**
- * Each registered package's components, by package name: the capitalized
- * folders of a nested package, the exported modules of a flat package.
+ * Each registered package's component names, by package name: every public
+ * component the registry names (a component in another component's folder,
+ * such as TableRow in Table, included), plus each capitalized folder.
  * @returns {Record<string, string[]>}
  */
 export function componentsByPackage(root, packages = COMPONENT_PACKAGES) {
   const out = {};
   for (const pkg of packages) {
     if (!fs.existsSync(path.join(root, pkg.src))) continue;
-    out[`${PACKAGE_SCOPE}${pkg.name}`] =
+    const names =
       pkg.layout === 'flat'
-        ? [...flatPackageComponentNames(root, pkg)].sort()
-        : componentFolders(path.join(root, pkg.src));
+        ? flatPackageComponentNames(root, pkg)
+        : [
+            ...nestedPackageComponentNames(root, pkg),
+            ...documentedComponentsOutsideComponentDirectories(root, pkg),
+            ...componentFolders(path.join(root, pkg.src)),
+          ];
+    out[`${PACKAGE_SCOPE}${pkg.name}`] = [...new Set(names)].sort();
   }
   return out;
 }

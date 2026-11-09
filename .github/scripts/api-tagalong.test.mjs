@@ -25,6 +25,11 @@ const SCRIPT = path.join(
   'api-tagalong.mjs',
 );
 
+const REPO = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../..',
+);
+
 let tmp;
 let root;
 
@@ -160,6 +165,49 @@ describe('grouping', () => {
       ],
       '@astryxdesign/lab': ['Integration'],
     });
+  });
+
+  it("names the components the registry finds inside other components' folders", () => {
+    const core = componentsByPackage(REPO)['@astryxdesign/core'];
+    for (const name of ['Table', 'TableRow', 'List', 'ListItem', 'Theme'])
+      expect(core).toContain(name);
+  });
+
+  it('files a nested component under its own name, not its folder', () => {
+    const components = {
+      '@astryxdesign/core': ['List', 'ListItem', 'Table', 'TableRow'],
+    };
+    const tableRow = analyze({
+      components,
+      changes: changesFile([
+        pkg('@astryxdesign/core', [
+          row('component TableRow', 'status'),
+          row('type TableRowStatus'),
+        ]),
+      ]),
+      title: 'fix(TableRow): add a status prop',
+      body: '',
+    });
+    expect(Object.keys(tableRow.rows_by_component)).toEqual(['TableRow']);
+    expect(tableRow.tagalongs).toEqual({});
+    const listItem = analyze({
+      components,
+      changes: changesFile([
+        pkg('@astryxdesign/core', [row('interface ListItemProps', 'tone')]),
+      ]),
+      title: 'fix(ListItem): x',
+      body: '',
+    });
+    expect(listItem.tagalongs).toEqual({});
+    const list = analyze({
+      components,
+      changes: changesFile([
+        pkg('@astryxdesign/core', [row('interface ListItemProps', 'tone')]),
+      ]),
+      title: 'fix(List): x',
+      body: '',
+    });
+    expect(Object.keys(list.tagalongs)).toEqual(['ListItem']);
   });
 
   it("matches a row only against its own package's components", () => {
