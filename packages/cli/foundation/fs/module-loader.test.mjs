@@ -13,11 +13,12 @@ import {
   importUserModule,
   loadModuleWithParser,
 } from './module-loader.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-module-loader-test-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-module-loader-test-'));
 });
 
 afterEach(() => {
@@ -80,8 +81,13 @@ describe('importUserModule', () => {
     },
   );
 
-  const probeFreshJavaScript = (dir, firstSource, secondSource) => {
-    const file = path.join(dir, 'fresh.js');
+  const probeFreshJavaScript = (
+    dir,
+    firstSource,
+    secondSource,
+    name = 'fresh.js',
+  ) => {
+    const file = path.join(dir, name);
     fs.writeFileSync(file, firstSource);
     const loaderUrl = pathToFileURL(
       path.join(process.cwd(), 'packages/cli/foundation/fs/module-loader.mjs'),
@@ -96,7 +102,8 @@ import {importUserModule} from ${JSON.stringify(loaderUrl)};
 const first = await importUserModule(process.env.TEST_MODULE);
 fs.writeFileSync(process.env.TEST_MODULE, ${JSON.stringify(secondSource)});
 const fresh = await importUserModule(process.env.TEST_MODULE, {fresh: true});
-process.stdout.write(JSON.stringify({first: first.default?.answer, fresh: fresh.default?.answer}));`,
+const sameExports = Object.keys(first).sort().join() === Object.keys(fresh).sort().join();
+process.stdout.write(JSON.stringify({first: first.default?.answer, fresh: fresh.default?.answer, sameExports}));`,
       ],
       {
         encoding: 'utf-8',
@@ -119,7 +126,7 @@ process.stdout.write(JSON.stringify({first: first.default?.answer, fresh: fresh.
         `module.exports = {answer: 1};\n`,
         `module.exports = {answer: 2};\n`,
       ),
-    ).toEqual({first: 1, fresh: 2});
+    ).toEqual({first: 1, fresh: 2, sameExports: true});
   });
 
   it('freshly reloads a changed ESM .js module in a real Node process', () => {
@@ -135,8 +142,105 @@ process.stdout.write(JSON.stringify({first: first.default?.answer, fresh: fresh.
         `export default {answer: 1};\n`,
         `export default {answer: 2};\n`,
       ),
-    ).toEqual({first: 1, fresh: 2});
+    ).toEqual({first: 1, fresh: 2, sameExports: true});
   });
+
+  it('freshly reloads a changed ES module .js in a package without a "type", in a real Node process', () => {
+    const typelessDir = path.join(tmpDir, 'typeless');
+    fs.mkdirSync(typelessDir);
+    fs.writeFileSync(
+      path.join(typelessDir, 'package.json'),
+      JSON.stringify({name: 'typeless'}),
+    );
+    expect(
+      probeFreshJavaScript(
+        typelessDir,
+        `export default {answer: 1};\n`,
+        `export default {answer: 2};\n`,
+      ),
+    ).toEqual({first: 1, fresh: 2, sameExports: true});
+  });
+
+  it.each([
+    [
+      'fresh.cjs',
+      `module.exports = {answer: 1};\n`,
+      `module.exports = {answer: 2};\n`,
+    ],
+    [
+      'fresh.mjs',
+      `export default {answer: 1};\n`,
+      `export default {answer: 2};\n`,
+    ],
+  ])(
+    'freshly reloads a changed %s in a real Node process',
+    (name, firstSource, secondSource) => {
+      const kindDir = path.join(tmpDir, name.replace('.', '-'));
+      fs.mkdirSync(kindDir);
+      fs.writeFileSync(
+        path.join(kindDir, 'package.json'),
+        JSON.stringify({name: 'typeless'}),
+      );
+      expect(
+        probeFreshJavaScript(kindDir, firstSource, secondSource, name),
+      ).toEqual({first: 1, fresh: 2, sameExports: true});
+    },
+  );
+
+  it.each([
+    ['in a CommonJS package', {type: 'commonjs'}],
+    ['in a package without a "type"', {name: 'typeless'}],
+  ])(
+    'reads one CommonJS module in two reads at once, first or fresh, %s, in a real Node process',
+    (_where, packageJson) => {
+      const dir = path.join(tmpDir, 'at-once');
+      fs.mkdirSync(dir);
+      fs.writeFileSync(
+        path.join(dir, 'package.json'),
+        JSON.stringify(packageJson),
+      );
+      const file = path.join(dir, 'm.js');
+      const loaderUrl = pathToFileURL(
+        path.join(
+          process.cwd(),
+          'packages/cli/foundation/fs/module-loader.mjs',
+        ),
+      ).href;
+      const output = execFileSync(
+        process.execPath,
+        [
+          '--input-type=module',
+          '-e',
+          `import fs from 'node:fs';
+import {importUserModule} from ${JSON.stringify(loaderUrl)};
+const file = process.env.TEST_MODULE;
+const read = async reads => {
+  try {
+    return (await Promise.all(reads())).map(mod => mod.default.answer).join();
+  } catch (error) {
+    return error.code ?? error.name;
+  }
+};
+fs.writeFileSync(file, 'module.exports = {answer: 1};\\n');
+const firstAndFresh = await read(() => [importUserModule(file), importUserModule(file, {fresh: true})]);
+fs.writeFileSync(file, 'module.exports = {answer: 2};\\n');
+const twoFresh = await read(() => [importUserModule(file, {fresh: true}), importUserModule(file, {fresh: true})]);
+const target = file.replace(/m\\.js$/, 'target.js');
+const link = file.replace(/m\\.js$/, 'link.js');
+fs.writeFileSync(target, 'module.exports = {answer: 3};\\n');
+fs.symlinkSync(target, link);
+const linkAndTarget = await read(() => [importUserModule(link), importUserModule(target, {fresh: true})]);
+process.stdout.write(JSON.stringify({firstAndFresh, twoFresh, linkAndTarget}));`,
+        ],
+        {encoding: 'utf-8', env: {...process.env, TEST_MODULE: file}},
+      );
+      expect(JSON.parse(output)).toEqual({
+        firstAndFresh: '1,1',
+        twoFresh: '2,2',
+        linkAndTarget: '3,3',
+      });
+    },
+  );
 
   it('defaults .js to CommonJS when no package.json exists', () => {
     const noPackageDir = fs.mkdtempSync(
@@ -149,7 +253,7 @@ process.stdout.write(JSON.stringify({first: first.default?.answer, fresh: fresh.
           `module.exports = {answer: 1};\n`,
           `module.exports = {answer: 2};\n`,
         ),
-      ).toEqual({first: 1, fresh: 2});
+      ).toEqual({first: 1, fresh: 2, sameExports: true});
     } finally {
       fs.rmSync(noPackageDir, {recursive: true, force: true});
     }

@@ -430,10 +430,21 @@ test('a frame painted before the compositor has the curve shows the element wher
       const onScreen = retarget.animator.get('x');
       retarget.animator.animate({x: 0}, {spring: Motion.springs.settle});
       frozen = null;
+      // The frame that commits the retarget builds its curve: drop it there.
+      // A busy page can make that frame late. The curve then starts at it,
+      // from the screen, so the inline value is where the curve starts.
+      await new Promise<void>(resolve => {
+        requestAnimationFrame(() => resolve());
+      });
+      const [built] = retarget.element.getAnimations();
+      const startsAt = retarget.animator.get(
+        'x',
+        Number(built?.startTime ?? Number.NaN),
+      );
       for (const animation of retarget.element.getAnimations()) {
         animation.cancel();
       }
-      return {presentX, onScreen, retargetX: x(retarget.element)};
+      return {presentX, onScreen, startsAt, retargetX: x(retarget.element)};
     },
     {travel: TRAVEL},
   );
@@ -444,7 +455,7 @@ test('a frame painted before the compositor has the curve shows the element wher
   expect(result.presentX).toBeCloseTo(0, 1);
   expect(result.onScreen).toBeGreaterThan(20);
   // The inline value is written to a thousandth of a pixel.
-  expect(result.retargetX).toBeCloseTo(result.onScreen, 2);
+  expect(result.retargetX).toBeCloseTo(result.startsAt, 2);
 });
 
 test('under Reduce Motion, a dip a busy main thread lands late still ends within its 200 ms cross-fade', async ({
@@ -822,6 +833,170 @@ for (const how of ['from a page frame callback', 'presented'] as const) {
   });
 }
 
+for (const how of ['in a task', 'in a frame callback of the page'] as const) {
+  test(`a retarget made ${how}, whose next frame a 200 ms block delays, starts at that frame, from the value and the velocity on screen there (spec:AST-094 FR6)`, async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'screencast frame evidence is Chromium-only in Playwright',
+    );
+    await open(page);
+    const box = page.locator('#box');
+    await markElement(box, {inset: MARKER_INSET});
+    const {start: controlStart} = await startBusyControl(page);
+    const {start: secondStart} = await startBusyControl(page, {ahead: true});
+    const cast = await startScreencast(page);
+    const out = {response: 1.2, dampingRatio: 1};
+    // The call comes 250 ms into the first curve, and the page then stays
+    // busy for 200 ms. A call in a task is committed by the frame after that
+    // block. A call in a frame callback waits for the frame after that block
+    // too: the frame it runs in shows the first curve.
+    const run = await page.evaluate(
+      async ({spring, back, travel, inFrame}) => {
+        const handle = window.animator.animate({x: travel}, {spring});
+        const started = await handle.started;
+        await new Promise(resolve =>
+          setTimeout(resolve, Math.max(0, started + 250 - performance.now())),
+        );
+        return new Promise<{start: number; call: number; end: number}>(
+          resolve => {
+            let call = 0;
+            const block = () => {
+              const from = performance.now();
+              while (performance.now() < from + 200) {
+                // the page's main thread is busy
+              }
+              resolve({
+                start: performance.timeOrigin + started,
+                call: performance.timeOrigin + call,
+                end: performance.timeOrigin + performance.now(),
+              });
+            };
+            if (inFrame) {
+              requestAnimationFrame(() => {
+                call = performance.now();
+                window.animator.animate({x: 0}, {spring: back});
+                setTimeout(block, 0);
+              });
+            } else {
+              setTimeout(() => {
+                call = performance.now();
+                window.animator.animate({x: 0}, {spring: back});
+                block();
+              }, 0);
+            }
+          },
+        );
+      },
+      {
+        spring: out,
+        back: SLOW,
+        travel: TRAVEL,
+        inFrame: how === 'in a frame callback of the page',
+      },
+    );
+    await page.waitForTimeout(400);
+    const frames = await cast.stop();
+    const tracked = await trackMarker(page, frames);
+    const control = await trackMarker(page, frames, {rgb: CONTROL_RGB});
+    const second = await trackControl(page, frames, {ahead: true});
+    // Each frame on the page clock, read from the two controls, as in the 1 s
+    // block above.
+    const clocks = [
+      {clock: controlClock(control), origin: controlStart},
+      {clock: controlClock(second), origin: secondStart},
+    ];
+    const timed = tracked.flatMap(f => {
+      const reader = clocks.find(({clock}) => clock.has(f.t));
+      if (f.box == null || reader == null) {
+        return [];
+      }
+      const ms = reader.clock.get(f.t) ?? NaN;
+      const cycles = Math.round((f.t - reader.origin - ms) / 800);
+      const at = reader.origin + ms + cycles * 800;
+      return at >= run.call - 50 && at <= run.end + 150
+        ? [{x: f.box.x - MARKER_INSET, at}]
+        : [];
+    });
+    // The frames fit the first curve up to a start at or after the block's
+    // end. After that start, they fit a spring from the value and the velocity
+    // on screen there. `skip` fits the same frames to the call's own clock
+    // instead.
+    const fit = await page.evaluate(
+      ({spring, back, travel, times, frames: judged}) => {
+        const first = Motion.solveSpring(Motion.toSpring(spring), {
+          from: 0,
+          to: travel,
+        });
+        const firstAt = (at: number) => first.value((at - times.start) / 1000);
+        const firstVelocity = (at: number) =>
+          first.velocity((at - times.start) / 1000);
+        const from = (at: number) =>
+          Motion.solveSpring(Motion.toSpring(back), {
+            from: firstAt(at),
+            to: 0,
+            velocity: firstVelocity(at),
+          });
+        const worstFor = (curve: (at: number) => number) =>
+          Math.max(...judged.map(({x, at}) => Math.abs(x - curve(at))));
+        // The best switch from the first curve to `next(commit)`, at or after
+        // the block's end.
+        const bestFit = (
+          next: (commit: number) => (elapsedMs: number) => number,
+        ) => {
+          let best = {commit: NaN, worst: Infinity};
+          for (let commit = times.end; commit <= times.end + 60; commit += 1) {
+            const curve = next(commit);
+            const worst = worstFor(at =>
+              at < commit ? firstAt(at) : curve(at - commit),
+            );
+            if (worst < best.worst) {
+              best = {commit, worst};
+            }
+          }
+          return best;
+        };
+        const fromScreen = bestFit(commit => {
+          const next = from(commit);
+          return elapsed => next.value(elapsed / 1000);
+        });
+        const ownClock = from(times.call);
+        const onOwnClock = bestFit(
+          commit => elapsed =>
+            ownClock.value((elapsed + commit - times.call) / 1000),
+        );
+        return {
+          commitAfterBlock: fromScreen.commit - times.end,
+          worst: fromScreen.worst,
+          skip: onOwnClock.worst,
+        };
+      },
+      {spring: out, back: SLOW, travel: TRAVEL, times: run, frames: timed},
+    );
+    const read = {
+      ...fit,
+      inBlock: timed.filter(({at}) => at > run.call && at < run.end).length,
+      after: timed.filter(({at}) => at > run.end + 20).length,
+    };
+    test.info().annotations.push({
+      type: 'a retarget behind a 200 ms block (px, ms)',
+      description: JSON.stringify({read, timed}),
+    });
+    // The compositor showed the first curve through the block, and the frames
+    // after it show the call.
+    expect(read.inBlock, JSON.stringify(read)).toBeGreaterThanOrEqual(3);
+    expect(read.after, JSON.stringify(read)).toBeGreaterThanOrEqual(3);
+    // Within 4 px everywhere: the marker and the controls are read at whole
+    // px, so each read adds up to a px.
+    expect(read.worst, JSON.stringify(read)).toBeLessThanOrEqual(4);
+    // The call's own clock misses the same frames by far more, so the case
+    // tells the two apart.
+    expect(read.skip, JSON.stringify(read)).toBeGreaterThan(20);
+  });
+}
+
 test('no Layout or Paint runs while it animates', async ({
   page,
   browserName,
@@ -847,6 +1022,58 @@ test('no Layout or Paint runs while it animates', async ({
   });
   expect(counts.Layout ?? 0).toBe(0);
   expect(counts.Paint ?? 0).toBe(0);
+});
+
+test('motions that one callback starts on new elements read their stylesheets in one style pass (architecture:react-component-runtime INV18)', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'tracing is a Chromium protocol');
+  await open(page);
+  // Eight rows that one change glides at once, as a list's reorder does,
+  // each with a stylesheet reason that its promotion keeps.
+  await page.evaluate(async () => {
+    const style = document.createElement('style');
+    style.textContent =
+      '.row { position: absolute; left: 0; width: 40px; height: 8px; background: #36c; will-change: opacity; }';
+    document.head.append(style);
+    for (let i = 0; i < 8; i++) {
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.style.top = `${120 + i * 12}px`;
+      document.body.append(row);
+    }
+    // A frame lays the rows out, so no style pass waits before the call.
+    await new Promise(resolve =>
+      requestAnimationFrame(() => setTimeout(resolve, 0)),
+    );
+  });
+  let call = {from: 0, to: 0};
+  const trace = await traceRendering(page, async () => {
+    call = await page.evaluate(async spring => {
+      const from = performance.timeOrigin + performance.now();
+      for (const row of document.querySelectorAll<HTMLElement>('.row')) {
+        Motion.createMotionEngine(row).animate({x: 60}, {spring});
+      }
+      // The callback's microtasks run before its task ends.
+      await Promise.resolve();
+      return {from, to: performance.timeOrigin + performance.now()};
+    }, SLOW);
+  });
+  const counts = countBetween(trace, call.from, call.to);
+  const willChange = await page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>('.row')].map(
+      row => row.style.willChange,
+    ),
+  );
+  test.info().annotations.push({
+    type: 'style passes in the callback that starts eight motions',
+    description: JSON.stringify({counts, willChange}),
+  });
+  // Each row keeps its stylesheet's reason beside its promotion.
+  expect(willChange).toEqual(Array(8).fill('opacity, translate'));
+  // One pass reads every stylesheet; a read per row forced a pass per row.
+  expect(counts.UpdateLayoutTree ?? 0).toBeLessThanOrEqual(1);
 });
 
 test('the calls from rest that one frame commits start at one time, however long the frame callbacks between them run', async ({

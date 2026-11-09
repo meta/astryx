@@ -9,7 +9,15 @@
  *   intrinsic marker column, including when a counter changes digit count.
  * @output Exports List component, ListProps, ListDensity, ListEdge, ListStyle
  *   types
- * @position Core implementation; consumed by index.ts, tested by List.test.tsx
+ * @position Core implementation. Consumed by index.ts, tested by List.test.tsx
+ *
+ * `animatedLayout` runs the layout updates (List/listLayoutUpdates.ts).
+ * `reorderable` runs the reorder session after them. List imports only the
+ * reorderable object's type and List/listReorderContext.ts, which holds the
+ * object's key and the session hooks. It hands the reorder to its rows
+ * through ListContext. The session, its handle
+ * and its listeners come with the object (reorderable/createReorderable.ts).
+ * So a List without it loads no reorder code.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/List/List.doc.mjs
@@ -19,7 +27,8 @@
  * - /packages/cli/assets/templates/blocks/components/List/ (showcase blocks)
  */
 
-import {useId, useMemo, useRef, type ReactNode} from 'react';
+import {useCallback, useId, useMemo, useRef, type ReactNode} from 'react';
+import type {Reorderable} from '../reorderable/createReorderable';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
@@ -36,6 +45,11 @@ import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
 import type {AnimatedLayout} from '../motion/animatedLayout';
 import {themeProps} from '../utils/themeProps';
 import {useDevWarning} from '../hooks/useDevWarning';
+import {
+  useReorderCommit,
+  useReorderSession,
+  type ListReorderOptions,
+} from './listReorderContext';
 
 export {
   type ListDensity,
@@ -74,6 +88,31 @@ export interface ListProps extends BaseProps<
   animatedLayout?: AnimatedLayout;
 
   /**
+   * Makes the rows reorderable, with the object `createReorderable` makes.
+   * Each ListItem with an `itemKey` gets a reorder handle at its end. One the
+   * object's `isReorderable` rejects keeps its place. Each committed move
+   * calls its `onReorder` once with the row's key and its index after the
+   * move. Apply it by rendering the rows in their new order. A drop on the
+   * starting place, a cancel, or a move the order does not take changes
+   * nothing.
+   *
+   * On a touch screen, a finger held still on a handle for a moment picks up
+   * its row. A flick on it still scrolls. The row stays in its place, dimmed,
+   * while a copy of it follows the finger. An accent line marks where it
+   * would land. The other rows stay still, the list scrolls near the edges,
+   * and on release the rows rearrange. A mouse drags a handle at once, the
+   * same way.
+   *
+   * Without a drag, activating a handle (a click, Space or Enter) turns on
+   * reorder mode for its row. Each arrow key moves it a place at once,
+   * reported and announced with its place and neighbours. Escape or another
+   * activation ends the mode, keeping the moves.
+   * While it is on, a hint anchored to the handle shows the moves and Done as
+   * buttons, so taps alone can reorder.
+   */
+  reorderable?: Reorderable;
+
+  /**
    * Whether to show dividers between list items.
    * @default false
    */
@@ -91,8 +130,9 @@ export interface ListProps extends BaseProps<
    *   reach a little past it into the container's padding. Suits interactive
    *   rows in a container
    * - 'bleed': text sits on the heading's line, and dividers and backgrounds
-   *   reach the container's edges with square corners, like Table rows in a
-   *   Card
+   *   reach the container's edges, like Table rows in a Card. Rows are
+   *   square, except that the first or last row of a list that is a rounded
+   *   Card's or Dialog's first or last child takes its corner
    *
    * A row's first content is what lines up with the heading: its marker,
    * icon, or avatar when it has one, otherwise its label. 'outset' and
@@ -197,6 +237,48 @@ const styles = stylex.create({
     width:
       'calc(100% + var(--container-padding-inline-start, 0px) + var(--container-padding-inline-end, 0px))',
   },
+  // 'bleed' rows reach the container's padding edge inline, and keep its block
+  // padding. The list passes its first and last rows the corner a rounded
+  // container publishes, less that block padding. It is at a corner only as
+  // the container's first or last child.
+  bleedCorners: {
+    '--_list-corner-start-start': {
+      default: '0px',
+      ':first-child':
+        'max(0px, var(--container-corner-start-start, 0px) - var(--container-padding-block-start, 0px))',
+    },
+    '--_list-corner-start-end': {
+      default: '0px',
+      ':first-child':
+        'max(0px, var(--container-corner-start-end, 0px) - var(--container-padding-block-start, 0px))',
+    },
+    '--_list-corner-end-start': {
+      default: '0px',
+      ':last-child':
+        'max(0px, var(--container-corner-end-start, 0px) - var(--container-padding-block-end, 0px))',
+    },
+    '--_list-corner-end-end': {
+      default: '0px',
+      ':last-child':
+        'max(0px, var(--container-corner-end-end, 0px) - var(--container-padding-block-end, 0px))',
+    },
+  },
+  // With a header, the list's root is the container's child, and the header
+  // sits above the first row.
+  bleedCornersBelowHeader: {
+    '--_list-corner-start-start': '0px',
+    '--_list-corner-start-end': '0px',
+    '--_list-corner-end-start': {
+      default: '0px',
+      ':last-child':
+        'max(0px, var(--container-corner-end-start, 0px) - var(--container-padding-block-end, 0px))',
+    },
+    '--_list-corner-end-end': {
+      default: '0px',
+      ':last-child':
+        'max(0px, var(--container-corner-end-end, 0px) - var(--container-padding-block-end, 0px))',
+    },
+  },
   withDividers: {
     gap: 0,
   },
@@ -247,6 +329,7 @@ const dynamicStyles = stylex.create({
 export function List({
   children,
   animatedLayout,
+  reorderable,
   density = 'balanced',
   hasDividers = false,
   edge: edgeProp,
@@ -263,7 +346,23 @@ export function List({
 }: ListProps) {
   const headerId = useId();
   const listRef = useRef<HTMLUListElement & HTMLOListElement>(null);
+  // The reorder's machinery comes with the object. The handles'
+  // instructions take the header's id with a suffix.
+  const {session: reorderSession, options: reorderOptions} = useReorderSession(
+    reorderable,
+    () => listRef.current,
+    `${headerId}h`,
+  );
   const measureRows = useListLayoutUpdates(listRef, animatedLayout);
+  // A drag's or a reorder-mode move's commits are the reorder's to move, so
+  // the layout updates measure nothing for them.
+  const measureUnlessReordering = useCallback(() => {
+    if (reorderSession?.ownsCommit() !== true) {
+      measureRows();
+    }
+  }, [measureRows, reorderSession]);
+  // After the layout updates, so a drop's commit is the reorder's.
+  useReorderCommit(reorderSession);
   const mergedRef = useMergedRefs(
     listRef,
     ref as React.Ref<HTMLUListElement & HTMLOListElement>,
@@ -271,7 +370,7 @@ export function List({
   const isOrdered = listStyle === 'decimal';
   const Tag = isOrdered ? 'ol' : 'ul';
   // Plain use of the deprecated prop is reported by its @deprecated type;
-  // development warns only when the two names conflict (spec:AST-017 FR29).
+  // development warns only when the two names conflict.
   useDevWarning(
     'List',
     '`edge` and the deprecated `edgeCompensation` are both set; `edge` wins. ' +
@@ -289,8 +388,21 @@ export function List({
       edge,
       listStyle,
       animatedLayout,
+      // With a session there is an object, so its options too.
+      reorder: reorderSession && {
+        session: reorderSession,
+        options: reorderOptions as ListReorderOptions,
+      },
     }),
-    [density, hasDividers, edge, listStyle, animatedLayout],
+    [
+      density,
+      hasDividers,
+      edge,
+      listStyle,
+      animatedLayout,
+      reorderSession,
+      reorderOptions,
+    ],
   );
 
   const listElement = (
@@ -311,6 +423,11 @@ export function List({
       // role restores "list, N items" announcements for every listStyle
       // variant.
       role="list"
+      // A bleeding list reads the corner its container publishes. With a
+      // header, the root below is the container's child and reads it.
+      {...(edge === 'bleed' && header == null
+        ? {'data-container-corner': ''}
+        : null)}
       {...mergeProps(
         themeProps('list', {density, listStyle}),
         stylex.props(
@@ -319,10 +436,12 @@ export function List({
           isOrdered && styles.numberColumns,
           hasDividers && styles.withDividers,
           reachesContainerPadding && styles.reachesContainerPadding,
+          edge === 'bleed' && header == null && styles.bleedCorners,
           listStyle !== 'none' &&
             (start != null && start !== 1
               ? dynamicStyles.counterStart(start - 1)
               : styles.withCounter),
+          reorderSession?.listStyle,
           xstyle,
         ),
         className,
@@ -336,14 +455,24 @@ export function List({
   // calls this in the commit, before the DOM changes.
   const snapshot =
     animatedLayout != null ? (
-      <LayoutChangeSnapshot value={children} onBeforeChange={measureRows} />
+      <LayoutChangeSnapshot
+        value={children}
+        onBeforeChange={measureUnlessReordering}
+      />
     ) : null;
+
+  // The session's options and listeners, and the handles' instructions.
+  const {reorder: reorderValue} = contextValue;
+  const reorderHost = reorderValue && (
+    <reorderValue.session.Host reorder={reorderValue} />
+  );
 
   if (header == null) {
     return (
       <ListContext value={contextValue}>
         {snapshot}
         {listElement}
+        {reorderHost}
       </ListContext>
     );
   }
@@ -351,11 +480,17 @@ export function List({
   return (
     <ListContext value={contextValue}>
       {snapshot}
-      <div {...stylex.props(styles.root)}>
+      <div
+        {...(edge === 'bleed' ? {'data-container-corner': ''} : null)}
+        {...stylex.props(
+          styles.root,
+          edge === 'bleed' && styles.bleedCornersBelowHeader,
+        )}>
         <div id={headerId} {...stylex.props(styles.header)}>
           {header}
         </div>
         {listElement}
+        {reorderHost}
       </div>
     </ListContext>
   );

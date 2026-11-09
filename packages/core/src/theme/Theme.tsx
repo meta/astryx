@@ -18,6 +18,11 @@
  * - `data-astryx-theme` — enables @scope'd theme CSS to reach elements rendered
  *   outside the Theme wrapper (portals, toast fallback viewports).
  *
+ * The root Theme also reads the reader's text size (iOS Dynamic Type) from a
+ * hidden, empty `font: -apple-system-body` probe and keeps the page's scales
+ * in an adopted stylesheet; every theme's font sizes follow them, and no
+ * attribute is written (see dynamicType.ts).
+ *
  * For RSC / SSR, set `data-theme` on `<html>` in your root server layout
  * to avoid a flash of wrong theme before hydration:
  *
@@ -43,6 +48,7 @@ import {colorVars, typographyVars} from './tokens.stylex';
 import {generateThemeCSS, type DefinedTheme} from './defineTheme';
 import {registerTheme} from './themeRegistry';
 import {dataAttr} from '../naming';
+import {syncReaderTextSize} from './dynamicType';
 import {ThemeContext} from './useTheme';
 import {warnOnce} from '../utils/devWarning';
 import {REDUCED_MOTION_PROPERTY, resolveMotionKnobs} from './themeMotion';
@@ -317,6 +323,20 @@ function useRootThemeSync(
   }, [isNested, mode, themeName, reducesMotion]);
 }
 
+/**
+ * Hook to keep the page's text size scales on the reader's text size (iOS
+ * Dynamic Type, or `env(preferred-text-scale)` elsewhere) for the root
+ * provider; see dynamicType.ts. Skipped for nested Theme instances.
+ */
+function useRootTextSizeSync(isNested: boolean): void {
+  useIsomorphicLayoutEffect(() => {
+    if (isNested || typeof document === 'undefined') {
+      return;
+    }
+    return syncReaderTextSize(document);
+  }, [isNested]);
+}
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -349,6 +369,7 @@ export function Theme({
   const reducesMotion =
     resolveMotionKnobs(theme.__axes?.motion).reducedMotion === 'always';
   useRootThemeSync(isNested, mode, theme.name, reducesMotion);
+  useRootTextSizeSync(isNested);
 
   // Get color-scheme style
   const colorSchemeStyle =

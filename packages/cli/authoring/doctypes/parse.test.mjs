@@ -18,6 +18,7 @@ import {parseComponent} from './component/parse.mjs';
 import {parseHook} from './hook/parse.mjs';
 import {parseReference} from './reference/parse.mjs';
 import {loadComponentDoc} from '../../foundation/discovery/component-loader.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const goodComponent = {
   type: 'component',
@@ -340,7 +341,7 @@ describe('loadComponentDoc (end-to-end load boundary)', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-doc-test-'));
+    tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-doc-test-'));
   });
 
   afterEach(() => {

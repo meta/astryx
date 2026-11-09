@@ -1534,6 +1534,7 @@ export function PowerSearch({
             aria-disabled={isDisabled ? true : undefined}
             {...stylex.props(
               inputWrapperStyles.base,
+              inputWrapperStyles.textField,
               sheetTriggerStyles.wrapper,
               filters.length > 0 && sheetTriggerStyles.wrapperWithTokens,
               sheetTriggerSizeStyles[size],

@@ -30,6 +30,7 @@ import {componentDocNamesCheck} from '../../foundation/integrations/validate-con
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 import {warmIntegrationChecks} from '../../test-utils/warm-integration-checks.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 // The checks' one-time start in this file (TypeScript and its lib files) runs
 // here, while the file is collected, so no test carries it.
@@ -39,7 +40,7 @@ let tmpDir;
 let copies = 0;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-validate-gaps-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-validate-gaps-'));
   // The fixture is a package with its own TypeScript config, scoped to its
   // own files. Without one, the prop check reads the repository's root
   // config, as `tsc` would for a folder inside it, and compiles every
