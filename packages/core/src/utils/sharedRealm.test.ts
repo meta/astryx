@@ -11,6 +11,7 @@
 
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import type * as RealmModule from './sharedRealm';
+import type {SharedBrand} from './sharedRealm';
 
 type Realm = typeof RealmModule;
 
@@ -67,6 +68,10 @@ describe('shared realm shapes (spec:AST-110 FR3)', () => {
     const branded = {[copyBrand.key]: {size: 4}};
     expect(pkgBrand.read(branded)).toEqual({size: 4});
     expect(pkgBrand.read({size: 4})).toBeUndefined();
+    // The type member is required, so a plain object is not branded.
+    // @ts-expect-error -- `{}` lacks the brand.
+    const unbranded: SharedBrand<'test/brand/v1'> = {};
+    expect(pkgBrand.read(unbranded)).toBeUndefined();
     expect(pkgBrand.read(null)).toBeUndefined();
   });
 

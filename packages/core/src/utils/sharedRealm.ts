@@ -119,11 +119,12 @@ export function sharedStore<T>(
 }
 
 /**
- * The type side of a shared brand: one optional member that is never present,
- * so the branded types of the package and a swizzled copy match.
+ * The type side of a shared brand: one member that is never present at
+ * runtime. It is required, so only code that casts makes a branded value, and
+ * its name is the same in the package and a swizzled copy.
  */
 export type SharedBrand<Name extends string> = {
-  readonly [K in `@astryxdesign/core/${Name}`]?: never;
+  readonly [K in `@astryxdesign/core/${Name}`]: never;
 };
 
 /** Marks and reads a value under a brand every copy of Core shares. */
