@@ -1501,7 +1501,7 @@ jobs:
           # lockfile, the root build inputs, or the check itself; shared
           # infrastructure, `full_suite`, runs it too); the build itself
           # follows the specialized-lane outputs.
-          paths: '^(packages/|pnpm-lock\.yaml$|package\.json$|tsconfig\.json$|scripts/|\.github/workflows/ci\.yml$|\.github/scripts/package-size\.mjs$|\.github/scripts/lib/package-size\.js$|\.github/scripts/merge-base\.sh$)'
+          paths: '^(packages/|pnpm-lock\.yaml$|package\.json$|tsconfig\.json$|scripts/|\.github/workflows/ci\.yml$|\.github/scripts/package-size\.mjs$|\.github/scripts/lib/package-size\.js$|\.github/scripts/module-size\.mjs$|\.github/module-size-budgets\.json$|\.github/scripts/merge-base\.sh$)'
           # A head cut before the package-size check has no script for it.
           requires-head-file: .github/scripts/package-size.mjs
 
@@ -1797,6 +1797,19 @@ jobs:
         run: |
           node .github/scripts/package-size.mjs measure --output package-size-head.json
           echo "measured=true" >> "$GITHUB_OUTPUT"
+
+      # Module size budgets (.github/module-size-budgets.json): a module over
+      # its budget prints a warning and fails nothing, unless its entry sets
+      # enforce. A missing module, budget file, or build error fails the step.
+      - name: Check module size budgets
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size.outputs.measured == 'true'
+        run: |
+          # A head cut before this check has no script for it.
+          if [ ! -f .github/scripts/module-size.mjs ]; then
+            echo "This head has no module size check; skipped."
+            exit 0
+          fi
+          node .github/scripts/module-size.mjs --summary "$GITHUB_STEP_SUMMARY"
 
       - name: Download main's package size for the merge base
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size.outputs.measured == 'true' && steps.size-records.outputs.package_run_id != ''
