@@ -187,6 +187,28 @@ if (!fs.existsSync(reportPath)) {
       out.push('');
     }
   }
+  // Stories whose scan threw and ran once more on a fresh page. The last
+  // line is the one a log search counts across runs.
+  const retried = r.retries?.stories ?? [];
+  out.push(`### Retries after an ERROR (${retried.length})`);
+  out.push('');
+  if (retried.length) {
+    out.push('| Story | Pass | First ERROR | Retry |');
+    out.push('|-------|------|-------------|-------|');
+    for (const retry of retried) {
+      const outcome =
+        retry.outcome === 'recovered'
+          ? 'recovered'
+          : `still ERROR: ${markdownCell(retry.error)}`;
+      out.push(
+        `| ${markdownCell(retry.storyId)} | ${markdownCell(retry.phase)} | ${markdownCell(retry.firstError)} | ${outcome} |`,
+      );
+    }
+    out.push('');
+  }
+  const ids = [...new Set(retried.map(retry => retry.storyId))].sort();
+  out.push(`\`rtl-audit-retries: ${retried.length} [${ids.join(' ')}]\``);
+  out.push('');
   out.push('### Curated precision (D2 order / D3 behavior / D4 overlay)');
   out.push('');
   out.push('| Component | Rollup | Dimensions |');
