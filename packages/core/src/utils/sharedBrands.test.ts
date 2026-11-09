@@ -12,6 +12,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import ts from 'typescript';
+import {renderHook} from '@testing-library/react';
 import {describe, expect, it, vi} from 'vitest';
 
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -75,6 +76,29 @@ describe('brands a swizzled copy shares with the package', () => {
     ).toBeDefined();
   });
 
+  it("a copy of Table's virtualization module reads a package capability", async () => {
+    const pkg =
+      await import('../Table/plugins/virtualization/useTableRowsVirtualization');
+    vi.resetModules();
+    const copy =
+      await import('../Table/plugins/virtualization/useTableRowsVirtualization');
+    expect(copy).not.toBe(pkg);
+    // A swizzled Table carries its own copy of this module and reads the
+    // capability the package's useTableRowsVirtualization made.
+    const {result} = renderHook(() =>
+      pkg.useTableRowsVirtualization({rowHeight: 40, viewportHeight: 400}),
+    );
+    expect(copy.getTableVirtualizationConfig(result.current)).toEqual({
+      rowHeight: 40,
+      viewportHeight: 400,
+    });
+    // The brand member is required, so a plain object is not a capability:
+    // only the hook makes one.
+    // @ts-expect-error -- `{}` lacks the capability's brand.
+    const notACapability: typeof result.current = {};
+    expect(copy.getTableVirtualizationConfig(notACapability)).toBeUndefined();
+  });
+
   it('the package and a copy give the branded types one shape', () => {
     // Two paths to Core's source that TypeScript reads as two modules each,
     // as it reads a package module and the copy of it.
@@ -89,6 +113,10 @@ describe('brands a swizzled copy shares with the package', () => {
         ['SnapPaging/snapPagingValue', 'SnapPaging'],
         ['Markdown/plugins/protocol', 'MarkdownPluginEntry'],
         ['Markdown/plugins/protocol', 'MarkdownTransform'],
+        [
+          'Table/plugins/virtualization/useTableRowsVirtualization',
+          'TableVirtualizationCapability',
+        ],
       ];
       fs.writeFileSync(
         check,
