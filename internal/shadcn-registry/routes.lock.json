@@ -3812,6 +3812,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-interactive-role-one-tile-four-roles",
+      "path": "examples/use-interactive-role/one-tile-four-roles",
+      "aliases": []
+    },
+    {
       "name": "example-use-keyboard-hint-arrow-key-hint",
       "path": "examples/use-keyboard-hint/arrow-key-hint",
       "aliases": []
@@ -3829,6 +3834,11 @@
     {
       "name": "example-use-link-component-article-cards",
       "path": "examples/use-link-component/article-cards",
+      "aliases": []
+    },
+    {
+      "name": "example-use-linkify-links-in-a-comment-thread",
+      "path": "examples/use-linkify/links-in-a-comment-thread",
       "aliases": []
     },
     {
@@ -4199,6 +4209,11 @@
     {
       "name": "hook-use-link-component",
       "path": "hooks/use-link-component",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-linkify",
+      "path": "hooks/use-linkify",
       "aliases": []
     },
     {

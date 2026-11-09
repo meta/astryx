@@ -200,9 +200,19 @@ export default defineConfig({
           // `.doc.mjs` documentation modules the docs catalog imports by the
           // hundred (doctor's first case: 0.7 s natively, 4.7 s inlined).
           // Both grow several times over on a loaded box. Mocks keep working
-          // from inlined callers.
+          // from inlined callers. The CLI's doc importers import doc files
+          // through `import-url.mjs`, which loads natively too, so its imports
+          // make no request to Vitest's main process. Each request waits in
+          // line behind every worker: `template --list` imports 771 doc files,
+          // 0.6 s alone and up to 26 s on a loaded box.
           server: {
-            deps: {external: [/\/packages\/core\/dist\//, /\.doc\.mjs$/]},
+            deps: {
+              external: [
+                /\/packages\/core\/dist\//,
+                /\.doc\.mjs$/,
+                /\/packages\/cli\/foundation\/fs\/import-url\.mjs$/,
+              ],
+            },
           },
           // Several CLI suites spawn a fresh `node bin/astryx.mjs` per assertion
           // (real process boundary). Under the forks pool these cold-starts can

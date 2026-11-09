@@ -78,6 +78,7 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {setInputValue} from '../utils/setInputValue';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -513,14 +514,9 @@ export function Typeahead<T extends SearchableItem>({
       // focus handler sees the label rather than an empty query: an empty one
       // would open the hasEntriesOnFocus bootstrap entries, and Enter would
       // commit the first of them instead of the edited value.
-      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-        window.HTMLInputElement.prototype,
-        'value',
-      )?.set;
       // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the base must hold the label as its query before the in-tap focus
       flushSync(() => {
-        nativeInputValueSetter?.call(input, value.label);
-        input.dispatchEvent(new Event('input', {bubbles: true}));
+        setInputValue(input, value.label);
       });
       input.focus();
       input.setSelectionRange(0, input.value.length);
@@ -588,12 +584,7 @@ export function Typeahead<T extends SearchableItem>({
   const handleClear = useCallback(() => {
     const input = inputRef.current;
     if (input && input.value !== '') {
-      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-        window.HTMLInputElement.prototype,
-        'value',
-      )?.set;
-      nativeInputValueSetter?.call(input, '');
-      input.dispatchEvent(new Event('input', {bubbles: true}));
+      setInputValue(input, '');
     }
     setIsEditing(false);
     setEditingValue(null);

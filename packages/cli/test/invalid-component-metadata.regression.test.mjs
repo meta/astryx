@@ -36,6 +36,7 @@ import {component} from '../api/component/component.mjs';
 import {search} from '../api/search/search.mjs';
 import {build} from '../api/build/build.mjs';
 import {doctor} from '../api/doctor/doctor.mjs';
+import {REPO_ROOT} from '../test-utils/repo-root.mjs';
 
 // ── Fixture ────────────────────────────────────────────────────────
 
@@ -149,7 +150,7 @@ function scaffoldInvalidDoc() {
 
 beforeEach(() => {
   originalCwd = process.cwd();
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-fr9-invalid-doc-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-fr9-invalid-doc-'));
   process.chdir(tmpDir);
 });
 

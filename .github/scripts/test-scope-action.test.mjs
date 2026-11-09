@@ -137,6 +137,7 @@ async function decide({
     SCOPE_OUTSIDE_PR: inputs['outside-pull-request'] ?? 'run',
     SCOPE_HEAD_FILE: inputs['requires-head-file'] ?? '',
     SCOPE_COMPONENT_AUDIT: inputs['component-audit'] ?? 'false',
+    SCOPE_LAB_ONLY_SPECS: inputs['lab-only-specs'] ?? '',
   };
   const saved = {...process.env};
   Object.assign(process.env, env);
@@ -177,6 +178,7 @@ describe('per-job scope step', () => {
         'has_rtl_components',
         'has_rtl_harness',
         'lab_only',
+        'lab_specs_path',
         'release_bump',
         'spec_only',
         'tooling_only',
@@ -321,6 +323,57 @@ describe('per-job scope step', () => {
       ),
     });
     expect(mixed.outputs).toMatchObject({lab_only: 'false', applies: 'true'});
+  });
+
+  it('still runs a changed interaction spec on the Lab-only lane, alone (spec:AST-030 FR26)', async () => {
+    const spec =
+      'packages/lab/src/NavigationStack/__tests__/NavigationStack.interaction.browser.spec.ts';
+    const inputs = {
+      paths: INTERACTION_PATHS,
+      'lab-only-specs': '\\.interaction\\.browser\\.spec\\.ts$',
+      'requires-head-file': 'playwright.interaction.config.ts',
+    };
+    const headFiles = ['playwright.interaction.config.ts'];
+    const {outputs} = await decide({files: changed(spec), inputs, headFiles});
+    expect(outputs).toMatchObject({lab_only: 'true', applies: 'true'});
+    expect(fs.readFileSync(outputs.lab_specs_path, 'utf8')).toBe(`${spec}\n`);
+    // Lab source beside the spec adds nothing: only the spec runs.
+    const both = await decide({
+      files: changed(
+        'packages/lab/src/NavigationStack/NavigationStack.tsx',
+        spec,
+      ),
+      inputs,
+      headFiles,
+    });
+    expect(both.outputs.applies).toBe('true');
+    expect(fs.readFileSync(both.outputs.lab_specs_path, 'utf8')).toBe(
+      `${spec}\n`,
+    );
+    // Lab source alone runs none.
+    const source = await decide({
+      files: changed('packages/lab/src/NavigationStack/NavigationStack.tsx'),
+      inputs,
+      headFiles,
+    });
+    expect(source.outputs).toMatchObject({
+      lab_only: 'true',
+      applies: 'false',
+      lab_specs_path: '',
+    });
+    // A deleted spec has nothing to run.
+    const removed = await decide({
+      files: [{filename: spec, status: 'removed'}],
+      inputs,
+      headFiles,
+    });
+    expect(removed.outputs).toMatchObject({
+      applies: 'false',
+      lab_specs_path: '',
+    });
+    // A head cut before the interaction config still skips.
+    const old = await decide({files: changed(spec), inputs});
+    expect(old.outputs.applies).toBe('false');
   });
 
   it('reports no Lab-only lane when the base classifier predates it', async () => {
