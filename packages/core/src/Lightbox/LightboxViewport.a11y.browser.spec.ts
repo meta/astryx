@@ -467,6 +467,46 @@ test('the caption opens, closes and pages with no ResizeObserver loop error', as
   expect(errors).toEqual([]);
 });
 
+// Some fonts set a line box a fraction of a pixel tall, where the caption's
+// client height rounds to whole pixels. These two round it up and down.
+for (const lineBox of ['20.125px', '19.984375px']) {
+  test(`a caption whose line box is a fraction of a pixel opens and closes with no ResizeObserver loop error (${lineBox})`, async ({
+    page,
+  }) => {
+    await page.addInitScript(height => {
+      const errors: string[] = [];
+      (window as unknown as {__pageErrors: string[]}).__pageErrors = errors;
+      window.addEventListener('error', event => {
+        errors.push(event.message);
+      });
+      document.addEventListener('DOMContentLoaded', () => {
+        const style = document.createElement('style');
+        style.textContent = `[data-lightbox-caption] * { line-height: ${height} !important; }`;
+        document.head.appendChild(style);
+      });
+    }, lineBox);
+    const dialog = await openCaptionGallery(page, {width: 402, height: 874});
+    await expect(dialog.getByRole('button', {name: 'more'})).toBeVisible();
+    for (let round = 0; round < 2; round++) {
+      await dialog.getByRole('button', {name: 'more'}).click();
+      await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
+      await dialog.getByRole('button', {name: 'less'}).click();
+      await expect(dialog.getByRole('button', {name: 'more'})).toBeVisible();
+    }
+    // Two frames, so the last frame's deliveries have run.
+    await page.evaluate(
+      async () =>
+        new Promise(resolve => {
+          requestAnimationFrame(() => requestAnimationFrame(resolve));
+        }),
+    );
+    const errors = await page.evaluate(
+      () => (window as unknown as {__pageErrors: string[]}).__pageErrors,
+    );
+    expect(errors).toEqual([]);
+  });
+}
+
 test(`a caption whose text grows while its box keeps two lines gets "more" at the end of its second line`, async ({
   page,
 }) => {
