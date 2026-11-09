@@ -74,6 +74,7 @@ import {
 import {
   MENU_ITEM_ROLES,
   MENU_ITEM_SELECTOR,
+  MENU_ROW_SELECTOR,
   MENU_BOUNDARY_SELECTOR,
   activateMenuItem,
 } from '../DropdownMenu/menuItemRoles';
@@ -179,13 +180,15 @@ const styles = stylex.create({
     userSelect: 'none',
   },
   // The menu's own inset inside the sheet content box (menuBottomSheetStyles
-  // .content): the 16px / 4px the sheet keeps plus the menu's 4px padding.
+  // .content): the 4px at the sides the content box keeps plus the menu's
+  // 4px padding; above the first row, the menu's 4px below the band the sheet
+  // keeps under its grab bar.
   sheetMenuInset: {
-    paddingBlockStart: `calc(${spacingVars['--spacing-4']} + ${spacingVars['--spacing-1']})`,
+    paddingBlockStart: spacingVars['--spacing-1'],
     paddingBlockEnd: spacingVars['--spacing-1'],
     paddingInline: `calc(${spacingVars['--spacing-1']} + ${spacingVars['--spacing-1']})`,
     // Bleeding rows read the padding this element applies.
-    '--container-padding-block-start': `calc(${spacingVars['--spacing-4']} + ${spacingVars['--spacing-1']})`,
+    '--container-padding-block-start': spacingVars['--spacing-1'],
     '--container-padding-block-end': spacingVars['--spacing-1'],
     '--container-padding-inline-start': `calc(${spacingVars['--spacing-1']} + ${spacingVars['--spacing-1']})`,
     '--container-padding-inline-end': `calc(${spacingVars['--spacing-1']} + ${spacingVars['--spacing-1']})`,
@@ -518,7 +521,8 @@ function useContextMenuElement(
     ownsEvent,
     getItems: getMenuItems,
   } = useInternalListFocus<HTMLDivElement>({
-    itemSelector: MENU_ITEM_SELECTOR,
+    itemSelector: MENU_ROW_SELECTOR,
+    reachesDisabledItems: true,
     boundarySelector: MENU_BOUNDARY_SELECTOR,
     // Menus wrap from the last row to the first and back.
     wrap: true,
@@ -537,7 +541,8 @@ function useContextMenuElement(
     getContainer: () => listRef.current,
   });
 
-  // Typeahead over the enabled menu items, matched on each row's LABEL alone.
+  // Typeahead over the menu items, disabled ones included, matched on each
+  // row's LABEL alone.
   // Reuses the hook's scoped item collection so an inline submenu flyout's
   // items aren't swept in.
   const typeahead = useTypeahead({

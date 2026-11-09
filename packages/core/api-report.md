@@ -234,10 +234,12 @@ component BreadcrumbMenuRadioItem(props: DropdownMenuRadioItemProps)
 component BreadcrumbMenuSubMenu(props: DropdownMenuSubMenuProps)
   prop children: ReactNode
   prop data-testid?: string
+  prop delay?: number = 150
   prop description?: ReactNode
   prop footer?: ReactNode
   prop hasSpinner?: boolean = false
   prop header?: ReactNode
+  prop hideDelay?: number = 200
   prop icon?: ReactNode | IconType
   prop isDisabled?: boolean = false
   prop label: ReactNode
@@ -641,6 +643,7 @@ component CodeBlock(props: CodeBlockProps)
   prop language?: string | CodeLanguage = 'plaintext'
   prop maxHeight?: number | string
   prop onCopy?: () => void
+  prop onCopyError?: (error: unknown) => void
   prop ref?: React.Ref<HTMLPreElement>
   prop size?: 'sm' | 'md'
   prop startLineNumber?: number = 1
@@ -850,10 +853,12 @@ component ContextMenuRadioItem(props: DropdownMenuRadioItemProps)
 component ContextMenuSubMenu(props: DropdownMenuSubMenuProps)
   prop children: ReactNode
   prop data-testid?: string
+  prop delay?: number = 150
   prop description?: ReactNode
   prop footer?: ReactNode
   prop hasSpinner?: boolean = false
   prop header?: ReactNode
+  prop hideDelay?: number = 200
   prop icon?: ReactNode | IconType
   prop isDisabled?: boolean = false
   prop label: ReactNode
@@ -1113,10 +1118,12 @@ component DropdownMenuRadioItem(props: DropdownMenuRadioItemProps)
 component DropdownMenuSubMenu(props: DropdownMenuSubMenuProps)
   prop children: ReactNode
   prop data-testid?: string
+  prop delay?: number = 150
   prop description?: ReactNode
   prop footer?: ReactNode
   prop hasSpinner?: boolean = false
   prop header?: ReactNode
+  prop hideDelay?: number = 200
   prop icon?: ReactNode | IconType
   prop isDisabled?: boolean = false
   prop label: ReactNode
@@ -1504,6 +1511,7 @@ component LinkProvider(props: LinkProviderProps)
   prop children: ReactNode
   prop component: LinkComponentType
 component List(props: ListProps)
+  prop animatedLayout?: AnimatedLayout
   prop children: ReactNode
   prop data-testid?: string
   prop density?: ListDensity = 'balanced'
@@ -1513,6 +1521,7 @@ component List(props: ListProps)
   prop header?: ReactNode
   prop listStyle?: ListMarkerStyle = 'none'
   prop ref?: React.Ref<HTMLUListElement | HTMLOListElement>
+  prop reorderable?: Reorderable
   prop start?: number = 1
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
@@ -1524,6 +1533,7 @@ component ListItem(props: ListItemProps)
   prop interactiveRef?: React.RefObject<HTMLElement | null>
   prop isDisabled?: boolean = false
   prop isSelected?: boolean = false
+  prop itemKey?: string | number
   prop label: ReactNode
   prop onClick?: (e: React.MouseEvent) => void
   prop ref?: React.Ref<HTMLLIElement>
@@ -2331,6 +2341,7 @@ component Table
   prop scrollWrapper?: ComponentType<{ children: ReactNode; htmlProps?: HTMLAttributes<HTMLDivElement> & { ref?: Ref<HTMLDivElement> }; xstyle?: StyleXStyles[]; beforeTable?: ReactNode; afterTable?: ReactNode }>
   prop textOverflow?: 'wrap' | 'truncate' = 'wrap'
   prop verticalAlign?: TableVerticalAlign = 'middle'
+  prop virtualization?: BaseTableProps<T>['virtualization']
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component TableBody(props: TableBodyProps)
@@ -2558,6 +2569,7 @@ component Timestamp(props: TimestampProps)
   prop isTimezoneShown?: boolean = false
   prop ref?: React.Ref<HTMLTimeElement>
   prop size?: TextSize
+  prop timezoneID?: string
   prop tooltipEntries?: ReadonlyArray<TimestampTooltipEntry> = undefined — a single default row with the full absolute time in the viewer's own time zone
   prop type?: TextType = 'supporting'
   prop value: string | number
@@ -2960,8 +2972,9 @@ hook useTableFiltering: <T extends Record<string, unknown>>(config: UseTableFilt
 hook useTableGroupedRows: <T extends Record<string, unknown>>(config: UseTableGroupedRowsConfig<T>) => UseTableGroupedRowsResult<T>
 hook useTablePagination: <T extends Record<string, unknown>>(config: UseTablePaginationConfig) => TablePlugin<T>
 hook useTableRowExpansion: <T extends Record<string, unknown>>(config: UseTableRowExpansionConfig<T>) => TablePlugin<T>
-hook useTableRowIndex: <T extends Record<string, unknown>>(config: UseTableRowIndexConfig<T>) => TablePlugin<T>
+hook useTableRowIndex: <T extends Record<string, unknown>>(config?: UseTableRowIndexConfig<T>) => TablePlugin<T>
 hook useTableRowStatus: <T extends Record<string, unknown>>(config: UseTableRowStatusConfig<T>) => TablePlugin<T>
+hook useTableRowsVirtualization: ({…}: UseTableRowsVirtualizationConfig) => TableVirtualizationCapability
 hook useTableSelection: <T extends Record<string, unknown>>(config: UseTableSelectionConfig<T>) => TablePlugin<T>
 hook useTableSelectionState: <T extends Record<string, unknown>>(config: UseTableSelectionStateConfig<T>) => UseTableSelectionStateResult<T>
 hook useTableSortable: <T extends Record<string, unknown>, TSortKey extends string = string>(config: UseTableSortableConfig<TSortKey>) => TablePlugin<T>
@@ -3001,6 +3014,7 @@ function createISOTimeString: (value: string) => ISOTimeString | null
 function createIncrementalState: <MathEnabled extends boolean = false>() => IncrementalState<MathEnabled>
 function createPanGesture: (element: Element, options: PanGestureOptions) => PanGesture
 function createPowerSearchConfig: <const D extends ReadonlyArray<FieldDefinition>>(definitions: D, configName?: string) => { config: PowerSearchConfig; applyFilters: <T extends InferData<D>>(filters: ReadonlyArray<PowerSearchFilter>, data: ReadonlyArray<T>) => T[] }
+function createReorderable: <TKey extends string | number = string | number, TTo = number>(options: ReorderableOptions<TKey, TTo>) => Reorderable<TKey, TTo>
 function createStaticSource: <T extends SearchableItem>(items: T[], options?: CreateStaticSourceOptions<T>) => SearchSource<T>
 function dateToISO: (pd: PlainDate) => ISODateString
 function decodeMarkdownCharacterReferences: (text: string) => string
@@ -3517,7 +3531,7 @@ const typographyVars: stylex.VarGroup<Readonly<{ readonly '--font-family-body': 
 ```text
 interface AlertDialogProps extends BaseProps<HTMLDialogElement> (props of AlertDialog)
 interface AnimatedLayout
-  [AREA]: () => Element | null
+  @astryxdesign/core/animated-layout/v1?: never
 interface Animator extends AnimatorHandle
   animate: (target: AnimatorValues, options?: AnimatorAnimateOptions) => Promise<void>
   decay: (velocity: AnimatorDecayVelocity) => Promise<void>
@@ -3621,6 +3635,7 @@ interface BaseTableProps<T extends Record<string, unknown>> extends BaseProps<HT
   rowIndexStart?: number = 1
   scrollWrapper?: ComponentType<{ children: ReactNode; htmlProps?: HTMLAttributes<HTMLDivElement> & { ref?: Ref<HTMLDivElement> }; xstyle?: StyleXStyles[]; beforeTable?: ReactNode; afterTable?: ReactNode }>
   textOverflow?: 'wrap' | 'truncate' = 'wrap'
+  virtualization?: TableVirtualizationCapability
   xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 interface BaseTypeaheadProps<T extends SearchableItem> extends Omit<BaseProps<HTMLElement>, 'onChange'> (props of BaseTypeahead)
@@ -3727,10 +3742,12 @@ interface BreadcrumbMenuSection
 interface BreadcrumbMenuSubMenuProps extends DropdownMenuSubMenuBaseProps
   children: ReactNode
   data-testid?: string
+  delay?: number = 150
   description?: ReactNode
   footer?: ReactNode
   hasSpinner?: boolean = false
   header?: ReactNode
+  hideDelay?: number = 200
   icon?: ReactNode | IconType
   isDisabled?: boolean = false
   label: ReactNode
@@ -3886,7 +3903,7 @@ interface ClickableContainerResult
 interface CodeBlockProps extends BaseProps<HTMLPreElement> (props of CodeBlock)
 type CodeColor = 'primary' | 'secondary' | 'inherit'
 type CodeLanguage
-  [LANGUAGE]: true
+  @astryxdesign/core/code-language/v1?: never
   fileExtensions: ReadonlyArray<string>
   fileNames: ReadonlyArray<string>
   identifiers: ReadonlyArray<string>
@@ -4071,10 +4088,12 @@ type ContextMenuSection = DropdownMenuSection
 interface ContextMenuSubMenuProps extends DropdownMenuSubMenuBaseProps
   children: ReactNode
   data-testid?: string
+  delay?: number = 150
   description?: ReactNode
   footer?: ReactNode
   hasSpinner?: boolean = false
   header?: ReactNode
+  hideDelay?: number = 200
   icon?: ReactNode | IconType
   isDisabled?: boolean = false
   label: ReactNode
@@ -5071,6 +5090,15 @@ type RadiusVarName = keyof typeof radiusDefaults
 interface RelativeDateFilterPreset
   label: string
   value: string
+interface ReorderMove<TKey extends string | number = string | number, TTo = number>
+  key: TKey
+  to: TTo
+interface Reorderable<TKey extends string | number = string | number, TTo = number>
+  [reorderableBrand]: { readonly key: TKey; readonly to: TTo }
+  start: (key: TKey) => void
+interface ReorderableOptions<TKey extends string | number = string | number, TTo = number>
+  isReorderable?: (key: TKey) => boolean
+  onReorder: (move: ReorderMove<TKey, TTo>) => void
 interface ResizableConfig
   autoSaveId?: string
   defaultIsCollapsed?: boolean
@@ -5304,7 +5332,7 @@ interface SliderSingleProps extends SliderBaseProps
   width?: SizeValue
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 interface SnapPaging
-  [snapPagingBrand]: true
+  @astryxdesign/core/snap-paging/v1?: never
 interface SnapPagingOptions
   pages?: 'view' | 'item' = 'view'
 type SourceRange
@@ -5448,15 +5476,16 @@ interface TableFooterProps extends BaseProps<HTMLTableSectionElement> (props of 
 interface TableHeaderCellProps extends BaseProps<HTMLTableCellElement> (props of TableHeaderCell)
 interface TableHeaderProps extends BaseProps<HTMLTableSectionElement> (props of TableHeader)
 interface TablePlugin<T extends Record<string, unknown> = Record<string, unknown>>
-  transformBodyCell?: (props: BodyCellRenderProps, column: TableColumn<T>, item: T, columnIndex: number, columns: ReadonlyArray<TableColumn<T>>) => BodyCellRenderProps
-  transformBodyRow?: (props: BodyRowRenderProps, item: T, index: number) => BodyRowRenderProps
+  rowModel?: TableRenderContext['rowModel']
+  transformBodyCell?: (props: BodyCellRenderProps, column: TableColumn<T>, item: T, columnIndex: number, columns: ReadonlyArray<TableColumn<T>>, context?: TableRowContext) => BodyCellRenderProps
+  transformBodyRow?: (props: BodyRowRenderProps, item: T, index: number, context?: TableRowContext) => BodyRowRenderProps
   transformColumns?: (columns: TableColumn<T>[]) => TableColumn<T>[]
   transformHeaderCell?: (props: HeaderCellRenderProps, column: TableColumn<T>, columnIndex: number, columns: ReadonlyArray<TableColumn<T>>) => HeaderCellRenderProps
   transformHeaderRow?: (props: HeaderRowRenderProps) => HeaderRowRenderProps
-  transformScrollWrapper?: (props: ScrollWrapperRenderProps) => ScrollWrapperRenderProps
+  transformScrollWrapper?: (props: ScrollWrapperRenderProps, context?: TableRenderContext) => ScrollWrapperRenderProps
   transformTable?: (props: TableRenderProps) => TableRenderProps
   transformTableContext?: (children: ReactNode) => ReactNode
-interface TableProps<T extends Record<string, unknown>> extends Omit<BaseTableProps<T>, 'plugins' | 'components'>
+interface TableProps<T extends Record<string, unknown>> extends TableAppearanceProps<T>
   children?: ReactNode
   columns?: TableColumn<T>[]
   data?: T[]
@@ -5473,11 +5502,26 @@ interface TableProps<T extends Record<string, unknown>> extends Omit<BaseTablePr
   scrollWrapper?: ComponentType<{ children: ReactNode; htmlProps?: HTMLAttributes<HTMLDivElement> & { ref?: Ref<HTMLDivElement> }; xstyle?: StyleXStyles[]; beforeTable?: ReactNode; afterTable?: ReactNode }>
   textOverflow?: 'wrap' | 'truncate' = 'wrap'
   verticalAlign?: TableVerticalAlign = 'middle'
+  virtualization?: BaseTableProps<T>['virtualization']
   xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
+interface TableRenderContext
+  headerRowCount: number
+  logicalRowCount: number
+  mode: 'data' | 'children'
+  rowModel: 'flat' | 'tree' | 'grouped' | 'detail' | 'custom'
+  viewport: React.RefObject<HTMLDivElement | null>
 interface TableRenderProps
   htmlProps: HTMLAttributes<HTMLTableElement>
   xstyle: StyleXStyles[]
+interface TableRowContext
+  headerRowCount: number
+  identityStatus: 'valid' | 'missing' | 'invalid' | 'duplicate'
+  key: string | number | undefined
+  kind: 'product' | 'synthetic' | 'unknown'
+  logicalIndex: number
+  logicalRowCount: number
+  render: TableRenderContext
 interface TableRowProps extends BaseProps<HTMLTableRowElement> (props of TableRow)
 interface TableRowStatus
   color: TableRowStatusColor | (string & {})
@@ -5509,6 +5553,8 @@ interface TableTreeRowMeta
   isExpanded: boolean
   level: number
 type TableVerticalAlign = 'middle' | 'top' | 'bottom'
+interface TableVirtualizationCapability
+  @astryxdesign/core/table-virtualization/v1: never
 interface TextAreaProps extends Omit<FieldInputBaseProps, 'onChange' | 'defaultValue'>, TextEntryTraitProps (props of TextArea)
 type TextAreaSize = 'sm' | 'md' | 'lg'
 interface TextAreaStatus
@@ -6219,6 +6265,9 @@ interface UseTableRowIndexConfig<T extends Record<string, unknown>>
   startFrom?: number = 1
 interface UseTableRowStatusConfig<T extends Record<string, unknown>>
   getStatus: (item: T) => (TableRowStatus & { status?: never }) | TableSemanticRowStatus | null
+interface UseTableRowsVirtualizationConfig
+  rowHeight: number
+  viewportHeight: number
 interface UseTableSelectionConfig<T extends Record<string, unknown>>
   getIsAllSelected: () => boolean
   getIsIndeterminate?: () => boolean
@@ -6230,7 +6279,7 @@ interface UseTableSelectionConfig<T extends Record<string, unknown>>
   onSelectAll: (event: { isAllSelected: boolean }) => void
   onSelectItem: (event: { item: T; isSelected: boolean }) => void
 interface UseTableSelectionStateConfig<T extends Record<string, unknown>>
-  data: T[]
+  data?: T[]
   getIsItemEnabled?: (item: T) => boolean = () => true
   getIsItemSelectable?: (item: T) => boolean = () => true
   idKey: (keyof T & string) | ((item: T) => string)
@@ -7782,7 +7831,7 @@ interface MarkdownPluginCapabilities
 type MarkdownPluginData = MarkdownAstDataValue
 type MarkdownPluginDefinition<Name extends string, Node extends MarkdownExtensionNode<Name> = never> = MarkdownSyntaxPluginDefinition<Name, Node> | MarkdownTransformPluginDefinition<Name, Node>
 interface MarkdownPluginEntry<Node extends MarkdownExtensionNode = MarkdownExtensionNode>
-  [markdownPluginNode]: Node
+  @astryxdesign/core/markdown-plugin-node/v1: Node
   apiVersion: 1
   name: string
 interface MarkdownSourceDecoration
@@ -7826,7 +7875,7 @@ interface MarkdownTokenizerInput
   offset: number
   source: string
 interface MarkdownTransform<Node extends MarkdownExtensionNode = never>
-  [markdownTransformNode]?: Node
+  @astryxdesign/core/markdown-transform-node/v1?: Node
 interface MarkdownTransformContext
   display: 'inline' | 'block'
   isFinal: boolean
@@ -8698,8 +8747,10 @@ TableHeaderCellProps (.)
 TableHeaderProps (.)
 TablePlugin (.)
 TableProps (.)
+TableRenderContext (.)
 TableRenderProps (.)
 TableRow (.)
+TableRowContext (.)
 TableRowProps (.)
 TableRowStatus (.)
 TableSelectionState (.)
@@ -8714,6 +8765,7 @@ TableSortableColumnConfig (.)
 TableTextOverflow (.)
 TableTreeRowMeta (.)
 TableVerticalAlign (.)
+TableVirtualizationCapability (.)
 UseTableColumnResizeConfig (.)
 UseTableColumnSettingsConfig (.)
 UseTableColumnSettingsStateConfig (.)
@@ -8725,6 +8777,7 @@ UseTablePaginationConfig (.)
 UseTableRowExpansionConfig (.)
 UseTableRowIndexConfig (.)
 UseTableRowStatusConfig (.)
+UseTableRowsVirtualizationConfig (.)
 UseTableSelectionConfig (.)
 UseTableSelectionStateConfig (.)
 UseTableSelectionStateResult (.)
@@ -8753,6 +8806,7 @@ useTablePagination (.)
 useTableRowExpansion (.)
 useTableRowIndex (.)
 useTableRowStatus (.)
+useTableRowsVirtualization (.)
 useTableSelection (.)
 useTableSelectionState (.)
 useTableSortable (.)

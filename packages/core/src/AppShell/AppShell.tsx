@@ -79,6 +79,7 @@ import {
   focusOutlineStyles,
 } from '../utils/focusOutline.stylex';
 import {useMediaQuery} from '../hooks/useMediaQuery';
+import {matchesMediaQuery} from '../utils/coarsePointer';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {themeProps} from '../utils/themeProps';
 import {useThemeDefinition} from '../theme/useTheme';
@@ -653,8 +654,10 @@ export function AppShell({
     if (!HasActivity || isMobileNavOpen) {
       return;
     }
-    const delayMs = window.matchMedia('(prefers-reduced-motion: reduce)')
-      .matches
+    const delayMs = matchesMediaQuery(
+      window,
+      '(prefers-reduced-motion: reduce)',
+    )
       ? 0
       : MOBILE_NAV_MAX_CLOSE_DELAY_MS + ACTIVITY_HIDE_BUFFER_MS;
     const timeout = setTimeout(() => {

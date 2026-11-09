@@ -20,6 +20,7 @@ import {
 } from '../../../api/doctor/doctor.mjs';
 import {MIN_NODE_VERSION} from '../../../foundation/env/node-version.mjs';
 import {CLI_VERSION, linkThisCliAsProjectCli} from '../../../test-utils/release-fixtures.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 let tmpDir;
 let logCalls;
@@ -473,7 +474,7 @@ describe('doctor — text output mirrors the JSON', () => {
 
 describe('doctor — a configured integration that cannot load', () => {
   it('sets exit code 1 and reports it in the JSON', async () => {
-    const dir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-doctor-exit-'));
+    const dir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-doctor-exit-'));
     const prevCwd = process.cwd();
     const prevExit = process.exitCode;
     process.exitCode = undefined;

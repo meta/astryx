@@ -277,7 +277,10 @@ describe('theme build adaptations', () => {
         css.indexOf('@media (width < 768px) and (pointer: coarse)'),
         css.indexOf('@media (prefers-contrast: more)'),
       );
-      expect(scaleBlock).toContain('--font-size-base: 0.875rem');
+      // Raw steps follow the reader's text size (spec:AST-102 FR3; 1 elsewhere).
+      expect(scaleBlock).toContain(
+        '--_scaled-font-size-base: min(calc(0.875rem * var(--_dynamic-type-body, 1)), var(--_scaled-font-size-lg))',
+      );
       expect(scaleBlock).not.toContain('.astryx-text');
       expect(scaleBlock).not.toContain('.astryx-heading');
       expect(scaleBlock).not.toContain('.astryx-button');
@@ -302,6 +305,70 @@ describe('theme build adaptations', () => {
       );
     },
   );
+
+  it("writes a built theme's font sizes following the reader's text size, as at runtime", async () => {
+    const {defineTheme, generateAdaptationCSS, generateThemeCSS} =
+      await import('@astryxdesign/core/theme');
+    const project = path.join(tmpDir, 'project');
+    const themesDir = path.join(project, 'themes');
+    // Butter's shape: a fixed supporting size, and a phone rule whose scale
+    // turns it back into a step.
+    const input = {
+      name: 'dynamic-type-built',
+      typography: {scale: {base: 14, ratio: 1.25}},
+      tokens: {'--text-supporting-size': '12px'},
+      adaptations: {
+        rules: [
+          {
+            when: {width: {below: 'lg'}, pointer: 'coarse'},
+            value: {typography: {scale: {base: 16, ratio: 1.2225}}},
+          },
+        ],
+      },
+    };
+    const themeFile = writeTheme(themesDir, input.name, JSON.stringify(input));
+    const result = await build(project, themeFile);
+    expect(result.code, result.stderr).toBe(0);
+    const css = fs.readFileSync(
+      path.join(themesDir, 'dynamic-type-built.css'),
+      'utf8',
+    );
+    const compact = value => value.replace(/\s+/g, ' ').trim();
+    const source = defineTheme(input);
+    const runtime = generateThemeCSS(source);
+    // The built CSS writes the sizes as the runtime does: the root's steps and
+    // its fixed supporting size scaled, and the phone rule's steps scaled
+    // inside its own condition.
+    const adaptationCSS = generateAdaptationCSS(source).component;
+    expect(compact(css)).toContain(compact(adaptationCSS));
+    expect(adaptationCSS).toContain(
+      '--_scaled-font-size-base: min(calc(1rem * var(--_dynamic-type-body, 1)), var(--_scaled-font-size-lg));',
+    );
+    expect(css).toContain(
+      '--_scaled-font-size-base: min(calc(0.875rem * var(--_dynamic-type-body, 1)), var(--_scaled-font-size-lg));',
+    );
+    expect(css).toContain(
+      '--text-supporting-size: calc(12px * var(--_dynamic-type-footnote, 1));',
+    );
+
+    // The built module and a theme extending it compile to the same CSS as
+    // the source.
+    const {dynamicTypeBuiltTheme: builtTheme} = await import(
+      pathToFileURL(path.join(themesDir, 'dynamic-type-built.js')).href
+    );
+    expect(generateThemeCSS(builtTheme)).toEqual(runtime);
+    const childInput = {
+      name: 'dynamic-type-child',
+      tokens: {'--text-body-size': '15px'},
+    };
+    expect(
+      generateThemeCSS(defineTheme({...childInput, extends: builtTheme})),
+    ).toEqual(generateThemeCSS(defineTheme({...childInput, extends: source})));
+    expect(
+      generateThemeCSS(defineTheme({...childInput, extends: builtTheme}))
+        .component,
+    ).toContain('--text-body-size: calc(15px * var(--_dynamic-type-body, 1));');
+  });
 
   it('resolves a plain object whose only input-only field is adaptations', async () => {
     const project = path.join(tmpDir, 'project');
@@ -459,7 +526,9 @@ describe('theme build adaptations', () => {
       'utf-8',
     );
     expect(rebuiltCss).toContain('@media (width < 700px)');
-    expect(rebuiltCss).toContain('--font-size-lg: 1.25rem');
+    expect(rebuiltCss).toContain(
+      '--_scaled-font-size-lg: min(calc(1.25rem * var(--_dynamic-type-title3, 1)), var(--_scaled-font-size-xl))',
+    );
     expect(rebuiltCss).toContain('light-dark(#111111, #eeeeee)');
     expect(rebuiltCss).toContain(':root { color-scheme: light dark; }');
     expect(`${rebuilt.stdout}${rebuilt.stderr}`).toContain(
