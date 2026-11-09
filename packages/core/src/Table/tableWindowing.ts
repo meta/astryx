@@ -87,7 +87,9 @@ function planFullRender<T extends Record<string, unknown>>({
     fallbackReason:
       virtualization == null
         ? undefined
-        : 'the virtualization capability was made after this Table mounted; remount the Table to window it',
+        : // The hook registers the implementation when it runs, so with none
+          // registered the value cannot come from it.
+          'virtualization is not a value from useTableRowsVirtualization',
   };
 }
 

@@ -78,6 +78,28 @@ describe('Table windowing admission diagnostics', () => {
     view.rerender(<StatusFixture />);
     expect(warning).toHaveBeenCalledTimes(1);
   });
+  it('names a virtualization value the hook did not make', () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const foreign = Object.freeze({rowHeight: 56, viewportHeight: 240});
+    const view = render(
+      <Table
+        data={data}
+        columns={columns}
+        idKey="id"
+        virtualization={
+          foreign as unknown as BaseTableProps<Item>['virtualization']
+        }
+      />,
+    );
+    expect(view.container.querySelectorAll('tbody > tr')).toHaveLength(
+      data.length,
+    );
+    expect(warning).toHaveBeenCalledTimes(1);
+    expect(warning.mock.calls[0].join(' ')).toContain(
+      'not a value from useTableRowsVirtualization',
+    );
+  });
+
   it('renders fully with one diagnostic when a caller replaces the owned scroll wrapper', () => {
     const CallerWrapper: NonNullable<BaseTableProps<Item>['scrollWrapper']> = ({
       children,

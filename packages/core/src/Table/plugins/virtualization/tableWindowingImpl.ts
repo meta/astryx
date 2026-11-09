@@ -51,6 +51,9 @@ function useWindowedTable<T extends Record<string, unknown>>({
 }: TableWindowInput<T>): TableWindow<T> {
   const config = getTableVirtualizationConfig(virtualization);
   const fallbackReason = useMemo(() => {
+    if (virtualization != null && config == null) {
+      return 'virtualization is not a value from useTableRowsVirtualization';
+    }
     if (mode !== 'data') {
       return 'windowing requires data mode';
     }
@@ -86,6 +89,7 @@ function useWindowedTable<T extends Record<string, unknown>>({
     }
     return undefined;
   }, [
+    virtualization,
     mode,
     scrollWrapper,
     rowModel,
