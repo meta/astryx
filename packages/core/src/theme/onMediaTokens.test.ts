@@ -385,6 +385,85 @@ describe('generateOnMediaCSS', () => {
   });
 });
 
+/** Declarations of each top-level media block, by surface. */
+function mediaDeclarations(css: string, surface: 'dark' | 'light') {
+  const declared: Record<string, string> = {};
+  const unscoped = css.split(/\n@media /)[0];
+  for (const match of unscoped.matchAll(
+    new RegExp(`\\[data-astryx-media="${surface}"\\] \\{([^}]*)\\}`, 'g'),
+  )) {
+    for (const line of match[1].split(';')) {
+      const colon = line.indexOf(':');
+      if (colon > 0) {
+        declared[line.slice(0, colon).trim()] = line.slice(colon + 1).trim();
+      }
+    }
+  }
+  return declared;
+}
+
+describe('generateOnMediaCSS scheme-dependent replays', () => {
+  const theme = defineTheme({
+    name: 'media-scheme-replay',
+    tokens: {
+      '--color-text-secondary': ['#555555', '#aaaaaa'],
+      '--color-border': 'var(--color-text-secondary)',
+      '--color-on-dark': '#ffffff',
+      '--spacing-4': '16px',
+    },
+  });
+  const css = generateOnMediaCSS(theme);
+
+  it('re-declares each scheme-dependent root token with its root value', () => {
+    for (const surface of ['dark', 'light'] as const) {
+      const declared = mediaDeclarations(css, surface);
+      expect(declared['--color-text-secondary']).toBe(
+        theme.tokens['--color-text-secondary'],
+      );
+      expect(declared['--color-border']).toBe('var(--color-text-secondary)');
+    }
+  });
+
+  it('does not re-declare a token whose value ignores the scheme', () => {
+    const declared = mediaDeclarations(css, 'dark');
+    expect(declared).not.toHaveProperty('--spacing-4');
+    expect(declared).not.toHaveProperty('--color-on-dark');
+  });
+
+  it('keeps the surface tokens over the root values', () => {
+    expect(mediaDeclarations(css, 'dark')['--color-accent']).toBe(
+      'var(--color-on-dark)',
+    );
+    expect(mediaDeclarations(css, 'light')['--color-text-primary']).toBe(
+      'var(--color-on-light)',
+    );
+  });
+
+  it('writes no core default the theme leaves unset', () => {
+    expect(mediaDeclarations(css, 'dark')).not.toHaveProperty(
+      '--color-background-surface',
+    );
+  });
+
+  it('restates an adaptation value over the base replay under its query', () => {
+    const adapted = defineTheme({
+      name: 'media-scheme-replay-adapted',
+      tokens: {'--color-text-secondary': ['#555555', '#aaaaaa']},
+      adaptations: {
+        rules: [
+          {
+            when: {contrast: 'more'},
+            value: {tokens: {'--color-text-secondary': '#000000'}},
+          },
+        ],
+      },
+    });
+    const adaptedCss = generateOnMediaCSS(adapted);
+    const query = adaptedCss.slice(adaptedCss.indexOf('\n@media '));
+    expect(query).toContain('--color-text-secondary: #000000;');
+  });
+});
+
 describe('reset.css baseline media rules', () => {
   /**
    * Validates that reset.css provides the minimum baseline for
