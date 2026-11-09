@@ -25,10 +25,10 @@ export interface UseTableRowsVirtualizationConfig {
 /** Geometry intent, not a data slice, renderer, scroll handle or plugin. */
 export interface TableVirtualizationCapability {
   /**
-   * A brand that is never present, so the capability types of the package and
-   * a swizzled copy match.
+   * A brand that is never present at runtime. It is required, so only the
+   * hook makes a capability, and its name is the same in a swizzled copy.
    */
-  readonly '@astryxdesign/core/table-virtualization/v1'?: never;
+  readonly '@astryxdesign/core/table-virtualization/v1': never;
 }
 
 /** Private consumption seam. Parent validates geometry and all logical inputs. */
@@ -67,7 +67,7 @@ export function useTableRowsVirtualization({
     () =>
       Object.freeze({
         [CAPABILITY]: Object.freeze({rowHeight, viewportHeight}),
-      }) as TableVirtualizationCapability,
+      }) as unknown as TableVirtualizationCapability,
     [rowHeight, viewportHeight],
   );
 }

@@ -92,6 +92,11 @@ describe('brands a swizzled copy shares with the package', () => {
       rowHeight: 40,
       viewportHeight: 400,
     });
+    // The brand member is required, so a plain object is not a capability:
+    // only the hook makes one.
+    // @ts-expect-error -- `{}` lacks the capability's brand.
+    const notACapability: typeof result.current = {};
+    expect(copy.getTableVirtualizationConfig(notACapability)).toBeUndefined();
   });
 
   it('the package and a copy give the branded types one shape', () => {
