@@ -753,6 +753,7 @@ component ComplexSelector(props: ComplexSelectorProps)
   prop controlXstyle?: StyleXStyles
   prop data-testid?: string
   prop description?: string
+  prop disabledMessage?: string
   prop handleRef?: React.Ref<ComplexSelectorHandle>
   prop isDisabled?: boolean
   prop isLabelHidden?: boolean

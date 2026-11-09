@@ -4,7 +4,7 @@
 
 /**
  * @file ComplexSelector.tsx
- * @input Uses React, StyleX, Field, Icon slots, Layer positioning, and usePopover
+ * @input Uses React, StyleX, Field, Icon slots, Layer positioning, usePopover, and useTooltip
  * @output Exports a rich-selector shell with exact token-sized input, secondary, and ghost triggers, plus an imperative open/close handle
  * @position Core implementation; consumed by index.ts
  *
@@ -44,6 +44,7 @@ import {Spinner} from '../Spinner';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import type {LayerAlignment, LayerPlacement} from '../Layer/useLayer';
 import {usePopover} from '../Popover/usePopover';
+import {useTooltip} from '../Tooltip/useTooltip';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
 import {
@@ -416,6 +417,29 @@ export interface ComplexSelectorProps<Value> extends Omit<
   isRequired?: boolean;
   /** Blocks opening and value commits, including from an already-open popup. */
   isDisabled?: boolean;
+  /**
+   * Explains why the selector is disabled. When set together with
+   * `isDisabled`, the selector shows a tooltip with this text on hover and
+   * keyboard focus, and the trigger stays focusable (via `aria-disabled`)
+   * so the reason is discoverable by keyboard and assistive technology.
+   * Activation stays blocked.
+   *
+   * Use this instead of wrapping a disabled selector in `Tooltip`, so the
+   * reason is attached to the trigger itself.
+   *
+   * @example
+   * ```
+   * <ComplexSelector
+   *   label="Owner"
+   *   value={owner}
+   *   onChange={setOwner}
+   *   isDisabled
+   *   disabledMessage="You need the Editor role to change this">
+   *   {() => <OwnerPicker />}
+   * </ComplexSelector>
+   * ```
+   */
+  disabledMessage?: string;
   /** Shows loading state on the trigger. */
   isLoading?: boolean;
   /** Validation status. */
@@ -538,6 +562,7 @@ export function ComplexSelector<Value>({
   isOptional = false,
   isRequired = false,
   isDisabled = false,
+  disabledMessage,
   isLoading = false,
   status,
   statusVariant = 'attached',
@@ -606,6 +631,14 @@ export function ComplexSelector<Value>({
       statusVariant: effectiveStatusVariant,
       size: 'sm',
     });
+  // The control box receives hover and bubbled focus while the trigger stays
+  // focusable via aria-disabled.
+  const showsDisabledMessage = isDisabled && Boolean(disabledMessage);
+  const disabledMessageTooltip = useTooltip({
+    placement: 'above',
+    focusTrigger: 'always',
+    isEnabled: showsDisabledMessage,
+  });
   const ariaDescribedBy =
     [
       description ? descriptionId : null,
@@ -614,6 +647,7 @@ export function ComplexSelector<Value>({
         : status?.message
           ? statusMessageId
           : null,
+      showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
     ]
       .filter((id): id is string => id != null)
       .join(' ') || undefined;
@@ -817,9 +851,16 @@ export function ComplexSelector<Value>({
       // Base props reach the caller's control, the primary semantic control
       // in this mode; the selector's own wiring below wins over them.
       ...rest,
-      'aria-describedby': ariaDescribedByProp,
+      'aria-describedby':
+        [
+          ariaDescribedByProp,
+          showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
+        ]
+          .filter(Boolean)
+          .join(' ') || undefined,
       ref: mergeRefs<HTMLElement>(el => {
         popover.triggerRef(el);
+        disabledMessageTooltip.ref(el);
         triggerRef.current = el;
       }, ref),
       id: triggerId,
@@ -853,6 +894,8 @@ export function ComplexSelector<Value>({
       <>
         {renderTrigger(triggerProps)}
         {popup}
+        {showsDisabledMessage &&
+          disabledMessageTooltip.renderTooltip(disabledMessage)}
       </>
     );
   }
@@ -860,7 +903,10 @@ export function ComplexSelector<Value>({
   const selectorContent = (
     <>
       <div
-        ref={popover.triggerRef}
+        ref={el => {
+          popover.triggerRef(el);
+          disabledMessageTooltip.ref(el);
+        }}
         {...pressable}
         onClick={handleControlBoxClick}
         {...mergeProps(
@@ -967,6 +1013,9 @@ export function ComplexSelector<Value>({
       </div>
 
       {popup}
+
+      {showsDisabledMessage &&
+        disabledMessageTooltip.renderTooltip(disabledMessage)}
     </>
   );
 

@@ -133,6 +133,12 @@ export const docs = {
           description: 'Disables the selector.',
         },
         {
+          name: 'disabledMessage',
+          type: 'string',
+          description:
+            'Explains why the selector is disabled. With isDisabled, shows the reason as a tooltip on hover and keyboard focus of the trigger, which stays focusable (aria-disabled) like every disabled selector; activation stays blocked. Use this instead of wrapping a disabled ComplexSelector in Tooltip.',
+        },
+        {
           name: 'isLoading',
           type: 'boolean',
           description: 'Shows loading state on the trigger.',
@@ -307,6 +313,11 @@ export const docs = {
         description:
           'Do not use ComplexSelector for a plain single-column text list; use Selector instead.',
       },
+      {
+        guidance: false,
+        description:
+          'Wrap a disabled ComplexSelector in Tooltip to explain why it is disabled. Use the disabledMessage prop, which attaches the reason to the trigger itself.',
+      },
     ],
   },
 };
@@ -368,6 +379,11 @@ export const docsDense = {
         description:
           'Do not use ComplexSelector for a plain single-column text list; use Selector instead.',
       },
+      {
+        guidance: false,
+        description:
+          'Wrap a disabled ComplexSelector in Tooltip to explain why it is disabled. Use the disabledMessage prop, which attaches the reason to the trigger itself.',
+      },
     ],
   },
   propDescriptions: {
@@ -377,6 +393,8 @@ export const docsDense = {
     changeAction: 'Async action after onChange; drives optimistic value/busy.',
     children: 'Render custom dialog content from (value,onChange,close,state).',
     triggerLabel: 'Closed trigger label/content.',
+    disabledMessage:
+      'Why disabled; w/ isDisabled shows tooltip on hover/focus, trigger stays focusable via aria-disabled; use instead of Tooltip wrapper.',
     variant:
       'input for forms; secondary beside secondary buttons; ghost beside ghost buttons.',
     startIcon: 'Leading trigger icon.',
