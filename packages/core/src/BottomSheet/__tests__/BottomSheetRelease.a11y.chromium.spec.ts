@@ -384,9 +384,14 @@ test('a mouse close under reduced motion moves the sheet no further', async ({
   const gap = Math.round(lift.upStamp - lift.moveStamp);
   // Read the DOM, not the accessibility tree: a closing dialog leaves the
   // tree, so a role locator finds nothing once the close has started.
+  // Past the tracker's 40 ms stillness interval the release reads as still.
+  const cause =
+    gap > 40
+      ? `the drag read as a still release (${gap} ms from the last move to the lift)`
+      : `${gap} ms from the last move to the lift`;
   await expect
     .poll(
-      () =>
+      async () =>
         page.evaluate(
           () =>
             document
@@ -394,7 +399,7 @@ test('a mouse close under reduced motion moves the sheet no further', async ({
               ?.getAttribute('aria-modal') ?? null,
         ),
       {
-        message: `the release did not ask the sheet to close: the drag read as a still release (${gap} ms from the last move to the lift), so its projection stayed short of the dismiss line`,
+        message: `the release did not ask the sheet to close: ${cause}, so its projection stayed short of the dismiss line`,
         timeout: 2_000,
       },
     )
