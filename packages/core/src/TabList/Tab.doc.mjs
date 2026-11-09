@@ -14,6 +14,46 @@ export const docs = {
     defaults: {value: 'tab-1', label: 'Tab'},
     wrapper: {component: 'TabList', props: {value: 'tab-1'}},
   },
+  examples: [
+    {
+      label: 'Describe a tab with help text',
+      code: `import {useRef} from 'react';
+import {Icon} from '@astryxdesign/core/Icon';
+import {Tab, TabList} from '@astryxdesign/core/TabList';
+import {Tooltip} from '@astryxdesign/core/Tooltip';
+
+// The tab is one button, so its help text is a Tooltip anchored on the Tab,
+// not a second button inside it. The tooltip describes the tab itself, and
+// the info glyph in endContent is decorative.
+function DescribedTab({value, label, description}) {
+  const tabRef = useRef(null);
+  return (
+    <>
+      <Tab
+        ref={tabRef}
+        value={value}
+        label={label}
+        endContent={<Icon icon="info" size="sm" />}
+      />
+      <Tooltip content={description} anchorRef={tabRef} />
+    </>
+  );
+}
+
+function SettingsTabs() {
+  return (
+    <TabList value="general" onChange={() => {}} role="tablist" aria-label="Settings">
+      <DescribedTab
+        value="general"
+        label="General"
+        description="Name, language, and time zone for this workspace."
+      />
+      <Tab value="advanced" label="Advanced" />
+    </TabList>
+  );
+}`,
+    },
+  ],
   props: [
     {
       name: 'value',
@@ -87,7 +127,7 @@ export const docs = {
       name: 'endContent',
       type: 'ReactNode',
       description:
-        'Content rendered after the label, such as a badge count or status dot.',
+        'Content rendered after the label, such as a badge count or status dot. The tab is one button, so endContent holds only non-interactive content: no button, link, InfoTip, or other focusable control. To explain a tab, anchor a Tooltip on the Tab through its ref and put a decorative info Icon here.',
       slotElements: [
         {
           __element: 'Icon',
@@ -169,7 +209,8 @@ export const docsZh = {
     {
       name: 'endContent',
       type: 'ReactNode',
-      description: '在标签文本之后渲染的内容，例如徽章计数或状态点。',
+      description:
+        '在标签文本之后渲染的内容，例如徽章计数或状态点。标签本身是一个按钮，因此 endContent 只能放非交互内容：不能放按钮、链接、InfoTip 或其他可聚焦控件。要说明一个标签，请通过 ref 把 Tooltip 锚定在 Tab 上，并在这里放一个装饰性的信息 Icon。',
     },
     {
       name: 'xstyle',
@@ -196,7 +237,8 @@ export const docsDense = {
     as: 'Custom link component overriding LinkProvider; only w/ href.',
     icon: 'Icon shown when not selected.',
     selectedIcon: 'Icon shown when selected; falls back to icon.',
-    endContent: 'Content after the label (badge, status dot, etc.).',
+    endContent:
+      'Non-interactive content after the label (badge, status dot). No focusable control: explain a tab with a Tooltip anchored on the Tab (anchorRef) + a decorative info Icon here.',
     xstyle:
       'StyleX styles for layout customization. Must be stylex.create() value, not inline style.',
   },

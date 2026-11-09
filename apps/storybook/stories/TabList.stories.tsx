@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {useState, type CSSProperties} from 'react';
+import {useRef, useState, type CSSProperties} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {TabList, Tab, TabMenu} from '@astryxdesign/core/TabList';
 import {Button} from '@astryxdesign/core/Button';
@@ -11,6 +11,8 @@ import {
   StackItem,
 } from '@astryxdesign/core/Layout';
 import {Heading} from '@astryxdesign/core/Text';
+import {Icon} from '@astryxdesign/core/Icon';
+import {Tooltip} from '@astryxdesign/core/Tooltip';
 import {
   PlusIcon,
   FunnelIcon,
@@ -1045,6 +1047,59 @@ export const TabsPattern: Story = {
           </div>
         ))}
       </div>
+    );
+  },
+};
+
+/**
+ * A tab's help text: a Tooltip anchored on the Tab, so it describes the tab
+ * itself. The tab stays one button; the info glyph is decorative.
+ */
+function DescribedTab({
+  value,
+  label,
+  description,
+}: {
+  value: string;
+  label: string;
+  description: string;
+}) {
+  const tabRef = useRef<HTMLButtonElement>(null);
+  return (
+    <>
+      <Tab
+        ref={tabRef}
+        value={value}
+        label={label}
+        endContent={<Icon icon="info" size="sm" />}
+      />
+      <Tooltip content={description} anchorRef={tabRef} />
+    </>
+  );
+}
+
+export const DescribedTabs: Story = {
+  name: 'Tab With Help Text',
+  render: () => {
+    const [value, setValue] = useState('general');
+    return (
+      <TabList
+        value={value}
+        onChange={setValue}
+        role="tablist"
+        aria-label="Settings">
+        <DescribedTab
+          value="general"
+          label="General"
+          description="Name, language, and time zone for this workspace."
+        />
+        <DescribedTab
+          value="members"
+          label="Members"
+          description="Who can open this workspace, and what they can change."
+        />
+        <Tab value="advanced" label="Advanced" />
+      </TabList>
     );
   },
 };
