@@ -12,14 +12,13 @@
 
 import {cleanup, renderHook} from '@testing-library/react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
-
-type ScrollLockModule = typeof import('./useScrollLock');
-type RootStylesModule = typeof import('./rootScrollStyles');
+import type * as RootStylesModule from './rootScrollStyles';
+import type * as ScrollLockModule from './useScrollLock';
 
 /** One load of the scroll-lock modules, as the package or a copy has. */
 async function load(): Promise<{
-  useScrollLock: ScrollLockModule['useScrollLock'];
-  isScrollLockActive: RootStylesModule['isScrollLockActive'];
+  useScrollLock: typeof ScrollLockModule.useScrollLock;
+  isScrollLockActive: typeof RootStylesModule.isScrollLockActive;
 }> {
   vi.resetModules();
   const {useScrollLock} = await import('./useScrollLock');
