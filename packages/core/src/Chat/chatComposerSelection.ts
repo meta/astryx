@@ -73,11 +73,8 @@ export function restoreSelectionRange(range: Range): void {
  * When a collapsed range sits on an element boundary, walk it into the preceding
  * text node if one exists. Chromium anchors an IME composition to the DOM boundary
  * where it starts; from an element boundary, the first preedit commits as raw
- * letters instead of composing.
- *
- * If the element has no landable text node at that edge (for example, an empty
- * editable, or ending in a non-editable token or br element), append an empty
- * text node at that boundary and land inside it so composition can attach.
+ * letters instead of composing. Without a preceding text node, the range stays
+ * where it is.
  */
 export function landInsideTrailingTextNode(
   editable: HTMLElement,
@@ -109,14 +106,6 @@ export function landInsideTrailingTextNode(
       }
     }
   }
-  const emptyText = document.createTextNode('');
-  if (offset < editable.childNodes.length) {
-    editable.insertBefore(emptyText, editable.childNodes[offset]);
-  } else {
-    editable.appendChild(emptyText);
-  }
-  range.setStart(emptyText, 0);
-  range.collapse(true);
 }
 
 /**

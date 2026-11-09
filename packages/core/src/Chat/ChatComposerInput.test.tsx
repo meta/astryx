@@ -2144,7 +2144,7 @@ describe('ChatComposerInput', () => {
     });
   });
 
-  describe('IME caret anchoring into text nodes (issue #6411)', () => {
+  describe('IME caret anchoring into text nodes', () => {
     it('anchors placeCaretAtEnd inside a Text node when content is present', () => {
       render(
         <ChatComposer onSubmit={() => {}} input={<ChatComposerInput />} />,
@@ -2157,19 +2157,6 @@ describe('ChatComposerInput', () => {
       expect(selection.rangeCount).toBeGreaterThan(0);
       expect(selection.anchorNode?.nodeType).toBe(Node.TEXT_NODE);
       expect(selection.anchorOffset).toBe('hello world'.length);
-    });
-
-    it('anchors placeCaretAtEnd inside an empty Text node when editable is empty', () => {
-      render(
-        <ChatComposer onSubmit={() => {}} input={<ChatComposerInput />} />,
-      );
-      const textbox = screen.getByRole('textbox');
-      placeCaretAtEnd(textbox);
-
-      const selection = window.getSelection()!;
-      expect(selection.rangeCount).toBeGreaterThan(0);
-      expect(selection.anchorNode?.nodeType).toBe(Node.TEXT_NODE);
-      expect(selection.anchorOffset).toBe(0);
     });
 
     it('anchors insertTextAtCursor inside the inserted text node', () => {
