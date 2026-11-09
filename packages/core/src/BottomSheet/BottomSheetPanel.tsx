@@ -26,6 +26,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
   useSyncExternalStore,
   type ReactNode,
   type Ref,
@@ -777,8 +778,6 @@ export function BottomSheetPanel({
   const dismissKeyboardRef = useRef<
     ((focusTarget?: HTMLElement) => void) | null
   >(null);
-  const previousStateRef = useRef(state);
-  const reactivatedEntranceRef = useRef(false);
   const onMotionStartRef = useRef(onMotionStart);
   const onMotionCompleteRef = useRef(onMotionComplete);
   const onScrimFadeDurationRef = useRef(onScrimFadeDuration);
@@ -786,20 +785,32 @@ export function BottomSheetPanel({
   const pendingMotionCompleteRef = useRef<BottomSheetPanelMotion | null>(null);
 
   const isEntering = state.kind === 'open' && state.entering;
-  const previousState = previousStateRef.current;
-  const wasEntering = previousState.kind === 'open' && previousState.entering;
-  if (isEntering && !wasEntering) {
-    reactivatedEntranceRef.current = previousState.kind === 'retained';
-  } else if (!isEntering) {
-    reactivatedEntranceRef.current = false;
+  // The last state's kind and entering flag, and whether this entrance brings
+  // back a retained sheet. State adjusted during render, as the state changes:
+  // a ref written here would keep a state from a render React discards.
+  const [entrance, setEntrance] = useState({
+    kind: state.kind,
+    isEntering,
+    isReactivated: false,
+  });
+  if (entrance.kind !== state.kind || entrance.isEntering !== isEntering) {
+    setEntrance({
+      kind: state.kind,
+      isEntering,
+      isReactivated: !isEntering
+        ? false
+        : entrance.isEntering
+          ? entrance.isReactivated
+          : entrance.kind === 'retained',
+    });
   }
+  const isReactivatedEntrance = entrance.isReactivated;
 
   useLayoutEffect(() => {
-    previousStateRef.current = state;
     onMotionStartRef.current = onMotionStart;
     onMotionCompleteRef.current = onMotionComplete;
     onScrimFadeDurationRef.current = onScrimFadeDuration;
-  }, [onMotionComplete, onMotionStart, onScrimFadeDuration, state]);
+  }, [onMotionComplete, onMotionStart, onScrimFadeDuration]);
 
   const isInteractive = state.kind === 'open';
   const isPresented = state.kind !== 'hidden';
@@ -814,29 +825,35 @@ export function BottomSheetPanel({
     isRetained && !isReducedMotion ? state.alignmentOffset : 0;
 
   // Everything derived from the snap points keys off their identity, not the
-  // array's: the resolver's identity is the hook's signal that the stops
-  // changed, so it must not churn on a re-render the drag caused. The memo
-  // reads the points through a ref, so the resolver resolves them at call time
-  // — against whatever the viewport is then, not what it was at memo time.
+  // array's. The resolver's identity is the hook's signal that the stops
+  // changed, so it must not churn on a re-render the drag caused. The points
+  // are kept in state with their key, adjusted during render when the key
+  // changes. So a render React discards cannot leave its points behind. The
+  // resolver resolves them at call time — against whatever the viewport is
+  // then, not what it was at memo time.
   const snapPointsKey = snapPointsKeyFor(snapPoints);
-  const snapPointsRef = useRef(snapPoints);
-  snapPointsRef.current = snapPoints;
+  const [keyedSnapPoints, setKeyedSnapPoints] = useState({
+    key: snapPointsKey,
+    points: snapPoints,
+  });
+  if (keyedSnapPoints.key !== snapPointsKey) {
+    setKeyedSnapPoints({key: snapPointsKey, points: snapPoints});
+  }
   const {snapHeights, ignoredSnapPointsMessage} = useMemo(() => {
-    if (snapPointsKey === '') {
+    const {key, points} = keyedSnapPoints;
+    if (key === '') {
       return {snapHeights: undefined, ignoredSnapPointsMessage: ''};
     }
-    const ignored = (snapPointsRef.current ?? []).filter(
-      point => !isValidSnapPoint(point),
-    );
+    const ignored = (points ?? []).filter(point => !isValidSnapPoint(point));
     return {
       snapHeights: () =>
-        resolveSnapPoints(snapPointsRef.current ?? [], layoutViewportHeight()),
+        resolveSnapPoints(points ?? [], layoutViewportHeight()),
       ignoredSnapPointsMessage:
         ignored.length === 0
           ? ''
           : `snapPoints ignored ${JSON.stringify(ignored)}. A snap point is a viewport fraction above 0 and up to 1 (0.5 is half the screen), a px length ('320px'), or a percentage ('50%').`,
     };
-  }, [snapPointsKey]);
+  }, [keyedSnapPoints]);
   useDevWarning(
     'BottomSheet',
     ignoredSnapPointsMessage,
@@ -1007,7 +1024,7 @@ export function BottomSheetPanel({
         pendingMotionCompleteRef.current = motion;
       }
     };
-    if (motion === 'entering' && reactivatedEntranceRef.current) {
+    if (motion === 'entering' && isReactivatedEntrance) {
       complete();
       return;
     }
@@ -1071,7 +1088,7 @@ export function BottomSheetPanel({
       motion === 'fading' || crossFadeMotion ? 'opacity' : 'transform',
       complete,
     );
-  }, [motion, isCrossFade, playedDragExit]);
+  }, [motion, isCrossFade, playedDragExit, isReactivatedEntrance]);
   // The snap is transform-only; the layout height reconciles when it lands.
   // waitForTransition — the same helper the motion states use — resolves that
   // even when no `transitionend` is coming: inline or computed

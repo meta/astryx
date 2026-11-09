@@ -709,12 +709,14 @@ export function useSheetGestures({
   const isOpenRef = useRef(isOpen);
   isOpenRef.current = isOpen;
 
-  // The resolver is refreshed during render, not with the callbacks below: the
-  // layout effect that re-anchors on a change to it runs BEFORE passive
-  // effects, so a resolver parked in one would still be the previous set of
-  // stops by the time the re-anchor read it.
+  // Syncs the resolver for the drag's callbacks. It is a layout effect
+  // declared before the re-anchor effect, so the re-anchor reads the new
+  // stops; a passive effect would run after it. A write during render would
+  // keep a resolver from a render React discards.
   const snapHeightsRef = useRef(snapHeights);
-  snapHeightsRef.current = snapHeights;
+  useLayoutEffect(() => {
+    snapHeightsRef.current = snapHeights;
+  }, [snapHeights]);
   const onTravelStartRef = useRef(onTravelStart);
   onTravelStartRef.current = onTravelStart;
 

@@ -19,7 +19,15 @@ import {
   onTestFinished,
 } from 'vitest';
 import {act, cleanup, render, screen, fireEvent} from '@testing-library/react';
-import {Profiler, createRef, useState, type ReactNode} from 'react';
+import {
+  Profiler,
+  Suspense,
+  createRef,
+  startTransition,
+  use,
+  useState,
+  type ReactNode,
+} from 'react';
 import {BottomSheet} from './BottomSheet';
 import {BottomSheetEscapeContext} from './bottomSheetEscape';
 import {resetBottomSheetStackForTests} from './bottomSheetStack';
@@ -2055,6 +2063,62 @@ describe('BottomSheet', () => {
 
       // Half of the 800px window is 400px of visible sheet: 736 - 400 = 336px
       // of travel, taken as layout height once the snap lands.
+      dragHandleTo(336);
+
+      expect(sheet.style.height).toBe('448px');
+      expect(sheet.style.transform).toBe('');
+    });
+
+    it('rests at the committed stop when React discards a render that moves it', async () => {
+      const observers = mockResizeObserverInstances();
+      mockVisualViewport(800);
+      mockWindowHeight(800);
+      // A transition that suspends for good: React renders the new stops,
+      // then keeps the committed tree and never commits that render.
+      const forever = new Promise<never>(() => {});
+      function Forever(): null {
+        use(forever);
+        return null;
+      }
+      function Screen({
+        snapPoints,
+        isPending,
+      }: {
+        snapPoints: ReadonlyArray<number>;
+        isPending: boolean;
+      }) {
+        return (
+          <Suspense fallback={null}>
+            <BottomSheet
+              isOpen
+              onOpenChange={() => {}}
+              label="Release notes"
+              snapPoints={snapPoints}
+              height="tall">
+              Content
+            </BottomSheet>
+            {isPending ? <Forever /> : null}
+          </Suspense>
+        );
+      }
+      const view = render(<Screen snapPoints={[0.5]} isPending={false} />);
+      const sheet = getSheet();
+      const sheetObserver = observers.find(instance =>
+        instance.observed.has(sheet),
+      );
+      act(() => {
+        sheetObserver?.callback(
+          [resizeEntry(784, 736)],
+          sheetObserver as unknown as ResizeObserver,
+        );
+      });
+      await act(async () => {
+        startTransition(() => {
+          view.rerender(<Screen snapPoints={[0.25]} isPending />);
+        });
+      });
+
+      // The committed stop is still half the window: 336px of travel.
       dragHandleTo(336);
 
       expect(sheet.style.height).toBe('448px');
