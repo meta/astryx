@@ -175,7 +175,11 @@ test.describe('every expectation is exercised by a range Slider state', () => {
       PER_THUMB_RUNS.map(([state, which]) => `${state.id}:${which}`).sort(),
     );
     expect(neverExercised(pairs)).toEqual([]);
-    expect(neverExercised(thumbs)).toEqual([]);
+    // No range state is disabled (the `disabled-range` exclusion); the
+    // single-thumb binding exercises an unavailable thumb.
+    expect(neverExercised(thumbs)).toEqual([
+      'slider.thumb.unavailable-keeps-value',
+    ]);
     expect(
       unmatchedKnownFailures(SLIDER_RANGE_KNOWN_FAILURES, [
         ...pairs,

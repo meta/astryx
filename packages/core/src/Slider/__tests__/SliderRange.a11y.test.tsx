@@ -127,9 +127,10 @@ describe('Slider (range) binding inventory', () => {
     expect(new Set(stories).size).toBe(stories.length);
   });
 
-  it('keeps group and pointer ownership explicit', () => {
+  it('keeps group, disabled-range and pointer ownership explicit', () => {
     expect(SLIDER_RANGE_EXCLUSIONS.map(exclusion => exclusion.id)).toEqual([
       'group-semantics',
+      'disabled-range',
       'pointer-drag-model',
     ]);
     for (const exclusion of SLIDER_RANGE_EXCLUSIONS) {

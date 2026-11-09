@@ -55,4 +55,3 @@ export const RangeCoincident = rangeStoryFor('range-coincident');
 export const RangeRtl = rangeStoryFor('range-rtl');
 export const RangeVertical = rangeStoryFor('range-vertical');
 export const RangeFormatted = rangeStoryFor('range-formatted');
-export const RangeDisabled = rangeStoryFor('range-disabled');

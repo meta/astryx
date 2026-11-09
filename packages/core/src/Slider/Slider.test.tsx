@@ -209,6 +209,23 @@ describe('Slider', () => {
     expect(control).not.toContainElement(screen.getByText('50'));
   });
 
+  it('range thumb bounds include the minStepsBetweenThumbs gap', () => {
+    render(
+      <Slider
+        label="Range"
+        value={[20, 80] as [number, number]}
+        min={0}
+        max={100}
+        step={5}
+        minStepsBetweenThumbs={2}
+      />,
+    );
+    const sliders = screen.getAllByRole('slider');
+    // minGap = 2 steps * 5 = 10
+    expect(sliders[0]).toHaveAttribute('aria-valuemax', '70');
+    expect(sliders[1]).toHaveAttribute('aria-valuemin', '30');
+  });
+
   // --- Label association ---
 
   // A <label htmlFor> must point at an existing form-associated element;
