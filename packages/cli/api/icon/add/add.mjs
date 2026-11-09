@@ -435,7 +435,12 @@ export async function iconAdd(exportName, options) {
       }
       throw error;
     }
-    const changed = dataChanged || created != null || generatedChanged;
+    // A renamed package's new name alone is not an added icon.
+    const added =
+      JSON.stringify(next) !== JSON.stringify(set.data) ||
+      created != null ||
+      generatedChanged;
+    const changed = dataChanged || added;
     // A ./ file publishes only when package.json `files` lists it; the
     // author adds it (architecture:cli-surface INV16).
     const note =
@@ -456,6 +461,8 @@ export async function iconAdd(exportName, options) {
         ...(created ? {newDefinition: created.name} : {}),
         files,
         changed,
+        added,
+        ...(where.moduleUpdate ? {moduleUpdate: where.moduleUpdate} : {}),
         ...(note ? {note} : {}),
       },
     };
@@ -766,6 +773,7 @@ async function addVariantForAll({cwd, from, selector, variant}) {
       missing,
       files,
       changed: dataChanged || written.changed,
+      ...(where.moduleUpdate ? {moduleUpdate: where.moduleUpdate} : {}),
     },
   };
 }

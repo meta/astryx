@@ -77,10 +77,8 @@ export async function iconMap(definition, icon, options = {}) {
         ERROR_CODES.ERR_MISSING_ARGUMENT,
       );
     }
-    const {packageDir, set, moduleRenamed} = await findLocalIconSet(
-      cwd,
-      selector,
-    );
+    const {packageDir, set, moduleRenamed, moduleUpdate} =
+      await findLocalIconSet(cwd, selector);
     // The docs' kebab id (`eye-slash`) names the same definition, and a
     // library's other name for an icon (`trash-2`) names the same icon.
     definition = definitionNameOf(definition, mappableDefinitions(set));
@@ -143,6 +141,7 @@ export async function iconMap(definition, icon, options = {}) {
         icon: remove ? null : /** @type {string} */ (icon),
         previous,
         changed,
+        ...(moduleUpdate ? {moduleUpdate} : {}),
         ...(files.length > 0 ? {files} : {}),
       },
     };
@@ -165,7 +164,7 @@ async function mapMany({cwd, selector, pairs}) {
       ERROR_CODES.ERR_MISSING_ARGUMENT,
     );
   }
-  const {packageDir, set, moduleRenamed} = await findLocalIconSet(
+  const {packageDir, set, moduleRenamed, moduleUpdate} = await findLocalIconSet(
     cwd,
     selector,
   );
@@ -235,6 +234,7 @@ async function mapMany({cwd, selector, pairs}) {
       file: path.relative(packageDir, set.dataPath).split(path.sep).join('/'),
       entries,
       changed,
+      ...(moduleUpdate ? {moduleUpdate} : {}),
       ...(files.length > 0 ? {files} : {}),
     },
   };

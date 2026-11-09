@@ -168,3 +168,106 @@ describe('a renamed icon-set package', () => {
     }
   });
 });
+
+describe('receipts after a package rename', () => {
+  const MODULE_LINE =
+    '[ok] Updated module to "@acme/new-icons" (was "@acme/old-icons"), the package name in package.json.';
+
+  /** @param {string[]} args */
+  async function textOf(args) {
+    const res = await runCli(['experimental', 'icon', ...args], pkg);
+    expect(res.code, res.stdout + res.stderr).toBe(0);
+    return res.stdout;
+  }
+
+  it('a repeated add says the icon is already there and reports the module rewrite', async () => {
+    await wrapAndMap();
+    await textOf(['add', 'Bin', '--from', LIBRARY, '--definition', 'delete']);
+    writePackage('@acme/new-icons');
+    const done = await json([
+      'experimental',
+      'icon',
+      'add',
+      'Bin',
+      '--from',
+      LIBRARY,
+      '--definition',
+      'delete',
+    ]);
+    expect(done.code, JSON.stringify(done.body)).toBe(0);
+    expect(done.body.data).toMatchObject({
+      added: false,
+      changed: true,
+      moduleUpdate: {previous: '@acme/old-icons', module: '@acme/new-icons'},
+    });
+    writePackage('@acme/old-icons');
+    await textOf(['map', 'close', 'cross']);
+    writePackage('@acme/new-icons');
+    const out = await textOf([
+      'add',
+      'Bin',
+      '--from',
+      LIBRARY,
+      '--definition',
+      'delete',
+    ]);
+    expect(out).toContain(
+      '[ok] BinIcon is already "bin" and map.delete names it.',
+    );
+    expect(out).toContain(MODULE_LINE);
+    expect(out).not.toContain('Added');
+  });
+
+  it('a single map that changes no entry says so and reports the module rewrite', async () => {
+    await wrapAndMap();
+    writePackage('@acme/new-icons');
+    const out = await textOf(['map', 'close', 'cross']);
+    expect(out).toContain('[ok] map.close is already "cross".');
+    expect(out).toContain(MODULE_LINE);
+    expect(out).not.toContain('(was "cross")');
+    expect(dataOf().module).toBe('@acme/new-icons');
+  });
+
+  it('map --remove on an unmapped definition says it has no entry and reports the module rewrite', async () => {
+    await wrapAndMap();
+    await textOf(['map', 'close', '--remove']);
+    writePackage('@acme/new-icons');
+    const res = await json([
+      'experimental',
+      'icon',
+      'map',
+      'close',
+      '--remove',
+    ]);
+    expect(res.body.data).toMatchObject({
+      previous: null,
+      changed: true,
+      moduleUpdate: {previous: '@acme/old-icons', module: '@acme/new-icons'},
+    });
+    writePackage('@acme/old-icons');
+    await textOf(['map', 'search', '--remove']);
+    writePackage('@acme/new-icons');
+    const out = await textOf(['map', 'search', '--remove']);
+    expect(out).toContain('has no map.search.');
+    expect(out).toContain(MODULE_LINE);
+    expect(out).not.toContain('Removed');
+    expect(out).not.toContain('"null"');
+  });
+
+  it('--pairs words each entry from its previous icon and reports the module rewrite', async () => {
+    await wrapAndMap();
+    await textOf(['map', 'search', '--remove']);
+    writePackage('@acme/new-icons');
+    const out = await textOf([
+      'map',
+      '--pairs',
+      'close=cross,menu=bin,search=bin',
+    ]);
+    expect(out).toContain('2 of 3 map entries changed');
+    expect(out).toContain('close = "cross" (unchanged)');
+    expect(out).toContain('menu = "bin" (was "cross")');
+    expect(out).toContain('search = "bin" (was not mapped)');
+    expect(out).toContain(MODULE_LINE);
+    expect(dataOf().module).toBe('@acme/new-icons');
+  });
+});

@@ -156,6 +156,7 @@
  * @property {string} data.file - The data file, relative to the package.
  * @property {Array<{definition: string, icon: string, previous: string | null, changed: boolean}>} data.entries - Each pair, in order, and what it replaced.
  * @property {boolean} data.changed - Whether the file was written.
+ * @property {{previous: string, module: string}} [data.moduleUpdate] - The data file's `module` before and after this command, when the package was renamed and the command wrote its new name.
  * @property {string[]} [data.files] - The generated module and its types, when its theme map was rewritten.
  */
 
@@ -172,6 +173,7 @@
  * @property {string | null} data.icon - The id of the icon now mapped (the icon may be named by any name `map` accepts); null after `remove`.
  * @property {string | null} data.previous - The icon id it replaced.
  * @property {boolean} data.changed - Whether the file was written.
+ * @property {{previous: string, module: string}} [data.moduleUpdate] - The data file's `module` before and after this command, when the package was renamed and the command wrote its new name.
  * @property {string[]} [data.files] - The generated module and its types, when its theme map was rewritten.
  */
 
@@ -207,6 +209,7 @@
  * @property {string[]} data.missing - Ids of icons `from` has no export for; they keep no such variant.
  * @property {string[]} data.files - Files written, relative to the package.
  * @property {boolean} data.changed
+ * @property {{previous: string, module: string}} [data.moduleUpdate] - The data file's `module` before and after this command, when the package was renamed and the command wrote its new name.
  */
 
 /**
@@ -223,6 +226,8 @@
  * @property {string} [data.newDefinition] - The set's own definition the command wrote.
  * @property {string[]} data.files - Files written, relative to the package.
  * @property {boolean} data.changed - Whether anything was written.
+ * @property {boolean} data.added - Whether the icon, its variant, its `map` entry, or a new definition was added. False when the set already had them, even when `changed` is true because the command wrote a renamed package's new name.
+ * @property {{previous: string, module: string}} [data.moduleUpdate] - The data file's `module` before and after this command, when the package was renamed and the command wrote its new name.
  * @property {string} [data.note] - What the package still needs, as text to copy: the entry line that exports the icon from the set's module, and the package.json `files` that publishes a `./` source.
  */
 

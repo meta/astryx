@@ -148,8 +148,9 @@ function packageDirOf(cwd) {
  * @param {string} [selector] a set name
  * The set's `module` names the package as package.json names it now;
  * `moduleRenamed` says the data file still names an old name, so a command
- * writes the data file even when nothing else changes.
- * @returns {Promise<{packageDir: string, pkg: Record<string, any>, root: string, set: DiscoveredIconSet, sets: DiscoveredIconSet[], moduleRenamed: boolean}>}
+ * writes the data file even when nothing else changes; `moduleUpdate` gives
+ * the old and the new name for the receipt, else null.
+ * @returns {Promise<{packageDir: string, pkg: Record<string, any>, root: string, set: DiscoveredIconSet, sets: DiscoveredIconSet[], moduleRenamed: boolean, moduleUpdate: {previous: string, module: string} | null}>}
  */
 export async function findLocalIconSet(cwd, selector) {
   const packageDir = packageDirOf(cwd);
@@ -195,9 +196,19 @@ export async function findLocalIconSet(cwd, selector) {
   if (named.length === 1) {
     const set = {...named[0], packageDir};
     const module = moduleInPackage(set.data.module, pkg.name);
-    const moduleRenamed = module !== set.data.module;
+    const moduleUpdate =
+      module !== set.data.module ? {previous: set.data.module, module} : null;
+    const moduleRenamed = moduleUpdate != null;
     if (moduleRenamed) set.data = {...set.data, module};
-    return {packageDir, pkg, root, set, sets: found.sets, moduleRenamed};
+    return {
+      packageDir,
+      pkg,
+      root,
+      set,
+      sets: found.sets,
+      moduleRenamed,
+      moduleUpdate,
+    };
   }
   const broken = selector
     ? found.errors.find(error => error.name === selector)
