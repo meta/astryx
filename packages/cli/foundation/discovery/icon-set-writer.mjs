@@ -100,11 +100,14 @@ export function iconIdOf(name) {
 
 /**
  * The name an icon set exports an icon as: PascalCase ending in `Icon`
- * (`Trash2` → `Trash2Icon`; `TrashIcon` stays).
+ * (`Trash2` → `Trash2Icon`; `TrashIcon` stays). A name that starts with a
+ * digit gets the word `Digit` in front (`0` → `Digit0Icon`), because a
+ * JavaScript name cannot start with a digit.
  * @param {string} name
  */
 export function iconExportName(name) {
-  const pascal = name[0].toUpperCase() + name.slice(1);
+  const upper = name[0].toUpperCase() + name.slice(1);
+  const pascal = /^[0-9]/u.test(upper) ? `Digit${upper}` : upper;
   return pascal.endsWith('Icon') ? pascal : `${pascal}Icon`;
 }
 
