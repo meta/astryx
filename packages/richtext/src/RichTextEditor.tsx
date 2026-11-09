@@ -82,6 +82,7 @@ import {CodeBackspacePlugin} from './internal/CodeBackspacePlugin';
 import {CodeBlockHeaderPlugin} from './internal/CodeBlockHeaderPlugin';
 import {CodePastePlugin} from './internal/CodePastePlugin';
 import {CodeSyntaxPlugin} from './internal/CodeSyntaxPlugin';
+import {BlockDirectionPlugin} from './internal/BlockDirectionPlugin';
 import {CodeTabPlugin} from './internal/CodeTabPlugin';
 import {MarkdownExtensionsPlugin} from './internal/MarkdownExtensionsPlugin';
 import type {RichTextMarkdownExtension} from './markdownExtensions';
@@ -738,6 +739,7 @@ export const RichTextEditor = function RichTextEditor({
               <TablePastePlugin />
               <CodeBlockHeaderPlugin codeLanguages={codeLanguages} />
               <CodeSyntaxPlugin codeLanguages={codeLanguages} />
+              <BlockDirectionPlugin />
               {/* Backspace at the very start of a code block makes it a
                   paragraph, instead of merging it into the block above. */}
               <CodeBackspacePlugin />

@@ -19,20 +19,29 @@
  * Algorithm: Bidi_Class `R` and `AL`. The living scripts are named. The two
  * ranges cover the historic right-to-left scripts in the Supplementary
  * Multilingual Plane, which have no script escapes that every engine knows.
+ *
+ * JavaScript has no `\p{Bidi_Class=...}` escape, so these sets approximate
+ * that property from script and category, and name the characters where the
+ * two disagree. Four `AL` characters have script `Common`: the semicolon,
+ * the letter mark, the question mark, and tatweel. Tatweel is also a
+ * modifier letter, so without it the scan reads an Arabic word that starts
+ * with one as left-to-right.
  */
 const STRONG_RTL = new RegExp(
-  String.raw`[\p{Script=Adlam}\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Mandaic}\p{Script=Nko}\p{Script=Samaritan}\p{Script=Syriac}\p{Script=Thaana}\u200F\u061C\u{10800}-\u{10FFF}\u{1E800}-\u{1EFFF}]`,
+  String.raw`[\p{Script=Adlam}\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Mandaic}\p{Script=Nko}\p{Script=Samaritan}\p{Script=Syriac}\p{Script=Thaana}\u061B\u061C\u061F\u0640\u200F\u{10800}-\u{10FFF}\u{1E800}-\u{1EFFF}]`,
   'u',
 );
 
 /**
- * The weak characters of the Arabic script: its digits, the number signs
- * before them, and the currency and per-cent marks beside them. They are
- * Bidi_Class `AN`, `EN` or `ET`, so the scan skips them. NKo and Adlam digits
- * are Bidi_Class `R` and are not here.
+ * The weak number characters of the right-to-left scripts: Bidi_Class `AN`,
+ * `EN` or `ET`, so the scan skips them. The Arabic digits, the number signs
+ * before them, the currency and per-cent marks beside them, and the Rumi,
+ * Indic Siyaq and Ottoman Siyaq blocks, which sit inside the ranges above
+ * and would otherwise read as strong. NKo and Adlam digits are Bidi_Class
+ * `R` and are not here.
  */
-const WEAK_ARABIC_NUMBER =
-  /[\u0600-\u0605\u0609\u060A\u0660-\u0669\u066A-\u066C\u06DD\u06F0-\u06F9\u0890\u0891\u08E2]/u;
+const WEAK_RTL_NUMBER =
+  /[\u0600-\u0605\u0609\u060A\u0660-\u0669\u066A-\u066C\u06DD\u06F0-\u06F9\u0890\u0891\u08E2\u{10E60}-\u{10E7F}\u{1EC70}-\u{1ECBF}\u{1ED00}-\u{1ED4F}]/u;
 
 /**
  * Bidi_Class `L`: every other letter, the letter numbers (`\p{Letter}` does
@@ -65,7 +74,7 @@ export function hasStrongRightToLeft(text: string): boolean {
  */
 export function firstStrongDirection(text: string): 'ltr' | 'rtl' | null {
   for (const character of text) {
-    if (COMBINING_MARK.test(character) || WEAK_ARABIC_NUMBER.test(character)) {
+    if (COMBINING_MARK.test(character) || WEAK_RTL_NUMBER.test(character)) {
       continue;
     }
     if (STRONG_RTL.test(character)) {

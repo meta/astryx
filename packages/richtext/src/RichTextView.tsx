@@ -39,6 +39,7 @@ import {TableScrollRegionPlugin} from './internal/TableScrollRegionPlugin';
 import {TableColumnFloorPlugin} from './internal/TableColumnFloorPlugin';
 import {CodeBlockHeaderPlugin} from './internal/CodeBlockHeaderPlugin';
 import {CodeSyntaxPlugin} from './internal/CodeSyntaxPlugin';
+import {BlockDirectionPlugin} from './internal/BlockDirectionPlugin';
 import {MarkdownExtensionsPlugin} from './internal/MarkdownExtensionsPlugin';
 import type {RichTextMarkdownExtension} from './markdownExtensions';
 import type {CodeLanguage} from '@astryxdesign/core/CodeBlock';
@@ -335,6 +336,7 @@ export function RichTextView({
             in tab order. */}
         <CodeBlockHeaderPlugin codeLanguages={codeLanguages} />
         <CodeSyntaxPlugin codeLanguages={codeLanguages} />
+        <BlockDirectionPlugin />
         {markdownExtensions != null && markdownExtensions.length > 0 ? (
           <MarkdownExtensionsPlugin
             extensions={markdownExtensions}
