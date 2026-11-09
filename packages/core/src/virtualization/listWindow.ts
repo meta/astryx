@@ -131,6 +131,26 @@ export function createListWindowSegments(
   end: number,
   focusIndex?: number,
 ): ListWindowSegment[] {
+  return createWindowSegments(
+    rowCount,
+    start,
+    end,
+    focusIndex,
+    (from, to) => (to - from) * rowHeight,
+  );
+}
+
+/**
+ * Mounted rows and gaps for a range and one retained row outside it. A gap's
+ * height comes from `gapHeight`, so any offset model can size it.
+ */
+export function createWindowSegments(
+  rowCount: number,
+  start: number,
+  end: number,
+  focusIndex: number | undefined,
+  gapHeight: (from: number, to: number) => number,
+): ListWindowSegment[] {
   if (rowCount === 0) {
     return [];
   }
@@ -162,7 +182,7 @@ export function createListWindowSegments(
         type: 'gap',
         start: cursor,
         end: interval.start,
-        height: (interval.start - cursor) * rowHeight,
+        height: gapHeight(cursor, interval.start),
       });
     }
     segments.push({type: 'rows', ...interval});
@@ -173,7 +193,7 @@ export function createListWindowSegments(
       type: 'gap',
       start: cursor,
       end: rowCount,
-      height: (rowCount - cursor) * rowHeight,
+      height: gapHeight(cursor, rowCount),
     });
   }
   return segments;

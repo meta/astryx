@@ -3,7 +3,8 @@
  * @file virtualization.ts
  * @input The private list-windowing module (`virtualization/`)
  * @output `@astryxdesign/core/internal/virtualization`: the shared list
- *   window hook, its pure range and anchor math and its measurement helpers,
+ *   window hook, its pure range and anchor math, its offset models and its
+ *   measurement helpers,
  *   re-exported by name for Lab
  * @position An internal entry reserved for Astryx's own packages. It is
  *   undocumented, outside the public API and its compatibility promise, and
@@ -23,7 +24,17 @@ export {
   type ListWindowPlan,
   type ListWindowSegment,
 } from '../virtualization/listWindow';
+export {
+  fixedItemSizes,
+  measuredItemSizes,
+  type ListItemSizes,
+} from '../virtualization/itemSizes';
 export {measureText, readPixels} from '../virtualization/measure';
+export {
+  calculateSizedListWindow,
+  createSizedListWindowSegments,
+  type SizedListWindowOptions,
+} from '../virtualization/sizedListWindow';
 export {
   useListWindow,
   type ListWindowGeometry,
