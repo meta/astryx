@@ -445,6 +445,16 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-full'],
     paddingInline: spacingVars['--spacing-2'],
   },
+  // The caption's text sits on the Counter's backing, line by line, so it
+  // keeps 4.5:1 over a light theme's translucent backdrop. The backing is
+  // inline, so the caption box keeps its size and place.
+  captionBacking: {
+    backgroundColor: `color-mix(in srgb, ${colorVars['--color-on-light']} 75%, transparent)`,
+    borderRadius: radiusVars['--radius-full'],
+    paddingInline: spacingVars['--spacing-2'],
+    boxDecorationBreak: 'clone',
+    WebkitBoxDecorationBreak: 'clone',
+  },
 });
 
 const pageStyles = stylex.create({
@@ -1522,7 +1532,9 @@ export function Lightbox({
                             <div
                               data-lightbox-caption=""
                               {...stylex.props(styles.caption)}>
-                              {mediaArray[i].caption}
+                              <span {...stylex.props(styles.captionBacking)}>
+                                {mediaArray[i].caption}
+                              </span>
                             </div>
                           )}
                         </div>
@@ -1538,7 +1550,9 @@ export function Lightbox({
                     ref={captionRef}
                     data-lightbox-caption=""
                     {...stylex.props(styles.caption)}>
-                    {currentItem.caption}
+                    <span {...stylex.props(styles.captionBacking)}>
+                      {currentItem.caption}
+                    </span>
                   </div>
                 )}
               </div>

@@ -221,6 +221,17 @@ function mousePress(
   });
 }
 
+/** The caption's box: the element that holds the caption's backing and text. */
+function captionBox(text: string): HTMLElement {
+  const box = screen
+    .getByText(text)
+    .closest<HTMLElement>('[data-lightbox-caption]');
+  if (box == null) {
+    throw new Error(`No caption box holds "${text}".`);
+  }
+  return box;
+}
+
 describe('Lightbox', () => {
   it('renders as a dialog element', () => {
     render(
@@ -1414,7 +1425,7 @@ describe('Lightbox', () => {
       );
       // The media group: the stage, then the caption's place below it. A
       // mouse's click there is below the raised caption.
-      const group = screen.getByText('A caption').parentElement!;
+      const group = captionBox('A caption').parentElement!;
       fireEvent.click(group, {detail: 1, clientY: 590});
       expect(onOpenChange).toHaveBeenCalledWith(false);
     });
@@ -1429,7 +1440,7 @@ describe('Lightbox', () => {
         />,
       );
       // The media group hugs its media and caption, as before.
-      fireEvent.click(screen.getByText('A caption').parentElement!);
+      fireEvent.click(captionBox('A caption').parentElement!);
       expect(onOpenChange).not.toHaveBeenCalled();
     });
 
@@ -1683,7 +1694,7 @@ describe('Lightbox gestures for a mouse and a pen (spec:AST-094 FR43)', () => {
       await new Promise(resolve => setTimeout(resolve, 400));
     });
     // Each caption click reads its own press, not the drag's.
-    const caption = screen.getByText('A caption');
+    const caption = captionBox('A caption');
     for (const at of [t0 + 1000, t0 + 2000]) {
       pointer('pointerdown', caption, 'mouse', 200, 300, at);
       pointer('pointerup', caption, 'mouse', 200, 300, at + 40);
@@ -1773,8 +1784,7 @@ describe('Lightbox gestures for a mouse and a pen (spec:AST-094 FR43)', () => {
     fireEvent.click(stage, {clientX: 180, clientY: 300, detail: 1});
     expect(onOpenChange).not.toHaveBeenCalled();
     // A new press on the dark area above starts a new click, which closes.
-    const container =
-      screen.getByText('A caption').parentElement!.parentElement!;
+    const container = captionBox('A caption').parentElement!.parentElement!;
     pointer('pointerdown', container, 'mouse', 200, 10, t0 + 1000);
     pointer('pointerup', container, 'mouse', 200, 10, t0 + 1040);
     fireEvent.click(container, {clientX: 200, clientY: 10, detail: 1});
@@ -2006,7 +2016,7 @@ describe('Lightbox touch zoom (synthetic touches)', () => {
         touch('touchmove', stage, [finger], [finger], 1000 + i * 16);
       }
       touch('touchend', stage, [], [finger], 1000 + 7 * 16);
-      const group = screen.getByText('A caption').parentElement!;
+      const group = captionBox('A caption').parentElement!;
       const tapStrip = () => {
         fingerDown(group, 200, 590);
         fireEvent.click(group, {clientX: 200, clientY: 590, detail: 1});
@@ -2069,7 +2079,7 @@ describe('Lightbox touch zoom (synthetic touches)', () => {
       />,
     );
     const stage = screen.getByRole('button', {name: 'Zoom'});
-    const caption = screen.getByText('A caption');
+    const caption = captionBox('A caption');
     // Fitted, the caption is raised by the stage's free space below the
     // photo: (600 - 200) / 2.
     expect(caption.style.translate).toBe('0 -200px');
@@ -2227,7 +2237,7 @@ describe('Lightbox touch zoom (synthetic touches)', () => {
     touch('touchend', stage, [], [finger], clock + 7 * 16);
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(onOpenChange).not.toHaveBeenCalled();
-    const group = screen.getByText('A caption').parentElement!;
+    const group = captionBox('A caption').parentElement!;
     const tapStrip = () => {
       fingerDown(group, 200, 590);
       fireEvent.click(group, {clientX: 200, clientY: 590, detail: 1});
