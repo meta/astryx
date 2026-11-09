@@ -590,6 +590,20 @@ export function Typeahead<T extends SearchableItem>({
     (isOpen: boolean) => {
       isListOpenRef.current = isOpen;
       onOpenChange?.(isOpen);
+      if (!isOpen) {
+        // A dialog-role menu returns focus to the input when it closes. When
+        // the token shows, the input is hidden and out of the tab order, so
+        // focus moves on to the token once it renders.
+        requestAnimationFrame(() => {
+          if (
+            tokenRef.current != null &&
+            document.activeElement === inputRef.current
+          ) {
+            const button = tokenRef.current.querySelector('button');
+            (button ?? tokenRef.current).focus();
+          }
+        });
+      }
     },
     [onOpenChange],
   );

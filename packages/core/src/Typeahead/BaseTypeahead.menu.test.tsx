@@ -617,5 +617,85 @@ describe('BaseTypeahead menu', () => {
       });
       expect(isLayerOpen(dialog)).toBe(true);
     });
+
+    it.each([
+      ['Escape', false],
+      ['close()', true],
+    ])(
+      'closing a dialog a pick opened in a Typeahead with a value returns focus to the token, with %s',
+      async (_, closesFromInside) => {
+        function FruitField() {
+          const handleRef = useRef<BaseTypeaheadHandle>(null);
+          const [value, setValue] = useState<SearchableItem | null>({
+            id: 'apple',
+            label: 'Apple',
+          });
+          const [field, setField] = useState<string | null>(null);
+          return (
+            <Typeahead
+              label="Fruit"
+              searchSource={fruits}
+              value={value}
+              onChange={item => {
+                setValue(item);
+                setField(item?.label ?? null);
+                handleRef.current?.open();
+              }}
+              onOpenChange={isOpen => {
+                if (!isOpen) {
+                  setField(null);
+                }
+              }}
+              debounceMs={0}
+              handleRef={handleRef}
+              menu={
+                field == null
+                  ? {role: 'listbox'}
+                  : {
+                      role: 'dialog',
+                      label: field,
+                      render: ({close}) => (
+                        <button type="button" onClick={close}>
+                          Done
+                        </button>
+                      ),
+                    }
+              }
+            />
+          );
+        }
+        const user = userEvent.setup();
+        render(<FruitField />);
+        // Enter edit mode from the token and pick another fruit.
+        await user.click(screen.getAllByText('Apple')[0]);
+        const input = screen.getByRole('combobox', {name: 'Fruit'});
+        await user.clear(input);
+        await user.type(input, 'Apri');
+        await user.click(
+          await screen.findByRole('option', {name: 'Apricot', hidden: true}),
+        );
+        const dialog = await screen.findByRole('dialog', {
+          name: 'Apricot',
+          hidden: true,
+        });
+        await waitFor(() => expect(isLayerOpen(dialog)).toBe(true));
+        if (closesFromInside) {
+          await user.click(
+            screen.getByRole('button', {name: 'Done', hidden: true}),
+          );
+        } else {
+          fireEvent.keyDown(document.activeElement ?? document.body, {
+            key: 'Escape',
+          });
+        }
+        // Focus lands on the token's button, not the hidden input.
+        await waitFor(() => {
+          const active = document.activeElement;
+          expect(active).not.toBe(input);
+          expect(active?.closest('[class]')?.textContent).toContain('Apricot');
+          expect(active?.tagName).toBe('BUTTON');
+        });
+      },
+    );
   });
 });
