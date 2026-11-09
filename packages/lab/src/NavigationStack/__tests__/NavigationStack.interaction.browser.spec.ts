@@ -58,6 +58,7 @@ import {
   touchStoryboard,
   traceRendering,
   trackMarker,
+  trackMarkers,
   waitForRest,
   watchAnimations,
   withStorybook,
@@ -1170,8 +1171,9 @@ test('a push keeps advancing every frame while the main thread is blocked', asyn
   const [push] = await watch.started({minProgressMs: 16});
   await page.waitForTimeout(150);
   const castFrames = await cast.stop();
-  const tracked = await trackMarker(page, castFrames);
-  const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
+  const [tracked, control] = await trackMarkers(page, castFrames, {
+    colors: [MARKER_RGB, CONTROL_RGB],
+  });
   const proof = busyWindowProof(
     tracked,
     {from: block.from, to: Math.min(block.to, push.to)},
