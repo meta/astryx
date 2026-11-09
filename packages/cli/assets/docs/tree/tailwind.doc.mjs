@@ -97,7 +97,11 @@ import {themes, defaultThemeSlug} from './astryx-themes';`,
         },
         {
           type: 'prose',
-          text: "This recipe leaves out `tailwind-theme.css`. The bridge maps Tailwind theme names such as `text-primary` and `bg-surface` to system tokens, so in an app that already defines those names it changes what the app's own classes paint. Add it only when the app does not use the names it maps.",
+          text: "This recipe leaves out `tailwind-theme.css`. The bridge maps Tailwind theme names to system tokens, including Tailwind's own defaults such as `rounded-lg` and `shadow-md`, so in an existing app it changes what the app's own classes paint. Add it only when the app does not use the names it maps.",
+        },
+        {
+          type: 'prose',
+          text: "`astryx.css` also sets `--color-accent`, `--color-border`, `--color-neutral`, the status colours (`--color-info`, `--color-success`, `--color-warning`, `--color-error`) and the other Core `--color-*` tokens on `:root`, above Tailwind's `theme` layer. If the app's `@theme` defines one of these names, rename that key or mark the block `@theme inline`, or the app's utilities take Astryx's value.",
         },
         {
           type: 'prose',
