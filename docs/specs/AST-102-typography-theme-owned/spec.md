@@ -78,7 +78,7 @@ the person's device.
   DR1 and DR2 apply when none is set, and the iOS text-entry floor of
   `family:input-fields` FR9 still holds. On Android, Core reads the system font scale
   from `env(preferred-text-scale)` and scales every font size by it, so the
-  whole scale follows with no switch. A page that carries
+  whole scale follows with no switch (DEC-3, DEC-4). A page that carries
   `<meta name="text-scale" content="scale">` already has the system font scale
   on its root font size, which Astryx sizes from, so Core adds none (the root
   font size follows the meta on Chromium 159.0.8142.0 on Android; Chrome on
@@ -177,11 +177,22 @@ Rejected: only unbranded or opted-in themes following the person's size.
 
 The person's size is honored by default, so products need no switch to turn it
 on. Core reads it where the platform exposes it only through a system text
-style, as on iOS, or only through `env(preferred-text-scale)`, as on Android,
-and lets the root font size carry it elsewhere; no read is a theme option,
-prop, or document attribute.
+style, as on iOS, and lets the root font size carry it elsewhere; neither read
+is a theme option, prop, or document attribute.
 
 Rejected: a public opt-in option or document attribute for the size.
+
+### DEC-4 — Android's system font scale is read the same way
+
+**Reference:** `spec:AST-102/DEC-4`
+**Decider:** Specs consistency ruling, `2026-11-09`, applying DEC-3
+
+Where the platform exposes the person's size only through
+`env(preferred-text-scale)`, as Chromium on Android does, Core reads it there
+too, so products still need no switch; a page with
+`<meta name="text-scale" content="scale">` already carries it on its root font
+size, so Core adds none. Like DEC-3's reads, it is not a theme option, prop, or
+document attribute.
 
 ## Open questions
 
