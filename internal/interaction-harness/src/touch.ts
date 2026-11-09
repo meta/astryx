@@ -44,6 +44,7 @@
  */
 
 import type {CDPSession, JSHandle, Page} from '@playwright/test';
+import {FRAME_STARVATION_MS} from './frame-starvation';
 import {
   toTouchEvents,
   type Finger,
@@ -136,9 +137,11 @@ export interface PlayOptions {
    * throws when the page's release strays further than that share. The error
    * is `TouchLiftStallError` when the play's own `onEvent` held the lift back.
    * It is `TouchPageStallError` when the page's own touch and pointer
-   * listeners held an event back, else `TouchPacingError` (see
-   * `touchPacingFault`). A `'spacing'` play also throws when the page received
-   * fewer touch events than it sent; any other play is then not judged.
+   * listeners held an event back. It is `TouchStarvationError` when the page
+   * drew no frame across the late gap and no page work held the event, else
+   * `TouchPacingError` (see `touchPacingFault`). A `'spacing'` play also
+   * throws when the page received fewer touch events than it sent; any other
+   * play is then not judged.
    */
   readonly pacing?: TouchPacing;
   /**
@@ -195,6 +198,13 @@ export interface PlayedEvent extends TouchEventStep {
    * the page has the event by then.
    */
   readonly returnedAt: number;
+  /**
+   * When the event left, on the clock a play paces on: the test process's
+   * `performance.now()`, ms, to a fraction of a millisecond.
+   */
+  readonly pacedSentAt: number;
+  /** When the dispatch command returned, on that same clock, ms. */
+  readonly pacedReturnedAt: number;
   /** The timestamp handed to the engine, epoch ms (Chromium only). */
   readonly timestamp: number | null;
   /**
@@ -414,6 +424,15 @@ export interface TouchPacingFault {
    * dispatch can deliver a gesture's timing then.
    */
   readonly frameGapMs?: number | null;
+  /**
+   * The gap that strays furthest past the script's: the step it ends at, and
+   * the gap as the page received it and as scripted, ms.
+   */
+  readonly late?: {
+    readonly index: number;
+    readonly gapMs: number;
+    readonly scriptedGapMs: number;
+  };
   /**
    * The widest gap that an event's wait for the main thread accounts for,
    * when the listeners alone do not, or null. The wait ends when the page's
@@ -713,6 +732,19 @@ export function touchPacingFault(
       }
     }
   });
+  const lateK = gapsMs.reduce(
+    (best, gap, k) =>
+      gap - scriptedGapsMs[k] > gapsMs[best] - scriptedGapsMs[best] ? k : best,
+    0,
+  );
+  const late =
+    span.length > 0
+      ? {
+          index: span[lateK],
+          gapMs: gapsMs[lateK],
+          scriptedGapMs: scriptedGapsMs[lateK],
+        }
+      : undefined;
   if (!releaseFault || reading == null) {
     return {
       kind: 'hold',
@@ -722,6 +754,7 @@ export function touchPacingFault(
       scriptedGapsMs,
       heldByPage,
       waited,
+      late,
       threshold: boundaries.holdMs,
       holdMs: hold ?? undefined,
     };
@@ -743,6 +776,7 @@ export function touchPacingFault(
     scriptedGapsMs,
     heldByPage,
     waited,
+    late,
     threshold: strays ? undefined : releaseBound,
   };
 }
@@ -804,7 +838,8 @@ function describeReading(fault: TouchPacingFault): string {
  * and pointer listeners did not hold the events back: a dispatch stalled
  * before the page. When an event waited for the main thread before the page's
  * listeners began, the error says how long. Another page task, or a starved
- * runner, held it there.
+ * runner, held it there. A gap with no wait, across which the page drew no
+ * frame, is `TouchStarvationError`.
  */
 export class TouchPacingError extends Error {
   constructor(readonly fault: TouchPacingFault) {
@@ -835,6 +870,30 @@ export class TouchPageStallError extends Error {
       `touchDriver: the page's own touch and pointer listeners took ${fault.heldByPage.handlingMs.toFixed(0)} ms of page wall time to handle an event, so the next reached it ${fault.heldByPage.gapMs.toFixed(0)} ms later, and ${describeFault(fault)}. On a starved runner that time includes the page's wait for a CPU: judge a page stall from a run with CI's CPU limits`,
     );
     this.name = 'TouchPageStallError';
+  }
+}
+
+/**
+ * A paced play's page read a release that is not the script's, and the
+ * runner starved the page. Across the gap that strays furthest, the page drew
+ * no frame for longer than `FRAME_STARVATION_MS`. Neither its own listeners
+ * nor a page task held the event before it. No pacing reaches a page that
+ * draws nothing, so the play cannot judge the component. It fails by name,
+ * as a busy proof's `FrameStarvationError` does. Judge the proof from a run
+ * with CI's CPU limits.
+ */
+export class TouchStarvationError extends Error {
+  constructor(
+    readonly fault: TouchPacingFault & {
+      readonly late: NonNullable<TouchPacingFault['late']>;
+      /** The longest time the page drew no frame across that gap, ms. */
+      readonly starvedMs: number;
+    },
+  ) {
+    super(
+      `touchDriver: the page drew no frame for ${fault.starvedMs.toFixed(0)} ms across a ${fault.late.gapMs.toFixed(0)} ms gap where the script spaces ${fault.late.scriptedGapMs.toFixed(0)} ms, and ${describeFault(fault)}. Neither the page's listeners nor a page task held the event: the runner starved the page. Judge the proof from a run with CI's CPU limits`,
+    );
+    this.name = 'TouchStarvationError';
   }
 }
 
@@ -922,20 +981,41 @@ export function liftStallError(
 /**
  * The error a paced play's fault throws. The lift stall comes first, since
  * it is the more specific cause. Then a gap the page's own listeners held is
- * the page's, and any other gap is the runner's.
+ * the page's. A starved page drew no frame for longer than
+ * `FRAME_STARVATION_MS` across the late gap. With no wait for the main
+ * thread, that fault is the starved runner's. Any other gap is a dispatch
+ * that stalled before the page.
+ * `frames` are the times the page drew a frame during the play.
  */
 export function touchPlayError(
   steps: readonly TouchEventStep[],
   arrivals: readonly TouchArrival[],
   fault: TouchPacingFault,
   onEventMs: readonly number[],
-): TouchLiftStallError | TouchPageStallError | TouchPacingError {
-  return (
-    liftStallError(steps, arrivals, fault, onEventMs) ??
-    (fault.heldByPage == null
-      ? new TouchPacingError(fault)
-      : new TouchPageStallError({...fault, heldByPage: fault.heldByPage}))
-  );
+  frames: readonly number[] = [],
+):
+  | TouchLiftStallError
+  | TouchPageStallError
+  | TouchStarvationError
+  | TouchPacingError {
+  const lift = liftStallError(steps, arrivals, fault, onEventMs);
+  if (lift != null) {
+    return lift;
+  }
+  if (fault.heldByPage != null) {
+    return new TouchPageStallError({...fault, heldByPage: fault.heldByPage});
+  }
+  const {late} = fault;
+  const starvedMs =
+    late == null || late.index < 1 || fault.waited != null
+      ? null
+      : longestFrameGap(frames, [
+          arrivals[late.index - 1],
+          arrivals[late.index],
+        ]);
+  return late != null && starvedMs != null && starvedMs > FRAME_STARVATION_MS
+    ? new TouchStarvationError({...fault, late, starvedMs})
+    : new TouchPacingError(fault);
 }
 
 /** Records what the page saw of a paced play's touches (WebKit). */
@@ -1013,8 +1093,16 @@ async function playSteps(
     const dispatchedAt = Date.now();
     const sentAt = performance.now();
     await dispatch(step, timestamp);
-    previous = {sentAt, returnedAt: performance.now()};
-    played.push({...step, dispatchedAt, returnedAt: Date.now(), timestamp});
+    const answered = performance.now();
+    previous = {sentAt, returnedAt: answered};
+    played.push({
+      ...step,
+      dispatchedAt,
+      returnedAt: Date.now(),
+      pacedSentAt: sentAt,
+      pacedReturnedAt: answered,
+      timestamp,
+    });
     const watched = performance.now();
     await onEvent?.(step, index);
     onEventMs.push(performance.now() - watched);
@@ -1036,7 +1124,7 @@ async function playSteps(
     });
     if (found != null) {
       const fault = {...found, frameGapMs: longestFrameGap(frames, arrivals)};
-      throw touchPlayError(steps, arrivals, fault, onEventMs);
+      throw touchPlayError(steps, arrivals, fault, onEventMs, frames);
     }
     const reading = readRelease(steps, arrivals, release);
     if (reading != null) {
@@ -1209,43 +1297,34 @@ export function touchArrivalsFrom(record: {
 
 /**
  * Records, for each touch event of a paced play, when it reached the page
- * and when the page's own listeners had finished with it (`armInputRun`).
+ * and when the page's own listeners had finished with it. It also records
+ * the page's frames (`armInputRun`).
  */
 function touchArrivalProbe(page: Page): TouchArrivalProbe {
   let armed: JSHandle<InputRun> | null = null;
-  let drawn: JSHandle<{times: number[]; stopped: boolean}> | null = null;
   return {
     async arm() {
       await armed?.evaluate(run => run.stop());
       await armed?.dispose();
-      await drawn?.evaluate(record => {
-        record.stopped = true;
-      });
-      await drawn?.dispose();
-      armed = await armInputRun(page, TOUCH_TYPES);
-      // When the page draws each frame, on the clock its events are stamped
-      // on. The harness's own frames run on the real timers: a frozen timer
-      // gate (story.ts) holds only the page's.
-      drawn = await page.evaluateHandle(() => {
-        const gate = (
-          window as unknown as {
-            __harnessTimerGate?: {frame?: typeof requestAnimationFrame};
-          }
-        ).__harnessTimerGate;
-        const frame = gate?.frame ?? window.requestAnimationFrame.bind(window);
-        const record = {times: [] as number[], stopped: false};
-        // Resolves at the first frame, so a frame before the gesture is read.
-        return new Promise<typeof record>(resolve => {
-          const tick = (time: number) => {
-            if (!record.stopped) {
-              record.times.push(time);
-              resolve(record);
-              frame(tick);
-            }
-          };
-          frame(tick);
-        });
-      });
+      armed = await armInputRun(page, TOUCH_TYPES, {frames: true});
+      // Waits for the run's first frame, so the frames read one before the
+      // gesture. The harness's own frames run on the real timers: a frozen
+      // timer gate (story.ts) holds only the page's.
+      await armed.evaluate(
+        run =>
+          new Promise<void>(resolve => {
+            const gate = (
+              window as unknown as {
+                __harnessTimerGate?: {frame?: typeof requestAnimationFrame};
+              }
+            ).__harnessTimerGate;
+            const frame =
+              gate?.frame ?? window.requestAnimationFrame.bind(window);
+            const check = () =>
+              run.frames.length > 0 ? resolve() : frame(check);
+            check();
+          }),
+      );
     },
     async read() {
       if (armed == null) {
@@ -1253,13 +1332,14 @@ function touchArrivalProbe(page: Page): TouchArrivalProbe {
       }
       const run = armed;
       armed = null;
-      const record = await run.evaluate(recorded => {
+      const {frames, ...record} = await run.evaluate(recorded => {
         recorded.stop();
         return {
           eventTypes: recorded.eventTypes.slice(),
           pointerTypes: recorded.pointerTypes.slice(),
           stamps: recorded.stamps.slice(),
           handledAt: recorded.handledAt.slice(),
+          frames: recorded.frames.slice(),
           // Only a mark added before the page's scripts comes before every
           // page listener. Without it, the hold counts from the stamp.
           ...(recorded.startsFirst
@@ -1268,15 +1348,6 @@ function touchArrivalProbe(page: Page): TouchArrivalProbe {
         };
       });
       await run.dispose();
-      const frames =
-        drawn == null
-          ? []
-          : await drawn.evaluate(recorded => {
-              recorded.stopped = true;
-              return recorded.times.slice();
-            });
-      await drawn?.dispose();
-      drawn = null;
       return {arrivals: touchArrivalsFrom(record), frames};
     },
   };

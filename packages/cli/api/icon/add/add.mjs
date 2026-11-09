@@ -147,6 +147,15 @@ export async function iconAdd(exportName, options) {
       );
     }
   }
+  // An export name cannot start with a digit, and an id the author gives has
+  // no library prefix to keep.
+  if (givenId != null && /^[0-9]/u.test(givenId)) {
+    throw new AstryxError(
+      `The icon id "${givenId}" starts with a digit, and an export name cannot. Pass --id with an id that starts with a letter.`,
+      undefined,
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
   if (all) {
     return authoring(() => addVariantForAll({cwd, from, selector, variant}));
   }

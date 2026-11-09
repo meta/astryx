@@ -568,6 +568,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-chat-virtualizer",
+      "path": "components/lab/chat-virtualizer",
+      "aliases": []
+    },
+    {
       "name": "component-lab-circle-check-indicator",
       "path": "components/lab/circle-check-indicator",
       "aliases": []

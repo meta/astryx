@@ -179,20 +179,16 @@ export function TimeGridView({
       timezoneID,
     ],
   );
-  const positioning = useRef({
+  const latestPositioning = {
     currentTime,
     days,
     minHour: normalizedMinHour,
     hourHeight,
-  });
+  };
+  const positioning = useRef(latestPositioning);
   // Syncs the positioning effect's inputs at commit, before it reads them.
   useLayoutEffect(() => {
-    positioning.current = {
-      currentTime,
-      days,
-      minHour: normalizedMinHour,
-      hourHeight,
-    };
+    positioning.current = latestPositioning;
   });
   const isBlockScrollable = scrollState.block.isScrollable;
   // The clock is 0 only in the server snapshot; wait for the client's.
