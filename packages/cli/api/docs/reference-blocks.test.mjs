@@ -23,6 +23,7 @@ import {checkDocsTree} from '../doctor/doctor.mjs';
 import {createDocId} from '../../foundation/identity/provider-identity.mjs';
 import {CLI_PROVIDER_ID} from '../../foundation/identity/providers.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const SLOW = 60_000;
 
@@ -119,7 +120,7 @@ const BROKEN = {
 let tmpDir;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-reference-test-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-reference-test-'));
 });
 
 afterEach(() => {

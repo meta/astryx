@@ -169,8 +169,10 @@ export function changedComponents(changed) {
  * @param {Map<string, Set<string>>} options.importers
  * @param {Record<string, number>} options.seconds
  * @param {number} [options.attempt] the run's attempt; 1 for its first run
- * @param {boolean} [options.everything] the changed files are unknown and
- *   everything is in scope: every component's audits are owed
+ * @param {boolean} [options.everything] the changed files are unknown (a diff
+ *   GitHub truncates, or a scope that could not be read) and everything is in
+ *   scope: every audit is owed, the run fits what it can, and the record is
+ *   never complete
  */
 export function planDependentAudits({
   changed,
@@ -181,16 +183,8 @@ export function planDependentAudits({
   attempt = 1,
   everything = false,
 }) {
-  const components = everything
-    ? [
-        ...new Set(
-          specs
-            .filter(({mode}) => mode === 'audit')
-            .map(({file}) => componentFolderOf(file))
-            .filter(Boolean),
-        ),
-      ].sort()
-    : changedComponents(changed);
+  if (everything) return planEverything(specs, seconds);
+  const components = changedComponents(changed);
   const touched = changedPrimitives(primitives, changed);
   const order = [
     ...components,
@@ -234,6 +228,58 @@ export function planDependentAudits({
   return {...base, files, deferred, complete: deferred.length === 0, ...legs};
 }
 
+/**
+ * An undecided scope's plan: every audit is owed; one run fits what it can
+ * and lists the rest; it is never complete.
+ * @param {{file: string, mode: string}[]} specs
+ * @param {Record<string, number>} seconds
+ */
+function planEverything(specs, seconds) {
+  const owed = specs
+    .filter(spec => spec.mode === 'audit')
+    .map(({file}) => file)
+    .sort();
+  /** @type {string[]} */
+  const files = [];
+  /** @type {string[]} */
+  const deferred = [];
+  for (const file of owed) {
+    const fits =
+      fitLegs([...files, file], seconds, MAX_LEGS).longestMs <=
+      budgetFor([...files, file], seconds);
+    (fits || files.length === 0 ? files : deferred).push(file);
+  }
+  return {
+    components: [],
+    primitives: [],
+    owed,
+    files,
+    deferred,
+    complete: false,
+    everything: true,
+    ...fitLegs(files, seconds, MAX_LEGS),
+  };
+}
+
+export const TOO_LARGE = 'diff too large to scope (>3,000 files); split the PR';
+export const UNDECIDED =
+  'the changed files could not be read; re-run all jobs at this head';
+
+/**
+ * What an undecided scope's run says: a truncated file list needs a split,
+ * any other undecided scope a re-run.
+ * @param {{deferred: string[]}} plan
+ * @param {boolean} truncated
+ */
+export function undecidedMessage(plan, truncated) {
+  const why = truncated ? TOO_LARGE : UNDECIDED;
+  const title = truncated ? 'Diff too large to scope' : 'Scope not decided';
+  return {
+    annotation: `::error title=${title}::${why}. ${plan.deferred.length} owed audit spec files do not run, so merge-guard does not merge this head.`,
+    summary: `${why}. Not run (${plan.deferred.length}):`,
+  };
+}
+
 function main() {
   const argv = process.argv.slice(2);
   const value = name => {
@@ -243,6 +289,7 @@ function main() {
   const root = process.cwd();
   const changedFile = value('--changed');
   const everything = argv.includes('--all');
+  const truncated = argv.includes('--truncated');
   const out = value('--out');
   const attempt = Number(value('--attempt') ?? '1');
   if (
@@ -285,6 +332,10 @@ function main() {
     ran: plan.files,
     deferred: plan.deferred,
     complete: plan.complete,
+    // Why the scope is undecided, so a reader can say "split" or "re-run".
+    ...(plan.everything
+      ? {undecided: truncated ? 'truncated' : 'unreadable'}
+      : {}),
   };
   fs.writeFileSync(out, `${JSON.stringify(record, null, 2)}\n`);
   if (plan.owed.length === 0) {
@@ -298,7 +349,9 @@ function main() {
       `This run (attempt ${attempt}) runs ${plan.files.length} of ${plan.owed.length} owed audit spec files in ${plan.count} leg(s), the longest leg's recorded time ${minutes} min:`,
     );
     for (const file of plan.files) console.log(`  ${file}`);
-    if (plan.deferred.length > 0) {
+    if (plan.everything) {
+      console.log(undecidedMessage(plan, truncated).annotation);
+    } else if (plan.deferred.length > 0) {
       console.log(
         `::warning title=Audits not yet run::${plan.deferred.length} owed audit spec files do not fit three legs of ten minutes. Re-run all jobs at this head to run every owed audit; merge-guard merges only on a run that ran them all.`,
       );
@@ -325,9 +378,11 @@ function main() {
     fs.appendFileSync(
       process.env.GITHUB_STEP_SUMMARY,
       `### Dependent audits\n\nRan (${plan.files.length}):\n\n${list(plan.files)}\n\n` +
-        (plan.deferred.length
-          ? `Not yet run (${plan.deferred.length}); re-run all jobs at this head:\n\n${list(plan.deferred)}\n`
-          : 'Every owed audit ran.\n'),
+        (plan.everything
+          ? `${undecidedMessage(plan, truncated).summary}\n\n${list(plan.deferred)}\n`
+          : plan.deferred.length
+            ? `Not yet run (${plan.deferred.length}); re-run all jobs at this head:\n\n${list(plan.deferred)}\n`
+            : 'Every owed audit ran.\n'),
     );
   }
 }

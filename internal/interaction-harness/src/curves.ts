@@ -5,16 +5,15 @@
  * @input Uses a Playwright `Page`, a `Locator` for the animated element, and
  *   the Web Animations API in the page (CSS transitions and CSS animations are
  *   Web Animations too)
- * @output `holdAnimations` (pause every running animation and describe it),
- *   `armHold` (the page holds what an action starts, as soon as it runs,
- *   and checks that it took the motion the test judges),
- *   `seekAnimations` (move them to t ms from the held origin, each keeping
- *   its offset), `sampleCurve` (the presented
- *   transform/opacity at each t, with the individual `translate`, `rotate` and
- *   `scale` properties composed in), `releaseAnimations`, `curveOf`, which
- *   picks one channel out of the samples for ./math's `compareCurve`, and the
- *   animation-state waits `waitForAnimation`, `watchAnimations` and
- *   `waitForRest`.
+ * @output `holdAnimations` pauses every running animation and describes it.
+ *   `armHold` makes the page hold what an action starts, as soon as it runs,
+ *   and checks that it took the motion the test judges. `seekAnimations`
+ *   moves them to t ms from the held origin, each keeping its offset, and
+ *   `releaseAnimations` lets them go. `sampleCurve` reads the presented
+ *   transform/opacity at each t, with the individual `translate`, `rotate`
+ *   and `scale` properties composed in. `curveOf` picks one channel out of
+ *   the samples for ./math's `compareCurve`. The animation-state waits are
+ *   `waitForAnimation`, `watchAnimations`, `waitForRest` and `settlesAt`.
  * @position Curve sampling: the exact presented value of an animation at a
  *   fixed time, independent of frame timing, so a curve can be compared with
  *   the UIKit reference to a fraction of a pixel. A paused animation's effect
@@ -24,12 +23,38 @@
  */
 
 import type {Locator, Page} from '@playwright/test';
+import {defineAnimatedProperties} from './animated-properties';
 import {defineCurveEnd} from './curve-end';
 import {FRAME_STARVATION_MS, FrameStarvationError} from './frames';
 import {parseTransform, type TimedValue, type Transform2D} from './math';
 
 /** How far inside its end a seek past an animation's end lands, ms. */
 export const END_INSET_MS = 0.5;
+
+/**
+ * How long a hold waits for its scope, or a judged target, to be on the
+ * page, ms.
+ */
+const TARGET_WAIT_MS = 5_000;
+
+/**
+ * The element that `scope` names, or null without a scope. Throws by name
+ * when no element matches within TARGET_WAIT_MS: it is gone, or it never
+ * came.
+ */
+async function scopeElement(caller: string, scope: Locator | undefined) {
+  if (scope == null) {
+    return null;
+  }
+  return scope.elementHandle({timeout: TARGET_WAIT_MS}).catch(error => {
+    if (error instanceof Error && error.name === 'TimeoutError') {
+      throw new Error(
+        `${caller}: the scope ${scope.toString()} is not on the page after ${TARGET_WAIT_MS} ms: it is gone, or it never came`,
+      );
+    }
+    throw error;
+  });
+}
 
 /**
  * Page side: records every animation the document runs, from its first frame
@@ -86,6 +111,13 @@ function animationRecorder(): void {
   }[] = [];
   // Each recorded animation's entry.
   const entries = new WeakMap<Animation, (typeof log)[number]>();
+  // CSS runs whose end event came while a rendering trace ran, with the
+  // event's time (real) and the active time the event reports.
+  const endedInTrace: {
+    entry: (typeof log)[number];
+    at: number;
+    elapsedMs: number;
+  }[] = [];
   // The times kept below are real: a page time plus the span a page freeze
   // stood still so far. A later freeze then leaves them where they were.
   const span = () =>
@@ -353,12 +385,42 @@ function animationRecorder(): void {
   // event came before it finished, and a cancelled run never finishes: under
   // load, a CSS exit reversed partway sent `transitionend` at current time 0,
   // still `running`, and was cancelled a frame later with no finish event.
+  // Chromium sends a run's end event before its finish event, so the run is
+  // still unfinished here. While a rendering trace runs, no run's state is
+  // read, as in the cancel wrapper below. That read flushes style, and lays
+  // out the run's anchored layer at the end of its own window. Only the newest
+  // run the event names is kept: an older run of that name that the page cut
+  // short stays unfinished. The recorder's resume() dates the kept run from
+  // what it stored.
   const onEnd = (event: Event) => {
+    if (tracing()) {
+      for (let i = log.length - 1; i >= 0; i--) {
+        const entry = log[i];
+        if (!isRunOf(entry, event)) {
+          continue;
+        }
+        if (entry.finishedAt == null) {
+          endedInTrace.push({
+            entry,
+            at: performance.now() + span(),
+            // The event carries the active time, so nothing is read from the
+            // run.
+            elapsedMs:
+              1000 *
+              Number(
+                (event as AnimationEvent | TransitionEvent).elapsedTime || 0,
+              ),
+          });
+        }
+        return;
+      }
+      return;
+    }
     for (const entry of log) {
       if (
         entry.finishedAt == null &&
-        atEnd(entry.animation) &&
-        isRunOf(entry, event)
+        isRunOf(entry, event) &&
+        atEnd(entry.animation)
       ) {
         dateFinish(entry, null);
       }
@@ -436,8 +498,30 @@ function animationRecorder(): void {
         record();
       }
     },
-    // Catches up on what started during a trace, then runs its frames again.
+    // Dates the CSS runs that ended during a trace, then catches up on what
+    // started during it and runs its frames again. A run ends where its start
+    // puts its end, through its specified timing, as the cancel wrapper reads
+    // it. Its stored start comes first: the page may have cancelled the run at
+    // its end since then. Without one, the end event's time and active time
+    // stand in.
     resume: () => {
+      for (const {entry, at, elapsedMs} of endedInTrace.splice(0)) {
+        if (entry.finishedAt != null) {
+          continue;
+        }
+        const timing = entry.animation.effect?.getTiming();
+        const delay = Number(timing?.delay ?? 0);
+        const duration =
+          typeof timing?.duration === 'number' ? timing.duration : 0;
+        const end =
+          delay +
+          duration * Number(timing?.iterations ?? 1) +
+          Number(timing?.endDelay ?? 0);
+        const speed = Math.abs(entry.animation.playbackRate || 1);
+        entry.finishStart = entry.startedAt ?? at - (delay + elapsedMs) / speed;
+        entry.startedAt ??= entry.finishStart;
+        entry.finishedAt = entry.finishStart + end / speed;
+      }
       record();
       loop();
     },
@@ -468,6 +552,7 @@ function animationRecorder(): void {
       log.length = 0;
       unread.length = 0;
       unstarted = [];
+      endedInTrace.length = 0;
     },
   };
 }
@@ -497,10 +582,11 @@ async function installRecorder(page: Page): Promise<void> {
  */
 async function installCurveEnd(page: Page): Promise<void> {
   await installRecorder(page);
-  // The hold, installed with the curve end it reads: one round trip installs
-  // both, so a hold sent from the test costs no extra one.
+  // The hold is installed with the curve end it reads and the property match
+  // of its judged motions. One round trip installs all three, so a hold sent
+  // from the test costs no extra one.
   await page.evaluate(
-    `(${defineCurveEnd.toString()})();(${defineHold.toString()})();`,
+    `(${defineCurveEnd.toString()})();(${defineHold.toString()})();(${defineAnimatedProperties.toString()})();`,
   );
 }
 
@@ -656,9 +742,11 @@ export interface HeldAnimation {
  * only it. A second call adds to the held set: what the first held stays held
  * until the release, and offsets keep counting from the origin the first call
  * set (the earliest start it took), so offsets already returned stay true.
- * An animation the page cancels after the hold (retargeting a CSS transition
- * cancels it) leaves the held set: seeking, sampling and releasing skip it
- * rather than revive it.
+ * An animation the page cancels after the hold leaves the held set.
+ * Retargeting a CSS transition cancels it. Seeking, sampling and releasing
+ * skip such an animation rather than revive it. A judged motion's run fails
+ * the next seek or sample instead: a read would show a run that the hold did
+ * not take.
  *
  * `judges` names the motion that the test reads from the hold, as for
  * `armHold`. A hold sent from the test takes what runs when it reaches the
@@ -672,7 +760,7 @@ export async function holdAnimations(
   options: HoldOptions,
 ): Promise<HeldAnimation[]> {
   const motions = judgedMotions('holdAnimations', options?.judges);
-  const scopeHandle = scope ? await scope.elementHandle() : null;
+  const scopeHandle = await scopeElement('holdAnimations', scope);
   await installCurveEnd(page);
   holdKeys += 1;
   const key = holdKeys;
@@ -818,7 +906,7 @@ export async function armHold(
     timeout = 5_000,
   } = options ?? ({} as Partial<ArmHoldOptions>);
   const motions = judgedMotions('armHold', judges);
-  const scopeHandle = scope ? await scope.elementHandle() : null;
+  const scopeHandle = await scopeElement('armHold', scope);
   await installCurveEnd(page);
   holdKeys += 1;
   const id = holdKeys;
@@ -976,7 +1064,7 @@ async function expectJudgedMotionsHeld(
   }
   const targets = await Promise.all(
     motions.map(motion =>
-      motion.target.elementHandle({timeout: 5_000}).catch(() => {
+      motion.target.elementHandle({timeout: TARGET_WAIT_MS}).catch(() => {
         throw new Error(
           `${failure.caller}: the judged target ${motion.target.toString()} is not on the page`,
         );
@@ -987,62 +1075,13 @@ async function expectJudgedMotionsHeld(
     ([armed, elements, wanted]) => {
       const w = window as unknown as {
         __harnessTook?: Record<number, Animation[]>;
+        __harnessHeldJudged?: {animation: Animation; motion: string}[];
+        __harnessAnimatedProperties: (animation: Animation) => string[];
+        __harnessAnimates: (animation: Animation, property: string) => boolean;
       };
       const animations = w.__harnessTook?.[armed] ?? [];
       delete w.__harnessTook?.[armed];
-      // `getKeyframes()` names a property in camel case, except a custom
-      // property.
-      const keyframeName = (property: string) =>
-        property.startsWith('--')
-          ? property
-          : property.replace(/-([a-z])/g, (_, letter: string) =>
-              letter.toUpperCase(),
-            );
-      // Chromium's `getKeyframes()` leaves out a custom property that a CSS
-      // animation animates. The `@keyframes` rule of that name lists it. The
-      // rule can sit inside a grouping rule (`@layer`, `@media`).
-      const keyframesRules = (rules: readonly CSSRule[]): CSSKeyframesRule[] =>
-        rules.flatMap(rule =>
-          rule instanceof CSSKeyframesRule
-            ? [rule]
-            : rule instanceof CSSGroupingRule
-              ? keyframesRules([...rule.cssRules])
-              : [],
-        );
-      const ruleProperties = (name: string) =>
-        [...document.styleSheets, ...document.adoptedStyleSheets].flatMap(
-          sheet => {
-            let rules: CSSRule[] = [];
-            try {
-              rules = [...sheet.cssRules];
-            } catch {
-              // A cross-origin sheet does not expose its rules.
-            }
-            return keyframesRules(rules)
-              .filter(rule => rule.name === name)
-              .flatMap(rule =>
-                [...rule.cssRules].flatMap(keyframe => [
-                  ...(keyframe as CSSKeyframeRule).style,
-                ]),
-              );
-          },
-        );
-      const properties = (animation: Animation) => [
-        ...new Set([
-          ...((animation.effect as KeyframeEffect | null)?.getKeyframes() ?? [])
-            .flatMap(keyframe => Object.keys(keyframe))
-            .filter(
-              name =>
-                !['offset', 'computedOffset', 'easing', 'composite'].includes(
-                  name,
-                ),
-            ),
-          ...(animation instanceof CSSAnimation
-            ? ruleProperties(animation.animationName).map(keyframeName)
-            : []),
-        ]),
-      ];
-      const describe = (animation: Animation) => {
+      const nameOf = (animation: Animation) => {
         const effect = animation.effect as KeyframeEffect | null;
         const target = effect?.target ?? null;
         const name =
@@ -1053,21 +1092,34 @@ async function expectJudgedMotionsHeld(
               (target.classList.length
                 ? `.${[...target.classList].slice(0, 2).join('.')}`
                 : '');
-        return `${name}${effect?.pseudoElement ?? ''} ${properties(animation).join(' ')}`;
+        return `${name}${effect?.pseudoElement ?? ''}`;
       };
+      const describe = (animation: Animation) =>
+        `${nameOf(animation)} ${w.__harnessAnimatedProperties(animation).join(' ')}`;
+      const runs = wanted.map((motion, index) =>
+        animations.filter(animation => {
+          const effect = animation.effect as KeyframeEffect | null;
+          return (
+            effect != null &&
+            effect.target === elements[index] &&
+            (effect.pseudoElement ?? null) === motion.pseudoElement &&
+            w.__harnessAnimates(animation, motion.property)
+          );
+        }),
+      );
+      // A seek or a sample fails by name once the page cancels one of these.
+      w.__harnessHeldJudged = [
+        ...(w.__harnessHeldJudged ?? []),
+        ...runs.flatMap((found, index) =>
+          found.map(animation => ({
+            animation,
+            motion: `${wanted[index].property} on ${nameOf(animation)}`,
+          })),
+        ),
+      ];
       return {
-        missing: wanted.flatMap((motion, index) =>
-          animations.some(animation => {
-            const effect = animation.effect as KeyframeEffect | null;
-            return (
-              effect != null &&
-              effect.target === elements[index] &&
-              (effect.pseudoElement ?? null) === motion.pseudoElement &&
-              properties(animation).includes(keyframeName(motion.property))
-            );
-          })
-            ? []
-            : [index],
+        missing: runs.flatMap((found, index) =>
+          found.length > 0 ? [] : [index],
         ),
         took: animations.map(describe),
       };
@@ -1106,6 +1158,8 @@ async function expectJudgedMotionsHeld(
  * round `currentTime` writes to their timer resolution.) Returns the time the
  * page then presents: `timeMs`, or the latest clamped end when every held
  * animation was clamped.
+ * It throws when the page has cancelled a judged motion's held run since the
+ * hold.
  */
 export async function seekAnimations(
   page: Page,
@@ -1117,7 +1171,16 @@ export async function seekAnimations(
         __harnessHeld?: Animation[];
         __harnessHeldStarts?: number[];
         __harnessHeldOrigin?: number;
+        __harnessHeldJudged?: {animation: Animation; motion: string}[];
       };
+      const cancelled = (w.__harnessHeldJudged ?? []).filter(
+        run => run.animation.playState === 'idle',
+      );
+      if (cancelled.length > 0) {
+        throw new Error(
+          `seekAnimations: the page cancelled the held run of a judged motion (${[...new Set(cancelled.map(run => run.motion))].join(', ')}) since the hold. A later style change retargeted it, so a read now shows a run that the hold did not take`,
+        );
+      }
       // An animation the page cancelled since the hold (a CSS transition is
       // cancelled whenever the page retargets its property) leaves the held set:
       // applying or playing it again would revive what the page dropped.
@@ -1162,6 +1225,7 @@ export async function releaseAnimations(
       __harnessHeld?: Animation[];
       __harnessHeldStarts?: number[];
       __harnessHeldOrigin?: number;
+      __harnessHeldJudged?: {animation: Animation; motion: string}[];
     };
     // An animation the page cancelled since the hold (a CSS transition is
     // cancelled whenever the page retargets its property) leaves the held set:
@@ -1188,6 +1252,7 @@ export async function releaseAnimations(
       w.__harnessHeld = [];
       w.__harnessHeldStarts = [];
       w.__harnessHeldOrigin = undefined;
+      w.__harnessHeldJudged = [];
     }
   }, finish);
 }
@@ -1251,7 +1316,16 @@ export async function sampleCurve(
         __harnessHeld?: Animation[];
         __harnessHeldStarts?: number[];
         __harnessHeldOrigin?: number;
+        __harnessHeldJudged?: {animation: Animation; motion: string}[];
       };
+      const cancelled = (w.__harnessHeldJudged ?? []).filter(
+        run => run.animation.playState === 'idle',
+      );
+      if (cancelled.length > 0) {
+        throw new Error(
+          `sampleCurve: the page cancelled the held run of a judged motion (${[...new Set(cancelled.map(run => run.motion))].join(', ')}) since the hold. A later style change retargeted it, so a read now shows a run that the hold did not take`,
+        );
+      }
       // An animation the page cancelled since the hold (a CSS transition is
       // cancelled whenever the page retargets its property) leaves the held set:
       // applying or playing it again would revive what the page dropped.
@@ -2260,4 +2334,189 @@ export async function waitForRest(
   if (rested == null) {
     throw new Error('waitForRest: still moving at the deadline');
   }
+}
+
+/** What the page saw by the end of a `settlesAt` wait. */
+interface SettleOutcome {
+  readonly settled: boolean;
+  /** No frame came for longer than the starvation gap before the deadline. */
+  readonly starved: boolean;
+  /** The value the last check read. */
+  readonly seen: string;
+  /** The animations still unfinished, described for the error. */
+  readonly unfinished: readonly string[];
+  /** From the start of the wait to its end, ms. */
+  readonly spanMs: number;
+  /** From the last frame before the deadline to the deadline, ms. */
+  readonly unwatchedMs: number;
+}
+
+/**
+ * Resolves once `locator`'s element shows `property` at `value` and no
+ * animation inside it is left unfinished. Held final keyframes count until
+ * their end, where `waitForRest` reads them as rest. The page checks once a
+ * frame, on its real frames, so a frozen timer gate does not hold it.
+ *
+ * Its deadline is `waitForRest`'s. Past `timeout` ms it rejects, and names
+ * the property, the last value it read and the animations still unfinished.
+ * It throws `FrameStarvationError` with the same names instead when the
+ * page drew no frame for longer than `FRAME_STARVATION_MS` before the
+ * deadline. A stall after the deadline does not count, because the page was
+ * watched up to it. An animation that repeats forever never finishes, so a
+ * wait under one reaches the deadline.
+ */
+export async function settlesAt(
+  locator: Locator,
+  property: string,
+  value: string,
+  {timeout = 5_000}: {timeout?: number} = {},
+): Promise<void> {
+  // The page-side wait answers at its own deadline; the read gets a second
+  // more, so only an element that is gone runs it out.
+  const outcome = await withinTimeout(
+    'settlesAt',
+    locator,
+    Date.now() + timeout + 1_000,
+    async evaluateTimeout =>
+      locator.evaluate(
+        (element, {prop, expected, ms, starvationMs}) =>
+          new Promise<SettleOutcome>(resolve => {
+            // The wait uses the page's real frames, timers and clock, so a
+            // frozen timer gate does not hold it.
+            const gate = (
+              window as unknown as {
+                __harnessTimerGate?: {
+                  frame: typeof requestAnimationFrame;
+                  now?: () => number;
+                  timeout?: typeof setTimeout;
+                  clearTimeout?: typeof clearTimeout;
+                };
+              }
+            ).__harnessTimerGate;
+            const frame = gate?.frame ?? requestAnimationFrame;
+            const realNow = gate?.now ?? (() => performance.now());
+            const later = gate?.timeout ?? setTimeout;
+            const clearTimer = gate?.clearTimeout ?? clearTimeout;
+            const startedAt = realNow();
+            const deadline = startedAt + ms;
+            let lastFrame = startedAt;
+            let seen = '';
+            let ended = false;
+            const unfinished = () =>
+              element
+                .getAnimations({subtree: true})
+                .filter(animation => animation.playState !== 'finished');
+            const describe = (animation: Animation) => {
+              const effect = animation.effect as KeyframeEffect | null;
+              const target = effect?.target ?? null;
+              const where =
+                target == null
+                  ? 'no element'
+                  : `${target.tagName.toLowerCase()}${target.id === '' ? '' : `#${target.id}`}${effect?.pseudoElement ?? ''}`;
+              const css = animation as Animation & {
+                transitionProperty?: string;
+                animationName?: string;
+              };
+              const label =
+                css.transitionProperty ?? css.animationName ?? animation.id;
+              const end = Number(
+                effect?.getComputedTiming().endTime ?? Infinity,
+              );
+              const at = Math.round(Number(animation.currentTime ?? 0));
+              const length = Number.isFinite(end)
+                ? `${Math.round(end)} ms`
+                : 'forever';
+              return `${animation.constructor.name}${label === '' ? '' : ` ${label}`} on ${where}, ${animation.playState} at ${at} of ${length}`;
+            };
+            const finish = (
+              settled: boolean,
+              starved: boolean,
+              unwatchedMs: number,
+            ) => {
+              ended = true;
+              clearTimer(deadlineTimer);
+              const listed = settled ? [] : unfinished().map(describe);
+              resolve({
+                settled,
+                starved,
+                seen,
+                unfinished:
+                  listed.length > 5
+                    ? [...listed.slice(0, 5), `${listed.length - 5} more`]
+                    : listed,
+                spanMs: realNow() - startedAt,
+                unwatchedMs,
+              });
+            };
+            // A frame that never comes cannot reach the deadline check in
+            // `check`, so this timer gives the verdict instead.
+            const deadlineTimer = later(
+              () => {
+                if (!ended) {
+                  const unwatched = Math.max(0, deadline - lastFrame);
+                  finish(false, unwatched > starvationMs, unwatched);
+                }
+              },
+              ms + starvationMs + 1,
+            );
+            const check = (frameBefore: number) => {
+              seen = getComputedStyle(element).getPropertyValue(prop);
+              if (seen === expected && unfinished().length === 0) {
+                finish(true, false, 0);
+              } else if (realNow() > deadline) {
+                // Only the span from the frame before this one to the
+                // deadline went unwatched. A stall after the deadline does
+                // not hide the value read before it.
+                const unwatched = Math.max(0, deadline - frameBefore);
+                finish(false, unwatched > starvationMs, unwatched);
+              } else {
+                frame(onFrame);
+              }
+            };
+            const onFrame = () => {
+              if (!ended) {
+                const frameBefore = lastFrame;
+                lastFrame = realNow();
+                check(frameBefore);
+              }
+            };
+            check(startedAt);
+          }),
+        {
+          prop: property,
+          expected: value,
+          ms: timeout,
+          starvationMs: FRAME_STARVATION_MS,
+        },
+        {timeout: evaluateTimeout},
+      ),
+  );
+  if (outcome == null) {
+    throw new Error(
+      `settlesAt: ${property} did not settle at ${value} by the deadline, and the page did not answer`,
+    );
+  }
+  if (outcome.settled) {
+    return;
+  }
+  const read =
+    outcome.seen === value
+      ? `${property} read ${JSON.stringify(outcome.seen)}`
+      : `${property} read ${JSON.stringify(outcome.seen)} (not ${JSON.stringify(value)})`;
+  const running =
+    outcome.unfinished.length === 0
+      ? 'no animation under it was unfinished'
+      : `unfinished under it: ${outcome.unfinished.join('; ')}`;
+  if (outcome.starved) {
+    throw new FrameStarvationError({
+      by: 'settlesAt',
+      frames: 0,
+      during: `it looked for ${property} to settle at ${value} in the ${Math.round(outcome.unwatchedMs)} ms up to its deadline (${read}; ${running})`,
+      min: 1,
+      longestGapMs: outcome.unwatchedMs,
+    });
+  }
+  throw new Error(
+    `settlesAt: not settled ${Math.round(outcome.spanMs)} ms after it began: ${read}; ${running}`,
+  );
 }

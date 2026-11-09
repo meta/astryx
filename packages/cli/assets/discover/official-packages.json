@@ -102,6 +102,10 @@
         },
         {
           "kind": "component",
+          "name": "ChatVirtualizer"
+        },
+        {
+          "kind": "component",
           "name": "CircleCheckIndicator"
         },
         {
@@ -259,6 +263,10 @@
         {
           "kind": "template",
           "name": "CommentThreadShowcase"
+        },
+        {
+          "kind": "template",
+          "name": "DialogHeroHeaderShowcase"
         },
         {
           "kind": "template",

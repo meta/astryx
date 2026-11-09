@@ -5,11 +5,12 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {integrationAdd, integrationAddComponent} from './add-contribution.mjs';
 import {discoverIntegrationComponents} from '../../foundation/discovery/component-discovery.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-add-component-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-add-component-'));
   fs.writeFileSync(
     path.join(tmpDir, 'package.json'),
     `${JSON.stringify({name: '@acme/widgets', version: '1.0.0', files: ['dist']}, null, 2)}\n`,

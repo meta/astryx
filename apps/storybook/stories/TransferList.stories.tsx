@@ -16,7 +16,7 @@
  * docs, and tests.
  */
 
-import {useEffect, useRef, useState, type SVGProps} from 'react';
+import {useEffect, useMemo, useRef, useState, type SVGProps} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import * as stylex from '@stylexjs/stylex';
 import {TransferList} from '@astryxdesign/lab';
@@ -24,6 +24,7 @@ import type {TransferListOption} from '@astryxdesign/lab';
 import {Theme} from '@astryxdesign/core';
 import {Button} from '@astryxdesign/core/Button';
 import {ComplexSelector} from '@astryxdesign/core/ComplexSelector';
+import {createReorderable} from '@astryxdesign/core';
 import {Divider} from '@astryxdesign/core/Divider';
 import {Heading} from '@astryxdesign/core/Heading';
 import {Icon} from '@astryxdesign/core/Icon';
@@ -169,12 +170,33 @@ const BASIC_OPTIONS: ReadonlyArray<TransferListOption<string>> = [
   {value: 'created', label: 'Created', description: 'Original creation time'},
 ];
 
+/** The owner's reorder: each move lands in `setValue`'s value where reported. */
+function useMoveReorderable<T extends string>(
+  setValue: (update: (value: readonly T[]) => readonly T[]) => void,
+  isReorderable?: (value: T) => boolean,
+) {
+  return useMemo(
+    () =>
+      createReorderable<T>({
+        onReorder: ({key, to}) =>
+          setValue(current => {
+            const next = current.filter(item => item !== key);
+            next.splice(to, 0, key);
+            return next;
+          }),
+        isReorderable,
+      }),
+    [setValue, isReorderable],
+  );
+}
+
 function DefaultExample() {
   const [value, setValue] = useState<readonly string[]>([
     'name',
     'owner',
     'status',
   ]);
+  const reorderable = useMoveReorderable(setValue);
   return (
     <TransferList
       label="Visible fields"
@@ -182,6 +204,7 @@ function DefaultExample() {
       options={BASIC_OPTIONS}
       value={value}
       onChange={setValue}
+      reorderable={reorderable}
       selectedLabel="Visible fields"
       availableLabel="Available fields"
       hasSelectAll
@@ -202,7 +225,6 @@ const LOCKED_OPTIONS: ReadonlyArray<TransferListOption<string>> = [
     description: 'Required identity field',
     group: 'Identity',
     isTransferDisabled: true,
-    isReorderDisabled: true,
     disabledMessage: 'Name is required and fixed in position.',
   },
   {
@@ -219,9 +241,6 @@ const LOCKED_OPTIONS: ReadonlyArray<TransferListOption<string>> = [
     label: 'Status',
     description: 'Current workflow state',
     group: 'Planning',
-    isReorderDisabled: true,
-    disabledMessage:
-      'Status can be hidden but its current position is fixed while selected.',
   },
   {
     value: 'priority',
@@ -237,6 +256,9 @@ const LOCKED_OPTIONS: ReadonlyArray<TransferListOption<string>> = [
   },
 ];
 
+/** The fields that keep their place in the selected list. */
+const FIXED_FIELDS = new Set(['name', 'status']);
+
 function LockedExample() {
   const [value, setValue] = useState<readonly string[]>([
     'name',
@@ -244,13 +266,29 @@ function LockedExample() {
     'status',
     'updated',
   ]);
+  // The owner's reorder: Name and Status keep their place, and each move
+  // lands where TransferList reports it.
+  const reorderable = useMemo(
+    () =>
+      createReorderable<string>({
+        onReorder: ({key, to}) =>
+          setValue(current => {
+            const next = current.filter(item => item !== key);
+            next.splice(to, 0, key);
+            return next;
+          }),
+        isReorderable: key => !FIXED_FIELDS.has(key),
+      }),
+    [],
+  );
   return (
     <TransferList
       label="Record fields"
-      description="Transfer and reorder are constrained per option, so a field can be locked in place without being locked in the list."
+      description="Transfer and reorder are constrained independently, so a field can be locked in place without being locked in the list."
       options={LOCKED_OPTIONS}
       value={value}
       onChange={setValue}
+      reorderable={reorderable}
       selectedLabel="Shown"
       availableLabel="Hidden"
       hasSelectAll
@@ -261,8 +299,10 @@ function LockedExample() {
 
 /**
  * TransferList has no component-wide disabled state. Availability is decided
- * per option, and the two constraints are independent: `isTransferDisabled`
- * pins an option to its panel, `isReorderDisabled` pins it to its position.
+ * per option, and the two constraints are independent. `isTransferDisabled`
+ * pins an option to its panel. The reorderable object's `isReorderable` takes
+ * away its reorder handle, and at either end of the selected list it also
+ * bounds the others.
  */
 export const Locked: Story = {
   render: () => <LockedExample />,
@@ -283,14 +323,13 @@ function UnorderedExample() {
       onChange={setValue}
       selectedLabel="Included"
       availableLabel="Not included"
-      isReorderable={false}
       hasSelectAll
       hasClear
     />
   );
 }
 
-/** `isReorderable={false}` for selections where order carries no meaning. */
+/** No `reorderable` for selections where order carries no meaning. */
 export const Unordered: Story = {
   render: () => <UnorderedExample />,
 };
@@ -310,6 +349,7 @@ function SearchableExample() {
   const [value, setValue] = useState<readonly string[]>(
     LARGE_POOL_OPTIONS.slice(0, 12).map(option => option.value),
   );
+  const reorderable = useMoveReorderable(setValue);
   return (
     <TransferList
       label="Report fields"
@@ -317,6 +357,7 @@ function SearchableExample() {
       options={LARGE_POOL_OPTIONS}
       value={value}
       onChange={setValue}
+      reorderable={reorderable}
       selectedLabel="In report"
       availableLabel="Available"
       hasSearch
@@ -626,6 +667,12 @@ function TableColumnSettingsExample() {
     setDraftColumns(nextColumns);
     setActiveSavedView(findSavedViewValue(nextColumns));
   };
+  // The draft is the order being edited, so a reorder moves the draft.
+  const draftColumnsRef = useRef(draftColumns);
+  draftColumnsRef.current = draftColumns;
+  const draftReorderable = useMoveReorderable<ProjectColumnKey>(update =>
+    changeDraftColumns(update(draftColumnsRef.current)),
+  );
 
   const saveCurrentColumnsAsView = () => {
     const nextNumber = nextSavedViewNumberRef.current;
@@ -704,6 +751,7 @@ function TableColumnSettingsExample() {
                   options={PROJECT_TRANSFER_OPTIONS}
                   value={draftColumns}
                   onChange={changeDraftColumns}
+                  reorderable={draftReorderable}
                   selectedLabel="Visible fields"
                   availableLabel="Available fields"
                   hasSearch
