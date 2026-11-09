@@ -753,10 +753,12 @@ export function Lightbox({
     [media],
   );
   const isGallery = mediaArray.length > 1;
-  // The item shown, current in every respect (its page, the counter, the
-  // pager, the announcement): an index past either end shows the nearest
-  // item. A NaN index stays NaN (the viewed-item check below).
-  const index = Math.max(0, Math.min(requestedIndex, mediaArray.length - 1));
+  // The item shown is current in every respect: its page, the counter, the
+  // pager and the announcement.
+  const wholeIndex = Number.isNaN(requestedIndex)
+    ? 0
+    : Math.round(requestedIndex);
+  const index = Math.max(0, Math.min(wholeIndex, mediaArray.length - 1));
   const currentItem = mediaArray.length > 0 ? mediaArray[index] : null;
   const currentType = currentItem?.type ?? 'image';
   const isVideo = currentType === 'video';
@@ -770,8 +772,6 @@ export function Lightbox({
   // never paints as zoomed; the stage resets the photo before it paints.
   const currentSrc = currentItem?.src;
   const [viewedItem, setViewedItem] = useState({index, src: currentSrc});
-  // Object.is, matching the dependency comparison of the effect this replaces:
-  // a controlled index of NaN must not re-render forever.
   if (
     !Object.is(viewedItem.index, index) ||
     !Object.is(viewedItem.src, currentSrc)
