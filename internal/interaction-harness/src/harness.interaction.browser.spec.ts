@@ -30,8 +30,8 @@
  *   after it;
  *   storyboards write a
  *   sheet and a trace that follows the curve, an endless animation does not
- *   set their length, and a photograph Chromium returns empty is taken again
- *   two frames later; a touch filmstrip keeps scripted event times while a
+ *   set their length, and a photograph the engine fails throws its error and
+ *   records no frame; a touch filmstrip keeps scripted event times while a
  *   handler clock sees its pacing; the timer gate holds a component timer
  *   until the filmstrip is done, drops callbacks the page cancels, stamps held
  *   frames with the time they run, and leaves the harness its own frames; a
@@ -6423,7 +6423,9 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
   }) => {
     await fixture(page);
     // What Chromium answers when its surface copy comes back empty.
+    let photographs = 0;
     page.screenshot = (async () => {
+      photographs += 1;
       throw new Error(
         'page.screenshot: Protocol error (Page.captureScreenshot): Unable to capture screenshot',
       );
@@ -6435,6 +6437,7 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     await expect(storyboard.capture('t=0 ms', 0)).rejects.toThrow(
       /Unable to capture screenshot/,
     );
+    expect(photographs).toBe(1);
     expect(storyboard.frames).toHaveLength(0);
     expect(storyboard.trace()).not.toHaveProperty('recaptures');
   });
