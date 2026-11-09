@@ -18,7 +18,7 @@
 
 import {describe, expect, it} from 'vitest';
 import {busyWindowProof, pageTimesOnControls, pooledBusyProof} from './busy';
-import type {TrackedFrame} from './frames';
+import {FrameStarvationError, type TrackedFrame} from './frames';
 
 const FRAME = 1000 / 60;
 const BLOCK = {from: 1000, to: 1700};
@@ -471,5 +471,41 @@ describe('busyWindowProof on a WebKit cast with a control', () => {
       });
     expect(proof(chromium, true)).toEqual(proof(stamped, true));
     expect(proof(webkit, false)).toEqual(proof(stamped, false));
+  });
+
+  it('measures the cast on every frame it drew, so a frame the display-rate keep leaves out never lengthens its longest gap', () => {
+    // In the block, a frame drawn 7 ms after another is left out of the
+    // judgment, and then no frame comes for 48 ms. Without that frame, the
+    // gap would read 55 ms, over FRAME_STARVATION_MS.
+    const shots = [
+      ...onTime(800, 990),
+      ...[1010, 1017, 1065, 1090].map(at => ({at, stamp: at})),
+      ...onTime(1110, 1300),
+    ];
+    const proof = (value: (at: number) => number) => () => {
+      const frames = cast(shots, value, 'webkit');
+      return busyWindowProof(
+        frames.tracked,
+        {from: 1000, to: 1100},
+        {axis: 'x', control: frames.control, ahead: frames.ahead},
+      );
+    };
+    // Under the floor, a frozen component failed on frames the compositor
+    // presented, and no gap passed 50 ms. So its red stands.
+    expect(proof(() => 100)().verdict.failures.join('\n')).toMatch(
+      /moved on 0 of the \d+ frames the control moved/,
+    );
+    // A component that moves with the control is too little to judge. The
+    // error counts every frame drawn, the one left out included.
+    const moving = proof(xAt);
+    expect(moving).toThrow(FrameStarvationError);
+    try {
+      moving();
+    } catch (error) {
+      const {numbers} = error as FrameStarvationError;
+      expect(numbers.frames).toBe(4);
+      expect(numbers.longestGapMs).toBeGreaterThan(45);
+      expect(numbers.longestGapMs).toBeLessThanOrEqual(50);
+    }
   });
 });
