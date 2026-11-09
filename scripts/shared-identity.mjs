@@ -6,8 +6,8 @@
  * @output The places where a module keeps cross-module identity in module
  *   scope instead of a registered shared key (spec:AST-110 FR3): a
  *   module-local symbol that keys an exported type or that an exported
- *   function reaches, and module-scope state (a `let`, or a collection that
- *   changes) that an exported function reaches, directly or through the
+ *   function reaches, and module-scope state (a `let`, or a collection or an
+ *   object or array literal that changes) that an exported function reaches, directly or through the
  *   module's own functions, or that is keyed by a document or window
  * @position Read by shared-identity.test.mjs; no Vitest import
  */
@@ -32,6 +32,8 @@ const NOT_SHIPPED =
   /\.(?:test|spec|stories|story|d|bench)\.tsx?$|(?:^|\/)__(?:tests|fixtures|mocks)__\//;
 const COLLECTION = /^(?:Map|Set|WeakMap|WeakSet)$/;
 const DOCUMENT_KEY = /^(?:Document|Window)$/;
+const MUTATING_METHOD =
+  /^(?:push|pop|shift|unshift|splice|sort|reverse|fill|copyWithin|set|add|delete|clear)$/;
 
 /** Every shipped source file, repository-relative. */
 export function sourceFiles() {
@@ -70,6 +72,58 @@ export function findInSource(file, code) {
   const exported = new Set();
   const hasExport = node =>
     (ts.getCombinedModifierFlags(node) & ts.ModifierFlags.Export) !== 0;
+  /** Whether the module writes into the value `name` holds. */
+  const isMutated = name => {
+    const rootOf = expression => {
+      let node = expression;
+      while (
+        ts.isPropertyAccessExpression(node) ||
+        ts.isElementAccessExpression(node) ||
+        ts.isNonNullExpression(node) ||
+        ts.isParenthesizedExpression(node)
+      ) {
+        node = node.expression;
+      }
+      return ts.isIdentifier(node) ? node.text : null;
+    };
+    let mutated = false;
+    const visit = node => {
+      if (mutated) return;
+      if (
+        ts.isBinaryExpression(node) &&
+        node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+        node.operatorToken.kind <= ts.SyntaxKind.LastAssignment &&
+        !ts.isIdentifier(node.left) &&
+        rootOf(node.left) === name
+      ) {
+        mutated = true;
+      } else if (
+        (ts.isPrefixUnaryExpression(node) ||
+          ts.isPostfixUnaryExpression(node)) &&
+        (node.operator === ts.SyntaxKind.PlusPlusToken ||
+          node.operator === ts.SyntaxKind.MinusMinusToken) &&
+        !ts.isIdentifier(node.operand) &&
+        rootOf(node.operand) === name
+      ) {
+        mutated = true;
+      } else if (
+        ts.isDeleteExpression(node) &&
+        rootOf(node.expression) === name
+      ) {
+        mutated = true;
+      } else if (
+        ts.isCallExpression(node) &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        MUTATING_METHOD.test(node.expression.name.text) &&
+        rootOf(node.expression.expression) === name
+      ) {
+        mutated = true;
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+    return mutated;
+  };
 
   for (const statement of source.statements) {
     if (ts.isVariableStatement(statement)) {
@@ -111,6 +165,16 @@ export function findInSource(file, code) {
             );
           }
         } else if (isLet) {
+          candidates.set(name, 'registry');
+        } else if (
+          init &&
+          (ts.isObjectLiteralExpression(init) ||
+            ts.isArrayLiteralExpression(init)) &&
+          !/^Readonly/.test(typeText) &&
+          isMutated(name)
+        ) {
+          // An object or array literal that the module changes holds state
+          // like a collection does.
           candidates.set(name, 'registry');
         }
         if (

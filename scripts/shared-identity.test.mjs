@@ -58,19 +58,21 @@ describe('cross-module identity in module scope (spec:AST-110 FR3)', () => {
     expect(hits.map(hit => hit.name)).toEqual(['registered']);
   });
 
-  it('flags state an export reaches through a private helper or an export list', () => {
+  it('flags state an export reaches through a private helper or an export list, including a literal it changes', () => {
     const hits = findInSource(
       'claims.ts',
       [
         `const held = new Map<number, string>();`,
         `const regions: WeakMap<Document, string> = new WeakMap();`,
-        `function remember(id: number) { held.set(id, 'x'); }`,
+        `const claims: Record<string, number[]> = {overflow: []};`,
+        `function remember(id: number) { held.set(id, 'x'); claims.overflow.push(id); }`,
         `function claim(id: number) { remember(id); }`,
         `export {claim};`,
       ].join('\n'),
     );
     expect(hits.map(hit => [hit.name, hit.why])).toEqual([
       ['held', 'module state the exported claim uses'],
+      ['claims', 'module state the exported claim uses'],
       ['regions', 'a per-document store in module scope'],
     ]);
   });

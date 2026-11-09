@@ -1,6 +1,10 @@
 {
   "$comment": "Module-scope cross-module identity the FR3 check knows about (spec:AST-110 FR3, FR7). \"open\" names the fix group that removes the entry; \"allowed\" gives the approved reason. A new hit or a stale entry fails scripts/shared-identity.test.mjs.",
   "entries": {
+    "packages/core/src/AppShell/useAppShellMainId.ts:claims": {
+      "status": "open",
+      "group": "triage"
+    },
     "packages/core/src/AppShell/useAppShellMainId.ts:listeners": {
       "status": "open",
       "group": "triage"
@@ -101,6 +105,10 @@
       "status": "open",
       "group": "F4 Layers and popovers"
     },
+    "packages/core/src/Layer/layerStack.ts:entries": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
     "packages/core/src/Layer/layerStack.ts:layerCountByDocument": {
       "status": "open",
       "group": "F4 Layers and popovers"
@@ -122,6 +130,10 @@
       "group": "F4 Layers and popovers"
     },
     "packages/core/src/Layer/modalOutlet.ts:outletGroups": {
+      "status": "open",
+      "group": "F4 Layers and popovers"
+    },
+    "packages/core/src/Layer/modalOutlet.ts:outlets": {
       "status": "open",
       "group": "F4 Layers and popovers"
     },
@@ -220,6 +232,10 @@
     "packages/core/src/Markdown/plugins/protocol.ts:reportedProductionPluginFailures": {
       "status": "allowed",
       "reason": "Deduplicates development warnings; a copy can at most repeat a warning once."
+    },
+    "packages/core/src/Markdown/plugins/protocol.ts:reusableScratch": {
+      "status": "allowed",
+      "reason": "Per-run state of one call (a parse, a transform or a render pass) that never outlives the call; a run never crosses copies."
     },
     "packages/core/src/Markdown/plugins/protocol.ts:scratchInUse": {
       "status": "allowed",
@@ -421,6 +437,14 @@
       "status": "open",
       "group": "F5 Focus and announce"
     },
+    "packages/core/src/hooks/modalAnnounce.ts:presented": {
+      "status": "open",
+      "group": "F5 Focus and announce"
+    },
+    "packages/core/src/hooks/rootScrollStyles.ts:claims": {
+      "status": "open",
+      "group": "F3 Scroll lock"
+    },
     "packages/core/src/hooks/rootScrollStyles.ts:held": {
       "status": "open",
       "group": "F3 Scroll lock"
@@ -445,6 +469,10 @@
       "status": "open",
       "group": "triage"
     },
+    "packages/core/src/hooks/useAnnounce.ts:clearTimers": {
+      "status": "open",
+      "group": "F5 Focus and announce"
+    },
     "packages/core/src/hooks/useAnnounce.ts:lastJoined": {
       "status": "open",
       "group": "F5 Focus and announce"
@@ -454,6 +482,14 @@
       "group": "F5 Focus and announce"
     },
     "packages/core/src/hooks/useAnnounce.ts:pendingByRegion": {
+      "status": "open",
+      "group": "F5 Focus and announce"
+    },
+    "packages/core/src/hooks/useAnnounce.ts:pendingFrames": {
+      "status": "open",
+      "group": "F5 Focus and announce"
+    },
+    "packages/core/src/hooks/useAnnounce.ts:pendingMessages": {
       "status": "open",
       "group": "F5 Focus and announce"
     },
@@ -541,6 +577,10 @@
       "status": "open",
       "group": "F7 Motion frame"
     },
+    "packages/core/src/motion/animatedLayout.ts:endedReports": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
     "packages/core/src/motion/animatedLayout.ts:exits": {
       "status": "open",
       "group": "F7 Motion frame"
@@ -602,6 +642,10 @@
       "group": "F7 Motion frame"
     },
     "packages/core/src/motion/animator.ts:shared": {
+      "status": "open",
+      "group": "F7 Motion frame"
+    },
+    "packages/core/src/motion/animator.ts:sheetReads": {
       "status": "open",
       "group": "F7 Motion frame"
     },
@@ -817,7 +861,15 @@
       "status": "open",
       "group": "triage"
     },
+    "packages/core/src/utils/pressFeedback.ts:button": {
+      "status": "open",
+      "group": "triage"
+    },
     "packages/core/src/utils/pressFeedback.ts:contact": {
+      "status": "open",
+      "group": "triage"
+    },
+    "packages/core/src/utils/pressFeedback.ts:finger": {
       "status": "open",
       "group": "triage"
     },
