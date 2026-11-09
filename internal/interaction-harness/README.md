@@ -357,6 +357,33 @@ the cast's step explains is then too little to judge: `busyWindowProof` throws
 there and the cast's step. A verdict that fails anyway comes back as it is, so
 a frozen or main-thread component stays a red on the component.
 
+A window that caught an animation (`blockMainThread` with `during`) predicts
+each frame instead, when two things hold. The proof passes both controls,
+`ahead` included, so every frame has a time of its own. The engine is
+Chromium. A geometry replay also needs the harness marker on the caught
+element. Once the loop ends, the
+page replays the element's geometry animations, paused, on a hidden copy of
+its box. The copy is aligned to the element, and its box is read every 2 ms.
+A fade or a pseudo-element replays one numeric channel. The tracked value at
+rest and at the curve's end map that channel to a position. The proof dates
+each frame on the controls' clock, from the controls' starts that the window
+keeps. A frame predicted to move a full cast step since the last new position must
+show one, so a hold ends once its moves add up to a step.
+A frame predicted to move less is too little to judge, and so is a frame with
+no control reading of its own. Each such frame is named in the proof's
+`unjudged` list and in its summary. It counts neither as moved nor as missed,
+and `judgeEveryFrame` throws for none. When too few judged frames are left,
+the proof throws `FrameStarvationError`. Where a replay predicts, one the
+proof cannot read throws `BusyPredictionError`: an ancestor moves too, or a
+run composites onto another. A replay whose travel or first judged position
+differs from the cast's by more than two steps or a tenth of the travel falls
+back by name. So does a geometry window without the marker, a window without
+`ahead` or in WebKit, and a window whose run left the element before the
+replay. WebKit reads the element's box at the loop's end before its
+animation's current time, so the replay cannot be aligned there. A window that falls back is judged exactly as without a
+replay, and its notes say why. The proof gives its `judged` part in the
+cast's stamps, so a spec selects frames by it as before.
+
 `controlClock(control)` reads the compositor's own time in each frame off the
 control's position, for a proof that judges motion against time, not against
 the screencast's stamps. A loaded machine stamps frames late, and
