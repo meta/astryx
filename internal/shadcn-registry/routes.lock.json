@@ -3812,6 +3812,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-interactive-role-one-tile-four-roles",
+      "path": "examples/use-interactive-role/one-tile-four-roles",
+      "aliases": []
+    },
+    {
       "name": "example-use-keyboard-hint-arrow-key-hint",
       "path": "examples/use-keyboard-hint/arrow-key-hint",
       "aliases": []

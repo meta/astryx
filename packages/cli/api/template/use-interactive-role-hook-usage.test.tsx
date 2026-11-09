@@ -45,23 +45,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function tilesByText(): Map<string, Element> {
-  const map = new Map<string, Element>();
-  for (const card of container.querySelectorAll('*')) {
-    const text = card.textContent ?? '';
-    for (const label of [
-      'Renders as a link',
-      'Renders as a button',
-      'Trigger via context',
-      'Plain content',
-    ]) {
-      if (text === label) map.set(label, card);
-    }
-  }
-  // Map from the text node up to the interactive ancestor (or the card itself).
-  return map;
-}
-
 describe('useInteractiveRoleHookUsage example', () => {
   it('resolves the element from the inputs: link, button, context button, inert', () => {
     root = createRoot(container);

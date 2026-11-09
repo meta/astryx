@@ -815,6 +815,7 @@
     "/templates/useImageModeHookUsage/",
     "/templates/useInputContainerHookUsage/",
     "/templates/useInputStatusIconHookUsage/",
+    "/templates/useInteractiveRoleHookUsage/",
     "/templates/useKeyboardHintHookUsage/",
     "/templates/useLinkComponentHookUsage/",
     "/templates/useListFocusHookUsage/",

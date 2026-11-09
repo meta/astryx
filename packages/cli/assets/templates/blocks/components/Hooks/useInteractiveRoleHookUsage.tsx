@@ -42,6 +42,7 @@ export default function UseInteractiveRoleHookUsage() {
       <Tile href="https://example.com/docs">Renders as a link</Tile>
       <Tile onClick={() => {}}>Renders as a button</Tile>
       <Popover
+        label="Tile details"
         content={
           <Card padding={3}>
             <Text type="body">Opened through the tile's context role</Text>
