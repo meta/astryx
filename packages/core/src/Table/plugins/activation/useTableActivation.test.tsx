@@ -9,7 +9,7 @@
  */
 
 import {describe, it, expect, vi, afterEach} from 'vitest';
-import {useMemo, useState} from 'react';
+import {StrictMode, useMemo, useState} from 'react';
 import type {MouseEvent as ReactMouseEvent} from 'react';
 import {render, renderHook, screen, fireEvent} from '@testing-library/react';
 import {createPortal} from 'react-dom';
@@ -1051,6 +1051,103 @@ describe('row eligibility', () => {
     expect(onActivate).not.toHaveBeenCalled();
     // Eligible rows are unaffected.
     expect(rows[0].getAttribute('tabindex')).toBe('0');
+  });
+
+  it('restores no tab stop after a re-render, not the modules own default', () => {
+    function Harness({eligible, data}: {eligible: boolean; data: Member[]}) {
+      const plugin = useTableActivation<Member>({
+        activeKey: null,
+        onActivate: () => {},
+        getIsItemActivatable: () => eligible,
+      });
+      return (
+        <Table
+          data={data}
+          columns={memberColumns}
+          idKey="id"
+          plugins={{activation: plugin}}
+        />
+      );
+    }
+    const {rerender} = render(<Harness eligible={true} data={members} />);
+    // The eligible row takes the module default.
+    expect(bodyRows()[0].getAttribute('tabindex')).toBe('0');
+    // A data update with new item objects re-renders the row and re-attaches
+    // its ref while the module default is still mounted.
+    const updated = members.map(member => ({...member}));
+    rerender(<Harness eligible={true} data={updated} />);
+    expect(bodyRows()[0].getAttribute('tabindex')).toBe('0');
+    // Excluding the row afterwards restores the baseline the row mounted
+    // with (no tab stop), rather than the re-snapshotted module default.
+    rerender(
+      <Harness eligible={false} data={updated.map(member => ({...member}))} />,
+    );
+    const row = bodyRows()[0];
+    expect(row.hasAttribute('tabindex')).toBe(false);
+    expect(row.getAttribute('aria-keyshortcuts')).toBeNull();
+  });
+
+  it('restores no tab stop after a remount while the module default is mounted', () => {
+    // A remount (StrictMode double-mount included) re-attaches the row ref
+    // while this module's default tab stop is still on the row. The
+    // re-attach must not adopt that write as the row owner's baseline.
+    function Harness({eligible}: {eligible: boolean}) {
+      const plugin = useTableActivation<Member>({
+        activeKey: null,
+        onActivate: () => {},
+        getIsItemActivatable: () => eligible,
+      });
+      return (
+        <StrictMode>
+          <Table
+            data={members}
+            columns={memberColumns}
+            idKey="id"
+            plugins={{activation: plugin}}
+          />
+        </StrictMode>
+      );
+    }
+    const {rerender} = render(<Harness eligible={true} />);
+    expect(bodyRows()[0].getAttribute('tabindex')).toBe('0');
+    rerender(<Harness eligible={false} />);
+    const row = bodyRows()[0];
+    expect(row.hasAttribute('tabindex')).toBe(false);
+    expect(row.getAttribute('aria-keyshortcuts')).toBeNull();
+  });
+
+  it('keeps an earlier plugins explicit tab stop across a re-render and exclusion', () => {
+    const early: TablePlugin<Member> = {
+      transformBodyRow: props => ({
+        ...props,
+        htmlProps: {...props.htmlProps, tabIndex: -1},
+      }),
+    };
+    function Harness({eligible, data}: {eligible: boolean; data: Member[]}) {
+      const plugin = useTableActivation<Member>({
+        activeKey: null,
+        onActivate: () => {},
+        getIsItemActivatable: () => eligible,
+      });
+      const plugins = useMemo(() => ({early, activation: plugin}), [plugin]);
+      return (
+        <Table
+          data={data}
+          columns={memberColumns}
+          idKey="id"
+          plugins={plugins}
+        />
+      );
+    }
+    const {rerender} = render(<Harness eligible={true} data={members} />);
+    expect(bodyRows()[0].getAttribute('tabindex')).toBe('-1');
+    const updated = members.map(member => ({...member}));
+    rerender(<Harness eligible={true} data={updated} />);
+    expect(bodyRows()[0].getAttribute('tabindex')).toBe('-1');
+    rerender(
+      <Harness eligible={false} data={updated.map(member => ({...member}))} />,
+    );
+    expect(bodyRows()[0].getAttribute('tabindex')).toBe('-1');
   });
 });
 
