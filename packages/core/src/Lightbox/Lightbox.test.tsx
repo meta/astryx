@@ -1155,6 +1155,25 @@ describe('Lightbox', () => {
       expect(zoomTarget()).toHaveAttribute('aria-pressed', 'true');
     });
 
+    it('returns a zoomed photo to its fitted size with 0', () => {
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={{src: '/photo.jpg', alt: 'Photo'}}
+          hasZoom
+        />,
+      );
+      const dialog = document.querySelector('dialog')!;
+      fireEvent.keyDown(dialog, {key: '+'});
+      expect(zoomTarget()).toHaveAttribute('aria-pressed', 'true');
+      fireEvent.keyDown(dialog, {key: '0'});
+      expect(zoomTarget()).toHaveAttribute('aria-pressed', 'false');
+      // At the fitted size, 0 leaves the photo there.
+      fireEvent.keyDown(dialog, {key: '0'});
+      expect(zoomTarget()).toHaveAttribute('aria-pressed', 'false');
+    });
+
     it('pans with arrow keys while zoomed instead of navigating the gallery', () => {
       const onIndexChange = vi.fn();
       render(
