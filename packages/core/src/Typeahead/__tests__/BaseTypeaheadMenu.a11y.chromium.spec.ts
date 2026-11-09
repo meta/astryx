@@ -61,7 +61,7 @@ async function activeOption(page: Page) {
 async function openList(page: Page, input: Locator) {
   await input.click();
   await expect(page.getByRole('option', {name: /Status/})).toBeVisible();
-  await expect.poll(() => activeOption(page)).toContain('Status');
+  await expect.poll(async () => activeOption(page)).toContain('Status');
 }
 
 test('the arrow keys move through the options, with information around the list', async ({
@@ -74,9 +74,9 @@ test('the arrow keys move through the options, with information around the list'
   await expect(page.getByText('Arrow keys move, Enter picks')).toBeVisible();
 
   await input.press('ArrowDown');
-  await expect.poll(() => activeOption(page)).toContain('Priority');
+  await expect.poll(async () => activeOption(page)).toContain('Priority');
   await input.press('ArrowDown');
-  await expect.poll(() => activeOption(page)).toContain('Owner');
+  await expect.poll(async () => activeOption(page)).toContain('Owner');
   // Focus never left the input.
   await expect(input).toBeFocused();
 });
@@ -87,7 +87,7 @@ test('a pick switches the open layer to a named dialog that takes focus', async 
   const input = await openStory(page);
   await openList(page, input);
   await input.press('ArrowDown');
-  await expect.poll(() => activeOption(page)).toContain('Priority');
+  await expect.poll(async () => activeOption(page)).toContain('Priority');
   // The menu's layer: the open popover that holds the result list.
   const layer = page.locator('[popover]:popover-open:has([role="listbox"])');
   await expect(layer).toHaveCount(1);
