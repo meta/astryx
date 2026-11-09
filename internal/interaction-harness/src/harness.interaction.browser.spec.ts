@@ -4149,6 +4149,24 @@ test.describe('holding', () => {
     await releaseAnimations(page, {finish: true});
   });
 
+  test('a hold whose scope is not on the page fails by name within its wait, not at the test timeout', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // The scope's element is gone before either hold resolves it, as a
+    // viewer the page has closed is.
+    await box.evaluate(el => el.remove());
+    await expect(armHold(page, box, {judges: 'count-only'})).rejects.toThrow(
+      /armHold: the scope .*#box.* is not on the page after 5000 ms: it is gone, or it never came/,
+    );
+    await expect(
+      holdAnimations(page, box, {judges: 'count-only'}),
+    ).rejects.toThrow(
+      /holdAnimations: the scope .*#box.* is not on the page after 5000 ms/,
+    );
+  });
+
   test('an armed hold rejects when nothing under its scope starts', async ({
     page,
   }) => {
@@ -4949,7 +4967,7 @@ test.describe('holding', () => {
     await releaseAnimations(page);
   });
 
-  test('a held transition the page retargets is dropped, not revived', async ({
+  test('a held transition the page retargets fails a seek or a sample by name, and is dropped, not revived', async ({
     page,
   }) => {
     await fixture(page);
@@ -4983,8 +5001,15 @@ test.describe('holding', () => {
           held: w.__harnessHeld.length,
         };
       });
-    await seekAnimations(page, 150);
-    expect(await state()).toEqual({cancelled: 'idle', held: 0});
+    // The judged run is gone, so a read would show the run that replaced
+    // it: a seek and a sample fail by name.
+    await expect(seekAnimations(page, 150)).rejects.toThrow(
+      /seekAnimations: the page cancelled the held run of a judged motion \(transform on div#box\) since the hold/,
+    );
+    await expect(sampleCurve(box, [150])).rejects.toThrow(
+      /sampleCurve: the page cancelled the held run of a judged motion \(transform on div#box\) since the hold/,
+    );
+    expect((await state()).cancelled).toBe('idle');
     await releaseAnimations(page);
     await waitForRest(box);
     expect(await state()).toEqual({cancelled: 'idle', held: 0});
