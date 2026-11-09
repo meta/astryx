@@ -31,6 +31,8 @@ import {
   validatePathApplicability,
   validateReviewApplicability,
   validateSchemaEvolution,
+  approvalLineRewritesSince,
+  findApprovalLineRewrites,
 } from './check-knowledge.mjs';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
@@ -847,6 +849,276 @@ describe('schema evolution', () => {
         new Map([['docs/schemas/knowledge/v1.json', 'changed']]),
       ).join('\n'),
     ).toMatch(/immutable.*append-only/s);
+  });
+});
+
+describe('approval line history', () => {
+  function record({approvedBy = 'owner-a', decisions = []} = {}) {
+    return {
+      path: 'docs/architecture/example.md',
+      content: [
+        '---',
+        'id: architecture:example',
+        'authority: current',
+        `approved_by: ${approvedBy}`,
+        '---',
+        '',
+        '## Deciding specs',
+        '',
+        ...decisions.flatMap(([id, decider]) => [
+          `### ${id} — A decision`,
+          '',
+          `**Decider:** ${decider}`,
+          '',
+          'The decision text.',
+          '',
+        ]),
+      ].join('\n'),
+    };
+  }
+  const base = record({
+    decisions: [['DEC-1', '`owner-a`, `2026-11-01`']],
+  });
+
+  it('reports a rewritten Decider and approved_by with the original decider', () => {
+    const head = record({
+      approvedBy: 'owner-b',
+      decisions: [['DEC-1', '`owner-b`, `2026-11-01`']],
+    });
+    expect(findApprovalLineRewrites([base], [head])).toEqual([
+      {
+        path: 'docs/architecture/example.md',
+        claim: 'approved_by',
+        from: 'owner-a',
+        to: 'owner-b',
+        decider: 'owner-a',
+      },
+      {
+        path: 'docs/architecture/example.md',
+        claim: 'DEC-1',
+        from: '`owner-a`, `2026-11-01`',
+        to: '`owner-b`, `2026-11-01`',
+        decider: 'owner-a',
+      },
+    ]);
+  });
+
+  it('reports a removed decision', () => {
+    expect(findApprovalLineRewrites([base], [record()])).toEqual([
+      expect.objectContaining({claim: 'DEC-1', to: null, decider: 'owner-a'}),
+    ]);
+  });
+
+  it('allows a new decision, an added approver, an amendment, and a filled placeholder', () => {
+    const pendingBase = record({
+      decisions: [
+        ['DEC-1', '`owner-a`, `2026-11-01`'],
+        ['DEC-2', '`owner-a`, `<pending>`'],
+      ],
+    });
+    const head = record({
+      approvedBy: '[owner-a, owner-b]',
+      decisions: [
+        ['DEC-2', '`owner-a`, `2026-11-08`'],
+        ['DEC-1', '`owner-a`, `2026-11-01`; amended `2026-11-08`'],
+        ['DEC-3', '`owner-b`, `2026-11-08`'],
+      ],
+    });
+    expect(findApprovalLineRewrites([pendingBase], [head])).toEqual([]);
+  });
+
+  it('reads a placeholder only in the decider and date fields', () => {
+    const decided =
+      '`owner-a`, `2026-11-01`; pending-search Enter, a quiet send';
+    const rewritten = findApprovalLineRewrites(
+      [record({decisions: [['DEC-1', decided]]})],
+      [
+        record({
+          decisions: [
+            [
+              'DEC-1',
+              '`owner-b`, `2026-11-01`; pending-search Enter, a quiet send',
+            ],
+          ],
+        }),
+      ],
+    );
+    expect(rewritten).toEqual([
+      expect.objectContaining({
+        claim: 'DEC-1',
+        from: decided,
+        decider: 'owner-a',
+      }),
+    ]);
+    // A placeholder date, with or without a note, is still a placeholder.
+    for (const placeholder of [
+      '`owner-a`, `<pending>`',
+      '`owner-a`, pending (awaiting the owner)',
+      'proposed by `owner-a`, `2026-09-27`; pending owner review',
+    ]) {
+      expect(
+        findApprovalLineRewrites(
+          [record({decisions: [['DEC-1', placeholder]]})],
+          [record({decisions: [['DEC-1', '`owner-a`, `2026-11-08`']]})],
+        ),
+        placeholder,
+      ).toEqual([]);
+    }
+  });
+
+  it('reads every decided-line shape the records use', () => {
+    const doc = lines => ({
+      path: 'docs/specs/AST-900/spec.md',
+      content: [
+        '---',
+        'id: spec:AST-900',
+        'authority: current',
+        'approved_by: owner-a',
+        '---',
+        '',
+        ...lines,
+      ].join('\n'),
+    });
+    const shapes = [
+      // Reference and Decider on one line.
+      [
+        '### DEC-1 — One line',
+        '',
+        '**Reference:** `spec:AST-900/DEC-1` · **Decider:** `owner-a`, `2026-08-31`',
+      ],
+      // Several deciders.
+      [
+        '### DEC-2 — Two owners',
+        '',
+        '**Deciders:** `owner-a`, `owner-c`, `2026-09-03`',
+      ],
+      // A list-item decision with an indented Decider line.
+      [
+        '- **DEC-3 — A list item.**',
+        '',
+        '  **Decider:** `owner-a`, 2026-10-24',
+      ],
+      // An amendment heading.
+      [
+        '### Amendment — Narrow the name',
+        '',
+        '**Decider:** `owner-a`, `2026-09-12`',
+      ],
+      // A direction owner names who decided.
+      [
+        '### DEC-4 — Owner label',
+        '',
+        '**Direction owner:** `owner-a`, `2026-10-02`',
+      ],
+    ];
+    const expected = [
+      {claim: 'DEC-1', decider: 'owner-a'},
+      {claim: 'DEC-2', decider: 'owner-a, owner-c'},
+      {claim: 'DEC-3', decider: 'owner-a'},
+      {claim: 'Amendment — Narrow the name', decider: 'owner-a'},
+      {claim: 'DEC-4', decider: 'owner-a'},
+    ];
+    shapes.forEach((shape, i) => {
+      const rewritten = shape.map(line => line.replace('owner-a', 'owner-b'));
+      expect(
+        findApprovalLineRewrites([doc(shape)], [doc(rewritten)]),
+        shape[0],
+      ).toEqual([expect.objectContaining(expected[i])]);
+      expect(
+        findApprovalLineRewrites([doc(shape)], [doc(['## Notes'])]),
+        `${shape[0]} removed`,
+      ).toEqual([expect.objectContaining({...expected[i], to: null})]);
+      expect(findApprovalLineRewrites([doc(shape)], [doc(shape)])).toEqual([]);
+    });
+  });
+
+  it('reads each labelled decider of a decision, and no proposed one', () => {
+    const doc = lines => ({
+      path: 'packages/themes/example/example.spec.md',
+      content: [
+        '---',
+        'id: theme:example',
+        'authority: current',
+        'approved_by: owner-a',
+        '---',
+        '',
+        '### DEC-1 — Two deciders',
+        '',
+        ...lines,
+      ].join('\n'),
+    });
+    const base = [
+      '**System-boundary decider:** `owner-a`, `2026-08-31`',
+      '**Final adoption decider:** `owner-c`, `2026-10-17`',
+      '**Proposed decider:** `owner-d`',
+    ];
+    const adoption = base.map(line => line.replace('owner-c', 'owner-b'));
+    expect(findApprovalLineRewrites([doc(base)], [doc(adoption)])).toEqual([
+      expect.objectContaining({
+        claim: 'DEC-1 (Final adoption decider)',
+        decider: 'owner-c',
+      }),
+    ]);
+    const boundary = base.map(line => line.replace('owner-a', 'owner-b'));
+    expect(findApprovalLineRewrites([doc(base)], [doc(boundary)])).toEqual([
+      expect.objectContaining({
+        claim: 'DEC-1 (System-boundary decider)',
+        decider: 'owner-a',
+      }),
+    ]);
+    const proposal = base.map(line => line.replace('owner-d', 'owner-e'));
+    expect(findApprovalLineRewrites([doc(base)], [doc(proposal)])).toEqual([]);
+  });
+
+  it('warns for a platform component record too', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'approval-lines-'));
+    try {
+      const file = 'docs/specs/components/TextInput/TextInput.swift.spec.md';
+      const git = (...args) =>
+        execFileSync('git', ['-C', dir, ...args], {
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            GIT_AUTHOR_NAME: 't',
+            GIT_AUTHOR_EMAIL: 't@example.com',
+            GIT_COMMITTER_NAME: 't',
+            GIT_COMMITTER_EMAIL: 't@example.com',
+          },
+        });
+      const write = approvedBy => {
+        fs.mkdirSync(path.join(dir, path.dirname(file)), {recursive: true});
+        fs.writeFileSync(
+          path.join(dir, file),
+          [
+            '---',
+            'id: component:TextInput/swift',
+            'authority: current',
+            `approved_by: ${approvedBy}`,
+            '---',
+            '',
+            '# TextInput (Swift)',
+            '',
+          ].join('\n'),
+        );
+      };
+      git('init', '-q');
+      write('owner-a');
+      git('add', '-A');
+      git('commit', '-q', '-m', 'base');
+      const base = git('rev-parse', 'HEAD').trim();
+      write('owner-b');
+      expect(approvalLineRewritesSince(dir, base, [file])).toEqual([
+        {
+          path: file,
+          claim: 'approved_by',
+          from: 'owner-a',
+          to: 'owner-b',
+          decider: 'owner-a',
+        },
+      ]);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
   });
 });
 
