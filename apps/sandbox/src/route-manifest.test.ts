@@ -118,6 +118,8 @@ describe('Sandbox static export contract', () => {
       canHydrate('/pages/alert-dialog-cases/', '?case=alert-over-a-toast'),
     ).toBe(false);
     expect(canHydrate('/pages/alert-dialog-cases/', '')).toBe(true);
+    expect(canHydrate('/pages/list-reorder-cases/', '?case=list')).toBe(false);
+    expect(canHydrate('/pages/list-reorder-cases/', '')).toBe(true);
   });
 
   it('does not turn unknown URLs, dynamic segments or traversal into a 200 fallback', () => {

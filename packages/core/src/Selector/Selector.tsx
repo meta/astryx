@@ -1603,6 +1603,15 @@ export function Selector<T extends SelectorOptionType>(
     noteHighlightMove();
   }, [comboboxTriggerClick, noteHighlightMove]);
 
+  // A new query is a new list: the old highlight's index would name another
+  // option, or one past the end. Adjusted during render rather than in an
+  // effect.
+  const [highlightedQuery, setHighlightedQuery] = useState(searchQuery);
+  if (highlightedQuery !== searchQuery) {
+    setHighlightedQuery(searchQuery);
+    setHighlightedIndex(-1);
+  }
+
   // Type-to-select, shared with the other collections (menus, listboxes).
   // Open, it walks the highlight — aria-activedescendant announces each match.
   // Closed, it commits the match like a native select, which changes the value
