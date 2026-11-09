@@ -29,8 +29,8 @@ RichText is built on [Lexical](https://lexical.dev) and does not hide it:
 plugins, and `onChange(editorState, editor)` and the editor ref's
 `getEditorState()` report Lexical types, so you extend the editor with Lexical
 directly. When a plugin you pass brings its own undo history, such as a
-collaboration plugin's, set `hasHistory={false}` so the editor's built-in
-history stays out of its way. The value you store is serialized Lexical editor
+`HistoryPlugin` with its own settings, set `hasHistory={false}` when the
+editor mounts so the editor's built-in history stays out of its way. The value you store is serialized Lexical editor
 state; `markdownToEditorStateJSON` and `editorStateJSONToMarkdown` convert it
 to and from Markdown.
 

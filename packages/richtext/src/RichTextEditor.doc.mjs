@@ -129,7 +129,7 @@ export const docs = {
       name: 'hasHistory',
       type: 'boolean',
       description:
-        "Keep the editor's own undo and redo history. Turn it off when a plugin passed in plugins brings its own history, such as a collaboration plugin's, so that only one history records edits and answers undo and redo; the toolbar's Undo and Redo follow that history.",
+        "Keep the editor's own undo and redo history. Turn it off when a plugin passed in plugins brings its own history, such as a HistoryPlugin with its own delay or history state, so that only one history records edits and answers undo and redo; the toolbar's Undo and Redo follow that history. Read once, when the editor mounts, as defaultValue is.",
       default: 'true',
     },
     {

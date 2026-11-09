@@ -110,6 +110,31 @@ describe('RichTextEditor undo history', () => {
     expect(textOf(editor)).toBe('Hello world');
   });
 
+  it('reads hasHistory once at mount, so Undo keeps working after it changes', async () => {
+    const ref = createRef<RichTextEditorRef>();
+    const view = render(
+      <RichTextEditor label="Notes" ref={ref} defaultValue={START} />,
+    );
+    await waitFor(() => expect(ref.current).not.toBeNull());
+    const editor = ref.current!.getEditor();
+
+    appendWorld(editor);
+    view.rerender(
+      <RichTextEditor
+        label="Notes"
+        ref={ref}
+        defaultValue={START}
+        hasHistory={false}
+      />,
+    );
+    let handled = false;
+    act(() => {
+      handled = editor.dispatchCommand(UNDO_COMMAND, undefined);
+    });
+    expect(handled).toBe(true);
+    await waitFor(() => expect(textOf(editor)).toBe('Hello'));
+  });
+
   it('leaves undo and redo to one history passed in plugins', async () => {
     const editor = await mount({
       hasHistory: false,
