@@ -6,6 +6,7 @@ import * as stylex from '@stylexjs/stylex';
 import {useLayer} from '@astryxdesign/core/Layer';
 import {LayerProvider} from '@astryxdesign/core/Layer';
 import {Button} from '@astryxdesign/core/Button';
+import {DropdownMenu} from '@astryxdesign/core/DropdownMenu';
 import {Text} from '@astryxdesign/core/Text';
 
 const styles = stylex.create({
@@ -21,6 +22,22 @@ const styles = stylex.create({
     justifyContent: 'center',
     alignItems: 'center',
     minHeight: 200,
+  },
+  contextZone: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 200,
+    height: 96,
+    border: '1px dashed var(--color-border-default)',
+    borderRadius: 8,
+  },
+  contextRow: {
+    display: 'flex',
+    gap: 24,
+    alignItems: 'center',
+    minHeight: 200,
+    paddingInline: 24,
   },
 });
 
@@ -1584,4 +1601,54 @@ function BrowserHideWakesAFocusLayerDemo() {
 
 export const BrowserHideWakesAFocusLayer: Story = {
   render: () => <BrowserHideWakesAFocusLayerDemo />,
+};
+
+/**
+ * A right click on a zone opens a light-dismissible layer
+ * from its `contextmenu` event, and a DropdownMenu through `isMenuOpen`. The
+ * release of that same press stays outside both, so the browser's light
+ * dismiss reads it as a dismissal unless the layer claims the press.
+ */
+function ContextMenuPressOpensALayerDemo() {
+  const layer = useLayer({mode: 'context', lightDismiss: true});
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  return (
+    <div {...stylex.props(styles.contextRow)}>
+      <div
+        ref={layer.ref}
+        data-testid="layer-zone"
+        onContextMenu={event => {
+          event.preventDefault();
+          layer.show();
+        }}
+        {...stylex.props(styles.contextZone)}>
+        <Text type="body">Right-click for a layer</Text>
+      </div>
+      {layer.render(
+        <div {...stylex.props(styles.popoverContent)} data-testid="layer">
+          <Text type="body">Opened by a right click.</Text>
+        </div>,
+        {placement: 'below', alignment: 'center'},
+      )}
+      <div
+        data-testid="menu-zone"
+        onContextMenu={event => {
+          event.preventDefault();
+          setIsMenuOpen(true);
+        }}
+        {...stylex.props(styles.contextZone)}>
+        <Text type="body">Right-click for the menu</Text>
+      </div>
+      <DropdownMenu
+        button={{label: 'Actions'}}
+        isMenuOpen={isMenuOpen}
+        onOpenChange={setIsMenuOpen}
+        items={[{label: 'Rename'}, {label: 'Duplicate'}]}
+      />
+    </div>
+  );
+}
+
+export const ContextMenuPressOpensALayer: Story = {
+  render: () => <ContextMenuPressOpensALayerDemo />,
 };

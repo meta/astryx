@@ -18,6 +18,31 @@ import {expect, test, type Frame, type Page} from '@playwright/test';
 
 const POST = '/blog/live-example-sample';
 
+// The post shows its authors' GitHub avatars, and the root layout links the
+// Google Fonts stylesheet. A slow or failing outside host must not hold these
+// tests: they answer GitHub's hosts with a local image and Google Fonts with an
+// empty stylesheet, and open the post without waiting for every image to load.
+const GITHUB = /^https:\/\/(github\.com|avatars\.githubusercontent\.com)\//;
+const GOOGLE_FONTS = /^https:\/\/fonts\.(googleapis|gstatic)\.com\//;
+const PIXEL = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+  'base64',
+);
+
+test.beforeEach(async ({page}) => {
+  await page.route(GITHUB, route =>
+    route.fulfill({status: 200, contentType: 'image/png', body: PIXEL}),
+  );
+  await page.route(GOOGLE_FONTS, route =>
+    route.fulfill({status: 200, contentType: 'text/css', body: ''}),
+  );
+});
+
+/** Opens the fixture post once its document has loaded. */
+async function openPost(page: Page) {
+  await page.goto(POST, {waitUntil: 'domcontentloaded'});
+}
+
 // The frame loads the TypeScript compiler before it renders anything.
 const POLL = {timeout: 45_000};
 
@@ -45,7 +70,7 @@ test('runs each tsx live block in its own sandboxed frame and contains failures'
   const pageErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.message));
   await page.setViewportSize({width: 1280, height: 900});
-  await page.goto(POST);
+  await openPost(page);
   const [counter, asset, broken, uncompilable] = await liveFrames(page);
 
   // A running example, importing a published package: it renders and it runs.
@@ -94,6 +119,20 @@ test('runs each tsx live block in its own sandboxed frame and contains failures'
   expect(pageErrors).toEqual([]);
 });
 
+test('opens the post and runs its examples while GitHub never answers', async ({
+  page,
+}) => {
+  // Registered after the image above, so it answers GitHub's hosts first: a
+  // request to them never completes.
+  await page.route(GITHUB, () => {});
+  await openPost(page);
+  const [counter] = await liveFrames(page);
+  await expect(counter.getByTestId('count')).toHaveText(
+    'Clicked 0 times',
+    POLL,
+  );
+});
+
 test('shows each live block as its source in the plain-text route', async ({
   request,
 }) => {
@@ -116,7 +155,7 @@ test('never lists the fixture in the blog index, the feed, or the sitemap', asyn
   await page.goto('/blog');
   await expect(page.locator('a[href*="live-example-sample"]')).toHaveCount(0);
   // The fixture page itself asks search engines not to index it.
-  await page.goto(POST);
+  await openPost(page);
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
     'content',
     /noindex/,

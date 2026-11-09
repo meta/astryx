@@ -20,7 +20,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import jscodeshift from 'jscodeshift';
+import {createRequire} from 'node:module';
 import {isValidSemver} from '../env/semver.mjs';
 import {
   isThemeFolder as readsAsTheme,
@@ -88,7 +88,29 @@ const ROOT_HOLDS = /** @type {Record<MetadataRoot, string>} */ ({
   themes: 'themes',
 });
 
-const j = jscodeshift.withParser('tsx');
+const require = createRequire(import.meta.url);
+/** @type {typeof import('jscodeshift').default | undefined} */
+let jscodeshiftModule;
+/** @type {ReturnType<typeof import('jscodeshift').default['withParser']> | undefined} */
+let tsxParser;
+
+/**
+ * jscodeshift, loaded at its first use: it is a large module, and a run that
+ * checks no contribution file never needs it.
+ * @returns {typeof import('jscodeshift').default}
+ */
+function jscodeshift() {
+  jscodeshiftModule ??= require('jscodeshift');
+  return /** @type {typeof import('jscodeshift').default} */ (
+    jscodeshiftModule
+  );
+}
+
+/** jscodeshift with the TypeScript parser, made once. */
+function tsx() {
+  tsxParser ??= jscodeshift().withParser('tsx');
+  return tsxParser;
+}
 
 /** @param {any} node @returns {any} */
 function unwrapStaticExpression(node) {
@@ -136,6 +158,7 @@ function staticPropertyNamed(property, name) {
  * @returns {ContributionStamp | null} null when it is not contribution metadata
  */
 export function readContributionStamp(file, templateOnly) {
+  const j = tsx();
   let ast;
   try {
     ast = j(fs.readFileSync(file, 'utf-8'));
@@ -526,7 +549,7 @@ function localImports(entry) {
     /** @type {string[]} */
     const specifiers = [];
     try {
-      const js = jscodeshift.withParser(
+      const js = jscodeshift().withParser(
         /\.(?:ts|tsx|mts)$/u.test(file) ? 'tsx' : 'babel',
       );
       const ast = js(fs.readFileSync(file, 'utf-8'));

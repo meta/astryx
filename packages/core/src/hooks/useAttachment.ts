@@ -9,7 +9,7 @@
  * @output Exports useAttachment and useAttachmentPair (two elements): they keep
  *   the attach function bound to the nodes the refs hold across commits
  * @position Internal React helper, not in hooks/index.ts: the one attach and
- *   release lifecycle of the gesture hooks and the pager
+ *   release lifecycle of the gesture hooks, the pager and useAnimator
  *
  * SYNC: When modified, update gestures/__tests__/useGestureRecognizer.test.tsx,
  * gestures/__tests__/useFingerScroll.test.tsx and

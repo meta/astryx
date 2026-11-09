@@ -7,6 +7,11 @@ import {execFileSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {afterEach, describe, expect, it} from 'vitest';
 import {
+  createRepository,
+  importCommits,
+  workingTreeFiles,
+} from './lib/git-fixture.mjs';
+import {
   composeKnowledgeSchemas,
   collectConcernMatches,
   collectGlobalReviewMatches,
@@ -371,18 +376,21 @@ function withSystemClaims(record) {
   );
 }
 
-function commitFixture(root, message) {
-  execFileSync('git', ['init', '-q'], {cwd: root});
-  execFileSync('git', ['config', 'user.name', 'Fixture'], {cwd: root});
-  execFileSync('git', ['config', 'user.email', 'fixture@example.com'], {
-    cwd: root,
-  });
-  execFileSync('git', ['add', '.'], {cwd: root});
-  execFileSync('git', ['commit', '-q', '-m', message], {cwd: root});
-  return execFileSync('git', ['rev-parse', 'HEAD'], {
-    cwd: root,
-    encoding: 'utf8',
-  }).trim();
+/**
+ * Commits the fixture's working tree as it stands on `main`, after the
+ * commit there, or as the first commit of a new repository.
+ */
+function commitFixture(root, message, {create = false} = {}) {
+  const commit = {
+    ref: 'refs/heads/main',
+    name: 'commit',
+    message,
+    snapshot: true,
+    files: workingTreeFiles(root),
+  };
+  return create
+    ? createRepository(root, [commit]).commit
+    : importCommits(root, [{...commit, parent: 'refs/heads/main'}]).commit;
 }
 
 afterEach(() => {
@@ -692,6 +700,7 @@ describe('global review applicability', () => {
     const baseWithoutRouting = commitFixture(
       root,
       'base without global routing',
+      {create: true},
     );
     execFileSync(
       'git',
@@ -703,14 +712,7 @@ describe('global review applicability', () => {
       path.join(root, 'docs/specs/AST-900/spec.md'),
       withReviewApplicability(currentRecord, {'public-api': ['FR1']}),
     );
-    execFileSync('git', ['add', '.'], {cwd: root});
-    execFileSync('git', ['commit', '-q', '-m', 'head adds global routing'], {
-      cwd: root,
-    });
-    const proposedHead = execFileSync('git', ['rev-parse', 'HEAD'], {
-      cwd: root,
-      encoding: 'utf8',
-    }).trim();
+    const proposedHead = commitFixture(root, 'head adds global routing');
 
     expect(
       routeGlobalReviewBaselinesAtRevision(
@@ -740,14 +742,7 @@ describe('global review applicability', () => {
     ).toThrow(/review head must differ/);
 
     fs.writeFileSync(path.join(root, 'README.md'), '# Reviewed change\n');
-    execFileSync('git', ['add', '.'], {cwd: root});
-    execFileSync('git', ['commit', '-q', '-m', 'later review head'], {
-      cwd: root,
-    });
-    const laterHead = execFileSync('git', ['rev-parse', 'HEAD'], {
-      cwd: root,
-      encoding: 'utf8',
-    }).trim();
+    const laterHead = commitFixture(root, 'later review head');
     expect(
       routeGlobalReviewBaselinesAtRevision(root, proposedHead, laterHead, [
         'public-api',

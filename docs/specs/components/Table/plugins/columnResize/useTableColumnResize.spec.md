@@ -14,6 +14,7 @@ verified_by:
   [
     packages/core/src/Table/plugins/columnResize/useTableColumnResize.test.tsx,
     packages/core/src/Table/__tests__/TableColumnResizeName.a11y.chromium.spec.ts,
+    packages/core/src/Table/__tests__/TableColumnResizeRange.a11y.chromium.spec.ts,
     scripts/check-knowledge.mjs,
   ]
 parent_component: component:Table
@@ -55,8 +56,11 @@ Both are defects to correct there, not variations this record allows.
   pointers, and every width outcome.
 - Compatibility class: presentation-only change to one transient state, plus one
   accessibility correction that adds a control where keyboard resize was already
-  promised. No public API, prop, export, target, or accessibility mapping is added
-  or changed.
+  promised. No public API, prop, export, or target is added or changed. One
+  accessibility correction changes the announced range: a column with no
+  maximum width announces a stand-in maximum and its value in words (AR7),
+  where it announced no maximum, so assistive technology fell back to a
+  maximum of 100.
 - Migration decision: none. No consumer edit and no codemod.
 
 This specification-only change carries no package Changeset. The implementation
@@ -160,7 +164,7 @@ remain in `useTableColumnResize.doc.mjs`.
 ## Accessibility contract
 
 - **AR1 — Unchanged semantics.** Each boundary keeps its separator role, vertical
-  orientation, accessible name naming its column, and current value bounds. Its
+  orientation, accessible name naming its column, and value bounds (AR7). Its
   resize handle sits in the `overlay` slot, so it doesn't join the header's
   name (`component:Table` FR11).
 - **AR2 — Decorative disclosure.** `hinted` is presentation only. It changes no ARIA
@@ -177,6 +181,16 @@ remain in `useTableColumnResize.doc.mjs`.
 - **AR6 — Parity across inputs.** The tab stop does not depend on primary pointer
   capability. A device whose primary pointer is coarse but which has a keyboard
   keeps the boundary control, its name, and its values (FR6, DEC-3).
+- **AR7 — A range that holds the value.** A boundary's announced maximum is
+  never below its value or its minimum (`spec:AST-020` FR1). A column with a
+  maximum width announces that maximum. A column with none announces the
+  window's inline extent, floored at its value and minimum, as an unbounded
+  Resizable region does, from the same shared measurement; the column is never
+  clamped to it. Because that maximum stands in for a missing limit, such a
+  boundary also announces its value in words ("133 pixels"). The server
+  render, which has no window, carries no maximum until hydration reads it.
+  Until a column is first resized, its value is its minimum width (a known
+  gap).
 
 ## Design relationships
 
@@ -238,6 +252,7 @@ without a target of its own.
 | FR10, ORD0         | Scroll-gate test driving the scroll region with a stationary pointer over the header                                                                                                                                                                                                                                                  | Pointer resting over a header while the region scrolls and after it settles                                      | Boundaries reveal mid-scroll, an existing hint survives the scroll, or disclosure fails to resume once scrolling stops.                                                                   |
 | FR7                | Snapshot or assertion that header hover changes no other header or row treatment                                                                                                                                                                                                                                                      | Header hover over a sortable and a selectable header                                                             | Header hover changes background, label, cursor, width, or another control's state.                                                                                                        |
 | FR8, AR1-AR3, AR6  | Existing keyboard and ARIA suites and a coarse-primary keyboard case; `useTableColumnResize.test.tsx` "the handle never adds to its column header's name (AR1)" and `TableColumnResizeName.a11y.chromium.spec.ts` "a resize handle never adds to its column header name"; an assistive-technology spot check is recommended follow-up | Tab to boundary, arrow resize, screen-reader navigation of the header, coarse-primary device with a keyboard     | The boundary leaves tab order on any input that can operate it, loses its name or values, or the hint reaches the accessibility tree.                                                     |
+| AR7                | `useTableColumnResize.test.tsx` "an unbounded column announces a finite maximum, never below its value, and its width in words" and "handle has aria-valuemax when finite"; `TableColumnResizeRange.a11y.chromium.spec.ts` in Chromium's accessibility tree                                                                           | A column with no maximum width; one with `maxWidth`                                                              | A missing or non-finite maximum, a maximum below the value or the minimum, missing value text on an unbounded column, or value text on a bounded one fails.                               |
 | PR1, PR2           | Render-count assertion around header pointer enter/leave and during a scroll; listener and observer inspection                                                                                                                                                                                                                        | Pointer enters and leaves the header repeatedly; the region scrolls under a resting pointer                      | Disclosure rerenders the Table, the scroll gate sets React state, more than one scroll listener or any timer is added, or the extent measurement observes what it resizes.                |
 | Plugin composition | Test mounting the resize and sticky-columns plugins together in both insertion orders                                                                                                                                                                                                                                                 | Pinned start column with resize enabled, before and after a drag                                                 | A pinned column loses `position: sticky` in either order, or the composition depends on caller insertion order.                                                                           |
 | Record shape       | `scripts/check-knowledge.mjs`                                                                                                                                                                                                                                                                                                         | Colocated module record, canonical id and filename, parent backlink                                              | A missing, misnamed, mis-parented, or unlinked record passes validation.                                                                                                                  |

@@ -4,6 +4,7 @@ import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {runCodemods} from '../runner.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 let tmpDir;
 let originalCwd;
@@ -12,7 +13,7 @@ beforeEach(() => {
   originalCwd = process.cwd();
   // Repo-local temp dir (not /tmp) to mirror the integration-runner tests and
   // avoid any Vite dynamic-import quirks with absolute /tmp paths.
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-runner-test-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-runner-test-'));
   process.chdir(tmpDir);
 });
 

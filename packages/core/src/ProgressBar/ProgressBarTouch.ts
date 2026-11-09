@@ -75,6 +75,8 @@ export function useProgressBarTouch(
   const watchesTrack = isTouch && hasMarks;
   const trackRef = useRef<HTMLDivElement | null>(null);
   const [trackWidth, setTrackWidth] = useState(0);
+  // Syncs the shared resize observer with the track while the track width is
+  // needed.
   useEffect(() => {
     const element = trackRef.current;
     if (!watchesTrack || element == null) {

@@ -9,7 +9,12 @@
  * @position Cross-browser proof for useScrollableArea's contentOrViewport policy
  */
 
-import {expect, test, type Page, type Locator} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Page,
+  type Locator,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,

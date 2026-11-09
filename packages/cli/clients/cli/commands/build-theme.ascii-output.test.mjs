@@ -16,9 +16,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {ensureCoreBuilt} from './ensure-core-built.mjs';
 import {runCli} from '../../../test-utils/run-cli.mjs';
-
-// Under the CLI package so fixtures resolve `@astryxdesign/core/theme`.
-const CLI_ROOT = path.resolve(import.meta.dirname, '../../..');
+import {
+  makeLinkedFixture,
+  removeLinkedFixture,
+} from '../../../test-utils/linked-fixture.mjs';
 
 const OCEAN = `import {defineTheme} from '@astryxdesign/core/theme';
 export const oceanTheme = defineTheme({
@@ -48,14 +49,14 @@ beforeAll(() => {
 }, 200_000);
 
 beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(CLI_ROOT, '.tmp-theme-ascii-'));
+  dir = makeLinkedFixture('astryx-theme-ascii-', ['@astryxdesign']);
   fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}\n');
   fs.writeFileSync(path.join(dir, 'ocean.mjs'), OCEAN);
   fs.writeFileSync(path.join(dir, 'ocean-calm.mjs'), CALM);
 });
 
 afterEach(() => {
-  fs.rmSync(dir, {recursive: true, force: true});
+  removeLinkedFixture(dir);
 });
 
 /** @param {{stdout: string, stderr: string}} result */

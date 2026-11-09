@@ -57,6 +57,48 @@ describe('Stepper', () => {
     expect(screen.getByTestId('step-2')).not.toHaveAttribute('aria-current');
   });
 
+  it.each([
+    ['horizontal', 'separated'],
+    ['vertical', 'separated'],
+    ['horizontal', 'on-track'],
+    ['vertical', 'on-track'],
+  ] as const)(
+    'keeps aria-current on the in-progress step over a caller’s (%s, %s)',
+    (orientation, indicatorPosition) => {
+      render(
+        <Stepper
+          activeStep={1}
+          orientation={orientation}
+          indicatorPosition={indicatorPosition}>
+          <Step
+            step={0}
+            label="Step 1"
+            data-testid="step-0"
+            aria-current="page"
+          />
+          <Step
+            step={1}
+            label="Step 2"
+            data-testid="step-1"
+            aria-current="false"
+          />
+          <Step
+            step={2}
+            label="Step 3"
+            data-testid="step-2"
+            aria-current="true"
+          />
+        </Stepper>,
+      );
+      expect(screen.getByTestId('step-0')).not.toHaveAttribute('aria-current');
+      expect(screen.getByTestId('step-1')).toHaveAttribute(
+        'aria-current',
+        'step',
+      );
+      expect(screen.getByTestId('step-2')).not.toHaveAttribute('aria-current');
+    },
+  );
+
   it('renders descriptions when provided', () => {
     render(
       <Stepper activeStep={0}>
@@ -1518,6 +1560,46 @@ describe('Stepper', () => {
         }
       },
     );
+
+    it('measures the list only while it is mounted and horizontal', () => {
+      const observed = new Set<Element>();
+      class ResizeObserverStub {
+        observe(element: Element) {
+          observed.add(element);
+        }
+        unobserve(element: Element) {
+          observed.delete(element);
+        }
+        disconnect() {
+          observed.clear();
+        }
+      }
+      vi.stubGlobal('ResizeObserver', ResizeObserverStub);
+      const stepper = (orientation: 'horizontal' | 'vertical') => (
+        <Stepper activeStep={0} orientation={orientation}>
+          <Step step={0} label="Account" />
+          <Step step={1} label="Review" />
+        </Stepper>
+      );
+      try {
+        const view = render(stepper('horizontal'));
+        const horizontalList = screen.getByRole('list');
+        expect(observed.has(horizontalList)).toBe(true);
+
+        view.rerender(stepper('vertical'));
+        expect(observed.has(horizontalList)).toBe(false);
+        expect(observed.has(screen.getByRole('list'))).toBe(false);
+
+        view.rerender(stepper('horizontal'));
+        const list = screen.getByRole('list');
+        expect(observed.has(list)).toBe(true);
+
+        view.unmount();
+        expect(observed.has(list)).toBe(false);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
 
     it('stops the controls at both ends of the sequence', () => {
       const onStepClick = vi.fn();

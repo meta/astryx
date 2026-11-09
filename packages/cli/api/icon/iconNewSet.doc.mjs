@@ -10,7 +10,7 @@ export const doc = {
   displayName: 'iconNewSet()',
   summary: 'Add an icon set to an integration package.',
   description:
-    "Creates an integration manifest when the package has none, writes the set directory with its strongly typed same-stem IconSetDoc and a starter data file (schemaVersion 1, module set to the package name, no icons and an empty map yet), and the set's generated module with its declaration file and an empty themeIcons theme map; with from, it wraps a library's icons into them, records the installed library and version as the data file's source, copies the library's license notices into the set, uses the library's license, maps each Astryx definition whose name is an icon id, and returns up to three likely icons for each other definition as suggestions (by its name, its words, and the other names the library gives an icon; never a part of a word, a negated form, or the opposite direction), never written. It declares the manifest's `experimental.iconSets` root on first use, and includes the manifest and root in package.json files when the package already uses an allowlist. It never writes the package's entry, exports, main, types, files list, peers, or scripts: its notes name each change the package needs as text to copy. Every path is confined to the package and existing files are never overwritten. Experimental: it may change or be removed in a patch release.",
+    "Creates an integration manifest when the package has none, writes the set directory with its strongly typed same-stem IconSetDoc and a starter data file (schemaVersion 1, module set to the package name, no icons and an empty map yet), and the set's generated module with its declaration file and an empty themeIcons theme map; with from, it wraps a library's icons into them, records the installed library and version as the data file's source, copies the library's license notices into the set, uses the library's license, maps each Astryx definition whose name is an icon id, and returns up to three likely icons for each other definition as suggestions (by its name, its words, and the other names the library gives an icon; never a part of a word, a negated form, or the opposite direction), never written. A library whose export names end in style, size and weight words gives one icon per glyph, named without those words, in the look the default variant names, else the library's usual default (outline, regular, the middle weight). Over an existing set, `from` refreshes it; without `from`, `variants`, `defaultVariant`, `displayName` and `description` update it in place and leave its icons, map and generated module unchanged (a variant an icon has must stay declared, and a set with icons keeps its default variant). It declares the manifest's `experimental.iconSets` root on first use, and includes the manifest and root in package.json files when the package already uses an allowlist. It never writes the package's entry, exports, main, types, files list, peers, or scripts: its notes name each change the package needs as text to copy. Every path is confined to the package, and an existing set is changed only as above. Experimental: it may change or be removed in a patch release.",
   importPath: '@astryxdesign/cli/api',
   signature:
     'iconNewSet(name: string, options?: IconNewSetOptions): Promise<IconNewSetResponse>',
@@ -56,7 +56,7 @@ export const doc = {
       name: 'options.defaultVariant',
       type: 'string',
       description:
-        "With variants: the variant each icon's own export draws, written to the data file's default; the first variant when absent.",
+        "With variants: the variant each icon's own export draws, written to the data file's default. In a library whose export names encode looks, it must be one of the library's look words, and when absent it is the look the icons' exports draw (with from and no icons yet, the library's usual default), which variants must list. Otherwise, when absent, an existing set keeps its default while variants declares it; a set without icons takes the first variant, and a set with icons and none declared needs it. Without from, a set with icons refuses a default other than the look they draw; when its icons' export names name no looks, it refuses one other than its declared default with from too.",
     },
     {
       name: 'options.displayName',
@@ -81,11 +81,11 @@ export const doc = {
   throws: [
     {
       code: 'ERR_INVALID_ARGUMENT',
-      when: 'the name is not lowercase kebab-case, package.json has no name, or a variant name or the default variant is invalid',
+      when: 'the name is not lowercase kebab-case, package.json has no name, or a variant name or the default variant is invalid; the default variant is no look word of a library whose export names encode looks; or the default variant would change on a set that has icons: without `from` (wrap the library again with `from` and `defaultVariant`), or with or without it when the export names of its icons name no looks (add the look as a variant instead)',
     },
     {
       code: 'ERR_INVALID_OPTION',
-      when: '`exclude` is given without `from`, or `defaultVariant` without `variants`',
+      when: '`exclude` is given without `from`, or `defaultVariant` without `variants`; `variants` leave out the default variant: the look the icons draw in a library whose export names encode looks, or the declared default of a set with icons whose export names name no looks; or such a set declares no default and `defaultVariant` names none',
     },
     {
       code: 'ERR_FILE_EXISTS',

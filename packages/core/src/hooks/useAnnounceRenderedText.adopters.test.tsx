@@ -3,8 +3,8 @@
 /**
  * @file useAnnounceRenderedText.adopters.test.tsx
  * @input Every core component that announces its own rendered content,
- *   Tooltip's pin included, with the shared own-content module replaced by a
- *   recorder
+ *   Spinner and Tooltip's show() hold included, with the shared own-content
+ *   module replaced by a recorder
  * @output architecture:react-component-runtime INV10 test: each adopter hands
  *   its own-content announcement to the shared module and announces none of it
  *   itself
@@ -14,9 +14,9 @@
  * still announced its own content would be holding an Effect, observer, timer
  * or listener of its own for it, which INV10 rules out. The registry check at
  * the end keeps this list in step with every file that imports the module, so
- * a new adopter cannot skip the test. The sheet case loads Tokenizer's
- * on-demand sheet module before it opens the sheet, so its wait covers the
- * open, not the module's load.
+ * a new adopter cannot skip the test. The file loads each on-demand sheet
+ * module before any test runs, so a sheet case's waits cover the open, not
+ * the module's load.
  */
 
 import fs from 'node:fs';
@@ -24,6 +24,7 @@ import path from 'node:path';
 import {useEffect, useRef, type HTMLAttributes, type RefObject} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
+import type {AnnounceRenderedTextOptions} from './useAnnounceRenderedText';
 
 interface ModuleCall {
   isShown: boolean;
@@ -38,10 +39,15 @@ vi.mock('./useAnnounceRenderedText', async importOriginal => ({
   useAnnounceRenderedText: (
     ref: RefObject<HTMLElement | null>,
     isShown: boolean,
+    _occasion: string,
+    {fallbackText}: AnnounceRenderedTextOptions = {},
   ) => {
     // Read after commit, the way the real module does.
     useEffect(() => {
-      calls.push({isShown, text: ref.current?.textContent ?? ''});
+      calls.push({
+        isShown,
+        text: ref.current?.textContent || fallbackText || '',
+      });
     });
   },
 }));
@@ -67,8 +73,14 @@ const {CommandPalette} = await import('../CommandPalette');
 const {BaseTypeahead} = await import('../Typeahead/BaseTypeahead');
 const {Tokenizer} = await import('../Tokenizer/Tokenizer');
 const {PowerSearch} = await import('../PowerSearch/PowerSearch');
+const {Spinner} = await import('../Spinner');
 const {createStaticSource} = await import('../Typeahead/createStaticSource');
-const {TooltipWithTriggerBehavior} = await import('../Tooltip/Tooltip');
+const {InfoTip} = await import('../InfoTip/InfoTip');
+// Tokenizer and PowerSearch load their sheets on demand. This file loads
+// both sheet modules before any test runs, so the sheet cases' waits and
+// time limits cover the open, not the module's load.
+await import('../Tokenizer/TokenizerBottomSheet');
+await import('../PowerSearch/PowerSearchBottomSheet');
 
 const source = createStaticSource([{id: 'apple', label: 'Apple'}]);
 
@@ -108,6 +120,18 @@ async function expectDelegated(text: string) {
 
 /** Each adopter, shown in the state where its own content appears. */
 const ADOPTERS: Record<string, () => Promise<void>> = {
+  'Spinner/Spinner.tsx': async () => {
+    const {rerender} = render(<Spinner />);
+    await expectDelegated('Loading');
+    rerender(<Spinner label={<span>Loading records</span>} />);
+    await expectDelegated('Loading records');
+    rerender(<Spinner aria-label="Waiting for results" />);
+    await expectDelegated('Waiting for results');
+    // App code silences a composed Spinner by hiding it.
+    rerender(<Spinner aria-hidden />);
+    expect(calls.at(-1)?.isShown).toBe(false);
+    expect(announce).not.toHaveBeenCalled();
+  },
   'EmptyState/EmptyState.tsx': async () => {
     render(<EmptyState title="Nothing here" description="Add an item" />);
     await expectDelegated('Nothing here');
@@ -167,13 +191,12 @@ const ADOPTERS: Record<string, () => Promise<void>> = {
     await expectDelegated('No results found');
   },
   'Tooltip/useTooltip.tsx': async () => {
-    // A tooltip a press pinned says its own text (component:Tooltip FR10).
+    // A tooltip that show() holds says its own text (component:Tooltip FR12).
     render(
-      <TooltipWithTriggerBehavior
+      <InfoTip
         content="Billed on the first of each month"
-        triggerBehavior="toggle">
-        <button type="button">About billing</button>
-      </TooltipWithTriggerBehavior>,
+        label="About billing"
+      />,
     );
     fireEvent.click(screen.getByRole('button', {name: 'About billing'}));
     await expectDelegated('Billed on the first of each month');
@@ -181,13 +204,6 @@ const ADOPTERS: Record<string, () => Promise<void>> = {
   'Tokenizer/TokenizerBottomSheet.tsx': async () => {
     // The sheet's own content is a caller's `emptySearchText` element; the
     // default EmptyState announces itself.
-    //
-    // Tokenizer loads the sheet on demand (Tokenizer.tsx's
-    // loadTokenizerBottomSheet). Loading the module is not what this case
-    // checks, so it waits for it first, and the one-second wait for the
-    // sheet's search field below covers only the open: on a busy machine the
-    // module's load alone outlasts it.
-    await import('../Tokenizer/TokenizerBottomSheet');
     render(
       <Tokenizer
         label="Tags"
@@ -196,7 +212,7 @@ const ADOPTERS: Record<string, () => Promise<void>> = {
         onChange={() => {}}
         debounceMs={0}
         emptySearchText={<em>Nothing called that</em>}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     fireEvent.click(screen.getByRole('button', {name: 'Tags'}));
@@ -231,7 +247,7 @@ const ADOPTERS: Record<string, () => Promise<void>> = {
         label="Filters"
         isLabelHidden={false}
         onChange={() => {}}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     fireEvent.click(screen.getByRole('button', {name: /^Filters/}));

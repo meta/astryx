@@ -38,7 +38,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import * as os from 'node:os';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 import {isStableRelease} from '../src/lib/integrationTargets.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -369,7 +369,10 @@ export function resolveContentRoot() {
 }
 
 // CLI usage: `node resolve-content-root.mjs` prints the resolution as JSON.
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   const r = resolveContentRoot();
   process.stdout.write(JSON.stringify(r, null, 2) + '\n');
 }
