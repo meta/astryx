@@ -2,8 +2,8 @@
 
 /**
  * @file Icon sets after the package is renamed in package.json: the next
- * command that writes the set gives the data file's `module` the new name,
- * so `integration check` passes without a hand edit.
+ * command that writes the data file gives its `module` the new name, so
+ * `integration check` passes without a hand edit, and its receipt says so.
  */
 
 import * as fs from 'node:fs';
@@ -54,8 +54,11 @@ afterEach(() => {
   fs.rmSync(tmp, {recursive: true, force: true});
 });
 
-/** @param {string} name */
-function writePackage(name) {
+/**
+ * @param {string} name
+ * @param {Record<string, string>} [exports]
+ */
+function writePackage(name, exports = {'.': './index.js'}) {
   fs.writeFileSync(
     path.join(pkg, 'package.json'),
     JSON.stringify(
@@ -64,7 +67,7 @@ function writePackage(name) {
         version: '1.0.0',
         license: 'MIT',
         type: 'module',
-        exports: {'.': './index.js'},
+        exports,
         dependencies: {[LIBRARY]: '^2.0.0'},
       },
       null,
@@ -79,13 +82,9 @@ async function json(args) {
   return {code: res.code, body: JSON.parse(res.stdout)};
 }
 
-const dataOf = () =>
-  JSON.parse(
-    fs.readFileSync(
-      path.join(pkg, 'icon-sets', 'outline', 'outline.icons.json'),
-      'utf-8',
-    ),
-  );
+const dataFile = () =>
+  path.join(pkg, 'icon-sets', 'outline', 'outline.icons.json');
+const dataOf = () => JSON.parse(fs.readFileSync(dataFile(), 'utf-8'));
 
 /** The pairs that map every built-in definition to `cross`. */
 const ALL_PAIRS = ICON_NAMES.map(name => `${name}=cross`).join(',');
@@ -171,7 +170,11 @@ describe('a renamed icon-set package', () => {
 
 describe('receipts after a package rename', () => {
   const MODULE_LINE =
-    '[ok] Updated module to "@acme/new-icons" (was "@acme/old-icons"), the package name in package.json.';
+    '[ok] Updated module to "@acme/new-icons" (was "@acme/old-icons"), from the package name in package.json.';
+  const MODULE_UPDATE = {
+    previous: '@acme/old-icons',
+    module: '@acme/new-icons',
+  };
 
   /** @param {string[]} args */
   async function textOf(args) {
@@ -267,6 +270,107 @@ describe('receipts after a package rename', () => {
     expect(out).toContain('close = "cross" (unchanged)');
     expect(out).toContain('menu = "bin" (was "cross")');
     expect(out).toContain('search = "bin" (was not mapped)');
+    expect(out).toContain(MODULE_LINE);
+    expect(dataOf().module).toBe('@acme/new-icons');
+  });
+
+  it('a refresh with new-set --from reports the module rewrite', async () => {
+    await wrapAndMap();
+    writePackage('@acme/new-icons');
+    const res = await json([
+      'experimental',
+      'icon',
+      'new-set',
+      'outline',
+      '--from',
+      LIBRARY,
+    ]);
+    expect(res.code, JSON.stringify(res.body)).toBe(0);
+    expect(res.body.data.moduleUpdate).toEqual(MODULE_UPDATE);
+    writePackage('@acme/old-icons');
+    await textOf(['new-set', 'outline', '--from', LIBRARY]);
+    writePackage('@acme/new-icons');
+    const out = await textOf(['new-set', 'outline', '--from', LIBRARY]);
+    expect(out).toContain(MODULE_LINE);
+    expect(dataOf().module).toBe('@acme/new-icons');
+  });
+
+  it('new-set without --from reports the rewrite of a subpath module', async () => {
+    await wrapAndMap();
+    const subpath = {
+      '.': './index.js',
+      './outline': './icon-sets/outline/outline.generated.js',
+    };
+    writePackage('@acme/old-icons', subpath);
+    fs.writeFileSync(
+      dataFile(),
+      JSON.stringify({...dataOf(), module: '@acme/old-icons/outline'}),
+    );
+    writePackage('@acme/new-icons', subpath);
+    const res = await json([
+      'experimental',
+      'icon',
+      'new-set',
+      'outline',
+      '--display-name',
+      'Outline',
+    ]);
+    expect(res.code, JSON.stringify(res.body)).toBe(0);
+    expect(res.body.data.moduleUpdate).toEqual({
+      previous: '@acme/old-icons/outline',
+      module: '@acme/new-icons/outline',
+    });
+    writePackage('@acme/old-icons', subpath);
+    await textOf(['new-set', 'outline', '--display-name', 'Outline']);
+    writePackage('@acme/new-icons', subpath);
+    const out = await textOf([
+      'new-set',
+      'outline',
+      '--display-name',
+      'Outline',
+    ]);
+    expect(out).toContain(
+      '[ok] Updated module to "@acme/new-icons/outline" (was "@acme/old-icons/outline"), from the package name in package.json.',
+    );
+    expect(dataOf().module).toBe('@acme/new-icons/outline');
+  });
+
+  const DESCRIBED = ['--description', 'Throws an item away.', '--words', 'bin'];
+
+  it('new-definition --icon reports the module rewrite, and new-definition without --icon does not', async () => {
+    await wrapAndMap();
+    writePackage('@acme/new-icons');
+    const plain = await json([
+      'experimental',
+      'icon',
+      'new-definition',
+      'trash-can',
+      ...DESCRIBED,
+    ]);
+    expect(plain.code, JSON.stringify(plain.body)).toBe(0);
+    expect(plain.body.data.moduleUpdate).toBeUndefined();
+    expect(dataOf().module).toBe('@acme/old-icons');
+    const res = await json([
+      'experimental',
+      'icon',
+      'new-definition',
+      'waste-bin',
+      ...DESCRIBED,
+      '--icon',
+      'bin',
+    ]);
+    expect(res.code, JSON.stringify(res.body)).toBe(0);
+    expect(res.body.data.moduleUpdate).toEqual(MODULE_UPDATE);
+    writePackage('@acme/old-icons');
+    await textOf(['new-definition', 'garbage', ...DESCRIBED, '--icon', 'bin']);
+    writePackage('@acme/new-icons');
+    const out = await textOf([
+      'new-definition',
+      'rubbish',
+      ...DESCRIBED,
+      '--icon',
+      'bin',
+    ]);
     expect(out).toContain(MODULE_LINE);
     expect(dataOf().module).toBe('@acme/new-icons');
   });

@@ -62,13 +62,13 @@ const variantsText = value => (Array.isArray(value) ? value.join('/') : '');
 /**
  * The receipt line for a data file whose `module` the command rewrote after
  * a package rename.
- * @param {{moduleUpdate?: {previous: string, module: string}}} data
+ * @param {{moduleUpdate?: {previous: string, module: string}, dryRun?: boolean}} data
  */
 const moduleUpdateLines = data =>
   data.moduleUpdate
     ? [
         text(
-          `[ok] Updated module to "${data.moduleUpdate.module}" (was "${data.moduleUpdate.previous}"), the package name in package.json.`,
+          `${data.dryRun ? '[plan] Would update' : '[ok] Updated'} module to "${data.moduleUpdate.module}" (was "${data.moduleUpdate.previous}"), from the package name in package.json.`,
         ),
       ]
     : [];
@@ -563,6 +563,7 @@ export function registerExperimentalIcon(group, program) {
               : `The experimental.iconSets root ${root.path} in ${manifest} is unchanged.`
             : `${dryRun ? 'Would update' : 'Updated'} ${manifest}.`,
         ),
+        ...moduleUpdateLines(data),
         ...(files.length > 0 ? [list(files)] : []),
         // What to do next comes before the long lists, so it never scrolls
         // away.
