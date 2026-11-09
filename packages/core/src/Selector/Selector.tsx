@@ -1095,7 +1095,10 @@ function filterOptionsByQuery(
   return items.filter(item => optionMatchesQuery(item, query));
 }
 
-/** The values and enabled states of a list, in order, as one string. */
+/**
+ * New option objects with the same values and enabled states give the same
+ * signature, so they do not move the highlight.
+ */
 function optionSignature(
   items: ReadonlyArray<{value: string; disabled?: boolean}>,
 ): string {
@@ -1107,8 +1110,8 @@ function optionSignature(
 /**
  * The index in `next` of the option highlighted at `index` in `previous`.
  * When that option is gone or disabled, the highlight moves to the next
- * remaining enabled option after it in the previous order, or the previous
- * one when none follows; -1 when none remains.
+ * remaining enabled option. With none after it, it moves to the previous
+ * one. -1 means none remains.
  */
 function followHighlight(
   previous: ReadonlyArray<{value: string; disabled?: boolean}>,
@@ -1666,9 +1669,25 @@ export function Selector<T extends SelectorOptionType>(
   if (highlightedList.signature !== highlightSignature) {
     setHighlightedList({signature: highlightSignature, items: filteredItems});
     if (highlightedQuery === searchQuery && highlightedIndex >= 0) {
-      setHighlightedIndex(
-        followHighlight(highlightedList.items, filteredItems, highlightedIndex),
+      const followed = followHighlight(
+        highlightedList.items,
+        filteredItems,
+        highlightedIndex,
       );
+      setHighlightedIndex(followed);
+      // The hovered row moves with its option too, so the ring keeps showing
+      // only a highlight that keyboard input set.
+      if (hoveredIndex != null) {
+        if (hoveredIndex === highlightedIndex) {
+          setHoveredIndex(followed >= 0 ? followed : null);
+        } else {
+          const hoveredValue = highlightedList.items[hoveredIndex]?.value;
+          const moved = filteredItems.findIndex(
+            item => item.value === hoveredValue,
+          );
+          setHoveredIndex(moved >= 0 ? moved : null);
+        }
+      }
     }
   }
 
