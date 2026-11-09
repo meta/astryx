@@ -518,6 +518,7 @@ describe('ci.yml RTL package sharding', () => {
     expect(readers.map(([name]) => name).sort()).toEqual(
       [
         'a11y-dependent-audits-plan',
+        'build-storybook',
         'pr-a11y-guards',
         'pr-a11y-specs',
         'pr-component-a11y-contracts',

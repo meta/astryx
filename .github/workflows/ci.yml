@@ -1504,6 +1504,9 @@ jobs:
           paths: '^(packages/|pnpm-lock\.yaml$|package\.json$|tsconfig\.json$|scripts/|\.github/workflows/ci\.yml$|\.github/scripts/package-size\.mjs$|\.github/scripts/lib/package-size\.js$|\.github/scripts/merge-base\.sh$)'
           # A head cut before the package-size check has no script for it.
           requires-head-file: .github/scripts/package-size.mjs
+          # Writes `changed_files_path`, which scopes the committed API report
+          # check to the packages this pull request can change.
+          component-audit: 'true'
 
       - name: Skip heavy work for a specialized lane
         if: steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.tooling_only == 'true'
@@ -1885,6 +1888,29 @@ jobs:
             fi
           fi
           node scripts/api-report/cli.mjs --changes --base "$BASE_SHA" "${SURFACE[@]}"
+
+      # Each package this pull request can change commits the API report its
+      # build generates (architecture:public-component-api INV24). It reads the
+      # reports the step above generated, so it builds nothing again; without
+      # them it checks each package with `api:report --check`.
+      - name: Check committed API reports
+        if: (steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request') && hashFiles('scripts/api-report/cli.mjs') != ''
+        env:
+          CHANGED_FILES: ${{ steps.scope.outputs.changed_files_path }}
+          SCOPE_DECIDED: ${{ steps.scope.outputs.decided }}
+          SCOPE_TRUNCATED: ${{ steps.scope.outputs.truncated }}
+        run: |
+          # A head cut before this check has no script for it.
+          if [ ! -f .github/scripts/api-report-gate.mjs ]; then
+            echo "This head has no committed API report check; skipped."
+            exit 0
+          fi
+          node .github/scripts/api-report-gate.mjs \
+            --changes api-changes.json \
+            --changed-files "$CHANGED_FILES" \
+            --decided "$SCOPE_DECIDED" \
+            --truncated "$SCOPE_TRUNCATED" \
+            --summary "$GITHUB_STEP_SUMMARY"
 
       - name: Upload analysis artifact
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && (github.event_name == 'pull_request' || inputs.operation == 'release-check')
