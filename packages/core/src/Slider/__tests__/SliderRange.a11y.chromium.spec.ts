@@ -25,6 +25,7 @@ import {
   summarize,
   unmatchedKnownFailures,
   type BindingResult,
+  type PatternContract,
 } from '@astryxdesign/a11y-spec';
 import {
   createChromiumHarness,
@@ -128,8 +129,8 @@ const PER_THUMB_RUNS = SLIDER_RANGE_BINDING_STATES.filter(
   (['lower', 'upper'] as const).map(which => [state, which] as const),
 );
 
-function expectClean(
-  spec: Parameters<typeof summarize>[0],
+function expectClean<Facts>(
+  spec: PatternContract<Facts>,
   result: BindingResult,
 ) {
   const report = summarize(spec, [result]);
