@@ -798,7 +798,7 @@ type TemplateCdnResponse
   data: { path: string; version: string; written: boolean; reason: "exists" | null }
   type: "template.cdn"
 type TemplateCopyResponse
-  data: { template: string; outputDir: string; fileName: string; filesCopied: number; demoMediaReplaced: number; notes: string[]; missingPackages: string[]; installComm … #ccca1257
+  data: { template: string; outputDir: string; fileName: string; filesCopied: number; demoMediaReplaced: number; demoContentReplaced: number; notes: string[]; missingPa … #84827e49
   package: string
   type: "template.copy"
 type TemplateIconsReport
@@ -835,7 +835,7 @@ type TemplateOptions
   skeleton?: boolean | undefined
   type?: "page" | "block" | undefined
 type TemplateShowResponse
-  data: { template: string; description: string; type: "page" | "block"; components: string[]; source: string; demoMediaReplaced: number; icons?: TemplateIconsReport | undefined }
+  data: { template: string; description: string; type: "page" | "block"; components: string[]; source: string; demoMediaReplaced: number; demoContentReplaced: number; icons?: TemplateIconsReport | undefined }
   package: string
   type: "template.show"
 type TemplateSkeletonResponse

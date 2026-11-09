@@ -34,6 +34,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/TopNav/TopNav.generated';
+import {isRenderable} from '../utils/isRenderable';
 
 registerEnglishFallback(english);
 
@@ -47,50 +48,75 @@ const styles = stylex.create({
     padding: spacingVars['--spacing-2'],
     boxSizing: 'border-box',
   },
-  // Flex layout (default, used when no centerContent)
+  // The bar wraps when its regions do not fit one row. The end region then
+  // moves to a second line.
   baseFlex: {
     display: 'flex',
+    flexWrap: 'wrap',
   },
-  // Grid layout (used when centerContent is present)
-  baseGrid: {
-    display: 'grid',
-    gridTemplateColumns: '1fr auto 1fr',
+  // While the regions fit one row, the start and end regions share the free
+  // width equally. This keeps the center at the bar's middle.
+  baseThreeRegion: {
+    display: 'flex',
+    flexWrap: 'wrap',
   },
+  // A region keeps its items on one line, so the bar wraps first. Only a
+  // region wider than the bar wraps its own items. `fit-content` is the
+  // region's full row, capped at the bar's width.
   leftSection: {
     display: 'flex',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacingVars['--spacing-4'],
     flex: '1 1 0%',
-    minWidth: 0,
+    minWidth: stylex.firstThatWorks('fit-content', '-webkit-fit-content'),
   },
+  // The heading shrinks only to its own narrowest width. TopNavHeading keeps
+  // its logo there.
   heading: {
     display: 'flex',
     alignItems: 'center',
-    flexShrink: 0,
+    flexShrink: 1,
   },
   startContent: {
     display: 'flex',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacingVars['--spacing-1'],
   },
+  // The center claims its content's minimum width when the bar decides where
+  // to wrap, then grows first, up to its content width. Only a center wider
+  // than the whole bar, alone on its line, narrows below that minimum.
   centerContent: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacingVars['--spacing-1'],
+    flexGrow: 1000,
+    flexShrink: 1,
+    flexBasis: 'min-content',
+    minWidth: 0,
+    maxWidth: 'max-content',
   },
   rightSection: {
     display: 'flex',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: spacingVars['--spacing-1'],
+    flex: '1 1 0%',
+    minWidth: stylex.firstThatWorks('fit-content', '-webkit-fit-content'),
   },
   endContent: {
     display: 'flex',
+    flexWrap: 'wrap',
     alignItems: 'center',
+    justifyContent: 'flex-end',
     gap: spacingVars['--spacing-1'],
     flexShrink: 0,
     marginInlineStart: 'auto',
+    minWidth: stylex.firstThatWorks('fit-content', '-webkit-fit-content'),
+    maxWidth: '100%',
   },
   // Mobile bar mode — simplified top bar with heading + toggle + endContent
   mobileBar: {
@@ -150,8 +176,8 @@ export interface TopNavProps extends BaseProps<HTMLElement> {
   /**
    * Center content slot - typically tabs, search bar, or primary navigation.
    * Positioned at the horizontal center of the nav bar.
-   * When provided, the layout switches to a three-column CSS grid to ensure
-   * true centering regardless of start/end content widths.
+   * When provided, the layout switches to three regions that keep the center
+   * at the bar's middle while they fit one row; the bar wraps when they do not.
    */
   centerContent?: ReactNode;
   /**
@@ -174,7 +200,7 @@ export interface TopNavProps extends BaseProps<HTMLElement> {
  * `endContent`. `children` are accepted as an alias for `startContent`
  * so navigation items do not silently disappear when using the common
  * React children pattern. When `centerContent` is provided, the layout switches
- * to a three-column CSS grid to keep center content horizontally centered.
+ * to three regions that keep center content horizontally centered.
  *
  * @example
  * ```
@@ -205,11 +231,13 @@ export function TopNav({
   const mobileContent = useTopNavMobileContent();
   const {hasAutoToggle} = useAppShellMobile();
   const resolvedStartContent = startContent ?? children;
-  const hasCenterContent = centerContent != null;
-  const hasCollapsibleContent =
-    resolvedStartContent != null || centerContent != null;
+  // The layout flags use the same test as the slots they gate.
+  const hasCenterContent = isRenderable(centerContent);
+  const hasStartContent = isRenderable(resolvedStartContent);
+  const hasMobileContent = isRenderable(mobileContent);
+  const hasCollapsibleContent = hasStartContent || hasCenterContent;
   // Show mobile toggle when there's ANY drawer content — own items OR SideNav via context
-  const hasMobileDrawerContent = hasCollapsibleContent || mobileContent != null;
+  const hasMobileDrawerContent = hasCollapsibleContent || hasMobileContent;
 
   // =========================================================================
   // Mobile bar mode — heading + endContent + toggle, hide nav items.
@@ -229,7 +257,7 @@ export function TopNav({
           style,
         )}
         {...props}>
-        {heading && (
+        {isRenderable(heading) && (
           <div {...stylex.props(styles.mobileBarHeading)}>{heading}</div>
         )}
         <div {...stylex.props(styles.mobileBarEnd)}>
@@ -246,7 +274,7 @@ export function TopNav({
   // =========================================================================
   if (renderMode === 'drawer') {
     // Only render if there are collapsible items or extra content
-    if (!hasCollapsibleContent && !mobileContent) {
+    if (!hasCollapsibleContent && !hasMobileContent) {
       return null;
     }
 
@@ -258,10 +286,10 @@ export function TopNav({
             {centerContent}
           </div>
         )}
-        {hasCollapsibleContent && mobileContent && (
+        {hasCollapsibleContent && hasMobileContent && (
           <Divider xstyle={styles.drawerDivider} />
         )}
-        {mobileContent && (
+        {hasMobileContent && (
           <div {...stylex.props(styles.drawerExtraContent)}>
             {mobileContent}
           </div>
@@ -283,7 +311,7 @@ export function TopNav({
         themeProps('top-nav'),
         stylex.props(
           styles.base,
-          hasCenterContent ? styles.baseGrid : styles.baseFlex,
+          hasCenterContent ? styles.baseThreeRegion : styles.baseFlex,
           xstyle,
         ),
         className,
@@ -291,8 +319,10 @@ export function TopNav({
       )}
       {...props}>
       <div {...stylex.props(styles.leftSection)}>
-        {heading && <div {...stylex.props(styles.heading)}>{heading}</div>}
-        {resolvedStartContent && (
+        {isRenderable(heading) && (
+          <div {...stylex.props(styles.heading)}>{heading}</div>
+        )}
+        {hasStartContent && (
           <TopNavSlotContext value="start">
             <div {...stylex.props(styles.startContent)}>
               {resolvedStartContent}
@@ -310,7 +340,7 @@ export function TopNav({
           <TopNavSlotContext value="end">{endContent}</TopNavSlotContext>
         </div>
       ) : (
-        endContent && (
+        isRenderable(endContent) && (
           <div {...stylex.props(styles.endContent)}>
             <TopNavSlotContext value="end">{endContent}</TopNavSlotContext>
           </div>

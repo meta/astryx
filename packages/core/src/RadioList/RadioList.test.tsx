@@ -1140,3 +1140,44 @@ describe('pressed state', () => {
     expect(readsPressStrength(row, '[data-astryx-press="on"]')).toBe(false);
   });
 });
+
+describe('RadioList group disabled state', () => {
+  it('marks a disabled radiogroup aria-disabled', () => {
+    render(
+      <RadioList label="Size" isDisabled value="small" onChange={() => {}}>
+        <RadioListItem value="small" label="Small" />
+      </RadioList>,
+    );
+    expect(screen.getByRole('radiogroup', {name: 'Size'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  });
+
+  it('leaves an enabled radiogroup without aria-disabled', () => {
+    render(
+      <RadioList label="Size" value="small" onChange={() => {}}>
+        <RadioListItem value="small" label="Small" />
+      </RadioList>,
+    );
+    expect(screen.getByRole('radiogroup', {name: 'Size'})).not.toHaveAttribute(
+      'aria-disabled',
+    );
+  });
+
+  it("keeps a caller's own aria-disabled on an enabled radiogroup (FR8)", () => {
+    render(
+      <RadioList
+        label="Size"
+        value="small"
+        onChange={() => {}}
+        aria-disabled="true">
+        <RadioListItem value="small" label="Small" />
+      </RadioList>,
+    );
+    expect(screen.getByRole('radiogroup', {name: 'Size'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  });
+});

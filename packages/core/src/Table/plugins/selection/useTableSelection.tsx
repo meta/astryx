@@ -38,7 +38,6 @@
  */
 
 import {
-  createContext,
   use,
   useCallback,
   useEffect,
@@ -58,8 +57,11 @@ import {
   useComponentTranslator,
 } from '../../../i18n/useComponentTranslator';
 import english from '../../../i18n/generated-english/Table/plugins/selection/useTableSelection.generated';
+import {createSharedContext} from '../../../utils/sharedContext';
 
 registerEnglishFallback(english);
+import {registerFixedHeightColumn} from '../../tableColumnAdmission';
+import {registerCountIndependentPlugin} from '../../tableRowContextUsage';
 
 // =============================================================================
 // Config Type
@@ -190,7 +192,11 @@ function applyRowSelectionStyle(
 // =============================================================================
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const SelectionStoreContext = createContext<SelectionStore<any> | null>(null);
+const SelectionStoreContext = createSharedContext<SelectionStore<any> | null>(
+  'SelectionStoreContext',
+  1,
+  null,
+);
 SelectionStoreContext.displayName = 'SelectionStoreContext';
 
 // =============================================================================
@@ -393,8 +399,9 @@ export function useTableSelection<T extends Record<string, unknown>>(
     [],
   );
 
-  return useMemo(
+  const plugin = useMemo(
     (): TablePlugin<T> => ({
+      rowModel: 'flat',
       transformTableContext(children: ReactNode) {
         return (
           <SelectionStoreContext value={store}>
@@ -404,6 +411,7 @@ export function useTableSelection<T extends Record<string, unknown>>(
       },
 
       transformColumns(columns: TableColumn<T>[]) {
+        registerFixedHeightColumn(selectionColumn);
         return [selectionColumn, ...columns];
       },
 
@@ -446,4 +454,5 @@ export function useTableSelection<T extends Record<string, unknown>>(
     }),
     [store, selectionColumn],
   );
+  return registerCountIndependentPlugin(plugin);
 }

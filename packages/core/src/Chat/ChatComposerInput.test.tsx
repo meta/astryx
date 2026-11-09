@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {createRef, StrictMode, useLayoutEffect} from 'react';
+import {createRef, StrictMode, useLayoutEffect, useState} from 'react';
 import {describe, it, expect, vi, afterEach, beforeEach} from 'vitest';
 import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -11,6 +11,7 @@ import type {
   ChatComposerTrigger,
   ChatComposerInputHandle,
 } from './ChatComposerInput';
+import {placeCaretAtEnd, insertTextAtCursor} from './chatComposerSelection';
 import {createStaticSource} from '../Typeahead/createStaticSource';
 import type {SearchableItem, SearchSource} from '../Typeahead/types';
 
@@ -276,6 +277,49 @@ describe('ChatComposerInput', () => {
       expect(onChange).toHaveBeenCalledWith('hello');
     });
 
+    it('reports an imperative insertToken through onChange once, as typing does (FR1)', () => {
+      const onChange = vi.fn();
+      const handleRef = createRef<ChatComposerInputHandle>();
+      render(<ChatComposerInput onChange={onChange} handleRef={handleRef} />);
+      const textbox = screen.getByRole('textbox');
+      textbox.focus();
+      act(() => {
+        handleRef.current!.insertToken({value: '@sam', label: 'Sam'});
+      });
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange).toHaveBeenLastCalledWith(handleRef.current!.getValue());
+      expect(onChange.mock.lastCall?.[0]).toContain('@sam');
+    });
+
+    it('enables Send and sends the token after an imperative insertToken in a controlled composer (FR1)', () => {
+      const onSubmit = vi.fn();
+      const handleRef = createRef<ChatComposerInputHandle>();
+      function Host() {
+        const [value, setValue] = useState('');
+        return (
+          <ChatComposer
+            value={value}
+            onChange={setValue}
+            onSubmit={onSubmit}
+            input={<ChatComposerInput handleRef={handleRef} />}
+          />
+        );
+      }
+      render(<Host />);
+      expect(screen.getByRole('button', {name: 'Send'})).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
+      screen.getByRole('textbox').focus();
+      act(() => {
+        handleRef.current!.insertToken({value: '@sam', label: 'Sam'});
+      });
+      const send = screen.getByRole('button', {name: 'Send'});
+      expect(send).not.toHaveAttribute('aria-disabled');
+      fireEvent.click(send);
+      expect(onSubmit.mock.lastCall?.[0]).toContain('@sam');
+    });
+
     it('calls onSubmit on Enter', () => {
       const onSubmit = vi.fn();
       render(<ChatComposerInput onSubmit={onSubmit} />);
@@ -352,6 +396,55 @@ describe('ChatComposerInput', () => {
       fireEvent.click(body);
       expect(document.activeElement).toBe(editable);
     });
+  });
+
+  describe('touch keyboard Return key', () => {
+    it('labels the Return key Send by default, since Enter sends', () => {
+      render(<ChatComposerInput onSubmit={() => {}} />);
+      expect(screen.getByRole('textbox')).toHaveAttribute(
+        'enterkeyhint',
+        'send',
+      );
+    });
+
+    it('takes enterKeyHint for a composer whose Enter inserts a line break', () => {
+      render(<ChatComposerInput onSubmit={() => {}} enterKeyHint="enter" />);
+      expect(screen.getByRole('textbox')).toHaveAttribute(
+        'enterkeyhint',
+        'enter',
+      );
+    });
+
+    it('labels the default input of ChatComposer Send', () => {
+      render(<ChatComposer onSubmit={() => {}} />);
+      expect(screen.getByRole('textbox')).toHaveAttribute(
+        'enterkeyhint',
+        'send',
+      );
+    });
+
+    it.each([
+      'enter',
+      'done',
+      'go',
+      'next',
+      'previous',
+      'search',
+      'send',
+    ] as const)(
+      'only labels the key: Enter still submits under %s',
+      enterKeyHint => {
+        const onSubmit = vi.fn();
+        render(
+          <ChatComposerInput onSubmit={onSubmit} enterKeyHint={enterKeyHint} />,
+        );
+        const textbox = screen.getByRole('textbox');
+        textbox.textContent = 'hello';
+        fireEvent.input(textbox);
+        fireEvent.keyDown(textbox, {key: 'Enter'});
+        expect(onSubmit).toHaveBeenCalledWith('hello');
+      },
+    );
   });
 
   describe('Enter submit behavior', () => {
@@ -788,7 +881,8 @@ describe('ChatComposerInput', () => {
     });
 
     it('paste inserts a token chip for long pastes after a focus() with no selection range', () => {
-      render(<ChatComposerInput />);
+      const onChange = vi.fn();
+      render(<ChatComposerInput onChange={onChange} />);
       const textbox = screen.getByRole('textbox');
 
       textbox.focus();
@@ -804,6 +898,7 @@ describe('ChatComposerInput', () => {
       });
 
       expect(textbox.querySelector('[data-astryx-token]')).toBeInTheDocument();
+      expect(onChange).toHaveBeenCalledTimes(1);
     });
 
     it('imperative insertToken works after a focus() with no selection range', () => {
@@ -2032,6 +2127,7 @@ describe('ChatComposerInput', () => {
 
       const options = await getMenuOptions(textbox);
       fireEvent.mouseEnter(options[1]);
+      fireEvent.pointerMove(options[1], {screenX: 107, screenY: 107});
 
       expect(options[1]).toHaveAttribute('aria-selected', 'true');
       expect(spy.mock.calls.length).toBe(callsAfterOpen);
@@ -2045,6 +2141,175 @@ describe('ChatComposerInput', () => {
       fireEvent.keyDown(textbox, {key: 'ArrowDown'});
 
       expect(spy.mock.calls.length).toBeGreaterThan(callsAfterOpen);
+    });
+  });
+
+  describe('IME caret anchoring into text nodes', () => {
+    it('anchors placeCaretAtEnd inside a Text node when content is present', () => {
+      render(
+        <ChatComposer onSubmit={() => {}} input={<ChatComposerInput />} />,
+      );
+      const textbox = screen.getByRole('textbox');
+      textbox.textContent = 'hello world';
+      placeCaretAtEnd(textbox);
+
+      const selection = window.getSelection()!;
+      expect(selection.rangeCount).toBeGreaterThan(0);
+      expect(selection.anchorNode?.nodeType).toBe(Node.TEXT_NODE);
+      expect(selection.anchorOffset).toBe('hello world'.length);
+    });
+
+    it('anchors insertTextAtCursor inside the inserted text node', () => {
+      render(
+        <ChatComposer onSubmit={() => {}} input={<ChatComposerInput />} />,
+      );
+      const textbox = screen.getByRole('textbox');
+      insertTextAtCursor(textbox, 'inserted text');
+
+      const selection = window.getSelection()!;
+      expect(selection.rangeCount).toBeGreaterThan(0);
+      expect(selection.anchorNode?.nodeType).toBe(Node.TEXT_NODE);
+      expect(selection.anchorNode?.textContent).toBe('inserted text');
+      expect(selection.anchorOffset).toBe('inserted text'.length);
+    });
+
+    it('one Backspace after a token removes the token and its space', () => {
+      let handle: ChatComposerInputHandle | null = null;
+      render(
+        <ChatComposer
+          onSubmit={() => {}}
+          input={
+            <ChatComposerInput
+              handleRef={h => {
+                handle = h;
+              }}
+            />
+          }
+        />,
+      );
+      const textbox = screen.getByRole('textbox');
+      act(() => textbox.focus());
+      act(() => {
+        handle?.insertToken({
+          value: '@cindy',
+          label: '@Cindy Zhang',
+          variant: 'blue',
+        });
+      });
+      expect(textbox.querySelector('[data-astryx-token]')).not.toBeNull();
+
+      fireEvent.keyDown(textbox, {key: 'Backspace'});
+
+      expect(textbox.querySelector('[data-astryx-token]')).toBeNull();
+      expect(textbox.textContent).toBe('');
+      expect(textbox.querySelector('br')).toBeNull();
+    });
+
+    it('after one Backspace removes a token, the caret is inside the text before it', () => {
+      let handle: ChatComposerInputHandle | null = null;
+      render(
+        <ChatComposer
+          onSubmit={() => {}}
+          input={
+            <ChatComposerInput
+              handleRef={h => {
+                handle = h;
+              }}
+            />
+          }
+        />,
+      );
+      const textbox = screen.getByRole('textbox');
+      act(() => textbox.focus());
+      act(() => handle?.insertText('hey '));
+      act(() => {
+        handle?.insertToken({
+          value: '@cindy',
+          label: '@Cindy Zhang',
+          variant: 'blue',
+        });
+      });
+
+      fireEvent.keyDown(textbox, {key: 'Backspace'});
+
+      const selection = window.getSelection()!;
+      expect(textbox.textContent).toBe('hey ');
+      expect(selection.anchorNode?.nodeType).toBe(Node.TEXT_NODE);
+      expect(selection.anchorNode?.textContent).toBe('hey ');
+      expect(selection.anchorOffset).toBe('hey '.length);
+    });
+
+    it('one Backspace on a token that starts the last line keeps that line for the caret', () => {
+      let handle: ChatComposerInputHandle | null = null;
+      render(
+        <ChatComposer
+          onSubmit={() => {}}
+          input={
+            <ChatComposerInput
+              handleRef={h => {
+                handle = h;
+              }}
+            />
+          }
+        />,
+      );
+      const textbox = screen.getByRole('textbox');
+      act(() => textbox.focus());
+      act(() => handle?.insertText('hey\n'));
+      // Chromium leaves an empty text node between a line break and a token.
+      act(() => {
+        textbox.append(document.createTextNode(''));
+        const range = document.createRange();
+        range.selectNodeContents(textbox);
+        range.collapse(false);
+        window.getSelection()!.removeAllRanges();
+        window.getSelection()!.addRange(range);
+      });
+      act(() => {
+        handle?.insertToken({
+          value: '@cindy',
+          label: '@Cindy Zhang',
+          variant: 'blue',
+        });
+      });
+
+      fireEvent.keyDown(textbox, {key: 'Backspace'});
+
+      // The emptied line keeps a placeholder, as the browser's own delete
+      // does, and the caret sits on it, not at the end of the line above.
+      expect(textbox.querySelector('[data-astryx-token]')).toBeNull();
+      expect(textbox.lastChild?.nodeName).toBe('BR');
+      const selection = window.getSelection()!;
+      expect(selection.anchorNode?.nodeType).toBe(Node.TEXT_NODE);
+      expect(selection.anchorNode?.nextSibling?.nodeName).toBe('BR');
+      expect(selection.anchorOffset).toBe(0);
+    });
+
+    it('anchors caret inside trailing text node after inserting a token', async () => {
+      let handle: ChatComposerInputHandle | null = null;
+      render(
+        <ChatComposer
+          onSubmit={() => {}}
+          input={
+            <ChatComposerInput
+              handleRef={h => {
+                handle = h;
+              }}
+            />
+          }
+        />,
+      );
+      act(() => {
+        handle?.insertToken({
+          value: '@cindy',
+          label: '@Cindy Zhang',
+          variant: 'blue',
+        });
+      });
+
+      const selection = window.getSelection()!;
+      expect(selection.rangeCount).toBeGreaterThan(0);
+      expect(selection.anchorNode?.nodeType).toBe(Node.TEXT_NODE);
     });
   });
 });

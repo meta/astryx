@@ -52,7 +52,7 @@ import {
 } from '../Stepper/StepperContext';
 
 const noop = () => {};
-const Scoped = createLayerScopedContext('default');
+const Scoped = createLayerScopedContext('TestScopedContext', 1, 'default');
 const ServiceContext = createContext('service');
 ServiceContext.displayName = 'ServiceContext';
 
@@ -89,7 +89,11 @@ describe('layer-scoped context', () => {
       selected: new Set<string>(),
       onChange: vi.fn(),
     };
-    const Membership = createLayerScopedContext(fallback);
+    const Membership = createLayerScopedContext(
+      'TestMembershipContext',
+      1,
+      fallback,
+    );
     const outer = {
       isDisabled: true,
       selected: new Set(['outer']),
@@ -111,7 +115,11 @@ describe('layer-scoped context', () => {
   });
 
   it('keeps the public depth provider limited to depth', () => {
-    const Membership = createLayerScopedContext('default');
+    const Membership = createLayerScopedContext(
+      'TestDepthMembershipContext',
+      1,
+      'default',
+    );
     function Probe() {
       expect(use(Membership)).toBe('outer');
       expect(use(LayerDepthContext)).toBe(3);
@@ -178,7 +186,7 @@ describe('layer-scoped context', () => {
     const input = screen.getByRole('textbox');
     fireEvent.change(input, {target: {value: 'keep me'}});
     input.focus();
-    const Late = createLayerScopedContext('late default');
+    const Late = createLayerScopedContext('TestLateContext', 1, 'late default');
     rerender(
       <LayerContentBoundary>
         <Content />
@@ -436,15 +444,21 @@ describe.each(boundaries)('%s provider boundary', (name, boundary) => {
         )}
       </ButtonGroup>,
     );
-    expect(screen.getByRole('button', {name: 'Outer member'})).toBeDisabled();
+    expect(screen.getByRole('button', {name: 'Outer member'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
     const independent = screen.getByRole('button', {name: 'Independent'});
-    expect(independent).toBeEnabled();
+    expect(independent).not.toHaveAttribute('aria-disabled');
     fireEvent.click(independent);
     expect(press).toHaveBeenCalledOnce();
     expect(
       screen.getByRole('button', {name: 'Explicit disabled'}),
-    ).toBeDisabled();
-    expect(screen.getByRole('button', {name: 'Inner member'})).toBeDisabled();
+    ).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('button', {name: 'Inner member'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
 
   it('ends group-owned labels without changing the content input label', () => {

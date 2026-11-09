@@ -14,7 +14,7 @@
  *   pnpm exec playwright test packages/richtext --project chromium
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,

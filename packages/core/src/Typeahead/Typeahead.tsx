@@ -52,6 +52,7 @@ import {useTooltip} from '../Tooltip';
 import {renderIconSlot, type IconType} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {Spinner} from '../Spinner';
+import {SpinnerOwnerContext} from '../Spinner/SpinnerOwnerContext';
 import {spacingVars, sizeVars} from '../theme/tokens.stylex';
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
@@ -77,6 +78,7 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {setInputValue} from '../utils/setInputValue';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -385,7 +387,12 @@ function EndLane({
   }
   return (
     <div {...stylex.props(styles.endLane)}>
-      {isBusy && <Spinner size="sm" aria-label={loadingLabel} role="img" />}
+      {isBusy && (
+        // Named, never live: the typeahead announces its search.
+        <SpinnerOwnerContext value={true}>
+          <Spinner size="sm" aria-label={loadingLabel} role="img" />
+        </SpinnerOwnerContext>
+      )}
       {clear}
     </div>
   );
@@ -507,14 +514,9 @@ export function Typeahead<T extends SearchableItem>({
       // focus handler sees the label rather than an empty query: an empty one
       // would open the hasEntriesOnFocus bootstrap entries, and Enter would
       // commit the first of them instead of the edited value.
-      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-        window.HTMLInputElement.prototype,
-        'value',
-      )?.set;
       // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the base must hold the label as its query before the in-tap focus
       flushSync(() => {
-        nativeInputValueSetter?.call(input, value.label);
-        input.dispatchEvent(new Event('input', {bubbles: true}));
+        setInputValue(input, value.label);
       });
       input.focus();
       input.setSelectionRange(0, input.value.length);
@@ -538,26 +540,40 @@ export function Typeahead<T extends SearchableItem>({
     [editingValue, isEditing],
   );
 
+  // Focus the token's button once it renders (the next cycle), so keyboard
+  // users stay in the component after edit mode ends.
+  const focusTokenNextFrame = useCallback(() => {
+    requestAnimationFrame(() => {
+      const tokenEl = tokenRef.current;
+      if (tokenEl) {
+        const button = tokenEl.querySelector('button');
+        (button ?? tokenEl).focus();
+      }
+    });
+  }, []);
+
   // Handle selection from dropdown — clears edit mode
   const handleChange = useCallback(
     (item: T | null) => {
       setIsEditing(false);
       setEditingValue(null);
       onChange(item);
-      // After selection, focus the token so keyboard users stay in the component.
-      // Use requestAnimationFrame because the token renders on the next cycle.
       if (item) {
-        requestAnimationFrame(() => {
-          const tokenEl = tokenRef.current;
-          if (tokenEl) {
-            // Focus the internal button inside the token
-            const button = tokenEl.querySelector('button');
-            (button ?? tokenEl).focus();
-          }
-        });
+        focusTokenNextFrame();
       }
     },
-    [onChange],
+    [onChange, focusTokenNextFrame],
+  );
+
+  // Whether the base's list is shown: Escape then hides the list first, and
+  // edit mode stays.
+  const isListOpenRef = useRef(false);
+  const handleOpenChange = useCallback(
+    (isOpen: boolean) => {
+      isListOpenRef.current = isOpen;
+      onOpenChange?.(isOpen);
+    },
+    [onOpenChange],
   );
 
   // Handle clear (explicit X button on token). Edit mode copied the label into
@@ -568,12 +584,7 @@ export function Typeahead<T extends SearchableItem>({
   const handleClear = useCallback(() => {
     const input = inputRef.current;
     if (input && input.value !== '') {
-      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-        window.HTMLInputElement.prototype,
-        'value',
-      )?.set;
-      nativeInputValueSetter?.call(input, '');
-      input.dispatchEvent(new Event('input', {bubbles: true}));
+      setInputValue(input, '');
     }
     setIsEditing(false);
     setEditingValue(null);
@@ -593,14 +604,14 @@ export function Typeahead<T extends SearchableItem>({
       if (isImeKeyEvent(e.nativeEvent)) {
         return;
       }
-      if (e.key === 'Escape' && editingValue) {
+      if (e.key === 'Escape' && editingValue && !isListOpenRef.current) {
         e.preventDefault();
         setIsEditing(false);
         setEditingValue(null);
-        inputRef.current?.blur();
+        focusTokenNextFrame();
       }
     },
-    [editingValue],
+    [editingValue, focusTokenNextFrame],
   );
 
   // Click wrapper to focus input or enter edit mode
@@ -653,6 +664,7 @@ export function Typeahead<T extends SearchableItem>({
           themeProps('typeahead', {size, status: status?.type}),
           stylex.props(
             inputWrapperStyles.base,
+            inputWrapperStyles.textField,
             styles.wrapper,
             sizeStyle,
             status && inputStatusBorderStyles[status.type],
@@ -738,7 +750,7 @@ export function Typeahead<T extends SearchableItem>({
                 // aria-required / aria-invalid still applies.
                 aria-invalid={status?.type === 'error' || rest['aria-invalid']}
                 onChangeQuery={onChangeQuery}
-                onOpenChange={onOpenChange}
+                onOpenChange={handleOpenChange}
                 debounceMs={debounceMs}
                 anchorRef={wrapperRef}
                 onKeyDown={handleKeyDown}

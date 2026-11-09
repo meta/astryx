@@ -28,13 +28,14 @@
  * each layer provides depth for its OWN content, so nesting composes on its own.
  */
 
-import {createContext, use, type ReactNode} from 'react';
+import {use, type ReactNode} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 
 /**
  * How many layers deep the current subtree is. 0 at the app root; each layer
  * increments it for its own content.
  */
-export const LayerDepthContext = createContext(0);
+export const LayerDepthContext = createSharedContext('LayerDepthContext', 1, 0);
 LayerDepthContext.displayName = 'LayerDepthContext';
 
 /**

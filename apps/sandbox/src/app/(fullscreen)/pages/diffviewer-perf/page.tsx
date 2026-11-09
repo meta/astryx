@@ -426,9 +426,12 @@ export default function DiffViewerPerfPage() {
         // Looks for a rendered diff now and then once per frame, so a file
         // that renders late is caught at the frame it appears.
         const watchFirstFile = () => {
-          // Unified view renders a <table>; split view, a role="table" grid.
+          // Unified view renders a <table>; split view, a role="table" grid;
+          // a file folded for its size, only its fold row.
           if (
-            surfaceRef.current?.querySelector('table, [role="table"]') != null
+            surfaceRef.current?.querySelector(
+              'table, [role="table"], [data-diff-fold]',
+            ) != null
           ) {
             afterNextPaint(renderStart, ms => {
               firstFileMs = ms;

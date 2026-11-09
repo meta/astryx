@@ -47,6 +47,15 @@ beforeEach(() => {
 });
 afterEach(() => fs.rmSync(root, {recursive: true, force: true}));
 
+function writeGateConfig(config) {
+  const dir = path.join(root, '.github/scripts/visual-gate');
+  fs.mkdirSync(dir, {recursive: true});
+  fs.writeFileSync(
+    path.join(dir, 'visual-gate.config.json'),
+    JSON.stringify(config),
+  );
+}
+
 describe('classifyVisualScope', () => {
   it.each([
     'pnpm-lock.yaml',
@@ -226,13 +235,57 @@ describe('classifyVisualScope', () => {
     });
   });
 
-  it('excludes the private probe fixture', () => {
+  it('runs the whole plan for the probe fixture, whose shots the release plan takes', () => {
+    writeGateConfig({probeTheme: 'probe'});
+    for (const file of [
+      'packages/themes/probe/src/probeTheme.ts',
+      'packages/themes/probe/src/probeConfig.ts',
+    ]) {
+      const result = classifyVisualScope([file], root);
+      expect(result, file).toMatchObject({
+        hasStableVisual: true,
+        broadStableVisual: true,
+        // Still not a stable theme: its own theme-matrix shots stay out.
+        stableThemes: [],
+      });
+    }
+    // Its package metadata alone changes no pixels.
+    expect(
+      classifyVisualScope(['packages/themes/probe/package.json'], root)
+        .hasStableVisual,
+    ).toBe(false);
+  });
+
+  it("defaults the probe fixture as the gate does when the config doesn't name it", () => {
+    writeGateConfig({});
+    expect(
+      classifyVisualScope(['packages/themes/probe/src/probeTheme.ts'], root),
+    ).toMatchObject({hasStableVisual: true, broadStableVisual: true});
+  });
+
+  it('reads the probe fixture from the gate config, so a renamed fixture still counts', () => {
+    writeGateConfig({probeTheme: 'preview'});
+    expect(
+      classifyVisualScope(
+        ['packages/themes/preview/src/previewTheme.ts'],
+        root,
+      ),
+    ).toMatchObject({hasStableVisual: true, broadStableVisual: true});
+    expect(
+      classifyVisualScope(['packages/themes/probe/src/probeTheme.ts'], root)
+        .hasStableVisual,
+    ).toBe(false);
+  });
+
+  it('uses the repository gate config for the probe fixture', () => {
     const result = classifyVisualScope(
       ['packages/themes/probe/src/probeTheme.ts'],
-      root,
+      path.resolve(import.meta.dirname, '../..'),
     );
-    expect(result.hasStableVisual).toBe(false);
-    expect(result.stableThemes).toEqual([]);
+    expect(result).toMatchObject({
+      hasStableVisual: true,
+      broadStableVisual: true,
+    });
   });
 
   it('excludes Lab and records its release channel from package metadata', () => {
