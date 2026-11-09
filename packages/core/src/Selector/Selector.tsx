@@ -1604,9 +1604,8 @@ export function Selector<T extends SelectorOptionType>(
   }, [comboboxTriggerClick, noteHighlightMove]);
 
   // A new query is a new list: the old highlight's index would name another
-  // option, or one past the end, so it is cleared and ArrowDown starts at the
-  // first enabled match. Adjusted during render, as the query changes, rather
-  // than in an effect.
+  // option, or one past the end. Adjusted during render rather than in an
+  // effect.
   const [highlightedQuery, setHighlightedQuery] = useState(searchQuery);
   if (highlightedQuery !== searchQuery) {
     setHighlightedQuery(searchQuery);

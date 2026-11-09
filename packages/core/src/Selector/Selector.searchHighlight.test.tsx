@@ -53,9 +53,11 @@ describe('Selector: a query change clears the highlight', () => {
     const onChange = renderSearch();
     await user.click(screen.getByRole('button', {name: /^Fruit\b/}));
     const search = screen.getByRole('combobox', h);
-    await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}');
+    // Apricot is index 1, inside the two-row list `b` leaves (Banana,
+    // Blueberry), so a kept index would name Blueberry.
+    await user.keyboard('{ArrowDown}{ArrowDown}');
     await user.type(search, 'b');
-    expect(activeOption(search)).toBeNull();
+    expect(search.getAttribute('aria-activedescendant')).toBeNull();
     await user.keyboard('{Enter}');
     expect(onChange).not.toHaveBeenCalled();
     await user.keyboard('{ArrowDown}');
@@ -92,7 +94,7 @@ describe('Selector: a query change clears the highlight', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('starts ArrowDown at the first enabled match, past a disabled one', async () => {
+  it('highlights nothing on ArrowDown when no match is enabled', async () => {
     const user = userEvent.setup();
     renderSearch();
     await user.click(screen.getByRole('button', {name: /^Fruit\b/}));
@@ -122,7 +124,9 @@ describe('MultiSelector: a query change clears the highlight', () => {
     );
     await user.click(screen.getByRole('button', {name: /^Fruit\b/}));
     const search = screen.getByRole('combobox', h);
-    await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}');
+    // Apricot is index 1, inside the two-row list `b` leaves (Banana,
+    // Blueberry), so a kept index would name Blueberry.
+    await user.keyboard('{ArrowDown}{ArrowDown}');
     await user.type(search, 'b');
     expect(search.getAttribute('aria-activedescendant')).toBeNull();
     await user.keyboard('{Enter}');

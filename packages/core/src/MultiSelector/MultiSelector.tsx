@@ -1881,10 +1881,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   });
 
   // A new query is a new list: the old highlight's index would name another
-  // row, or one past the end, so it is cleared. Unlike Selector it does not
-  // move to the first match: with no row highlighted, Left and Right stay the
-  // search field's caret keys rather than moving into a row's action cell.
-  // Adjusted during render, as the query changes, rather than in an effect.
+  // row, or one past the end, so it is cleared. With no row highlighted, Left
+  // and Right stay the search field's caret keys. Adjusted during render
+  // rather than in an effect.
   const [highlightedQuery, setHighlightedQuery] = useState(searchQuery);
   if (highlightedQuery !== searchQuery) {
     setHighlightedQuery(searchQuery);
