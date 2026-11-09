@@ -167,6 +167,29 @@ describe('why a notice did not print (diagnostic state)', () => {
     });
   });
 
+  // The setup reminder shares the once-a-day record but is no update
+  // notice: no skip is recorded for it, and an old one is never reported.
+  it('records no skip for the setup reminder, and lastNoticeSkip ignores one', () => {
+    const stateDir = tempDir('state');
+    updateGlobalState({latest: '0.7.1'}, stateDir);
+    expect(takeNotice('setup:/app', {stateDir, now: 1000})).toBe(true);
+    expect(takeNotice('setup:/app', {stateDir, now: 2000})).toBe(false);
+    expect(readGlobalState(stateDir).noticeSkips).toBeUndefined();
+    expect(lastNoticeSkip({stateDir})).toBeNull();
+    updateGlobalState(
+      {noticeSkips: {'setup:/app': {reason: 'already-shown', at: 3000}}},
+      stateDir,
+    );
+    expect(lastNoticeSkip({stateDir})).toBeNull();
+    expect(takeNotice('global', {stateDir, now: 4000})).toBe(true);
+    expect(takeNotice('global', {stateDir, now: 5000})).toBe(false);
+    expect(lastNoticeSkip({stateDir})).toEqual({
+      key: 'global',
+      reason: 'already-shown',
+      at: 5000,
+    });
+  });
+
   it('says a held lock timed out, and who holds it', () => {
     const stateDir = tempDir('state');
     const lockDir = path.join(stateDir, '.lock-state');

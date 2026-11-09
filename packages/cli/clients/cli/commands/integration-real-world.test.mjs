@@ -11,7 +11,12 @@ import {afterEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {runCli} from '../../../test-utils/run-cli.mjs';
+import {requireNatively} from '../../../test-utils/native-require.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('../../../test-utils/run-cli.mjs')} */
+const {runCli} = require('../../../test-utils/run-cli.mjs');
 
 let rootDir;
 const CLI_BIN = path.join(
@@ -73,7 +78,7 @@ afterEach(() => {
 describe('integration authoring across a real npm package boundary', () => {
   it('authors, packs, installs, upgrades, and builds contributed source', async () => {
     rootDir = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-theme-provider-consumer-'),
+      path.join(REPO_ROOT, '.astryx-theme-provider-consumer-'),
     );
     const providerDir = path.join(rootDir, 'provider');
     const consumerDir = path.join(rootDir, 'consumer');

@@ -20,7 +20,7 @@ import {
   vi,
 } from 'vitest';
 import {act, cleanup, fireEvent, render, screen} from '@testing-library/react';
-import {rulesDeclaredFor} from '../__tests__/pressState';
+import {layerOnlyWhilePressed, rulesDeclaredFor} from '../__tests__/pressState';
 import {swipeLayerLoaded} from './__tests__/swipeLayerLoaded';
 import userEvent from '@testing-library/user-event';
 import {LinkProvider} from '../Link/LinkProvider';
@@ -874,6 +874,16 @@ describe('Item', () => {
     }
   });
 
+  it('keeps its touch press layer to a press: on or fading', () => {
+    render(<Item label="Row" onClick={() => {}} data-testid="row" />);
+    // Under a coarse pointer the row's `::before` layer and its isolation
+    // apply only on a press arm; at rest a caller's own `::before` keeps its
+    // styles.
+    expect(layerOnlyWhilePressed(screen.getByTestId('row'), '::before')).toBe(
+      true,
+    );
+  });
+
   it('truncates the label and description to the lines it is given', () => {
     // The clamp count reaches CSS through a custom property, so resolve it.
     const lineClamp = (element: HTMLElement) => {
@@ -945,6 +955,18 @@ describe('Item', () => {
     expect(item()).toHaveAttribute('data-selected', 'selected');
     expect(item()).not.toHaveAttribute('data-highlighted');
     expect(item()).not.toHaveAttribute('data-disabled');
+    rerender(
+      <Item label="Item" role="option" isHighlighted data-testid="item" />,
+    );
+    expect(item()).toHaveAttribute('data-highlighted', 'highlighted');
+    expect(item()).not.toHaveAttribute('data-selected');
+    expect(item()).not.toHaveAttribute('data-disabled');
+    rerender(
+      <Item label="Item" isDisabled onClick={() => {}} data-testid="item" />,
+    );
+    expect(item()).toHaveAttribute('data-disabled', 'disabled');
+    expect(item()).not.toHaveAttribute('data-highlighted');
+    expect(item()).not.toHaveAttribute('data-selected');
   });
 
   it('aligns the row on first baselines only under first-line', () => {

@@ -519,15 +519,146 @@ function currentOutputMap(root, files) {
  * `base` must be the merge commit's first parent, the main commit the merge
  * was built on. A later main would show every file it gained as a deletion.
  */
-function mergeBackEntries(root, base) {
+function mergeBackEntries(root, base, head = 'HEAD') {
   const raw = git(root, [
     'diff',
     '--name-status',
     '--find-renames',
     base,
-    'HEAD',
+    head,
   ]);
   return raw ? raw.split('\n') : [];
+}
+
+/**
+ * Validate one merge-back projection against its immutable release tag.
+ *
+ * The live PR path also binds the still-active release branch. A historical
+ * coverage audit has no branch to bind after cleanup, so it replays the same
+ * structural validation against the committed head and immutable tag.
+ */
+function validateMergeBackAtRef(
+  root,
+  {base, head = 'HEAD', releaseRef, activeBranches = null, workingTree = false},
+) {
+  const marker = markerAtRef(root, releaseRef);
+  const plan = JSON.parse(
+    git(root, ['show', `${releaseRef}:${RELEASE_DIR}/${PLAN_FILE}`]),
+  );
+  const errors = validateIdentity(marker, plan);
+  if (releaseRef !== `v${marker.version}`)
+    errors.push('release merge-back must use the immutable version tag');
+
+  const releaseHead = git(root, ['rev-parse', releaseRef]);
+  if (activeBranches !== null) {
+    const branchHead = git(root, ['rev-parse', `origin/${marker.branch}`]);
+    if (releaseHead !== branchHead)
+      errors.push('version tag does not match the active release branch head');
+    const sortedBranches = [...activeBranches].sort();
+    if (sortedBranches.length !== 1 || sortedBranches[0] !== marker.branch)
+      errors.push(
+        'release merge-back requires exactly the marked active branch',
+      );
+  }
+
+  const entries = mergeBackEntries(root, base, head);
+  const releaseDiff = git(root, [
+    'diff',
+    '--name-status',
+    '--find-renames',
+    plan.cutSha,
+    releaseRef,
+  ]);
+  const releaseRenames = new Set(
+    releaseDiff
+      .split('\n')
+      .filter(Boolean)
+      .map(entry => entry.split('\t'))
+      .filter(
+        ([status, ...files]) => status?.startsWith('R') && files.length === 2,
+      )
+      .map(([, ...files]) => files.join('\t')),
+  );
+  const releaseOutputs = releaseOutputMapAtRef(root, plan, releaseRef);
+  const releaseManifestFiles = releaseOutputPathsAtRef(
+    root,
+    plan,
+    releaseRef,
+  ).filter(isPackageManifestPath);
+  const cutManifests = manifestMapAtRef(
+    root,
+    plan.cutSha,
+    releaseManifestFiles,
+  );
+  const releaseManifests = manifestMapAtRef(
+    root,
+    releaseRef,
+    releaseManifestFiles,
+  );
+  const mainManifestFiles = git(root, [
+    'ls-tree',
+    '-r',
+    '--name-only',
+    base,
+    '--',
+    'packages',
+  ])
+    .split('\n')
+    .filter(isPackageManifestPath);
+  const baseManifests = manifestMapAtRef(root, base, mainManifestFiles);
+  const baseConfig = jsonAtRef(root, base, '.changeset/config.json');
+  const headChangesets = workingTree
+    ? new Map(changesetEntries(root).map(entry => [entry.path, entry.sha256]))
+    : changesetMapAtRef(root, head);
+  const headOutputs = workingTree
+    ? currentOutputMap(root, releaseOutputs.keys())
+    : fileDigestsAtRef(root, head, [...releaseOutputs.keys()]);
+  const headManifests = workingTree
+    ? currentManifestMap(root, mainManifestFiles)
+    : manifestMapAtRef(root, head, mainManifestFiles);
+
+  errors.push(
+    ...validateReleaseMergeBack({
+      entries,
+      plan,
+      baseChangesets: changesetMapAtRef(root, base),
+      headChangesets,
+      releaseOutputs,
+      headOutputs,
+      releaseRenames,
+      releaseVersion: marker.version,
+      fixedNames: new Set((baseConfig?.fixed ?? []).flat()),
+      cutManifests,
+      releaseManifests,
+      baseManifests,
+      headManifests,
+    }),
+  );
+  return {
+    errors,
+    receipt: {
+      branch: marker.branch,
+      head: releaseHead,
+      version: marker.version,
+      planDigest: marker.planDigest,
+      base,
+      releaseRef,
+    },
+  };
+}
+
+/** Replay the merge-back validator over a closed, one-parent merge commit. */
+function validateHistoricalReleaseMergeBack(root, {head, releaseRef}) {
+  const lineage = git(root, ['rev-list', '--parents', '-n', '1', head])
+    .trim()
+    .split(/\s+/);
+  if (lineage.length !== 2)
+    return ['historical release merge-back must be a one-parent squash commit'];
+  return validateMergeBackAtRef(root, {
+    base: lineage[1],
+    head,
+    releaseRef,
+  }).errors;
 }
 
 function markerAtRef(root, ref) {
@@ -802,14 +933,16 @@ function validateReleaseMergeBack({
   }
 
   for (const [file, digest] of planned) {
-    if (baseChangesets.get(file) !== digest)
-      errors.push(
-        `release merge-back cannot verify frozen Changeset on current main: ${file}`,
-      );
-    if (headChangesets.has(file))
-      errors.push(
-        `release merge-back did not delete frozen Changeset: ${file}`,
-      );
+    const baseDigest = baseChangesets.get(file);
+    const headDigest = headChangesets.get(file);
+    if (baseDigest === digest) {
+      if (headDigest !== undefined)
+        errors.push(
+          `release merge-back did not delete frozen Changeset: ${file}`,
+        );
+    } else if (headDigest !== baseDigest) {
+      errors.push(`release merge-back changed post-cut Changeset: ${file}`);
+    }
   }
   for (const [file, digest] of baseChangesets) {
     if (planned.has(file)) continue;
@@ -1194,103 +1327,17 @@ async function main() {
   if (command === 'validate-merge-back') {
     const base = required(values, 'base');
     const releaseRef = required(values, 'release-ref');
-    const marker = markerAtRef(root, releaseRef);
-    const plan = JSON.parse(
-      git(root, ['show', `${releaseRef}:${RELEASE_DIR}/${PLAN_FILE}`]),
-    );
-    const errors = validateIdentity(marker, plan);
-    if (releaseRef !== `v${marker.version}`)
-      errors.push('release merge-back must use the immutable version tag');
-    const releaseHead = git(root, ['rev-parse', releaseRef]);
-    const branchHead = git(root, ['rev-parse', `origin/${marker.branch}`]);
-    if (releaseHead !== branchHead)
-      errors.push('version tag does not match the active release branch head');
     const activeBranches = required(values, 'active-branches')
       .split(',')
-      .filter(Boolean)
-      .sort();
-    if (activeBranches.length !== 1 || activeBranches[0] !== marker.branch)
-      errors.push(
-        'release merge-back requires exactly the marked active branch',
-      );
-    const entries = mergeBackEntries(root, base);
-    const releaseDiff = git(root, [
-      'diff',
-      '--name-status',
-      '--find-renames',
-      plan.cutSha,
-      releaseRef,
-    ]);
-    const releaseRenames = new Set(
-      releaseDiff
-        .split('\n')
-        .filter(Boolean)
-        .map(entry => entry.split('\t'))
-        .filter(
-          ([status, ...files]) => status?.startsWith('R') && files.length === 2,
-        )
-        .map(([, ...files]) => files.join('\t')),
-    );
-    const releaseOutputs = releaseOutputMapAtRef(root, plan, releaseRef);
-    const releaseManifestFiles = releaseOutputPathsAtRef(
-      root,
-      plan,
-      releaseRef,
-    ).filter(isPackageManifestPath);
-    const cutManifests = manifestMapAtRef(
-      root,
-      plan.cutSha,
-      releaseManifestFiles,
-    );
-    const releaseManifests = manifestMapAtRef(
-      root,
-      releaseRef,
-      releaseManifestFiles,
-    );
-    // FR50 validates every current-main manifest so the release branch delta
-    // cannot overwrite post-cut main fields or decide the next version.
-    const mainManifestFiles = git(root, [
-      'ls-tree',
-      '-r',
-      '--name-only',
+      .filter(Boolean);
+    const {errors, receipt} = validateMergeBackAtRef(root, {
       base,
-      '--',
-      'packages',
-    ])
-      .split('\n')
-      .filter(isPackageManifestPath);
-    const baseManifests = manifestMapAtRef(root, base, mainManifestFiles);
-    const baseConfig = jsonAtRef(root, base, '.changeset/config.json');
-    errors.push(
-      ...validateReleaseMergeBack({
-        entries,
-        plan,
-        baseChangesets: changesetMapAtRef(root, base),
-        headChangesets: new Map(
-          changesetEntries(root).map(entry => [entry.path, entry.sha256]),
-        ),
-        releaseOutputs,
-        headOutputs: currentOutputMap(root, releaseOutputs.keys()),
-        releaseRenames,
-        releaseVersion: marker.version,
-        fixedNames: new Set((baseConfig?.fixed ?? []).flat()),
-        cutManifests,
-        releaseManifests,
-        baseManifests,
-        headManifests: currentManifestMap(root, mainManifestFiles),
-      }),
-    );
+      releaseRef,
+      activeBranches,
+      workingTree: true,
+    });
     if (errors.length) throw new Error(errors.join('\n'));
-    console.log(
-      JSON.stringify({
-        branch: marker.branch,
-        head: releaseHead,
-        version: marker.version,
-        planDigest: marker.planDigest,
-        base,
-        releaseRef,
-      }),
-    );
+    console.log(JSON.stringify(receipt));
     return;
   }
   if (command !== 'validate')
@@ -1364,6 +1411,7 @@ export {
   validateReleaseDiff,
   validateReleaseState,
   validateReleaseMergeBack,
+  validateHistoricalReleaseMergeBack,
   versionTagExists,
   writeAuthority,
 };

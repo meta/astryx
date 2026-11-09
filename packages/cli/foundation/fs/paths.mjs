@@ -16,6 +16,7 @@ import {fileURLToPath} from 'node:url';
 import {
   findEntry,
   listDir,
+  listDirEntries,
   listingCacheActive,
   pathExists,
 } from './listing-cache.mjs';
@@ -811,7 +812,7 @@ export function discoverExternalPackages(startDir = process.cwd()) {
   /** @param {string} searchDir */
   const scanDir = searchDir => {
     if (!fs.existsSync(searchDir)) return;
-    const entries = fs.readdirSync(searchDir, {withFileTypes: true});
+    const entries = listDirEntries(searchDir);
 
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
@@ -853,7 +854,8 @@ export function discoverExternalPackages(startDir = process.cwd()) {
 
 /**
  * List available component directories in packages/core/src.
- * Returns directory names that contain Astryx*.tsx files.
+ * Component directories are capitalized (`Button`, `Dialog`); lowercase
+ * directories hold shared infrastructure and are never listed.
  * @param {string} coreDir
  */
 export function listComponents(coreDir) {
@@ -864,9 +866,7 @@ export function listComponents(coreDir) {
   return entries
     .filter(e => {
       if (!e.isDirectory()) return false;
-      // Skip non-component dirs
-      if (['hooks', 'theme', 'utils'].includes(e.name)) return false;
-      return true;
+      return /^[A-Z]/.test(e.name);
     })
     .map(e => e.name)
     .sort();

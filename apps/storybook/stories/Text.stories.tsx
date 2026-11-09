@@ -244,6 +244,25 @@ export const SingleLineTruncation: Story = {
   ),
 };
 
+const MANY_ROWS = Array.from(
+  {length: 500},
+  (_, index) =>
+    `Row ${index + 1}: a cell label far wider than the column it has been given`,
+);
+
+/** A long list of truncated cells, as in a table, for checking load cost. */
+export const ManyTruncatedRows: Story = {
+  render: () => (
+    <div style={{width: '240px'}}>
+      {MANY_ROWS.map(label => (
+        <Text key={label} type="body" maxLines={1}>
+          {label}
+        </Text>
+      ))}
+    </div>
+  ),
+};
+
 export const MultiLineTruncation: Story = {
   render: () => (
     <div style={{width: '300px', border: '1px solid #ccc', padding: '12px'}}>

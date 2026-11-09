@@ -5,7 +5,8 @@
 /**
  * @file Item.tsx
  * @input Uses React, ReactNode, StyleXStyles, theme tokens, useClickableContainer,
- *   the shared press overlays and the compositor press layer
+ *   the shared press overlays and the compositor press layer, and a row's
+ *   trailing control (ItemTrailingContext)
  * @output Exports Item component, ItemProps type; publishes the shared inline inset.
  *   Only numbered composing rows keep their start/label/end slots in one flex
  *   group, through Item's private exact-marker scope; other marked rows keep
@@ -54,8 +55,10 @@ import {mergeProps} from '../utils/mergeProps';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 import {ItemDescriptionContext} from './ItemDescriptionContext';
+import {ItemLabelContext, ItemLabelNeededContext} from './ItemLabelContext';
 import {ItemListRowContext} from './ItemListRowContext';
 import {ItemMarkerColumnsContext} from './ItemMarkerColumnsContext';
+import {ItemTrailingContext} from './ItemTrailingContext';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {computeTargetAndRel} from '../Link/computeTargetAndRel';
 import {useLinkComponent} from '../Link/useLinkComponent';
@@ -692,6 +695,7 @@ export function Item({
   );
 
   const isInteractive = onClick != null || href != null || isDelegate;
+  const hasStateFill = isHighlighted || isSelected;
   const {target, rel} = computeTargetAndRel(targetFromProps, relFromProps);
   // When a semantic role is provided (e.g. "menuitem"), a parent component
   // handles keyboard access. Skip the invisible button/anchor and put
@@ -761,6 +765,13 @@ export function Item({
   // only once React runs it, such as an empty fragment, still publishes an id.
   const descriptionID = useId();
   const hasRenderableDescription = isRenderable(description);
+  // The label element's id, published through ItemLabelContext for a control
+  // Item renders in a slot that is named after the row (`aria-labelledby`).
+  // Only a row with such a control gives its label an id.
+  const labelID = useId();
+  const isLabelNeeded = use(ItemLabelNeededContext);
+  const publishedLabelID =
+    isLabelNeeded && isRenderable(label) ? labelID : null;
 
   const isStringLabel = typeof label === 'string';
   const isStringDescription = typeof description === 'string';
@@ -790,6 +801,7 @@ export function Item({
   const labelAndDescription = (
     <>
       <span
+        id={publishedLabelID ?? undefined}
         {...stylex.props(
           styles.label,
           isInline && styles.inlineLabel,
@@ -848,6 +860,10 @@ export function Item({
     }
     onClick?.(e);
   };
+
+  // A control a row adds after the slots, unwrapped (ItemTrailingContext):
+  // a List row's reorder handle when the row has no end content.
+  const trailing = use(ItemTrailingContext);
 
   const content = (
     <>
@@ -920,6 +936,7 @@ export function Item({
           {endContent}
         </span>
       )}
+      {trailing}
     </>
   );
 
@@ -1019,11 +1036,23 @@ export function Item({
           align === 'start' && styles.alignStart,
           align === 'first-line' && styles.alignFirstLine,
           isInteractive && styles.interactive,
-          isInteractive && interactionOverlayStyles.backgroundColor,
+          // A row with a state fill keeps the fill as its background colour.
+          // Its overlay paints as an image layer over the fill.
+          isInteractive &&
+            (hasStateFill
+              ? interactionOverlayStyles.backgroundImage
+              : interactionOverlayStyles.backgroundColor),
           // The touch press on a compositor layer (after the overlay, whose
           // own touch paint it turns off): the release keeps fading while
           // script runs.
           isInteractive && rowPressLayerStyles.cell,
+          // A highlighted row's fill is already the hover tone, so it shows
+          // only its press. A selected row also shows its hover.
+          isInteractive &&
+            hasStateFill &&
+            (isSelected
+              ? rowPressLayerStyles.cellOnImage
+              : rowPressLayerStyles.cellOnImagePressOnly),
           isLinkRoot && styles.linkRoot,
           isHighlighted && styles.highlighted,
           isSelected && styles.selected,
@@ -1036,23 +1065,29 @@ export function Item({
       )}
       role={role}
       onClick={rootOnClick}>
-      <ItemDescriptionContext
-        value={hasRenderableDescription ? descriptionID : null}>
-        <ItemListRowContext value={false}>
-          {isRenderable(marker) && marker}
-          {isRenderable(marker) && columnMarker === marker ? (
-            <span
-              {...stylex.props(
-                styles.markerContent,
-                align === 'first-line' && styles.markerContentFirstLine,
-              )}>
-              {content}
-            </span>
-          ) : (
-            content
-          )}
-        </ItemListRowContext>
-      </ItemDescriptionContext>
+      <ItemTrailingContext value={null}>
+        <ItemDescriptionContext
+          value={hasRenderableDescription ? descriptionID : null}>
+          <ItemLabelContext value={publishedLabelID}>
+            <ItemLabelNeededContext value={false}>
+              <ItemListRowContext value={false}>
+                {isRenderable(marker) && marker}
+                {isRenderable(marker) && columnMarker === marker ? (
+                  <span
+                    {...stylex.props(
+                      styles.markerContent,
+                      align === 'first-line' && styles.markerContentFirstLine,
+                    )}>
+                    {content}
+                  </span>
+                ) : (
+                  content
+                )}
+              </ItemListRowContext>
+            </ItemLabelNeededContext>
+          </ItemLabelContext>
+        </ItemDescriptionContext>
+      </ItemTrailingContext>
       {hasSwipe && (
         // The panels: out-of-flow children of this root, so the DOM is the one
         // the row had before the split. Suspense and lazy add no element, and
