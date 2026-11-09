@@ -65,13 +65,16 @@
  */
 
 import {
+  useMemo,
   useRef,
   useSyncExternalStore,
   type Key,
   type KeyboardEvent,
   type ReactNode,
+  type RefObject,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {useAttachment} from '../hooks/useAttachment';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
   useAnnounce,
@@ -240,7 +243,10 @@ function namesRow(element: HTMLElement | null): boolean {
   );
 }
 
-/** What a label element's change that can rename its row looks like. */
+/**
+ * The label changes that can rename a row: its text, its children, and the
+ * names of the icons and images in it.
+ */
 const LABEL_WATCH: MutationObserverInit = {
   subtree: true,
   childList: true,
@@ -729,7 +735,6 @@ export class ListReorderController implements ListReorderSession {
    * mutation observer while the list is up, with each registration's release.
    */
   private namesWatch: {
-    list: HTMLElement;
     unwatchRows: () => void;
     labels: Map<Element, () => void>;
   } | null = null;
@@ -772,10 +777,22 @@ export class ListReorderController implements ListReorderSession {
   /** This session's development warnings, each given once. */
   private readonly warn = createDevWarnings();
 
+  /**
+   * The list element the List renders, as a ref: a new one when its numbering
+   * turns on or off (an `ol` or a `ul`).
+   */
+  readonly list: RefObject<HTMLElement | null>;
+
   constructor(
     private readonly getList: () => HTMLElement | null,
     readonly hintId: string,
-  ) {}
+  ) {
+    this.list = {
+      get current() {
+        return getList();
+      },
+    };
+  }
 
   /** The List's latest options, announcer, strings and presentation. */
   configure(options: {
@@ -883,13 +900,8 @@ export class ListReorderController implements ListReorderSession {
    * shared mutation observer. A row's place, and whether its label names it,
    * come from the DOM. Returns the release.
    */
-  attachNames(): () => void {
-    const list = this.getList();
-    if (list == null) {
-      return () => {};
-    }
+  attachNames(list: HTMLElement): () => void {
     const watch = {
-      list,
       unwatchRows: observeMutations(
         list,
         {childList: true},
@@ -938,18 +950,6 @@ export class ListReorderController implements ListReorderSession {
     }
     const places = new Map(rowsOf(list).map((row, index) => [row, index + 1]));
     const watch = this.namesWatch;
-    // The List renders a new element when its numbering turns on or off (an
-    // `ol` or a `ul`). Its remounted handles refresh the names, which moves
-    // the watch onto it.
-    if (watch != null && watch.list !== list) {
-      watch.unwatchRows();
-      watch.list = list;
-      watch.unwatchRows = observeMutations(
-        list,
-        {childList: true},
-        this.onNamesMutation,
-      );
-    }
     const watched = new Set<Element>();
     let changed = false;
     for (const handle of this.keys.keys()) {
@@ -1205,11 +1205,7 @@ export class ListReorderController implements ListReorderSession {
    * drags the row once it has moved MOUSE_DRAG_SLOP from where it pressed.
    * Returns the detach.
    */
-  attachMouse(): () => void {
-    const list = this.getList();
-    if (list == null) {
-      return () => {};
-    }
+  attachMouse(list: HTMLElement): () => void {
     const onPointerDown = (event: PointerEvent) => {
       if (!this.dragsAtOnce(event.pointerType) || event.button !== 0) {
         return;
@@ -1297,11 +1293,7 @@ export class ListReorderController implements ListReorderSession {
    * the list receives only the touches that begin on its handles. Returns the
    * detach.
    */
-  attachTouch(isCoarsePointer: boolean): () => void {
-    const list = this.getList();
-    if (list == null) {
-      return () => {};
-    }
+  attachTouch(list: HTMLElement, isCoarsePointer: boolean): () => void {
     let held: HTMLElement | null = null;
     // The finger's velocity, for the glide a release hands it to.
     const velocity = new VelocityTracker();
@@ -2406,10 +2398,18 @@ function ListReorderHost({reorder}: {reorder: ListReorderContextValue}) {
     });
   });
   // The list's own pointer listeners, on its DOM element.
-  useIsomorphicLayoutEffect(() => controller.attachMouse(), [controller]);
-  // Syncs the handles' names with the list's rows and their label elements
-  // in the DOM, through the session's observer.
-  useIsomorphicLayoutEffect(() => controller.attachNames(), [controller]);
+  useAttachment(
+    controller.list,
+    list => controller.attachMouse(list),
+    controller,
+  );
+  // The handles' names follow the list's rows and their label elements in
+  // the DOM, through the session's observer.
+  useAttachment(
+    controller.list,
+    list => controller.attachNames(list),
+    controller,
+  );
   // The owner's options, for an object a Lab collection adapted from the
   // owner's.
   const startedBy = options.startedBy ?? options;
@@ -2423,9 +2423,14 @@ function ListReorderHost({reorder}: {reorder: ListReorderContextValue}) {
   useIsomorphicLayoutEffect(() => () => controller.dispose(), [controller]);
   // The gesture host's hold recognizer on the list. It takes a finger under
   // every primary pointer, and a pen where the primary pointer is coarse.
-  useIsomorphicLayoutEffect(
-    () => controller.attachTouch(isTouch),
+  const touchKey = useMemo(
+    () => ({controller, isTouch}),
     [controller, isTouch],
+  );
+  useAttachment(
+    controller.list,
+    list => controller.attachTouch(list, isTouch),
+    touchKey,
   );
   return (
     <>
