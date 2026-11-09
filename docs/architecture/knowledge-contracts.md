@@ -1316,6 +1316,15 @@ automation (INV30). Automated approval must not publish links an outside
 contributor added without a person checking them. Team-authored links follow
 the normal gates.
 
+### DEC-19 — Lab-only changes need no owner card
+
+**Reference:** `architecture:knowledge-contracts/DEC-19`
+**Decider:** `cixzhang`, `2026-11-04` (recorded from the owner's words by Specs, 2026-11-09)
+
+The owner said: "37b ok since it’s lab only. Anything lab only gets an ok". A pull request whose every changed path is in the Lab package (`packages/lab/`) and its Lab stories, sandbox pages, docs entries and Changesets needs no owner decision for its Lab behavior or Lab API; the spec owner's consistency stamp suffices. A pull request that also changes Core (`packages/core/`, including its locales and internal modules) or any other package stays under the normal owner rules for those parts.
+
+Rejected: treating a Lab pull request that touches Core as Lab-only.
+
 ## Verification
 
 | Invariant                         | Evidence                                                                                                                                                                                                                 | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
