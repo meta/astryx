@@ -4,7 +4,8 @@
  * @file nestedPadding.test.tsx
  * @input Uses vitest, @testing-library/react, Layout, AppShell, Card, Section
  * @output Tests which outer inset a Layout's regions resolve to when Layouts
- *   are nested or composed inside padding containers
+ *   are nested or composed inside padding containers, and that LayoutPanel
+ *   publishes the inset it applies on each edge
  * @position Layout tests; validates the scope of Layout's `padding` prop
  *
  * A Layout's `padding` belongs to its own regions. A nested Layout without
@@ -27,6 +28,8 @@ import {render, screen} from '@testing-library/react';
 import {Layout} from '../Layout';
 import {LayoutHeader} from '../LayoutHeader';
 import {LayoutContent} from '../LayoutContent';
+import {LayoutFooter} from '../LayoutFooter';
+import {LayoutPanel} from '../LayoutPanel';
 import {AppShell} from '../../AppShell';
 import {Card} from '../../Card';
 import {Section} from '../../Section';
@@ -260,5 +263,89 @@ describe('Layout padding scope', () => {
       />,
     );
     expect(resolvedInset('page-header')).toBe('var(--spacing-2)');
+  });
+});
+
+type PanelEdge = 'inline-start' | 'inline-end' | 'block-start' | 'block-end';
+
+/** The inset a panel publishes on one edge, as a spacing token reference. */
+function publishedPanelInset(testId: string, edge: PanelEdge) {
+  return lookup(
+    screen.getByTestId(testId),
+    `--container-padding-${edge}`,
+    declarationsByClass(),
+  );
+}
+
+describe('LayoutPanel inset publication', () => {
+  // The Layout's `padding` sets the Layout-edge inset; the inner inset stays
+  // at the step-4 default, so the two differ on every edge.
+  function PanelLayout({hasHeaderAndFooter = false}) {
+    return (
+      <Layout
+        padding={2}
+        header={hasHeaderAndFooter ? <LayoutHeader>Title</LayoutHeader> : null}
+        start={<LayoutPanel data-testid="start-panel">Start</LayoutPanel>}
+        content={<LayoutContent>Body</LayoutContent>}
+        end={<LayoutPanel data-testid="end-panel">End</LayoutPanel>}
+        footer={
+          hasHeaderAndFooter ? <LayoutFooter>Actions</LayoutFooter> : null
+        }
+      />
+    );
+  }
+
+  it('publishes the Layout-edge inset on the edges where a panel applies it', () => {
+    render(<PanelLayout />);
+    expect(publishedPanelInset('start-panel', 'inline-start')).toBe(
+      'var(--spacing-2)',
+    );
+    expect(publishedPanelInset('start-panel', 'inline-end')).toBe(
+      'var(--spacing-4)',
+    );
+    expect(publishedPanelInset('end-panel', 'inline-start')).toBe(
+      'var(--spacing-4)',
+    );
+    expect(publishedPanelInset('end-panel', 'inline-end')).toBe(
+      'var(--spacing-2)',
+    );
+    for (const panel of ['start-panel', 'end-panel']) {
+      expect(publishedPanelInset(panel, 'block-start')).toBe(
+        'var(--spacing-2)',
+      );
+      expect(publishedPanelInset(panel, 'block-end')).toBe('var(--spacing-2)');
+    }
+  });
+
+  it('publishes the inner inset on block edges beside a header and footer', () => {
+    render(<PanelLayout hasHeaderAndFooter />);
+    for (const panel of ['start-panel', 'end-panel']) {
+      expect(publishedPanelInset(panel, 'block-start')).toBe(
+        'var(--spacing-4)',
+      );
+      expect(publishedPanelInset(panel, 'block-end')).toBe('var(--spacing-4)');
+    }
+  });
+
+  it('publishes an explicit padding on every edge', () => {
+    render(
+      <Layout
+        padding={2}
+        start={
+          <LayoutPanel padding={6} data-testid="start-panel">
+            Start
+          </LayoutPanel>
+        }
+        content={<LayoutContent>Body</LayoutContent>}
+      />,
+    );
+    for (const edge of [
+      'inline-start',
+      'inline-end',
+      'block-start',
+      'block-end',
+    ] as const) {
+      expect(publishedPanelInset('start-panel', edge)).toBe('var(--spacing-6)');
+    }
   });
 });
