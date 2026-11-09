@@ -28,6 +28,7 @@ import {
   frames,
   holdAnimations,
   markElement,
+  MARKER_RGB,
   openStory,
   releaseAnimations,
   sampleCurve,
@@ -38,7 +39,7 @@ import {
   type TouchDriver,
   type TouchScript,
   touchStoryboard,
-  trackMarker,
+  trackMarkers,
   waitForAnimation,
   waitForRest,
   withStorybook,
@@ -457,8 +458,9 @@ test('the cancel keeps moving every frame while the main thread is blocked', asy
   // A few frames after the block, so the screencast holds its end.
   await frames(page, 6);
   const castFrames = await cast.stop();
-  const tracked = await trackMarker(page, castFrames);
-  const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
+  const [tracked, control] = await trackMarkers(page, castFrames, {
+    colors: [MARKER_RGB, CONTROL_RGB],
+  });
   // The spring slows hard at its end. Near the end each 60 Hz frame moves it
   // about 0.18 of what remains (2π / 0.5 s, critically damped). So within
   // about 5.6 cast steps of its end a frame moves less than one step, and

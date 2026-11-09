@@ -465,6 +465,30 @@ describe('useChatStreamScroll — the page as the scroller', () => {
     expect(api.current!.isLocked).toBe(true);
   });
 
+  it('puts a message at the top of the viewport with scrollToMessage', () => {
+    const {api} = renderPage();
+    root.scrollTop = 1000;
+    const scrollTo = vi.fn();
+    Object.defineProperty(root, 'scrollTo', {
+      value: scrollTo,
+      configurable: true,
+    });
+    vi.spyOn(root, 'getBoundingClientRect').mockReturnValue({
+      top: -1000,
+    } as DOMRect);
+    const message = document.createElement('div');
+    vi.spyOn(message, 'getBoundingClientRect').mockReturnValue({
+      top: 300,
+    } as DOMRect);
+    try {
+      api.current!.scrollToMessage(message);
+      expect(scrollTo).toHaveBeenCalledWith({top: 1300, behavior: 'instant'});
+    } finally {
+      Reflect.deleteProperty(root, 'scrollTo');
+      vi.restoreAllMocks();
+    }
+  });
+
   it('ignores the scroll of an element inside the page', () => {
     const {api} = renderPage();
     const panel = document.createElement('div');
@@ -476,5 +500,27 @@ describe('useChatStreamScroll — the page as the scroller', () => {
     } finally {
       panel.remove();
     }
+  });
+});
+
+describe('useChatStreamScroll — scrollToMessage in a scrolling element', () => {
+  it('puts a message at the top of the element\u2019s visible area', () => {
+    const {api, el} = renderHook();
+    el.scrollTop = 50;
+    const scrollTo = vi.fn();
+    Object.defineProperty(el, 'scrollTo', {
+      value: scrollTo,
+      configurable: true,
+    });
+    vi.spyOn(el, 'getBoundingClientRect').mockReturnValue({
+      top: 100,
+    } as DOMRect);
+    const message = document.createElement('div');
+    vi.spyOn(message, 'getBoundingClientRect').mockReturnValue({
+      top: 400,
+    } as DOMRect);
+    api.current!.scrollToMessage(message);
+    expect(scrollTo).toHaveBeenCalledWith({top: 350, behavior: 'instant'});
+    vi.restoreAllMocks();
   });
 });
