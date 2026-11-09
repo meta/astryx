@@ -25,13 +25,14 @@
   "sideEffects": [
     "**/*.css"
   ],
-  "main": "./dist/source.js",
+  "type": "module",
+  "main": "./dist/source.cjs",
   "types": "./dist/source.d.ts",
   "exports": {
     ".": {
       "types": "./dist/source.d.ts",
       "import": "./dist/source.mjs",
-      "require": "./dist/source.js"
+      "require": "./dist/source.cjs"
     },
     "./built": {
       "types": "./dist/y2k.d.ts",
@@ -69,7 +70,7 @@
   ],
   "scripts": {
     "api:report": "node ../../../scripts/api-report/cli.mjs --package .",
-    "build": "node ../../../scripts/clean-dist.mjs && node ../../../scripts/generate-y2k-palette-refs.mjs --check && astryx theme build src/y2kTheme.ts -o dist/theme.css --icons-specifier ./icons.mjs && tsup && tsc --project tsconfig.build.json && node ../../../scripts/check-fully-specified.mjs"
+    "build": "node ../../../scripts/clean-dist.mjs && node ../../../scripts/generate-y2k-palette-refs.mjs --check && astryx theme build src/y2kTheme.ts -o dist/theme.css --icons-specifier ./icons.mjs && tsup && tsc --project tsconfig.build.json && node ../../../scripts/add-declaration-extensions.mjs && node ../../../scripts/check-fully-specified.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.18.0"
