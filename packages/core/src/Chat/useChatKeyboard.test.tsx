@@ -779,7 +779,7 @@ describe('ChatLayout in a page that scrolls the document', () => {
     expect(isDockLeftCovered(window)).toBe(false);
   });
 
-  it('follows the cover the pan leaves on the dock\u2019s translate once the reader scrolls after Firefox\u2019s own pan, and lays it out once at rest', () => {
+  it('follows the cover the pan leaves on the dock\u2019s translate once the reader scrolls after Firefox\u2019s own pan, and lays it out when the finger lifts and when the fling rests', () => {
     const {container} = renderDocumentLayout();
     report(window.innerHeight - 290);
     wait(108);
@@ -899,6 +899,7 @@ describe('ChatLayout in a page that scrolls the document', () => {
           drag();
         }
         expect(layoutLift(dockOf(container))).toBe(0);
+        expect(dockOf(container).style.translate).toBe('');
       }
       viewport.offsetTop = 0;
       setInnerHeight(block);
@@ -908,6 +909,7 @@ describe('ChatLayout in a page that scrolls the document', () => {
       expect(layoutLift(dockOf(container))).toBe(0);
       wait(3000);
       expect(layoutLift(dockOf(container))).toBe(0);
+      expect(dockOf(container).style.translate).toBe('');
       expect(isDockLeftCovered(window)).toBe(false);
     } finally {
       Reflect.deleteProperty(document.documentElement, 'clientHeight');
@@ -963,6 +965,32 @@ describe('ChatLayout in a page that scrolls the document', () => {
     expect(layoutLift(dockOf(container))).toBe(90);
     expect(dockOf(container).style.translate).toBe('0px -50px');
     // A report with the same pan and height, as a toolbar's resize raises.
+    act(() => {
+      viewport.dispatchEvent(new Event('resize'));
+    });
+    expect(layoutLift(dockOf(container))).toBe(140);
+    expect(dockOf(container).style.translate).toBe('');
+  });
+
+  it('forgets a finger whose lift it never heard once the keyboard hides, so a later fling still comes to rest', () => {
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 290);
+    wait(108);
+    pan(290);
+    // A finger goes down, and its lift is never heard.
+    act(() => {
+      document.dispatchEvent(touch('touchstart', [{x: 5, y: 300}]));
+    });
+    report(window.innerHeight);
+    pan(0);
+    // The next show: Firefox pans, then a wheel scrolls the page.
+    report(window.innerHeight - 290);
+    wait(108);
+    pan(290);
+    wheel();
+    pan(150);
+    expect(dockOf(container).style.translate).toBe('0px -140px');
+    // The pan's momentum ends in an exact repeat, with no finger down.
     act(() => {
       viewport.dispatchEvent(new Event('resize'));
     });

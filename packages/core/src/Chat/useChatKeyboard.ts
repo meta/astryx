@@ -235,7 +235,9 @@ export function useChatKeyboard({
   // the layout has not taken yet.
   const panPendingRef = useRef(false);
   // Fingers on the screen: while one is down, the reader still moves the pan,
-  // however slowly.
+  // however slowly. The input stream's getDownPresses cannot serve. The
+  // browser cancels a finger's pointer once its touch starts to scroll, and
+  // the stream drops the press then.
   const fingersRef = useRef(0);
   // Whether the transcript followed its newest message, and where it was
   // scrolled, just before the layout's last change.
@@ -308,7 +310,8 @@ export function useChatKeyboard({
     };
     // While the dock follows the cover a pan leaves, a report moves only the
     // dock's translate, from the keyboard module's numbers. The layout takes
-    // the lift once, when the reader's scroll comes to rest.
+    // the lift when the last finger lifts, and again when a fling comes to
+    // rest.
     const followPan = (height: number) => {
       const target = liftRef.current - liftFor(height);
       if (Math.abs(target) < 0.5) {
@@ -403,6 +406,10 @@ export function useChatKeyboard({
       const changed = event.height !== reportedHeight;
       const pan = getKeyboardPan(win);
       reportedHeight = event.height;
+      // A keyboard hide ends any touch this effect may not have heard end.
+      if (event.height <= 0) {
+        fingersRef.current = 0;
+      }
       const isPanStill = pan === reportedPan;
       reportedPan = pan;
       if (leavesReveal && event.height > 0 && followsDockDeficit(win)) {
