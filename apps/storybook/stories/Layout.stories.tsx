@@ -125,6 +125,9 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-container'],
     overflow: 'hidden',
   },
+  wideFrame: {
+    inlineSize: 2400,
+  },
   cwContainerMatrix: {
     height: 240,
   },
@@ -1427,6 +1430,39 @@ export const ContentWidthWider: Story = {
         />
       </div>
     </VStack>
+  ),
+};
+
+/**
+ * A Layout with no `contentWidth` in a frame wider than the viewport: the
+ * header and footer span the frame, as the content does.
+ */
+export const WiderThanViewport: Story = {
+  name: 'No Content Width — Frame Wider Than the Viewport',
+  render: () => (
+    <div {...stylex.props(styles.wideFrame)} data-testid="wide-frame">
+      <Layout
+        defaultHasDividers
+        header={
+          <LayoutHeader data-testid="wide-header">
+            <h3 {...stylex.props(styles.heading)}>Header</h3>
+          </LayoutHeader>
+        }
+        content={
+          <LayoutContent data-testid="wide-content">
+            <p {...stylex.props(styles.bodyText)}>
+              The frame is 2400px wide, wider than the viewport. With no
+              contentWidth, nothing caps the regions.
+            </p>
+          </LayoutContent>
+        }
+        footer={
+          <LayoutFooter data-testid="wide-footer">
+            <p {...stylex.props(styles.bodyText)}>Footer</p>
+          </LayoutFooter>
+        }
+      />
+    </div>
   ),
 };
 
