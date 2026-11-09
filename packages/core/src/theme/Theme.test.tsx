@@ -339,8 +339,9 @@ describe('Theme', () => {
   });
   // The gate is the capability alone, never a platform idiom (one touch
   // behavior on every touch device): a touch callout without
-  // `font: -apple-system-body` reads nothing.
-  it('reads no text size where the engine has no font: -apple-system-body', () => {
+  // `font: -apple-system-body` measures nothing, and every scale reads
+  // `env(preferred-text-scale)`.
+  it('measures no text size where the engine has no font: -apple-system-body, and reads env(preferred-text-scale)', () => {
     vi.stubGlobal('CSS', {
       supports: vi.fn(
         (property: string) => property === '-webkit-touch-callout',
@@ -349,7 +350,10 @@ describe('Theme', () => {
     vi.stubGlobal(
       'CSSStyleSheet',
       class {
-        replaceSync() {}
+        text = '';
+        replaceSync(text: string) {
+          this.text = text;
+        }
       },
     );
     Object.defineProperty(document, 'adoptedStyleSheets', {
@@ -366,7 +370,12 @@ describe('Theme', () => {
       expect(
         document.querySelector('[data-astryx-text-size-probe]'),
       ).toBeNull();
-      expect(document.adoptedStyleSheets).toEqual([]);
+      const adopted = (
+        document.adoptedStyleSheets as unknown as {text: string}[]
+      )
+        .map(sheet => sheet.text)
+        .join('');
+      expect(adopted).toContain('env(preferred-text-scale, 1)');
     } finally {
       vi.unstubAllGlobals();
       delete (document as {adoptedStyleSheets?: unknown}).adoptedStyleSheets;
