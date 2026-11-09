@@ -34,7 +34,8 @@ import {
 import {routeSegment} from '../foundation/discovery/docs-section-key.mjs';
 import {EXPERIMENTAL_AUTHORING_ROUTE} from '../foundation/discovery/authoring-self-docs.mjs';
 import {generateCompressedIndex} from '../foundation/agent-docs/agent-docs.mjs';
-import {program, JSON_SUPPORTED} from '../clients/cli/index.mjs';
+import {JSON_SUPPORTED} from '../clients/cli/index.mjs';
+import {program} from '../clients/cli/program.mjs';
 import {buildManifest} from '../clients/cli/lib/manifest.mjs';
 import {runCli} from '../test-utils/run-cli.mjs';
 

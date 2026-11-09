@@ -16,7 +16,7 @@
  *   device has already disagreed with jsdom once on this gesture.
  */
 
-import {expect, test, type Locator} from '@playwright/test';
+import {expect, test, type Locator} from '@astryxdesign/a11y-spec/playwright';
 // @ts-expect-error -- pngjs ships no declarations; runtime support is pinned.
 import {PNG} from 'pngjs';
 import {
@@ -24,6 +24,13 @@ import {
   serveStorybook,
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
+import {
+  advanceFrozenPage,
+  freezePageOn,
+  installPageFreeze,
+  installTimerGate,
+  thawPage,
+} from '@astryxdesign/interaction-harness';
 
 let storybook: StaticServer;
 
@@ -118,6 +125,9 @@ async function boxOf(locator: Locator): Promise<Box> {
 test('paints no panel at rest, keeps the panel fixed while the row moves, rests open on a real button, and springs back with the panel', async ({
   page,
 }) => {
+  // The page clock that lets the scene stop at the spring back's lift,
+  // installed before the story loads.
+  await installPageFreeze(page);
   await page.goto(
     `${storybook.origin}/iframe.html?id=core-item--swipe-actions&viewMode=story`,
     {waitUntil: 'load'},
@@ -214,24 +224,25 @@ test('paints no panel at rest, keeps the panel fixed while the row moves, rests 
   // The spring back: a short drag released before half the panel. The row
   // slides home on its clock and the panel's width runs on the same one, so
   // mid-flight the gap the row has not yet covered is still the panel.
+  await installTimerGate(page);
   await touch('touchStart', startX);
   await dragTo([8, 16, 24, 30]);
   await expect.poll(async () => translationOf(row)).toBeGreaterThan(20);
+  // The scene stops in the lift's own task, before the row hears the lift,
+  // and moves on 60 ms by its own clock. A read sent after the lift comes a
+  // round trip late, and a loaded runner can find the spring back over.
+  await freezePageOn(page, 'touchend');
   await touch('touchEnd');
-  const midFlight = await row.evaluate(
-    async (node, selector) =>
-      new Promise<{rowX: number; panelWidth: number}>(resolve => {
-        setTimeout(() => {
-          const panelEl = node.querySelector(selector) as HTMLElement;
-          const matrix = new DOMMatrix(getComputedStyle(node).transform);
-          resolve({
-            panelWidth: parseFloat(getComputedStyle(panelEl).width),
-            rowX: Math.abs(matrix.e),
-          });
-        }, 60);
-      }),
-    '[data-swipe-panel="leading"]',
-  );
+  await advanceFrozenPage(page, 60);
+  const midFlight = await row.evaluate((node, selector) => {
+    const panelEl = node.querySelector(selector) as HTMLElement;
+    const matrix = new DOMMatrix(getComputedStyle(node).transform);
+    return {
+      panelWidth: parseFloat(getComputedStyle(panelEl).width),
+      rowX: Math.abs(matrix.e),
+    };
+  }, '[data-swipe-panel="leading"]');
+  await thawPage(page);
   expect(midFlight.rowX).toBeGreaterThan(2);
   expect(Math.abs(midFlight.panelWidth - midFlight.rowX)).toBeLessThanOrEqual(
     6,

@@ -27,6 +27,7 @@ import {
   packageReferenceProblems,
 } from '../docs/_adapter.mjs';
 import {findProjectCoreDir} from '../../foundation/fs/paths.mjs';
+import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {
   discoverIntegrationComponents,
   discoverOwnedComponents,
@@ -56,12 +57,7 @@ import {
 } from './validate-integration.mjs';
 import {rootProblem} from '../../foundation/integrations/validate-contributions.mjs';
 import {normalizeProviderId} from '../../foundation/identity/provider-identity.mjs';
-
-/** @param {string} value */
-export function shellArg(value) {
-  if (/^[A-Za-z0-9@/._-]+$/.test(value)) return value;
-  return `'${value.replace(/'/g, `'\\''`)}'`;
-}
+import {shellArg} from '../../foundation/text/shell-arg.mjs';
 
 /**
  * The provider ID a package without a name is checked under: a valid bare
@@ -154,6 +150,16 @@ function addErrors(issues, errors, code) {
  * @returns {Promise<import('./authoring-checks.type.mjs').IntegrationTemplateConflictResponse>}
  */
 export async function integrationTemplateConflicts(pkg, options = {}) {
+  // Read-only: one listing of each folder serves the whole check.
+  return withListingCache(() => templateConflicts(pkg, options));
+}
+
+/**
+ * @param {string | undefined} pkg
+ * @param {import('./authoring-checks.type.mjs').IntegrationAuthoringOptions} options
+ * @returns {Promise<import('./authoring-checks.type.mjs').IntegrationTemplateConflictResponse>}
+ */
+async function templateConflicts(pkg, options) {
   const {cwd = process.cwd()} = options;
   const resolved = await resolveIntegration(pkg, cwd);
   const validated = resolved.found;
@@ -291,6 +297,16 @@ export async function integrationTemplateConflicts(pkg, options = {}) {
  * @returns {Promise<import('./authoring-checks.type.mjs').IntegrationComponentConflictResponse>}
  */
 export async function integrationComponentConflicts(pkg, options = {}) {
+  // Read-only: one listing of each folder serves the whole check.
+  return withListingCache(() => componentConflicts(pkg, options));
+}
+
+/**
+ * @param {string | undefined} pkg
+ * @param {import('./authoring-checks.type.mjs').IntegrationAuthoringOptions} options
+ * @returns {Promise<import('./authoring-checks.type.mjs').IntegrationComponentConflictResponse>}
+ */
+async function componentConflicts(pkg, options) {
   const {cwd = process.cwd()} = options;
   const resolved = await resolveIntegration(pkg, cwd);
   const validated = resolved.found;
@@ -387,6 +403,16 @@ export async function integrationComponentConflicts(pkg, options = {}) {
  * @returns {Promise<import('./authoring-checks.type.mjs').IntegrationDocConflictResponse>}
  */
 export async function integrationDocConflicts(pkg, options = {}) {
+  // Read-only: one listing of each folder serves the whole check.
+  return withListingCache(() => docConflicts(pkg, options));
+}
+
+/**
+ * @param {string | undefined} pkg
+ * @param {import('./authoring-checks.type.mjs').IntegrationAuthoringOptions} options
+ * @returns {Promise<import('./authoring-checks.type.mjs').IntegrationDocConflictResponse>}
+ */
+async function docConflicts(pkg, options) {
   const {cwd = process.cwd()} = options;
   const resolved = await resolveIntegration(pkg, cwd);
   const validated = resolved.found;

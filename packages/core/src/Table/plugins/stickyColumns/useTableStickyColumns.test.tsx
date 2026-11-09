@@ -13,11 +13,12 @@
  * jsdom-visible, plugin-owned signal that a column is pinned and at what offset.
  */
 
-import {describe, it, expect} from 'vitest';
+import {afterEach, describe, it, expect, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import {Table} from '../../Table';
 import {useTableStickyColumns} from './useTableStickyColumns';
 import {useTableColumnResize} from '../columnResize/useTableColumnResize';
+import {useTableRowIndex} from '../rowIndex/useTableRowIndex';
 import {pixel, proportional} from '../../columnUtils';
 import type {TableColumn} from '../../types';
 
@@ -68,6 +69,30 @@ describe('useTableStickyColumns', () => {
     }
     render(<Harness />);
     expect(getHeader('Name').style.insetInlineStart).toBe('0px');
+  });
+
+  it("adds a row-number column's windowed extra width to the pinned offsets after it", () => {
+    function Harness() {
+      const rowIndex = useTableRowIndex<Row>();
+      const sticky = useTableStickyColumns<Row>({startKeys: ['name']});
+      return (
+        <Table
+          data={data}
+          columns={columns}
+          idKey="id"
+          plugins={{rowIndex, stickyColumns: sticky}}
+        />
+      );
+    }
+    render(<Harness />);
+    // The number column comes first, so Name sits after its 48px floor plus
+    // whatever extra width a windowed table gives it (none here).
+    expect(getHeader('Name').getAttribute('style')).toContain(
+      'calc(48px + var(--_table-logical-extra-0, 0px))',
+    );
+    expect(screen.getByRole('table').getAttribute('style') ?? '').not.toContain(
+      '--_table-logical-extra',
+    );
   });
 
   it('computes cumulative start offsets for contiguous pinned columns', () => {
@@ -280,5 +305,55 @@ describe('useTableStickyColumns', () => {
       // resize plugin's own styles give them.
       expect(getHeaderCell('team').style.position).toBe('');
     });
+  });
+
+  describe('the scroll container attaches once', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it.each([true, false])(
+      'keeps one attach across renders with column resize composed (resize first: %s)',
+      resizeFirst => {
+        let observers = 0;
+        vi.stubGlobal(
+          'ResizeObserver',
+          class {
+            constructor() {
+              observers += 1;
+            }
+            observe() {}
+            unobserve() {}
+            disconnect() {}
+          },
+        );
+        function Harness({tick}: {tick: number}) {
+          const sticky = useTableStickyColumns<Row>({startKeys: ['name']});
+          const resize = useTableColumnResize<Row>({
+            columns: columns as TableColumn<Record<string, unknown>>[],
+          });
+          return (
+            <Table
+              data={data}
+              columns={columns}
+              idKey="id"
+              aria-describedby={`tick-${tick}`}
+              plugins={
+                resizeFirst
+                  ? {resize, stickyColumns: sticky}
+                  : {stickyColumns: sticky, resize}
+              }
+            />
+          );
+        }
+        const {rerender} = render(<Harness tick={0} />);
+        const attached = observers;
+        rerender(<Harness tick={1} />);
+        rerender(<Harness tick={2} />);
+        rerender(<Harness tick={3} />);
+        // Three plain re-renders: no plugin's scroll container re-attaches.
+        expect(observers).toBe(attached);
+      },
+    );
   });
 });

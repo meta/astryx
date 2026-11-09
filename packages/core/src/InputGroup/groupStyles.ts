@@ -26,8 +26,15 @@ const MEMBER = '[data-astryx-input-group-item]';
 // any sibling; only context-layer infrastructure (popovers, inert markers,
 // native dialog surfaces) is skipped. Followers are not always members, so
 // this rule cannot name them by the marker.
-const FOLLOWED = ':has(~ *:not([popover]):not(template):not(dialog))';
-const IS_LAST_ITEM = `:not(${FOLLOWED})`;
+//
+// `:nth-last-child(1 of S)`, not `:not(:has(~ S))`: the stylesheet is global,
+// and WebKit re-evaluates a sibling-relative `:has()` against every earlier
+// sibling on each insertion, so filling any container became quadratic
+// (ButtonGroup FR3). A member always matches S, so being the last of S is the
+// same as having no following S.
+const IS_LAST_ITEM =
+  ':nth-last-child(1 of :not([popover]):not(template):not(dialog))';
+const FOLLOWED = `:not(${IS_LAST_ITEM})`;
 
 // Button consumes InputGroup context anywhere below the group, including buttons
 // inside an input's own implementation. Keep the visual adaptation on direct
@@ -89,8 +96,10 @@ export const groupStyles = stylex.create({
       default: 0,
       [IS_LAST_ITEM]: radiusVars['--radius-element'],
     },
+    // Input wrappers already sit at z-index 1. A focused member goes one
+    // higher, so an unfocused input beside it cannot cover its focus ring.
     ':focus-within': {
-      zIndex: 1,
+      zIndex: 2,
     },
   },
 });

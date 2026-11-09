@@ -6,6 +6,7 @@ import {
   SegmentedControl,
   SegmentedControlItem,
 } from '@astryxdesign/core/SegmentedControl';
+import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
 import {Heading} from '@astryxdesign/core/Heading';
 import {Icon} from '@astryxdesign/core/Icon';
@@ -290,6 +291,46 @@ export const Disabled: Story = {
   },
 };
 
+export const BelowAButton: Story = {
+  name: 'Below a button',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A large segmented control 8 px below a button. Under a coarse pointer each segment’s invisible hit area grows toward 44 px tall, but stops halfway to the button, so a tap on the button stays the button’s and nothing changes size.',
+      },
+    },
+  },
+  render: () => {
+    const [value, setValue] = useState('month');
+    const [refreshes, setRefreshes] = useState(0);
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'start',
+          gap: 8,
+        }}>
+        <Button
+          label="Refresh"
+          onClick={() => setRefreshes(count => count + 1)}
+        />
+        <SegmentedControl
+          value={value}
+          onChange={setValue}
+          label="Range"
+          size="lg">
+          <SegmentedControlItem value="day" label="Day" />
+          <SegmentedControlItem value="week" label="Week" />
+          <SegmentedControlItem value="month" label="Month" />
+        </SegmentedControl>
+        <Text type="supporting">Refreshed {refreshes} times</Text>
+      </div>
+    );
+  },
+};
+
 export const DisabledItem: Story = {
   render: () => {
     const [value, setValue] = useState('hourly');
@@ -353,6 +394,57 @@ export const PressedState: Story = {
           isDisabled
         />
       </SegmentedControl>
+    );
+  },
+};
+
+const PERIODS = [
+  {value: 'day', label: 'Day'},
+  {value: 'week', label: 'Week'},
+  {value: 'month', label: 'Month'},
+  {value: 'year', label: 'Year to date'},
+];
+
+/**
+ * On a touch screen the selection slides from one segment to the next on
+ * UIKit's spring, whether a finger, a key or the app changed the value. With a
+ * mouse or a pen every change, a click included, slides on the theme's
+ * duration and easing, and a drag carries it as a finger does.
+ */
+export const SelectionMotion: Story = {
+  name: 'Selection motion',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Under a finger the selection slides between segments on UIKit’s spring, for taps, arrow keys and programmatic changes alike (the button changes the value from outside). Drag the selected segment to another one and let go: the segment under the finger is chosen, and letting go outside the control selects nothing. Under Reduce Motion nothing travels: the old selection fades out as the new one fades in. With a mouse or a pen every change, a click included, slides on the theme’s duration and easing, and a drag carries the selection as a finger does.',
+      },
+    },
+  },
+  render: () => {
+    const [value, setValue] = useState('day');
+    const next = () => {
+      const index = PERIODS.findIndex(period => period.value === value);
+      setValue(PERIODS[(index + 1) % PERIODS.length].value);
+    };
+    return (
+      <VStack gap={4} width="100%">
+        <SegmentedControl value={value} onChange={setValue} label="Period">
+          {PERIODS.map(period => (
+            <SegmentedControlItem key={period.value} {...period} />
+          ))}
+        </SegmentedControl>
+        <SegmentedControl
+          value={value}
+          onChange={setValue}
+          label="Period, filling the row"
+          layout="fill">
+          {PERIODS.map(period => (
+            <SegmentedControlItem key={period.value} {...period} />
+          ))}
+        </SegmentedControl>
+        <Button label="Next period" onClick={next} />
+      </VStack>
     );
   },
 };

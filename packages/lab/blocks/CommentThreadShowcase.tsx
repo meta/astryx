@@ -36,7 +36,7 @@ export default function CommentThreadShowcase() {
   });
 
   return (
-    <Card padding={0} width={340}>
+    <Card padding={0} width="100%" maxWidth={340}>
       <CommentThread
         comment={thread}
         currentUser={VIEWER}

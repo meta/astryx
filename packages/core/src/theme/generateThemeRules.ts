@@ -42,6 +42,8 @@ import {
   checkDeclarationName,
   checkDeclarationValue,
 } from './declarationBoundary';
+import {readerTextSizeEntries} from './dynamicType';
+import {PRESS_BELIEVED_SELECTOR} from '../privateAttributes/press';
 
 /**
  * Theme @scope selectors.
@@ -127,6 +129,37 @@ function appendPseudoToSelectorList(selector: string, pseudo: string): string {
   const guarded = guardHoverPseudo(pseudo);
 
   return parts.map(part => `${part}${guarded}`).join(', ');
+}
+
+/**
+ * The touch press model (utils/interactionOverlay.stylex.ts, pressFeedback.ts).
+ * A mouse keeps `:active`. Under a coarse primary pointer, the press
+ * controller marks a press it believes. A finger then paints no press on the
+ * touch or through a scroll.
+ */
+const COARSE_POINTER_QUERY = '(pointer: coarse)';
+const ACTIVE_PSEUDO = /:active(?![-\w])/g;
+
+/**
+ * The rules for one themed pseudo-class override. A themed `:active` follows
+ * the press model: the `:active` rule applies only off a coarse pointer, and
+ * under one the press attribute takes `:active`'s place.
+ */
+function pseudoRules(
+  baseSelector: string,
+  pseudo: string,
+  declarations: string,
+): string[] {
+  if (!new RegExp(ACTIVE_PSEUDO.source).test(pseudo)) {
+    return [
+      `  ${appendPseudoToSelectorList(baseSelector, pseudo)} {\n${declarations}\n  }`,
+    ];
+  }
+  const pressed = pseudo.replace(ACTIVE_PSEUDO, PRESS_BELIEVED_SELECTOR);
+  return [
+    `  @media not all and ${COARSE_POINTER_QUERY} {\n  ${appendPseudoToSelectorList(baseSelector, pseudo)} {\n${declarations}\n  }\n  }`,
+    `  @media ${COARSE_POINTER_QUERY} {\n  ${appendPseudoToSelectorList(baseSelector, pressed)} {\n${declarations}\n  }\n  }`,
+  ];
 }
 
 /** Insert the disabled guard into a `:hover` pseudo, keeping any pseudo-element last. */
@@ -463,17 +496,18 @@ function joinDeclarations(
 }
 
 /**
- * Public status roles whose canonical default references an existing semantic
- * source token. StyleX owns the document defaults. A theme that authors a
- * source repeats its omitted role at the theme root so nested Theme regions
- * bind the alias locally without changing authored-token metadata.
+ * Public tokens whose canonical default references another public token: the
+ * status roles and `--duration-exit`. StyleX owns the document defaults. A
+ * theme that authors a source repeats its omitted token at the theme root so
+ * nested Theme regions bind the alias locally without changing authored-token
+ * metadata.
  *
  * Conditional scopes repeat an omitted alias only when the source changes on
  * that scope. Explicit adaptation role writes are replayed after generated
  * aliases (and on media descendants) so authored role precedence survives
  * overlapping conditions without disabling the alias in non-matching states.
  */
-const SCOPED_STATUS_ROLE_DEFAULTS: ReadonlyArray<
+const SCOPED_REFERENCE_DEFAULTS: ReadonlyArray<
   readonly [role: string, source: string]
 > = [
   ['--color-text-info', '--color-text-blue'],
@@ -493,16 +527,17 @@ const SCOPED_STATUS_ROLE_DEFAULTS: ReadonlyArray<
   ['--color-border-success', '--color-text-success'],
   ['--color-border-warning', '--color-text-warning'],
   ['--color-border-error', '--color-text-error'],
+  ['--duration-exit', '--duration-fast'],
 ];
 
-const SCOPED_STATUS_ROLE_SOURCES = new Map(SCOPED_STATUS_ROLE_DEFAULTS);
+const SCOPED_REFERENCE_SOURCES = new Map(SCOPED_REFERENCE_DEFAULTS);
 
 /** Colours INV17's derivation measures; a scope that sets one re-derives. */
 const STATUS_MEASURED =
   /^--color-(?:info|success|warning|error|on-|background-surface|background-card)/;
 
 const STATUS_ROLE_ORDER = new Map(
-  SCOPED_STATUS_ROLE_DEFAULTS.map(([role], index) => [role, index]),
+  SCOPED_REFERENCE_DEFAULTS.map(([role], index) => [role, index]),
 );
 
 type TokenValues = Record<string, unknown>;
@@ -740,7 +775,7 @@ export function generatedScopedStatusRoleDefaults(
     ),
   }));
 
-  for (const [role, source] of SCOPED_STATUS_ROLE_DEFAULTS) {
+  for (const [role, source] of SCOPED_REFERENCE_DEFAULTS) {
     const alias = `var(${source})`;
     if (
       authoredRoot[role] !== undefined ||
@@ -775,7 +810,7 @@ function authoredStatusRoleEntries(
   tokens: Record<string, string>,
 ): [string, string][] {
   const canonicalTokens = createTokenCascade(tokens).values;
-  return SCOPED_STATUS_ROLE_DEFAULTS.flatMap(([role]) => {
+  return SCOPED_REFERENCE_DEFAULTS.flatMap(([role]) => {
     const value = canonicalTokens[role];
     return value === undefined ? [] : [[role, stringifyTokenValue(value)]];
   });
@@ -789,7 +824,7 @@ function tokenValueIsAliasOf(value: unknown, source: string): boolean {
 }
 
 function mediaRoleRestorationValue(role: string, value: string): string {
-  const source = SCOPED_STATUS_ROLE_SOURCES.get(role);
+  const source = SCOPED_REFERENCE_SOURCES.get(role);
   return source !== undefined && tokenValueIsAliasOf(value, source)
     ? value
     : 'inherit';
@@ -843,7 +878,7 @@ function generatedAdaptationStatusRoleDefaults(
     // alias, and roles that follow them (icon and border) alias them here.
     const ruleRoles = new Map(aliases[index]);
     const ruleSources = {...authoredRule, ...Object.fromEntries(ruleRoles)};
-    for (const [role, source] of SCOPED_STATUS_ROLE_DEFAULTS) {
+    for (const [role, source] of SCOPED_REFERENCE_DEFAULTS) {
       const alias = `var(${source})`;
       const rootRole = rootValues[role];
       if (
@@ -921,7 +956,7 @@ function generatedMediaStatusRoleDefaults(
     return stringifyTokenValue(candidate.values[role]);
   };
 
-  for (const [role, source] of SCOPED_STATUS_ROLE_DEFAULTS) {
+  for (const [role, source] of SCOPED_REFERENCE_DEFAULTS) {
     const alias = `var(${source})`;
     const rootRole = rootValues[role];
     if (
@@ -981,7 +1016,13 @@ function tokenBlock(
   tokenEntries: [string, string][] = Object.entries(source.tokens),
 ): string | null {
   const declarations = [
-    joinDeclarations(tokenEntries, `${location}tokens`, sink),
+    // Font sizes follow the reader's text size where the root Theme sets the
+    // scales. Elsewhere each scale is 1.
+    joinDeclarations(
+      readerTextSizeEntries(tokenEntries),
+      `${location}tokens`,
+      sink,
+    ),
     joinDeclarations(
       Object.entries(source.localTokens ?? {}),
       `${location}localTokens`,
@@ -1434,9 +1475,7 @@ function generateComponentRules(
             sink,
             toKebabCase,
           );
-          parts.push(
-            `  ${appendPseudoToSelectorList(baseSelector, pseudo)} {\n${declarations}\n  }`,
-          );
+          parts.push(...pseudoRules(baseSelector, pseudo, declarations));
         }
       }
     }
@@ -1509,6 +1548,9 @@ function generateColorOverrides(
     disabled: 'var(--color-text-disabled)',
     placeholder: 'var(--color-text-secondary)',
     accent: 'var(--color-text-accent)',
+    // A label that follows its owner's color, such as a Link's, keeps doing
+    // so when a theme styles the target's base color.
+    inherit: 'inherit',
   };
 
   const touchesText = 'text' in components;
@@ -1691,8 +1733,10 @@ export function generateOnMediaCSS(
       ...statusRoleDefaults,
     ];
     if (tokenEntries.length > 0) {
+      // The surface re-declares font sizes the way a theme's root does, so they
+      // keep following the reader's text size there (see dynamicType.ts).
       const declarations = joinDeclarations(
-        tokenEntries,
+        readerTextSizeEntries(tokenEntries),
         `${location}tokens`,
         sink,
       );

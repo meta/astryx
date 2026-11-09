@@ -184,13 +184,13 @@ export const CHECKBOX_BINDING_STATES = [
     storyId: 'a11y-checkbox-pattern--input-required',
   },
   {
-    id: 'input-inherited-required-valid',
+    id: 'input-under-required-default',
     binding: 'CheckboxInput',
     summary:
-      'an unchecked checkbox inheriting required semantics without native validation',
-    facts: facts({required: true}),
+      'an unchecked checkbox under a required form default, which gives it no required state',
+    facts: facts(),
     visibleLabel: 'Marketing consent',
-    storyId: 'a11y-checkbox-pattern--input-inherited-required-valid',
+    storyId: 'a11y-checkbox-pattern--input-under-required-default',
   },
   {
     id: 'input-invalid',
@@ -311,8 +311,13 @@ export const CHECKBOX_BINDING_STATES = [
     id: 'list-item-group-disabled-with-message',
     binding: 'CheckboxListItem',
     summary:
-      'an item in an unavailable group, kept focusable so the group reason is discoverable',
-    facts: facts({checked: true, operable: false, disabled: true}),
+      'an item in an unavailable group, kept focusable and described by the group reason',
+    facts: facts({
+      checked: true,
+      operable: false,
+      disabled: true,
+      description: 'Managed by your administrator',
+    }),
     visibleLabel: 'Email',
     visibleLabelSelector: '[data-a11y-visible-label]',
     storyId: 'a11y-checkbox-pattern--list-item-group-disabled-with-message',

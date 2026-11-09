@@ -589,3 +589,61 @@ export const InScrollContainer: Story = {
     </div>
   ),
 };
+
+/**
+ * The BottomSheet presentation opened into a submenu. The sheet's back button
+ * points toward the previous view, so its chevron mirrors in right-to-left
+ * layouts; this story keeps that view on screen for the RTL audit.
+ */
+export const BottomSheetSubmenu: Story = {
+  name: 'Presentation / BottomSheet submenu',
+  parameters: {
+    layout: 'fullscreen',
+    viewport: {defaultViewport: 'mobile1'},
+    docs: {story: {inline: false, height: '560px'}},
+  },
+  render: () => (
+    <div style={{padding: 16}}>
+      <ContextMenu
+        data-testid="bottom-sheet-submenu-context-menu"
+        presentation="bottom-sheet"
+        label="Document actions"
+        items={[
+          {label: 'Edit', icon: PencilIcon, onClick: () => {}},
+          {
+            label: 'Share',
+            icon: ShareIcon,
+            items: [
+              {label: 'Copy link', onClick: () => {}},
+              {label: 'Email', onClick: () => {}},
+            ],
+          },
+        ]}>
+        <div {...stylex.props(triggerStyles.area)}>
+          Long-press or right-click for document actions
+        </div>
+      </ContextMenu>
+    </div>
+  ),
+  play: async ({canvasElement}) => {
+    const trigger = canvasElement.querySelector(
+      '[data-testid="bottom-sheet-submenu-context-menu"]',
+    );
+    trigger?.dispatchEvent(
+      new MouseEvent('contextmenu', {bubbles: true, clientX: 40, clientY: 40}),
+    );
+    // The sheet renders in the top layer, outside the canvas.
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const share = Array.from(
+        document.body.querySelectorAll<HTMLElement>(
+          '[role="menuitem"], button',
+        ),
+      ).find(element => element.textContent?.trim() === 'Share');
+      if (share != null) {
+        share.click();
+        return;
+      }
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+  },
+};

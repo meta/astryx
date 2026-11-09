@@ -53,7 +53,8 @@ export const docs = {
         {
           name: 'children',
           type: 'ReactNode',
-          description: 'Trigger element that must accept a ref.',
+          description:
+            'The trigger. Text children, a string or number or text written around an expression such as `Edited {when}`, are wrapped in a focusable inline span; holes such as `false` and `null` are ignored. With element children, HoverCard wires the first element, so that element does not need to accept a ref.',
         },
         {
           name: 'content',
@@ -97,14 +98,15 @@ export const docs = {
         {
           name: 'focusTrigger',
           type: "'auto' | 'always' | 'never'",
-          description: 'Controls when focus events trigger the hover card.',
+          description:
+            'When focus should open the hover card. auto opens when the trigger itself takes focus, or focus lands inside a trigger that is focusable at that moment, so a roving-tabindex member opens when the arrow keys reach it.',
           default: "'auto'",
         },
         {
           name: 'touchTrigger',
           type: "'auto' | 'tap' | 'none'",
           description:
-            'What a tap does where there is no hover. auto opens on tap unless the trigger performs an action of its own (a button, link, or form control), whose tap belongs to the control. tap always opens. none never opens on touch. A tap-opened card is dismissed by a tap outside it.',
+            'What a tap does where there is no hover. auto opens on tap unless the trigger performs an action of its own (a button, link, or form control), whose tap belongs to the control; an aria-disabled control performs none, so a tap on it opens its reason. tap always opens. none never opens on touch. A tap-opened card is dismissed by a tap outside it.',
           default: "'auto'",
         },
         {
@@ -128,7 +130,8 @@ export const docs = {
         {
           name: 'hasHoverIndication',
           type: "'auto' | boolean",
-          description: 'Shows a dashed underline on the trigger element.',
+          description:
+            'Shows a dashed underline on a text trigger. auto shows it when children is text: strings and numbers, such as `Edited {when}`, with holes such as `false` and `null` ignored. It has no effect on an element trigger, which keeps its own styling.',
           default: "'auto'",
         },
         {
@@ -140,7 +143,25 @@ export const docs = {
         {
           name: 'isOpen',
           type: 'boolean',
-          description: 'Controlled open state for the hover card.',
+          description:
+            'Controlled open state. true holds the card open. false holds it closed against hover and focus. A controlled card answers Escape by calling onOpenChange(false) without closing; it closes when you set isOpen to false, and focus inside the card then returns to the trigger.',
+        },
+        {
+          name: 'xstyle',
+          type: 'StyleXStyles',
+          description:
+            'StyleX styles for the card surface, the element that carries the hover-card theme target.',
+        },
+        {
+          name: 'className',
+          type: 'string',
+          description:
+            'Class name added to the card surface, beside the hover-card target class.',
+        },
+        {
+          name: 'style',
+          type: 'CSSProperties',
+          description: 'Inline styles for the card surface.',
         },
       ],
     },
@@ -245,7 +266,8 @@ export const docsZh = {
         {
           name: 'children',
           type: 'ReactNode',
-          description: '必须接受 ref 的触发元素。',
+          description:
+            '触发元素。文本子元素（字符串或数字，或围绕表达式书写的文本，例如 `Edited {when}`）会被包裹在可聚焦的内联 span 中；`false`、`null` 等空位会被忽略。传入元素时，HoverCard 连接第一个元素，因此该元素无需接受 ref。',
         },
         {
           name: 'content',
@@ -282,14 +304,15 @@ export const docsZh = {
         {
           name: 'focusTrigger',
           type: "'auto' | 'always' | 'never'",
-          description: '控制焦点事件何时触发悬浮卡片。',
+          description:
+            '焦点何时打开悬浮卡片。auto 在触发元素自身获得焦点，或焦点落在当时可聚焦的触发元素内部时打开，因此方向键到达漫游 tabindex 成员时也会打开。',
           default: "'auto'",
         },
         {
           name: 'touchTrigger',
           type: "'auto' | 'tap' | 'none'",
           description:
-            '在没有悬停的触摸设备上，轻点的行为。auto：轻点即打开，除非触发元素本身会执行操作（按钮、链接、表单控件），此时轻点归该控件所有。tap：始终轻点打开。none：触摸永不打开。轻点打开的卡片可通过点击卡片外部关闭。',
+            '在没有悬停的触摸设备上，轻点的行为。auto：轻点即打开，除非触发元素本身会执行操作（按钮、链接、表单控件），此时轻点归该控件所有；设置了 aria-disabled 的控件不执行操作，因此轻点它会显示其原因。tap：始终轻点打开。none：触摸永不打开。轻点打开的卡片可通过点击卡片外部关闭。',
           default: "'auto'",
         },
         {
@@ -313,13 +336,36 @@ export const docsZh = {
         {
           name: 'hasHoverIndication',
           type: "'auto' | boolean",
-          description: '在触发元素上显示虚线下划线。',
+          description:
+            '在文本触发元素上显示虚线下划线。auto：当 children 是文本（字符串和数字，例如 `Edited {when}`，忽略 `false`、`null` 等空位）时显示。对元素触发器无效，元素保留自身样式。',
           default: "'auto'",
         },
         {
           name: 'isDefaultOpen',
           type: 'boolean',
           description: '是否在挂载时显示悬浮卡片。仍然可以关闭。',
+        },
+        {
+          name: 'isOpen',
+          type: 'boolean',
+          description:
+            '受控的打开状态。true 保持卡片打开。false 使悬停和焦点都无法打开卡片。受控卡片响应 Escape 时调用 onOpenChange(false) 而不关闭；将 isOpen 设为 false 时关闭，此时卡片内的焦点返回触发元素。',
+        },
+        {
+          name: 'xstyle',
+          type: 'StyleXStyles',
+          description:
+            '卡片表面（带有 hover-card 主题目标的元素）的 StyleX 样式。',
+        },
+        {
+          name: 'className',
+          type: 'string',
+          description: '添加到卡片表面的类名，与 hover-card 目标类名并列。',
+        },
+        {
+          name: 'style',
+          type: 'CSSProperties',
+          description: '卡片表面的内联样式。',
         },
       ],
     },
@@ -429,7 +475,8 @@ export const docsDense = {
       description:
         'Component wrapper for hover card overlay; richer overlay triggered on hover/focus.',
       propDescriptions: {
-        children: 'Trigger element; must accept ref.',
+        children:
+          'Trigger. Text children (strings/numbers, incl. `Edited {when}`; holes like false/null ignored) are wrapped in a focusable inline span. With elements, the first element is wired (no ref needed).',
         content: 'Hover card content.',
         placement:
           "Position relative to anchor element. Logical: start/end follow the popover's inherited direction (RTL mirrors).",
@@ -439,14 +486,20 @@ export const docsDense = {
         hideDelay: 'Hide delay in ms.',
         focusTrigger: 'Controls when focus events trigger hover card.',
         touchTrigger:
-          'Tap behavior where there is no hover. auto = tap opens unless the trigger acts (button/link/control); tap = always opens; none = never on touch. Tap-opened cards close on a tap outside.',
+          'Tap behavior where there is no hover. auto = tap opens unless the trigger acts (button/link/control; an aria-disabled control does not act); tap = always opens; none = never on touch. Tap-opened cards close on a tap outside.',
         isEnabled: 'Enable/disable hover + focus triggers.',
         label:
           'Accessible name for the popup. With label: named role="dialog"; without: role="group".',
         onOpenChange:
           'Callback when visibility changes; true=shown, false=hidden.',
-        hasHoverIndication: 'Dashed underline on trigger element.',
+        hasHoverIndication:
+          'Dashed underline on a text trigger. auto = text children (strings/numbers, holes ignored); no effect on element triggers.',
         isDefaultOpen: 'Show hover card on mount. Still dismissible.',
+        isOpen:
+          'Controlled open state. true holds open; false holds closed against hover and focus. Escape calls onOpenChange(false) without closing; setting false returns focus inside the card to the trigger.',
+        xstyle: 'StyleX styles for the card surface (hover-card target).',
+        className: 'Class added to the card surface.',
+        style: 'Inline styles for the card surface.',
       },
     },
   ],

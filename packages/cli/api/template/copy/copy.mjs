@@ -18,7 +18,10 @@ import {
 } from '../../../foundation/fs/path-safety.mjs';
 import {AstryxError, writeFailed} from '../../error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
-import {pkgOf, replaceDemoMedia} from '../../../foundation/discovery/template-adapter.mjs';
+import {
+  pkgOf,
+  replaceTemplateDemos,
+} from '../../../foundation/discovery/template-adapter.mjs';
 import {analyzeTemplateNeeds} from '../../../foundation/discovery/template-needs.mjs';
 import {
   NO_ICON_SETS,
@@ -89,12 +92,14 @@ export function templateCopy(
     );
   }
 
-  // Strip demo image references so the scaffolded file renders without a
-  // Meta-only network dependency. Read before any write, so a failure below
-  // leaves nothing behind.
-  const {source: withMedia, demoMediaReplaced} = replaceDemoMedia(
-    fs.readFileSync(match.filePath, 'utf-8'),
-  );
+  // Replace docs-only demo content and demo media references so the
+  // scaffolded file renders without anything only Astryx's previews provide.
+  // Read before any write, so a failure below leaves nothing behind.
+  const {
+    source: withMedia,
+    demoContentReplaced,
+    demoMediaReplaced,
+  } = replaceTemplateDemos(fs.readFileSync(match.filePath, 'utf-8'));
   // Icons follow the project's icon set (AST-084 FR9). An icon with no match
   // keeps its import, so its library stays a needed dependency below.
   const {source: outputSource, icons} = mapTemplateIcons(
@@ -127,6 +132,7 @@ export function templateCopy(
       fileName: outputFileName,
       filesCopied: 1,
       demoMediaReplaced,
+      demoContentReplaced,
       notes,
       missingPackages: missing,
       installCommand,
