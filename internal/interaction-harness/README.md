@@ -242,6 +242,18 @@ raw numbers for the report. Frames are judged in presentation order: a loaded
 machine can deliver them out of order. `castStoryboard` turns the frames of the
 block into a filmstrip.
 
+To read frames after a moment, such as the rest after a block, wait for them by
+time: `waitForCastFrame(cast, {after, during})` returns once the cast holds a
+frame presented after `after`, epoch ms on the page's clock. A frame that
+arrives after that moment can still have been presented before it, so a count
+of frames delivered is no such wait. `cast.lastFrameAt()` reads the latest
+presentation time captured so far. Past 5 s with no such frame, the wait fails.
+When no frame came for longer than `FRAME_STARVATION_MS`, it throws
+`FrameStarvationError`: the screen did not change, or the page was starved of
+frames. Keep something moving, such as `startBusyControl`, to tell them apart.
+While frames still come, all presented before `after`, the error names both
+times.
+
 A just-started animation can reach the screen after the block began (50–100 ms
 later in WebKit on a loaded machine). When the cast saw the element at rest
 before the block (wait for `cast.frameCount()` to pass 0 before starting the
