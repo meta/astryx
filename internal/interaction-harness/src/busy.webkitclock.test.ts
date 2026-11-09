@@ -17,7 +17,7 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {busyWindowProof, pooledBusyProof} from './busy';
+import {busyWindowProof, pageTimesOnControls, pooledBusyProof} from './busy';
 import type {TrackedFrame} from './frames';
 
 const FRAME = 1000 / 60;
@@ -405,6 +405,25 @@ describe('busyWindowProof on a WebKit cast with a control', () => {
     expect(pooled.summary).toMatch(
       /; run 1: [^;]*(;[^;]*)*?; note: cadence not judged: \d+ display-interval pairs; run 2: .*; note: cadence not judged: \d+ display-interval pairs$/,
     );
+  });
+
+  it('gives each control frame with a reading its own time on the page clock, and none to a frame near a turn', () => {
+    // The frame after frame 11 is drawn one interval later, stamped 60 ms
+    // late: it reads at its drawn time.
+    const gap = cast(lateAfterGap(11), fade(0.6), 'webkit');
+    const late = lateAfterGap(11)[12];
+    expect(pageTimesOnControls(gap.control).get(late.stamp)).toBeCloseTo(
+      late.at,
+      0,
+    );
+    // At 1200 ms the first control turns, and only the one ahead reads it.
+    const shots = onTime();
+    const frames = cast(shots, fade(0.6), 'webkit');
+    const turn = shots[24].stamp;
+    expect(pageTimesOnControls(frames.control).has(turn)).toBe(false);
+    expect(
+      pageTimesOnControls(frames.control, {ahead: frames.ahead}).get(turn),
+    ).toBeCloseTo(turn, 0);
   });
 
   it("dates the frames from the controls' starts as from the origin their stamps agree with", () => {

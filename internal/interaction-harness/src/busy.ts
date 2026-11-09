@@ -373,11 +373,59 @@ function readControlClock(control: readonly TrackedFrame[]): {
 }
 
 /**
- * Each stamp's time on the page clock, read from the busy controls'
- * positions: the first control's clock, else the one `ahead`. The stamp only
- * picks the control's cycle, so a stamp that runs late moves no reading. Each
- * control counts from its start (`controlStarts`), or else from the origin
- * that most of its frames' stamps agree with (`controlClock`).
+ * Each control frame's time on the page clock, epoch ms, by its cast stamp. It
+ * is read from the busy controls' positions: the first control's clock, else
+ * the one `ahead`. The stamp only picks the control's cycle, so a stamp that
+ * runs late moves no reading. Each control counts from its start
+ * (`controlStarts`), or else from the origin that most of its frames' stamps
+ * agree with (`controlClock`). A frame with no reading has no time here.
+ * Frames tracked from the same screencast share its stamps, so a spec looks
+ * their times up here. The busy proofs date their frames from these times.
+ */
+export function pageTimesOnControls(
+  control: readonly TrackedFrame[],
+  {
+    ahead,
+    controlStarts,
+  }: {
+    /** The control started `ahead`, from the same screencast. */
+    readonly ahead?: readonly TrackedFrame[];
+    /** When the first control started, then the one ahead (`startBusyControl`). */
+    readonly controlStarts?: readonly [number, number?];
+  } = {},
+): Map<number, number> {
+  const cycle = 2 * CONTROL_LEG_MS;
+  const readers = [
+    {...readControlClock(control), start: controlStarts?.[0]},
+    ...(ahead == null
+      ? []
+      : [{...readControlClock(ahead), start: controlStarts?.[1]}]),
+  ].flatMap(({readings, origin, start}) => {
+    const from = start ?? origin;
+    return from == null ? [] : [{readings, from}];
+  });
+  const times = new Map<number, number>();
+  for (const {t: stamp} of [...control, ...(ahead ?? [])]) {
+    if (times.has(stamp)) {
+      continue;
+    }
+    for (const {readings, from} of readers) {
+      const ms = readings.get(stamp);
+      if (ms != null) {
+        times.set(
+          stamp,
+          from + ms + Math.round((stamp - from - ms) / cycle) * cycle,
+        );
+        break;
+      }
+    }
+  }
+  return times;
+}
+
+/**
+ * Each stamp's time on the page clock: its own reading where it has one
+ * (`pageTimesOnControls`).
  *
  * A stamp with no reading keeps its stamp's distance from the nearest stamp
  * whose reading agrees with it, within `CONTROL_AGREE_MS`. Such a stamp is
@@ -399,27 +447,12 @@ function controlPageTimes(
   ahead: readonly TrackedFrame[] | undefined,
   controlStarts: readonly [number, number?] | undefined,
 ): {times: Map<number, number>; read: ReadonlySet<number>} | null {
-  const cycle = 2 * CONTROL_LEG_MS;
-  const readers = [
-    {...readControlClock(control), start: controlStarts?.[0]},
-    ...(ahead == null
-      ? []
-      : [{...readControlClock(ahead), start: controlStarts?.[1]}]),
-  ].flatMap(({readings, origin, start}) => {
-    const from = start ?? origin;
-    return from == null ? [] : [{readings, from}];
-  });
+  const own = pageTimesOnControls(control, {ahead, controlStarts});
   const read = new Map<number, number>();
   for (const stamp of stamps) {
-    for (const {readings, from} of readers) {
-      const ms = readings.get(stamp);
-      if (ms != null) {
-        read.set(
-          stamp,
-          from + ms + Math.round((stamp - from - ms) / cycle) * cycle,
-        );
-        break;
-      }
+    const ms = own.get(stamp);
+    if (ms != null) {
+      read.set(stamp, ms);
     }
   }
   if (read.size === 0) {
@@ -1049,9 +1082,10 @@ export interface BusyProof extends FrameStats {
    * The part of the window judged: inside the margins, up to `settledWithin`,
    * and from `onScreenFromMs` when that is set. On a WebKit cast dated on the
    * controls' clock, it runs from the cast's stamp of the first frame judged
-   * to that of the last. So a caller selects the judged frames by its stamps.
-   * Only this part moves back to the stamps. The summary's times, its stall
-   * and its control read stay on the controls' clock.
+   * to that of the last. So a caller selects the judged part by its stamps.
+   * Frames the display-rate keep left out fall inside it too. Only this part
+   * moves back to the stamps. The summary's times, its stall and its control
+   * read stay on the controls' clock.
    */
   readonly judged: {readonly from: number; readonly to: number};
   /**

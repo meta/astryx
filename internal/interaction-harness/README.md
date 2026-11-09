@@ -367,13 +367,15 @@ In WebKit, a busy proof with a control judges every frame on the controls'
 clock, not on the screencast's stamps. WebKit stamps the frame after a delivery
 gap about 60 ms late. So `busyWindowProof` and `pooledBusyProof` date each
 WebKit frame from the control's positions, the component's and the control's
-alike. A frame with no reading keeps its stamp's distance from the nearest
-frame whose stamp agrees with its reading. The dated frames keep the cast's
-order, since the cast delivers them in the order they were drawn. The proof's
-`judged` part stays on the cast's stamps, so a spec selects the judged frames
-from its own cast. Without the control ahead, a late frame near the first
-control's turn keeps its lateness. A
-proof that judges every frame near a turn starts the control ahead too
+alike. A frame with no reading keeps its stamp's distance from the nearest frame
+whose stamp agrees with its reading. The dated frames keep the cast's order,
+since the cast delivers them in the order they were drawn. The proof's `judged`
+part stays on the cast's stamps, so a spec selects the judged part from its own
+cast; frames the display-rate keep left out fall inside it too. A spec that
+needs a frame's own time for another check reads it with `pageTimesOnControls`,
+the readings the proof dates from. Without the control ahead, a late frame near
+the first control's turn keeps its lateness. A proof that judges every frame
+near a turn starts the control ahead too
 (`startBusyControl(page, {ahead: true})`). It passes that control's frames as
 `ahead`, per run in a pool; `controlStarts` is optional. Chromium casts and
 casts with no control are judged on their stamps. Under load, Chromium's cast
