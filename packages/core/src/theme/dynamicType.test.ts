@@ -1002,11 +1002,53 @@ describe('the root sync', () => {
 
   // The gate is the capability alone, never a platform idiom (one touch
   // behavior on every touch device).
-  it('does nothing where the engine has no font: -apple-system-body, touch callout or not', () => {
+  it('reads env(preferred-text-scale) for every scale where the engine has no font: -apple-system-body, touch callout or not', () => {
     pretendEngine({textSize: false, touchCallout: true});
-    expect(syncReaderTextSize(document)).toBeUndefined();
+    const before = htmlAttributes();
+    const cleanup = syncReaderTextSize(document);
+    expect(cleanup).toBeTypeOf('function');
     expect(document.querySelector('[data-astryx-text-size-probe]')).toBeNull();
+    for (const step of ['body', 'title1', 'largeTitle'] as const) {
+      expect(adoptedText()).toContain(
+        `${dynamicTypeScaleProperty(step)}: env(preferred-text-scale, 1);`,
+      );
+    }
+    expect(htmlAttributes()).toBe(before);
+    cleanup?.();
     expect(document.adoptedStyleSheets).toEqual([]);
+  });
+
+  // The meta already scales the root font size, and rem sizes follow it.
+  it('gives no scales on a page whose text-scale meta scales the root font size', () => {
+    pretendEngine({textSize: false});
+    const meta = document.createElement('meta');
+    meta.name = 'text-scale';
+    meta.content = 'scale';
+    document.head.append(meta);
+    try {
+      expect(syncReaderTextSize(document)).toBeUndefined();
+      expect(document.adoptedStyleSheets).toEqual([]);
+    } finally {
+      meta.remove();
+    }
+  });
+
+  // `legacy` keeps the root at 16 px, so the scales still apply.
+  it('still reads env(preferred-text-scale) under a legacy text-scale meta', () => {
+    pretendEngine({textSize: false});
+    const meta = document.createElement('meta');
+    meta.name = 'text-scale';
+    meta.content = 'legacy';
+    document.head.append(meta);
+    try {
+      const cleanup = syncReaderTextSize(document);
+      expect(adoptedText()).toContain(
+        `${dynamicTypeScaleProperty('body')}: env(preferred-text-scale, 1);`,
+      );
+      cleanup?.();
+    } finally {
+      meta.remove();
+    }
   });
 
   it('follows the reader text size wherever the engine provides it, with no platform check', () => {

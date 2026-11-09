@@ -226,7 +226,13 @@ function TableScrollWrapper({
     keyboardAccess: {owner: 'content'},
     overscroll: 'contain',
   });
-  const {ref, ...restHtmlProps} = htmlProps ?? {};
+  // The spread below replaces className and style. Merge the plugin's instead.
+  const {
+    ref,
+    className: pluginClassName,
+    style: pluginStyle,
+    ...restHtmlProps
+  } = htmlProps ?? {};
   const wrapperRef = useMemo(
     () => mergeRefs(ref, runtime?.setViewport),
     [ref, runtime?.setViewport],
@@ -256,6 +262,8 @@ function TableScrollWrapper({
         hasBlockViewport && scrollWrapperStyles.viewport(viewportHeight),
         ...(pluginStyles ?? []),
       ),
+      pluginClassName,
+      pluginStyle,
     ),
   });
 
