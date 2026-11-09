@@ -69,6 +69,14 @@ so your theme's token overrides (`@layer astryx-theme`) win over it, as long
 as Core's `reset.css` (or a `@layer reset, astryx-base, astryx-theme;` line,
 if your app has its own reset) loads first.
 
+## Editing code blocks
+
+Backspace at the very start of a code block turns it into a paragraph of its
+lines, instead of merging the code into the block above.
+
+Pasting rich content into a code block inserts its plain text, one line per
+block: headings, lists, tables, and formatting never land inside the code.
+
 ## Examples
 
 Interactive examples live in Storybook under **RichText/RichTextEditor**

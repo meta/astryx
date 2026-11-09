@@ -170,7 +170,9 @@ guidance owns the process used to propose and test APIs.
   calls it internal. Privacy requires removing the export or moving the capability
   behind a non-exported boundary. Core's `./internal/*` subpaths are the one
   exception: reachable, but reserved for Core and Lab, undocumented, versioned
-  in lockstep with Core, limited by lint to those two packages, and outside
+  in lockstep with Core, limited by lint to those two packages, and imported
+  by a swizzled copy only for an exported StyleX module whose identity is its
+  path (`spec:AST-110` FR1), and outside
   the compatibility promise (`spec:AST-017` FR21).
 - **INV13 — Public deltas route to their authority owner.** Every public API update
   and every public behavior change follows the result and disposition defined by
@@ -267,7 +269,11 @@ guidance owns the process used to propose and test APIs.
   where it is written, and it never exports them or sets the attribute. Every
   other file in that package spreads those exports and
   never writes the attribute or its selector, and no package imports another
-  package's owner module through an internal path. StyleX merges styles one
+  package's owner module through an internal path. An owner module whose
+  attribute marks an element its package does not render may write its
+  selector once in an injected rule instead of `stylex.create`; Core may
+  re-export only that module's writer to Lab through an internal entry, and
+  the attribute name and selector stay private to the owner. StyleX merges styles one
   whole property at a time, so an owner style carries every condition of each
   property it sets, its rest state and pointer states included, and a caller
   does not set those properties again on the same element. Outside the owner

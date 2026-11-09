@@ -353,7 +353,9 @@ interface BottomSheetSharedProps extends BaseProps<HTMLDivElement> {
    * unless the theme sets `padding` on `bottom-sheet`), matching Dialog. The
    * content box is a container: a Section that is its only child escapes the
    * padding, and bleed children such as Table and Divider compensate against
-   * it. Pass `0` for content that supplies its own inset.
+   * it. Pass `0` for content that supplies its own inset. Whatever the padding,
+   * the block-start inset is never less than the grab bar's height
+   * (`--spacing-6`), so resting content starts below the bar.
    */
   padding?: SpacingStep;
 
@@ -719,7 +721,7 @@ function StandaloneBottomSheet({
   // top one closes. A Dialog opened from a sheet stays above every sheet. A
   // closing sheet stops supplying when it starts to close. Passive: it runs
   // after the layout effects that present.
-  useModalOutlet(
+  const outletRef = useModalOutlet(
     dialogRef,
     isOpen && hasScrim,
     stackView.isTop,
@@ -991,6 +993,7 @@ function StandaloneBottomSheet({
         onScrimOpacity={handleScrimOpacity}
         onScrimFadeDuration={handleScrimFadeDuration}
         onElementChange={handlePanelElementChange}
+        handleRef={outletRef}
         onMotionStart={handleMotionStart}
         onMotionComplete={handleMotionComplete}>
         <ModalAnnounceProvider

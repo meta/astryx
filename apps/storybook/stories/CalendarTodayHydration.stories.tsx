@@ -3,17 +3,18 @@
 /**
  * @file CalendarTodayHydration.stories.tsx
  * @input Calendar, React's server renderer and hydrateRoot, run in the page
- * @output A fixture that server-renders Calendar on one date and hydrates it
- *   on another, for the browser lane; excluded from the visual matrix
+ * @output A fixture that server-renders Calendar, or a sheet DateInput or
+ *   DateTimeInput, on one date and hydrates it on another, for the browser
+ *   lane; excluded from the visual matrix
  * @position Real-browser server render, hydration and post-hydration fixture
- *   for component:Calendar FR12
+ *   for component:Calendar FR12 and the sheet fields of spec:AST-013 FR9
  */
 
 import type {Meta, StoryObj} from '@storybook/react';
 import {useRef, useState, type ReactElement} from 'react';
 import {hydrateRoot} from 'react-dom/client';
 import {renderToString} from 'react-dom/server';
-import {Calendar} from '@astryxdesign/core';
+import {Calendar, DateInput, DateTimeInput} from '@astryxdesign/core';
 
 const meta = {
   title: 'Core/CalendarHydration',
@@ -78,4 +79,32 @@ export const OneMonth: Story = {
 
 export const TwoMonths: Story = {
   render: () => <HydrationFixture tree={<Calendar numberOfMonths={2} />} />,
+};
+
+export const SheetDateInput: Story = {
+  render: () => (
+    <HydrationFixture
+      tree={
+        <DateInput
+          label="Due"
+          presentation="bottom-sheet"
+          onChange={() => {}}
+        />
+      }
+    />
+  ),
+};
+
+export const SheetDateTimeInput: Story = {
+  render: () => (
+    <HydrationFixture
+      tree={
+        <DateTimeInput
+          label="Starts"
+          presentation="bottom-sheet"
+          onChange={() => {}}
+        />
+      }
+    />
+  ),
 };
