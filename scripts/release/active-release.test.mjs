@@ -8,6 +8,7 @@
  * @position focused safety suite for the release-branch CI contract
  */
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -24,10 +25,12 @@ import {
   buildPlan,
   canaryEligibility,
   declaredVersionAtRef,
+  isReleaseTestRepairPath,
   latestStableVersion,
   mergeBackEntries,
   nextPlannedVersion,
   validateReleaseDiff,
+  validateReleaseTestRepair,
   validateHistoricalReleaseMergeBack,
   validateReleaseMergeBack,
   validateReleaseState,
@@ -450,6 +453,384 @@ describe('active release branch authority', () => {
         'R100\tpackages/core/CHANGELOG.md\tpackages/cli/CHANGELOG.md',
       ]),
     ).toEqual([]);
+  });
+
+  it('admits one post-bump test repair whose patch already merged on main', () => {
+    const patchId = 'a'.repeat(40);
+    const changeDigest = 'c'.repeat(64);
+    const sourceCommit = 'b'.repeat(40);
+    const valid = {
+      entries: [
+        'M\tpackages/core/src/BottomSheet/__tests__/BottomSheetRelease.a11y.chromium.spec.ts',
+      ],
+      changedLines: ['await mouseDrag(page, {duration: 50});'],
+      commitCount: 1,
+      mergeCommitCount: 0,
+      patchId,
+      changeDigest,
+      mainPatches: new Map([
+        [patchId, [{commit: sourceCommit, changeDigest, presentAtMain: true}]],
+      ]),
+      baseChangesets: new Map(),
+    };
+    expect(isReleaseTestRepairPath(valid.entries[0].split('\t')[1])).toBe(true);
+    expect(validateReleaseTestRepair(valid)).toEqual({
+      errors: [],
+      sourceCommit,
+    });
+  });
+
+  it('fails closed for any broader or unproven release test repair', () => {
+    const patchId = 'a'.repeat(40);
+    const changeDigest = 'c'.repeat(64);
+    const sourceCommit = 'b'.repeat(40);
+    const repair = overrides =>
+      validateReleaseTestRepair({
+        entries: ['M\tinternal/interaction-harness/runner.ts'],
+        changedLines: ['const release = event.timeStamp;'],
+        commitCount: 1,
+        mergeCommitCount: 0,
+        patchId,
+        changeDigest,
+        mainPatches: new Map([
+          [
+            patchId,
+            [{commit: sourceCommit, changeDigest, presentAtMain: true}],
+          ],
+        ]),
+        baseChangesets: new Map(),
+        ...overrides,
+      }).errors;
+
+    expect(
+      repair({entries: ['M\tpackages/core/src/Button/Button.tsx']}),
+    ).toContain(
+      'release test repair contains a non-test path: packages/core/src/Button/Button.tsx',
+    );
+    expect(
+      repair({
+        entries: ['M\tpackages/core/src/Button/__snapshots__/Button.snap'],
+      }),
+    ).toContain(
+      'release test repair contains a non-test path: packages/core/src/Button/__snapshots__/Button.snap',
+    );
+    for (const line of [
+      'expect(dialog).toBeHidden();',
+      '.toBeHidden({visible: false});',
+      'expectNoA11yViolations(page);',
+      'test.skip(true, "flaky");',
+      'test.fail();',
+      'test.slow();',
+      'it.skipIf(process.platform === "darwin")();',
+      'describe.runIf(false)();',
+      'const timeoutMs = 2_000;',
+      'retries: 3,',
+      'axe.disableRules(["color-contrast"]);',
+      'return;',
+      'expect(tree).toMatchSnapshot();',
+    ]) {
+      expect(repair({changedLines: [line]})).toContain(
+        `release test repair changes an assertion, test control, timeout, retry, or snapshot: ${line}`,
+      );
+    }
+    expect(repair({commitCount: 2})).toContain(
+      'release test repair must contain exactly one non-merge commit',
+    );
+    expect(repair({mergeCommitCount: 1})).toContain(
+      'release test repair must contain exactly one non-merge commit',
+    );
+    expect(repair({mainPatches: new Map()})).toContain(
+      'release test repair does not exactly match a non-merge commit still present on main',
+    );
+    expect(repair({changeDigest: 'd'.repeat(64)})).toContain(
+      'release test repair does not exactly match a non-merge commit still present on main',
+    );
+    expect(
+      repair({
+        mainPatches: new Map([
+          [
+            patchId,
+            [
+              {
+                commit: sourceCommit,
+                changeDigest,
+                presentAtMain: false,
+              },
+            ],
+          ],
+        ]),
+      }),
+    ).toContain(
+      'release test repair does not exactly match a non-merge commit still present on main',
+    );
+    expect(
+      repair({
+        baseChangesets: new Map([['.changeset/frozen.md', 'c'.repeat(64)]]),
+      }),
+    ).toContain(
+      'release test repair requires the generated version bump to be merged first',
+    );
+  });
+
+  it('proves the real git patch against current main before the CLI admits it', () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'astryx-release-test-repair-'),
+    );
+    roots.push(root);
+    const testFile =
+      'packages/core/src/BottomSheet/__tests__/BottomSheetRelease.a11y.chromium.spec.ts';
+    const before = 'await page.mouse.move(0, 150);\n';
+    const after = 'await mouseDrag(page);\n';
+    const {cut} = createRepository(root, [
+      {
+        ref: 'refs/heads/main',
+        name: 'cut',
+        snapshot: true,
+        files: {
+          '.changeset/README.md': '# Changesets\n',
+          'pnpm-workspace.yaml': "packages:\n  - 'packages/*'\n",
+          'packages/core/package.json': JSON.stringify({
+            name: '@astryxdesign/core',
+            version: '0.6.5',
+          }),
+          [testFile]: before,
+        },
+      },
+    ]);
+    const plan = {
+      schemaVersion: 2,
+      version: '0.6.5',
+      branch: BRANCH,
+      cutSha: cut,
+      changesets: [],
+    };
+    const marker = buildMarker(plan);
+    const {
+      mainRepair,
+      mainRevert,
+      releaseBase,
+      releaseRepair,
+      whitespaceRepair,
+    } = importCommits(root, [
+      {
+        ref: 'refs/heads/main',
+        name: 'mainRepair',
+        parent: cut,
+        files: {[testFile]: after},
+      },
+      {
+        ref: `refs/heads/${BRANCH}`,
+        name: 'releaseBase',
+        parent: cut,
+        files: {
+          '.release/active.json': `${JSON.stringify(marker)}\n`,
+          '.release/plan.json': `${JSON.stringify(plan)}\n`,
+        },
+      },
+      {
+        ref: 'refs/heads/repair',
+        name: 'releaseRepair',
+        parent: 'releaseBase',
+        files: {[testFile]: after},
+      },
+      {
+        ref: 'refs/heads/whitespace-repair',
+        name: 'whitespaceRepair',
+        parent: 'releaseBase',
+        files: {[testFile]: 'await mouse Drag(page);\n'},
+      },
+      {
+        ref: 'refs/heads/reverted-main',
+        name: 'mainRevert',
+        parent: 'mainRepair',
+        files: {[testFile]: before},
+      },
+    ]);
+    const validator = path.join(import.meta.dirname, 'active-release.mjs');
+    const run = (head, mainRef) =>
+      execFileSync(
+        process.execPath,
+        [
+          validator,
+          'validate-diff',
+          '--root',
+          root,
+          '--base',
+          releaseBase,
+          '--head',
+          head,
+          '--main-ref',
+          mainRef,
+        ],
+        {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']},
+      );
+
+    expect(JSON.parse(run(releaseRepair, mainRepair))).toMatchObject({
+      kind: 'test-repair',
+      sourceCommit: mainRepair,
+      files: 1,
+    });
+    for (const [head, mainRef] of [
+      [whitespaceRepair, mainRepair],
+      [releaseRepair, mainRevert],
+    ]) {
+      try {
+        run(head, mainRef);
+        throw new Error('expected validation to fail');
+      } catch (error) {
+        expect(error.stderr).toContain(
+          'does not exactly match a non-merge commit still present on main',
+        );
+      }
+    }
+  });
+
+  it('admits only an exact reviewed policy bundle onto a predating release branch', () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'astryx-release-policy-carry-'),
+    );
+    roots.push(root);
+    const validatorFile = 'scripts/release/active-release.mjs';
+    const workflowFile = '.github/workflows/ci.yml';
+    const manifestPath = 'scripts/release/policy-carry/v0.6.5.json';
+    const patchPath = 'scripts/release/policy-carry/v0.6.5.diff';
+    const digest = value =>
+      crypto.createHash('sha256').update(value).digest('hex');
+    const {cut} = createRepository(root, [
+      {
+        ref: 'refs/heads/main',
+        name: 'cut',
+        snapshot: true,
+        files: {
+          [validatorFile]: 'main generated only\n',
+          [workflowFile]: 'main trusted base\n',
+          'packages/core/src/Button/Button.tsx': 'export const Button = 1;\n',
+        },
+      },
+    ]);
+    const policyFiles = {
+      [validatorFile]: 'generated or proven test repair\n',
+      [workflowFile]: 'trusted base plus current main\n',
+    };
+    const {releaseBase, policyCarry, wrongContent, productCarry} =
+      importCommits(root, [
+        {
+          ref: `refs/heads/${BRANCH}`,
+          name: 'releaseBase',
+          parent: cut,
+          files: {
+            [validatorFile]: 'release generated only\n',
+            [workflowFile]: 'release trusted base\n',
+          },
+        },
+        {
+          ref: 'refs/heads/policy-carry',
+          name: 'policyCarry',
+          parent: 'releaseBase',
+          files: policyFiles,
+        },
+        {
+          ref: 'refs/heads/wrong-content',
+          name: 'wrongContent',
+          parent: 'releaseBase',
+          files: {
+            ...policyFiles,
+            [workflowFile]: 'almost trusted base plus current main\n',
+          },
+        },
+        {
+          ref: 'refs/heads/product-carry',
+          name: 'productCarry',
+          parent: 'releaseBase',
+          files: {
+            ...policyFiles,
+            'packages/core/src/Button/Button.tsx': 'export const Button = 2;\n',
+          },
+        },
+      ]);
+    const patch = execFileSync(
+      'git',
+      ['diff', '--binary', releaseBase, policyCarry],
+      {cwd: root, encoding: 'utf8'},
+    );
+    const targets = Object.fromEntries(
+      Object.keys(policyFiles)
+        .sort()
+        .map(file => [
+          file,
+          digest(
+            execFileSync('git', ['show', `${policyCarry}:${file}`], {
+              cwd: root,
+            }),
+          ),
+        ]),
+    );
+    const manifest = {
+      schemaVersion: 1,
+      releaseBranch: BRANCH,
+      base: releaseBase,
+      patch: patchPath,
+      patchSha256: digest(patch),
+      targets,
+    };
+    const {mainPolicy} = importCommits(root, [
+      {
+        ref: 'refs/heads/main',
+        name: 'mainPolicy',
+        parent: cut,
+        files: {
+          [manifestPath]: `${JSON.stringify(manifest)}\n`,
+          [patchPath]: patch,
+        },
+      },
+    ]);
+    const validator = path.join(import.meta.dirname, 'active-release.mjs');
+    const run = head =>
+      execFileSync(
+        process.execPath,
+        [
+          validator,
+          'validate-policy-carry',
+          '--root',
+          root,
+          '--base',
+          releaseBase,
+          '--head',
+          head,
+          '--source',
+          mainPolicy,
+          '--main-ref',
+          mainPolicy,
+          '--manifest',
+          manifestPath,
+          '--release-branch',
+          BRANCH,
+        ],
+        {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']},
+      );
+
+    expect(JSON.parse(run(policyCarry))).toMatchObject({
+      kind: 'policy-carry',
+      source: mainPolicy,
+      manifest: manifestPath,
+      files: 2,
+    });
+    try {
+      run(wrongContent);
+      throw new Error('expected validation to fail');
+    } catch (error) {
+      expect(error.stderr).toContain(
+        `release policy carry file does not match its reviewed bundle: ${workflowFile}`,
+      );
+    }
+    try {
+      run(productCarry);
+      throw new Error('expected validation to fail');
+    } catch (error) {
+      expect(error.stderr).toContain(
+        'release policy carry contains an unauthorized path: packages/core/src/Button/Button.tsx',
+      );
+    }
   });
 
   it('binds generated-only deletion to the frozen plan paths and hashes', () => {

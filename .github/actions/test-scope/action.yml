@@ -17,8 +17,9 @@
 #   classifier, an API error, an empty file list or one GitHub truncates)
 #   puts everything in scope (spec:AST-030 FR3, FR4). A classifier that rejects the change (a spec-only PR with a
 #   Changeset) fails the step, as the old scope job failed its dependents.
-# - A release-branch pull request is the generated version bump: spec-only and
-#   tooling-only, with `release_bump` true.
+# - A release-branch generated bump keeps its narrow lane. Any other candidate
+#   runs every test lane; the trusted release validator then admits only the
+#   proven test-repair class and rejects every broader change.
 #
 # The job must be checked out first: this is a local action.
 
@@ -86,7 +87,7 @@ outputs:
       classifier predates it reports nothing, which runs every test.
     value: ${{ steps.scope.outputs.vitest_full_suite }}
   release_bump:
-    description: The PR targets a release branch (the generated version bump).
+    description: The PR targets a release branch and must pass release validation.
     value: ${{ steps.scope.outputs.release_bump }}
   decided:
     description: >-
@@ -190,6 +191,21 @@ runs:
             for (const [key, value] of Object.entries(values)) core.setOutput(key, value);
             core.info(Object.entries(values).map(([k, v]) => `${k}=${v}`).join(' '));
           };
+          const writeChangedFiles = files => {
+            const changedFilesPath = path.join(
+              process.env.RUNNER_TEMP || os.tmpdir(),
+              'test-scope-changed-files.txt',
+            );
+            const changed = [
+              ...new Set(
+                files.flatMap(file =>
+                  [file.filename, file.previous_filename].filter(Boolean),
+                ),
+              ),
+            ];
+            fs.writeFileSync(changedFilesPath, `${changed.join('\n')}\n`);
+            return changedFilesPath;
+          };
 
           if (context.eventName !== 'pull_request') {
             core.info(`${context.eventName}: not a pull request, so everything is in scope.`);
@@ -198,16 +214,62 @@ runs:
           }
           const pr = context.payload.pull_request;
           if (pr.base.ref.startsWith('release/v')) {
-            core.info('Release-branch pull request: the generated version bump.');
-            report({
-              ...everything,
-              ...(audit ? auditNone : {}),
-              spec_only: 'true',
-              tooling_only: 'true',
-              release_bump: 'true',
-              touches: 'false',
-              applies: 'false',
-            });
+            let releaseFiles;
+            try {
+              releaseFiles = await github.paginate(github.rest.pulls.listFiles, {
+                ...context.repo,
+                pull_number: pr.number,
+                per_page: 100,
+              });
+              if (releaseFiles.length >= 3000)
+                throw new Error('GitHub truncated the file list at 3000');
+              if (releaseFiles.length === 0)
+                throw new Error('GitHub listed no changed files');
+            } catch (error) {
+              core.warning(
+                `Release-branch scope could not be decided (${error.message}); every test lane runs and the release validator still decides the change.`,
+              );
+              report({
+                ...everything,
+                ...(audit ? auditAll : {}),
+                release_bump: 'true',
+                decided: 'false',
+                truncated: String(/truncated the file list/.test(error.message)),
+              });
+              return;
+            }
+            const releaseOutput = file =>
+              file.startsWith('.changeset/') ||
+              /^packages\/(?:[^/]+|themes\/[^/]+)\/(?:package\.json|CHANGELOG\.md)$/.test(file) ||
+              /^packages\/cli\/assets\/codemods\/(?:registry\.mjs|__tests__\/registry\.test\.mjs|transforms\/(?:next|v\d+\.\d+\.\d+)\/)/.test(file) ||
+              file === 'pnpm-lock.yaml';
+            const generatedOnly = releaseFiles.every(file =>
+              [file.filename, file.previous_filename]
+                .filter(Boolean)
+                .every(releaseOutput),
+            );
+            if (generatedOnly) {
+              core.info('Release-branch pull request: the generated version bump.');
+              report({
+                ...everything,
+                ...(audit ? auditNone : {}),
+                spec_only: 'true',
+                tooling_only: 'true',
+                release_bump: 'true',
+                touches: 'false',
+                applies: 'false',
+              });
+            } else {
+              core.info(
+                'Release-branch non-generated candidate: every test lane runs; the release validator must prove the narrow test-repair class.',
+              );
+              report({
+                ...everything,
+                ...(audit ? auditAll : {}),
+                release_bump: 'true',
+                changed_files_path: writeChangedFiles(releaseFiles),
+              });
+            }
             return;
           }
 
@@ -363,12 +425,7 @@ runs:
                   componentScope = auditAll;
                 }
               }
-              // A file, not an output value: a large pull request's list would
-              // not fit an environment variable.
-              const changedFilesPath = path.join(process.env.RUNNER_TEMP || os.tmpdir(), 'test-scope-changed-files.txt');
-              const changed = [...new Set(files.flatMap(f => [f.filename, f.previous_filename].filter(Boolean)))];
-              fs.writeFileSync(changedFilesPath, `${changed.join('\n')}\n`);
-              componentScope.changed_files_path = changedFilesPath;
+              componentScope.changed_files_path = writeChangedFiles(files);
             }
             report({...everything, ...classified, ...componentScope, release_bump: 'false', touches, applies, head_file_present: headFilePresent, lab_specs_path: labSpecsPath});
           } finally {
