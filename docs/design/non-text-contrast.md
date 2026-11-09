@@ -48,11 +48,11 @@ block that, so it does not have to reach the non-text threshold itself.
 
 ## Anatomy and hierarchy
 
-| Role            | Purpose                                                 | Required relationship                                               |
-| --------------- | ------------------------------------------------------- | ------------------------------------------------------------------- |
-| Treatment       | The boundary, fill, indicator, or graphic part reviewed | Meets 3:1 against adjacent colors, or DR3 names its independent cue |
-| Independent cue | A different visible cue that carries the same meaning   | Meets its own applicable threshold against its adjacent colors      |
-| Adjacent colors | The colors the treatment or cue touches                 | Named in the evidence, per mode and state                           |
+| Role            | Purpose                                                                                                                                                                                                                                                                       | Required relationship                                               |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Treatment       | The boundary, fill, indicator, or graphic part reviewed                                                                                                                                                                                                                       | Meets 3:1 against adjacent colors, or DR3 names its independent cue |
+| Independent cue | A different visible cue that carries the same meaning                                                                                                                                                                                                                         | Meets its own applicable threshold against its adjacent colors      |
+| Adjacent colors | The colors the treatment or cue touches. A boundary is measured against the surface outside the component; its own fill counts as adjacent only when that fill is the interactive area or the cue that identifies the component, and an adornment's decorative fill does not. | Named in the evidence, per mode and state                           |
 
 ## State representation
 
