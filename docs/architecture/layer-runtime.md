@@ -464,8 +464,12 @@ viewport's tree position when no outlet is open, and enters the top layer again
 after each move. Toasts therefore paint above the modal and stay operable inside
 it. An input hold can make a layer's content inert, or the page's. A host
 there stays live, as do the elements that hold it; their other children go
-inert. The hold announces its shield's entry, so toasts stay operable above
-the shield too.
+inert. A live region among them stays live too, unless it holds something
+focusable when the hold starts: it takes no input, and inert would drop what
+is written to it. A
+live region inside a child that goes inert stays inert with it. The
+hold announces its shield's entry, so toasts stay operable above the shield
+too.
 Moving the host does not remount the rows, so entries, timers, and focus
 handoff survive. The rule is one of order, not of modality, and it reaches
 the surfaces that tell the registry they entered the top layer: the modal

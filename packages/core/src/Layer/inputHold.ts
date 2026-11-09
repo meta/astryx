@@ -29,6 +29,7 @@ import {
 } from '../utils/inputStream';
 import {isDocument, isElement, isHTMLElement, isNode} from '../utils/nodeType';
 import {realmValue, sharedKey} from '../utils/sharedRealm';
+import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
 import {
   isModalOutletHost,
   modalOutletHosts,
@@ -910,9 +911,27 @@ function createPressHold(doc: Document): PressHold | null {
 }
 
 /**
- * Makes the layer's content inert, except the shield and the global hosts,
- * and moves focus out of it. A global host deeper in the layer stays live
- * with the elements around it: their other children go inert. An element
+ * Whether `element` is a live region with nothing focusable in it. It takes no
+ * input, and inert would drop what is written to it, so a hold leaves it live.
+ */
+function isTextLiveRegion(element: Element): boolean {
+  const live = element.getAttribute('aria-live');
+  const isLive =
+    live != null
+      ? live !== 'off'
+      : ['status', 'alert', 'log'].includes(element.getAttribute('role') ?? '');
+  return (
+    isLive &&
+    !element.matches(FOCUSABLE_SELECTOR) &&
+    element.querySelector(FOCUSABLE_SELECTOR) == null
+  );
+}
+
+/**
+ * Makes the layer's content inert and moves focus out of it. The shield, the
+ * global hosts and a child live region with nothing focusable stay live. A
+ * global host deeper in the layer stays live with the elements around it:
+ * their other children go inert. An element
  * that turns inert while focused keeps its focus and its key activation.
  * Enter and Space still click such a button until the engine's focus fixup
  * runs, if it runs. Blurring it leaves focus on the document, as that fixup
@@ -931,7 +950,11 @@ function makeContentInert(
   // go inert: inert content has no live descendant.
   const makeInertAround = (parent: Element) => {
     for (const child of parent.children) {
-      if (child === shield || hosts.includes(child)) {
+      if (
+        child === shield ||
+        hosts.includes(child) ||
+        isTextLiveRegion(child)
+      ) {
         continue;
       }
       if (hosts.some(host => containsAlongFlatTree(child, host))) {

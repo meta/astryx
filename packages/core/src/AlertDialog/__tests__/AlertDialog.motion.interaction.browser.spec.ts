@@ -859,6 +859,88 @@ test.describe('under a finger', () => {
     ).toEqual(['undo', 'end']);
   });
 
+  test('while the alert fades out, the words of a toast its action raised reach assistive technology: the live region they go to is exposed (spec:AST-086 FR2)', async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), 'core-alertdialog--alert-over-a-toast');
+    const driver = await touchDriver(page);
+    const dialog = page.getByRole('alertdialog', {name: 'Delete item?'});
+    const openAndDelete = async () => {
+      await driver.tap(
+        await centerOf(page.getByRole('button', {name: 'Delete item'})),
+      );
+      await waitForRest(dialog);
+      await driver.tap(
+        await centerOf(dialog.getByRole('button', {name: 'Delete'})),
+      );
+    };
+    // The first close announces, so the page's shared live regions exist
+    // before the next close holds the page.
+    await openAndDelete();
+    await waitForClose(dialog);
+    // A long exit, so the words are written while the copy fades.
+    await setToken(page, '--duration-exit', '2000ms');
+    // Records each write of the words into a live region. It notes whether the
+    // exit copy is there, so the page is held, and whether assistive
+    // technology can read that region.
+    await page.evaluate(() => {
+      const writes: {isHeld: boolean; isExposed: boolean}[] = [];
+      (
+        window as unknown as {
+          __writes: {isHeld: boolean; isExposed: boolean}[];
+        }
+      ).__writes = writes;
+      const isLive = (element: Element) =>
+        element.hasAttribute('aria-live') ||
+        ['status', 'alert', 'log'].includes(element.getAttribute('role') ?? '');
+      new MutationObserver(records => {
+        for (const record of records) {
+          let region =
+            record.target instanceof Element
+              ? record.target
+              : record.target.parentElement;
+          while (region != null && !isLive(region)) {
+            region = region.parentElement;
+          }
+          if (region?.textContent?.includes('Item deleted') !== true) {
+            continue;
+          }
+          writes.push({
+            isHeld: document.querySelector('[data-astryx-alert-exit]') != null,
+            isExposed:
+              region.closest(
+                '[inert], [aria-hidden="true"], dialog:not([open])',
+              ) == null,
+          });
+        }
+      }).observe(document.body, {
+        subtree: true,
+        childList: true,
+        characterData: true,
+      });
+    });
+    const writes = async () =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __writes: {isHeld: boolean; isExposed: boolean}[];
+            }
+          ).__writes,
+      );
+    await openAndDelete();
+    await expect(dialog).toBeHidden();
+    await expect.poll(async () => (await writes()).length).toBeGreaterThan(0);
+    // The page is still held: the copy still fades.
+    await expect(exitCopyOf(page)).toBeVisible();
+    const written = await writes();
+    // Each write lands while the page is held, and in a region assistive
+    // technology can read.
+    expect(written).toEqual(
+      written.map(() => ({isHeld: true, isExposed: true})),
+    );
+  });
+
   test('a toast the alert raises enters once: repeated alerts move it in and out, and it starts no transition (component:Toast FR12)', async ({
     page,
   }) => {

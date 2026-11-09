@@ -170,6 +170,46 @@ describe('holdInput', () => {
     expect(isInHeldLayer(child)).toBe(false);
   });
 
+  it('leaves a live region with nothing focusable in a dismissing layer live: it takes no input, and inert would drop its words (spec:AST-086 FR2)', async () => {
+    const {layer, child} = mountLayer();
+    const polite = document.createElement('div');
+    polite.setAttribute('aria-live', 'polite');
+    const status = document.createElement('div');
+    status.setAttribute('role', 'status');
+    const off = document.createElement('div');
+    off.setAttribute('role', 'status');
+    off.setAttribute('aria-live', 'off');
+    layer.append(polite, status, off);
+    const end = deferred();
+    holdInput(layer, {until: end.promise, scope: 'layer'});
+    expect(child.hasAttribute('inert')).toBe(true);
+    expect(polite.hasAttribute('inert')).toBe(false);
+    expect(status.hasAttribute('inert')).toBe(false);
+    expect(off.hasAttribute('inert')).toBe(true);
+    end.resolve();
+    await flush();
+    expect(off.hasAttribute('inert')).toBe(false);
+  });
+
+  it('keeps a live region that holds something focusable in a dismissing layer inert, so the hold still keeps input away from it', async () => {
+    const {layer} = mountLayer();
+    const region = document.createElement('div');
+    region.setAttribute('role', 'status');
+    const button = document.createElement('button');
+    region.append(button);
+    const tabStop = document.createElement('div');
+    tabStop.setAttribute('aria-live', 'assertive');
+    tabStop.tabIndex = 0;
+    layer.append(region, tabStop);
+    const end = deferred();
+    holdInput(layer, {until: end.promise, scope: 'layer'});
+    expect(region.hasAttribute('inert')).toBe(true);
+    expect(tabStop.hasAttribute('inert')).toBe(true);
+    end.resolve();
+    await flush();
+    expect(region.hasAttribute('inert')).toBe(false);
+  });
+
   it('leaves a global host in a dismissing layer live, and puts it back above the shield (spec:AST-003 FR16)', async () => {
     const {layer, child} = mountLayer();
     const host = document.createElement('div');
