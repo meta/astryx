@@ -48,6 +48,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
@@ -431,16 +432,28 @@ export function useTouchTriggerInternal(
   // Mirrors `isOpen` for synchronous reads inside the pointer handler, which
   // runs outside React's render and would otherwise close over a stale value.
   const isOpenRef = useRef(isOpen);
-  isOpenRef.current = isOpen;
+  // Syncs the tap handler's open state with the committed `isOpen`.
+  useLayoutEffect(() => {
+    isOpenRef.current = isOpen;
+  });
 
   // Latest values for the document listener, which outlives the render that
   // armed it.
   const hideRef = useRef(hide);
-  hideRef.current = hide;
+  // Syncs the document listener's `hide` with the committed one.
+  useLayoutEffect(() => {
+    hideRef.current = hide;
+  });
   const layerIdRef = useRef(layerId);
-  layerIdRef.current = layerId;
+  // Syncs the document listener's layer id with the committed one.
+  useLayoutEffect(() => {
+    layerIdRef.current = layerId;
+  });
   const onReleaseInLayerRef = useRef(onReleaseInLayer);
-  onReleaseInLayerRef.current = onReleaseInLayer;
+  // Syncs the document listener's release callback with the committed one.
+  useLayoutEffect(() => {
+    onReleaseInLayerRef.current = onReleaseInLayer;
+  });
 
   // Whether a tap is what opened the layer. Only a tap-open owes the user an
   // outside-tap dismissal: a hover-opened layer already closes on
@@ -539,8 +552,7 @@ export function useTouchTriggerInternal(
 
   // What a tap on the trigger does. It runs from the tap's `click`, after the
   // render that armed it, so it reads the latest props through this ref.
-  const answerTapRef = useRef<(tapEvent: Event | null) => void>(() => {});
-  answerTapRef.current = (tapEvent: Event | null) => {
+  const respondToTap = (tapEvent: Event | null) => {
     const trigger = triggerRef.current;
     // A tap that landed in a disabled control is that control's: its reason
     // opens. Every other tap is the trigger's to decide.
@@ -572,6 +584,11 @@ export function useTouchTriggerInternal(
     armOutsideDismiss();
     show();
   };
+  const answerTapRef = useRef(respondToTap);
+  // Syncs the tap's answer with the committed props.
+  useLayoutEffect(() => {
+    answerTapRef.current = respondToTap;
+  });
 
   const handlePointerDown = useCallback(
     (event: PointerEvent): boolean => {

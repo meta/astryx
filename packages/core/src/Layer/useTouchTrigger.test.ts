@@ -16,13 +16,21 @@
  * (Tooltip.test.tsx, HoverCard.test.tsx) cover the gestures it feeds.
  */
 
-import {createElement} from 'react';
-import {fireEvent, render, screen} from '@testing-library/react';
-import {describe, it, expect} from 'vitest';
+import {
+  Suspense,
+  createElement,
+  startTransition,
+  use,
+  useRef,
+  type ReactElement,
+} from 'react';
+import {act, fireEvent, render, screen} from '@testing-library/react';
+import {describe, it, expect, vi} from 'vitest';
 import {
   isActionTrigger,
   tapLandsOnDisabledControl,
   useTapStop,
+  useTouchTrigger,
 } from './useTouchTrigger';
 
 function element(html: string): HTMLElement {
@@ -196,5 +204,131 @@ describe('tapLandsOnDisabledControl', () => {
     ['<p>Read the <span data-tapped>WCAG</span> notes.</p>'],
   ])('leaves the tap to the trigger: %s', html => {
     expect(tapLandsOnDisabledControl(tappedIn(html))).toBe(false);
+  });
+});
+
+describe('useTouchTrigger after a render React discards', () => {
+  // A transition that suspends for good: React renders its element, then
+  // keeps the committed tree and never commits that render.
+  const forever = new Promise<never>(() => {});
+  function Forever(): null {
+    use(forever);
+    return null;
+  }
+
+  interface ProbeProps {
+    isOpen: boolean;
+    layerId: string;
+    show: () => void;
+    hide: () => void;
+  }
+  function Probe({isOpen, layerId, show, hide}: ProbeProps) {
+    const triggerRef = useRef<HTMLButtonElement>(null);
+    const touch = useTouchTrigger({
+      touchTrigger: 'tap',
+      isEnabled: true,
+      isControlled: false,
+      isOpen,
+      layerId,
+      triggerRef,
+      show,
+      hide,
+    });
+    return createElement(
+      'div',
+      null,
+      createElement(
+        'button',
+        {
+          ref: triggerRef,
+          type: 'button',
+          onPointerEnter: (event: {nativeEvent: PointerEvent}) =>
+            touch.handlePointerEnter(event.nativeEvent),
+          onPointerDown: (event: {nativeEvent: PointerEvent}) =>
+            touch.handlePointerDown(event.nativeEvent),
+        },
+        'Trigger',
+      ),
+      createElement('div', {id: 'layer-a'}, 'Layer A'),
+      createElement('div', {id: 'layer-b'}, 'Layer B'),
+      createElement('div', null, 'Outside'),
+    );
+  }
+  function screenOf(props: ProbeProps, isPending = false): ReactElement {
+    return createElement(
+      Suspense,
+      {fallback: null},
+      createElement(Probe, props),
+      isPending ? createElement(Forever) : null,
+    );
+  }
+  async function discardRender(
+    rerender: (ui: ReactElement) => void,
+    props: ProbeProps,
+  ): Promise<void> {
+    await act(async () => {
+      startTransition(() => {
+        rerender(screenOf(props, true));
+      });
+    });
+  }
+  /** A finger's tap, in the order a browser dispatches it. */
+  function tap(element: HTMLElement) {
+    fireEvent.pointerEnter(element, {pointerType: 'touch'});
+    fireEvent.pointerDown(element, {pointerType: 'touch'});
+    fireEvent.pointerUp(element, {pointerType: 'touch'});
+    fireEvent.click(element);
+  }
+
+  it('opens on a tap when the discarded render said the layer was open', async () => {
+    const props = {
+      isOpen: false,
+      layerId: 'layer-a',
+      show: vi.fn(),
+      hide: vi.fn(),
+    };
+    const {rerender} = render(screenOf(props));
+    await discardRender(rerender, {...props, isOpen: true});
+
+    tap(screen.getByText('Trigger'));
+
+    expect(props.show).toHaveBeenCalledOnce();
+    expect(props.hide).not.toHaveBeenCalled();
+  });
+
+  it('dismisses through the committed hide, not the discarded one', async () => {
+    const props = {
+      isOpen: false,
+      layerId: 'layer-a',
+      show: vi.fn(),
+      hide: vi.fn(),
+    };
+    const {rerender} = render(screenOf(props));
+    tap(screen.getByText('Trigger'));
+    expect(props.show).toHaveBeenCalledOnce();
+    const discardedHide = vi.fn();
+    await discardRender(rerender, {...props, hide: discardedHide});
+
+    fireEvent.pointerUp(screen.getByText('Outside'), {pointerType: 'touch'});
+
+    expect(props.hide).toHaveBeenCalledOnce();
+    expect(discardedHide).not.toHaveBeenCalled();
+  });
+
+  it('keeps a tap inside the committed layer from dismissing it', async () => {
+    const props = {
+      isOpen: false,
+      layerId: 'layer-a',
+      show: vi.fn(),
+      hide: vi.fn(),
+    };
+    const {rerender} = render(screenOf(props));
+    tap(screen.getByText('Trigger'));
+    expect(props.show).toHaveBeenCalledOnce();
+    await discardRender(rerender, {...props, layerId: 'layer-b'});
+
+    fireEvent.pointerUp(screen.getByText('Layer A'), {pointerType: 'touch'});
+
+    expect(props.hide).not.toHaveBeenCalled();
   });
 });
