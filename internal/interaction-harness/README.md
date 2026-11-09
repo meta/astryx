@@ -606,9 +606,9 @@ the burst throws `WheelPageStallError`, the page split the gesture, and the
 proof fails. A page can only widen a gap, so one no wider than the send
 spacing is the dispatch's even when a starved renderer also held the step.
 Otherwise the dispatch stalled before the page (a loaded runner) and it throws
-`WheelPacingError` with the gaps. Wrap such a
-proof in `retakeOnWheelPacing(testInfo, attempt)`: one re-take, only on
-`WheelPacingError`, listed as a `wheel-retake` annotation. The burst times the
+`WheelPacingError` with the gaps. A proof never re-takes itself: a
+`WheelPacingError` stays red, named as the runner's. Where one shows in CI's
+profile, fix the wheel's delivery, not the proof. The burst times the
 page's handling with a listener on the window that runs after the page's own.
 A step whose propagation the page stops is marked by a task queued when it
 arrived, and never later than the next step's arrival. So its handling, with
