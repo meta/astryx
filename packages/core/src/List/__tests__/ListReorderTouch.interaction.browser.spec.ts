@@ -32,7 +32,9 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  blockMainThread,
   busyWindowProof,
+  castStep,
   drag,
   flick,
   holdThenDrag,
@@ -44,7 +46,6 @@ import {
   trackMarker,
   withStorybook,
   writeEvidence,
-  type BusyWindow,
   type TouchEventStep,
 } from '@astryxdesign/interaction-harness';
 import {solveSpring, toSpring} from '../../motion/spring';
@@ -721,20 +722,10 @@ async function pitchOf(page: Page): Promise<number> {
 }
 
 /**
- * The step a screencast frame moves a glide in. Chromium's PNG frames move it
- * in 1 px steps and WebKit's JPEG frames in 2 px steps. So a spring's last
- * few px can show as a plateau, and judging stops two steps from the end.
- */
-function castStepPx(page: Page): number {
-  return page.context().browser()?.browserType().name() === 'webkit' ? 2 : 1;
-}
-
-/**
  * Films `marked` while a drag of `travel` rows runs, released at once. The
- * page blocks its own main thread for `blockMs` once the motion under test
- * has run 50 ms on its clock. A block in its first frames would hold the
- * start, by design, and a test-side trigger lands a variable number of frames
- * late.
+ * page blocks its own main thread for `blockMs` once the row's glide has run
+ * 50 ms on its clock. A block in its first frames would hold the start, by
+ * design.
  */
 async function busyProof(
   page: Page,
@@ -744,34 +735,14 @@ async function busyProof(
 ) {
   const pitch = await pitchOf(page);
   const {at: from} = await handleOf(page, 'Inbox');
-  await marked.evaluate((element, ms) => {
-    const target = element as HTMLElement;
-    const won = window as unknown as {__block?: BusyWindow};
-    const check = () => {
-      const moving = target
-        .getAnimations()
-        .find(a => a.playState === 'running' && Number(a.currentTime) >= 50);
-      if (moving == null) {
-        requestAnimationFrame(check);
-        return;
-      }
-      // From a task, so the frame being rendered finishes first.
-      setTimeout(() => {
-        const start = performance.now();
-        while (performance.now() - start < ms) {
-          // The main thread is held.
-        }
-        won.__block = {
-          from: performance.timeOrigin + start,
-          to: performance.timeOrigin + performance.now(),
-        };
-      }, 0);
-    };
-    requestAnimationFrame(check);
-  }, blockMs);
   const unmark = await markElement(marked);
   const cast = await startScreencast(page);
   const driver = await touchDriver(page);
+  const blocking = blockMainThread(page, blockMs, {
+    during: marked,
+    minProgressMs: 50,
+    property: 'translate',
+  });
   await driver.play(
     drag(
       from,
@@ -779,20 +750,15 @@ async function busyProof(
       {holdMs: HOLD_MS, durationMs, restMs: 150},
     ),
   );
+  const block = await blocking;
   // The frames after the lift, which the proof judges.
   await page.waitForTimeout(300);
   const frames = await cast.stop();
   await unmark();
-  const block = await page.evaluate(
-    () => (window as unknown as {__block?: BusyWindow}).__block ?? null,
-  );
-  if (block == null) {
-    throw new Error('the motion under test never started');
-  }
   const tracked = await trackMarker(page, frames);
   return busyWindowProof(tracked, block, {
     axis: 'y',
-    settledWithin: 2 * castStepPx(page),
+    settledWithin: 2 * castStep(tracked, 'y'),
   });
 }
 
@@ -1005,6 +971,7 @@ test.describe('the preview, the drop and the handle under a finger', () => {
       const withoutHandle = row.getBoundingClientRect().height;
       element.style.display = '';
       return {
+        ring: style.outlineStyle,
         width: box.width,
         height: box.height,
         hitHeight: hit.bottom - hit.top,
@@ -1034,7 +1001,9 @@ test.describe('the preview, the drop and the handle under a finger', () => {
       expect(geometry.gapToNext).toBeLessThanOrEqual(0.5);
     }
     expect(geometry.probeHits).toBe(true);
-    // The ring clears the lines above and below.
+    // The ring clears the lines above and below. It shows, so the band
+    // judged is the ring's.
+    expect(geometry.ring).not.toBe('none');
     expect(geometry.above).toBeGreaterThan(0);
     expect(geometry.below).toBeGreaterThan(0);
     // The handle takes only its lines' height in the row's layout.

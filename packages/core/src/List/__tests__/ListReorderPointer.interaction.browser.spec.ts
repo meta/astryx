@@ -766,6 +766,8 @@ test("with a mouse the handle keeps a plain button's text selection and callout"
       return result;
     });
     // No style of its own: a held finger's lock comes from the gesture host.
+    // Chromium has no `-webkit-touch-callout`, so that value is compared in
+    // WebKit only.
     expect(styles.handle).toEqual(styles.plain);
   } finally {
     await story.close();
