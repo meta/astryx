@@ -19,6 +19,19 @@ afterEach(() => {
   fs.rmSync(tmpDir, {recursive: true, force: true});
 });
 
+/**
+ * The code a guard rejected with, or 'accepted'.
+ * @param {() => unknown} fn
+ */
+function rejectionCode(fn) {
+  try {
+    fn();
+  } catch (err) {
+    return err instanceof PathSafetyError ? err.code : err;
+  }
+  return 'accepted';
+}
+
 describe('assertWithin', () => {
   it('accepts a relative path that stays inside root', () => {
     const result = assertWithin('subdir/file.txt', tmpDir);
@@ -36,6 +49,14 @@ describe('assertWithin', () => {
 
   it('rejects deep ../../ traversal', () => {
     expect(() => assertWithin('a/b/../../../c', tmpDir)).toThrow(PathSafetyError);
+  });
+
+  it('reports an escape with the registered ERR_PATH_TRAVERSAL code', () => {
+    // An uncaught guard error reaches the JSON envelope with this code as-is.
+    expect(rejectionCode(() => assertWithin('../escaped', tmpDir))).toBe('ERR_PATH_TRAVERSAL');
+    expect(
+      rejectionCode(() => assertWithin('/etc/passwd', tmpDir, {allowAbsolute: true})),
+    ).toBe('ERR_PATH_TRAVERSAL');
   });
 
   it('rejects absolute paths by default', () => {
@@ -160,6 +181,7 @@ describe('assertWithin — symlink escape (realpath guard)', () => {
     // path.resolve is lexical and would pass this; the realpath check must catch it.
     expect(() => assertWithin('link/evil.txt', root)).toThrow(PathSafetyError);
     expect(() => assertWithin('link/evil.txt', root)).toThrow(/outside|symlink|traversal/i);
+    expect(rejectionCode(() => assertWithin('link/evil.txt', root))).toBe('ERR_PATH_TRAVERSAL');
   });
 
   it('still accepts a legit non-existent nested path inside root', () => {
@@ -168,5 +190,33 @@ describe('assertWithin — symlink escape (realpath guard)', () => {
 
   it('rejects a NUL byte in the path', () => {
     expect(() => assertWithin('a\u0000b', root)).toThrow(PathSafetyError);
+  });
+
+  it('rejects a dangling symlink whose target is outside root', () => {
+    // A write through the link would create the missing target outside root.
+    fs.symlinkSync(path.join(outside, 'created.txt'), path.join(root, 'leaf'));
+    expect(rejectionCode(() => assertWithin('leaf', root))).toBe('ERR_PATH_TRAVERSAL');
+  });
+
+  it('rejects a path through a dangling directory symlink that points outside root', () => {
+    fs.symlinkSync(path.join(outside, 'missing-dir'), path.join(root, 'dir'));
+    expect(rejectionCode(() => assertWithin('dir/evil.txt', root))).toBe('ERR_PATH_TRAVERSAL');
+  });
+
+  it('follows a chain of links that ends in a dangling target outside root', () => {
+    fs.symlinkSync(path.join(outside, 'missing.txt'), path.join(root, 'second'));
+    fs.symlinkSync('second', path.join(root, 'first'));
+    expect(rejectionCode(() => assertWithin('first', root))).toBe('ERR_PATH_TRAVERSAL');
+  });
+
+  it('accepts a dangling symlink whose target stays inside root', () => {
+    fs.symlinkSync(path.join('sub', 'new.txt'), path.join(root, 'leaf'));
+    expect(assertWithin('leaf', root)).toBe(path.join(root, 'leaf'));
+  });
+
+  it('terminates on a symlink loop', () => {
+    fs.symlinkSync('loop', path.join(root, 'loop'));
+    const result = rejectionCode(() => assertWithin('loop', root));
+    expect(['accepted', 'ERR_PATH_TRAVERSAL']).toContain(result);
   });
 });

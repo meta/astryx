@@ -3,7 +3,7 @@
 /**
  * @file Renders a scaled live template preview inside a gallery tile.
  * @input Uses the template slug, theme mode, visibility, and measured tile size.
- * @output Renders only visible previews and releases the global queue after each committed render.
+ * @output Renders visible previews in a normalized viewport and releases the global queue after each committed render.
  * @position Client-side live preview for template gallery cards.
  */
 
@@ -24,6 +24,7 @@ import {neutralTheme} from '@astryxdesign/theme-neutral/built';
 import {useThemeMode} from '../app/providers';
 import {TEMPLATE_COMPONENTS} from './templateComponents';
 import {scheduleThumbnailRender} from './thumbnailRenderScheduler';
+import previewCss from './TemplatePreviewSurface.module.css';
 
 const FIXED_SCALE = 0.5;
 
@@ -225,8 +226,10 @@ export function TemplateThumbnail({
                 </div>
               }>
               <Theme theme={neutralTheme} mode={mode}>
-                <Component />
-                <ThumbnailRenderSettled onSettled={settleRender} />
+                <div className={previewCss.viewport}>
+                  <Component />
+                  <ThumbnailRenderSettled onSettled={settleRender} />
+                </div>
               </Theme>
             </Suspense>
           </div>

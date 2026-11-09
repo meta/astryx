@@ -128,7 +128,7 @@ export function ColorSwatch({
               onChange(tokenName, newValue);
             }
           }}
-          xstyle={s.input}
+          controlXstyle={s.input}
         />
       }
     />

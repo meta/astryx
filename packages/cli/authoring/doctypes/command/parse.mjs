@@ -8,7 +8,7 @@
 import {CommandDocKindSchema} from '../_schema.mjs';
 import {formatZodError} from '../../_shared/errors.mjs';
 
-/** @typedef {import('../types').CommandDoc} CommandDoc */
+/** @typedef {import('../types.js').CommandDoc} CommandDoc */
 
 /**
  * Validate an unknown value as a stamped command doc, or throw.

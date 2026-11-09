@@ -5,6 +5,7 @@ export const doc = {
   type: 'function',
   kind: 'api',
   name: 'integrationAddTemplate',
+  namespace: 'cli/api',
   displayName: 'integrationAddTemplate()',
   summary: 'Add a complete page or block template contribution.',
   description:

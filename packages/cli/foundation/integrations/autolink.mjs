@@ -29,8 +29,9 @@
  *     package's own package.json `name` (see loadIntegrations), so an aliased
  *     dependency reports the package it actually is.
  *
- * An explicit config entry always wins: candidates already loaded from config
- * are dropped before anything here is imported.
+ * An explicit config entry always wins: a dependency whose directory is
+ * already loaded from config is never imported again, and comes back as a
+ * repeat so the provider ledger still records it.
  *
  * @position lib — sits between config/project (the caller) and
  *   integrations/integrations (the loader); contributes no discovery of its own.
@@ -39,6 +40,13 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {findManifestPaths, loadIntegrations} from './integrations.mjs';
+import {resolveProviders} from './provider-resolution.mjs';
+import {
+  isBarePackageName,
+  resolveInstalledPackageDir,
+} from './installed-package.mjs';
+
+export {resolveInstalledPackageDir};
 
 /**
  * package.json fields whose keys name a dependency this project installs.
@@ -55,26 +63,6 @@ export const DEPENDENCY_FIELDS = Object.freeze([
   'optionalDependencies',
 ]);
 
-/**
- * Whether a dependency key is a bare package name safe to resolve.
- *
- * Mirrors the guard in {@link import('./integrations.mjs').resolvePackageDir}:
- * a name is a directory under node_modules, so a path segment (`.`, `..`) or an
- * absolute spec must never reach the resolver, which goes on to dynamically
- * import what it finds.
- *
- * @param {string} name
- * @returns {boolean}
- */
-function isBarePackageName(name) {
-  return (
-    typeof name === 'string' &&
-    name.length > 0 &&
-    !path.isAbsolute(name) &&
-    !name.startsWith('@/') &&
-    !name.split('/').some(segment => segment === '.' || segment === '..')
-  );
-}
 
 /**
  * The dependency names this project declares, in field then declaration order,
@@ -115,37 +103,6 @@ export function readDeclaredDependencies(projectDir) {
   return declared;
 }
 
-/**
- * Resolve an installed package's directory the way Node's resolver finds it:
- * the nearest `node_modules/<name>` walking up from `fromDir`.
- *
- * Walking up matters because hoisting is normal — yarn and npm workspaces lift
- * a workspace member's dependency to the repo root, so the app's own
- * node_modules can be empty of a package it genuinely declares.
- *
- * Presence is decided by the package's own package.json, not the directory, so
- * a stale empty directory is not mistaken for an install.
- *
- * @param {string} name bare package name
- * @param {string} fromDir directory to start walking up from
- * @returns {{packageDir: string, hostDir: string}|null} the resolved package
- *   directory and the directory whose node_modules holds it
- */
-export function resolveInstalledPackageDir(name, fromDir) {
-  if (!isBarePackageName(name)) return null;
-  const segments = name.split('/');
-  let dir = path.resolve(fromDir);
-  for (let i = 0; i < 50; i++) {
-    const packageDir = path.join(dir, 'node_modules', ...segments);
-    if (fs.existsSync(path.join(packageDir, 'package.json'))) {
-      return {packageDir, hostDir: dir};
-    }
-    const parent = path.dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return null;
-}
 
 /**
  * Resolve a path through symlinks for identity comparison. pnpm links every
@@ -164,6 +121,53 @@ function realPath(target) {
 }
 
 /**
+ * @typedef {object} AutolinkCandidate
+ * @property {string} spec
+ * @property {string} field
+ * @property {string} packageDir
+ * @property {string} hostDir
+ * @property {boolean} [repeat] the directory is already loaded or already a
+ *   candidate under another dependency key; it is not loaded again
+ */
+
+/**
+ * Every declared dependency that ships exactly one root manifest, in
+ * declaration order, including the ones whose directory is already loaded or
+ * already a candidate (`repeat`), so a caller can account for each of them.
+ *
+ * @param {string} projectDir directory holding the project's package.json
+ * @param {{exclude?: Iterable<string>}} [options] `exclude` — package
+ *   directories already loaded (from config); matched through symlinks
+ * @returns {AutolinkCandidate[]}
+ */
+export function scanAutolinkCandidates(projectDir, {exclude = []} = {}) {
+  const taken = new Set([...exclude].map(realPath));
+  /** @type {AutolinkCandidate[]} */
+  const candidates = [];
+
+  for (const {name, field} of readDeclaredDependencies(projectDir)) {
+    const resolved = resolveInstalledPackageDir(name, projectDir);
+    if (!resolved) continue;
+
+    if (findManifestPaths(resolved.packageDir).length !== 1) continue;
+
+    // Two dependency keys can name one installed package — an npm alias beside
+    // the package it aliases, or the two spellings of a package mid-rename
+    // resolving through one store entry. Load it once.
+    const identity = realPath(resolved.packageDir);
+    if (taken.has(identity)) {
+      candidates.push({spec: name, field, ...resolved, repeat: true});
+      continue;
+    }
+
+    taken.add(identity);
+    candidates.push({spec: name, field, ...resolved});
+  }
+
+  return candidates;
+}
+
+/**
  * Declared dependencies that ship an integration manifest and are not already
  * loaded, in declaration order.
  *
@@ -178,27 +182,82 @@ function realPath(target) {
  *   directories already loaded (from config); matched through symlinks
  * @returns {Array<{spec: string, field: string, packageDir: string, hostDir: string}>}
  */
-export function findAutolinkCandidates(projectDir, {exclude = []} = {}) {
-  const taken = new Set([...exclude].map(realPath));
-  /** @type {Array<{spec: string, field: string, packageDir: string, hostDir: string}>} */
+export function findAutolinkCandidates(projectDir, options) {
+  return scanAutolinkCandidates(projectDir, options)
+    .filter(candidate => !candidate.repeat)
+    .map(({spec, field, packageDir, hostDir}) => ({
+      spec,
+      field,
+      packageDir,
+      hostDir,
+    }));
+}
+
+/**
+ * Load every autolink candidate, each in isolation, as provider candidates for
+ * {@link resolveProviders}. Nothing is filtered here: a candidate whose load
+ * throws or whose manifest fails comes back with its error, and a repeated
+ * directory comes back unloaded, so the resolver records each one.
+ *
+ * @param {object} options
+ * @param {string} options.projectDir directory holding the project's package.json
+ * @param {import('./integrations.mjs').LoadedIntegration[]} [options.loaded]
+ *   integrations already loaded from config
+ * @param {boolean} [options.fresh]
+ * @returns {Promise<import('./provider-resolution.mjs').ProviderCandidate[]>}
+ */
+export async function loadAutolinkCandidates({
+  projectDir,
+  loaded = [],
+  fresh = false,
+}) {
+  const scanned = scanAutolinkCandidates(projectDir, {
+    // A configured entry that never resolved to a directory has none to exclude.
+    exclude: loaded.flatMap(integration =>
+      typeof integration.__packageDir === 'string'
+        ? [integration.__packageDir]
+        : [],
+    ),
+  });
+
+  /** @type {import('./provider-resolution.mjs').ProviderCandidate[]} */
   const candidates = [];
-
-  for (const {name, field} of readDeclaredDependencies(projectDir)) {
-    const resolved = resolveInstalledPackageDir(name, projectDir);
-    if (!resolved) continue;
-
-    // Two dependency keys can name one installed package — an npm alias beside
-    // the package it aliases, or the two spellings of a package mid-rename
-    // resolving through one store entry. Load it once.
-    const identity = realPath(resolved.packageDir);
-    if (taken.has(identity)) continue;
-
-    if (findManifestPaths(resolved.packageDir).length !== 1) continue;
-
-    taken.add(identity);
-    candidates.push({spec: name, field, ...resolved});
+  for (const candidate of scanned) {
+    const {spec, packageDir} = candidate;
+    if (candidate.repeat) {
+      candidates.push({source: 'autolinked', spec, packageDir, repeat: true});
+      continue;
+    }
+    try {
+      // Resolve from the directory whose node_modules actually holds the
+      // package, so a hoisted dependency resolves the same way Node found it.
+      const [integration] = await loadIntegrations([spec], {
+        cwd: candidate.hostDir,
+        fresh,
+      });
+      candidates.push({
+        source: 'autolinked',
+        spec,
+        packageDir,
+        ...(integration == null
+          ? {}
+          : {
+              integration: {
+                ...integration,
+                __autolinked: true,
+                __dependencyField: candidate.field,
+              },
+            }),
+      });
+    } catch (error) {
+      candidates.push({
+        source: 'autolinked',
+        spec,
+        packageDir,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
-
   return candidates;
 }
 
@@ -216,6 +275,12 @@ export function findAutolinkCandidates(projectDir, {exclude = []} = {}) {
  * consuming project can neither fix nor silence, and which
  * `astryx doctor integration validate <package>` reports on demand.
  *
+ * One package reached twice (an alias beside the package it aliases, at the
+ * same version) loads once. The same name at another version is kept, so the
+ * provider pass reports it instead of dropping it. Project.load does not call
+ * this; it hands {@link loadAutolinkCandidates} to the resolver, whose ledger
+ * records every candidate dropped here.
+ *
  * @param {object} options
  * @param {string} options.projectDir directory holding the project's package.json
  * @param {import('./integrations.mjs').LoadedIntegration[]} [options.loaded]
@@ -228,38 +293,26 @@ export async function autolinkIntegrations({
   loaded = [],
   fresh = false,
 }) {
-  const candidates = findAutolinkCandidates(projectDir, {
-    exclude: loaded.map(integration => integration.__packageDir),
-  });
-
+  const candidates = await loadAutolinkCandidates({projectDir, loaded, fresh});
+  const {ledger} = resolveProviders([
+    ...loaded.map(integration => ({
+      source: /** @type {const} */ ('configured'),
+      integration,
+      spec: integration.__spec,
+    })),
+    ...candidates,
+  ]);
   /** @type {import('./integrations.mjs').LoadedIntegration[]} */
   const autolinked = [];
-  const names = new Set(loaded.map(integration => integration.name));
-
-  for (const candidate of candidates) {
-    /** @type {import('./integrations.mjs').LoadedIntegration|undefined} */
-    let integration;
-    try {
-      // Resolve from the directory whose node_modules actually holds the
-      // package, so a hoisted dependency resolves the same way Node found it.
-      [integration] = await loadIntegrations([candidate.spec], {
-        cwd: candidate.hostDir,
-        fresh,
-      });
-    } catch {
-      continue;
+  for (const entry of ledger.values()) {
+    const {candidate} = entry;
+    if (
+      candidate.source === 'autolinked' &&
+      candidate.integration != null &&
+      (entry.outcome === 'contributes' || entry.outcome === 'set-aside')
+    ) {
+      autolinked.push(candidate.integration);
     }
-    if (!integration || integration.__loadError) continue;
-    // Identity is the resolved package's own name, so an alias and the package
-    // it aliases collapse here even when they are two directories on disk.
-    if (names.has(integration.name)) continue;
-    names.add(integration.name);
-    autolinked.push({
-      ...integration,
-      __autolinked: true,
-      __dependencyField: candidate.field,
-    });
   }
-
   return autolinked;
 }

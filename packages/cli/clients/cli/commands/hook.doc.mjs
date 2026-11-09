@@ -12,7 +12,7 @@ export const doc = {
   type: 'command',
   name: 'hook',
   displayName: 'astryx hook',
-  namespace: 'cli',
+  namespace: 'cli/commands',
   summary: 'List hooks or print hook docs',
   description:
     'Resolves a hook by name and prints its authored doc, or lists the catalog grouped ' +
@@ -40,6 +40,7 @@ export const doc = {
     {label: 'Browse the catalog', cli: 'astryx hook --list'},
     {label: 'One hook as JSON', cli: 'astryx hook useFocusTrap --json'},
   ],
+  outsideProject: 'same',
   exitCodes: [
     {code: 0, when: 'success'},
     {

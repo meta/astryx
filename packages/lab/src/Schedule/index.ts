@@ -17,14 +17,8 @@ export {
   createScheduleWeeklyView,
   type ScheduleWeeklyViewOptions,
 } from './WeeklyView';
-export {
-  createScheduleDayView,
-  type ScheduleDayViewOptions,
-} from './DayView';
-export {
-  createScheduleListView,
-  type ScheduleListViewOptions,
-} from './ListView';
+export {createScheduleDayView, type ScheduleDayViewOptions} from './DayView';
+export {createScheduleListView, type ScheduleListViewOptions} from './ListView';
 export {ScheduleContext, useScheduleContext} from './context';
 export {
   defaultSchedulePlugins,
@@ -55,6 +49,7 @@ export type {
   ScheduleHeaderContent,
   SchedulePlugin,
   SchedulePluginPosition,
+  ScheduleTimeGridViewOptions,
   ScheduleView,
   ScheduleViewBase,
   ScheduleViewOptions,

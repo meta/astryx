@@ -30,6 +30,10 @@ export const TEMPLATE_COMPONENTS: Record<
   blank: lazy(
     () => import('../../../../packages/cli/assets/templates/pages/blank/page'),
   ),
+  'canvas-editor': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/canvas-editor/page'),
+  ),
   'centered-hero': lazy(
     () =>
       import('../../../../packages/cli/assets/templates/pages/centered-hero/page'),
@@ -45,6 +49,10 @@ export const TEMPLATE_COMPONENTS: Record<
   'contact-form': lazy(
     () =>
       import('../../../../packages/cli/assets/templates/pages/contact-form/page'),
+  ),
+  'course-detail': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/course-detail/page'),
   ),
   dashboard: lazy(
     () =>
@@ -194,9 +202,17 @@ export const TEMPLATE_COMPONENTS: Record<
   table: lazy(
     () => import('../../../../packages/cli/assets/templates/pages/table/page'),
   ),
+  'table-comparison': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/table-comparison/page'),
+  ),
   'table-filter': lazy(
     () =>
       import('../../../../packages/cli/assets/templates/pages/table-filter/page'),
+  ),
+  'table-collapsible': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/table-collapsible/page'),
   ),
   'table-grouped': lazy(
     () =>
@@ -209,6 +225,14 @@ export const TEMPLATE_COMPONENTS: Record<
   'table-page': lazy(
     () =>
       import('../../../../packages/cli/assets/templates/pages/table-page/page'),
+  ),
+  'table-tree': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/table-tree/page'),
+  ),
+  'work-item-detail': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/work-item-detail/page'),
   ),
 };
 

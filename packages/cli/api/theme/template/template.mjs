@@ -4,10 +4,9 @@
  * @file `astryx theme template` leaf — writes the annotated theme template into the
  * consumer's project.
  *
- * Sibling of `theme add`: both answer "put a theme starting point in my
- * project", and they split on where you start. `add` copies a theme we ship
- * (you like stone, you want to own it); `template` writes the blank annotated
- * reference (you want your own, and need to know what the surface contains).
+ * `theme add` uses an installed built theme without copying source. This command
+ * writes the blank annotated reference for a new theme. `theme eject` is the
+ * separate path for starting from a complete source fork of an existing theme.
  *
  * The template is a doc that happens to compile, so it is one file at the
  * project root by default rather than a package under src/themes/ — you read
@@ -62,8 +61,17 @@ export function themeTemplate(options = {}) {
 
   // Our repo header has no business in someone else's source tree.
   const contents = stripCopyrightHeader(fs.readFileSync(THEME_TEMPLATE_SRC, 'utf-8'));
-  fs.mkdirSync(path.dirname(resolved), {recursive: true});
-  fs.writeFileSync(resolved, contents);
+  try {
+    fs.mkdirSync(path.dirname(resolved), {recursive: true});
+    fs.writeFileSync(resolved, contents);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new AstryxError(
+      `Failed to write the theme template to ${relative}: ${message}`,
+      undefined,
+      ERROR_CODES.ERR_WRITE_FAILED,
+    );
+  }
 
   return {type: 'theme.template', data: {path: relative, written: true, reason: null}};
 }

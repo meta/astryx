@@ -40,6 +40,20 @@ export function generateMarkdownFixture(sectionCount: number): string {
   ].join('\n\n');
 }
 
+export function formatBenchmarkChange(
+  value: number | null,
+  baseline: number | null,
+): string {
+  if (value == null || baseline == null) {
+    return '—';
+  }
+  if (baseline === 0) {
+    return value === 0 ? '0.0%' : 'new';
+  }
+  const percent = ((value - baseline) / baseline) * 100;
+  return `${percent >= 0 ? '+' : ''}${percent.toFixed(1)}%`;
+}
+
 export function nextStreamOffset(
   sourceLength: number,
   currentOffset: number,

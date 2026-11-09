@@ -22,7 +22,7 @@
 import {z} from 'zod';
 import {formatZodError} from '../_shared/errors.mjs';
 
-/** @typedef {import('./type').DebugEvent} DebugEvent */
+/** @typedef {import('./type.js').DebugEvent} DebugEvent */
 
 const outcomeSchema = z.enum([
   'ok',
@@ -169,8 +169,8 @@ const eventSchema = z
  * `Expect<false>` fails the `tsconfig.authoring-contract.json` typecheck —
  * so a field added to the recorder without being published here breaks CI.
  *
- * @typedef {import('../_shared/contract').Expect<
- *   import('../_shared/contract').MutuallyAssignable<z.infer<typeof eventSchema>, DebugEvent>
+ * @typedef {import('../_shared/contract.js').Expect<
+ *   import('../_shared/contract.js').MutuallyAssignable<z.infer<typeof eventSchema>, DebugEvent>
  * >} _DebugEventDriftLock
  */
 

@@ -5,24 +5,21 @@ export const doc = {
   type: 'command',
   name: 'integration pack',
   displayName: 'astryx integration pack',
-  namespace: 'cli',
-  summary: 'Prove the packed integration is what consumers receive',
+  namespace: 'cli/commands',
+  summary: 'Deprecated: the old name of `integration verify`',
   description:
-    'Runs the package lifecycle, packs with npm, checks every required contribution file against the real tarball, extracts it into a scratch consumer, and compares the local and packed contribution inventories through one shared contract.',
+    '`{@command integration pack --check}` is the name this check had before {@link command:integration verify}. It still runs the same check, with the same output, JSON, and exit codes, and prints a note that names `integration verify`. It will be removed in a later release. Outside a package it writes nothing and reports one failed check, no_package, naming the integration package it needs (exit 1).',
   fn: 'integrationPackCheck',
   options: [
     {
       flag: '--check',
-      description: 'Run the packed-package verification gate',
+      description: 'Run the check. Required, as before.',
     },
   ],
   examples: [
-    {label: 'Verify before publishing', cli: 'astryx integration pack --check'},
-    {
-      label: 'Machine-readable result',
-      cli: 'astryx integration pack --check --json',
-    },
+    {label: 'The old spelling', cli: 'astryx integration pack --check'},
   ],
+  outsideProject: 'own',
   exitCodes: [
     {code: 0, when: 'the packed package exposes the same valid contributions'},
     {
@@ -30,5 +27,11 @@ export const doc = {
       when: '--check is omitted or the tarball is incomplete or invalid',
     },
   ],
-  related: ['integration add', 'doctor integration validate'],
+  related: ['integration verify'],
+  notes: [
+    {
+      type: 'prose',
+      text: "In global mode: outside a package, `integration pack --check` writes nothing, reports one failed check, `no_package`, and exits 1. In a project, the project's version of Astryx runs it, whichever astryx command you start. See {@link namespace:global} and {@link generic:global-integrations}.",
+    },
+  ],
 };

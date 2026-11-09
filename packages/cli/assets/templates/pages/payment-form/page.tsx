@@ -714,7 +714,7 @@ export default function PaymentFormPage() {
                               placeholder="Enter promo code"
                               value={promo}
                               onChange={setPromo}
-                              style={fullWidth}
+                              controlStyle={fullWidth}
                             />
                           </StackItem>
                           <Button

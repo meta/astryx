@@ -6,10 +6,18 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {listDir, listDirEntries, pathExists} from '../fs/listing-cache.mjs';
 import {existsCaseExact} from '../fs/paths.mjs';
 import {levenshteinDistance} from '../text/string-utils.mjs';
 
 const SKIP_DIRS = new Set(['utils', '__tests__', 'node_modules']);
+
+// A hook's doc outside src/hooks/: a `use…` hook, or a `create…` factory
+// documented as one (its doc typed `HookDoc`, such as createReorderable).
+const HOOK_DOC_FILE_RE = /^(?:use|create)[A-Z]\w*\.doc\.mjs$/;
+
+// Matches the top-level `relatedHooks: [...]` field in a hook .doc.mjs file.
+const RELATED_HOOKS_RE = /(?:^|\n) {0,4}relatedHooks:\s*\[([^\]]*)\]/;
 
 // Matches the top-level `category: 'categoryName'` field in a hook .doc.mjs file.
 const CATEGORY_RE = /(?:^|\n) {0,4}category:\s*['"]([^'"]+)['"]/;
@@ -28,6 +36,25 @@ function readHookMeta(docPath) {
     };
   } catch {
     return {category: null};
+  }
+}
+
+/**
+ * Whether a `create…` factory's doc names its own `use…` hook in
+ * `relatedHooks`, as createAnimator's names useAnimator. Such a factory is
+ * listed beside that hook, not on its own.
+ * @param {string} docPath
+ * @param {string} hookName
+ * @returns {boolean}
+ */
+function isBesideOwnHook(docPath, hookName) {
+  if (!hookName.startsWith('create')) return false;
+  const ownHook = `use${hookName.slice('create'.length)}`;
+  try {
+    const related = RELATED_HOOKS_RE.exec(fs.readFileSync(docPath, 'utf-8'));
+    return related != null && related[1].includes(`'${ownHook}'`);
+  } catch {
+    return false;
   }
 }
 
@@ -57,8 +84,8 @@ export function discoverHooks(coreDir) {
   const hookCategories = new Map();
 
   // 1. Scan src/hooks/ for *.doc.mjs files
-  if (fs.existsSync(hooksDir)) {
-    const entries = fs.readdirSync(hooksDir, {withFileTypes: true});
+  if (pathExists(hooksDir)) {
+    const entries = listDirEntries(hooksDir);
     for (const entry of entries) {
       if (!entry.isFile()) continue;
       if (!entry.name.endsWith('.doc.mjs')) continue;
@@ -69,9 +96,10 @@ export function discoverHooks(coreDir) {
     }
   }
 
-  // 2. Scan ALL component directories for files matching use*.doc.mjs
-  if (fs.existsSync(srcDir)) {
-    const topEntries = fs.readdirSync(srcDir, {withFileTypes: true});
+  // 2. Scan ALL component directories for hook docs: use*.doc.mjs, and
+  // create*.doc.mjs for a factory documented as a hook (createReorderable)
+  if (pathExists(srcDir)) {
+    const topEntries = listDirEntries(srcDir);
     for (const entry of topEntries) {
       if (!entry.isDirectory() || SKIP_DIRS.has(entry.name) || entry.name === 'hooks') continue;
       const dirPath = path.join(srcDir, entry.name);
@@ -114,19 +142,15 @@ export function discoverHooks(coreDir) {
  * @param {Map<string, string>} hookCategories
  */
 function scanDirForHookDocs(dirPath, hookCategories) {
-  if (!fs.existsSync(dirPath)) return;
-  const entries = fs.readdirSync(dirPath, {withFileTypes: true});
+  if (!pathExists(dirPath)) return;
+  const entries = listDirEntries(dirPath);
   for (const entry of entries) {
     if (entry.isDirectory() && !SKIP_DIRS.has(entry.name)) {
       scanDirForHookDocs(path.join(dirPath, entry.name), hookCategories);
-    } else if (
-      entry.isFile() &&
-      entry.name.startsWith('use') &&
-      entry.name.endsWith('.doc.mjs')
-    ) {
+    } else if (entry.isFile() && HOOK_DOC_FILE_RE.test(entry.name)) {
       const hookName = hookNameFromFile(entry.name);
-      if (!hookCategories.has(hookName)) {
-        const docPath = path.join(dirPath, entry.name);
+      const docPath = path.join(dirPath, entry.name);
+      if (!hookCategories.has(hookName) && !isBesideOwnHook(docPath, hookName)) {
         const {category} = readHookMeta(docPath);
         hookCategories.set(hookName, category || 'Other');
       }
@@ -162,8 +186,8 @@ export function findHookDoc(coreDir, name) {
   }
 
   // 2. Case-insensitive search in hooks directory
-  if (fs.existsSync(hooksDir)) {
-    const entries = fs.readdirSync(hooksDir);
+  if (pathExists(hooksDir)) {
+    const entries = listDir(hooksDir);
     for (const entry of entries) {
       if (!entry.endsWith('.doc.mjs')) continue;
       const hookName = hookNameFromFile(entry);
@@ -175,8 +199,8 @@ export function findHookDoc(coreDir, name) {
   }
 
   // 3. Check all component dirs for {name}.doc.mjs or use{Name}.doc.mjs
-  if (fs.existsSync(srcDir)) {
-    const topEntries = fs.readdirSync(srcDir, {withFileTypes: true});
+  if (pathExists(srcDir)) {
+    const topEntries = listDirEntries(srcDir);
     for (const entry of topEntries) {
       if (!entry.isDirectory() || SKIP_DIRS.has(entry.name) || entry.name === 'hooks') continue;
       const found = searchDirForHookDoc(path.join(srcDir, entry.name), uniqueCandidates);
@@ -213,8 +237,8 @@ export function findHookDoc(coreDir, name) {
  * @returns {string | null}
  */
 function searchDirForHookDoc(dirPath, candidates) {
-  if (!fs.existsSync(dirPath)) return null;
-  const entries = fs.readdirSync(dirPath, {withFileTypes: true});
+  if (!pathExists(dirPath)) return null;
+  const entries = listDirEntries(dirPath);
   for (const entry of entries) {
     if (entry.isDirectory() && !SKIP_DIRS.has(entry.name)) {
       const found = searchDirForHookDoc(path.join(dirPath, entry.name), candidates);

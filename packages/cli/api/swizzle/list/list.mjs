@@ -8,7 +8,7 @@
  * shared seam. All human prose / usage hints live in the CLI renderer.
  */
 
-import {resolveCore} from '../_adapter.mjs';
+import {CORE_PACKAGE, resolveCore} from '../_adapter.mjs';
 
 /**
  * List swizzlable components discoverable from `cwd`'s @astryxdesign/core.
@@ -17,5 +17,5 @@ import {resolveCore} from '../_adapter.mjs';
  */
 export function swizzleList(cwd = process.cwd()) {
   const {components} = resolveCore(cwd);
-  return {type: 'swizzle.list', data: components};
+  return {type: 'swizzle.list', package: CORE_PACKAGE, data: components};
 }

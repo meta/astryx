@@ -14,7 +14,7 @@
  * gap-report handlers.
  */
 
-import type {DebugInvocationSource} from '../debug/type';
+import type {DebugInvocationSource} from '../debug/type.js';
 
 /** Supported gap-report categories. */
 export type GapReportCategory =

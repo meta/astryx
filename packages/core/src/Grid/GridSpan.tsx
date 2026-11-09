@@ -7,8 +7,10 @@
  * @position Grid span component; controls grid item span
  *
  * SYNC: When modified, update these files to stay in sync:
+ * - /packages/core/src/Grid/GridSpan.doc.mjs
  * - /packages/core/src/Grid/Grid.doc.mjs
  * - /packages/core/src/Grid/Grid.test.tsx
+ * - /apps/storybook/stories/GridSpan.stories.tsx
  * - /apps/storybook/stories/Grid.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/Grid/ (showcase blocks)
  */
@@ -25,7 +27,7 @@ export interface GridSpanProps extends BaseProps<HTMLDivElement> {
   /**
    * Number of columns to span, or 'full' to span all columns.
    * - Number: `grid-column: span N`
-   * - 'full': `grid-column: 1 / -1` (spans entire row)
+   * - 'full': `grid-column: 1 / -1` (spans all explicit columns)
    */
   columns?: number | 'full';
 
@@ -47,6 +49,9 @@ const baseStyles = stylex.create({
     minWidth: 0, // Prevent overflow in grid
     // Make span fill grid cell and stretch children
     display: 'grid',
+    // The implicit `auto` column would grow to a child's min-content width;
+    // a zero minimum keeps it inside the span.
+    gridTemplateColumns: 'minmax(0, 1fr)',
     height: '100%',
   },
 });

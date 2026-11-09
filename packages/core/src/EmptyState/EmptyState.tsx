@@ -2,7 +2,7 @@
 
 /**
  * @file EmptyState.tsx
- * @input Uses React, HTMLAttributes
+ * @input Uses React, HTMLAttributes, AnnounceRenderedText
  * @output Exports EmptyState component, EmptyStateProps type
  * @position Core implementation; consumed by index.ts
  *
@@ -23,7 +23,9 @@ import {
   typeScaleVars,
 } from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
-import {mergeProps} from '../utils';
+import {AnnounceRenderedText} from '../hooks/AnnounceRenderedText';
+import {isRenderable} from '../utils/isRenderable';
+import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
 
 const styles = stylex.create({
@@ -123,7 +125,9 @@ export interface EmptyStateProps extends BaseProps<HTMLDivElement> {
  * An empty state placeholder for content areas with no data.
  * Displays an icon or illustration, title, optional description, and action buttons.
  *
- * Uses `role="status"` to announce content to screen readers.
+ * Not a live region. Its title and description are announced once when they
+ * appear or change after the page loaded, never when the page first renders
+ * with them (`spec:AST-086` FR2).
  * Styles use Astryx theme tokens via StyleX. Wrap your app in <Theme> to apply a theme.
  *
  * @example
@@ -158,7 +162,6 @@ export function EmptyState({
     <div
       ref={ref}
       {...props}
-      role="status"
       {...mergeProps(
         themeProps('empty-state', {variant: isCompact ? 'compact' : null}),
         stylex.props(
@@ -169,8 +172,8 @@ export function EmptyState({
         className,
         style,
       )}>
-      {icon != null && <div aria-hidden="true">{icon}</div>}
-      <div {...stylex.props(styles.textGroup)}>
+      {isRenderable(icon) && <div aria-hidden="true">{icon}</div>}
+      <AnnounceRenderedText {...stylex.props(styles.textGroup)}>
         {createElement(
           HeadingTag,
           mergeProps(
@@ -181,11 +184,7 @@ export function EmptyState({
           ),
           title,
         )}
-        {description != null && (
-          // Rendered as <div> (not <p>): description accepts ReactNode and a
-          // <p> cannot legally contain block children, which causes hydration
-          // mismatches. The StyleX style sets margin: 0, so appearance is
-          // unchanged.
+        {isRenderable(description) && (
           <div
             {...mergeProps(
               themeProps('empty-state-description', {
@@ -199,8 +198,8 @@ export function EmptyState({
             {description}
           </div>
         )}
-      </div>
-      {actions != null && (
+      </AnnounceRenderedText>
+      {isRenderable(actions) && (
         <div
           {...stylex.props(styles.actions, isCompact && styles.actionsCompact)}>
           {actions}

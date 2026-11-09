@@ -10,6 +10,7 @@
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Outline/Outline.doc.mjs
+ * - /packages/core/src/Outline/useOutlineFromMarkdown.doc.mjs
  * - /packages/core/src/Outline/index.ts
  */
 
@@ -29,7 +30,11 @@ export function useOutlineFromMarkdown<
   const plugins = options?.plugins;
   const isFinal = options?.isFinal;
   return useMemo(
-    () => parseOutlineFromMarkdown(markdown, {plugins, isFinal}),
+    () =>
+      parseOutlineFromMarkdown(markdown, {
+        plugins,
+        isFinal,
+      }),
     [markdown, plugins, isFinal],
   );
 }

@@ -5,6 +5,7 @@ import {render, screen} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
 import {StatusDot} from './StatusDot';
+import {getForcedColorsRules} from '../__tests__/forcedColors';
 
 /** Renders a StatusDot and returns its root element. */
 function renderDot(props: React.ComponentProps<typeof StatusDot>) {
@@ -143,26 +144,37 @@ describe('StatusDot', () => {
   });
 
   describe('variant ink (a passed icon paints from currentColor)', () => {
-    it('pairs the warning plate with the dedicated dark on-warning ink', () => {
-      // The regression this guards: a light surface ink on the yellow warning
-      // plate lands near 2:1, while `--color-on-warning` is the fixed dark
-      // ink (~9.6:1). An icon inherits the ink via `currentColor`, so the
-      // pairing is what keeps custom icons legible.
+    it('paints each status plate in its icon role with the surface as ink', () => {
+      // A status dot is a mark on the page: the icon role holds 3:1 or more
+      // against the page and card surfaces, where the strong warning fill
+      // lands near 1.8:1 on a muted card. An icon inherits the ink via
+      // `currentColor`; the surface ink keeps the same pair the other way
+      // round.
       const probe = stylex.create({
+        success: {
+          backgroundColor: colorVars['--color-icon-success'],
+          color: colorVars['--color-background-surface'],
+        },
         warning: {
-          backgroundColor: colorVars['--color-warning'],
-          color: colorVars['--color-on-warning'],
+          backgroundColor: colorVars['--color-icon-warning'],
+          color: colorVars['--color-background-surface'],
+        },
+        error: {
+          backgroundColor: colorVars['--color-icon-error'],
+          color: colorVars['--color-background-surface'],
         },
       });
-      const dot = renderDot({variant: 'warning', label: 'Degraded'});
-      const atomicClasses = (stylex.props(probe.warning).className ?? '')
-        .split(' ')
-        // Dev mode prepends a per-file `File__style.key` debug class that
-        // legitimately differs between the probe and the component.
-        .filter(cls => !cls.includes('__'));
-      expect(atomicClasses.length).toBeGreaterThan(0);
-      for (const cls of atomicClasses) {
-        expect(dot.className).toContain(cls);
+      for (const variant of ['success', 'warning', 'error'] as const) {
+        const dot = renderDot({variant, label: variant});
+        const atomicClasses = (stylex.props(probe[variant]).className ?? '')
+          .split(' ')
+          // Dev mode prepends a per-file `File__style.key` debug class that
+          // legitimately differs between the probe and the component.
+          .filter(cls => !cls.includes('__'));
+        expect(atomicClasses.length).toBeGreaterThan(0);
+        for (const cls of atomicClasses) {
+          expect(dot.className, variant).toContain(cls);
+        }
       }
     });
   });
@@ -191,10 +203,22 @@ describe('StatusDot', () => {
 });
 
 describe('StatusDot theme target names', () => {
-  it('renders the deprecated class beside the current one', () => {
+  it('renders only the canonical target class', () => {
     render(<StatusDot variant="success" label="Online" />);
     const dot = screen.getByRole('img', {name: 'Online'});
     expect(dot).toHaveClass('astryx-status-dot');
-    expect(dot).toHaveClass('astryx-statusdot');
+    expect(dot).not.toHaveClass('astryx-statusdot');
+  });
+});
+
+// jsdom cannot emulate forced colors, so this asserts the compiled rule the
+// status fill relies on (architecture:theme-tokens INV11): the fill becomes
+// Canvas, and a CanvasText boundary keeps its shape.
+describe('StatusDot forced colors', () => {
+  it('keeps a visible boundary on the status fill', () => {
+    render(<StatusDot variant="error" label="Offline" />);
+    const css = getForcedColorsRules();
+    expect(css).toContain('outline-style: solid;');
+    expect(css).toContain('outline-color: canvastext;');
   });
 });

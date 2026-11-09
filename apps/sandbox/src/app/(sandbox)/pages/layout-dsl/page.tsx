@@ -45,20 +45,20 @@ function heuristicTokens(src: string): number {
 /**
  * Loads the build-time tokenizer module from public/xle-tokenizer.mjs
  * (esbuild-bundled gpt-tokenizer o200k_base, or a heuristic fallback — see
- * scripts/generate-xle-tokenizer.mjs). Loaded client-side via a webpackIgnore
- * runtime import so the sandbox build never depends on gpt-tokenizer resolving
- * through webpack. Falls back to the inline heuristic until it's ready. The
- * basePath prefix keeps the asset reachable under the GitHub Pages deployment.
+ * scripts/generate-xle-tokenizer.mjs). Loaded by URL with Vite's dynamic
+ * import analysis disabled; the build never needs gpt-tokenizer installed.
+ * The inline heuristic runs until that module loads. The Vite base path keeps
+ * the asset reachable at /sandbox/ and during root-local development.
  */
 type TokenizerModule = {countTokens: (s: string) => number; ENCODER: string};
-const TOKENIZER_URL = `${process.env.NEXT_PUBLIC_BASE_PATH || ''}/xle-tokenizer.mjs`;
+const TOKENIZER_URL = `${import.meta.env.BASE_URL}xle-tokenizer.mjs`;
 
 function useTokenCounter() {
   const [bpe, setBpe] = useState<((s: string) => number) | null>(null);
   const [encoder, setEncoder] = useState('est.');
   useEffect(() => {
     let alive = true;
-    (import(/* webpackIgnore: true */ TOKENIZER_URL) as Promise<TokenizerModule>)
+    (import(/* @vite-ignore */ TOKENIZER_URL) as Promise<TokenizerModule>)
       .then(m => {
         if (!alive) {
           return;
@@ -194,7 +194,8 @@ const s = stylex.create({
     textAlign: 'start',
     paddingBlock: 'var(--spacing-1)',
     paddingInline: 'var(--spacing-2)',
-    border: 'none',
+    borderWidth: 0,
+    borderStyle: 'none',
     backgroundColor: {
       default: 'transparent',
       ':hover': 'var(--color-background-hover, var(--color-background-muted))',
@@ -206,7 +207,8 @@ const s = stylex.create({
     borderBottomColor: 'var(--color-border-subtle, var(--color-border))',
   },
   rowActive: {
-    backgroundColor: 'var(--color-background-active, var(--color-background-muted))',
+    backgroundColor:
+      'var(--color-background-active, var(--color-background-muted))',
   },
   rowLabel: {fontSize: 'var(--text-sm, 13px)', fontWeight: 600},
   rowExpr: {
@@ -227,7 +229,15 @@ const s = stylex.create({
   min0: {minWidth: 0},
 });
 
-function Metric({label, value, sub}: {label: string; value: string; sub?: string}) {
+function Metric({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+}) {
   return (
     <div {...stylex.props(s.metric)}>
       <Text type="supporting">{label}</Text>
@@ -329,9 +339,9 @@ export default function LayoutDSLPage() {
         <Heading level={2}>Layout DSL</Heading>
         <Text type="supporting">
           Write a compressed layout expression (compact XLE or indented outline
-          XLO). It is validated live against @astryxdesign/core; the expanded TSX
-          and token counts update below. The whole pipeline runs in-browser via
-          the @astryxdesign/cli/xle barrel.
+          XLO). It is validated live against @astryxdesign/core; the expanded
+          TSX and token counts update below. The whole pipeline runs in-browser
+          via the @astryxdesign/cli/xle barrel.
         </Text>
       </VStack>
 
@@ -390,7 +400,11 @@ export default function LayoutDSLPage() {
         />
         <Metric
           label="Expansion"
-          value={inTokens > 0 && outTokens > 0 ? `${(outTokens / inTokens).toFixed(1)}×` : '—'}
+          value={
+            inTokens > 0 && outTokens > 0
+              ? `${(outTokens / inTokens).toFixed(1)}×`
+              : '—'
+          }
           sub="output ÷ input"
         />
       </div>
@@ -422,7 +436,9 @@ export default function LayoutDSLPage() {
               <Text type="supporting">
                 {expanded.componentsUsed.length} components
                 {expanded.states ? ` · ${expanded.states} state hooks` : ''}
-                {expanded.todos.length ? ` · ${expanded.todos.length} TODO` : ''}
+                {expanded.todos.length
+                  ? ` · ${expanded.todos.length} TODO`
+                  : ''}
               </Text>
             )}
           </HStack>
@@ -433,7 +449,10 @@ export default function LayoutDSLPage() {
       {valid && (
         <VStack gap={1}>
           <Text type="label">Canonical forms</Text>
-          <pre {...stylex.props(s.echo)}>{`compact:\n${check.compact}\n\noutline:\n${check.outline}`}</pre>
+          <pre
+            {...stylex.props(
+              s.echo,
+            )}>{`compact:\n${check.compact}\n\noutline:\n${check.outline}`}</pre>
         </VStack>
       )}
 
@@ -466,7 +485,10 @@ export default function LayoutDSLPage() {
                   <button
                     key={ex.label}
                     type="button"
-                    {...stylex.props(s.row, ex.label === activeLabel && s.rowActive)}
+                    {...stylex.props(
+                      s.row,
+                      ex.label === activeLabel && s.rowActive,
+                    )}
                     onClick={() => pick(ex.label, ex.expr)}>
                     <VStack gap={0} xstyle={s.min0}>
                       <span {...stylex.props(s.rowLabel)}>{ex.label}</span>
@@ -474,7 +496,9 @@ export default function LayoutDSLPage() {
                         {ex.expr.replace(/\n/g, ' ⏎ ')}
                       </span>
                     </VStack>
-                    <span {...stylex.props(s.rowTok)}>{countTokens(ex.expr)} tok</span>
+                    <span {...stylex.props(s.rowTok)}>
+                      {countTokens(ex.expr)} tok
+                    </span>
                   </button>
                 ))}
               </div>

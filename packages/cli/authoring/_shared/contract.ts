@@ -28,5 +28,27 @@ export type MutuallyAssignable<A, B> = [A] extends [B]
     : false
   : false;
 
+/**
+ * `T` without string or number index signatures, at every depth. A
+ * `.passthrough()` schema infers one and a hand-written interface never has
+ * one, so a lock drops them before comparing named fields. Recursive fields
+ * that a schema casts to their public type compare equal by construction.
+ */
+export type NamedFields<T> = T extends readonly (infer U)[]
+  ? NamedFields<U>[]
+  : T extends (...args: never[]) => unknown
+    ? T
+    : T extends object
+      ? {
+          [
+            K in keyof T as string extends K
+              ? never
+              : number extends K
+                ? never
+                : K
+          ]: NamedFields<T[K]>;
+        }
+      : T;
+
 /** Compiles only when `T` is exactly `true`; otherwise a type error. */
 export type Expect<T extends true> = T;

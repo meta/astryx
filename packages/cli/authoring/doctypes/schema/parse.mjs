@@ -8,7 +8,7 @@
 import {SchemaDocKindSchema} from '../_schema.mjs';
 import {formatZodError} from '../../_shared/errors.mjs';
 
-/** @typedef {import('../types').SchemaDoc} SchemaDoc */
+/** @typedef {import('../types.js').SchemaDoc} SchemaDoc */
 
 /**
  * Validate an unknown value as a stamped schema doc, or throw.

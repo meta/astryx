@@ -271,9 +271,9 @@ export interface TonalColor {
    *      snap-to-ramp matching so tokens whose values come from the
    *      canonical ramp don't show up as "off-ramp".
    *
-   * Numeric keys are interpreted as tone steps; non-numeric keys
-   * (e.g. `hue`, `chroma`) are ignored. This permissive shape matches
-   * theme palette exports like `stonePalettes.red` (which carry both).
+   * Numeric keys are interpreted as tone steps; non-numeric compatibility
+   * metadata is ignored. Pass a family's explicit `light` and `dark` ramps
+   * when the theme owns separate mode-aware palette values.
    *
    * Omit for themes that don't carry a custom-tuned ramp — the audit
    * + preview both fall back to generating the ramp from `sourceHex`
@@ -755,10 +755,7 @@ function CheckboxRadioSwitchSection() {
             isDisabled
           />
         </VStack>
-        <RadioList
-          label="Display mode"
-          value="comfortable"
-          onChange={() => {}}>
+        <RadioList label="Display mode" value="comfortable" onChange={() => {}}>
           <RadioListItem value="compact" label="Compact" />
           <RadioListItem value="comfortable" label="Comfortable" />
           <RadioListItem value="spacious" label="Spacious" />
@@ -1044,7 +1041,6 @@ function TonalSection({
           margin: 0,
           marginBottom: 20,
         }}>
-        
         Full HCT tonal ramps: 21 perceptually uniform steps from black (T0) to
         white (T100).
         {isDark && (

@@ -11,7 +11,8 @@
  * A toggle button that connects to useChatDictation. Shows a microphone
  * icon when idle. When listening, replaces the icon with volume-reactive
  * frequency bars (equalizer style) that respond to real mic input.
- * Bars use the accent color and hue-shift when volume clips past 10%.
+ * Bars use the accent color and blend toward the semantic error color when
+ * volume clips past 20%.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Chat/index.ts (exports)
@@ -27,7 +28,13 @@ import {Icon} from '../Icon';
 import {mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Chat/ChatDictationButton.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Types
@@ -39,7 +46,7 @@ export interface ChatDictationButtonProps extends BaseProps<HTMLSpanElement> {
   dictation: UseSpeechRecognitionReturn;
   /** Button size. @default "md" */
   size?: 'sm' | 'md';
-  /** Hide the button when SpeechRecognition is not supported. @default true */
+  /** Hide the button when SpeechRecognition is unsupported. When false, the unsupported button remains visible but disabled. @default true */
   isHiddenWhenUnsupported?: boolean;
   /** Accessible label override. */
   label?: string;
@@ -112,7 +119,7 @@ export function ChatDictationButton({
   style,
   ...rest
 }: ChatDictationButtonProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
 
   if (isHiddenWhenUnsupported && !dictation.isSupported) {
     return null;
@@ -128,13 +135,13 @@ export function ChatDictationButton({
   // Boost each band for visibility — quiet speech (0-10%) maps to full visual range
   const boostedBands = bands.map(b => Math.min(Math.pow(b / 0.2, 0.5), 1));
 
-  // Hue shift from accent color when volume clips past 10%
+  // Blend toward the theme's semantic error color as clipping increases.
   const isClipping = rawVolume >= 0.2;
-  const hueShift = isClipping ? Math.min((rawVolume - 0.2) / 0.1, 1) * 60 : 0;
+  const clippingStrength = Math.min((rawVolume - 0.2) / 0.1, 1) * 100;
 
   const barColor = isClipping
-    ? `hsl(calc(var(--accent-hue, 210) + ${hueShift}), 80%, 50%)`
-    : `var(--color-accent, ${colorVars['--color-accent']})`;
+    ? `color-mix(in srgb, ${colorVars['--color-accent']}, ${colorVars['--color-error']} ${clippingStrength}%)`
+    : colorVars['--color-accent'];
 
   const {barWidth, barGap, barMaxHeight} = SIZE_CONFIG[size];
 
@@ -180,6 +187,7 @@ export function ChatDictationButton({
         size={size}
         icon={isListening ? undefined : <Icon icon="microphone" size={size} />}
         isIconOnly
+        isDisabled={!dictation.isSupported}
         onClick={dictation.toggle}
       />
     </span>

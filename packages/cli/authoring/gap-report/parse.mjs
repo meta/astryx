@@ -13,8 +13,8 @@
 import {z} from 'zod';
 import {formatZodError} from '../_shared/errors.mjs';
 
-/** @typedef {import('./type').GapReportHandler} GapReportHandler */
-/** @typedef {import('./type').GapReportHandlerReceipt} GapReportHandlerReceipt */
+/** @typedef {import('./type.js').GapReportHandler} GapReportHandler */
+/** @typedef {import('./type.js').GapReportHandlerReceipt} GapReportHandlerReceipt */
 
 // Typed z.custom so z.infer reproduces the real function type, matching the
 // pattern used by the debug handler and post-codemod hook parsers.
@@ -36,8 +36,8 @@ const handlerSchema = z
  * {@link GapReportHandler} type. If they drift, `MutuallyAssignable` becomes
  * `false` and `Expect<false>` fails `tsconfig.authoring-contract.json`.
  *
- * @typedef {import('../_shared/contract').Expect<
- *   import('../_shared/contract').MutuallyAssignable<z.infer<typeof handlerSchema>, GapReportHandler>
+ * @typedef {import('../_shared/contract.js').Expect<
+ *   import('../_shared/contract.js').MutuallyAssignable<z.infer<typeof handlerSchema>, GapReportHandler>
  * >} _GapReportHandlerDriftLock
  */
 
@@ -50,8 +50,8 @@ const receiptSchema = z
   .strict();
 
 /**
- * @typedef {import('../_shared/contract').Expect<
- *   import('../_shared/contract').MutuallyAssignable<z.infer<typeof receiptSchema>, GapReportHandlerReceipt>
+ * @typedef {import('../_shared/contract.js').Expect<
+ *   import('../_shared/contract.js').MutuallyAssignable<z.infer<typeof receiptSchema>, GapReportHandlerReceipt>
  * >} _GapReportReceiptDriftLock
  */
 

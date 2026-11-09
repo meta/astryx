@@ -15,7 +15,7 @@
  */
 
 import * as stylex from '@stylexjs/stylex';
-import Link from 'next/link';
+import Link from '../../../../router';
 import {Banner} from '@astryxdesign/core/Banner';
 import {Badge} from '@astryxdesign/core/Badge';
 import {Card} from '@astryxdesign/core/Card';

@@ -14,7 +14,7 @@
 import {formatZodError} from '../_shared/errors.mjs';
 import {integrationSchema} from './schema.mjs';
 
-/** @typedef {import('./type').AstryxIntegration} AstryxIntegration */
+/** @typedef {import('./type.js').AstryxIntegration} AstryxIntegration */
 
 /**
  * Validate an unknown value as an Astryx integration manifest, or throw.

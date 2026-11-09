@@ -3,7 +3,7 @@
 /**
  * @file Templates gallery index.
  * @input Uses generated template metadata, URL preview state, live thumbnails, and a lazy preview dialog.
- * @output Renders the filterable gallery and loads the query-synced preview dialog on first open.
+ * @output Renders a wide, three-column filterable gallery with scaled 1440×900 previews and loads the query-synced preview dialog on first open.
  * @position Public `/templates` docsite route.
  */
 
@@ -29,7 +29,6 @@ import {buildTemplatePreviewHref} from '../../../components/templatePreviewUrl';
 import {sortTemplatesByTitle} from '../../../components/templateGalleryOrder';
 import type {TemplatePreviewItem} from '../../../components/TemplatePreviewDialog';
 import {trackOpenPlayground, trackView} from '../../../lib/analytics';
-import {layout} from '../../../layout.stylex';
 
 const LazyTemplatePreviewDialog = lazy(() =>
   import('../../../components/TemplatePreviewDialog').then(module => ({
@@ -249,10 +248,7 @@ function TemplatesGallery() {
   );
 
   return (
-    <Section
-      maxWidth={layout.contentMaxWidth}
-      padding={6}
-      style={{marginInline: 'auto'}}>
+    <Section maxWidth={1600} padding={6} style={{marginInline: 'auto'}}>
       <VStack gap={10}>
         {/* Header */}
         <VStack gap={6} align="stretch">
@@ -276,14 +272,24 @@ function TemplatesGallery() {
         </VStack>
 
         {/* Body */}
-        <Grid columns={{minWidth: isMobile ? 280 : 360}} gap={4} width="100%">
+        <Grid
+          columns={{minWidth: isMobile ? 280 : 360, max: 3}}
+          gap={6}
+          width="100%">
           {filteredItems.map(item => {
-            const templateContent = <TemplateThumbnail slug={item.slug} />;
+            const templateContent = (
+              <TemplateThumbnail
+                slug={item.slug}
+                renderWidth={1440}
+                aspectRatio="16/10"
+              />
+            );
 
             return (
               <ClickableCard
                 key={item.slug}
                 padding={0}
+                width="100%"
                 maxWidth="100%"
                 label={`Preview ${item.name}`}
                 onClick={() => openPreview(item.slug)}

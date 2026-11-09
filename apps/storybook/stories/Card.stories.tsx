@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import type {ReactNode} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import * as stylex from '@stylexjs/stylex';
 import {Card} from '@astryxdesign/core/Card';
@@ -14,7 +15,8 @@ import {
   LayoutFooter,
 } from '@astryxdesign/core/Layout';
 import {Button} from '@astryxdesign/core/Button';
-import {Heading} from '@astryxdesign/core/Text';
+import {Heading, Text} from '@astryxdesign/core/Text';
+import {Grid} from '@astryxdesign/core/Grid';
 import {Theme, defineTheme} from '@astryxdesign/core/theme';
 import {
   colorVars,
@@ -54,6 +56,19 @@ const styles = stylex.create({
   narrowContainer: {
     width: 320,
   },
+  frames: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: spacingVars['--spacing-6'],
+  },
+  frame: {
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colorVars['--color-border'],
+    borderRadius: 8,
+  },
+  frame320: {width: 320},
+  frame390: {width: 390},
 });
 
 const meta: Meta<typeof Card> = {
@@ -614,6 +629,113 @@ export const NarrowContainer: Story = {
           </p>
         </VStack>
       </Card>
+    </div>
+  ),
+};
+
+const payouts = [
+  {label: 'Payout', amount: '$1,240.00', id: 'po_1Q8ZK4X7M2N5P3R6T9V1W4YB'},
+  {label: 'Refund', amount: '-$86.50', id: 're_3NfK9Lm2Qx7Vb4Tz8Rw1Hy6C'},
+  {label: 'Adjustment', amount: '$12.00', id: 'adj_7Hq2Wm9Kx4Lz8Vn3Rb6Tf1PD'},
+];
+
+function PayoutCard({
+  payout,
+  truncateId,
+}: {
+  payout: (typeof payouts)[number];
+  truncateId?: boolean;
+}) {
+  return (
+    <Card>
+      <VStack gap={1}>
+        <Heading level={3}>{payout.label}</Heading>
+        <Text hasTabularNumbers>{payout.amount}</Text>
+        <Text type="supporting" maxLines={truncateId ? 1 : undefined}>
+          {payout.id}
+        </Text>
+      </VStack>
+    </Card>
+  );
+}
+
+function RowFrame({
+  label,
+  width,
+  children,
+}: {
+  label: string;
+  width?: 320 | 390;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <p {...stylex.props(styles.heading)}>{label}</p>
+      <div
+        {...stylex.props(
+          styles.frame,
+          width === 320 && styles.frame320,
+          width === 390 && styles.frame390,
+        )}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Three cards sharing a row in 320px and 390px frames and at full width.
+ * Each card shrinks to its HStack share or Grid track instead of widening
+ * the row to fit its longest unbroken value, so the row stays inside the
+ * frame. A value that cannot wrap is clipped at the card edge (the raw IDs
+ * in the first two frames); the Grid frames truncate it with
+ * `maxLines={1}`, the recommended form, which shows the full value in a
+ * tooltip.
+ */
+export const InNarrowRow: Story = {
+  render: () => (
+    <div {...stylex.props(styles.frames)}>
+      <RowFrame
+        label="HStack, 390px frame, raw IDs (clipped at the card edge)"
+        width={390}>
+        <HStack gap={3}>
+          {payouts.map(payout => (
+            <PayoutCard key={payout.id} payout={payout} />
+          ))}
+        </HStack>
+      </RowFrame>
+      <RowFrame label="HStack, 320px frame, raw IDs" width={320}>
+        <HStack gap={3}>
+          {payouts.map(payout => (
+            <PayoutCard key={payout.id} payout={payout} />
+          ))}
+        </HStack>
+      </RowFrame>
+      <RowFrame
+        label="Grid columns={3}, 390px frame, IDs truncated with maxLines={1}"
+        width={390}>
+        <Grid columns={3} gap={3}>
+          {payouts.map(payout => (
+            <PayoutCard key={payout.id} payout={payout} truncateId />
+          ))}
+        </Grid>
+      </RowFrame>
+      <RowFrame
+        label="Grid columns={3}, 320px frame, IDs truncated"
+        width={320}>
+        <Grid columns={3} gap={3}>
+          {payouts.map(payout => (
+            <PayoutCard key={payout.id} payout={payout} truncateId />
+          ))}
+        </Grid>
+      </RowFrame>
+      <RowFrame label="Grid columns={3}, full width (unchanged)">
+        <Grid columns={3} gap={3}>
+          {payouts.map(payout => (
+            <PayoutCard key={payout.id} payout={payout} truncateId />
+          ))}
+        </Grid>
+      </RowFrame>
     </div>
   ),
 };

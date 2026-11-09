@@ -1,17 +1,19 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-"use strict";
+'use strict';
 
 /**
  * @astryxdesign/build
  *
- * Unified build configuration for Astryx source builds.
- * 
+ * Unified build configuration for Astryx source builds. The complete PostCSS
+ * helper resolves its bundled Autoprefixer from this package rather than from
+ * the consuming project's dependency graph.
+ *
  * Usage:
  *   // babel.config.js
  *   const {babel} = require('@astryxdesign/build');
  *   module.exports = babel(__dirname);
- * 
+ *
  *   // postcss.config.js
  *   const {postcss} = require('@astryxdesign/build');
  *   module.exports = postcss(__dirname);
@@ -39,6 +41,7 @@ function stylexOptions(rootDir, overrides = {}) {
   return {
     dev: process.env.NODE_ENV !== 'production',
     runtimeInjection: false,
+    propertyValidationMode: 'throw',
     enableInlinedConditionalMerge: true,
     treeshakeCompensation: true,
     aliases: resolveAliases(rootDir),
@@ -51,7 +54,7 @@ function stylexOptions(rootDir, overrides = {}) {
 
 /**
  * Generate a complete babel.config.js for Astryx source builds.
- * 
+ *
  * @param {string} rootDir — __dirname of the project root
  * @param {object} [overrides] — extra StyleX options to merge
  * @returns {object} babel config object
@@ -79,7 +82,7 @@ function babel(rootDir, overrides = {}) {
 
 /**
  * Generate a complete postcss.config.js for Astryx source builds.
- * 
+ *
  * @param {string} rootDir — __dirname of the project root
  * @param {object} [overrides] — extra options (appDir, extraInclude, etc.)
  * @returns {object} postcss config object
@@ -96,7 +99,7 @@ function postcss(rootDir, overrides = {}) {
         ],
         extraInclude,
       },
-      autoprefixer: {},
+      [require.resolve('autoprefixer')]: {},
     },
   };
 }

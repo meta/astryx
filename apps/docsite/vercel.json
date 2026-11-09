@@ -1,4 +1,4 @@
 {
   "installCommand": "cd ../.. && node scripts/clean-workspace-node-modules.mjs && pnpm install --force --frozen-lockfile",
-  "buildCommand": "cd ../.. && pnpm build && pnpm -F @astryxdesign/docsite build"
+  "buildCommand": "cd ../.. && pnpm build && node apps/docsite/scripts/build-previews.mjs && pnpm -F @astryxdesign/docsite build"
 }

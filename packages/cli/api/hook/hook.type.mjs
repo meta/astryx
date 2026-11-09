@@ -11,14 +11,14 @@
  *
  * Invocation                                 -> type discriminator
  * ------------------------------------------------------------------
- * xds --json hook                           -> hook.list (data.detail='names')
- * xds --json hook --list                    -> hook.list (data.detail='names')
- * xds --json hook --category State          -> hook.list (filtered)
- * xds --json hook --list --detail compact   -> hook.list (data.detail='compact')
- * xds --json hook --list --detail full      -> hook.list (data.detail='full')
- * xds --json hook useMediaQuery             -> hook.detail
- * xds --json hook useMediaQuery --params    -> hook.detail.params
- * (not found)                               -> CLIError
+ * astryx --json hook                         -> hook.list (data.detail='names')
+ * astryx --json hook --list                  -> hook.list (data.detail='names')
+ * astryx --json hook --category State        -> hook.list (filtered)
+ * astryx --json hook --list --detail compact -> hook.list (data.detail='compact')
+ * astryx --json hook --list --detail full    -> hook.list (data.detail='full')
+ * astryx --json hook useMediaQuery           -> hook.detail
+ * astryx --json hook useMediaQuery --params  -> hook.detail.params
+ * (not found)                                -> CLIError
  */
 
 // Re-export the authored-doc types from core so the hook leaves reference these
@@ -28,7 +28,7 @@
 /** @typedef {import('@astryxdesign/cli/authoring').HookParamDoc} HookParamDoc */
 
 /**
- * xds --json hook [--list] [--category X] [--detail names|compact|full]
+ * astryx --json hook [--list] [--category X] [--detail names|compact|full]
  *
  * The list view emits ONE `hook.list` type across all three detail levels; the
  * depth is carried in `data.detail` and `data.components` holds the grouped map
@@ -39,6 +39,7 @@
  *
  * @typedef {object} HookListResponse
  * @property {'hook.list'} type
+ * @property {string} package `@astryxdesign/core`, the only package that ships hooks.
  * @property {HookListData} data
  */
 
@@ -56,16 +57,18 @@
  */
 
 /**
- * xds --json hook <name>
+ * astryx --json hook <name>
  * @typedef {object} HookDetailResponse
  * @property {'hook.detail'} type
+ * @property {string} package `@astryxdesign/core`, the only package that ships hooks.
  * @property {HookDoc} data
  */
 
 /**
- * xds --json hook <name> --params
+ * astryx --json hook <name> --params
  * @typedef {object} HookDetailParamsResponse
  * @property {'hook.detail.params'} type
+ * @property {string} package `@astryxdesign/core`, the only package that ships hooks.
  * @property {HookParamDoc[]} data
  */
 

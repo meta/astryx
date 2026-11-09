@@ -4,7 +4,7 @@
 
 /**
  * @file ChatContext.tsx
- * @input Uses React createContext
+ * @input Layer-scoped React context
  * @output Exports Chat message/list/composer/layout contexts. The composer
  *   context (value + input-control registration) is public composition API,
  *   re-exported from Chat/index.ts for custom inputs.
@@ -12,7 +12,9 @@
  *   ChatComposerInput, ChatSendButton, and custom inputs.
  */
 
-import {createContext, use, type RefObject} from 'react';
+import {use, type RefObject} from 'react';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
+import {createSharedContext} from '../utils/sharedContext';
 
 export type ChatMessageSender = 'user' | 'assistant' | 'system';
 export type ChatDensity = 'compact' | 'balanced' | 'spacious';
@@ -22,9 +24,12 @@ export interface ChatMessageContextValue {
   density: ChatDensity;
 }
 
-export const ChatMessageContext = createContext<ChatMessageContextValue | null>(
-  null,
-);
+export const ChatMessageContext =
+  createLayerScopedContext<ChatMessageContextValue | null>(
+    'ChatMessageContext',
+    1,
+    null,
+  );
 ChatMessageContext.displayName = 'ChatMessageContext';
 
 export function useChatMessageContext(): ChatMessageContextValue | null {
@@ -35,7 +40,12 @@ export interface ChatListContextValue {
   density: ChatDensity;
 }
 
-export const ChatListContext = createContext<ChatListContextValue | null>(null);
+export const ChatListContext =
+  createLayerScopedContext<ChatListContextValue | null>(
+    'ChatListContext',
+    1,
+    null,
+  );
 ChatListContext.displayName = 'ChatListContext';
 
 export function useChatListContext(): ChatListContextValue | null {
@@ -82,7 +92,11 @@ export interface ChatComposerContextValue {
 }
 
 export const ChatComposerContext =
-  createContext<ChatComposerContextValue | null>(null);
+  createSharedContext<ChatComposerContextValue | null>(
+    'ChatComposerContext',
+    1,
+    null,
+  );
 ChatComposerContext.displayName = 'ChatComposerContext';
 
 export function useChatComposerContext(): ChatComposerContextValue | null {
@@ -100,9 +114,12 @@ export interface ChatLayoutContextValue {
   contentRef: (el: HTMLElement | null) => void;
 }
 
-export const ChatLayoutContext = createContext<ChatLayoutContextValue | null>(
-  null,
-);
+export const ChatLayoutContext =
+  createSharedContext<ChatLayoutContextValue | null>(
+    'ChatLayoutContext',
+    1,
+    null,
+  );
 ChatLayoutContext.displayName = 'ChatLayoutContext';
 
 export function useChatLayoutContext(): ChatLayoutContextValue | null {

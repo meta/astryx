@@ -4,7 +4,7 @@
 
 /**
  * @file AvatarSizeContext.ts
- * @input Uses React createContext
+ * @input Layer-scoped React context
  * @output Exports AvatarSizeContext
  * @position Internal context; provided by Avatar, consumed by sub-components
  *
@@ -12,7 +12,7 @@
  * - /packages/core/src/Avatar/Avatar.doc.mjs
  */
 
-import {createContext} from 'react';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 
 /**
  * Context that provides the resolved numeric avatar size (in pixels)
@@ -20,5 +20,9 @@ import {createContext} from 'react';
  *
  * Default value of 36 matches the default 'md' avatar size.
  */
-export const AvatarSizeContext = createContext<number>(36);
+export const AvatarSizeContext = createLayerScopedContext<number>(
+  'AvatarSizeContext',
+  1,
+  36,
+);
 AvatarSizeContext.displayName = 'AvatarSizeContext';

@@ -17,7 +17,9 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
+  effectiveTemplateDiscovery,
   extractComponents,
+  findPageDocFile,
   stripTemplateAssetRefs,
 } from './template-adapter.mjs';
 
@@ -162,5 +164,60 @@ describe('stripTemplateAssetRefs', () => {
     ).toThrow(
       /Unrecognized template asset format bin for \/template-assets\/clip\.bin/,
     );
+  });
+});
+
+describe('findPageDocFile', () => {
+  it('keeps the released precedence when one page has two specs', () => {
+    const page = fs.mkdtempSync(path.join(dir, 'page-'));
+    fs.writeFileSync(path.join(page, 'template.doc.mjs'), 'export {};\n');
+    fs.writeFileSync(path.join(page, 'template.doc.ts'), 'export {};\n');
+    expect(findPageDocFile(page)).toBe(path.join(page, 'template.doc.ts'));
+
+    fs.writeFileSync(path.join(page, 'template.template.mjs'), 'export {};\n');
+    expect(findPageDocFile(page)).toBe(
+      path.join(page, 'template.template.mjs'),
+    );
+  });
+});
+
+describe('effectiveTemplateDiscovery', () => {
+  it('shadows only the matching template kind', () => {
+    const pageReplacement = {
+      type: 'page',
+      dirName: 'acme-dashboard',
+      name: 'Acme dashboard',
+      description: '',
+      filePath: '/acme-dashboard.tsx',
+      docPath: '/acme-dashboard.doc.mjs',
+      package: '@acme/widgets',
+      replaces: 'dashboard',
+    };
+    const corePage = {
+      type: 'page',
+      dirName: 'dashboard',
+      name: 'Dashboard page',
+      description: '',
+      filePath: '/dashboard-page.tsx',
+      docPath: '/dashboard-page.doc.mjs',
+    };
+    const coreBlock = {
+      type: 'block',
+      dirName: 'dashboard',
+      name: 'Dashboard block',
+      description: '',
+      filePath: '/dashboard-block.tsx',
+      docPath: '/dashboard-block.doc.mjs',
+    };
+
+    const effective = effectiveTemplateDiscovery([
+      corePage,
+      coreBlock,
+      pageReplacement,
+    ]);
+
+    expect(effective).toContain(pageReplacement);
+    expect(effective).toContain(coreBlock);
+    expect(effective).not.toContain(corePage);
   });
 });

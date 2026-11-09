@@ -2,7 +2,7 @@
 
 'use client';
 
-import {usePathname} from 'next/navigation';
+import {usePathname} from '../router';
 import {AppShell} from '@astryxdesign/core/AppShell';
 import {SandboxNav} from './SandboxNav';
 

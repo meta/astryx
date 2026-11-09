@@ -12,16 +12,17 @@ export const doc = {
   type: 'command',
   name: 'manifest',
   displayName: 'astryx manifest',
-  namespace: 'cli',
-  summary: 'Print the full CLI capability manifest (use with --json).',
+  namespace: 'cli/commands',
+  summary: 'Print the full CLI capability manifest (use with --json)',
   description:
     'Emits the complete CLI surface: every command with its arguments, options, ' +
     'subcommands, and JSON response types, as a single typed envelope for agents and ' +
     'tooling to introspect. Intended to be run with --json.',
   examples: [
     {label: 'Full manifest', cli: 'astryx manifest --json'},
-    {label: 'Shorthand', cli: 'astryx --json'},
+    {label: 'The same manifest, under data.manifest (type "help")', cli: 'astryx --json'},
   ],
+  outsideProject: 'same',
   exitCodes: [
     {code: 0, when: 'success'},
     {code: 1, when: 'the manifest cannot be generated'},

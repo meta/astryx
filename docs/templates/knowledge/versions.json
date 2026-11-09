@@ -1,10 +1,10 @@
 {
-  "architecture": 2,
-  "component": 5,
-  "design": 1,
-  "family": 1,
+  "architecture": 3,
+  "component": 7,
+  "design": 2,
+  "family": 2,
   "implementation-plan": 1,
-  "module": 2,
-  "system-spec": 1,
-  "theme": 1
+  "module": 4,
+  "system-spec": 2,
+  "theme": 2
 }

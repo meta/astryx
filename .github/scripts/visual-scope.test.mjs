@@ -47,7 +47,62 @@ beforeEach(() => {
 });
 afterEach(() => fs.rmSync(root, {recursive: true, force: true}));
 
+function writeGateConfig(config) {
+  const dir = path.join(root, '.github/scripts/visual-gate');
+  fs.mkdirSync(dir, {recursive: true});
+  fs.writeFileSync(
+    path.join(dir, 'visual-gate.config.json'),
+    JSON.stringify(config),
+  );
+}
+
 describe('classifyVisualScope', () => {
+  it.each([
+    'pnpm-lock.yaml',
+    'package.json',
+    'packages/core/package.json',
+    'apps/storybook/vite.config.ts',
+    'packages/build/src/vite.ts',
+    'unknown-rendering-input.toml',
+  ])(
+    'keeps shared input %s broad alone and beside a focused component',
+    file => {
+      for (const files of [
+        [file],
+        ['packages/core/src/Button/Button.tsx', file],
+      ]) {
+        expect(classifyVisualScope(files, root)).toMatchObject({
+          hasStableVisual: true,
+          broadStableVisual: true,
+        });
+      }
+    },
+  );
+
+  it('fails closed for an empty path set', () => {
+    expect(classifyVisualScope([], root)).toMatchObject({
+      hasStableVisual: true,
+      broadStableVisual: true,
+    });
+  });
+
+  it.each([
+    'apps/storybook/.storybook/preview.tsx',
+    'apps/storybook/stories/Button.stories.tsx',
+    '.github/scripts/visual-gate/gate.mjs',
+    '.github/scripts/visual-gate/visual-gate.config.json',
+    '.github/scripts/visual-scope.mjs',
+    '.github/workflows/ci.yml',
+  ])(
+    'routes shared visual infrastructure through the canonical owner: %s',
+    file => {
+      expect(classifyVisualScope([file], root)).toMatchObject({
+        hasStableVisual: true,
+        broadStableVisual: true,
+      });
+    },
+  );
+
   it('includes stable Core runtime changes', () => {
     const result = classifyVisualScope(
       ['packages/core/src/Button/Button.tsx'],
@@ -75,6 +130,35 @@ describe('classifyVisualScope', () => {
     });
   });
 
+  it('leaves a Changeset out: release notes render nothing', () => {
+    expect(
+      classifyVisualScope(
+        ['packages/core/src/Button/Button.tsx', '.changeset/button-fix.md'],
+        root,
+      ),
+    ).toMatchObject({
+      hasStableVisual: true,
+      broadStableVisual: false,
+      stableComponents: ['Button'],
+    });
+    expect(classifyVisualScope(['.changeset/notes.md'], root)).toMatchObject({
+      hasStableVisual: false,
+      broadStableVisual: false,
+    });
+  });
+
+  it('audits a shared Core module through its reverse dependents when the pull request runs what it reaches (spec:AST-030 FR13)', () => {
+    const files = ['packages/core/src/hooks/useHold.ts'];
+    expect(classifyVisualScope(files, root, {}, {scoped: true})).toMatchObject({
+      hasStableVisual: true,
+      broadStableVisual: false,
+    });
+    // Unscoped (main, a full-suite change), it keeps the whole plan.
+    expect(classifyVisualScope(files, root)).toMatchObject({
+      broadStableVisual: true,
+    });
+  });
+
   it('ignores Core tests and component docs — they do not change pixels', () => {
     const result = classifyVisualScope(
       [
@@ -99,12 +183,7 @@ describe('classifyVisualScope', () => {
 
   it('ignores build-only metadata in a stable theme package', () => {
     const result = classifyVisualScope(
-      [
-        'packages/themes/neutral/package.json',
-        'packages/core/package.json',
-        'scripts/clean-dist.mjs',
-        'pnpm-lock.yaml',
-      ],
+      ['packages/themes/neutral/package.json'],
       root,
       {
         'packages/themes/neutral/package.json': {
@@ -156,18 +235,62 @@ describe('classifyVisualScope', () => {
     });
   });
 
-  it('excludes the private probe fixture', () => {
+  it('runs the whole plan for the probe fixture, whose shots the release plan takes', () => {
+    writeGateConfig({probeTheme: 'probe'});
+    for (const file of [
+      'packages/themes/probe/src/probeTheme.ts',
+      'packages/themes/probe/src/probeConfig.ts',
+    ]) {
+      const result = classifyVisualScope([file], root);
+      expect(result, file).toMatchObject({
+        hasStableVisual: true,
+        broadStableVisual: true,
+        // Still not a stable theme: its own theme-matrix shots stay out.
+        stableThemes: [],
+      });
+    }
+    // Its package metadata alone changes no pixels.
+    expect(
+      classifyVisualScope(['packages/themes/probe/package.json'], root)
+        .hasStableVisual,
+    ).toBe(false);
+  });
+
+  it("defaults the probe fixture as the gate does when the config doesn't name it", () => {
+    writeGateConfig({});
+    expect(
+      classifyVisualScope(['packages/themes/probe/src/probeTheme.ts'], root),
+    ).toMatchObject({hasStableVisual: true, broadStableVisual: true});
+  });
+
+  it('reads the probe fixture from the gate config, so a renamed fixture still counts', () => {
+    writeGateConfig({probeTheme: 'preview'});
+    expect(
+      classifyVisualScope(
+        ['packages/themes/preview/src/previewTheme.ts'],
+        root,
+      ),
+    ).toMatchObject({hasStableVisual: true, broadStableVisual: true});
+    expect(
+      classifyVisualScope(['packages/themes/probe/src/probeTheme.ts'], root)
+        .hasStableVisual,
+    ).toBe(false);
+  });
+
+  it('uses the repository gate config for the probe fixture', () => {
     const result = classifyVisualScope(
       ['packages/themes/probe/src/probeTheme.ts'],
-      root,
+      path.resolve(import.meta.dirname, '../..'),
     );
-    expect(result.hasStableVisual).toBe(false);
-    expect(result.stableThemes).toEqual([]);
+    expect(result).toMatchObject({
+      hasStableVisual: true,
+      broadStableVisual: true,
+    });
   });
 
   it('excludes Lab and records its release channel from package metadata', () => {
     const result = classifyVisualScope(
-      ['packages/lab/src/Drawer/Drawer.tsx'],
+      ['packages/lab/src/Stat/Stat.tsx'],
       root,
     );
     expect(result.hasStableVisual).toBe(false);
@@ -190,7 +313,7 @@ describe('classifyVisualScope', () => {
       execFileSync(
         process.execPath,
         [SCRIPT, '--manifests', manifests, '--github-output', output],
-        {input: 'packages/lab/src/Drawer/Drawer.tsx\n'},
+        {input: 'packages/lab/src/Stat/Stat.tsx\n'},
       ),
     ).toThrow();
   });

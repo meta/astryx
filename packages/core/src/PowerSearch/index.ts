@@ -12,7 +12,11 @@
  */
 
 export {PowerSearch} from './PowerSearch';
-export type {PowerSearchProps, PowerSearchSize} from './PowerSearch';
+export type {
+  PowerSearchPresentation,
+  PowerSearchProps,
+  PowerSearchSize,
+} from './PowerSearch';
 
 export {PowerSearchToken} from './PowerSearchToken';
 export {PowerSearchFilterEditor} from './PowerSearchFilterEditor';

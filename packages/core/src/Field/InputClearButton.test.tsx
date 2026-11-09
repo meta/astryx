@@ -8,8 +8,8 @@
  * @output Unit tests for the shared clear-button primitive
  * @position Testing; validates InputClearButton.tsx — the single home for the
  *   clearable input family's clear (✕) affordance and its theme target. Covers
- *   the accessible name, the click callback, the decorative registry glyph,
- *   both theme targets, the touch hit area, and xstyle forwarding.
+ *   the accessible name, contextual hover tooltip, click callback, decorative
+ *   registry glyph, both theme targets, touch hit area, and xstyle forwarding.
  *
  * SYNC: When InputClearButton.tsx changes, update tests to match new behavior.
  */
@@ -17,7 +17,7 @@
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {describe, it, expect, vi, afterEach} from 'vitest';
-import {render, screen, fireEvent} from '@testing-library/react';
+import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
 import {
   InputClearButton,
@@ -25,46 +25,15 @@ import {
   type InputClearButtonProps,
 } from './InputClearButton';
 import {Icon, registerIcons, resetIcons} from '../Icon';
+import {InternationalizationProvider} from '../i18n';
 import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {declaredValue} from '../__tests__/stylexDeclarations';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 
 function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
   const {prose, component} = generateThemeCSS(theme);
   return [prose, component].filter(Boolean).join('\n\n');
-}
-
-interface InjectedRule {
-  selector: string;
-  text: string;
-  media: string | null;
-}
-
-/**
- * Every style rule StyleX has injected at runtime (`runtimeInjection` in the
- * root vitest config), flattened out of any at-rule wrapper and tagged with
- * that wrapper's condition — so a `@media (pointer: coarse)` rule stays
- * distinguishable from the unconditional one.
- */
-function injectedRules(): InjectedRule[] {
-  const walk = (rules: CSSRuleList, condition: string | null) =>
-    [...rules].flatMap((rule): InjectedRule[] => {
-      const {selectorText} = rule as CSSStyleRule;
-      if (typeof selectorText === 'string') {
-        return [{selector: selectorText, text: rule.cssText, media: condition}];
-      }
-      // A grouping rule (@media, @keyframes, ...): descend, carrying the
-      // innermost condition down. jsdom hangs an empty `cssRules` off plain
-      // style rules too, which is why the leaf check comes first.
-      const nested = (rule as CSSGroupingRule).cssRules;
-      if (nested == null) {
-        return [];
-      }
-      const own = (rule as CSSMediaRule).media?.mediaText;
-      return walk(nested, own != null && own !== '' ? own : condition);
-    });
-
-  return [...document.styleSheets].flatMap(sheet => walk(sheet.cssRules, null));
 }
 
 const getGlyph = (): HTMLElement => {
@@ -95,6 +64,44 @@ describe('InputClearButton public props', () => {
 });
 
 describe('InputClearButton', () => {
+  it('shows a generic "Clear" tooltip while the accessible name keeps the field label', async () => {
+    // A long field label repeated in the tooltip reads as awkward copy
+    // ("Clear Assigned engineering partner"); the field's own label already
+    // sits beside the glyph. The contextual name stays for assistive tech.
+    const showPopover = vi.spyOn(HTMLElement.prototype, 'showPopover');
+    render(
+      <InputClearButton
+        label="Clear Assigned engineering partner"
+        onClick={() => {}}
+      />,
+    );
+
+    const button = screen.getByRole('button', {
+      name: 'Clear Assigned engineering partner',
+    });
+    const tooltip = screen.getByRole('tooltip', {hidden: true});
+    expect(tooltip).toHaveTextContent(/^Clear$/);
+    expect(button.getAttribute('aria-describedby')).toBe(tooltip.id);
+
+    fireEvent.mouseEnter(button);
+    await waitFor(() => expect(showPopover).toHaveBeenCalled());
+    showPopover.mockRestore();
+  });
+
+  it('localizes the tooltip through the catalog', () => {
+    render(
+      <InternationalizationProvider
+        locale="en"
+        overrides={{en: {'@astryx.inputClearButton.tooltip': 'Leeren'}}}>
+        <InputClearButton label="Suche leeren" onClick={() => {}} />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByRole('button', {name: 'Suche leeren'})).toBeTruthy();
+    expect(screen.getByRole('tooltip', {hidden: true})).toHaveTextContent(
+      /^Leeren$/,
+    );
+  });
+
   it('renders a real button with the given accessible label', () => {
     render(<InputClearButton label="Clear" onClick={() => {}} />);
     const button = screen.getByRole('button', {name: 'Clear'});
@@ -155,20 +162,17 @@ describe('InputClearButton', () => {
     expect(screen.getByRole('button')).toHaveAccessibleName('Clear');
   });
 
-  it('merges an extra iconClassName beside the canonical target', () => {
-    // Consumers that shipped a component-specific target before the family
-    // converged pass it through here to keep emitting it for a deprecation
-    // window.
+  it('merges a consumer iconClassName beside the canonical target', () => {
     render(
       <InputClearButton
         label="Clear"
         onClick={() => {}}
-        iconClassName="astryx-date-input-clear-icon"
+        iconClassName="consumer-clear-icon"
       />,
     );
     const glyph = getGlyph();
     expect(glyph).toHaveClass('astryx-input-clear-icon');
-    expect(glyph).toHaveClass('astryx-date-input-clear-icon');
+    expect(glyph).toHaveClass('consumer-clear-icon');
   });
 
   it('exposes input-clear-icon so a theme reaches the glyph color, size, and hover', () => {
@@ -217,75 +221,25 @@ describe('InputClearButton', () => {
     expect(declaredValue(screen.getByRole('button'), 'width')).toBe('999px');
   });
 
-  it('grows the hit area to 24px on a coarse pointer only (WCAG 2.5.8 AA)', () => {
-    // The visual glyph stays 20px; an ::after overlay expands only the
-    // tappable region, and only under a coarse pointer. Asserted against the
-    // CSS StyleX injects at runtime, because jsdom resolves neither media
-    // queries nor pseudo-element boxes.
+  it("takes Button's shared touch band rather than a fixed 24px overlay of its own", () => {
+    // Under a finger the clear button's target grows toward 44 px where its
+    // neighbors leave room, through Button's band (AST-094 FR42).
     render(<InputClearButton label="Clear" onClick={() => {}} />);
     const button = screen.getByRole('button', {name: 'Clear'});
-    const classes = new Set(button.className.split(' ').filter(Boolean));
-
-    const css = injectedRules();
-    const rulesForButton = css.filter(({selector}) =>
-      [...classes].some(c => selector.includes(`.${c}`)),
+    const bandClasses = (stylex.props(touchHitAreaStyles.layer).className ?? '')
+      .split(/\s+/)
+      .filter(Boolean);
+    expect(bandClasses.length).toBeGreaterThan(0);
+    const band = [...button.querySelectorAll('*')].find(element =>
+      bandClasses.every(bandClass => element.classList.contains(bandClass)),
     );
-    // Guards every assertion below against silently passing if StyleX's
-    // runtime injection or the class plumbing ever changes shape.
-    expect(rulesForButton.length).toBeGreaterThan(0);
-
-    const decl = (pattern: RegExp, inMedia?: string) =>
-      rulesForButton.some(
-        ({text, media}) =>
-          pattern.test(text) &&
-          (inMedia == null ? media == null : (media ?? '').includes(inMedia)),
-      );
-
-    // Fine pointer: hit area == the 20px visual glyph, no expansion.
-    expect(decl(/--_input-clear-hit-inset\s*:\s*0px/)).toBe(true);
-    // Coarse pointer: 20px + 2px on each side = 24x24, the AA floor.
-    expect(decl(/--_input-clear-hit-inset\s*:\s*-2px/, 'pointer: coarse')).toBe(
-      true,
-    );
-    // ...and nothing wider than that, which would reach into the adornment
-    // gap and the input's caret area. Scoped to the coarse block, because
-    // that is the only place a wider value can appear.
-    expect(
-      decl(
-        /--_input-clear-hit-inset\s*:\s*-(?:[3-9]|\d{2,})px/,
-        'pointer: coarse',
-      ),
-    ).toBe(false);
-    // The overlay exists only on touch. On a fine pointer a generated
-    // ::after would cover the button and take hover away from the glyph
-    // target, so `content` is gated the same way the inset is.
-    expect(decl(/--_input-clear-hit-content\s*:\s*none/)).toBe(true);
-    expect(decl(/--_input-clear-hit-content\s*:\s*""/, 'pointer: coarse')).toBe(
-      true,
-    );
-    // The overlay itself is what carries the expansion, and what is gated.
-    expect(
-      decl(/::after\s*\{[^}]*inset\s*:\s*var\(--_input-clear-hit-inset\)/),
-    ).toBe(true);
-    expect(
-      decl(/::after\s*\{[^}]*content\s*:\s*var\(--_input-clear-hit-content\)/),
-    ).toBe(true);
-  });
-
-  it('declares its own containing block for the hit overlay', () => {
-    // The ::after overlay must resolve against this button. Button happens to
-    // set `position: relative` on itself, so at runtime the overlay is
-    // correctly placed either way — and StyleX compiles both declarations to
-    // the same atomic class, so the rendered CSS cannot tell the two apart.
-    // Assert on the source instead, so a future edit can't quietly leave the
-    // overlay depending on another component's internal.
+    expect(band).toBeDefined();
     const source = readFileSync(
       path.resolve(__dirname, './InputClearButton.tsx'),
       'utf-8',
     );
-    const buttonStyle = source.match(/button:\s*\{[\s\S]*?\n {2}\},/)?.[0];
-    expect(buttonStyle).toBeDefined();
-    expect(buttonStyle).toMatch(/position:\s*'relative'/);
+    expect(source).not.toContain('--_input-clear-hit-inset');
+    expect(source).not.toContain("'::after'");
   });
 
   it('exposes input-clear-button so a theme controls the button size and hover', () => {
@@ -355,5 +309,22 @@ describe('InputClearButton pointer and focus interactions', () => {
 
     expect(handlePointerDown).toHaveBeenCalledTimes(1);
     expect(pointerDownEvent).toBe(false);
+  });
+
+  it('leaves a touch pointerdown uncancelled so the tap still clicks, and still keeps focus through mousedown', () => {
+    const handlePointerDown = vi.fn();
+    render(
+      <InternalInputClearButton
+        label="Clear"
+        onClick={() => {}}
+        onPointerDown={handlePointerDown}
+        onClickCapture={() => {}}
+      />,
+    );
+    const button = screen.getByRole('button', {name: 'Clear'});
+
+    expect(fireEvent.pointerDown(button, {pointerType: 'touch'})).toBe(true);
+    expect(handlePointerDown).toHaveBeenCalledTimes(1);
+    expect(fireEvent.mouseDown(button)).toBe(false);
   });
 });

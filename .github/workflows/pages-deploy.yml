@@ -1,69 +1,27 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
-# Deploy the latest serialized gh-pages snapshot after a workflow that can write
-# it settles. The legacy branch-source deployment starts once per queue commit
-# and cancels an in-progress deployment whenever a newer commit arrives. Under
-# normal PR traffic that can leave the public site permanently behind even
-# though every publisher succeeded.
-#
-# This workflow deliberately keeps the active deployment running. GitHub may
-# replace an older pending run with a newer one, but the current deployment
-# finishes and the newest queued run then deploys the latest branch snapshot.
-# Until the repository's Pages source is set to GitHub Actions, the source
-# check exits successfully and the deployment job stays skipped.
-
-name: Deploy GitHub Pages
+# Keep the retired GitHub Pages origin as one small, durable compatibility page.
+# Stable docs, Storybook, and Sandbox are built and served by Vercel.
+name: Publish GitHub Pages landing
 
 on:
-  workflow_run:
-    workflows:
-      - 'Deploy'
-      - 'PR Comment'
-      - 'Re-deploy Preview'
-      - 'Cleanup Preview Deployments'
-      - 'Release Gate'
-      - 'Visual Baseline'
-      - 'Visual acceptance'
-      - 'Visual acceptance promotion'
-      - 'Vibe Test Screenshots'
-      - 'Compact GitHub Pages History'
-    types: [completed]
+  push:
+    branches: ['main']
+    paths:
+      - '.github/pages/**'
+      - '.github/workflows/pages-deploy.yml'
   workflow_dispatch:
 
 permissions: {}
 
 concurrency:
-  group: github-pages-deployment
-  cancel-in-progress: false
+  group: github-pages-landing
+  cancel-in-progress: true
 
 jobs:
-  source:
-    runs-on: ubuntu-slim
-    permissions:
-      pages: read
-    outputs:
-      workflow: ${{ steps.source.outputs.workflow }}
-    steps:
-      - name: Check Pages deployment source
-        id: source
-        uses: actions/github-script@v9
-        with:
-          script: |
-            const {data} = await github.rest.repos.getPages(context.repo);
-            const enabled = data.build_type === 'workflow';
-            core.setOutput('workflow', String(enabled));
-            if (!enabled) {
-              core.notice('GitHub Pages still uses the legacy branch source; switch the source to GitHub Actions, then dispatch this workflow.');
-            }
-
   deploy:
-    needs: source
-    if: needs.source.outputs.workflow == 'true'
-    # The published branch is several GiB and contains hundreds of thousands of
-    # files. ubuntu-slim has a 15-minute hard job limit, which can interrupt the
-    # archive created by upload-pages-artifact before it reaches the upload step.
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-slim
     permissions:
       contents: read
       pages: write
@@ -72,21 +30,20 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Checkout latest published site
-        uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+
+      - name: Stage landing and deep-link recovery page
+        run: |
+          mkdir pages-dist
+          cp -R .github/pages/. pages-dist/
+          cp .github/pages/index.html pages-dist/404.html
+
+      - uses: actions/configure-pages@v6
+
+      - uses: actions/upload-pages-artifact@v5
         with:
-          ref: gh-pages
-          fetch-depth: 1
-          persist-credentials: false
+          path: pages-dist
 
-      - name: Configure Pages
-        uses: actions/configure-pages@v6
-
-      - name: Upload latest published site
-        uses: actions/upload-pages-artifact@v5
-        with:
-          path: .
-
-      - name: Deploy latest published site
+      - name: Deploy landing
         id: deployment
         uses: actions/deploy-pages@v5

@@ -172,6 +172,74 @@ async function run() {
       'rgb(144, 224, 239)',
     );
 
+    // Exercise the shared compiler in the browser as well as the family
+    // packaging above: an unsafe declaration must not consume valid siblings.
+    const {defineTheme, generateThemeCSS} = await import(
+      require('node:url').pathToFileURL(
+        path.join(root, 'packages/core/dist/theme/index.js'),
+      ).href
+    );
+    const warnings = [];
+    const boundary = generateThemeCSS(
+      defineTheme({
+        name: 'boundary',
+        tokens: {
+          '--font-family-body': 'Gill\\ Sans, "Segoe;UI", serif /* ; */',
+        },
+        components: {
+          button: {
+            base: {
+              color: 'rgb(1, 2, 3)',
+              backgroundColor: 'red; } #escaped { color: rgb(255, 0, 0)',
+              backgroundImage: 'URL(data:image/svg+xml;base64,PHN2Zy8+)',
+              borderRadius: '4px',
+              '::before': {content: '"kept; { }"'},
+            },
+          },
+        },
+      }),
+      warnings,
+    );
+    await page.setContent(
+      '<style>#escaped { color: rgb(4, 5, 6); }</style>' +
+        '<div data-astryx-theme="boundary"><button class="astryx-button">kept</button></div>' +
+        '<div id="escaped">unchanged</div>',
+    );
+    await page.addStyleTag({content: boundary.component + boundary.prose});
+    const boundarySeen = await page.evaluate(() => {
+      const button = document.querySelector('.astryx-button');
+      const style = getComputedStyle(button);
+      return {
+        color: style.color,
+        radius: style.borderRadius,
+        image: style.backgroundImage,
+        content: getComputedStyle(button, '::before').content,
+        outside: getComputedStyle(document.querySelector('#escaped')).color,
+      };
+    });
+    check('boundary drop is reported once', warnings.length, 1);
+    check(
+      'safe declaration before the drop paints',
+      boundarySeen.color,
+      'rgb(1, 2, 3)',
+    );
+    check('safe declaration after the drop paints', boundarySeen.radius, '4px');
+    check(
+      'data URL survives',
+      boundarySeen.image.includes('data:image/svg+xml;base64,PHN2Zy8+'),
+      true,
+    );
+    check(
+      'quoted semicolon and braces survive',
+      boundarySeen.content,
+      '"kept; { }"',
+    );
+    check(
+      'an unsafe value cannot style another rule',
+      boundarySeen.outside,
+      'rgb(4, 5, 6)',
+    );
+
     if (failures.length > 0) {
       throw new Error(`${failures.length} theme-family assertion(s) failed`);
     }

@@ -80,6 +80,77 @@ function createSearchSource(
   };
 }
 
+describe('isDisabled reaches every built-in value editor', () => {
+  const items = [
+    {id: 'a', label: 'Alpha'},
+    {id: 'b', label: 'Beta'},
+  ];
+  const enumValues = [
+    {value: 'a', label: 'Alpha'},
+    {value: 'b', label: 'Beta'},
+  ];
+  const cases: ReadonlyArray<[string, OperatorValue]> = [
+    ['string', {type: 'string'}],
+    [
+      'string with a search source',
+      {type: 'string', searchSource: createSearchSource(items)},
+    ],
+    [
+      'string_list',
+      {type: 'string_list', searchSource: createSearchSource(items)},
+    ],
+    ['integer', {type: 'integer'}],
+    ['float', {type: 'float'}],
+    ['time', {type: 'time'}],
+    ['date_absolute', {type: 'date_absolute'}],
+    ['date_relative', {type: 'date_relative'}],
+    ['date_range', {type: 'date_range'}],
+    ['enum', {type: 'enum', values: enumValues}],
+    ['enum_list', {type: 'enum_list', values: enumValues}],
+    [
+      'entity_list',
+      {type: 'entity_list', searchSource: createSearchSource(items)},
+    ],
+  ];
+
+  // Every form control the editor renders outside a closed popover (a date
+  // input's calendar stays mounted while closed, and its disabled trigger
+  // cannot open it), so a disabled built-in editor leaves nothing a person
+  // can type into, press, or open.
+  function controlsOf(container: HTMLElement): HTMLElement[] {
+    return Array.from(
+      container.querySelectorAll<HTMLElement>(
+        'input, textarea, button, select, [role="combobox"], [contenteditable="true"]',
+      ),
+    ).filter(element => {
+      const popover = element.closest<HTMLElement>('[popover]');
+      return (
+        element.getAttribute('aria-hidden') !== 'true' &&
+        (popover == null || popover.matches(':popover-open'))
+      );
+    });
+  }
+
+  const isUnavailable = (element: HTMLElement) =>
+    (element as HTMLInputElement).disabled === true ||
+    element.getAttribute('aria-disabled') === 'true';
+
+  it.each(cases)('%s', (_name, operatorValue) => {
+    const {container} = render(
+      <PowerSearchValueEditor
+        operatorValue={operatorValue}
+        filterValue={undefined}
+        onChange={() => {}}
+        config={stubConfig}
+        isDisabled
+      />,
+    );
+    const controls = controlsOf(container);
+    expect(controls.length).toBeGreaterThan(0);
+    expect(controls.filter(element => !isUnavailable(element))).toEqual([]);
+  });
+});
+
 // =============================================================================
 // #1103 — StringEditor ignores searchSource
 // =============================================================================
@@ -628,5 +699,56 @@ describe('maxMenuItems', () => {
 
   it('caps entity-list suggestions', async () => {
     await expectCapped({type: 'entity_list', searchSource: source});
+  });
+});
+
+// =============================================================================
+// EnumListEditor shows the whole closed vocabulary
+// =============================================================================
+
+describe('EnumListEditor', () => {
+  const values = Array.from({length: 12}, (_, index) => ({
+    value: `option-${index}`,
+    label: `Option ${index}`,
+  }));
+
+  it('shows every value on focus instead of the typeahead default of 10', async () => {
+    render(
+      <PowerSearchValueEditor
+        operatorValue={{type: 'enum_list', values}}
+        filterValue={undefined}
+        onChange={vi.fn()}
+        config={stubConfig}
+      />,
+    );
+
+    fireEvent.focus(screen.getByRole('combobox'));
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    expect(screen.getAllByRole('option', {hidden: true})).toHaveLength(12);
+    expect(screen.getByText('Option 11')).toBeInTheDocument();
+  });
+
+  it('shows every matching value when searching', async () => {
+    render(
+      <PowerSearchValueEditor
+        operatorValue={{type: 'enum_list', values}}
+        filterValue={undefined}
+        onChange={vi.fn()}
+        config={stubConfig}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.change(screen.getByRole('combobox'), {
+        target: {value: 'Option'},
+      });
+      await new Promise(resolve => setTimeout(resolve, 200));
+    });
+
+    expect(screen.getAllByRole('option', {hidden: true})).toHaveLength(12);
+    expect(screen.getByText('Option 11')).toBeInTheDocument();
   });
 });

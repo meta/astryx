@@ -12,17 +12,33 @@
  */
 
 import {describe, it, expect, vi, beforeEach} from 'vitest';
-import {useState} from 'react';
+import {use, useState} from 'react';
 import {render, screen, fireEvent, renderHook} from '@testing-library/react';
 import {useTranslator, type TranslatorFn} from './useTranslator';
 import {InternationalizationProvider} from './InternationalizationProvider';
+import {InternationalizationContext} from './InternationalizationContext';
 import {__resetForTests} from './resolve';
-import type {MessagesByLocale, Overrides} from './types';
+import {InternationalizationContext as PublicInternationalizationContext} from './publicContext';
+import enCatalog from './generated-locales/en.generated';
+import type {
+  MessagesByLocale,
+  Overrides,
+  ProviderMessagesByLocale,
+} from './types';
 
 // Module scope: the provider memoizes on prop identity, so inline object
 // literals would hand back a fresh context value on every render.
 const FR_MESSAGES: MessagesByLocale = {
   fr: {'@astryx.pagination.next': {defaultMessage: 'Page suivante'}},
+};
+const FR_RUNTIME_MESSAGES: ProviderMessagesByLocale = {
+  fr: {'@astryx.pagination.next': 'Page suivante compacte'},
+};
+// One messages value mixing shapes: a generated string map for the active
+// locale and a rich catalog for its parent.
+const MIXED_MESSAGES: ProviderMessagesByLocale = {
+  'fr-CA': {'@astryx.pagination.next': 'Page suivante (CA)'},
+  fr: {'@astryx.pagination.previous': {defaultMessage: 'Page précédente'}},
 };
 const FR_OVERRIDES: Overrides = {
   fr: {'@astryx.pagination.next': 'Suivant'},
@@ -37,6 +53,21 @@ describe('useTranslator — resolution', () => {
   it('resolves a shipped key to English when no provider is mounted', () => {
     const {result} = renderHook(() => useTranslator());
     expect(result.current('@astryx.pagination.next')).toBe('Go to next page');
+  });
+
+  it('resolves every shipped key to its English, whichever modules are loaded', () => {
+    // Application code may translate any Astryx key through the public hook.
+    const {result} = renderHook(() => useTranslator());
+    for (const [key, message] of Object.entries(enCatalog)) {
+      expect(result.current(key)).toBe(message);
+    }
+  });
+
+  it('resolves every shipped key through the public context export', () => {
+    const {result} = renderHook(() => use(PublicInternationalizationContext));
+    for (const [key, message] of Object.entries(enCatalog)) {
+      expect(result.current.translate(key, undefined)).toBe(message);
+    }
   });
 
   it('interpolates values into the message', () => {
@@ -66,6 +97,62 @@ describe('useTranslator — resolution', () => {
       ),
     });
     expect(result.current('@astryx.pagination.next')).toBe('Page suivante');
+  });
+
+  it('accepts a generated runtime catalog and preserves the rich context shape', () => {
+    const {result} = renderHook(
+      () => ({
+        context: use(InternationalizationContext),
+        translate: useTranslator(),
+      }),
+      {
+        wrapper: ({children}) => (
+          <InternationalizationProvider
+            locale="fr"
+            messages={FR_RUNTIME_MESSAGES}>
+            {children}
+          </InternationalizationProvider>
+        ),
+      },
+    );
+
+    expect(result.current.translate('@astryx.pagination.next')).toBe(
+      'Page suivante compacte',
+    );
+    expect(
+      result.current.context.messages.fr['@astryx.pagination.next'],
+    ).toEqual({defaultMessage: 'Page suivante compacte'});
+  });
+
+  it('resolves rich and runtime catalogs mixed in one messages value', () => {
+    const {result} = renderHook(
+      () => ({
+        context: use(InternationalizationContext),
+        translate: useTranslator(),
+      }),
+      {
+        wrapper: ({children}) => (
+          <InternationalizationProvider
+            locale="fr-CA"
+            messages={MIXED_MESSAGES}>
+            {children}
+          </InternationalizationProvider>
+        ),
+      },
+    );
+
+    expect(result.current.translate('@astryx.pagination.next')).toBe(
+      'Page suivante (CA)',
+    );
+    expect(result.current.translate('@astryx.pagination.previous')).toBe(
+      'Page précédente',
+    );
+    expect(result.current.context.messages).toEqual({
+      'fr-CA': {
+        '@astryx.pagination.next': {defaultMessage: 'Page suivante (CA)'},
+      },
+      fr: {'@astryx.pagination.previous': {defaultMessage: 'Page précédente'}},
+    });
   });
 
   it('lets a provider override beat the provider catalog', () => {

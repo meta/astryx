@@ -23,15 +23,22 @@ import {
   typeScaleVars,
   radiusVars,
 } from '../theme/tokens.stylex';
-import {mergeProps} from '../utils';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
+import {mergeProps} from '../utils/mergeProps';
+import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 import type {BaseProps} from '../BaseProps';
 import {useNavHeadingMenuContext} from './NavMenuContext';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import {themeProps} from '../utils/themeProps';
+import {isRenderable} from '../utils/isRenderable';
+import {keepDisabledRowUnfocused} from '../DropdownMenu/menuItemRoles';
 
 const styles = stylex.create({
   root: {
     boxSizing: 'border-box',
+    // A held pointer slides across the items; it selects no item text.
+    // Caller content beside the items stays selectable.
+    userSelect: 'none',
     display: 'flex',
     alignItems: 'center',
     gap: spacingVars['--spacing-2'],
@@ -47,7 +54,8 @@ const styles = stylex.create({
         '@media (hover: hover)': colorVars['--color-overlay-hover'],
       },
     },
-    border: 'none',
+    borderWidth: 0,
+    borderStyle: 'none',
     cursor: {
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
@@ -129,6 +137,7 @@ export function NavHeadingMenuItem({
   className,
   style,
   'data-testid': testId,
+  ...restProps
 }: NavHeadingMenuItemProps) {
   const ctx = useNavHeadingMenuContext();
   const size = ctx?.size ?? 'md';
@@ -142,15 +151,34 @@ export function NavHeadingMenuItem({
   }, [isDisabled, onClick, ctx]);
 
   const LinkComponent = useLinkComponent();
-  const Element = href ? LinkComponent : 'div';
+  // A disabled link item must not navigate (spec:AST-085 FR2). Cancelling the
+  // click would leave the destination live for middle-click, assistive
+  // technology activation, and "open in new tab", so the item drops its href
+  // instead. The router LinkComponent is skipped too: some routers reject a
+  // missing destination. A plain anchor keeps the row's element shape.
+  // (Mirrors the disabled paths of Link, Tab, and TopNavItem.)
+  const Element = href ? (isDisabled ? 'a' : LinkComponent) : 'div';
+
+  // The element type above changes when `isDisabled` flips, so React replaces
+  // the row; focus follows to the replacement (spec:AST-085 FR4).
+  const itemRef = useFocusAcrossSwap<HTMLElement>(ref);
 
   return (
     <Element
-      ref={ref}
+      {...restProps}
+      onMouseDown={composeEventHandlers(
+        restProps.onMouseDown,
+        isDisabled ? keepDisabledRowUnfocused : undefined,
+      )}
+      ref={itemRef}
       role="menuitem"
-      tabIndex={isDisabled ? undefined : -1}
+      // Every row, disabled included, takes focus but is not a Tab stop.
+      tabIndex={-1}
       aria-disabled={isDisabled || undefined}
-      href={href}
+      href={isDisabled ? undefined : href}
+      // A menu row is never a draggable link: a mouse press that slides to
+      // another row would start a drag and cancel the press.
+      draggable={href != null ? false : undefined}
       onClick={handleClick}
       data-testid={testId}
       {...mergeProps(
@@ -173,7 +201,7 @@ export function NavHeadingMenuItem({
         ) : (
           label
         )}
-        {description && (
+        {isRenderable(description) && (
           <Text type="supporting" maxLines={1}>
             {description}
           </Text>

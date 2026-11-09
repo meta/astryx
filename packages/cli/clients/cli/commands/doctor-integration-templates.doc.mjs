@@ -9,13 +9,14 @@ export const doc = {
   type: 'command',
   name: 'doctor integration templates',
   displayName: 'astryx doctor integration templates',
-  namespace: 'cli',
-  summary: 'Warn when integration template ids conflict with Core',
+  namespace: 'cli/commands',
+  summary: 'Validate integration template replacements and Core id overlaps',
   description:
-    'Compares one local or installed integration with the built-in Core page and ' +
-    'block template ids. A conflict is allowed and exits successfully, but the ' +
-    'report recommends renaming and gives the exact --package command required ' +
-    'to select the integration template when the overlap is intentional.',
+    'Validates one local or installed integration against the built-in Core page ' +
+    'and block template ids. Intentional replacements are informational and name ' +
+    'the command for selecting the Core original. Missing targets, ambiguous ' +
+    'replacements, and invalid declarations are errors; undeclared same-id overlaps ' +
+    'remain warnings that require package selection.',
   fn: 'integrationTemplateConflicts',
   args: [
     {
@@ -36,9 +37,16 @@ export const doc = {
       cli: 'astryx doctor integration templates @acme/widgets --json',
     },
   ],
+  outsideProject: 'same',
   exitCodes: [
-    {code: 0, when: 'the check completed; template conflicts are warnings'},
-    {code: 1, when: 'the integration or one of its templates is invalid'},
+    {
+      code: 0,
+      when: 'replacement declarations are valid; undeclared id conflicts are warnings',
+    },
+    {
+      code: 1,
+      when: 'the integration, a template, or a replacement declaration is invalid',
+    },
   ],
   related: ['doctor integration validate', 'template'],
 };

@@ -19,20 +19,20 @@ import {
   formatWeekTitle,
   ScheduleFrame,
   ScheduleRangeMonthTitle,
+  useScheduleCalendar,
 } from './shared';
 import {TimeGridView} from './TimeGridView';
 import {scheduleRangeToZonedDateTimeRange} from './zonedDateTime';
 import type {
   PlainDate,
+  ScheduleTimeGridViewOptions,
   ScheduleView,
   ScheduleViewComponentProps,
 } from './types';
 
-export interface ScheduleWeeklyViewOptions {
+export interface ScheduleWeeklyViewOptions extends ScheduleTimeGridViewOptions {
+  /** Weekday the week starts on, 0 = Sunday. @default 0 */
   weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6;
-  minHour?: number;
-  maxHour?: number;
-  hourHeight?: number;
 }
 
 function ScheduleWeeklyView({
@@ -40,24 +40,21 @@ function ScheduleWeeklyView({
 }: ScheduleViewComponentProps<ScheduleWeeklyViewOptions>) {
   const {events, focusDate, timezoneID, locale, range, isLoading} =
     useScheduleContext();
-  const {minHour = 0, maxHour = 24, hourHeight = 100} = options;
+  const calendar = useScheduleCalendar();
+  const {minHour = 0, maxHour = 24, hourHeight = 100, renderPopover} = options;
   const days = enumerateDates(range.startDate, range.endDate);
   const highlightedDate = focusDate.toPlainDate();
   const titleLabel = formatWeekTitle(
     days[0],
     days[days.length - 1],
-    timezoneID,
     locale,
+    calendar,
   );
 
   return (
     <ScheduleFrame
       title={
-        <ScheduleRangeMonthTitle
-          start={days[0]}
-          end={days[days.length - 1]}
-          timezoneID={timezoneID}
-        />
+        <ScheduleRangeMonthTitle start={days[0]} end={days[days.length - 1]} />
       }
       titleLabel={titleLabel}
       isLoading={isLoading}>
@@ -69,6 +66,8 @@ function ScheduleWeeklyView({
         minHour={minHour}
         maxHour={maxHour}
         hourHeight={hourHeight}
+        label={titleLabel}
+        renderPopover={renderPopover}
       />
     </ScheduleFrame>
   );
@@ -79,10 +78,11 @@ export function createScheduleWeeklyView({
   minHour = 0,
   maxHour = 24,
   hourHeight = 100,
+  renderPopover,
 }: ScheduleWeeklyViewOptions = {}): ScheduleView<ScheduleWeeklyViewOptions> {
   return {
     component: ScheduleWeeklyView,
-    options: {weekStartsOn, minHour, maxHour, hourHeight},
+    options: {weekStartsOn, minHour, maxHour, hourHeight, renderPopover},
     getDateRange: date => {
       const range = getWeekDateRange({
         date: date.toPlainDate(),

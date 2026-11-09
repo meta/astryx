@@ -47,7 +47,7 @@ export const docs = {
       name: 'isHiddenWhenUnsupported',
       type: 'boolean',
       description:
-        'When true, renders nothing if the browser does not support SpeechRecognition.',
+        'When true, renders nothing if the browser does not support SpeechRecognition. When false, keeps the button visible but disabled.',
       default: 'true',
     },
     {
@@ -81,7 +81,7 @@ export const docsZh = {
   propDescriptions: {
     dictation: 'The return value from useChatDictation or useSpeechRecognition. Controls all button state.',
     size: 'Button size.',
-    isHiddenWhenUnsupported: 'When true, renders nothing if SpeechRecognition is unsupported.',
+    isHiddenWhenUnsupported: 'When true, hides unsupported dictation; when false, keeps a disabled button visible.',
     label: 'Accessible label override.',
     xstyle: 'Additional StyleX styles.',
   },
@@ -104,7 +104,7 @@ export const docsDense = {
   propDescriptions: {
     dictation: 'return from useChatDictation/useSpeechRecognition; controls state',
     size: 'btn size',
-    isHiddenWhenUnsupported: 'hide when SpeechRecognition unsupported',
+    isHiddenWhenUnsupported: 'hide unsupported dictation; false keeps disabled btn visible',
     label: 'a11y label override',
     xstyle: 'extra StyleX styles',
   },

@@ -64,11 +64,21 @@ function ensureDynamicHighlightType(tokenType: string): void {
     }
   }
 
-  const name = `astryx-${tokenType}`;
-  const colorVar = `var(--color-syntax-${tokenType}, currentColor)`;
-  dynamicStyleSheet.insertRule(
-    `.astryx-code-block code::highlight(${name}), .astryx-codeeditor code::highlight(${name}) { color: ${colorVar}; }`,
-  );
+  // CSS.escape both generated names before they land in rule text: the
+  // registry key stays the raw string (a ::highlight() selector matches by
+  // ident VALUE, escapes and all), so dotted, non-ASCII, `_private`, and
+  // digit-led token types keep their colours — while nothing a token stream
+  // carries can step outside its ident and shape the rule.
+  const name = CSS.escape(`astryx-${tokenType}`);
+  const colorVar = `var(${CSS.escape(`--color-syntax-${tokenType}`)}, currentColor)`;
+  try {
+    dynamicStyleSheet.insertRule(
+      `.astryx-code-block code::highlight(${name}), .astryx-codeeditor code::highlight(${name}) { color: ${colorVar}; }`,
+    );
+  } catch {
+    // An engine that still refuses the rule costs that type its colour
+    // (ranges paint with currentColor) — never the whole code block.
+  }
 }
 
 // ---------------------------------------------------------------------------

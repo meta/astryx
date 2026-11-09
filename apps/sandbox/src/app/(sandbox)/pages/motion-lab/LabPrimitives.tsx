@@ -66,7 +66,9 @@ const sx = stylex.create({
     padding: '14px',
   },
   splitBorder: {
-    borderInlineStart: '1px solid var(--color-border)',
+    borderInlineStartWidth: '1px',
+    borderInlineStartStyle: 'solid',
+    borderInlineStartColor: 'var(--color-border)',
   },
   meterTrack: {
     height: '5px',

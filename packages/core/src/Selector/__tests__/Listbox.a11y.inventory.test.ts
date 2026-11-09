@@ -42,7 +42,7 @@ describe('Listbox migration inventory', () => {
     ]);
   });
 
-  it('pins each known failure to one exact inventory part', () => {
+  it('pins every remaining known failure to one exact inventory part', () => {
     const parts = LISTBOX_SCENARIOS.flatMap(scenario =>
       listboxParts(scenario).map(part => ({
         binding: `${scenario.component}.${part.role}`,
@@ -50,7 +50,7 @@ describe('Listbox migration inventory', () => {
       })),
     );
 
-    expect(LISTBOX_KNOWN_FAILURES).toHaveLength(2);
+    expect(LISTBOX_KNOWN_FAILURES).toHaveLength(0);
     for (const record of LISTBOX_KNOWN_FAILURES) {
       expect(
         parts.filter(

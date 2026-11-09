@@ -16,6 +16,7 @@ export type {
   TokenizerProps,
   TokenizerSize,
   TokenizerOverflowBehavior,
+  TokenizerPresentation,
   TokenizerChange,
   TokenizerHandle,
   TokenizerStatus,

@@ -10,7 +10,11 @@
  * here — the function does not know it has a CLI.
  */
 
-import type {HookParamDoc, UsageDoc} from '../base/type';
+import type {
+  AuthoredDocGraphFields,
+  HookParamDoc,
+  UsageDoc,
+} from '../base/type.js';
 
 /**
  * A documented return. Hooks list named return fields (`name` set); CLI/API
@@ -45,7 +49,7 @@ export interface FunctionExampleDoc {
  *   /\*\* @type {import('@astryxdesign/cli/authoring').FunctionDoc} \*\/
  *   export const doc = { type: 'function', kind: 'api', name: 'search', ... };
  */
-export interface FunctionDoc {
+export interface FunctionDoc extends AuthoredDocGraphFields {
   /** Doc-kind discriminant (shared with hooks). */
   type?: 'function';
   /** Export name, e.g. 'search' | 'useMediaQuery'. */
@@ -58,7 +62,7 @@ export interface FunctionDoc {
   summary?: string;
   /** Longer description. */
   description?: string;
-  /** Docs namespace path. Defaults (e.g. 'cli/api') applied by the docs index. */
+  /** The group that reads this doc. The CLI's API functions use 'cli/api', which the docs tree adopts by kind: each is the leaf `cli/api/functions/<name>`. Every function doc the CLI ships declares one, and `astryx doctor` fails on one that is missing or that nothing reads. */
   namespace?: string;
   /** Alternate slugs that also resolve to this doc. */
   aliases?: string[];
@@ -80,7 +84,8 @@ export interface FunctionDoc {
   usage?: UsageDoc;
   /** The CLI command that wraps this function, e.g. 'search'. */
   command?: string;
-  /** Related function/command names. */
+  /** Related function names; the CLI links each to its doc. Name the CLI
+   *  command with `command`, not here. */
   related?: string[];
   /** Component names this is commonly used with (hooks). */
   relatedComponents?: string[];

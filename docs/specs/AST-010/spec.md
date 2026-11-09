@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 4
 template_version: 1
 kind: system-spec
 id: spec:AST-010
@@ -266,8 +266,11 @@ behavior under `minSize` and `maxSize`.
 
 The shipped contract remains distributed across its current owners:
 
-- `architecture:public-component-api` owns the stable exports, breaking-change
-  classification, and migration boundary;
+- `architecture:public-component-api` owns stable export and component contract
+  shape;
+- [`spec:AST-017` — Release Compatibility & Versioning system spec](../AST-017/spec.md)
+  owns classification, deprecation/cleanup state, Changesets, and migration evidence;
+  this spec keeps the exact Resizable mapping and its direct transition requirement;
 - `family:layout-regions` delegates resize state and interaction to useResizable
   and ResizeHandle while LayoutPanel consumes resolved size;
 - `spec:AST-002` governs the caller-owned container basis and predictable state;
