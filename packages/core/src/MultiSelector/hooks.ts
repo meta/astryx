@@ -19,6 +19,7 @@ import {isRtlElement} from '../hooks/isRtlElement';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import type {MultiSelectorOptionData} from './types';
 import {useTypeahead} from '../hooks/useTypeahead';
+import {enabledEdgeIndex} from '../utils/enabledEdgeIndex';
 
 interface UseMultiComboboxOptions {
   selectableItems: MultiSelectorOptionData[];
@@ -141,15 +142,8 @@ export function useMultiCombobox({
 
   /** Opening never lands on a disabled option; -1 when none is enabled. */
   const findOpeningIndex = useCallback(
-    (fromEnd: boolean) => {
-      const enabledIndices = getEnabledIndices();
-      return (
-        (fromEnd
-          ? enabledIndices[enabledIndices.length - 1]
-          : enabledIndices[0]) ?? -1
-      );
-    },
-    [getEnabledIndices],
+    (fromEnd: boolean) => enabledEdgeIndex(selectableItems, fromEnd),
+    [selectableItems],
   );
 
   const closeAndReset = useCallback(() => {

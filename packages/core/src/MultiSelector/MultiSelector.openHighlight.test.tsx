@@ -30,12 +30,13 @@ function activeOptionText(control: HTMLElement): string | null {
 
 function renderMultiSelector(
   options: ReadonlyArray<string | {value: string; disabled?: boolean}>,
+  value: string[] = [],
 ) {
   render(
     <MultiSelector
       label="Levels"
       options={[...options]}
-      value={[]}
+      value={value}
       onChange={() => {}}
     />,
   );
@@ -79,5 +80,47 @@ describe('MultiSelector: the option a closed list highlights when it opens', () 
     trigger.focus();
     fireEvent.keyDown(trigger, {key: 'ArrowDown'});
     expect(activeOptionText(trigger)).toBeNull();
+  });
+
+  describe('with a value selected, in the order the list opens in', () => {
+    // The open list puts the selected options first.
+    const LIST = [{value: 'Archived', disabled: true}, 'Easy', 'Hard'];
+
+    it('ArrowDown opens on the selected option at the top', () => {
+      const trigger = renderMultiSelector(LIST, ['Hard']);
+      trigger.focus();
+      fireEvent.keyDown(trigger, {key: 'ArrowDown'});
+      expect(activeOptionText(trigger)).toBe('Hard');
+    });
+
+    it('Enter opens on the selected option at the top', () => {
+      const trigger = renderMultiSelector(LIST, ['Hard']);
+      trigger.focus();
+      fireEvent.keyDown(trigger, {key: 'Enter'});
+      expect(activeOptionText(trigger)).toBe('Hard');
+    });
+
+    it('a press opens on the selected option at the top', () => {
+      const trigger = renderMultiSelector(LIST, ['Hard']);
+      fireEvent.click(trigger);
+      expect(activeOptionText(trigger)).toBe('Hard');
+    });
+
+    it('ArrowUp opens on the last enabled option when a disabled option is selected', () => {
+      const trigger = renderMultiSelector(
+        ['Easy', 'Hard', {value: 'Retired', disabled: true}],
+        ['Retired'],
+      );
+      trigger.focus();
+      fireEvent.keyDown(trigger, {key: 'ArrowUp'});
+      expect(activeOptionText(trigger)).toBe('Hard');
+    });
+
+    it('typing opens on the typed match, never on a disabled option', () => {
+      const trigger = renderMultiSelector(LIST, ['Hard']);
+      trigger.focus();
+      fireEvent.keyDown(trigger, {key: 'e'});
+      expect(activeOptionText(trigger)).toBe('Easy');
+    });
   });
 });
