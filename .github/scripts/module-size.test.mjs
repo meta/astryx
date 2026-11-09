@@ -39,16 +39,19 @@ beforeAll(() => {
       '// This long explanatory comment must not reach the minified output.',
       'export function useWidget(initialWidgetValue: number) {',
       '  const [currentWidgetValue] = useState(initialWidgetValue);',
-      '  return [currentWidgetValue + insideHelperValue + outsideValue, jsx, createRoot];',
+      '  return [currentWidgetValue + insideHelperValue() + outsideValue(), jsx, createRoot];',
       '}',
       '',
     ].join('\n'),
   );
   write(
     'src/widget/inside.ts',
-    "export const insideHelperValue = 'inside-marker'.length;\n",
+    "export const insideHelperValue = () => 'inside-marker';\n",
   );
-  write('src/outside.ts', "export const outsideValue = 'outside-marker'.length;\n");
+  write(
+    'src/outside.ts',
+    "export const outsideValue = () => 'outside-marker';\n",
+  );
   write(
     'src/big/big.ts',
     `export const big = ${JSON.stringify(
@@ -123,7 +126,9 @@ describe('budgets', () => {
       checkBudgets({
         root,
         config: {
-          modules: [{...widget, entries: ['src/widget/gone.ts'], budgetBytes: 1}],
+          modules: [
+            {...widget, entries: ['src/widget/gone.ts'], budgetBytes: 1},
+          ],
         },
       }),
     ).rejects.toThrow(/src\/widget\/gone\.ts/);
@@ -150,18 +155,34 @@ describe('command line', () => {
   it('prints a GitHub warning and exits 0 when an advisory budget is exceeded', () => {
     const out = run({version: 1, modules: [{...big, budgetBytes: 100}]});
     expect(out.status).toBe(0);
-    expect(out.stdout).toMatch(/::warning title=Module size over budget::big engine/);
+    expect(out.stdout).toMatch(
+      /::warning title=Module size over budget::big engine/,
+    );
   });
 
   it('exits 1 when an enforced budget is exceeded', () => {
-    const out = run({version: 1, modules: [{...big, budgetBytes: 100, enforce: true}]});
+    const out = run({
+      version: 1,
+      modules: [{...big, budgetBytes: 100, enforce: true}],
+    });
     expect(out.status).toBe(1);
-    expect(out.stdout).toMatch(/::error title=Module size over budget::big engine/);
+    expect(out.stdout).toMatch(
+      /::error title=Module size over budget::big engine/,
+    );
   });
 
   it('exits 2 on a missing module path or config', () => {
-    expect(run({version: 1, modules: [{...widget, entries: ['nope.ts'], budgetBytes: 1}]}).status).toBe(2);
-    const missing = spawnSync(process.execPath, [SCRIPT, '--config', path.join(root, 'none.json')], {encoding: 'utf8'});
+    expect(
+      run({
+        version: 1,
+        modules: [{...widget, entries: ['nope.ts'], budgetBytes: 1}],
+      }).status,
+    ).toBe(2);
+    const missing = spawnSync(
+      process.execPath,
+      [SCRIPT, '--config', path.join(root, 'none.json')],
+      {encoding: 'utf8'},
+    );
     expect(missing.status).toBe(2);
   });
 });
@@ -169,7 +190,10 @@ describe('command line', () => {
 describe('committed budgets', () => {
   it('names an engine and adapters that exist, each with a budget and an enforce switch', () => {
     const config = JSON.parse(
-      fs.readFileSync(path.join(REPO, '.github/module-size-budgets.json'), 'utf8'),
+      fs.readFileSync(
+        path.join(REPO, '.github/module-size-budgets.json'),
+        'utf8',
+      ),
     );
     expect(config.version).toBe(1);
     const roles = config.modules.map(m => m.role);

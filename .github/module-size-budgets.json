@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "method": "esbuild ESM bundle of each entry, minified, NODE_ENV production; every package import (React, react-dom, react/jsx-runtime) and every relative import outside the module's scope stays external; then gzip -9 of the output. budgetBytes is that gzipped size.",
+  "enforce": "Set when the converged engine lands; over-budget then needs the owner's OK.",
+  "modules": [
+    {
+      "name": "virtualization engine",
+      "role": "engine",
+      "entries": ["packages/core/src/utils/listWindow.ts"],
+      "scope": "packages/core/src/utils",
+      "budgetBytes": 4915,
+      "enforce": false,
+      "note": "Today's shared windowing piece. The converged engine replaces this path."
+    },
+    {
+      "name": "Table virtualization adapter",
+      "role": "adapter",
+      "entries": [
+        "packages/core/src/Table/plugins/virtualization/useTableWindow.ts",
+        "packages/core/src/Table/plugins/virtualization/useTableRowsVirtualization.ts"
+      ],
+      "scope": "packages/core/src/Table/plugins/virtualization",
+      "budgetBytes": 2000,
+      "enforce": false,
+      "note": "Over budget until its windowing moves into the converged engine."
+    }
+  ]
+}
