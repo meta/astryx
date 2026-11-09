@@ -10,7 +10,7 @@ export const docs = {
     description: 'Provides a native scroll viewport and a real observed content box. The viewport enters the tab order only while a requested logical axis is effectively scrollable, and containment applies only to effective axes.',
     bestPractices: [
       {guidance: true, description: 'Give every area a concise label that identifies the content keyboard users will scroll.'},
-      {guidance: true, description: 'Keep the default `role="group"` for ordinary scroll containers. Choose `role="region"` only when the area is significant enough to appear in screen-reader landmark navigation — every `region` adds an entry to that list.'},
+      {guidance: true, description: 'Leave `role` unset (it renders `group`) for ordinary scroll containers. Choose `role="region"` only when the area is significant enough to appear in screen-reader landmark navigation; every `region` adds an entry to that list.'},
       {guidance: true, description: 'Choose `inline`, `block`, or `both` from content intent; the component maps the logical axes through writing mode and direction.'},
       {guidance: true, description: 'Keep the default `overscroll="allow"` for nested areas unless the interaction deliberately needs containment.'},
       {guidance: true, description: 'Use `useScrollableArea` instead when a component already owns both a viewport and a suitable content box, or when children must remain direct flex/grid items or retain a definite percentage block-size basis.'},
