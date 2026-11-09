@@ -202,7 +202,14 @@ A judged part shorter than four of the
 screencast's intervals fails: the animation under test was not moving during
 the block. One that had already settled when the judged part began (nothing in
 the window to judge) throws `BusyWindowTooLateError`, with the numbers: the
-block ran too late, which is no reading of the component. With
+block ran too late, which is no reading of the component. The held animation
+can also end inside the block. When it keeps no end value (`holds` false: no
+held tail, and no fill the compositor honors; WebKit on Linux honors none)
+and no settle bound applies, the judged part ends at its curve's end. Past it,
+WebKit presents the value the main thread last committed, not the animation.
+If that leaves the control fewer than four frames, where the uncut part held
+enough, the block also began too late: `BusyWindowTooLateError`, with
+`curveEndMs`. A starved run still throws `FrameStarvationError`. With
 `during`, `blockMainThread` starts the loop from a task queued in the frame
 that saw the animation, after that frame's rendering update: WebKit hands a
 newly started animation to its compositor there, and a loop inside the rAF
@@ -258,7 +265,8 @@ A just-started animation can reach the screen after the block began (50–100 ms
 later in WebKit on a loaded machine). When the cast saw the element at rest
 before the block (wait for `cast.frameCount()` to pass 0 before starting the
 animation), judging starts at its first presented change: the judged part still
-ends with the block and still needs four intervals, and `onScreenFromMs` and the
+ends with the block (or the held curve, above) and still needs four intervals,
+and `onScreenFromMs` and the
 summary report when it came. So is an element that moved, then held from
 before the block until its first presented change inside it: WebKit presents
 a just-started compositor animation late (a sheet's release held on screen for
@@ -359,7 +367,7 @@ its longest stall may be no longer than that run's control's, since a stall
 belongs to its run. A run whose control moved on fewer frames than
 `minRunFrames` (1 by default) is too little to judge: the summary names it,
 and the pool leaves it out, so it never counts as a pass. A run whose block
-began after its motion had settled is left out the same way: its `runs` entry
+began too late for its motion is left out the same way: its `runs` entry
 is null, and `late` holds its `BusyWindowTooLateError`. The pool reads each
 run without the starvation throw. The pool fails with
 fewer than `minJudgedRuns` judged runs (half of all the runs, rounded up). In each judged run,
