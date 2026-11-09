@@ -27,14 +27,16 @@ import DurationShardSequencer from './scripts/vitest-shard-sequencer.mjs';
 
 const rootDir = path.resolve(__dirname, '.');
 const coreSrc = path.resolve(__dirname, 'packages/core/src');
-// Times the Markdown helper pipeline against the empty one on the CPU clock.
-// CPU time still includes cache and memory-bandwidth contention from other
-// work, so this file runs alone in the `perf` project.
+// Some Node 25 releases leave the negative spelling out of this list, so the
+// check reads the positive one.
 const webStorageOff = process.allowedNodeEnvironmentFlags.has(
-  '--no-experimental-webstorage',
+  '--experimental-webstorage',
 )
   ? ['--no-experimental-webstorage']
   : [];
+// Times the Markdown helper pipeline against the empty one on the CPU clock.
+// CPU time still includes cache and memory-bandwidth contention from other
+// work, so this file runs alone in the `perf` project.
 const helperOverheadBenchmark =
   'packages/core/src/Markdown/Markdown.fr23.perf.test.ts';
 
