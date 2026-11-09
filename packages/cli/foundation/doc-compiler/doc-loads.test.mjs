@@ -346,7 +346,7 @@ const RUNNERS = {
     sites: [
       '.import() ×2',
       'createJiti ×2',
-      'import(<computed>) ×4',
+      'importUrl ×4',
       'importUserModule ×2',
     ],
   },
@@ -355,9 +355,9 @@ const RUNNERS = {
     sites: ['importDocModule', 'importNativeModule ×3', 'importTemplateModule'],
   },
   'foundation/render/page-worker.mjs': {
-    runs: 'the page `astryx experimental render` renders, its local modules, React, and the StyleX compiler, in a worker; outside a project, Node resolves the packages its folder lacks, and React and StyleX for every module (resolve hooks for ES modules), from the package set the CLI runs from',
+    runs: 'the page `astryx experimental render` renders, its local modules, React, and the StyleX compiler, in a worker, then React DOM and the recharts settings to draw its charts; outside a project, Node resolves the packages its folder lacks, and React and StyleX for every module (resolve hooks for ES modules), from the package set the CLI runs from',
     sites: [
-      '.import() ×3',
+      '.import() ×6',
       'createJiti ×2',
       'module',
       'module.register',
@@ -367,6 +367,10 @@ const RUNNERS = {
   'foundation/render/render-page.mjs': {
     runs: 'the render worker, so a page that never finishes can be stopped',
     sites: ['worker_threads.Worker'],
+  },
+  'foundation/fs/import-url.mjs': {
+    runs: 'the doc file at a file URL, for the doc importers',
+    sites: ['import(<computed>)'],
   },
   'foundation/fs/module-loader.mjs': {
     runs: 'user modules (config, manifests, handlers, codemods): natively, through jiti, or by require for a fresh CommonJS read',
@@ -435,6 +439,7 @@ const RUNNERS = {
  */
 const LOADER_MODULES = {
   'foundation/doc-compiler/import.mjs': [],
+  'foundation/fs/import-url.mjs': [],
   'foundation/fs/module-loader.mjs': ['findPresentFiles'],
   // loadTopicModule hands back a topic's raw doc.
   'foundation/discovery/docs-discovery.mjs': [

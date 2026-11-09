@@ -155,10 +155,30 @@ test('under Reduce Motion on a touch screen, a move cross-fades: the card jumps 
   // the bottom of the fade, and no seek of the running animations shows it.
   // A first cross-fade warms the page up (a fresh WebKit page skips frames
   // for about 100 ms); the second, back home, is the one measured.
-  const frames = await page.evaluate(async travel => {
+  const {frames, landed} = await page.evaluate(async travel => {
     const card = document.getElementById('card') as HTMLElement;
     await window.card.animate({x: travel});
     const samples: {left: number; opacity: number}[] = [];
+    // The travel lands with a style write, so the card's opacity is read as
+    // that write runs. The next frame can come well into the fade back in on
+    // a loaded runner, and a landing that runs late enough appears at once.
+    // Only a change of `translate` counts: the animator writes other inline
+    // styles too (`will-change`).
+    const landed: number[] = [];
+    const {style} = card;
+    const setProperty = style.setProperty.bind(style);
+    style.setProperty = (property, value, priority) => {
+      if (property !== 'translate') {
+        setProperty(property, value, priority);
+        return;
+      }
+      const was = style.getPropertyValue(property);
+      const opacity = Number(getComputedStyle(card).opacity);
+      setProperty(property, value, priority);
+      if (style.getPropertyValue(property) !== was) {
+        landed.push(opacity);
+      }
+    };
     let done = false;
     void window.card.animate({x: 0}).then(() => {
       done = true;
@@ -170,7 +190,8 @@ test('under Reduce Motion on a touch screen, a move cross-fades: the card jumps 
         opacity: Number(getComputedStyle(card).opacity),
       });
     }
-    return samples;
+    delete (style as {setProperty?: unknown}).setProperty;
+    return {frames: samples, landed};
   }, TRAVEL);
   // Never between the ends: the travel is substituted, not slowed.
   for (const {left: x} of frames) {
@@ -189,7 +210,9 @@ test('under Reduce Motion on a touch screen, a move cross-fades: the card jumps 
   for (let i = 1; i < after.length; i++) {
     expect(after[i]).toBeGreaterThanOrEqual(after[i - 1] - 0.01);
   }
-  expect(Math.min(before[before.length - 1], after[0])).toBeLessThan(0.1);
+  // It lands once, while transparent.
+  expect(landed).toHaveLength(1);
+  expect(landed[0]).toBeLessThan(0.1);
   expect(frames[frames.length - 1].opacity).toBeCloseTo(1, 2);
 });
 

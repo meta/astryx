@@ -247,9 +247,9 @@ useAutoMediaMode useAutoMediaMode hooks/useAnimatedLayout.doc.mjs hooks/useAutoM
 useBackdropPress useBackdropPress Layer/Layer.doc.mjs Layer/useBackdropPress.ts
 useBaseTablePlugins useBaseTablePlugins Table/Table.doc.mjs Table/useBaseTablePlugins.ts
 useBusyAnnouncement useBusyAnnouncement hooks/useAnimatedLayout.doc.mjs hooks/useBusyAnnouncement.ts
-useCalendarConstraints useCalendarConstraints Calendar/Calendar.doc.mjs Calendar/hooks/useCalendarConstraints.ts
+useCalendarConstraints useCalendarConstraints Calendar/useCalendarConstraints.doc.mjs Calendar/hooks/useCalendarConstraints.ts
 useCalendarDays useCalendarDays Calendar/useCalendarDays.doc.mjs Calendar/hooks/useCalendarDays.ts
-useCalendarNavigation useCalendarNavigation Calendar/Calendar.doc.mjs Calendar/hooks/useCalendarNavigation.ts
+useCalendarNavigation useCalendarNavigation Calendar/useCalendarNavigation.doc.mjs Calendar/hooks/useCalendarNavigation.ts
 useChatComposerTokens useChatComposerTokens Chat/Chat.doc.mjs Chat/useChatComposerTokens.ts
 useChatDictation useChatDictation Chat/Chat.doc.mjs Chat/useChatDictation.ts
 useChatNewMessages useChatNewMessages Chat/Chat.doc.mjs Chat/useChatNewMessages.ts
@@ -298,7 +298,7 @@ useSpeechRecognition useSpeechRecognition Chat/Chat.doc.mjs Chat/useSpeechRecogn
 useSwipeAction useSwipeAction Item/Item.doc.mjs Item/useSwipeAction.ts
 useSwitchTouch useSwitchTouch Switch/Switch.doc.mjs Switch/useSwitchTouch.ts
 useTableCellStyles useTableCellStyles Table/Table.doc.mjs Table/useTableCellStyles.ts
-useTableColumnSettingsState useTableColumnSettingsState Table/Table.doc.mjs Table/plugins/columnSettings/useTableColumnSettingsState.tsx
+useTableColumnSettingsState useTableColumnSettingsState Table/plugins/columnSettings/useTableColumnSettingsState.doc.mjs Table/plugins/columnSettings/useTableColumnSettingsState.tsx
 useTableSortableState useTableSortableState Table/plugins/sortable/useTableSortableState.doc.mjs Table/plugins/sortable/useTableSortableState.tsx
 useToastGesture useToastGesture Toast/Toast.doc.mjs Toast/useToastGesture.ts
 useTouchTrigger useTouchTrigger Layer/Layer.doc.mjs Layer/useTouchTrigger.ts

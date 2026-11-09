@@ -12,13 +12,14 @@ import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {loadProjectContext, selectIntegrationCodemodsFor} from './_adapter.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 let originalCwd;
 
 beforeEach(() => {
   originalCwd = process.cwd();
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-upgrade-context-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-upgrade-context-'));
 });
 
 afterEach(() => {

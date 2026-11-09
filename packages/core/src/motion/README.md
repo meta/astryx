@@ -29,6 +29,7 @@ roles through `resolveMotion`.
 | `uikit/sheet.ts`                                 | UISheetPresentationController: the flick speed, how near a detent counts as on it, how far ahead a release is projected, and the speed below which it is not.        |
 | `uikit/switch.ts`                                | UISwitch on iOS 26.2: geometry, the lift, settle, travel and tracking springs, the flip distance, the track colour.                                                  |
 | `uikit/datePicker.ts`                            | UIDatePicker: the rules it adds to its wheels.                                                                                                                       |
+| `uikit/reorder.ts`                               | UITableView edit-mode reorder: the reorder control's claim and the edge autoscroll (the glides play `springs.settle`).                                               |
 | `android/keyboard.ts`                            | Android's software keyboard (Chrome with Gboard): its slides' durations and curves (no theme's) and when they start against Chrome's report and a blur.              |
 | `uikit/zoomMedia.ts`                             | UIScrollView zooming for a photo viewer: overshoot past the limits, double-tap and maximum zoom.                                                                     |
 | `roles.ts`                                       | The internal motion roles: the springs, durations and curves `spec:AST-094` FR4 names, registered by the shared tables, and a role's CSS form read back.             |
@@ -181,7 +182,10 @@ await handle.finished; // true if it ran to the end, false if interrupted
 - `createMotionEngine(dialog, {pseudoElement: '::backdrop'})` drives a
   pseudo-element; with no inline style to hold it, a static filling animation
   holds its end value until the next animation replaces it, while the
-  pseudo-element exists. A dialog's `::backdrop` is made again each time the
+  pseudo-element exists. A value equal to its `base` (`{base: {opacity: 0}}`,
+  what its stylesheet shows at rest) is not held, so the pseudo-element keeps
+  no compositing layer at rest; in development, the first such value warns
+  when the stylesheet shows another. A dialog's `::backdrop` is made again each time the
   dialog opens, so a presentation `set`s its starting value right after
   `showModal()`, in the same task (a `set` before it lands on the backdrop
   the open replaces).
