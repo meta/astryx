@@ -272,6 +272,23 @@ describe('command line', () => {
     );
   });
 
+  it("prints an adapter's size note in the table and in its warning", () => {
+    writeAdapterFixture();
+    const note =
+      "host-resident wiring isn't counted while it lives in the host component (list-windowing INV5 gap)";
+    const out = run({
+      version: 1,
+      modules: [{...adapterEntry, budgetBytes: 1, sizeNote: note}],
+    });
+    expect(out.status).toBe(0);
+    expect(out.stdout).toContain(`fixture adapter: ${note}`);
+    expect(out.stdout).toMatch(
+      new RegExp(
+        `::warning title=Module size over budget::fixture adapter is \\d+ B min\\+gz; its budget is 1 B\\. ${note.replace(/[()]/g, '\\$&')}`,
+      ),
+    );
+  });
+
   it('exits 1 when an enforced budget is exceeded', () => {
     const out = run({
       version: 1,
@@ -316,6 +333,10 @@ describe('committed budgets', () => {
     for (const m of config.modules) {
       expect(typeof m.budgetBytes).toBe('number');
       expect(typeof m.enforce).toBe('boolean');
+      if (m.role === 'adapter')
+        expect(m.sizeNote).toBe(
+          "host-resident wiring isn't counted while it lives in the host component (list-windowing INV5 gap)",
+        );
       const parts =
         m.role === 'adapter' ? [m.host, m.engine, {entries: m.adapter}] : [m];
       for (const part of parts) {
