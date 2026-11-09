@@ -101,6 +101,14 @@ export interface PanGestureRecognizerOptions extends GestureRecognizerOptions<Pa
 
 const ZERO: Point = {x: 0, y: 0};
 
+/**
+ * A tap's wobble, px. A scroll-edge pan leaves moves inside it to the
+ * browser, because WebKit ends a touch's click when one of its moves is
+ * cancelled. Mobile Safari commits its native pan on a kept move this long,
+ * so the hold starts at it.
+ */
+const TAP_WOBBLE = 5;
+
 const DIRECTION_VECTORS: Partial<Record<PanDirection, Point>> = {
   left: {x: -1, y: 0},
   right: {x: 1, y: 0},
@@ -424,12 +432,14 @@ export class PanGestureRecognizer extends GestureRecognizer {
   }
 
   /**
-   * A scroll-edge pan holds its finger from the first move while every
-   * scroller under it is at its edge and the finger pulls away from that
-   * edge, the pan's own way (`spec:AST-094` FR19, DEC-18):
-   * the browser would only rubber-band there. It still begins at its
-   * hysteresis; a move the content can still scroll stays the browser's,
-   * and so does every move while a second finger is down (a pinch).
+   * A scroll-edge pan holds its finger once it has moved a tap's wobble along
+   * the pan's axis. It holds only while every scroller under it is at its
+   * edge and the finger pulls away from that edge, the pan's own way. There
+   * the browser would only rubber-band (`spec:AST-094` FR19, DEC-18). Inside
+   * the wobble the moves stay the browser's, so a tap keeps its click. It
+   * still begins at its hysteresis. A move the content can still scroll stays
+   * the browser's, and so does every move while a second finger is down (a
+   * pinch).
    */
   protected override keepsTouch(touchId: number): boolean {
     const touch = this.touches.get(touchId);
@@ -451,10 +461,21 @@ export class PanGestureRecognizer extends GestureRecognizer {
     }
     const moved = this.raw;
     return (
-      (moved.x !== 0 || moved.y !== 0) &&
+      this.travelAlongAxis(moved) >= TAP_WOBBLE &&
       this.classify(moved) === 'begin' &&
       !this.nativeCanScroll(moved.x, moved.y)
     );
+  }
+
+  private travelAlongAxis(moved: Point): number {
+    if (this.direction === 'any') {
+      return Math.max(Math.abs(moved.x), Math.abs(moved.y));
+    }
+    const isHorizontal =
+      this.direction === 'horizontal' ||
+      this.direction === 'left' ||
+      this.direction === 'right';
+    return Math.abs(isHorizontal ? moved.x : moved.y);
   }
 
   private nativeCanScroll(dx: number, dy: number): boolean {
