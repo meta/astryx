@@ -650,7 +650,9 @@ async function addVariantForAll({cwd, from, selector, variant}) {
   // is left as it is and never listed as missing. Some libraries ship each
   // look as its own package (Font Awesome's solid and regular packages): an
   // icon from another package meets its variant only under the same export
-  // name and of the same kind, a component or data for the adapter.
+  // name and of the same kind, a component or data for the adapter. Once
+  // one icon of a package meets its twin, that package is a look package of
+  // the variant module, so its other icons are listed as missing.
   const variantPackage = iconModulePackage(source.module);
   /** @param {{module: string, source: string, adapt: boolean}} origin */
   const otherPackageTwin = origin => {
@@ -658,6 +660,14 @@ async function addVariantForAll({cwd, from, selector, variant}) {
     const twin = byLibraryExport.get(origin.source);
     return twin != null && twin.adapt === origin.adapt;
   };
+  const lookPackages = new Set(
+    set.data.icons.flatMap(icon => {
+      const origin = origins.get(icon.export);
+      return origin && otherPackageTwin(origin)
+        ? [iconModulePackage(origin.module)]
+        : [];
+    }),
+  );
   const generated = generatedModulePath(set, packageDir);
   /** @type {import('../../../foundation/discovery/icon-set-writer.mjs').GeneratedIcon[]} */
   const toWrite = [];
@@ -674,7 +684,7 @@ async function addVariantForAll({cwd, from, selector, variant}) {
     if (
       origin &&
       iconModulePackage(origin.module) !== variantPackage &&
-      !otherPackageTwin(origin)
+      !lookPackages.has(iconModulePackage(origin.module))
     ) {
       return icon;
     }

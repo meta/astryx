@@ -5,7 +5,9 @@
  * its own package, shaped like Font Awesome: `add --variant <look> --from
  * <other package> --all` adds the look for every icon, and a pack export
  * (`fas`, an object of the other exports) is no icon and keeps the library
- * prefix coming off.
+ * prefix coming off. An icon of the set that the look's package does not
+ * export is listed as missing, and a glyph whose name starts with a digit
+ * (`fa0`) keeps the prefix.
  */
 
 import * as fs from 'node:fs';
@@ -30,8 +32,10 @@ const REGULAR = '@acme/free-regular-glyphs';
  * @param {string} name
  * @param {string} prefix the look's prefix, `fas` or `far`
  * @param {boolean} pack whether it exports the pack under the prefix
+ * @param {Array<[string, string]>} [extra] more glyphs, as export name and
+ *   icon name
  */
-function writeLook(name, prefix, pack) {
+function writeLook(name, prefix, pack, extra = []) {
   const lib = path.join(pkg, 'node_modules', ...name.split('/'));
   fs.mkdirSync(lib, {recursive: true});
   fs.writeFileSync(
@@ -61,6 +65,7 @@ function writeLook(name, prefix, pack) {
     'faHouse',
     'faMagnifyingGlass',
     'faXmark',
+    ...extra.map(([each]) => each),
   ];
   fs.writeFileSync(
     path.join(lib, 'index.mjs'),
@@ -71,6 +76,9 @@ function writeLook(name, prefix, pack) {
       `var faHouse = ${glyph('house', 'M1 1')};`,
       'var faHome = faHouse;',
       `var faMagnifyingGlass = ${glyph('magnifying-glass', 'M2 2')};`,
+      ...extra.map(
+        ([each, iconName]) => `var ${each} = ${glyph(iconName, 'M3 3')};`,
+      ),
       `var icons = {${exported.map(each => `${each}: ${each}`).join(', ')}};`,
       '',
       `export { ${pack ? `icons as ${prefix}, ` : ''}prefix, ${exported.join(', ')} };`,
@@ -236,7 +244,7 @@ describe('a library of icon data objects with one package per look', () => {
     expect(await strictFailures()).toEqual([]);
   });
 
-  it('a pack export (`fas`) is no icon, and the `fa` prefix still comes off every name', async () => {
+  it('a pack export (`fas`) is no icon, and the `fa` prefix still comes off the names', async () => {
     writeLook(SOLID, 'fas', true);
     writeLook(REGULAR, 'far', true);
     await wrapSolid();
@@ -248,6 +256,62 @@ describe('a library of icon data objects with one package per look', () => {
     const added = await addRegular();
     expect(added.code, JSON.stringify(added.body)).toBe(0);
     expect(added.body.data).toMatchObject({added: 3, missing: []});
+    expect(await strictFailures()).toEqual([]);
+  });
+
+  it('icons whose names start with a digit (`fa0`, `fa500px`) keep the `fa` prefix, and the set passes the strict check', async () => {
+    writeLook(SOLID, 'fas', true, [
+      ['fa0', '0'],
+      ['fa500px', '500px'],
+    ]);
+    writeLook(REGULAR, 'far', true);
+    await wrapSolid();
+    expect(iconRows()).toEqual([
+      ['fa-0', 'Fa0Icon'],
+      ['fa-500px', 'Fa500pxIcon'],
+      ['house', 'HouseIcon'],
+      ['magnifying-glass', 'MagnifyingGlassIcon'],
+      ['xmark', 'XmarkIcon'],
+    ]);
+    expect(await strictFailures()).toEqual([]);
+  });
+
+  it('add --variant regular --all lists the icons the regular package does not export as missing', async () => {
+    writeLook(SOLID, 'fas', true, [
+      ['fa0', '0'],
+      ['faTrash', 'trash'],
+    ]);
+    writeLook(REGULAR, 'far', true);
+    await wrapSolid();
+    const added = await addRegular();
+    expect(added.code, JSON.stringify(added.body)).toBe(0);
+    expect(added.body.data).toMatchObject({
+      added: 3,
+      missing: ['fa-0', 'trash'],
+    });
+    expect(iconRows()).toEqual([
+      ['fa-0', 'Fa0Icon'],
+      ['house', 'HouseIcon', 'HouseRegularIcon'],
+      ['magnifying-glass', 'MagnifyingGlassIcon', 'MagnifyingGlassRegularIcon'],
+      ['trash', 'TrashIcon'],
+      ['xmark', 'XmarkIcon', 'XmarkRegularIcon'],
+    ]);
+    const res = await runCli(
+      [
+        'experimental',
+        'icon',
+        'add',
+        '--variant',
+        'regular',
+        '--from',
+        REGULAR,
+        '--all',
+      ],
+      pkg,
+    );
+    expect(res.stdout).toContain(
+      `2 icons have no regular export in ${REGULAR} and keep none: fa-0, trash`,
+    );
     expect(await strictFailures()).toEqual([]);
   });
 });
