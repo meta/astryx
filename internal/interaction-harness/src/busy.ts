@@ -121,10 +121,11 @@ export async function trackControl(
  * keep the marker out of its strip too (the top `2 * CONTROL_SIDE + 4` px).
  *
  * A busy proof dates a cast's frames on the controls' clock, in either
- * engine. Without the control ahead, a frame stamped late near the first
- * control's turn keeps its lateness. A proof that judges every frame near a
- * turn starts the one ahead too, and passes its frames to `busyWindowProof`
- * as `ahead`.
+ * engine, when the frames carry their engine (`trackMarker` keeps it).
+ * Without the control ahead, a frame stamped late near the first control's
+ * turn keeps its lateness. A proof that judges every frame near a turn
+ * starts the one ahead too, and passes its frames to `busyWindowProof` as
+ * `ahead`.
  */
 export async function startBusyControl(
   page: Page,
