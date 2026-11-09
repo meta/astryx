@@ -1355,10 +1355,11 @@ function motionStepPx(values: readonly number[]): number {
  * carrying one frame of motion. So each frame takes its time from the
  * controls' positions (`controlClock`), the component's and the control's
  * alike. A frame with no reading keeps its stamp's distance from the nearest
- * frame whose stamp agrees with its reading. The dated frames keep the cast's
- * order. Without the control `ahead`, a late frame near the first control's
- * turn keeps its lateness. Chromium casts and casts with no control are
- * judged on their stamps.
+ * frame whose stamp agrees with its reading. Such a frame never comes after
+ * the next frame with a reading, and no two frames share a time. Without the
+ * control `ahead`, a late frame near the first control's turn keeps its
+ * lateness. Chromium casts and casts with no control are judged on their
+ * stamps.
  *
  * A WebKit proof keeps one dated frame per display interval, the earlier
  * one. A frame with no reading always stays. The proof judges motion on every

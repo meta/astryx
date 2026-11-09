@@ -175,6 +175,8 @@ test('a spring keeps advancing every frame through a 1 s main-thread block, on i
     axis: 'x',
     settledWithin: 2,
     control,
+    ahead: second,
+    controlStarts: [controlStart, secondStart],
   });
   const alone = busyWindowProof(tracked, busy, {axis: 'x', settledWithin: 2});
   test.info().annotations.push({
