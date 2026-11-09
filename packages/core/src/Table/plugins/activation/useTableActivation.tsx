@@ -477,6 +477,25 @@ export function useTableActivation<T extends Record<string, unknown>>(
   }
   const store = storeRef.current;
 
+  // Affordance baselines by mounted row. The row ref below re-attaches
+  // whenever the transform re-renders the row, so a snapshot taken there
+  // can hold this module's own writes; the record lets a re-attach tell
+  // those apart from another plugin's values.
+  const rowBaselines = useMemo(
+    () =>
+      new WeakMap<
+        HTMLTableRowElement,
+        {
+          rowKey: string | number | undefined;
+          ownedTabIndex: string | null;
+          ownedShortcuts: string | null;
+          writtenTabIndex: string | null | undefined;
+          writtenShortcuts: string | null | undefined;
+        }
+      >(),
+    [],
+  );
+
   // Notify subscribers on every render — row ref subscribers re-apply
   // imperative styling only where their snapshot changed. Callback and key
   // changes ride the store, so the returned plugin keeps a stable identity.
@@ -580,15 +599,52 @@ export function useTableActivation<T extends Record<string, unknown>>(
           // values are no signal (a later plugin's explicit `tabIndex={0}`
           // reads the same as this module's default), so ownership is
           // positional — what the DOM holds before this module first writes —
-          // never inferred from equality. The baseline is re-snapshotted
-          // whenever the transform re-runs, so a later plugin's declarative
-          // change still lands; between re-runs React commits nothing this
-          // module did not render, so the snapshot stays current.
+          // never inferred from equality.
+          //
+          // The ref re-attaches whenever the transform re-renders the row, so
+          // a later snapshot can hold this module's own writes. A live value
+          // that matches the last write is never adopted as someone else's:
+          // the earlier baseline and the write record survive, and only a
+          // value nobody wrote becomes the new baseline. A row the record
+          // does not know (or one recycled for another key) snapshots fresh.
           // `data-activation-eligible` is exempt: it is namespaced to this
           // module, so no other plugin writes it.
-          let ownedTabIndex: string | null = row.getAttribute('tabindex');
-          let ownedShortcuts: string | null =
-            row.getAttribute('aria-keyshortcuts');
+          const liveTabIndex = row.getAttribute('tabindex');
+          const liveShortcuts = row.getAttribute('aria-keyshortcuts');
+          const previousBaseline = rowBaselines.get(row);
+          let ownedTabIndex: string | null;
+          let ownedShortcuts: string | null;
+          let writtenTabIndex: string | null | undefined;
+          let writtenShortcuts: string | null | undefined;
+          if (previousBaseline != null && previousBaseline.rowKey === key) {
+            if (liveTabIndex === previousBaseline.writtenTabIndex) {
+              ownedTabIndex = previousBaseline.ownedTabIndex;
+              writtenTabIndex = previousBaseline.writtenTabIndex;
+            } else {
+              ownedTabIndex = liveTabIndex;
+              writtenTabIndex = undefined;
+            }
+            if (liveShortcuts === previousBaseline.writtenShortcuts) {
+              ownedShortcuts = previousBaseline.ownedShortcuts;
+              writtenShortcuts = previousBaseline.writtenShortcuts;
+            } else {
+              ownedShortcuts = liveShortcuts;
+              writtenShortcuts = undefined;
+            }
+          } else {
+            ownedTabIndex = liveTabIndex;
+            ownedShortcuts = liveShortcuts;
+            writtenTabIndex = undefined;
+            writtenShortcuts = undefined;
+          }
+          const baseline = {
+            rowKey: key as string | number | undefined,
+            ownedTabIndex,
+            ownedShortcuts,
+            writtenTabIndex,
+            writtenShortcuts,
+          };
+          rowBaselines.set(row, baseline);
           // Last applied reflection for this row: a store broadcast over
           // an unchanged row stays a DOM no-op, so key-only updates keep
           // the at-most-two-rows bound even with an inline `onActivate`.
@@ -598,8 +654,6 @@ export function useTableActivation<T extends Record<string, unknown>>(
           // so it is adopted into the baseline rather than overwritten.
           let lastInteractive: boolean | null = null;
           let lastActive = false;
-          let writtenTabIndex: string | null | undefined;
-          let writtenShortcuts: string | null | undefined;
           const applyStyle = (eligibleNow: boolean) => {
             // Keyboard affordances and the pointer cursor follow the same
             // liveness as paint and presses: a row a later plugin marked
@@ -634,43 +688,43 @@ export function useTableActivation<T extends Record<string, unknown>>(
               // (roving focus) survives the next exclusion.
               const liveTabIndex = row.getAttribute('tabindex');
               if (liveTabIndex == null) {
-                const next = ownedTabIndex ?? String(tabIndex);
+                const next = baseline.ownedTabIndex ?? String(tabIndex);
                 row.setAttribute('tabindex', next);
-                writtenTabIndex = next;
-              } else if (liveTabIndex !== writtenTabIndex) {
-                ownedTabIndex = liveTabIndex;
-                writtenTabIndex = undefined;
+                baseline.writtenTabIndex = next;
+              } else if (liveTabIndex !== baseline.writtenTabIndex) {
+                baseline.ownedTabIndex = liveTabIndex;
+                baseline.writtenTabIndex = undefined;
               }
               const liveShortcuts = row.getAttribute('aria-keyshortcuts');
-              if (liveShortcuts !== writtenShortcuts) {
+              if (liveShortcuts !== baseline.writtenShortcuts) {
                 // A live value this module did not write is adopted (minus
                 // this module's own tokens, which the merge below re-adds),
                 // so a later plugin's announcement update survives.
-                ownedShortcuts = stripActivationTokens(liveShortcuts);
-                const next = withActivationShortcuts(ownedShortcuts);
+                baseline.ownedShortcuts = stripActivationTokens(liveShortcuts);
+                const next = withActivationShortcuts(baseline.ownedShortcuts);
                 row.setAttribute('aria-keyshortcuts', next);
-                writtenShortcuts = next;
+                baseline.writtenShortcuts = next;
               }
             } else {
               row.removeAttribute('data-activation-eligible');
               // Restore the owned baseline, never blank it: a row the
               // predicate excludes keeps its owner's tab stop and key
               // announcements, whichever side of activation declared them.
-              if (ownedTabIndex == null) {
+              if (baseline.ownedTabIndex == null) {
                 row.removeAttribute('tabindex');
               } else {
-                row.setAttribute('tabindex', ownedTabIndex);
+                row.setAttribute('tabindex', baseline.ownedTabIndex);
               }
               // The next apply re-establishes this module's affordances from
               // the baseline above, so its writes are never mistaken for
               // another plugin's.
-              writtenTabIndex = undefined;
-              if (ownedShortcuts == null) {
+              baseline.writtenTabIndex = undefined;
+              if (baseline.ownedShortcuts == null) {
                 row.removeAttribute('aria-keyshortcuts');
               } else {
-                row.setAttribute('aria-keyshortcuts', ownedShortcuts);
+                row.setAttribute('aria-keyshortcuts', baseline.ownedShortcuts);
               }
-              writtenShortcuts = undefined;
+              baseline.writtenShortcuts = undefined;
             }
           };
           // The first apply reuses the render-time eligibility above, so the
@@ -785,6 +839,6 @@ export function useTableActivation<T extends Record<string, unknown>>(
         };
       },
     }),
-    [store],
+    [store, rowBaselines],
   );
 }
