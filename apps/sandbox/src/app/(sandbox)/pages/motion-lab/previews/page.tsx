@@ -26,6 +26,8 @@ import {
   ChipRig,
   DisclosureRig,
   ListReorderRig,
+  NavTintRig,
+  ProgressFillRig,
   RailRig,
   SkeletonSwapRig,
   StatCountRig,
@@ -138,37 +140,34 @@ export default function PreviewsPage() {
           panes={[
             {
               tone: 'before',
-              label: 'Today — only the chevron rotates',
+              label: 'Today — the rail snaps',
               content: <RailRig mode="before" />,
             },
             {
               tone: 'after',
-              label: 'Proposed — the rail animates',
+              label: 'Proposed — the rail animates, the page follows its edge',
               content: <RailRig mode="after" />,
             },
           ]}
         />
         <DemoBody>
           <Text type="supporting" color="secondary">
+            Both panes are the real <code>AppShell</code> and{' '}
+            <code>SideNav</code>, collapsed through SideNav&rsquo;s own
+            controlled <code>collapsible</code> config. The proposal animates
+            the rail&rsquo;s width on the lab&rsquo;s collapse-and-expand
+            duration (<code>--duration-reveal</code>) and decelerating curve (
+            <code>--ease-entry</code>), so tuning either token reaches it. The
+            content is AppShell&rsquo;s flex sibling, so its edge follows the
+            rail in the same frame with no script per frame. The page is
+            anchored to that edge (<code>margin-inline: 0 auto</code>) rather
+            than centered in its own widening space, so it moves with the rail
+            instead of half as far, and never re-centers. Reduce Motion snaps.
+          </Text>
+          <Text type="supporting" color="secondary">
             The transform alternative — translate the rail and clip it — keeps
             the animation on the compositor but leaves the content beside it
             un-reflowed until the end, which reads worse than the layout cost.
-            Worth prototyping both before granting the exception.
-          </Text>
-          <Text type="supporting" color="secondary">
-            <strong>
-              Both panes here are approximated, not the real component.{' '}
-            </strong>
-            A fork of core&rsquo;s <code>SideNav</code> needs{' '}
-            <code>SideNavCollapseContext</code> on the public surface —{' '}
-            <code>SideNav</code> is a provider and core exports only the reader
-            hook. Importing the context by relative path compiles and is
-            silently wrong: the app resolves to <code>dist</code> while the
-            relative path reaches <code>src</code>, so the fork provides one
-            context object and core&rsquo;s own children read another. The
-            one-line fix is a public API surface change and wants its own
-            review, so this demo stays weaker than the TabList one below it
-            until that lands.
           </Text>
         </DemoBody>
       </DemoCard>
@@ -249,7 +248,7 @@ export default function PreviewsPage() {
         </DemoBody>
       </DemoCard>
 
-      <Grid columns={{minWidth: 420}} gap={4}>
+      <Grid columns={{minWidth: 420, max: 2}} gap={4}>
         <DemoCard
           title="Checkbox tick"
           question="A high-frequency surface, so criterion 2 applies: the answer may be that it should be almost nothing."
@@ -294,7 +293,47 @@ export default function PreviewsPage() {
             ]}
           />
         </DemoCard>
+
+        <DemoCard
+          title="NavItem hover tint"
+          question="Hover a row in each pane. Today the tint snaps on; the proposal fades it on the state token, and narrows the hover gate to a fine pointer that hovers."
+          badges={<Badge variant="error" label="ADD" />}>
+          <ComparePanes
+            panes={[
+              {
+                tone: 'before',
+                label: 'Today — snaps on hover',
+                content: <NavTintRig mode="before" />,
+              },
+              {
+                tone: 'after',
+                label: 'State token, fine pointers only',
+                content: <NavTintRig mode="after" />,
+              },
+            ]}
+          />
+        </DemoCard>
       </Grid>
+
+      <DemoCard
+        title="ProgressBar fill"
+        question="Width against transform for the determinate fill. Width re-lays out the bar every frame; scaleX stays on the compositor but squashes the rounded ends."
+        badges={<Badge variant="warning" label="PARTIAL" />}>
+        <ComparePanes
+          panes={[
+            {
+              tone: 'before',
+              label: 'Today — real ProgressBar, width',
+              content: <ProgressFillRig mode="before" />,
+            },
+            {
+              tone: 'after',
+              label: 'Proposed — transform: scaleX',
+              content: <ProgressFillRig mode="after" />,
+            },
+          ]}
+        />
+      </DemoCard>
 
       <VStack gap={2}>
         <Heading level={2}>What is not here</Heading>

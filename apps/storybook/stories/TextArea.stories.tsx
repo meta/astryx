@@ -59,7 +59,7 @@ const meta: Meta<typeof TextArea> = {
     isReadOnly: {
       control: 'boolean',
       description:
-        'Whether the textarea is read-only. The value still submits with the form but cannot be edited. Unlike isDisabled it is not dimmed and stays in the tab order.',
+        'Whether the textarea is read-only. The value still submits with the form but cannot be edited. Unlike isDisabled it is not dimmed and keeps its form value.',
     },
     disabledMessage: {
       control: 'text',
@@ -276,7 +276,7 @@ export const DescriptionWithOptional: Story = {
 };
 
 // Read-only shows a value the user should see and send but not change. Unlike
-// a disabled field it is not dimmed, stays in the tab order, and still submits.
+// a disabled field it is not dimmed and still submits.
 export const ReadOnly: Story = {
   render: args => {
     const [value, setValue] = useState(
@@ -792,6 +792,38 @@ export const VerticalFormAlignment: Story = {
             maxLength={200}
           />
         </FormLayout>
+      </div>
+    );
+  },
+};
+
+/**
+ * Keyboard traits: a note that keeps Return as a line break but turns
+ * correction off for code-like text, and a caption field that capitalizes
+ * every word. Focus them on a phone to see the keyboard.
+ */
+export const KeyboardTraits: Story = {
+  render: () => {
+    const [snippet, setSnippet] = useState('');
+    const [caption, setCaption] = useState('');
+    return (
+      <div
+        style={{display: 'flex', flexDirection: 'column', gap: 16, width: 320}}>
+        <TextArea
+          label="Shell command"
+          value={snippet}
+          onChange={setSnippet}
+          autoCapitalize="none"
+          hasAutoCorrect={false}
+          hasSpellCheck={false}
+        />
+        <TextArea
+          label="Photo caption"
+          value={caption}
+          onChange={setCaption}
+          rows={2}
+          autoCapitalize="words"
+        />
       </div>
     );
   },

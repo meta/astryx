@@ -1029,7 +1029,7 @@ function MultiSelectorDemo() {
           isLabelHidden
           value={draft}
           onChange={setDraft}
-          xstyle={s.flushSheetCheckList}
+          containerXstyle={s.flushSheetCheckList}
           hasDividers>
           {LABELS.map(l => (
             <CheckboxListItem

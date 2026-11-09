@@ -1,9 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Build and stage Storybook and Vite Sandbox in the existing Vercel docsite preview.
- * @input VERCEL_ENV, Storybook static build, and Sandbox Vite static build.
- * @output apps/docsite/public/{storybook,sandbox} only in preview/canary deployments.
+ * @file Build and stage Storybook and Vite Sandbox in the Vercel docsite.
+ * @input VERCEL_ENV, VERCEL_GIT_COMMIT_SHA, Storybook static build, and Sandbox Vite static build.
+ * @output apps/docsite/public/{storybook,sandbox} in preview and production deployments.
  * @position Build-time staging before the docsite Next.js build; CI retains its own visual artifact.
  */
 
@@ -12,34 +12,71 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-export function stageStorybook(source, destination) {
+const CANONICAL_ORIGIN = 'https://astryx.atmeta.com';
+const DEPLOYED_ENVIRONMENTS = new Set(['preview', 'production']);
+
+function documentMetadata(deploymentEnv, canonicalPath) {
+  return deploymentEnv === 'production'
+    ? `<link rel="canonical" href="${CANONICAL_ORIGIN}${canonicalPath}" />`
+    : '<meta name="robots" content="noindex, nofollow" />';
+}
+
+function injectHead(html, markup) {
+  const head = html.match(/<head(?:\s[^>]*)?>/i)?.[0];
+  if (!head) throw new Error('Static app HTML must contain a head element');
+  return html.replace(head, `${head}\n    ${markup}`);
+}
+
+function htmlFiles(directory) {
+  return fs.readdirSync(directory, {withFileTypes: true}).flatMap(entry => {
+    const absolute = path.join(directory, entry.name);
+    return entry.isDirectory()
+      ? htmlFiles(absolute)
+      : entry.name.endsWith('.html')
+        ? [absolute]
+        : [];
+  });
+}
+
+function sandboxCanonicalPath(destination, file) {
+  const relative = path.relative(destination, file).split(path.sep).join('/');
+  if (relative === 'index.html') return '/sandbox/';
+  if (relative.endsWith('/index.html')) {
+    return `/sandbox/${relative.slice(0, -'index.html'.length)}`;
+  }
+  return `/sandbox/${relative}`;
+}
+
+export function stageStorybook(source, destination, deploymentEnv) {
   const index = path.join(source, 'index.html');
   if (!fs.existsSync(index) || !fs.statSync(index).isFile()) {
     throw new Error(`Storybook build has no index.html: ${index}`);
   }
   const html = fs.readFileSync(index, 'utf8');
-  const head = html.match(/<head(?:\s[^>]*)?>/i)?.[0];
-  if (!head || /<base\b/i.test(html)) {
-    throw new Error(
-      'Storybook index.html must have a head without a base element',
-    );
+  if (/<base\b/i.test(html)) {
+    throw new Error('Storybook index.html must not contain a base element');
   }
 
-  // Next.js redirects /storybook/ to /storybook. Fix the base for relative
-  // manager, iframe, and asset URLs without changing Storybook's CI build.
+  // Next.js serves /storybook through index.html. Pin relative manager, iframe,
+  // and asset URLs to the stable route. Only the entry is canonical in
+  // production; previews and standalone frames stay out of search results.
   fs.rmSync(destination, {recursive: true, force: true});
   fs.cpSync(source, destination, {recursive: true});
-  fs.writeFileSync(
-    indexPath(destination),
-    html.replace(head, `${head}\n    <base href="/storybook/" />`),
-  );
+  for (const file of htmlFiles(destination)) {
+    const relative = path.relative(destination, file).split(path.sep).join('/');
+    const metadata =
+      deploymentEnv === 'production' && relative === 'index.html'
+        ? documentMetadata(deploymentEnv, '/storybook/')
+        : '<meta name="robots" content="noindex, nofollow" />';
+    const markup =
+      relative === 'index.html'
+        ? ['<base href="/storybook/" />', metadata].join('\n    ')
+        : metadata;
+    fs.writeFileSync(file, injectHead(fs.readFileSync(file, 'utf8'), markup));
+  }
 }
 
-function indexPath(directory) {
-  return path.join(directory, 'index.html');
-}
-
-export function stageSandbox(source, destination) {
+export function stageSandbox(source, destination, deploymentEnv) {
   for (const relative of ['index.html', '404.html', '404/index.html']) {
     const file = path.join(source, relative);
     if (!fs.existsSync(file) || !fs.statSync(file).isFile()) {
@@ -47,10 +84,23 @@ export function stageSandbox(source, destination) {
     }
   }
   // The Vite export already uses /sandbox/ for JS, CSS, template assets and
-  // fullscreen embeds. Copy the physical tree unchanged: missing paths must
-  // stay missing rather than falling through to an SPA shell.
+  // fullscreen embeds. Copy the physical tree unchanged except for discovery
+  // metadata: stable routes are canonical and preview routes are noindex.
   fs.rmSync(destination, {recursive: true, force: true});
   fs.cpSync(source, destination, {recursive: true});
+  for (const file of htmlFiles(destination)) {
+    const relative = path.relative(destination, file).split(path.sep).join('/');
+    const isRouteIndex =
+      relative === 'index.html' || relative.endsWith('/index.html');
+    const metadata =
+      relative === '404.html' || relative === '404/index.html' || !isRouteIndex
+        ? '<meta name="robots" content="noindex, nofollow" />'
+        : documentMetadata(
+            deploymentEnv,
+            sandboxCanonicalPath(destination, file),
+          );
+    fs.writeFileSync(file, injectHead(fs.readFileSync(file, 'utf8'), metadata));
+  }
 }
 
 function runPreviewBuild(run, root, name, args, env = process.env) {
@@ -68,7 +118,7 @@ function runPreviewBuild(run, root, name, args, env = process.env) {
       .join('\n')
       .slice(-12000);
     throw new Error(
-      `${name} preview build failed:\n${detail || error.message}`,
+      `${name} static build failed:\n${detail || error.message}`,
       {
         cause: error,
       },
@@ -76,21 +126,32 @@ function runPreviewBuild(run, root, name, args, env = process.env) {
   }
 }
 
-export function buildPreviews(deploymentEnv, root, run = execFileSync) {
+export function buildPreviews(
+  deploymentEnv,
+  root,
+  run = execFileSync,
+  commitSha = process.env.VERCEL_GIT_COMMIT_SHA,
+) {
   const publicDir = path.join(root, 'apps/docsite/public');
   const storybookDestination = path.join(publicDir, 'storybook');
   const sandboxDestination = path.join(publicDir, 'sandbox');
-  if (deploymentEnv !== 'preview') {
-    // Release docs must never package an earlier cached preview.
+  const versionFile = path.join(publicDir, 'version.json');
+  if (!DEPLOYED_ENVIRONMENTS.has(deploymentEnv)) {
+    // Local builds must never package an earlier cached deployment.
     fs.rmSync(storybookDestination, {recursive: true, force: true});
     fs.rmSync(sandboxDestination, {recursive: true, force: true});
+    fs.rmSync(versionFile, {force: true});
     return;
   }
+  if (!/^[0-9a-f]{40}$/i.test(commitSha ?? '')) {
+    throw new Error('Vercel deployment is missing VERCEL_GIT_COMMIT_SHA');
+  }
 
-  // Remove cached previews before either build: a failed build must not leave
-  // an older static tree that the subsequent Next build could accidentally ship.
+  // Remove cached apps before either build: a failed build must not leave an
+  // older static tree that the subsequent Next build could accidentally ship.
   fs.rmSync(storybookDestination, {recursive: true, force: true});
   fs.rmSync(sandboxDestination, {recursive: true, force: true});
+  fs.rmSync(versionFile, {force: true});
   runPreviewBuild(run, root, 'Storybook', [
     '-F',
     '@astryxdesign/storybook',
@@ -103,8 +164,20 @@ export function buildPreviews(deploymentEnv, root, run = execFileSync) {
     ['-F', '@astryxdesign/sandbox', 'build'],
     {...process.env, SANDBOX_BASE_PATH: '/sandbox'},
   );
-  stageStorybook(path.join(root, 'apps/storybook/dist'), storybookDestination);
-  stageSandbox(path.join(root, 'apps/sandbox/out'), sandboxDestination);
+  stageStorybook(
+    path.join(root, 'apps/storybook/dist'),
+    storybookDestination,
+    deploymentEnv,
+  );
+  stageSandbox(
+    path.join(root, 'apps/sandbox/out'),
+    sandboxDestination,
+    deploymentEnv,
+  );
+  fs.writeFileSync(
+    versionFile,
+    `${JSON.stringify({commit: commitSha, environment: deploymentEnv})}\n`,
+  );
 }
 
 if (

@@ -6,7 +6,7 @@
  * @file Tour.tsx
  * @input Uses React state/refs, TourContext
  * @output Exports Tour controller component and TourProps
- * @position Lab experiment (facebook/astryx#4239); controller consumed by index.ts
+ * @position Lab experiment (meta/astryx#4239); controller consumed by index.ts
  *
  * Tour is the controller for a product-tour / NUX walkthrough. It renders no
  * visible chrome of its own — it owns the tour state (active step, advance /
@@ -29,7 +29,7 @@
  * - /packages/lab/src/Tour/index.ts (exports if types change)
  */
 
-import {useCallback, useEffect, useMemo, useState, type ReactNode} from 'react';
+import {useCallback, useMemo, useState, type ReactNode} from 'react';
 import {
   TourContext,
   type TourDismissSource,
@@ -108,13 +108,16 @@ export function Tour({
     };
   }, []);
 
-  // Reset to the first step whenever the tour is (re)started, so a dismissed
-  // tour begins from the top next time isActive flips back on.
-  useEffect(() => {
+  // Reset to the first step when the tour is deactivated, so a dismissed tour
+  // begins from the top next time isActive flips back on. Adjusted during
+  // render, so no commit carries the old step past deactivation.
+  const [wasActive, setWasActive] = useState(isActive);
+  if (!Object.is(wasActive, isActive)) {
+    setWasActive(isActive);
     if (!isActive) {
       setActiveStepIndex(0);
     }
-  }, [isActive]);
+  }
 
   const stepCount = stepIds.length;
 

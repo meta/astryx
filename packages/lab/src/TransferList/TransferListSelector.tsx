@@ -4,7 +4,10 @@
 
 /**
  * @file TransferListSelector.tsx
- * @input Controlled option data, uncontrolled ComplexSelector state, TransferList, action controls, and the core i18n catalog
+ * @input Controlled option data, uncontrolled ComplexSelector state, action
+ *   controls and the core i18n catalog. Also TransferList with the owner's
+ *   reorderable object, adapted through Core's internal reorder entry and
+ *   aimed at the draft when staged
  * @output Exports the immediate-or-staged TransferListSelector composition with draft cleanup after dismissal
  * @position Lab collection input shell; consumed by the TransferList entry point, docs, and tests
  *
@@ -24,6 +27,11 @@ import {
 import {useTranslator} from '@astryxdesign/core/i18n';
 import {HStack} from '@astryxdesign/core/Stack';
 import {borderVars, colorVars} from '@astryxdesign/core/theme/tokens.stylex';
+import type {Reorderable} from '@astryxdesign/core';
+import {
+  adaptReorderable,
+  reorderableOptions,
+} from '@astryxdesign/core/internal/reorder';
 import {TransferList, type TransferListProps} from './TransferList';
 
 const DEFAULT_SELECTOR_WIDTH = 'min(41rem, calc(100vw - 32px))';
@@ -93,9 +101,9 @@ type TransferListSelectorShellProp =
   | 'size'
   | 'width'
   | 'placement'
-  | 'xstyle'
-  | 'className'
-  | 'style'
+  | 'controlXstyle'
+  | 'controlClassName'
+  | 'controlStyle'
   | 'data-testid';
 
 type TransferListContentProp =
@@ -105,7 +113,6 @@ type TransferListContentProp =
   | 'hasSearch'
   | 'searchLabel'
   | 'searchPlaceholder'
-  | 'isReorderable'
   | 'hasSelectAll'
   | 'hasClear'
   | 'renderOption'
@@ -135,7 +142,23 @@ export type TransferListSelectorProps<T extends string = string> = Pick<
     applyLabel?: string;
     /** Label for the staged discard action. Only used in staged behavior. @default 'Cancel' */
     cancelLabel?: string;
+    /**
+     * Makes the selected options reorderable: pass the object
+     * `createReorderable` makes. Its `isReorderable(value)` says which values
+     * move. An immediate selector hands each move to its `onReorder`. A
+     * staged one moves its draft instead, so Cancel drops the move with the
+     * draft, and Apply commits it through `onChange`. Without it, the
+     * selected options keep their order.
+     */
+    reorderable?: Reorderable<T>;
   };
+
+/** `value` with `key` moved to index `to`. */
+function moveValue<T>(value: readonly T[], key: T, to: number): readonly T[] {
+  const next = value.filter(item => item !== key);
+  next.splice(to, 0, key);
+  return next;
+}
 
 function areOrderedValuesEqual<T>(
   first: readonly T[],
@@ -202,7 +225,7 @@ export function TransferListSelector<T extends string = string>({
   hasSearch,
   searchLabel,
   searchPlaceholder,
-  isReorderable,
+  reorderable: ownerReorderable,
   hasSelectAll,
   hasClear,
   renderOption,
@@ -217,27 +240,24 @@ export function TransferListSelector<T extends string = string>({
   const cancelLabel =
     cancelLabelFromProps ?? t('@astryx.transferListSelector.cancel');
   const [draftValue, setDraftValue] = useState<readonly T[]>(value);
-  const previousAppliedValueRef = useRef<readonly T[]>([...value]);
-  const previousCommitBehaviorRef = useRef(commitBehavior);
 
   const resetDraft = useCallback(() => {
     setDraftValue([...value]);
   }, [value]);
 
-  useEffect(() => {
-    const previousAppliedValue = previousAppliedValueRef.current;
-    previousAppliedValueRef.current = [...value];
-    if (!areOrderedValuesEqual(previousAppliedValue, value)) {
-      resetDraft();
-    }
-  }, [resetDraft, value]);
-
-  useEffect(() => {
-    if (previousCommitBehaviorRef.current !== commitBehavior) {
-      resetDraft();
-    }
-    previousCommitBehaviorRef.current = commitBehavior;
-  }, [commitBehavior, resetDraft]);
+  // A changed applied value or commit behavior discards the staged draft.
+  // Adjusted during render, so no commit paints the discarded draft.
+  const [draftSource, setDraftSource] = useState(() => ({
+    value: [...value],
+    commitBehavior,
+  }));
+  if (
+    !areOrderedValuesEqual(draftSource.value, value) ||
+    !Object.is(draftSource.commitBehavior, commitBehavior)
+  ) {
+    setDraftSource({value: [...value], commitBehavior});
+    setDraftValue([...value]);
+  }
 
   const resolvedWidth =
     typeof width === 'number'
@@ -263,6 +283,34 @@ export function TransferListSelector<T extends string = string>({
       {(appliedValue, commit, close, state) => {
         const isStaged = commitBehavior === 'staged';
         const transferListValue = isStaged ? draftValue : appliedValue;
+        // The owner's reorder, aimed at the draft when staged and handed to
+        // the owner when immediate, with the owner's `isReorderable`. Made
+        // each render, so a move reads this render's value (the object may
+        // be made anew).
+        const owner =
+          ownerReorderable == null
+            ? undefined
+            : reorderableOptions(ownerReorderable);
+        // Adapted, so the engine is the owner's: nothing here loads the
+        // reorder, and the owner's `start` finds the list.
+        const reorderable =
+          owner == null || ownerReorderable == null
+            ? undefined
+            : adaptReorderable(ownerReorderable, {
+                onReorder: move => {
+                  if (state.isBusy) {
+                    return;
+                  }
+                  if (isStaged) {
+                    setDraftValue(current =>
+                      moveValue(current, move.key, move.to),
+                    );
+                  } else {
+                    owner.onReorder(move);
+                  }
+                },
+                isReorderable: owner.isReorderable,
+              });
 
         return (
           <div
@@ -275,7 +323,7 @@ export function TransferListSelector<T extends string = string>({
               />
             )}
             <fieldset
-              disabled={isDisabled}
+              aria-disabled={isDisabled || undefined}
               {...stylex.props(
                 styles.fieldset,
                 state.isBusy && styles.fieldsetBusy,
@@ -284,8 +332,12 @@ export function TransferListSelector<T extends string = string>({
                 label={label}
                 isLabelHidden
                 options={options}
+                isDisabled={isDisabled}
                 value={transferListValue}
                 onChange={nextValue => {
+                  if (isDisabled) {
+                    return;
+                  }
                   // Now that busy no longer disables the fieldset, the controls
                   // stay live while a change is in flight; ignore transfers
                   // until it settles so one pending action cannot be stacked.
@@ -303,7 +355,7 @@ export function TransferListSelector<T extends string = string>({
                 hasSearch={hasSearch}
                 searchLabel={searchLabel}
                 searchPlaceholder={searchPlaceholder}
-                isReorderable={isReorderable}
+                reorderable={reorderable}
                 hasSelectAll={hasSelectAll}
                 hasClear={hasClear}
                 renderOption={renderOption}

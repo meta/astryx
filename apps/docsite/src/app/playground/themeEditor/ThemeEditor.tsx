@@ -21,7 +21,6 @@ import {
   defineTheme,
   expandTypeScale,
   expandRadiusScale,
-  expandColorScale,
   colorDefaults,
   spacingDefaults,
   radiusDefaults,
@@ -48,7 +47,6 @@ import {
   buildComponentOverrides,
   buildSpacingScale,
   mergeComponentStyleMaps,
-  getExpandedColorScale,
 } from './helpers';
 
 const s = stylex.create({
@@ -112,7 +110,6 @@ export function ThemeEditor({
   const [durationStep, setDurationStep] = useState(1);
   // A unified preset is only "active" once the user explicitly applies one.
   const [activePreset, setActivePreset] = useState<string | null>(null);
-  const [autoPickColors, setAutoPickColors] = useState(false);
   const [customOverrides, setCustomOverrides] = useState<CustomOverride[]>([]);
 
   const currentTheme = useMemo(() => {
@@ -225,11 +222,6 @@ export function ThemeEditor({
     }));
   }, []);
 
-  const handleExpandColorScale = useCallback((accentHex: string) => {
-    const derived = getExpandedColorScale(accentHex);
-    setTokens(prev => ({...prev, ...derived}));
-  }, []);
-
   return (
     <VStack xstyle={s.root}>
       {/* Self-load theme fonts so the editor's controls render in the loaded
@@ -256,7 +248,6 @@ export function ThemeEditor({
             sizeBase={sizeBase}
             durationStep={durationStep}
             activePreset={activePreset}
-            autoPickColors={autoPickColors}
             onTokenChange={handleTokenChange}
             onApplyTypeScale={applyTypeScale}
             onApplyRadiusScale={applyRadiusScale}
@@ -264,8 +255,6 @@ export function ThemeEditor({
             onApplySizeScale={applySizeScale}
             onApplyDurationScale={applyDurationScale}
             onApplyUnifiedPreset={applyUnifiedPreset}
-            onSetAutoPickColors={setAutoPickColors}
-            onExpandColorScale={handleExpandColorScale}
           />
         )}
         {panelTab === 'components' && (

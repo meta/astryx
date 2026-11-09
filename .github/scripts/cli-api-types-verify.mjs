@@ -104,8 +104,8 @@ fs.writeFileSync(
 const scenario = `
 import {
   component, docs, blog, discover, template, hook, search, build, swizzle,
-  gapReport, upgrade, init, doctor, layoutExpand, layoutCheck, layoutGrammar,
-  themeBuild, themeAdd, themeList, listThemes,
+  gapReport, upgrade, init, doctor,
+  themeBuild, themeAdd, themeTemplate, themeList, listThemes,
   integrationAdd, integrationAddComponent, integrationAddDoc,
   integrationAddTemplate, integrationAddCodemod, integrationAddAgentDoc,
   integrationAddTheme, integrationPackCheck,
@@ -113,7 +113,9 @@ import {
 } from '@astryxdesign/cli/api';
 import type {
   ComponentOptions, SearchOptions, UpgradeOptions, GapReportOptions,
-  ComponentDetailResponse, SearchResponse, UpgradeRunResponse,
+  BatchResponse, BatchRow, ComponentBatchCandidate, ComponentBatchResponse,
+  ComponentBatchResult, ComponentSingleResponse, ComponentDetailResponse,
+  SearchResponse, UpgradeRunResponse,
   GapReportReceiptResponse, GapReportCategoriesResponse, Logger,
   IntegrationAddComponentOptions, IntegrationAddDocOptions,
   IntegrationAddTemplateOptions, IntegrationAddCodemodOptions,
@@ -125,14 +127,22 @@ import type {
 async function main() {
   const r = await component('Button');
   if (r.type === 'component.detail') { const n: string = r.data.name; void n; }
+  const batch = await component(['Button']) as ComponentBatchResponse;
+  const sharedBatch: BatchResponse<
+    'component.batch', ComponentSingleResponse, ComponentBatchCandidate
+  > = batch;
+  const sharedRow: BatchRow<ComponentSingleResponse, ComponentBatchCandidate> | undefined =
+    sharedBatch.data.results[0];
+  const componentRow: ComponentBatchResult | undefined = batch.data.results[0];
+  void [sharedBatch, sharedRow, componentRow];
   const s: SearchOptions = { limit: 5, type: 'component' };
   const l: Logger = logger; l.setSilent(false); l.log('x');
   void ({} as ComponentOptions); void ({} as UpgradeOptions); void ({} as GapReportOptions);
   void ({} as ComponentDetailResponse); void ({} as SearchResponse); void ({} as UpgradeRunResponse);
   void ({} as GapReportReceiptResponse); void ({} as GapReportCategoriesResponse);
   void [docs, blog, discover, template, hook, search, build, swizzle, gapReport, upgrade, init,
-    doctor, layoutExpand, layoutCheck, layoutGrammar, themeBuild, themeAdd, themeList,
-    listThemes, validateIntegration, summarizeIssues, AstryxError, s];
+    doctor, themeBuild, themeAdd, themeTemplate,
+    themeList, listThemes, validateIntegration, summarizeIssues, AstryxError, s];
 }
 void main;
 

@@ -8,12 +8,21 @@
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {Project} from '../config/project.mjs';
-import {CLI_ROOT} from '../fs/paths.mjs';
-import {compileDocs} from './bundle.mjs';
-import {COMPILED_DOC_KINDS} from './compile.mjs';
-import {collectDocInputs} from './inputs.mjs';
-import {parseCompiledDocsBundle} from './ir.mjs';
+import {requireNatively} from '../../test-utils/native-require.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('../config/project.mjs')} */
+const {Project} = require('../config/project.mjs');
+/** @type {typeof import('../fs/paths.mjs')} */
+const {CLI_ROOT} = require('../fs/paths.mjs');
+/** @type {typeof import('./bundle.mjs')} */
+const {compileDocs} = require('./bundle.mjs');
+/** @type {typeof import('./compile.mjs')} */
+const {COMPILED_DOC_KINDS} = require('./compile.mjs');
+/** @type {typeof import('./inputs.mjs')} */
+const {collectDocInputs} = require('./inputs.mjs');
+/** @type {typeof import('./ir.mjs')} */
+const {parseCompiledDocsBundle} = require('./ir.mjs');
 
 const REPO_ROOT = path.resolve(CLI_ROOT, '..', '..');
 
@@ -144,19 +153,26 @@ describe('compileDocs over a broken integration', () => {
     expect(bundle.nodes.some(node => node.id === 'acme-guide')).toBe(true);
   });
 
-  it('reports a component doc that fails to load, and compiles the rest', async () => {
+  it('withdraws a component doc that fails to load, reports it, and compiles the rest', async () => {
     write(
       'components/AcmeCard.doc.mjs',
       "throw new Error('boom');\nexport default {};\n",
     );
     const project = await Project.load(tmpDir);
     const bundle = await compileDocs(project);
-    const found = bundle.diagnostics.filter(d => d.provider === '@acme/kit');
-    // Discovery lists the doc; compiling it fails at load, and only it.
-    expect(found.map(d => [d.code, d.source])).toEqual([
-      ['load_failed', '@acme/kit/components/AcmeCard.doc.mjs'],
-    ]);
-    expect(found[0].message).toMatch(/boom/);
+    // Discovery loads each integration component doc and withdraws one that
+    // fails, so the project reports it and the compiler never reads it.
+    const issues = (await project.issues()).filter(
+      issue => issue.package === '@acme/kit',
+    );
+    expect(issues.map(issue => issue.code)).toEqual(['invalid_component']);
+    expect(issues[0].message).toMatch(/boom/);
+    expect(
+      bundle.diagnostics.filter(d => d.provider === '@acme/kit'),
+    ).toEqual([]);
+    expect(
+      bundle.nodes.some(node => node.id === '@acme/kit:components:AcmeCard'),
+    ).toBe(false);
     expect(bundle.nodes.some(node => node.kind === 'reference')).toBe(true);
   });
 
@@ -165,9 +181,13 @@ describe('compileDocs over a broken integration', () => {
       'components/AcmeCard.doc.mjs',
       "export default {type: 'component', displayName: 'No name'};\n",
     );
-    const bundle = await compileDocs(await Project.load(tmpDir));
-    const found = bundle.diagnostics.filter(d => d.provider === '@acme/kit');
-    expect(found.map(d => d.code)).toEqual(['invalid_doc']);
+    const project = await Project.load(tmpDir);
+    const bundle = await compileDocs(project);
+    const issues = (await project.issues()).filter(
+      issue => issue.package === '@acme/kit',
+    );
+    expect(issues.map(issue => issue.code)).toEqual(['invalid_component']);
+    expect(issues[0].message).toMatch(/invalid metadata/);
     expect(
       bundle.nodes.some(node => node.id === '@acme/kit:components:AcmeCard'),
     ).toBe(false);
@@ -186,7 +206,8 @@ describe('compileDocs over a broken integration', () => {
     expect(found.map(d => d.code)).toContain('not_json');
     expect(found.map(d => d.code)).not.toContain('invalid_topic');
     // The compiler's code never reaches the error a reader throws.
-    const {lowerTopic} = await import('../../api/docs/_adapter.mjs');
+    /** @type {typeof import('../../api/docs/_adapter.mjs')} */
+    const {lowerTopic} = require('../../api/docs/_adapter.mjs');
     const catalog = await (await Project.load(tmpDir)).docs();
     const entry = /** @type {any} */ (catalog.resolve('acme-guide'));
     const thrown = await lowerTopic(catalog, entry).catch(error => error);

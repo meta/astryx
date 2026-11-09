@@ -2,6 +2,7 @@
 
 /**
  * @file formatters.ts
+ * @input Values, a provider locale, and for dates an optional calendar
  * @output Built-in locale-aware tick, value, and list format utilities
  * @position Utility; consumed by Chart and ChartAxis
  *
@@ -12,7 +13,8 @@
  * across the full magnitude range (K/M/B/T and beyond).
  */
 
-import type {Locale} from '@astryxdesign/core/i18n';
+import type {CalendarSystem, Locale} from '@astryxdesign/core/i18n';
+import {plainDateFormat, plainDateFromDate} from '@astryxdesign/core/utils';
 
 /** Lazily cache one formatter per locale, including the legacy host default. */
 function byLocale<T>(
@@ -179,20 +181,48 @@ function toDate(value: unknown): Date {
   return new Date(NaN);
 }
 
-/** Date formatter — short date (e.g. "Jan 5", "Mar 12"). */
-export function shortDate(value: unknown, locale: Locale): string {
+/**
+ * Date formatter — short date (e.g. "Jan 5", "Mar 12"), in `calendar`. The
+ * calendar defaults to Gregorian; pass the application's calendar to match
+ * the date components.
+ */
+export function shortDate(
+  value: unknown,
+  locale: Locale,
+  calendar: CalendarSystem = 'gregory',
+): string {
   const d = toDate(value);
   if (Number.isNaN(d.getTime())) {
     return String(value);
   }
-  return getShortDateFormat(locale).format(d);
+  return calendar === 'gregory'
+    ? getShortDateFormat(locale).format(d)
+    : plainDateFormat(
+        plainDateFromDate(d),
+        {month: 'short', day: 'numeric', calendar},
+        locale,
+      );
 }
 
-/** Date formatter — month/year (e.g. "Jan 2024", "Mar 2025"). */
-export function monthYear(value: unknown, locale: Locale): string {
+/**
+ * Date formatter — month/year (e.g. "Jan 2024", "Mar 2025"), in `calendar`.
+ * The calendar defaults to Gregorian; pass the application's calendar to
+ * match the date components.
+ */
+export function monthYear(
+  value: unknown,
+  locale: Locale,
+  calendar: CalendarSystem = 'gregory',
+): string {
   const d = toDate(value);
   if (Number.isNaN(d.getTime())) {
     return String(value);
   }
-  return getMonthYearFormat(locale).format(d);
+  return calendar === 'gregory'
+    ? getMonthYearFormat(locale).format(d)
+    : plainDateFormat(
+        plainDateFromDate(d),
+        {month: 'short', year: 'numeric', calendar},
+        locale,
+      );
 }

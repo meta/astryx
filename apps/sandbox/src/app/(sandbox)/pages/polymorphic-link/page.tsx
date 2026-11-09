@@ -28,7 +28,9 @@ const styles = stylex.create({
     maxWidth: 960,
   },
   navWrapper: {
-    border: '1px solid #e0e0e0',
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: '#e0e0e0',
     borderRadius: 8,
     overflow: 'hidden',
   },
@@ -48,7 +50,9 @@ const styles = stylex.create({
   },
   sidenavWrapper: {
     width: 240,
-    border: '1px solid #e0e0e0',
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: '#e0e0e0',
     borderRadius: 8,
     overflow: 'hidden',
   },
@@ -173,9 +177,7 @@ export default function PolymorphicLinkPage() {
                 </Text>
                 <Breadcrumbs label="Provider breadcrumbs">
                   <BreadcrumbItem href="/">Home</BreadcrumbItem>
-                  <BreadcrumbItem href="/products">
-                    Products
-                  </BreadcrumbItem>
+                  <BreadcrumbItem href="/products">Products</BreadcrumbItem>
                   <BreadcrumbItem isCurrent>Widget</BreadcrumbItem>
                 </Breadcrumbs>
               </VStack>
@@ -215,9 +217,7 @@ export default function PolymorphicLinkPage() {
                 <Text type="supporting" weight="bold">
                   Link
                 </Text>
-                <Link href="/docs">
-                  Go to documentation
-                </Link>
+                <Link href="/docs">Go to documentation</Link>
               </VStack>
             </VStack>
           </LinkProvider>

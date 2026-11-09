@@ -68,9 +68,21 @@ export const doc = {
         'Existing topic to extend. Only valid for doc, and not with options.replaces.',
     },
     {
+      name: 'options.parent',
+      type: 'string',
+      description:
+        "Namespace of this package to place the doc in, as a guide in its `guides` slot; the namespace doc is written when missing. Only valid for doc, and not with options.replaces or options.extends.",
+    },
+    {
       name: 'options.to',
       type: 'string',
       description: 'Exact target semver (e.g. 1.2.0). Required for codemod and only valid there.',
+    },
+    {
+      name: 'options.from',
+      type: 'string',
+      description:
+        'Slug of an existing theme to fork as the starting point. Only valid for theme.',
     },
   ],
   returns: [

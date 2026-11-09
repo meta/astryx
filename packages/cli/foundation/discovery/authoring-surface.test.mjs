@@ -14,6 +14,7 @@ import {
   tracePublicAuthoringTypes,
 } from './authoring-surface.mjs';
 import {docs} from '../../api/docs/docs.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const SLOW = 60_000;
 
@@ -35,7 +36,7 @@ afterEach(() => {
  * @returns {string}
  */
 function tree(files) {
-  const root = fs.mkdtempSync(path.join(process.cwd(), '.astryx-surface-'));
+  const root = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-surface-'));
   roots.push(root);
   for (const [rel, content] of Object.entries(files)) {
     const abs = path.join(root, rel);
@@ -86,7 +87,7 @@ describe('the public authoring surface of this repo', () => {
   it(
     'audits clean: every exported type has a readable doc and every self-doc documents one',
     async () => {
-      const index = await docs('authoring', undefined, {index: true});
+      const index = await docs('authoring/field-reference', undefined, {index: true});
       const topicKeys = new Set(
         index.data.sections.map((/** @type {any} */ s) => s.id),
       );

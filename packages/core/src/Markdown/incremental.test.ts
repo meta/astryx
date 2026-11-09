@@ -268,6 +268,49 @@ describe('parseMarkdownIncremental', () => {
     }
   });
 
+  it.each([
+    ['blockquote', 'Intro.\n\n> quoted\ncontinued lazily'],
+    ['unordered list', 'Intro.\n\n- listed\ncontinued lazily'],
+    ['ordered list', 'Intro.\n\n1. listed\ncontinued lazily'],
+    ['task list', 'Intro.\n\n- [ ] listed\ncontinued lazily'],
+    ['CRLF blockquote', 'Intro.\r\n\r\n> quoted\r\ncontinued lazily'],
+    [
+      'later blockquote paragraph',
+      'Intro.\n\n> para1\n>\n> para2\ncontinued lazily',
+    ],
+    ['nested containers', 'Intro.\n\n> 1. > quoted\ncontinued lazily'],
+  ] as const)(
+    'keeps a lazy continuation in its %s at every stream split',
+    (_label, text) => {
+      const full = parseMarkdown(text, {sourceRanges: true});
+      expect(full).toHaveLength(2);
+      expect(JSON.stringify(full[1])).toContain('continued lazily');
+      const characterState = createIncrementalState();
+      let result: BlockNode[] = [];
+      for (let end = 1; end <= text.length; end++) {
+        result = parseMarkdownIncremental(text.slice(0, end), characterState, {
+          sourceRanges: true,
+          isFinal: false,
+        });
+      }
+      expect(result).toEqual(full);
+
+      for (let split = 0; split <= text.length; split++) {
+        const state = createIncrementalState();
+        parseMarkdownIncremental(text.slice(0, split), state, {
+          sourceRanges: true,
+          isFinal: false,
+        });
+        expect(
+          parseMarkdownIncremental(text, state, {
+            sourceRanges: true,
+            isFinal: true,
+          }),
+        ).toEqual(full);
+      }
+    },
+  );
+
   it('handles 1-char chunks and matches full parse', () => {
     const text = '# Hello\n\nWorld';
     const {final} = simulateStreaming(text, 1);

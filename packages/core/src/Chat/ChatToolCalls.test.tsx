@@ -1,15 +1,38 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {createRef} from 'react';
 import {describe, it, expect} from 'vitest';
 import {render, screen, fireEvent} from '@testing-library/react';
+import * as stylex from '@stylexjs/stylex';
 import {Theme} from '../theme/Theme';
 import {defineTheme} from '../theme/defineTheme';
+import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {ChatToolCalls} from './ChatToolCalls';
 
 describe('ChatToolCalls', () => {
   it('renders nothing for empty calls', () => {
     const {container} = render(<ChatToolCalls calls={[]} />);
     expect(container.firstChild).toBeNull();
+  });
+
+  it('forwards the root ref and supported DOM props', () => {
+    const ref = createRef<HTMLDivElement>();
+    render(
+      <ChatToolCalls
+        ref={ref}
+        calls={[{name: 'bash'}]}
+        data-testid="tool-calls"
+        aria-label="Tool activity"
+        className="consumer-class"
+        style={{marginBlockStart: 12}}
+      />,
+    );
+
+    const root = screen.getByTestId('tool-calls');
+    expect(ref.current).toBe(root);
+    expect(root).toHaveAttribute('aria-label', 'Tool activity');
+    expect(root).toHaveClass('astryx-chat-tool-calls', 'consumer-class');
+    expect(root).toHaveStyle({marginBlockStart: '12px'});
   });
 
   it('renders single call inline without group chrome', () => {
@@ -163,6 +186,66 @@ describe('ChatToolCalls', () => {
     expect(btn).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(btn);
     expect(btn).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('renders the public custom group label when expanded', () => {
+    render(
+      <ChatToolCalls
+        label="Repository updates"
+        defaultIsExpanded
+        calls={[{name: 'read'}, {name: 'edit'}]}
+      />,
+    );
+
+    expect(screen.getByText('Repository updates')).toBeInTheDocument();
+    expect(screen.queryByText('2 tool calls')).not.toBeInTheDocument();
+  });
+
+  it('removes collapsed call rows from keyboard and accessibility navigation', () => {
+    render(
+      <ChatToolCalls
+        calls={[
+          {name: 'read', resultDetail: <div>file contents</div>},
+          {name: 'edit', resultDetail: <div>diff contents</div>},
+        ]}
+      />,
+    );
+
+    const header = screen.getAllByRole('button')[0];
+    const content = document.getElementById(
+      header.getAttribute('aria-controls') as string,
+    );
+    expect(content).toHaveAttribute('inert');
+
+    fireEvent.click(header);
+    expect(content).not.toHaveAttribute('inert');
+  });
+
+  it('composes the shared visible focus ring on every disclosure control', () => {
+    render(
+      <ChatToolCalls
+        defaultIsExpanded
+        calls={[
+          {name: 'read', resultDetail: <div>file contents</div>},
+          {name: 'edit'},
+        ]}
+      />,
+    );
+
+    const buttons = screen.getAllByRole('button');
+    const focusRingClasses = stylex
+      .props(focusOutlineStyles.focusVisible)
+      .className!.split(' ');
+    const [focusRingMarker] = focusRingClasses;
+    for (const button of buttons) {
+      expect(button).toHaveClass(focusRingMarker);
+    }
+    // The group header keeps the shared ring unchanged. Grouped detail rows
+    // replace only its offset with an inset value so the animated clip boundary
+    // cannot hide the ring; the focused Storybook story verifies that geometry.
+    for (const className of focusRingClasses) {
+      expect(buttons[0]).toHaveClass(className);
+    }
   });
 
   it('shows target when provided', () => {

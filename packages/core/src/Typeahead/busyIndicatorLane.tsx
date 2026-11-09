@@ -9,7 +9,8 @@
  * @position Package-internal; not exported from the package entry point
  */
 
-import {createContext, use, useSyncExternalStore} from 'react';
+import {use, useSyncExternalStore} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 
 /**
  * How the base hands its busy state to a wrapper that owns the inline-end lane.
@@ -92,7 +93,11 @@ export function useIsBusy(lane: BusyIndicatorLane): boolean {
   return useSyncExternalStore(lane.subscribe, lane.getIsBusy, lane.getIsBusy);
 }
 
-const BusyIndicatorLaneContext = createContext<BusyIndicatorLane | null>(null);
+const BusyIndicatorLaneContext = createSharedContext<BusyIndicatorLane | null>(
+  'BusyIndicatorLaneContext',
+  1,
+  null,
+);
 BusyIndicatorLaneContext.displayName = 'BusyIndicatorLaneContext';
 
 export const BusyIndicatorLaneProvider = BusyIndicatorLaneContext.Provider;
@@ -109,22 +114,24 @@ export function useBusyIndicatorLane(): BusyIndicatorLane | null {
 }
 
 /**
- * The wrapper's own input-busy state, travelling the other way.
+ * The wrapper's own value-busy state, sent the other way.
  *
- * The input-field family's `isLoading` and a pending `changeAction` mean the
- * field VALUE is resolving or being saved (`docs/families/input-fields.md`,
- * FR5 and FR6). Only the wrapper knows that; the base owns source-busy — a
- * search in flight — and nothing else. Both meanings still surface as one
- * `aria-busy` on the combobox and one Spinner in the end lane, so the wrapper
- * hands its half down through this context and the base ORs it into the
- * attribute it already sets. The base's search lifecycle never reads it.
+ * `isLoading` and a pending `changeAction` mean that the field value is
+ * resolving or being saved. Only the wrapper knows this. The base owns
+ * search busy only. The combobox shows both kinds as one `aria-busy`, so the
+ * wrapper sends its kind down through this context and the base adds it to
+ * the attribute. The search lifecycle does not read it.
  *
- * A plain context value rather than a store entry: the wrapper already
- * re-renders for the state that produces it (`useOptimistic` and the
- * `isLoading` prop), and the base is its child, so nothing extra re-renders
- * for it. False when the base is used directly.
+ * This is a plain context value, not a store entry. The wrapper already
+ * re-renders for the state that makes it, and the base is its child, so no
+ * other component re-renders. The value is false when the base is used
+ * directly.
  */
-const InputBusyContext = createContext(false);
+const InputBusyContext = createSharedContext<boolean>(
+  'InputBusyContext',
+  1,
+  false,
+);
 InputBusyContext.displayName = 'InputBusyContext';
 
 export const InputBusyProvider = InputBusyContext.Provider;

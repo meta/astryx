@@ -40,6 +40,7 @@ export const doc = {
     {label: 'Browse the catalog', cli: 'astryx hook --list'},
     {label: 'One hook as JSON', cli: 'astryx hook useFocusTrap --json'},
   ],
+  outsideProject: 'same',
   exitCodes: [
     {code: 0, when: 'success'},
     {

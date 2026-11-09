@@ -7,6 +7,7 @@ import {
   buildDocsIndexData,
   findDocSection,
   sectionKey,
+  sectionKeyErrors,
   sectionKeyProblems,
   sectionSummary,
   sectionTitleKey,
@@ -68,12 +69,17 @@ describe('sectionKeyProblems', () => {
       section('Quick-start'),
     ]);
     expect(problems).toHaveLength(1);
-    expect(problems[0]).toContain('"quick-start" is already used by sections[0]');
+    expect(problems[0]).toContain(
+      '"quick-start" is already used by sections[0]',
+    );
   });
 
   it('rejects an authored id that collides with a derived key', () => {
     expect(
-      sectionKeyProblems([section('Install'), section('Setup', {id: 'install'})]),
+      sectionKeyProblems([
+        section('Install'),
+        section('Setup', {id: 'install'}),
+      ]),
     ).toHaveLength(1);
   });
 
@@ -85,13 +91,13 @@ describe('sectionKeyProblems', () => {
     }
   });
 
-  it('rejects a title no key derives from', () => {
+  it('reports a title no key derives from', () => {
     expect(sectionKeyProblems([section('亮/暗模式')])[0]).toContain(
-      'Give the section an id',
+      'compatibility key is used',
     );
-    expect(sectionKeyProblems([section('亮/暗模式', {id: 'light-dark'})])).toEqual(
-      [],
-    );
+    expect(
+      sectionKeyProblems([section('亮/暗模式', {id: 'light-dark'})]),
+    ).toEqual([]);
   });
 
   it('leaves a missing title to the title check', () => {
@@ -107,12 +113,21 @@ describe('withSectionKeys', () => {
     expect(doc.sections.map(s => s.id)).toEqual(['quick-start', 'use']);
   });
 
-  it('keeps the authored title of a translated section', () => {
+  it('keeps authored titles and keys stable for translated sections', () => {
     const doc = withSectionKeys({
-      sections: [withSourceTitle(section('快速开始'), 'Quick Start')],
+      sections: [
+        withSourceTitle(section('高级安装'), 'Install advanced'),
+        withSourceTitle(section('安装'), 'Install'),
+      ],
     });
-    expect(doc.sections[0].id).toBe('quick-start');
-    expect(sourceTitle(doc.sections[0])).toBe('Quick Start');
+    expect(doc.sections.map(s => s.id)).toEqual([
+      'install-advanced',
+      'install-2',
+    ]);
+    for (const target of doc.sections) {
+      expect(findDocSection(doc.sections, target.id).section).toBe(target);
+    }
+    expect(sourceTitle(doc.sections[0])).toBe('Install advanced');
   });
 });
 
@@ -127,7 +142,14 @@ describe('findDocSection', () => {
     ],
   }).sections;
 
-  it('finds a section by key first', () => {
+  it('finds every emitted key without changing a legacy query', () => {
+    const colliding = withSectionKeys({
+      sections: [section('Install advanced'), section('Install')],
+    }).sections;
+    expect(findDocSection(colliding, 'install').section).toBe(colliding[0]);
+    for (const target of colliding) {
+      expect(findDocSection(colliding, target.id).section).toBe(target);
+    }
     expect(findDocSection(sections, 'tokens').section.title).toBe(
       'Theme Tokens',
     );
@@ -149,15 +171,15 @@ describe('findDocSection', () => {
     expect(findDocSection(sections, 'props').section.id).toBe('theme-props');
   });
 
-  it('refuses an ambiguous exact title and lists the candidates', () => {
+  it('keeps the first ambiguous exact-title match and lists the candidates', () => {
     const {section: match, candidates} = findDocSection(sections, 'Overview');
-    expect(match).toBeNull();
+    expect(match?.id).toBe('overview-a');
     expect(candidates.map(s => s.id)).toEqual(['overview-a', 'overview-b']);
   });
 
-  it('refuses an ambiguous partial title', () => {
+  it('keeps the first ambiguous partial-title match', () => {
     const {section: match, candidates} = findDocSection(sections, 'theme');
-    expect(match).toBeNull();
+    expect(match?.id).toBe('theme-props');
     expect(candidates.map(s => s.id)).toEqual(['theme-props', 'tokens']);
   });
 
@@ -185,9 +207,9 @@ describe('sectionSummary', () => {
   });
 
   it('is empty when the section has no text', () => {
-    expect(sectionSummary({content: [{type: 'table', headers: [], rows: []}]})).toBe(
-      '',
-    );
+    expect(
+      sectionSummary({content: [{type: 'table', headers: [], rows: []}]}),
+    ).toBe('');
   });
 
   it('cuts a long summary at a word boundary', () => {

@@ -4,7 +4,7 @@
 
 /**
  * @file TableContext.ts
- * @input React
+ * @input Layer-scoped React context
  * @output Exports TableContext and TableContextValue
  * @position Context layer; connects Table styling to sub-components (TableRow, TableCell)
  *
@@ -15,7 +15,7 @@
  * - /packages/core/src/Table/index.ts (exports if types change)
  */
 
-import {createContext} from 'react';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 import type {TableVerticalAlign} from './types';
 
 export interface TableContextValue {
@@ -27,5 +27,9 @@ export interface TableContextValue {
   textOverflow: 'wrap' | 'truncate';
 }
 
-export const TableContext = createContext<TableContextValue | null>(null);
+export const TableContext = createLayerScopedContext<TableContextValue | null>(
+  'TableContext',
+  1,
+  null,
+);
 TableContext.displayName = 'TableContext';

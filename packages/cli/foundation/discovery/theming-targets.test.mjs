@@ -25,6 +25,15 @@ import {describe, it, expect} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {findCoreDir} from '../fs/paths.mjs';
+const promotedThemeSurfaceTransform = new URL(
+  '../../assets/codemods/transforms/v0.7.0/migrate-deprecated-theme-surface.mjs',
+  import.meta.url,
+);
+const {DEPRECATED_THEME_TARGETS} = await import(
+  fs.existsSync(promotedThemeSurfaceTransform)
+    ? promotedThemeSurfaceTransform.href
+    : '../../assets/codemods/transforms/next/migrate-deprecated-theme-surface.mjs'
+);
 import {
   discoverComponents,
   findComponentReadme,
@@ -34,69 +43,13 @@ import {
   collectThemingTargets,
   collectThemingVars,
   targetsByKey,
-  targetValidationRegistry,
 } from './theming-targets.mjs';
 
 const coreDir = /** @type {string} */ (findCoreDir(process.cwd()));
 const coreSrc = path.join(coreDir, 'src');
-const repoRoot = path.resolve(coreDir, '../..');
-
-const DEPRECATED_TARGETS = {
-  'base-table': 'table',
-  checkbox: 'checkbox-indicator',
-  codeblock: 'code-block',
-  'codeblock-copy-button': 'code-block-copy-button',
-  'codeblock-header': 'code-block-header',
-  'codeblock-title': 'code-block-title',
-  'date-input-clear-icon': 'input-clear-icon',
-  'date-range-input-clear-icon': 'input-clear-icon',
-  hovercard: 'hover-card',
-  'multi-selector-clear-icon': 'input-clear-icon',
-  navicon: 'nav-icon',
-  'popover-surface': 'popover',
-  progressbar: 'progress-bar',
-  'progressbar-fill': 'progress-bar-fill',
-  'progressbar-mark': 'progress-bar-mark',
-  'progressbar-track': 'progress-bar-track',
-  radio: 'radio-indicator',
-  'radio-dot': 'radio-indicator-dot',
-  'selector-clear-icon': 'input-clear-icon',
-  statusdot: 'status-dot',
-  textarea: 'text-area',
-};
-
-/** Return the source text inside a static `components: {…}` object. */
-function componentsObjectSource(source) {
-  const match = /\bcomponents\s*:\s*\{/.exec(source);
-  if (match == null) return '';
-  const start = match.index + match[0].length - 1;
-  let depth = 0;
-  let quote = null;
-  let escaped = false;
-  for (let index = start; index < source.length; index++) {
-    const char = source[index];
-    if (quote != null) {
-      if (escaped) escaped = false;
-      else if (char === '\\') escaped = true;
-      else if (char === quote) quote = null;
-      continue;
-    }
-    if (char === "'" || char === '"' || char === '`') {
-      quote = char;
-      continue;
-    }
-    if (char === '{') depth++;
-    if (char === '}' && --depth === 0) return source.slice(start + 1, index);
-  }
-  return '';
-}
 
 /** @type {Promise<import('./theming-targets.mjs').ThemingTarget[]>} */
 const enumerated = collectThemingTargets(coreSrc);
-/** @type {Promise<import('./theming-targets.mjs').ThemingTarget[]>} */
-const activeEnumerated = collectThemingTargets(coreSrc, {
-  includeDeprecated: false,
-});
 
 describe('collectThemingTargets', () => {
   it('enumerates the whole surface, not a handful', async () => {
@@ -112,124 +65,13 @@ describe('collectThemingTargets', () => {
     }
   });
 
-  it('can limit ownership checks to active targets', async () => {
-    const all = await enumerated;
-    const active = await activeEnumerated;
-    expect(
-      all.some(t => t.component === 'CodeBlock' && t.key === 'codeblock'),
-    ).toBe(true);
-    expect(
-      active.some(t => t.component === 'CodeBlock' && t.key === 'codeblock'),
-    ).toBe(false);
-    expect(
-      active.some(t => t.component === 'CodeBlock' && t.key === 'code-block'),
-    ).toBe(true);
-  });
-
-  it('keeps the deprecated Popover alias enumerable but out of active ownership', async () => {
-    const allPopoverKeys = (await enumerated)
-      .filter(target => target.component === 'Popover')
-      .map(target => target.key);
-    const activePopoverKeys = (await activeEnumerated)
-      .filter(target => target.component === 'Popover')
-      .map(target => target.key);
-    const doc = await loadComponentDoc(
-      path.join(coreSrc, 'Popover', 'Popover.doc.mjs'),
-    );
-
-    expect(allPopoverKeys).toEqual(['popover', 'popover-surface']);
-    expect(activePopoverKeys).toEqual(['popover']);
-    expect(doc.theming.targets).toContainEqual({
-      className: 'astryx-popover-surface',
-      deprecatedFor: 'popover',
-    });
-  });
-
-  it('keeps every deprecated target discoverable with its exact replacement', async () => {
-    const targets = await enumerated;
-    for (const [key, deprecatedFor] of Object.entries(DEPRECATED_TARGETS)) {
-      expect(
-        targets.some(
-          target =>
-            target.key === key && target.deprecatedFor === deprecatedFor,
-        ),
-        `${key} should remain discoverable as deprecated for ${deprecatedFor}`,
-      ).toBe(true);
-    }
-  });
-
-  it('keeps maintained themes and copyable sources on canonical keys', () => {
-    const themeFiles = [
-      'packages/themes/butter/src/butterTheme.ts',
-      'packages/themes/chocolate/src/chocolateTheme.ts',
-      'packages/themes/gothic/src/gothicTheme.ts',
-      'packages/themes/matcha/src/matchaTheme.ts',
-      'packages/themes/neutral/src/neutralTheme.ts',
-      'packages/themes/stone/src/stoneTheme.ts',
-      'packages/themes/y2k/src/y2kTheme.ts',
-      'packages/cli/assets/templates/themes/butter/butterTheme.ts',
-      'packages/cli/assets/templates/themes/chocolate/chocolateTheme.ts',
-      'packages/cli/assets/templates/themes/gothic/gothicTheme.ts',
-      'packages/cli/assets/templates/themes/matcha/matchaTheme.ts',
-      'packages/cli/assets/templates/themes/neutral/neutralTheme.ts',
-      'packages/cli/assets/templates/themes/stone/stoneTheme.ts',
-      'packages/cli/assets/templates/themes/y2k/y2kTheme.ts',
-    ];
-    for (const relativePath of themeFiles) {
-      const components = componentsObjectSource(
-        fs.readFileSync(path.join(repoRoot, relativePath), 'utf8'),
-      );
-      for (const key of Object.keys(DEPRECATED_TARGETS)) {
-        const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        expect(components, `${relativePath} still uses ${key}`).not.toMatch(
-          new RegExp(`(?:^|[,\\n]\\s*)(?:['"]${escaped}['"]|${escaped})\\s*:`),
-        );
-      }
-    }
-
-    const editorSource = fs.readFileSync(
-      path.join(
-        repoRoot,
-        'apps/docsite/src/app/playground/themeEditor/constants.ts',
-      ),
-      'utf8',
-    );
-    for (const key of Object.keys(DEPRECATED_TARGETS)) {
-      expect(editorSource, `theme editor still exposes ${key}`).not.toContain(
-        `'${key}'`,
+  it('does not enumerate any removed target alias', async () => {
+    const keys = new Set((await enumerated).map(target => target.key));
+    for (const removed of Object.keys(DEPRECATED_THEME_TARGETS)) {
+      expect(keys, `${removed} must not remain discoverable`).not.toContain(
+        removed,
       );
     }
-  });
-
-  it('keeps deprecated replacements in the validation registry', async () => {
-    const registry = targetValidationRegistry(await enumerated);
-    for (const [key, replacement] of Object.entries(DEPRECATED_TARGETS)) {
-      expect(registry.propsByKey).toHaveProperty(key);
-      expect(registry.deprecatedByKey[key]).toBe(replacement);
-    }
-  });
-
-  it('rejects conflicting canonical replacements for one deprecated key', () => {
-    expect(() =>
-      targetValidationRegistry([
-        {
-          key: 'old-target',
-          className: 'astryx-old-target',
-          component: 'One',
-          props: [],
-          states: [],
-          deprecatedFor: 'first-target',
-        },
-        {
-          key: 'old-target',
-          className: 'astryx-old-target',
-          component: 'Two',
-          props: [],
-          states: [],
-          deprecatedFor: 'second-target',
-        },
-      ]),
-    ).toThrow(/conflicting replacements/);
   });
 
   it('carries the props and states a target reflects', async () => {
@@ -318,13 +160,13 @@ describe('collectThemingTargets', () => {
   it('collapses to the override keys, merging the components that share one', async () => {
     const byKey = targetsByKey(await enumerated);
     expect(byKey['switch']).toEqual(['size', 'checked', 'disabled']);
-    // `radio` is documented by two unrelated owners. Parent/child
+    // `radio-indicator` is documented by two unrelated owners. Parent/child
     // canonicalization must not collapse a shared target across families.
-    const radio = (await enumerated).filter(t => t.key === 'radio');
+    const radio = (await enumerated).filter(t => t.key === 'radio-indicator');
     expect(radio.map(t => t.component)).toEqual(['Indicator', 'RadioList']);
     for (const t of radio) {
       for (const name of [...t.props, ...t.states]) {
-        expect(byKey['radio']).toContain(name);
+        expect(byKey['radio-indicator']).toContain(name);
       }
     }
   });

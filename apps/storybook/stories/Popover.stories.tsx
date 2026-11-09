@@ -13,6 +13,7 @@ import {List, ListItem} from '@astryxdesign/core/List';
 import {VStack, HStack} from '@astryxdesign/core/Layout';
 import {Text, Heading} from '@astryxdesign/core/Text';
 import {Switch} from '@astryxdesign/core/Switch';
+import {TextInput} from '@astryxdesign/core/TextInput';
 import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
 import {Divider} from '@astryxdesign/core/Divider';
 import {Section} from '@astryxdesign/core/Section';
@@ -97,10 +98,6 @@ const readinessStyles = stylex.create({
     paddingInlineStart: spacingVars['--spacing-4'],
     paddingInlineEnd: spacingVars['--spacing-4'],
     overflow: 'clip',
-  },
-  edgeAnchorRow: {
-    display: 'flex',
-    justifyContent: 'flex-end',
   },
   oversizedTrigger: {
     inlineSize: 640,
@@ -676,56 +673,10 @@ export const RenderProp: Story = {
 // Responsive and Interaction Readiness Evidence
 // =============================================================================
 
-export const ViewportFit: Story = {
-  name: 'Viewport Fit',
-  parameters: {
-    layout: 'fullscreen',
-    viewport: {defaultViewport: 'mobile1'},
-    docs: {
-      story: {inline: false, height: '844px'},
-      description: {
-        story:
-          'Uses the actual Storybook viewport rather than a simulated phone frame. The Popover requests a 640px width and must stay anchored to the trigger while preserving at least 16px safe-area-aware gutters from both viewport edges.',
-      },
-    },
-  },
-  render: () => (
-    <div {...stylex.props(readinessStyles.viewportStoryCanvas)}>
-      <div {...stylex.props(readinessStyles.edgeAnchorRow)}>
-        <Popover
-          placement="below"
-          alignment="end"
-          label="Narrow viewport fit evidence"
-          width={640}
-          content={
-            <VStack gap={3} xstyle={readinessStyles.evidenceCopy}>
-              <Heading level={4} tabIndex={-1}>
-                Narrow viewport fit
-              </Heading>
-              <Text type="body" wordBreak="break-word">
-                This intentionally requests a wider-than-mobile popover. The
-                layer should stay anchored to the trigger, preserve safe gutters
-                on both viewport edges, and allow long content to reflow instead
-                of causing horizontal page overflow.
-              </Text>
-              <Text type="supporting" wordBreak="break-word">
-                Long localized-token-like content:
-                project-settings-notification-delivery-exception-review-queue
-              </Text>
-            </VStack>
-          }>
-          <Button label="Open fit evidence">Open fit evidence</Button>
-        </Popover>
-      </div>
-    </div>
-  ),
-  play: async ({canvasElement}) => {
-    const trigger = canvasElement.querySelector('button');
-    if (trigger instanceof HTMLElement) {
-      trigger.click();
-    }
-  },
-};
+// Viewport geometry — gutters, caps, flips, the slide — is the layer runtime's
+// and is demonstrated under Core/Layer (spec:AST-059). Popover keeps the
+// stories for what is Popover's own: its match-trigger preference, scrolling,
+// focus, dismissal, and surface styling.
 
 export const MatchTriggerViewportFit: Story = {
   name: 'Match-trigger viewport fit',
@@ -736,7 +687,7 @@ export const MatchTriggerViewportFit: Story = {
       story: {inline: false, height: '844px'},
       description: {
         story:
-          'Uses the actual Storybook viewport. The real trigger is intentionally 640px wide, while Popover keeps its default match-trigger sizing; the Popover must cap to the available viewport instead of inheriting the full trigger width.',
+          'Uses the actual Storybook viewport. The real trigger is intentionally 640px wide, while Popover keeps its default match-trigger sizing; the preference is clamped by the layer runtime\u2019s viewport cap (spec:AST-059 FR7) instead of inheriting the full trigger width.',
       },
     },
   },
@@ -871,6 +822,79 @@ export const TriggerInteractionEvidence: Story = {
   },
 };
 
+// =============================================================================
+// Keyboard Avoidance
+// =============================================================================
+
+const NOTE_TIPS = [
+  'Notes are shared with everyone on the project.',
+  'Mention a teammate to send them the note.',
+  'Pin a note to keep it at the top of the list.',
+  'Notes older than a year are archived.',
+  'Attach a file by dropping it on the note.',
+  'Use a short title: it is what the list shows.',
+];
+
+function NoteContent() {
+  const [title, setTitle] = React.useState('');
+  return (
+    <VStack gap={3}>
+      <Heading level={4} tabIndex={-1}>
+        Add a note
+      </Heading>
+      <TextInput
+        label="Title"
+        placeholder="Short title"
+        value={title}
+        onChange={setTitle}
+      />
+      <Divider />
+      {NOTE_TIPS.map(tip => (
+        <Text key={tip}>{tip}</Text>
+      ))}
+      <Button label="Save note" variant="primary">
+        Save note
+      </Button>
+    </VStack>
+  );
+}
+
+function SearchNotesField() {
+  const [query, setQuery] = React.useState('');
+  return (
+    <div style={{marginTop: 16, maxWidth: 320}}>
+      <TextInput
+        label="Search notes"
+        placeholder="Search"
+        value={query}
+        onChange={setQuery}
+      />
+    </div>
+  );
+}
+
+export const KeyboardAvoidance: Story = {
+  name: 'Keyboard Avoidance',
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      story: {inline: false, height: '844px'},
+      description: {
+        story:
+          'A tall popover with a text field. On a phone, the field brings up the software keyboard; the popover keeps its top and stays clear of the keyboard, as a popover on iOS does. Search notes, below the trigger, brings the keyboard up before the popover opens: it then opens clear of the keyboard.',
+      },
+    },
+  },
+  render: () => (
+    <div style={{padding: 16}}>
+      <Popover label="Add a note" width={320} content={<NoteContent />}>
+        <Button label="Add note">Add note</Button>
+      </Popover>
+      <SearchNotesField />
+    </div>
+  ),
+};
+
 export const KeepPopoverPresentation: Story = {
   name: 'Keep Popover Presentation',
   parameters: {
@@ -911,6 +935,31 @@ export const BottomSheetPresentationOption: Story = {
       trigger.click();
     }
   },
+};
+
+export const AdaptivePresentation: Story = {
+  name: 'Adaptive Presentation',
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      story: {inline: false, height: '844px'},
+      description: {
+        story:
+          'presentation="adaptive": on a compact touch screen (a phone) the content is presented in a BottomSheet, the way iOS presents a popover on an iPhone; with a mouse or on a larger screen it stays anchored to its trigger.',
+      },
+    },
+  },
+  render: () => (
+    <div style={{padding: 16}}>
+      <Popover
+        label="Filter by status"
+        presentation="adaptive"
+        width={280}
+        content={<FilterContent />}>
+        <Button label="Filter">Filter</Button>
+      </Popover>
+    </div>
+  ),
 };
 
 export const AdaptivePopoverRecipe: PresentationRecipeStory = {

@@ -248,15 +248,13 @@ describe('CLI theme bundle is in sync with source', () => {
     });
   }
 
-  it('theme add copies each bundled theme in bundle order, without its descriptor', () => {
+  it('theme eject copies each bundled theme in bundle order, with its descriptor', () => {
     const discovered = new Map(
       discoverBundledThemes().map(theme => [theme.slug, theme.files]),
     );
     for (const slug of slugs) {
       expect(discovered.get(slug), slug).toEqual(
-        expectedFiles(slug)
-          .map(file => file.output)
-          .filter(file => !file.endsWith('.doc.mjs')),
+        expectedFiles(slug).map(file => file.output),
       );
     }
   });

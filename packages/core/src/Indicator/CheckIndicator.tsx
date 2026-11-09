@@ -24,16 +24,18 @@
  *     host passes (`selector-check`, say) lands on the same element as
  *     `astryx-icon` — one element carrying the mark and its theme target, per
  *     the wrapper reduction in #4838/#4846.
- *   - It adds NO theme target of its own. `astryx-checkbox` and `astryx-radio`
- *     exist because those indicators draw chrome that needs styling; a check
- *     is an icon, and `astryx-icon` plus the host's target already reach it.
+ *   - It adds NO theme target of its own. `astryx-checkbox-indicator` and
+ *     `astryx-radio-indicator` exist because those indicators draw chrome that
+ *     needs styling; a check is an icon, and `astryx-icon` plus the host's
+ *     target already reach it.
  */
 
 import * as stylex from '@stylexjs/stylex';
 import type {SVGProps} from 'react';
 import {Icon} from '../Icon/Icon';
 import {colorVars} from '../theme/tokens.stylex';
-import {isRenderable, mergeProps} from '../utils';
+import {isRenderable} from '../utils/isRenderable';
+import {mergeProps} from '../utils/mergeProps';
 import type {IndicatorProps} from './types';
 
 /** The check glyph matches the control sizes the indicator families share. */

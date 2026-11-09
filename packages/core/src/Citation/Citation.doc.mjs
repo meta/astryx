@@ -33,7 +33,7 @@ export const docs = {
         name: 'Container',
         required: true,
         description:
-          'The interactive wrapper. Renders as an anchor when a URL is provided, or a span otherwise.',
+          'The root wrapper. Accepted source URLs render an anchor; missing or rejected URLs render an inert span.',
       },
       {
         name: 'Icon',

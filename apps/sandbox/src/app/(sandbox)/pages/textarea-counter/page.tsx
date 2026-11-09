@@ -40,7 +40,7 @@ const styles = stylex.create({
     whiteSpace: 'nowrap',
   },
   counterError: {
-    color: colorVars['--color-error'],
+    color: colorVars['--color-text-error'],
   },
   counterPinned: {
     flexShrink: 0,
@@ -259,7 +259,7 @@ function InsideBottomRight({value, onChange, max, status}: VariantProps) {
           rows={3}
           width="100%"
           placeholder="Write a description..."
-          xstyle={styles.overlayTextareaPad}
+          controlXstyle={styles.overlayTextareaPad}
         />
         <div {...stylex.props(styles.overlayCounter)}>
           <Counter length={value.length} max={max} />

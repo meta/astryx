@@ -4,7 +4,7 @@
 /**
  * @file Bundles each public theme's source, strongly typed same-stem descriptor,
  * optional icons, and palette-authoring artifacts into
- * `packages/cli/assets/templates/themes/` so `astryx theme add` can scaffold a
+ * `packages/cli/assets/templates/themes/` so `astryx theme eject` can scaffold a
  * complete theme without the package installed. There is no central catalog.
  * Run from the repo root and commit the generated bundle.
  */
@@ -118,7 +118,7 @@ function main() {
     }
 
     // Keep optional theme-owned authoring artifacts with the template. A
-    // palette-backed theme must remain reproducible after `theme add`.
+    // palette-backed theme must remain reproducible after `theme eject`.
     const optionalFiles = [
       {source: path.join(sourceDir, 'icons.tsx'), output: 'icons.tsx'},
       {

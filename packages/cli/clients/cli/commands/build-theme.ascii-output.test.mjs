@@ -16,9 +16,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {ensureCoreBuilt} from './ensure-core-built.mjs';
 import {runCli} from '../../../test-utils/run-cli.mjs';
-
-// Under the CLI package so fixtures resolve `@astryxdesign/core/theme`.
-const CLI_ROOT = path.resolve(import.meta.dirname, '../../..');
+import {
+  makeLinkedFixture,
+  removeLinkedFixture,
+} from '../../../test-utils/linked-fixture.mjs';
 
 const OCEAN = `import {defineTheme} from '@astryxdesign/core/theme';
 export const oceanTheme = defineTheme({
@@ -48,14 +49,14 @@ beforeAll(() => {
 }, 200_000);
 
 beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(CLI_ROOT, '.tmp-theme-ascii-'));
+  dir = makeLinkedFixture('astryx-theme-ascii-', ['@astryxdesign']);
   fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}\n');
   fs.writeFileSync(path.join(dir, 'ocean.mjs'), OCEAN);
   fs.writeFileSync(path.join(dir, 'ocean-calm.mjs'), CALM);
 });
 
 afterEach(() => {
-  fs.rmSync(dir, {recursive: true, force: true});
+  removeLinkedFixture(dir);
 });
 
 /** @param {{stdout: string, stderr: string}} result */
@@ -71,22 +72,59 @@ function run(args) {
 }
 
 describe('theme command human output is plain ASCII', () => {
-  it('a standalone build: ok, warning, error, notice, and font help lines', async () => {
-    const result = await run(['build', 'ocean.mjs']);
+  it('a private-variable build keeps its output and exits 1', async () => {
+    const short = await run(['build', 'ocean.mjs']);
+    expect(short.code).toBe(1);
+    expect(short.stdout).toContain(
+      '[note] Fonts named but not loaded: "Inter"',
+    );
+    expect(nonAscii(short)).toEqual([]);
 
-    expect(result.code).toBe(0);
+    const result = await runCli(
+      ['--detail', 'full', 'theme', 'build', 'ocean.mjs'],
+      dir,
+    );
+
+    expect(result.code).toBe(1);
     expect(result.stdout).toContain('[ok] ocean.css');
-    expect(result.stderr).toContain('[warn] Deprecated component target');
+    expect(result.stderr).toContain('[warn] Unknown component "progressbar"');
     expect(result.stderr).toContain('[error] Component "button"');
     expect(result.stdout).toContain('note: Font "Inter"');
     expect(result.stdout).toContain('[note] Theme "ocean" names fonts');
     expect(nonAscii(result)).toEqual([]);
   });
 
+  it('JSON build and check keep their receipts and exit 1', async () => {
+    const built = await runCli(['--json', 'theme', 'build', 'ocean.mjs'], dir);
+    expect(built.code).toBe(1);
+    expect(built.stderr).toBe('');
+    const receipt = JSON.parse(built.stdout);
+    expect(receipt.type).toBe('theme.build');
+    expect(receipt.data.name).toBe('ocean');
+    expect(receipt.data.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining('--_button-radius')]),
+    );
+
+    const checked = await runCli(
+      ['--json', 'theme', 'build', 'ocean.mjs', '--check'],
+      dir,
+    );
+    expect(checked.code).toBe(1);
+    expect(checked.stderr).toBe('');
+    expect(JSON.parse(checked.stdout)).toMatchObject({
+      type: 'theme.build.check',
+      data: {name: 'ocean', upToDate: true, stale: []},
+    });
+
+    for (const extension of ['css', 'css.d.ts', 'js', 'd.ts']) {
+      expect(fs.existsSync(path.join(dir, `ocean.${extension}`))).toBe(true);
+    }
+  });
+
   it('--check, up to date and stale', async () => {
     await run(['build', 'ocean.mjs']);
     const upToDate = await run(['build', 'ocean.mjs', '--check']);
-    expect(upToDate.code).toBe(0);
+    expect(upToDate.code).toBe(1);
     expect(upToDate.stdout).toContain('[ok] Theme outputs are up to date');
     expect(nonAscii(upToDate)).toEqual([]);
 
@@ -99,7 +137,7 @@ describe('theme command human output is plain ASCII', () => {
 
   it('a batch build and check', async () => {
     const built = await run(['build', 'ocean.mjs', 'ocean-calm.mjs']);
-    expect(built.code).toBe(0);
+    expect(built.code).toBe(1);
     expect(built.stdout).toContain('[ok] Built 2 themes.');
     expect(nonAscii(built)).toEqual([]);
 
@@ -109,7 +147,7 @@ describe('theme command human output is plain ASCII', () => {
       'ocean-calm.mjs',
       '--check',
     ]);
-    expect(checked.code).toBe(0);
+    expect(checked.code).toBe(1);
     expect(checked.stdout).toContain('[ok] Checked 2 themes.');
     expect(nonAscii(checked)).toEqual([]);
   });
@@ -124,7 +162,7 @@ describe('theme command human output is plain ASCII', () => {
       'ocean-family',
     ];
     const built = await run(familyArgs);
-    expect(built.code).toBe(0);
+    expect(built.code).toBe(1);
     expect(built.stdout).toContain('[ok] ocean-family.css');
     expect(nonAscii(built)).toEqual([]);
 

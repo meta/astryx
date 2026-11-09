@@ -12,10 +12,19 @@ function normalizeUrl(url: string): string {
   return url.replace(/[\x00-\x1f\x7f]/g, '').trim();
 }
 
+/**
+ * The form a URL's scheme is compared in: lowercase, and without the spaces
+ * after the scheme's colon, which a data URL's media type ignores
+ * (`data: text/html` is HTML).
+ */
+function comparableUrl(normalized: string): string {
+  return normalized.toLowerCase().replace(/^([a-z][a-z\d+.-]*:) +/, '$1');
+}
+
 /** Return a normalized navigation URL, or null for a blocked scheme. */
 export function sanitizeUrl(url: string): string | null {
   const normalized = normalizeUrl(url);
-  const lower = normalized.toLowerCase();
+  const lower = comparableUrl(normalized);
   if (
     lower.startsWith('javascript:') ||
     lower.startsWith('vbscript:') ||

@@ -11,6 +11,12 @@
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen, fireEvent} from '@testing-library/react';
 import {SelectableCard} from './SelectableCard';
+import {
+  afterPaintsPress,
+  hasReleaseFade,
+  pressArmsShadowedByDefault,
+  readsPressStrength,
+} from '../__tests__/pressState';
 
 describe('SelectableCard', () => {
   it('renders children', () => {
@@ -111,6 +117,22 @@ describe('SelectableCard', () => {
     expect(handleChange).not.toHaveBeenCalled();
   });
 
+  it('does not toggle on Space when disabled', () => {
+    const handleChange = vi.fn();
+    render(
+      <SelectableCard
+        label="Disabled"
+        isSelected={false}
+        onChange={handleChange}
+        isDisabled>
+        Content
+      </SelectableCard>,
+    );
+    const checkbox = screen.getByRole('checkbox', {name: 'Disabled'});
+    fireEvent.keyDown(checkbox, {key: ' '});
+    expect(handleChange).not.toHaveBeenCalled();
+  });
+
   it('toggles exactly once on Space (native), not doubled by the Enter handler', () => {
     const handleChange = vi.fn();
     render(
@@ -168,5 +190,27 @@ describe('SelectableCard', () => {
       // proving the selection ring does not clobber the elevation shadow.
       expect(selectedClassFor('med')).not.toBe(selectedClassFor('none'));
     });
+  });
+});
+
+describe('SelectableCard pressed state (touch)', () => {
+  it('fades the touch press out on the card, whose overlay layer reads its strength', () => {
+    const {container} = render(
+      <SelectableCard label="Test" isSelected={false} onChange={() => {}}>
+        Content
+      </SelectableCard>,
+    );
+    const card = container.querySelector('[data-astryx-pressable]');
+    if (card == null) {
+      throw new Error('the card carries no pressable marker');
+    }
+    expect(hasReleaseFade(card)).toBe(true);
+    expect(readsPressStrength(card, '[data-astryx-press="on"]')).toBe(true);
+    expect(readsPressStrength(card)).toBe(true);
+    expect(afterPaintsPress(card, '[data-astryx-press="on"]')).toBe(true);
+    expect(afterPaintsPress(card)).toBe(true);
+    // In a layered stylesheet a press arm on a custom property the card also
+    // declares without it never applies.
+    expect(pressArmsShadowedByDefault(card)).toEqual([]);
   });
 });

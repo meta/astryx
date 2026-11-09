@@ -70,13 +70,18 @@ describe('json envelope shape', () => {
     expect(env.apiVersion).toBe(API_VERSION);
     expect(env.type).toBe('docs.list');
     expect(env.data).toEqual([{name: 'Button'}]);
-    expect('meta' in env).toBe(false);
+    // The only meta every result carries names who answered (AST-081 FR5).
+    expect(Object.keys(env.meta)).toEqual(['answeredBy']);
+    const {cli, core, copy} = env.meta.answeredBy;
+    expect(typeof cli).toBe('string');
+    expect(core === null || typeof core === 'string').toBe(true);
+    expect(['project', 'matched', 'carried']).toContain(copy);
   });
 
   it('jsonOut attaches optional meta as a sibling of data', () => {
     jsonOut({type: 'discover.list', data: [], meta: {configured: false}});
     const env = JSON.parse(logs[0]);
-    expect(env.meta).toEqual({configured: false});
+    expect(env.meta).toEqual({configured: false, answeredBy: expect.any(Object)});
     expect(env.data).toEqual([]);
   });
 

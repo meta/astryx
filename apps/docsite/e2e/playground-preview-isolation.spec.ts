@@ -153,6 +153,62 @@ function exampleRendering(text: string) {
 }
 
 test.describe('playground preview isolation', () => {
+  test('survives a deployment-injected cookie probe', async ({page}) => {
+    // Vercel adds its Toolbar cookie probe to Next's shared main-app bundle.
+    // Insert the same probe immediately after our bootstrap guard but before
+    // the Webpack runtime, making this stricter than the deployed ordering.
+    await page.route(
+      /\/_next\/static\/chunks\/main-app-[^/]+\.js/,
+      async route => {
+        // A new connection, so a kept-alive socket that `next start` closes
+        // for idleness cannot reset this fetch.
+        const response = await route.fetch({
+          headers: {...route.request().headers(), connection: 'close'},
+        });
+        const body = await response.text();
+        const runtimeStart = body.indexOf('(self.webpackChunk_N_E=');
+        expect(runtimeStart).toBeGreaterThan(0);
+        const cookieProbe = [
+          "if (location.pathname === '/playground/preview') {",
+          '  void document.cookie;',
+          '}',
+        ].join('\n');
+        await route.fulfill({
+          response,
+          body: [
+            body.slice(0, runtimeStart),
+            cookieProbe,
+            body.slice(runtimeStart),
+          ].join('\n'),
+        });
+      },
+    );
+
+    await page.goto('/playground');
+
+    await expectPreviewToRender(page, 'Welcome');
+    await expect(
+      page.getByText('Build error', {exact: true}),
+    ).not.toBeVisible();
+    expect(
+      await currentPreviewFrame(page).evaluate(() => {
+        const blocked = (probe: () => unknown) => {
+          try {
+            probe();
+            return false;
+          } catch {
+            return true;
+          }
+        };
+        return {
+          cookie: document.cookie,
+          localStorage: blocked(() => window.localStorage),
+          parentDocument: blocked(() => window.parent.document),
+        };
+      }),
+    ).toEqual({cookie: '', localStorage: true, parentDocument: true});
+  });
+
   test('reports a compiler bootstrap failure instead of building forever', async ({
     page,
   }) => {

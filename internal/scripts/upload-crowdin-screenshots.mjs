@@ -53,6 +53,7 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {
   buildMeasureSource,
+  MUTATING_STRATEGIES,
   STRATEGY_NAMES,
   toDevicePixelRect,
 } from './lib/crowdin-strategies.mjs';
@@ -215,7 +216,7 @@ function serveStatic(dir) {
 //
 // Per-strategy convention for which arg slot is the "text" arg:
 //   visibleText / option / placeholder / ariaLabel / footerButton /
-//   srOnlyLabel / srOnlyReveal   → args[0]
+//   srOnlyLabel / srOnlyReveal / textRun / liveRegionReveal   → args[0]
 //   chipOperator                  → args[1]  (args[0] = field name)
 //   filterInput                   → no text arg (kind string only)
 const TEXT_ARG_INDEX = {
@@ -228,6 +229,8 @@ const TEXT_ARG_INDEX = {
   footerButton: 0,
   srOnlyLabel: 0,
   srOnlyReveal: 0,
+  textRun: 0,
+  liveRegionReveal: 0,
 };
 
 function t(key, strategy, ...args) {
@@ -237,6 +240,13 @@ function t(key, strategy, ...args) {
     if (def != null) args[idx] = def;
   }
   return {key, strategy, args};
+}
+
+// Every palette capture starts by opening the modal behind the trigger.
+async function openCommandPalette(page) {
+  await page.getByRole('button', {name: 'Open'}).click();
+  await page.waitForSelector('dialog[open]', {timeout: 3000});
+  await page.waitForTimeout(400);
 }
 
 const TARGETS = [
@@ -693,15 +703,15 @@ const TARGETS = [
   {
     name: 'table-sort-headers',
     // The sort-direction strings (`Sort ascending`, `Sort descending`,
-    // `Clear sort`) are NOT the column header aria-labels — those use the
-    // compound `sortBy` / `sortedBy` templates. The three strings we care
-    // about live in the header context menu, which opens on right-click.
+    // `Clear sort`) are not the column header buttons' names, which are the
+    // column text. The three strings we care about live in the header
+    // context menu, which opens on right-click.
     // Right-clicking the currently-sorted column (Name) reveals all three
     // options in one popover.
     storyId: 'core-tablesortable--single-sort',
     viewport: {width: 1100, height: 500},
     interact: async page => {
-      const header = page.getByRole('button', {name: /^Sort by Name/}).first();
+      const header = page.getByRole('button', {name: 'Name', exact: true}).first();
       await header.waitFor({state: 'visible', timeout: 5000});
       await header.click({button: 'right'});
       // Wait for context menu.
@@ -1381,6 +1391,95 @@ const TARGETS = [
       t('astryx.typeahead.searchPlaceholder', 'placeholder'),
     ],
   },
+
+  // ==========================================================================
+  // CommandPalette
+  // ==========================================================================
+  // Four moments of one flow on the BuiltInStrings story, which overrides no
+  // string. Each announcement replaces the one before it, so each needs its
+  // own capture.
+  {
+    name: 'commandpalette-bootstrap-empty',
+    storyId: 'core-commandpalette--built-in-strings',
+    viewport: {width: 900, height: 700},
+    interact: openCommandPalette,
+    selector: null,
+    manualTags: [
+      t('astryx.commandPalette.input.placeholder', 'placeholder'),
+      t('astryx.commandPalette.emptyBootstrap', 'visibleText'),
+      // Each hint is `<span><Kbd/>Navigate</span>`, so tag the text node.
+      t('astryx.commandPalette.footer.navigate', 'textRun'),
+      t('astryx.commandPalette.footer.select', 'textRun'),
+      t('astryx.commandPalette.footer.close', 'textRun'),
+      // aria-label only, but on surfaces a translator can see and identify.
+      t('astryx.commandPalette.label', 'ariaLabel'),
+      t('astryx.commandPalette.list.label', 'ariaLabel'),
+    ],
+  },
+  {
+    name: 'commandpalette-no-results',
+    storyId: 'core-commandpalette--built-in-strings',
+    viewport: {width: 900, height: 700},
+    interact: async page => {
+      await openCommandPalette(page);
+      await page.locator('dialog[open] input').first().fill('zzz');
+      await page.waitForTimeout(1100);
+    },
+    selector: null,
+    manualTags: [
+      t('astryx.commandPalette.emptySearch', 'visibleText'),
+      // "No results for {query}" — the story's query is "zzz".
+      t(
+        'astryx.commandPalette.noResultsFor',
+        'liveRegionReveal',
+        'No results for zzz',
+        '.astryx-command-palette-input',
+        'below',
+      ),
+    ],
+  },
+  {
+    name: 'commandpalette-result-count',
+    storyId: 'core-commandpalette--built-in-strings',
+    viewport: {width: 900, height: 700},
+    interact: async page => {
+      await openCommandPalette(page);
+      await page.locator('dialog[open] input').first().fill('e');
+      await page.waitForTimeout(1100);
+    },
+    selector: null,
+    manualTags: [
+      // All three of the story's commands match "e".
+      t(
+        'astryx.commandPalette.resultCount',
+        'liveRegionReveal',
+        '3 results',
+        '.astryx-command-palette-input',
+        'below',
+      ),
+    ],
+  },
+  {
+    name: 'commandpalette-loading',
+    storyId: 'core-commandpalette--built-in-strings',
+    viewport: {width: 900, height: 700},
+    interact: async page => {
+      await openCommandPalette(page);
+      // Capture inside the story's 600ms in-flight window.
+      await page.locator('dialog[open] input').first().fill('e');
+      await page.waitForTimeout(120);
+    },
+    selector: null,
+    manualTags: [
+      t(
+        'astryx.commandPalette.loading',
+        'liveRegionReveal',
+        undefined,
+        '.astryx-command-palette-input',
+        'below',
+      ),
+    ],
+  },
 ];
 
 // ---------- validation ----------
@@ -1479,8 +1578,9 @@ async function main() {
       // screenshot is captured. Strategies are idempotent: the same call
       // during the measurement pass below returns the already-injected
       // rect instead of duplicating.
-      const revealTags =
-        (target.manualTags || []).filter(t => t.strategy === 'srOnlyReveal');
+      const revealTags = (target.manualTags || []).filter(t =>
+        MUTATING_STRATEGIES.includes(t.strategy),
+      );
       if (revealTags.length) {
         for (const tag of revealTags) {
           await page.evaluate(

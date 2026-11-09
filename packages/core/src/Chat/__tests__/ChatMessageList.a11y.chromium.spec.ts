@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y audit ChatMessageList
 
 /**
  * @file ChatMessageList.a11y.chromium.spec.ts
@@ -11,7 +12,12 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {expect, test, type Browser, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Browser,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   DEFAULT_STORYBOOK_DIR,
@@ -42,7 +48,8 @@ interface Case {
   direction?: 'ltr' | 'rtl';
   coarsePointer?: boolean;
   requiresOverflow?: boolean;
-  statusName?: string;
+  /** The top loader is shown, silent inside the log (spec:AST-086 FR4, FR8). */
+  hiddenLoader?: boolean;
 }
 
 // Expectations are authored from the public fixture and component source, not
@@ -153,7 +160,7 @@ const CASES: Case[] = [
     density: 'balanced',
     busy: false,
     text: 'Earlier message remains readable',
-    statusName: 'Loading',
+    hiddenLoader: true,
   },
 ];
 
@@ -228,8 +235,10 @@ async function capture(page: Page, scenario: Case, mode: 'light' | 'dark') {
     );
     const logs = page.getByRole('log');
     await logs.first().waitFor();
-    if (scenario.statusName) {
-      await page.getByRole('status', {name: scenario.statusName}).waitFor();
+    if (scenario.hiddenLoader) {
+      await page
+        .locator('[role="log"] .astryx-spinner[aria-hidden="true"]')
+        .waitFor();
     }
     await holdMotionStill(page);
     await page.evaluate(async () => document.fonts.ready);
@@ -260,17 +269,21 @@ async function capture(page: Page, scenario: Case, mode: 'light' | 'dark') {
               parentClientHeight: node.parentElement?.clientHeight ?? 0,
             }
           : {}),
-        ...(measures.status
+        ...(measures.loader
           ? {
-              statusName: node
-                .querySelector('[role="status"]')
-                ?.getAttribute('aria-label'),
+              hiddenLoader:
+                node
+                  .querySelector('.astryx-spinner')
+                  ?.closest('[aria-hidden="true"]') != null,
+              exposedStatus: [...node.querySelectorAll('[role="status"]')].some(
+                status => status.closest('[aria-hidden="true"]') == null,
+              ),
             }
           : {}),
       }),
       {
         overflow: Boolean(scenario.requiresOverflow),
-        status: Boolean(scenario.statusName),
+        loader: Boolean(scenario.hiddenLoader),
       },
     );
     const environment = await page.evaluate(() => ({
@@ -323,8 +336,9 @@ async function capture(page: Page, scenario: Case, mode: 'light' | 'dark') {
     if (scenario.text != null) {
       expect(observed.text).toContain(scenario.text);
     }
-    if (scenario.statusName != null) {
-      expect(observed.statusName).toBe(scenario.statusName);
+    if (scenario.hiddenLoader) {
+      expect(observed.hiddenLoader).toBe(true);
+      expect(observed.exposedStatus).toBe(false);
     }
     expect(observed.width).toBeGreaterThan(0);
     expect(observed.height).toBeGreaterThan(0);
@@ -371,7 +385,7 @@ async function capture(page: Page, scenario: Case, mode: 'light' | 'dark') {
         text: scenario.text,
         coarsePointer: scenario.coarsePointer ?? false,
         ...(scenario.requiresOverflow ? {requiresOverflow: true} : {}),
-        ...(scenario.statusName ? {statusName: scenario.statusName} : {}),
+        ...(scenario.hiddenLoader ? {hiddenLoader: true} : {}),
       },
       observed: {
         build: storybookSha,

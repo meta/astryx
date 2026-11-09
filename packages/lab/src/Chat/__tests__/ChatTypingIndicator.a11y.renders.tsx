@@ -4,7 +4,8 @@
 
 /** Shared jsdom and Storybook renderings for ChatTypingIndicator status states. */
 
-import {useState, type ReactElement} from 'react';
+import {useEffect, useState, type ReactElement} from 'react';
+import {useAnnounce} from '@astryxdesign/core/hooks';
 import {ChatTypingIndicator} from '../ChatTypingIndicator';
 import type {ChatTypingStatusStateId} from './ChatTypingIndicator.a11y.states';
 
@@ -27,12 +28,35 @@ function TransitionButton({
   );
 }
 
-function TypingHarness({startsNamed}: {startsNamed: boolean}) {
-  const initial = startsNamed ? ['Ana'] : [];
-  const [names, setNames] = useState<string[]>(initial);
+/**
+ * Establishes the singleton polite channel the indicator announces through,
+ * then clears the seed, so the binding inspects the pre-existing empty region.
+ */
+function PrimePoliteChannel() {
+  const announce = useAnnounce();
+  const [isReady, setIsReady] = useState(false);
+  useEffect(() => {
+    let secondFrame = 0;
+    announce('Preparing status channel', 'polite');
+    const firstFrame = requestAnimationFrame(() => {
+      secondFrame = requestAnimationFrame(() => {
+        announce('', 'polite');
+        setIsReady(true);
+      });
+    });
+    return () => {
+      cancelAnimationFrame(firstFrame);
+      cancelAnimationFrame(secondFrame);
+    };
+  }, [announce]);
+  return <span data-a11y-ready={String(isReady)} hidden />;
+}
+
+function TypingHarness() {
+  const [names, setNames] = useState<string[]>([]);
   return (
     <div>
-      <span data-a11y-ready="true" hidden />
+      <PrimePoliteChannel />
       <button data-a11y-relation="focus-anchor" type="button">
         Keep focus
       </button>
@@ -53,8 +77,7 @@ export const CHAT_TYPING_STATUS_STATE_RENDERS: Record<
   ChatTypingStatusStateId,
   ChatTypingStatusStateRender
 > = {
-  'chat-typing-empty-to-message': () => <TypingHarness startsNamed={false} />,
-  'chat-typing-name-mounted': () => <TypingHarness startsNamed />,
+  'chat-typing-empty-to-message': () => <TypingHarness />,
 };
 
 export {transitionTestId};

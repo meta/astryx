@@ -16,7 +16,9 @@
  * then nine alternating paired rounds averaging 20 iterations a side,
  * reported as the median of the nine paired ratios — against the omitted
  * baseline, for a stable list and a recreated equivalent one. Each ratio
- * comes from one sample, never a selection by the fastest baseline.
+ * comes from one sample, never a selection by the fastest baseline. Windows
+ * are timed on the main thread's CPU clock, so V8's background threads do not
+ * bill their work to whichever side happens to be running.
  *
  * The harness retries a fresh process only when the A/A control is invalid.
  * A helper-overhead failure is never retried to obtain a passing sample.

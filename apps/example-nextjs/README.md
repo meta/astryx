@@ -67,9 +67,9 @@ export function Providers({children}) {
 
 This example lives in the Astryx monorepo for convenience, but it should be representative of a real app consuming `@astryxdesign/core` from npm. Monorepo workspace resolution can silently bypass issues that external consumers hit.
 
-**Before merging changes to this example, test it as an external consumer.** See the [Testing Example Apps](https://github.com/facebook/astryx/wiki/Testing-Example-Apps) wiki page for the full procedure.
+**Before merging changes to this example, test it as an external consumer.** See the [Testing Example Apps](https://github.com/meta/astryx/wiki/Testing-Example-Apps) wiki page for the full procedure.
 
 ## Related
 
-- [Issue #145: Add example-nextjs project](https://github.com/facebook/astryx/issues/145)
+- [Issue #145: Add example-nextjs project](https://github.com/meta/astryx/issues/145)
 - [Astryx + Tailwind example](../example-nextjs-tailwind/): same dist approach with Tailwind for custom layout styles

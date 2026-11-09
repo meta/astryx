@@ -41,6 +41,7 @@ function stylexOptions(rootDir, overrides = {}) {
   return {
     dev: process.env.NODE_ENV !== 'production',
     runtimeInjection: false,
+    propertyValidationMode: 'throw',
     enableInlinedConditionalMerge: true,
     treeshakeCompensation: true,
     aliases: resolveAliases(rootDir),

@@ -58,6 +58,29 @@ describe('experimental palette generator', () => {
     }
   });
 
+  it('keeps Y2K comparison inputs aligned with its reviewed palette request', () => {
+    const y2k = THEME_REFERENCES.find(theme => theme.id === 'y2k');
+
+    expect(y2k?.suggestedVibrancy).toEqual({oklch: 72, hct: 53, compare: 72});
+    expect(
+      Object.fromEntries(
+        y2k?.families.map(family => [family.id, family.seed]) ?? [],
+      ),
+    ).toEqual({
+      neutral: '#fff6ed',
+      accent: '#cccffa',
+      red: '#ff6f7a',
+      orange: '#ff9f4a',
+      yellow: '#ffd34f',
+      green: '#c5e17a',
+      teal: '#48c99a',
+      cyan: '#42d4d0',
+      blue: '#00a8ff',
+      purple: '#a589ff',
+      pink: '#ff72b6',
+    });
+  });
+
   it('supports the full and compact stop presets', () => {
     expect(validateStops([...FULL_21_STOPS])).toHaveLength(21);
     expect(validateStops([...COMPACT_11_STOPS])).toHaveLength(11);
