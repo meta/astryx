@@ -5,7 +5,8 @@
  * its own package, shaped like Font Awesome: `add --variant <look> --from
  * <other package> --all` adds the look for every icon, and a pack export
  * (`fas`, an object of the other exports) is no icon and keeps the library
- * prefix coming off. An icon of the set that the look's package does not
+ * prefix coming off, also in TypeScript source under `as` or `satisfies`.
+ * An icon of the set that the look's package does not
  * export is listed as missing, and a glyph whose name starts with a digit
  * (`fa0`) keeps the prefix.
  */
@@ -34,31 +35,40 @@ const REGULAR = '@acme/free-regular-glyphs';
  * @param {boolean} pack whether it exports the pack under the prefix
  * @param {Array<[string, string]>} [extra] more glyphs, as export name and
  *   icon name
+ * @param {boolean} [typed] whether the package is TypeScript source whose
+ *   pack wraps each value in `as` or `satisfies`
  */
-function writeLook(name, prefix, pack, extra = []) {
+function writeLook(name, prefix, pack, extra = [], typed = false) {
   const lib = path.join(pkg, 'node_modules', ...name.split('/'));
   fs.mkdirSync(lib, {recursive: true});
+  const source = typed ? 'index.ts' : 'index.mjs';
   fs.writeFileSync(
     path.join(lib, 'package.json'),
     JSON.stringify({
       name,
       version: '7.0.0',
       license: 'MIT',
-      main: 'index.js',
-      module: 'index.mjs',
-      types: 'index.d.ts',
+      main: typed ? source : 'index.js',
+      module: source,
+      types: typed ? source : 'index.d.ts',
       exports: {
-        '.': {
-          types: './index.d.ts',
-          import: './index.mjs',
-          require: './index.js',
-        },
+        '.': typed
+          ? `./${source}`
+          : {
+              types: './index.d.ts',
+              import: './index.mjs',
+              require: './index.js',
+            },
       },
     }),
   );
   fs.writeFileSync(path.join(lib, 'LICENSE.txt'), 'MIT License\n');
   const glyph = (/** @type {string} */ iconName, /** @type {string} */ d) =>
     `{prefix: '${prefix}', iconName: '${iconName}', icon: [512, 512, [], 'f000', '${d}']}`;
+  const packValue = (/** @type {string} */ each, /** @type {number} */ at) =>
+    !typed
+      ? each
+      : `${each} ${at % 2 === 0 ? 'as' : 'satisfies'} IconDefinition`;
   const exported = [
     'faClose',
     'faHome',
@@ -68,8 +78,13 @@ function writeLook(name, prefix, pack, extra = []) {
     ...extra.map(([each]) => each),
   ];
   fs.writeFileSync(
-    path.join(lib, 'index.mjs'),
+    path.join(lib, source),
     [
+      ...(typed
+        ? [
+            'type IconDefinition = {prefix: string; iconName: string; icon: unknown[]};',
+          ]
+        : []),
       `var prefix = '${prefix}';`,
       `var faXmark = ${glyph('xmark', 'M0 0')};`,
       'var faClose = faXmark;',
@@ -79,12 +94,13 @@ function writeLook(name, prefix, pack, extra = []) {
       ...extra.map(
         ([each, iconName]) => `var ${each} = ${glyph(iconName, 'M3 3')};`,
       ),
-      `var icons = {${exported.map(each => `${each}: ${each}`).join(', ')}};`,
+      `var icons = {${exported.map((each, at) => `${each}: ${packValue(each, at)}`).join(', ')}};`,
       '',
       `export { ${pack ? `icons as ${prefix}, ` : ''}prefix, ${exported.join(', ')} };`,
       '',
     ].join('\n'),
   );
+  if (typed) return;
   fs.writeFileSync(
     path.join(lib, 'index.d.ts'),
     [
@@ -257,6 +273,17 @@ describe('a library of icon data objects with one package per look', () => {
     expect(added.code, JSON.stringify(added.body)).toBe(0);
     expect(added.body.data).toMatchObject({added: 3, missing: []});
     expect(await strictFailures()).toEqual([]);
+  });
+
+  it('a TypeScript pack whose values use `as` or `satisfies` is no icon either', async () => {
+    writeLook(SOLID, 'fas', true, [], true);
+    writeLook(REGULAR, 'far', true, [], true);
+    await wrapSolid();
+    expect(iconRows()).toEqual([
+      ['house', 'HouseIcon'],
+      ['magnifying-glass', 'MagnifyingGlassIcon'],
+      ['xmark', 'XmarkIcon'],
+    ]);
   });
 
   it('icons whose names start with a digit (`fa0`, `fa500px`) keep the `fa` prefix, and the set passes the strict check', async () => {

@@ -44,11 +44,11 @@ import {
 import {findInstalledPackage} from '../fs/paths.mjs';
 import {cliVersion} from '../release/run-context.mjs';
 import {
-  exportObjectKeys,
   exportScalarType,
   exportValueKind,
   followedExportNames,
   moduleExportOrigin,
+  staticExportBindings,
 } from './module-exports.mjs';
 
 /** @typedef {import('./icon-set-discovery.mjs').DiscoveredIconSet} DiscoveredIconSet */
@@ -659,12 +659,9 @@ function iconCandidates(file, {adapter = false, exclude = []} = {}) {
  * @param {Set<string>} exported every export name of the module
  */
 function isIconPack(file, name, exported) {
-  const keys = exportObjectKeys(file, name);
-  return (
-    keys != null &&
-    keys.length >= 2 &&
-    keys.every(key => key !== name && exported.has(key))
-  );
+  const bindings = staticExportBindings(file, name);
+  if (bindings == null || bindings.size < 2) return false;
+  return [...bindings.keys()].every(key => key !== name && exported.has(key));
 }
 
 /**
