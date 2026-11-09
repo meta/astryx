@@ -51,11 +51,7 @@ export const TABLE_A11Y_STATES = [
     modules: ['sort'],
     facts: {
       label: 'Team members',
-      columnHeaders: [
-        'Sort by Name, sorted descending',
-        'Sort by Role',
-        'Sort by Location',
-      ],
+      columnHeaders: ['Name', 'Role', 'Location'],
       rows: 3,
       rowHeaders: [],
       cells: 3,

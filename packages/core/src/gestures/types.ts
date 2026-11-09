@@ -10,6 +10,7 @@
  */
 
 import type {SelectionLock} from './GestureRecognizer';
+import {isElement} from '../utils/nodeType';
 
 /**
  * UIGestureRecognizer.State. A discrete recognizer goes straight from
@@ -20,6 +21,14 @@ export type GestureState =
 
 /** What made the contact. A pen on an iPad is `pen`, not `touch`. */
 export type PointerKind = 'touch' | 'mouse' | 'pen';
+
+/**
+ * Scroll input a recognizer can take, as UIKit's `UIScrollTypeMask`: a
+ * trackpad's two-finger scroll or pinch (`continuous`), or a mouse wheel's
+ * notches (`discrete`). A pan takes only a trackpad's; a pinch takes a
+ * ctrl-wheel of either.
+ */
+export type ScrollType = 'continuous' | 'discrete';
 
 export interface Point {
   readonly x: number;
@@ -85,15 +94,10 @@ export interface GestureTouch {
   readonly target: unknown;
   /** The native scrollers under the contact, when the host knows them. */
   readonly scroll: NativeScrollProbe | null;
+  /** Set for a wheel's or a trackpad's scroll input, which is no contact. */
+  readonly scrollType?: ScrollType;
   /** The browser took this contact for its own pan or zoom. */
   takenByBrowser: boolean;
-  /**
-   * A finger delivered where the primary pointer is fine, which only a
-   * per-event press tracker hears (an FR19 exception for press feedback
-   * only, pending in `spec:AST-094`'s amendment): the tracker paints its
-   * press and reports no control event.
-   */
-  readonly isFeedbackOnly?: boolean;
 }
 
 /** The input a host hands the arena for one contact in one event. */
@@ -111,8 +115,8 @@ export interface TouchBeganInput extends TouchInput {
   readonly pointerType: PointerKind;
   readonly target: unknown;
   readonly scroll?: NativeScrollProbe | null;
-  /** See GestureTouch.isFeedbackOnly. */
-  readonly isFeedbackOnly?: boolean;
+  /** Set for a wheel's or a trackpad's scroll input. */
+  readonly scrollType?: ScrollType;
 }
 
 /** What a recognizer is told alongside the touches that changed. */
@@ -131,6 +135,17 @@ export interface GestureEventContext {
 export interface GestureEnvironment {
   viewportSize(): {readonly width: number; readonly height: number};
   isRtl(view: unknown): boolean;
+  /**
+   * The box of a recognizer's view in viewport coordinates, or null when it
+   * has none to measure. A screen-edge pan reads it to tell a view within
+   * its edge band from any other.
+   */
+  viewRect?(view: unknown): {
+    readonly left: number;
+    readonly top: number;
+    readonly width: number;
+    readonly height: number;
+  } | null;
 }
 
 export const DEFAULT_ENVIRONMENT: GestureEnvironment = {
@@ -140,8 +155,21 @@ export const DEFAULT_ENVIRONMENT: GestureEnvironment = {
     }
     return {width: window.innerWidth, height: window.innerHeight};
   },
-  isRtl() {
-    return false;
+  isRtl(view) {
+    if (typeof window === 'undefined' || !isElement(view)) {
+      return false;
+    }
+    return (
+      (view.ownerDocument.defaultView ?? window).getComputedStyle(view)
+        .direction === 'rtl'
+    );
+  },
+  viewRect(view) {
+    if (!isElement(view)) {
+      return null;
+    }
+    const {left, top, width, height} = view.getBoundingClientRect();
+    return {left, top, width, height};
   },
 };
 
@@ -178,6 +206,12 @@ export interface TouchConsumer {
    * undefined and keeps the browser's long-press selection.
    */
   readonly selectionLock?: SelectionLock;
+  /**
+   * Whether this touch's press holds the browser's context menu closed now.
+   * A control whose hold acts uses it (a switch's hold toggles it). The host
+   * then cancels the menu, as for a claimed touch.
+   */
+  holdsContextMenu?(touchId: number): boolean;
   /**
    * Whether the consumer takes touches now (a disabled control does not).
    * The host listens only while something enabled is attached

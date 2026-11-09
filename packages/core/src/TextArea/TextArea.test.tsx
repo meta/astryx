@@ -17,6 +17,7 @@ import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
 import {TestIcon} from '../__tests__/TestIcon';
 import {TextArea} from './TextArea';
+import {InternationalizationProvider} from '../i18n';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 
 // jsdom cannot match `:focus-visible`: compare the ring's StyleX class hash.
@@ -282,6 +283,57 @@ describe('TextArea', () => {
     expect(container.querySelector('svg')).not.toBeInTheDocument();
   });
 
+  // One presence check decides the start icon's slot and its padding
+  // (architecture:react-component-runtime INV16): empty values render no
+  // slot, and 0 is content shown inside the slot, never a stray "0" beside it.
+  describe('start icon slot presence', () => {
+    const zeroTextParent = (container: HTMLElement) => {
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (node.textContent === '0') {
+          return node.parentElement;
+        }
+      }
+      return null;
+    };
+
+    it.each([
+      ['null', null],
+      ['false', false],
+      ['an empty string', ''],
+    ])('renders no slot and reserves no padding for %s', (_label, value) => {
+      const {container} = render(
+        <TextArea
+          label="Description"
+          value=""
+          onChange={() => {}}
+          startIcon={value}
+        />,
+      );
+      expect(container.querySelector('[class*="startIcon"]')).toBeNull();
+      expect(screen.getByRole('textbox').className).not.toContain(
+        'textareaWithStartIcon',
+      );
+    });
+
+    it('shows 0 inside the slot, with its padding, not beside it', () => {
+      const {container} = render(
+        <TextArea
+          label="Description"
+          value=""
+          onChange={() => {}}
+          startIcon={0}
+        />,
+      );
+      const parent = zeroTextParent(container);
+      expect(parent).not.toBeNull();
+      expect(parent?.className).toContain('startIcon');
+      expect(screen.getByRole('textbox').className).toContain(
+        'textareaWithStartIcon',
+      );
+    });
+  });
+
   describe('status prop', () => {
     it('renders with error status icon', () => {
       const {container} = render(
@@ -519,6 +571,38 @@ describe('TextArea', () => {
         />,
       );
       expect(screen.getByText('5/20')).toBeInTheDocument();
+    });
+
+    it('formats the counter from the catalog with locale number formatting', () => {
+      render(
+        <InternationalizationProvider
+          locale="de-DE"
+          overrides={{
+            'de-DE': {
+              '@astryx.textArea.counter': '{count, number} von {limit, number}',
+            },
+          }}>
+          <TextArea
+            label="Bio"
+            value={'a'.repeat(62)}
+            onChange={() => {}}
+            maxLength={2000}
+          />
+        </InternationalizationProvider>,
+      );
+      expect(screen.getByText('62 von 2.000')).toBeInTheDocument();
+    });
+
+    it('formats an English counter with grouped digits', () => {
+      render(
+        <TextArea
+          label="Bio"
+          value="hi"
+          onChange={() => {}}
+          maxLength={2000}
+        />,
+      );
+      expect(screen.getByText('2/2,000')).toBeInTheDocument();
     });
 
     it('does not display counter when maxLength is not provided', () => {
@@ -938,6 +1022,57 @@ describe('TextArea', () => {
     });
   });
 
+  describe('touch keyboard traits', () => {
+    it('renders no trait attribute when none is set, leaving the browser default', () => {
+      render(<TextArea label="Notes" value="" onChange={() => {}} />);
+      const textarea = screen.getByRole('textbox');
+      for (const attribute of [
+        'enterkeyhint',
+        'inputmode',
+        'autocapitalize',
+        'autocorrect',
+      ]) {
+        expect(textarea).not.toHaveAttribute(attribute);
+      }
+    });
+
+    it('forwards every trait to the native textarea', () => {
+      render(
+        <TextArea
+          label="Message"
+          value=""
+          onChange={() => {}}
+          enterKeyHint="send"
+          inputMode="text"
+          autoCapitalize="sentences"
+          hasAutoCorrect={false}
+          hasSpellCheck={false}
+        />,
+      );
+      const textarea = screen.getByRole('textbox');
+      expect(textarea).toHaveAttribute('enterkeyhint', 'send');
+      expect(textarea).toHaveAttribute('inputmode', 'text');
+      expect(textarea).toHaveAttribute('autocapitalize', 'sentences');
+      expect(textarea).toHaveAttribute('autocorrect', 'off');
+      expect(textarea).toHaveAttribute('spellcheck', 'false');
+    });
+
+    it('keeps Return a line break whatever enterKeyHint says', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <TextArea
+          label="Message"
+          value="a"
+          onChange={onChange}
+          enterKeyHint="send"
+        />,
+      );
+      await user.type(screen.getByRole('textbox'), '{Enter}');
+      expect(onChange).toHaveBeenLastCalledWith('a\n', expect.anything());
+    });
+  });
+
   describe('autoComplete prop (#5638)', () => {
     it('forwards autoComplete to the native textarea unchanged', () => {
       render(
@@ -1253,5 +1388,32 @@ describe('TextArea theme target names', () => {
     expect(root).not.toBeNull();
     expect(root).toHaveClass('astryx-text-area');
     expect(root).not.toHaveClass('astryx-textarea');
+  });
+});
+
+describe('TextArea caller aria-labelledby', () => {
+  it('names the textarea by its label and a caller aria-labelledby', () => {
+    render(
+      <>
+        <span id="billing-heading">Billing</span>
+        <TextArea
+          label="Notes"
+          value=""
+          onChange={() => {}}
+          aria-labelledby="billing-heading"
+        />
+      </>,
+    );
+    const textarea = screen.getByRole('textbox', {name: 'Notes Billing'});
+    expect(textarea.getAttribute('aria-labelledby')?.split(' ')).toContain(
+      'billing-heading',
+    );
+  });
+
+  it('leaves a textarea named by its label element without a caller aria-labelledby', () => {
+    render(<TextArea label="Notes" value="" onChange={() => {}} />);
+    expect(screen.getByRole('textbox', {name: 'Notes'})).not.toHaveAttribute(
+      'aria-labelledby',
+    );
   });
 });

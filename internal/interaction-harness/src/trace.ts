@@ -6,7 +6,9 @@
  *   PerformanceObserver for long tasks
  * @output `traceRendering` — counts of the main thread's rendering work
  *   (Layout, Paint, UpdateLayoutTree, PrePaint, …) between two marks — and
- *   `installLongTaskLog` / `readLongTasks`.
+ *   `installLongTaskLog` / `readLongTasks`. `longTasksOf` gives each long task
+ *   its wall and thread time. `layoutSources` names what ran each counted
+ *   Layout and what invalidated layout before it.
  * @position The "no Layout/Paint during a transform/opacity animation" proof.
  *   A compositor animation costs the main thread nothing per frame; one that
  *   animates a layout property, or writes styles from JavaScript each frame,
@@ -17,20 +19,11 @@
  * `performance.mark` calls, and to the time between the start and end marks,
  * so other pages, the browser process and setup work are excluded.
  *
- * With `{invalidations: true}` the trace also records why each style
- * recalculation happened, which elements animations ran on and whether they
- * ran on the compositor, and when script ran. `countBetween` can then leave
- * out the one rendering pass Chrome makes on its own for a compositor
- * animation (its start time arriving from the compositor, late on a loaded
- * machine): a pass whose style recalculations all have the reason
- * `Animation`, on elements whose animations run on the compositor, with no
- * script since the previous pass. Anything the page causes (a style write, a
- * layout read, an animation the compositor cannot run) is still counted.
- *
  * SYNC: Keep RENDERING_EVENTS equal to the README's list.
  */
 
 import type {CDPSession, Page} from '@playwright/test';
+import {frames} from './story';
 
 /**
  * The mark a harness function puts on its own page-side work
@@ -61,6 +54,29 @@ export const RENDERING_EVENTS = [
   'HitTest',
 ] as const;
 
+/** A main-thread task longer than 50 ms, epoch ms. */
+export interface TracedTask {
+  readonly start: number;
+  /** Wall time, ms. */
+  readonly durationMs: number;
+  /**
+   * The main thread's own run time in the task, from the trace's thread clock,
+   * ms; at most `durationMs`. A busy machine stretches a task's wall time but
+   * not its thread time. Without a thread clock it is the wall time.
+   */
+  readonly threadMs: number;
+}
+
+/** A counted rendering event, epoch ms. */
+export interface RenderingEvent {
+  readonly name: string;
+  readonly t: number;
+  /** A `Paint`'s node, as the trace names it. */
+  readonly node?: string;
+  /** How many elements an `UpdateLayoutTree` restyled. */
+  readonly elements?: number;
+}
+
 export interface RenderingTrace {
   /** Count per trace event name inside the window, on the page's main thread. */
   readonly counts: Readonly<Record<string, number>>;
@@ -72,130 +88,46 @@ export interface RenderingTrace {
   /** Window length, ms. */
   readonly durationMs: number;
   /**
-   * The page's own main-thread tasks longer than 50 ms inside the window (long
-   * tasks), epoch ms. A task that ran a test's own DevTools command (a
-   * `page.evaluate`) is one, whether it calls page code directly or sets it
-   * off; only the harness's own marked reads are in `devtoolsTasks`.
+   * The page's own main-thread tasks inside the window whose main thread ran
+   * longer than 50 ms (long tasks), epoch ms. A task that ran a test's own
+   * DevTools command (a `page.evaluate`) is one, whether it calls page code
+   * directly or sets it off. Only the harness's own marked reads are in
+   * `devtoolsTasks`.
    */
-  readonly longTasks: readonly {
-    readonly start: number;
-    readonly durationMs: number;
-  }[];
+  readonly longTasks: readonly TracedTask[];
+  /**
+   * The page's own tasks longer than 50 ms of wall time whose main thread ran
+   * 50 ms or less, epoch ms. A busy machine kept the renderer off the CPU, or
+   * the thread waited (a synchronous request, `Atomics.wait`). A claim about
+   * a blocking wait judges these too.
+   */
+  readonly stretchedTasks: readonly TracedTask[];
   /**
    * Main-thread tasks longer than 50 ms inside the window that ran a DevTools
    * command the harness marked as its own read (`HARNESS_READ`) and no page
    * script, epoch ms: `waitForAnimation` describing every animation's
    * keyframes, or `blockMainThread(page, ms)` without `during`.
    */
-  readonly devtoolsTasks: readonly {
-    readonly start: number;
-    readonly durationMs: number;
-  }[];
-  /** Every counted rendering event with its epoch-ms time, for sub-window counts. */
-  readonly events: readonly {readonly name: string; readonly t: number}[];
+  readonly devtoolsTasks: readonly TracedTask[];
+  /**
+   * Every counted rendering event with its epoch-ms time, for sub-window
+   * counts. A `Paint` names the node it painted, and an `UpdateLayoutTree`
+   * counts the elements it restyled.
+   */
+  readonly events: readonly RenderingEvent[];
   /** The window, epoch ms on the page's clock. */
   readonly window: {readonly from: number; readonly to: number};
   /**
-   * With `invalidations`: each style recalculation Chrome scheduled, with its
-   * reason (`Animation`, `Inline CSS style declaration was mutated`, …) and
-   * the element's trace node id, epoch ms.
+   * Every main-thread trace event inside the window, in time order, when the
+   * trace keeps them (`keepEvents`). A proof reads them only to explain a
+   * failure.
    */
-  readonly styleInvalidations?: readonly {
-    readonly t: number;
-    readonly reason: string;
-    readonly nodeId?: number;
-  }[];
-  /**
-   * With `invalidations`: the elements animations ran on, and whether each
-   * of them ran on the compositor (Chrome reported no reason it could not).
-   */
-  readonly animations?: readonly {
-    readonly nodeId: number;
-    readonly composited: boolean;
-  }[];
-  /**
-   * With `invalidations`: when script started on the main thread (function
-   * calls, animation frame callbacks, timers, event dispatch), epoch ms.
-   */
-  readonly scripts?: readonly number[];
+  readonly mainThread?: readonly TimedTraceEvent[];
 }
 
-export interface TraceRenderingOptions {
-  /**
-   * Also record style recalculation reasons, the animations and whether they
-   * ran on the compositor, and script, for
-   * `countBetween(…, {skipCompositorAnimationUpdates: true})`.
-   */
-  invalidations?: boolean;
-}
-
-export interface CountBetweenOptions {
-  /**
-   * Leave out a rendering pass Chrome makes on its own for compositor
-   * animations: every style recalculation since the previous pass has the
-   * reason `Animation` and is on an element whose animations run on the
-   * compositor, and no script ran in between. Needs a trace recorded with
-   * `{invalidations: true}`.
-   */
-  skipCompositorAnimationUpdates?: boolean;
-}
-
-// Rendering events closer than this belong to one pass (one frame's style,
-// layout and paint); passes are a frame apart.
-const PASS_GAP_MS = 4;
-
-/**
- * The times of the rendering events that belong to passes Chrome made on its
- * own for compositor animations (see `CountBetweenOptions`).
- */
-function compositorAnimationUpdates(trace: RenderingTrace): Set<number> {
-  const {styleInvalidations, animations, scripts} = trace;
-  if (styleInvalidations == null || animations == null || scripts == null) {
-    throw new Error(
-      'countBetween: skipCompositorAnimationUpdates needs traceRendering(…, {invalidations: true})',
-    );
-  }
-  const composited = new Set<number>();
-  const notComposited = new Set<number>();
-  for (const animation of animations) {
-    (animation.composited ? composited : notComposited).add(animation.nodeId);
-  }
-  const events = [...trace.events].sort((a, b) => a.t - b.t);
-  const skipped = new Set<number>();
-  let previousEnd = -Infinity;
-  let i = 0;
-  while (i < events.length) {
-    let j = i;
-    while (
-      j + 1 < events.length &&
-      events[j + 1].t - events[j].t <= PASS_GAP_MS
-    ) {
-      j += 1;
-    }
-    const start = events[i].t;
-    const end = events[j].t;
-    const causes = styleInvalidations.filter(
-      inv => inv.t > previousEnd && inv.t <= end,
-    );
-    const isAnimationUpdate =
-      causes.length > 0 &&
-      causes.every(
-        inv =>
-          inv.reason === 'Animation' &&
-          inv.nodeId != null &&
-          composited.has(inv.nodeId) &&
-          !notComposited.has(inv.nodeId),
-      ) &&
-      !scripts.some(t => t > previousEnd && t <= start);
-    if (isAnimationUpdate) {
-      for (let k = i; k <= j; k += 1) {
-        skipped.add(events[k].t);
-      }
-    }
-    previousEnd = end;
-    i = j + 1;
-  }
-  return skipped;
+/** A main-thread trace event with its epoch-ms time. */
+export interface TimedTraceEvent extends TraceEvent {
+  readonly t: number;
 }
 
 /** Counts rendering events by name inside `[from, to]` (epoch ms). */
@@ -203,26 +135,135 @@ export function countBetween(
   trace: RenderingTrace,
   from: number,
   to: number,
-  {skipCompositorAnimationUpdates = false}: CountBetweenOptions = {},
 ): Record<string, number> {
-  const skipped = skipCompositorAnimationUpdates
-    ? compositorAnimationUpdates(trace)
-    : new Set<number>();
   const counts: Record<string, number> = {};
   for (const e of trace.events) {
-    if (e.t >= from && e.t <= to && !skipped.has(e.t)) {
+    if (e.t >= from && e.t <= to) {
       counts[e.name] = (counts[e.name] ?? 0) + 1;
     }
   }
   return counts;
 }
 
-interface TraceEvent {
+/** What ran a counted Layout, and what invalidated layout before it. */
+export interface LayoutSource {
+  /** The Layout's time, epoch ms. */
+  readonly t: number;
+  /** The task that ran the Layout: its dispatches and calls, in order. */
+  readonly task: readonly string[];
+  /**
+   * Each layout or style invalidation since the previous Layout, with the
+   * task it ran in. The trace names the reason and the node only when it
+   * tracks invalidations.
+   */
+  readonly invalidations: ReadonlyArray<{
+    readonly t: number;
+    readonly what: string;
+    readonly task: readonly string[];
+  }>;
+}
+
+const TASK_STEPS = new Set([
+  ...PAGE_SCRIPT_EVENTS,
+  'BeginMainThreadFrame',
+  'EvaluateScript',
+  'HitTest',
+  'IntersectionObserverController::computeIntersections',
+  'ParseHTML',
+  'UpdateLayoutTree',
+  'Layout',
+]);
+
+const INVALIDATIONS = new Set([
+  'InvalidateLayout',
+  'ScheduleStyleRecalculation',
+  'LayoutInvalidationTracking',
+  'StyleRecalcInvalidationTracking',
+]);
+
+/** One trace event as text: its name and what its data says about it. */
+function describeEvent(e: TraceEvent): string {
+  const data = (e.args?.data ?? {}) as Record<string, unknown>;
+  const text = (value: unknown) =>
+    typeof value === 'string' || typeof value === 'number'
+      ? String(value)
+      : null;
+  const url = text(data.url);
+  const parts = [
+    text(data.type),
+    text(data.functionName),
+    url == null
+      ? null
+      : `${url.split('/').pop()}:${text(data.lineNumber) ?? '?'}:${text(data.columnNumber) ?? '?'}`,
+    text(data.reason),
+    text(data.nodeName),
+  ].filter(part => part != null && part !== '');
+  // Square brackets: a message line that ends in `:line:column` or
+  // `:line:column)` reads as a stack frame to Playwright, which then reports
+  // that line as the failure's location.
+  return parts.length === 0 ? e.name : `${e.name}[${parts.join(' ')}]`;
+}
+
+/**
+ * Names the source of each Layout in `[from, to]` (epoch ms) from a trace that
+ * kept its events (`traceRendering(page, body, {keepEvents: true})`). For a
+ * Layout it gives the steps of the task that ran it. It also gives every
+ * invalidation since the previous Layout, with the steps of its own task.
+ */
+export function layoutSources(
+  trace: RenderingTrace,
+  from: number,
+  to: number,
+): LayoutSource[] {
+  const main = trace.mainThread;
+  if (main == null) {
+    throw new Error(
+      'layoutSources: the trace kept no events; trace with {keepEvents: true}',
+    );
+  }
+  const tasks = main.filter(e => e.name === 'RunTask' && e.ph === 'X');
+  const stepsBefore = (e: TimedTraceEvent): string[] => {
+    const task = tasks.find(t => t.ts <= e.ts && t.ts + (t.dur ?? 0) >= e.ts);
+    if (task == null) {
+      return [];
+    }
+    return main
+      .filter(
+        x =>
+          x !== e && x.ts >= task.ts && x.ts <= e.ts && TASK_STEPS.has(x.name),
+      )
+      .map(describeEvent)
+      .slice(-8);
+  };
+  const layouts = main.filter(e => e.name === 'Layout');
+  return layouts
+    .filter(e => e.t >= from && e.t <= to)
+    .map(layout => {
+      const previous = layouts.filter(e => e.ts < layout.ts).at(-1);
+      return {
+        t: layout.t,
+        task: stepsBefore(layout),
+        invalidations: main
+          .filter(
+            e =>
+              INVALIDATIONS.has(e.name) &&
+              e.ts > (previous?.ts ?? -Infinity) &&
+              e.ts <= layout.ts,
+          )
+          .slice(-12)
+          .map(e => ({t: e.t, what: describeEvent(e), task: stepsBefore(e)})),
+      };
+    });
+}
+
+export interface TraceEvent {
   name: string;
   cat: string;
   ph: string;
   ts: number;
   dur?: number;
+  /** Thread-clock duration, µs. */
+  tdur?: number;
   pid: number;
   tid: number;
   args?: Record<string, unknown>;
@@ -237,12 +278,14 @@ interface TraceEvent {
  * CSS `@keyframes` animation (and, for an unwatched `waitForAnimation`, a
  * cancelled CSS transition) the wait reads its timing, which flushes that
  * animation's style, so wait on such an animation with `waitForRest`, or
- * after the trace.
+ * after the trace. Taking a watch, or calling `waitForRest` while an
+ * animation already runs on the element, reads its animations once, which
+ * restyles it: do either before the window a proof counts.
  */
 export async function traceRendering(
   page: Page,
   body: () => Promise<unknown>,
-  {invalidations = false}: TraceRenderingOptions = {},
+  {keepEvents = false}: {keepEvents?: boolean} = {},
 ): Promise<RenderingTrace> {
   const cdp: CDPSession = await page.context().newCDPSession(page);
   const events: TraceEvent[] = [];
@@ -260,9 +303,6 @@ export async function traceRendering(
         'disabled-by-default-devtools.timeline',
         'blink.user_timing',
         'toplevel',
-        ...(invalidations
-          ? ['disabled-by-default-devtools.timeline.invalidationTracking']
-          : []),
       ],
       excludedCategories: ['*'],
     },
@@ -291,6 +331,10 @@ export async function traceRendering(
       }
     }, on);
   await standDown(true);
+  // The frame the recorder requested before it stood down runs now, before the
+  // start mark. A frame callback makes its frame a main-thread one, in which an
+  // anchored layer that animates lays out.
+  await frames(page, 1);
   let fromEpoch: number;
   let toEpoch: number;
   try {
@@ -319,80 +363,71 @@ export async function traceRendering(
   // Trace time (µs, monotonic) -> epoch ms, anchored on the start mark.
   const toEpochMs = (ts: number) => fromEpoch + (ts - start.ts) / 1000;
   const counts: Record<string, number> = {};
-  const counted: {name: string; t: number}[] = [];
+  const counted: RenderingEvent[] = [];
   for (const e of events) {
     if (!onMain(e) || e.ph === 'E') {
       continue;
     }
     if ((RENDERING_EVENTS as readonly string[]).includes(e.name)) {
       counts[e.name] = (counts[e.name] ?? 0) + 1;
-      counted.push({name: e.name, t: toEpochMs(e.ts)});
-    }
-  }
-  const extra: {
-    -readonly [
-      K in 'styleInvalidations' | 'animations' | 'scripts'
-    ]?: RenderingTrace[K];
-  } = {};
-  if (invalidations) {
-    const data = (e: TraceEvent) =>
-      ((e.args as {data?: Record<string, unknown>} | undefined)?.data ??
-        {}) as Record<string, unknown>;
-    const asyncId = (e: TraceEvent) =>
-      (e as TraceEvent & {id2?: {local?: string}; id?: string}).id2?.local ??
-      (e as TraceEvent & {id?: string}).id ??
-      '';
-    const animationNode = new Map<string, number>();
-    const animationComposited = new Map<string, boolean>();
-    for (const e of events) {
-      if (e.name !== 'Animation' || e.pid !== start.pid) {
-        continue;
-      }
-      const d = data(e);
-      if (typeof d.nodeId === 'number') {
-        animationNode.set(asyncId(e), d.nodeId);
-      }
-      if (typeof d.compositeFailed === 'number') {
-        const id = asyncId(e);
-        animationComposited.set(
-          id,
-          (animationComposited.get(id) ?? true) && d.compositeFailed === 0,
-        );
-      }
-    }
-    extra.animations = [...animationNode].map(([id, nodeId]) => ({
-      nodeId,
-      composited: animationComposited.get(id) ?? false,
-    }));
-    extra.styleInvalidations = events
-      .filter(e => onMain(e) && e.name === 'StyleRecalcInvalidationTracking')
-      .map(e => {
-        const d = data(e);
-        return {
-          t: toEpochMs(e.ts),
-          reason: String(d.reason ?? ''),
-          nodeId: typeof d.nodeId === 'number' ? d.nodeId : undefined,
-        };
+      const node = (e.args?.data as {nodeName?: unknown} | undefined)?.nodeName;
+      const elements = e.args?.elementCount;
+      counted.push({
+        name: e.name,
+        t: toEpochMs(e.ts),
+        ...(typeof node === 'string' ? {node} : {}),
+        ...(typeof elements === 'number' ? {elements} : {}),
       });
-    extra.scripts = events
-      .filter(
-        e =>
-          onMain(e) &&
-          [
-            'FunctionCall',
-            'FireAnimationFrame',
-            'TimerFire',
-            'EventDispatch',
-          ].includes(e.name),
-      )
-      .map(e => toEpochMs(e.ts));
+    }
   }
+  const {longTasks, devtoolsTasks, stretchedTasks} = longTasksOf(
+    events.filter(e => onMain(e) && e.ph !== 'E'),
+    toEpochMs,
+  );
+  return {
+    counts,
+    layout: counts.Layout ?? 0,
+    paint: counts.Paint ?? 0,
+    styleRecalc: counts.UpdateLayoutTree ?? 0,
+    prePaint: counts.PrePaint ?? 0,
+    durationMs: (end.ts - start.ts) / 1000,
+    longTasks,
+    stretchedTasks,
+    devtoolsTasks,
+    events: counted,
+    window: {from: fromEpoch, to: toEpoch},
+    ...(keepEvents
+      ? {
+          mainThread: events
+            .filter(e => onMain(e) && e.ph !== 'E')
+            .sort((a, b) => a.ts - b.ts)
+            .map(e => ({...e, t: toEpochMs(e.ts)})),
+        }
+      : {}),
+  };
+}
+
+/**
+ * The main thread's tasks longer than 50 ms, split into the page's own and the
+ * harness's marked reads. A page task is long when its main thread ran longer
+ * than 50 ms; one only the wall clock stretched past that is apart
+ * (`stretchedTasks`). `main` holds the main thread's events in the window;
+ * `toEpochMs` turns trace time into epoch ms.
+ */
+export function longTasksOf(
+  main: readonly TraceEvent[],
+  toEpochMs: (ts: number) => number,
+): {
+  longTasks: TracedTask[];
+  devtoolsTasks: TracedTask[];
+  stretchedTasks: TracedTask[];
+} {
   // A task that ran a DevTools command received it over the DevTools
   // session's pipe; page script it set off shows as its listener, timer or
   // frame callback.
-  const main = events.filter(e => onMain(e) && e.ph !== 'E');
-  const longTasks: {start: number; durationMs: number}[] = [];
-  const devtoolsTasks: {start: number; durationMs: number}[] = [];
+  const longTasks: TracedTask[] = [];
+  const devtoolsTasks: TracedTask[] = [];
+  const stretchedTasks: TracedTask[] = [];
   for (const task of main) {
     if (task.name !== 'RunTask' || (task.dur ?? 0) <= 50_000) {
       continue;
@@ -418,24 +453,84 @@ export async function traceRendering(
           HARNESS_READ,
     );
     const pageScript = inside.some(e => PAGE_SCRIPT_EVENTS.has(e.name));
-    (devtools && harnessRead && !pageScript ? devtoolsTasks : longTasks).push({
+    const wall = task.dur ?? 0;
+    const traced = {
       start: toEpochMs(task.ts),
-      durationMs: (task.dur ?? 0) / 1000,
-    });
+      durationMs: wall / 1000,
+      threadMs: Math.min(task.tdur ?? wall, wall) / 1000,
+    };
+    if (devtools && harnessRead && !pageScript) {
+      devtoolsTasks.push(traced);
+    } else if (traced.threadMs > 50) {
+      longTasks.push(traced);
+    } else {
+      stretchedTasks.push(traced);
+    }
+  }
+  return {longTasks, devtoolsTasks, stretchedTasks};
+}
+
+/**
+ * The browser's open pages. The compositor record is browser-wide: its
+ * `Display::FrameDisplayed` events carry no page identity.
+ */
+function openPages(page: Page): Page[] {
+  const browser = page.context().browser();
+  return browser == null
+    ? page.context().pages()
+    : browser.contexts().flatMap(context => context.pages());
+}
+
+/**
+ * Watches for a page that opens while the record runs, in any context (it
+ * may close again before the record stops). Returns whether one opened.
+ */
+async function watchForOtherPages(
+  page: Page,
+): Promise<{stop(): Promise<boolean>}> {
+  let opened = false;
+  const onPage = (other: Page) => {
+    if (other !== page) {
+      opened = true;
+    }
+  };
+  // The page's own context, through Playwright (a persistent context has no
+  // browser to ask).
+  page.context().on('page', onPage);
+  // Every context, through the browser's target discovery: a page in a
+  // context created during the record is a new target too.
+  let targets: CDPSession | null = null;
+  const browser = page.context().browser();
+  if (browser != null) {
+    try {
+      targets = await browser.newBrowserCDPSession();
+      const {targetInfos} = await targets.send('Target.getTargets');
+      const known = new Set(targetInfos.map(info => info.targetId));
+      targets.on('Target.targetCreated', ({targetInfo}) => {
+        if (targetInfo.type === 'page' && !known.has(targetInfo.targetId)) {
+          opened = true;
+        }
+      });
+      await targets.send('Target.setDiscoverTargets', {discover: true});
+    } catch {
+      targets = null;
+    }
   }
   return {
-    counts,
-    layout: counts.Layout ?? 0,
-    paint: counts.Paint ?? 0,
-    styleRecalc: counts.UpdateLayoutTree ?? 0,
-    prePaint: counts.PrePaint ?? 0,
-    durationMs: (end.ts - start.ts) / 1000,
-    longTasks,
-    devtoolsTasks,
-    events: counted,
-    window: {from: fromEpoch, to: toEpoch},
-    ...extra,
+    async stop() {
+      page.context().off('page', onPage);
+      await targets?.detach().catch(() => {});
+      return opened;
+    },
   };
+}
+
+function assertOnlyPage(page: Page, when: string): void {
+  if (openPages(page).some(other => other !== page && !other.isClosed())) {
+    throw new Error(
+      `startCompositorTrace: another page is open ${when}; the compositor record is browser-wide (its frames carry no page identity), so another page's frames would be credited to this one`,
+    );
+  }
 }
 
 /**
@@ -444,7 +539,8 @@ export async function traceRendering(
  * clock. Start it with the screencast, before the block, and stop it after.
  * Engines without a CDP trace (WebKit) resolve `stop()` to [], and the
  * verdict then judges the screencast alone. It runs its own trace, so not
- * inside `traceRendering`.
+ * inside `traceRendering`. The record is browser-wide, so it throws when
+ * another page is open as it starts or stops, or opened while it ran.
  */
 export async function startCompositorTrace(
   page: Page,
@@ -455,6 +551,13 @@ export async function startCompositorTrace(
   } catch {
     return {stop: async () => []};
   }
+  try {
+    assertOnlyPage(page, 'as the trace starts');
+  } catch (error) {
+    await cdp.detach().catch(() => {});
+    throw error;
+  }
+  const others = await watchForOtherPages(page);
   const events: TraceEvent[] = [];
   cdp.on('Tracing.dataCollected', ({value}) => {
     events.push(...(value as unknown as TraceEvent[]));
@@ -482,6 +585,12 @@ export async function startCompositorTrace(
       await cdp.send('Tracing.end');
       await complete;
       await cdp.detach().catch(() => {});
+      if (await others.stop()) {
+        throw new Error(
+          "startCompositorTrace: another page opened during the record; the compositor record is browser-wide (its frames carry no page identity), so that page's frames would be credited to this one",
+        );
+      }
+      assertOnlyPage(page, 'as the trace stops');
       const mark = events.find(e => e.name === tag);
       if (mark == null) {
         throw new Error('startCompositorTrace: the clock mark was not traced');
@@ -496,13 +605,16 @@ export async function startCompositorTrace(
 }
 
 const LONG_TASK_SCRIPT = `(() => {
-  if (window.__harnessLongTasks || typeof PerformanceObserver === 'undefined') return;
+  if (window.__harnessLongTasks) return;
   const tasks = [];
-  window.__harnessLongTasks = tasks;
+  const log = {tasks, supported: false};
+  window.__harnessLongTasks = log;
+  if (typeof PerformanceObserver === 'undefined' || !(PerformanceObserver.supportedEntryTypes || []).includes('longtask')) return;
   try {
     new PerformanceObserver(list => {
       for (const entry of list.getEntries()) tasks.push({start: performance.timeOrigin + entry.startTime, durationMs: entry.duration, name: entry.name});
     }).observe({type: 'longtask', buffered: true});
+    log.supported = true;
   } catch {}
 })()`;
 
@@ -525,16 +637,35 @@ export interface LongTask {
   readonly name: string;
 }
 
-/** Long tasks recorded since navigation, optionally only those overlapping a window. */
+/**
+ * Long tasks recorded since navigation, optionally only those overlapping a
+ * window. Fails closed: it throws when the log never ran on this document
+ * (installed after the page navigated) or the engine has no Long Tasks API
+ * (WebKit), so an empty answer is evidence of no long task, never of no log.
+ */
 export async function readLongTasks(
   page: Page,
   range?: {from: number; to: number},
 ): Promise<LongTask[]> {
-  const tasks = await page.evaluate(
+  const log = await page.evaluate(
     () =>
-      (window as unknown as {__harnessLongTasks?: LongTask[]})
-        .__harnessLongTasks ?? [],
+      (
+        window as unknown as {
+          __harnessLongTasks?: {tasks: LongTask[]; supported: boolean};
+        }
+      ).__harnessLongTasks ?? null,
   );
+  if (log == null) {
+    throw new Error(
+      'readLongTasks: the long-task log is not running on this document; call installLongTaskLog(page) before navigating',
+    );
+  }
+  if (!log.supported) {
+    throw new Error(
+      'readLongTasks: this engine has no Long Tasks API, so the log records nothing',
+    );
+  }
+  const tasks = log.tasks;
   return range == null
     ? tasks
     : tasks.filter(

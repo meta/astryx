@@ -4,8 +4,7 @@
  * @file index.ts
  * @input The modules of packages/core/src/gestures
  * @output Re-exports the gesture system for core's own components
- * @position Core's own barrel. Not exported from the package; Lab imports it
- *   through internal workspace imports.
+ * @position Core's own barrel. Not exported from the package.
  */
 
 export {GestureArena, browserClock} from './GestureArena';
@@ -16,6 +15,8 @@ export type {
   GestureClock,
 } from './GestureArena';
 export {GestureHost, getGestureHost} from './GestureHost';
+export {holdPageScroll} from './pageHold';
+export type {PageScrollDecision} from './pageHold';
 export type {AttachOptions, GestureHostOptions} from './GestureHost';
 export {
   GestureRecognizer,
@@ -35,7 +36,6 @@ export {
   playHaptic,
   supportsSwitchControl,
 } from './haptics';
-export {HoverGestureRecognizer} from './HoverGestureRecognizer';
 export {LongPressGestureRecognizer} from './LongPressGestureRecognizer';
 export type {LongPressGestureRecognizerOptions} from './LongPressGestureRecognizer';
 export {createNativeScrollProbe, parseTouchAction} from './nativeScroll';
@@ -46,17 +46,16 @@ export type {
 } from './PanGestureRecognizer';
 export {PinchGestureRecognizer} from './PinchGestureRecognizer';
 export type {PinchGestureRecognizerOptions} from './PinchGestureRecognizer';
-export {PRESS_PROFILES, PressTracker} from './PressTracker';
+export {PRESS_PROFILES, createPressTracker} from './PressTracker';
 export type {
   ControlEvent,
   PressBounds,
   PressHighlightDelay,
   PressProfile,
   PressProfileName,
+  PressTracker,
   PressTrackerOptions,
 } from './PressTracker';
-export {RotationGestureRecognizer} from './RotationGestureRecognizer';
-export type {RotationGestureRecognizerOptions} from './RotationGestureRecognizer';
 export {ScreenEdgePanGestureRecognizer} from './ScreenEdgePanGestureRecognizer';
 export type {
   ScreenEdge,
@@ -73,10 +72,9 @@ export {deriveTouchAction, gestureHostStyle} from './touchAction';
 export type {GestureHostStyle} from './touchAction';
 export type * from './types';
 export {DEFAULT_ENVIRONMENT} from './types';
-export {useGestureRecognizer, usePressTracker} from './useGestureRecognizer';
-export type {
-  UseGestureRecognizerOptions,
-  UsePressTrackerOptions,
-} from './useGestureRecognizer';
+export {useGestureRecognizer} from './useGestureRecognizer';
+export type {UseGestureRecognizerOptions} from './useGestureRecognizer';
+export {usePressTracker} from './usePressTracker';
+export type {UsePressTrackerOptions} from './usePressTracker';
 export {VelocityTracker} from './VelocityTracker';
 export type {VelocityTrackerOptions} from './VelocityTracker';

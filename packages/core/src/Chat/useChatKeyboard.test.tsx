@@ -3,17 +3,12 @@
 /**
  * @file useChatKeyboard.test.tsx
  * @input vitest, Testing Library, ChatLayout, a stand-in visual viewport
- * @output Tests ChatLayout's keyboard behavior in jsdom: the dock lifts by
- *   the keyboard's cover and the message area's end padding makes the same
- *   room, with no element added for it, a transcript at its newest message
- *   stays there, the dock comes down when the composer's text blurs, nothing
- *   moves without a keyboard; which touches the composer claims (unfocused
- *   contenteditable text, never a token's control or a text control); focus
- *   moves into the composer's text delivered without the browser's reveal
- *   under a finger, and left to the browser under a mouse; the caret a
- *   claimed tap places, where the browser has either caret-from-point API
- * @position Unit tests for Chat/useChatKeyboard.ts (motion and the tap claim
- *   are proven in Mobile Safari; see the pull request evidence)
+ * @output Tests ChatLayout's keyboard behavior in jsdom. It covers the dock's
+ *   lift, the message area's room and the dock's ride down at a blur. It
+ *   also covers the touches the composer claims, focus moves and Done's park
+ *   on the composer group
+ * @position Unit tests for Chat/useChatKeyboard.ts; the browser spec proves
+ *   Chrome's ride
  */
 
 import fs from 'node:fs';
@@ -23,7 +18,25 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import {ChatComposer} from './ChatComposer';
 import {ChatLayout} from './ChatLayout';
-import {editableToClaim, focusAtPoint} from './useChatKeyboard';
+import {editableToClaim} from './useChatKeyboard';
+import {getKeyboardLayoutGuide} from '../keyboard/keyboardLayoutGuide';
+import {__resetInteractionModalityForTest} from '../utils/interactionModality';
+import {__focusTakeoverCallersForTest} from '../keyboard/keyboardHeight';
+
+// jsdom dates events on the epoch clock, but a browser dates them on
+// performance.now()'s, which the keyboard guide reads them against.
+let eventTime: {mockRestore: () => void} | null = null;
+
+beforeEach(() => {
+  eventTime = vi
+    .spyOn(Event.prototype, 'timeStamp', 'get')
+    .mockImplementation(() => performance.now());
+});
+
+afterEach(() => {
+  eventTime?.mockRestore();
+  eventTime = null;
+});
 
 type FakeViewport = EventTarget & {
   height: number;
@@ -71,15 +84,25 @@ function layoutLift(element: HTMLElement): number {
 // Lets the ride end (the animator's clock) and its end reach the layout.
 async function settle() {
   await act(async () => {
+    const sleep = async (ms: number) =>
+      new Promise(resolve => setTimeout(resolve, ms));
+    // The guide publishes a report's transition within a few frames, then
+    // checks it a while after its curve ends: the ride is over by then.
+    await sleep(200);
+    const {start, curve} = getKeyboardLayoutGuide(window).transition;
+    const checked = start + (curve?.durationMs ?? 0) + 200;
     await vi.waitFor(
       () => {
         if (document.getAnimations?.().some(a => a.playState === 'running')) {
           throw new Error('still riding');
         }
+        if (performance.now() < checked) {
+          throw new Error('still riding');
+        }
       },
       {timeout: 3000, interval: 20},
     );
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await sleep(50);
   });
 }
 
@@ -102,7 +125,18 @@ function renderLayout() {
 }
 
 describe('ChatLayout and the software keyboard', () => {
+  // A phone: its primary pointer is a coarse finger.
+  const stubPointer = (pointer: 'coarse' | 'fine') => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === `(pointer: ${pointer})`,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+  };
+
   beforeEach(() => {
+    stubPointer('coarse');
     viewport = Object.assign(new EventTarget(), {
       height: window.innerHeight,
       offsetTop: 0,
@@ -112,28 +146,55 @@ describe('ChatLayout and the software keyboard', () => {
       configurable: true,
       value: viewport,
     });
-    // Mobile Safari's reports (keyboard/keyboardModel.ts): iOS is the browser
-    // that supports -webkit-touch-callout.
-    Object.defineProperty(window, 'CSS', {
-      configurable: true,
-      value: {
-        supports: (property: string) => property === '-webkit-touch-callout',
-      },
-    });
   });
 
   afterEach(() => {
     Reflect.deleteProperty(window, 'visualViewport');
-    Reflect.deleteProperty(window, 'CSS');
+    Reflect.deleteProperty(navigator, 'virtualKeyboard');
+    vi.unstubAllGlobals();
+  });
+
+  // Chrome on Android: the guide publishes Gboard's slides where the
+  // browser has the VirtualKeyboard API.
+  const stubChromeKeyboard = () => {
+    Object.defineProperty(navigator, 'virtualKeyboard', {
+      configurable: true,
+      value: {overlaysContent: false},
+    });
+  };
+
+  it('rides nothing without the VirtualKeyboard API, as in Safari on iOS: the layout follows the height alone', async () => {
+    const guide = getKeyboardLayoutGuide(window);
+    const subscribe = vi.spyOn(guide, 'subscribe');
+    const {container} = renderLayout();
+    report(window.innerHeight - 300);
+    expect(dockOf(container).style.translate).toBe('');
+    await settle();
+    expect(layoutLift(dockOf(container))).toBe(300);
+    expect(subscribe).not.toHaveBeenCalled();
+    subscribe.mockRestore();
+  });
+
+  it('attaches nothing of the ride under a fine pointer: the layout follows the height alone', async () => {
+    stubPointer('fine');
+    const guide = getKeyboardLayoutGuide(window);
+    const subscribe = vi.spyOn(guide, 'subscribe');
+    const {container} = renderLayout();
+    report(window.innerHeight - 300);
+    await settle();
+    expect(layoutLift(dockOf(container))).toBe(300);
+    expect(dockOf(container).style.translate).toBe('');
+    // Nothing subscribed the keyboard layout guide.
+    expect(subscribe).not.toHaveBeenCalled();
+    subscribe.mockRestore();
   });
 
   it('lays the dock and the room after the messages out from the keyboard height', async () => {
     const {container} = renderLayout();
     report(window.innerHeight - 300);
     await settle();
-    // spec:AST-099 FR3: the layout is right with no animation running, and
-    // the ride's translate is handed back to it: back at identity, the
-    // animator takes it off the element.
+    // The layout is right with no animation running. The ride's translate is
+    // handed back to it: back at identity, the animator takes it off.
     expect(layoutLift(dockOf(container))).toBe(300);
     expect(keyboardRoom(messagesOf())).toBe(300);
     expect(dockOf(container).style.translate).toBe('');
@@ -143,8 +204,7 @@ describe('ChatLayout and the software keyboard', () => {
     renderLayout();
     report(window.innerHeight - 300);
     await settle();
-    // architecture:component-style-authoring INV7: the room is the message
-    // area's end padding (spec:AST-099 FR3), not an element of its own.
+    // The room is the message area's end padding, not an element of its own.
     expect(screen.getByTestId('layout').children).toHaveLength(2);
   });
 
@@ -173,14 +233,14 @@ describe('ChatLayout and the software keyboard', () => {
     expect(scrollTop).toBe(1300 - 600);
   });
 
-  it('leaves a transcript the reader scrolled up where it is', async () => {
-    renderLayout();
-    // Past the mount's own first-frame scroll to the end.
-    await settle();
+  // A transcript of 1,000 px in a 600 px root, plus the keyboard's room, that
+  // the reader scrolls to `top`. The stream scroll hears each scroll.
+  function scrolledTranscript(top: number) {
     const root = screen.getByTestId('layout');
-    let scrollTop = 100;
+    let scrollTop = 1000 - 600;
     Object.defineProperties(root, {
       clientHeight: {configurable: true, get: () => 600},
+      offsetHeight: {configurable: true, get: () => 600},
       scrollHeight: {
         configurable: true,
         get: () => 1000 + keyboardRoom(messagesOf()),
@@ -193,12 +253,46 @@ describe('ChatLayout and the software keyboard', () => {
         },
       },
     });
+    // From the end, up to `top`, as a reader scrolls.
+    act(() => {
+      root.dispatchEvent(new Event('scroll'));
+    });
+    scrollTop = top;
+    act(() => {
+      root.dispatchEvent(new Event('scroll'));
+    });
+    act(() => {
+      root.dispatchEvent(new Event('scrollend'));
+    });
+    return {
+      get scrollTop() {
+        return scrollTop;
+      },
+    };
+  }
+
+  it('leaves a transcript the reader scrolled up where it is', async () => {
+    renderLayout();
+    // Past the mount's own first-frame scroll to the end.
+    await settle();
+    const transcript = scrolledTranscript(100);
     report(window.innerHeight - 300);
     await settle();
-    expect(scrollTop).toBe(100);
+    expect(transcript.scrollTop).toBe(100);
+  });
+
+  it('keeps a reader the stream scroll still follows, 5 px above the end, at the newest message', async () => {
+    renderLayout();
+    await settle();
+    // Within the stream scroll's lock distance, so it still follows.
+    const transcript = scrolledTranscript(1000 - 600 - 5);
+    report(window.innerHeight - 300);
+    await settle();
+    expect(transcript.scrollTop).toBe(1300 - 600);
   });
 
   it('rides the dock down from the blur, ahead of the layout, which follows the keyboard', async () => {
+    stubChromeKeyboard();
     const {container} = renderLayout();
     const field = screen.getByRole('textbox', {name: 'Message'});
     act(() => field.focus());
@@ -219,8 +313,8 @@ describe('ChatLayout and the software keyboard', () => {
 
   it('keeps the lift when the page is pinch-zoomed past 2x with the keyboard up', async () => {
     // WebKit reports innerWidth and innerHeight in the zoomed visual
-    // viewport's px (spec:AST-099 FR2): at 2x, innerHeight alone reads no
-    // keyboard, and the dock would drop under it.
+    // viewport's px. At 2x, innerHeight alone reads no keyboard, and the dock
+    // would drop under it.
     try {
       vi.stubGlobal('innerHeight', 714);
       vi.stubGlobal('innerWidth', 402);
@@ -340,10 +434,10 @@ describe('focus moves into the composer (spec:AST-099 FR4)', () => {
     expect(focus).not.toHaveBeenCalledWith({preventScroll: true});
   });
 
-  it('moves focus to the named composer region when the keyboard\u2019s Done ends entry', () => {
+  it('moves focus to the composer group when the keyboard\u2019s Done ends entry', () => {
     primaryPointer('coarse');
     const {message} = renderWithSearch('textarea');
-    const region = screen.getByRole('group', {name: 'Message composer'});
+    const region = screen.getByRole('group');
     act(() => message.focus());
     const focus = vi.spyOn(region, 'focus');
     // Done blurs the composer's text, and focus goes to nothing.
@@ -352,7 +446,29 @@ describe('focus moves into the composer (spec:AST-099 FR4)', () => {
     expect(focus).toHaveBeenCalledWith({preventScroll: true});
   });
 
-  it('names the composer region without a landmark, so two layouts on a page repeat none', () => {
+  it('shows the parked group\u2019s focus ring only after keyboard input (architecture:interaction-modality INV1)', () => {
+    primaryPointer('coarse');
+    __resetInteractionModalityForTest();
+    const {message} = renderWithSearch('textarea');
+    const region = screen.getByRole('group');
+    // A tap on the text, then Done with nothing typed: no ring.
+    fireEvent.pointerDown(message);
+    act(() => message.focus());
+    act(() => message.blur());
+    expect(document.activeElement).toBe(region);
+    expect(region.style.getPropertyValue('outline')).toBe('none');
+    // The override leaves with the focus stop.
+    act(() => message.focus());
+    expect(region.style.getPropertyValue('outline')).toBe('');
+    // Typed, then Done: the shared ring applies.
+    fireEvent.keyDown(message, {key: 'a'});
+    act(() => message.blur());
+    expect(document.activeElement).toBe(region);
+    expect(region.style.getPropertyValue('outline')).toBe('');
+    __resetInteractionModalityForTest();
+  });
+
+  it('gives the composer group no name and no landmark, so two layouts on a page repeat none', () => {
     primaryPointer('coarse');
     render(
       <>
@@ -365,16 +481,61 @@ describe('focus moves into the composer (spec:AST-099 FR4)', () => {
       </>,
     );
     expect(screen.queryAllByRole('region')).toHaveLength(0);
-    expect(
-      screen.getAllByRole('group', {name: 'Message composer'}),
-    ).toHaveLength(2);
+    // The layout names none of the caller's regions.
+    const groups = screen.getAllByRole('group');
+    expect(groups).toHaveLength(2);
+    for (const group of groups) {
+      expect(group.hasAttribute('aria-label')).toBe(false);
+      expect(group.hasAttribute('aria-labelledby')).toBe(false);
+    }
   });
 
-  it('adds no tab stop for the composer region', () => {
+  it('adds no tab stop for the composer region: it takes focus only for Done\u2019s park, and gives the focus stop up as focus leaves (spec:AST-017 FR59)', () => {
     primaryPointer('coarse');
-    renderWithSearch('textarea');
-    const region = screen.getByRole('group', {name: 'Message composer'});
+    const {message} = renderWithSearch('textarea');
+    const region = screen.getByRole('group');
+    // No focus target until Done parks focus there, so a tap or a click
+    // beside the composer never focuses the region.
+    expect(region.hasAttribute('tabindex')).toBe(false);
+    act(() => message.focus());
+    act(() => message.blur());
+    expect(document.activeElement).toBe(region);
     expect(region.tabIndex).toBe(-1);
+    act(() => message.focus());
+    expect(document.activeElement).toBe(message);
+    expect(region.hasAttribute('tabindex')).toBe(false);
+  });
+
+  it('leaves the composer region a plain container under a mouse: no group, no name and no focus target (spec:AST-017 FR59)', () => {
+    primaryPointer('fine');
+    const {message} = renderWithSearch('textarea');
+    expect(screen.queryByRole('group')).toBeNull();
+    const layout = screen.getByTestId('layout');
+    // The composer's containers inside the layout, the region among them.
+    const containers = () => {
+      const list: Element[] = [];
+      for (
+        let element = message.parentElement;
+        element != null && element !== layout;
+        element = element.parentElement
+      ) {
+        list.push(element);
+      }
+      return list;
+    };
+    expect(
+      containers().filter(
+        element =>
+          element.hasAttribute('role') ||
+          element.hasAttribute('aria-label') ||
+          element.hasAttribute('tabindex'),
+      ),
+    ).toEqual([]);
+    act(() => message.focus());
+    act(() => message.blur());
+    expect(
+      containers().filter(element => element.hasAttribute('tabindex')),
+    ).toEqual([]);
   });
 
   it('leaves focus where the browser puts it when it moves on to another field', () => {
@@ -391,6 +552,44 @@ describe('focus moves into the composer (spec:AST-099 FR4)', () => {
     act(() => message.focus());
     act(() => message.blur());
     expect(document.activeElement).toBe(document.body);
+  });
+
+  it('registers no touch listener and installs no focus takeover under a mouse (architecture INV13, spec:AST-094 FR24)', () => {
+    primaryPointer('fine');
+    const touchTargets: EventTarget[] = [];
+    const addEventListener = EventTarget.prototype.addEventListener;
+    vi.spyOn(EventTarget.prototype, 'addEventListener').mockImplementation(
+      function (this: EventTarget, type, listener, options) {
+        if (type.startsWith('touch')) {
+          touchTargets.push(this);
+        }
+        addEventListener.call(this, type, listener, options);
+      },
+    );
+    renderWithSearch('textarea');
+    const layout = screen.getByTestId('layout');
+    // React's own root listeners sit outside the layout.
+    expect(
+      touchTargets.filter(
+        target => target instanceof Node && layout.contains(target),
+      ),
+    ).toEqual([]);
+    expect(__focusTakeoverCallersForTest(document)).toBe(0);
+  });
+
+  it('installs the focus takeover for each ChatLayout under a finger, through the keyboard module\u2019s one listener (spec:AST-094 FR24)', () => {
+    primaryPointer('coarse');
+    render(
+      <>
+        <ChatLayout composer={<textarea aria-label="First" />}>
+          <p>Hello</p>
+        </ChatLayout>
+        <ChatLayout composer={<textarea aria-label="Second" />}>
+          <p>Hi</p>
+        </ChatLayout>
+      </>,
+    );
+    expect(__focusTakeoverCallersForTest(document)).toBe(2);
   });
 });
 
@@ -473,6 +672,21 @@ describe('a text control composer tapped with nothing focused (spec:AST-099 FR4)
     vi.restoreAllMocks();
   });
 
+  // A touch event as the browser raises it, at the given points.
+  function touch(type: string, touches: {x: number; y: number}[]) {
+    const event = new Event(type, {bubbles: true, cancelable: true});
+    const list = touches.map((p, identifier) => ({
+      identifier,
+      clientX: p.x,
+      clientY: p.y,
+    }));
+    Object.assign(event, {
+      touches: type === 'touchend' ? [] : list,
+      changedTouches: list,
+    });
+    return event;
+  }
+
   it('is focused without the browser\u2019s reveal, as a contenteditable composer is', () => {
     render(
       <ChatLayout
@@ -488,25 +702,39 @@ describe('a text control composer tapped with nothing focused (spec:AST-099 FR4)
     const textarea = screen.getByRole('textbox', {name: 'Message'});
     expect(document.activeElement).not.toBe(textarea);
     const focus = vi.spyOn(textarea, 'focus');
-    const touch = (type: string, touches: {x: number; y: number}[]) => {
-      const event = new Event(type, {bubbles: true, cancelable: true});
-      const list = touches.map((p, identifier) => ({
-        identifier,
-        clientX: p.x,
-        clientY: p.y,
-      }));
-      Object.assign(event, {
-        touches: type === 'touchend' ? [] : list,
-        changedTouches: list,
-      });
-      return event;
-    };
-    textarea.dispatchEvent(touch('touchstart', [{x: 10, y: 10}]));
     const end = touch('touchend', [{x: 10, y: 10}]);
-    textarea.dispatchEvent(end);
+    // The tap focuses the composer, which re-renders it.
+    act(() => {
+      textarea.dispatchEvent(touch('touchstart', [{x: 10, y: 10}]));
+      textarea.dispatchEvent(end);
+    });
     expect(end.defaultPrevented).toBe(true);
     expect(focus).toHaveBeenCalledWith({preventScroll: true});
     expect(document.activeElement).toBe(textarea);
+  });
+
+  it('raises the claimed tap\u2019s click once, so a caller\u2019s onClick still runs', () => {
+    const onClick = vi.fn();
+    render(
+      <ChatLayout
+        composer={
+          <ChatComposer
+            onSubmit={() => {}}
+            input={<textarea aria-label="Message" onClick={onClick} />}
+          />
+        }>
+        <p>Hello</p>
+      </ChatLayout>,
+    );
+    const textarea = screen.getByRole('textbox', {name: 'Message'});
+    // The route cancels the tap's touchend, so the browser raises no click.
+    const end = touch('touchend', [{x: 10, y: 10}]);
+    act(() => {
+      textarea.dispatchEvent(touch('touchstart', [{x: 10, y: 10}]));
+      textarea.dispatchEvent(end);
+    });
+    expect(end.defaultPrevented).toBe(true);
+    expect(onClick).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -517,6 +745,7 @@ describe('inside an iframe (spec:AST-099 FR7)', () => {
     frame?.remove();
     frame = null;
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   // A touch event as the browser raises it, in the frame's own window.
@@ -536,13 +765,19 @@ describe('inside an iframe (spec:AST-099 FR7)', () => {
     return event;
   }
 
-  it('leaves the composer\u2019s taps and focus to the browser, under a finger too', () => {
+  it('leaves the composer\u2019s taps, focus and region to the browser, under a finger too', () => {
     frame = document.createElement('iframe');
     document.body.append(frame);
     const inner = frame.contentWindow as Window & typeof globalThis;
-    // A touch screen with a visual viewport, in a document that is not the
-    // top one; jsdom has no isContentEditable, so the nearest
-    // contenteditable decides.
+    // A touch screen: the top window has a coarse pointer too.
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === '(pointer: coarse)',
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    // A visual viewport, in a document that is not the top one; jsdom has no
+    // isContentEditable, so the nearest contenteditable decides.
     Object.defineProperty(inner, 'matchMedia', {
       configurable: true,
       value: (query: string) => ({
@@ -578,6 +813,8 @@ describe('inside an iframe (spec:AST-099 FR7)', () => {
     const editable = host.querySelector<HTMLElement>(
       '[contenteditable="true"]',
     )!;
+    // The region is a plain container: Done parks nothing here.
+    expect(host.querySelector('[role="group"]')).toBeNull();
     // A tap on the composer's text: the browser focuses it itself.
     editable.dispatchEvent(touchEvent(inner, 'touchstart', [{x: 10, y: 10}]));
     const end = touchEvent(inner, 'touchend', [], [{x: 10, y: 10}]);
@@ -591,94 +828,10 @@ describe('inside an iframe (spec:AST-099 FR7)', () => {
   });
 });
 
-describe('the caret a claimed tap places', () => {
-  // Installs (or, with undefined, removes) one caret-from-point API on the
-  // document, as each engine has its own.
-  function stubCaretApi(
-    name: 'caretPositionFromPoint' | 'caretRangeFromPoint',
-    value: unknown,
-  ) {
-    Object.defineProperty(document, name, {configurable: true, value});
-  }
-
-  function editable(): {element: HTMLElement; text: Text} {
-    const element = document.createElement('div');
-    element.setAttribute('contenteditable', 'true');
-    // jsdom does not compute isContentEditable.
-    Object.defineProperty(element, 'isContentEditable', {value: true});
-    const text = document.createTextNode('Hello there');
-    element.append(text);
-    document.body.append(element);
-    return {element, text};
-  }
-
-  afterEach(() => {
-    Reflect.deleteProperty(document, 'caretPositionFromPoint');
-    Reflect.deleteProperty(document, 'caretRangeFromPoint');
-    document.body.replaceChildren();
-  });
-
-  it('reads the standard caretPositionFromPoint, the only one Firefox has', () => {
-    const {element, text} = editable();
-    stubCaretApi(
-      'caretPositionFromPoint',
-      vi.fn(() => ({offsetNode: text, offset: 3})),
-    );
-
-    focusAtPoint(element, 20, 10);
-
-    expect(document.activeElement).toBe(element);
-    const selection = document.getSelection();
-    expect(selection?.anchorNode).toBe(text);
-    expect(selection?.anchorOffset).toBe(3);
-    expect(selection?.isCollapsed).toBe(true);
-  });
-
-  it('puts a text control\u2019s caret where the browser maps the point into it, or after its text', () => {
-    const textarea = document.createElement('textarea');
-    textarea.value = 'A long draft';
-    document.body.append(textarea);
-    const focus = vi.spyOn(textarea, 'focus');
-    stubCaretApi(
-      'caretPositionFromPoint',
-      vi.fn(() => ({offsetNode: textarea, offset: 3})),
-    );
-    focusAtPoint(textarea, 20, 10);
-    expect(focus).toHaveBeenCalledWith({preventScroll: true});
-    expect(document.activeElement).toBe(textarea);
-    expect([textarea.selectionStart, textarea.selectionEnd]).toEqual([3, 3]);
-
-    textarea.blur();
-    stubCaretApi(
-      'caretPositionFromPoint',
-      vi.fn(() => null),
-    );
-    focusAtPoint(textarea, 20, 10);
-    expect([textarea.selectionStart, textarea.selectionEnd]).toEqual([12, 12]);
-  });
-
-  it('falls back to caretRangeFromPoint where only WebKit\u2019s exists', () => {
-    const {element, text} = editable();
-    stubCaretApi(
-      'caretRangeFromPoint',
-      vi.fn(() => {
-        const range = document.createRange();
-        range.setStart(text, 5);
-        range.collapse(true);
-        return range;
-      }),
-    );
-
-    focusAtPoint(element, 20, 10);
-
-    expect(document.getSelection()?.anchorOffset).toBe(5);
-  });
-});
-
 describe('the ChatLayout stories', () => {
   it('give a full-page layout the dynamic viewport\u2019s height, so the composer starts on screen', () => {
     // Where a phone browser's toolbar collapses, 100vh is the viewport with
-    // the toolbar hidden (Firefox for Android: 859 px for 796 visible), which
+    // the toolbar hidden: 859 px for 796 visible in Firefox for Android. That
     // puts the composer under the window's bottom edge.
     const here = path.dirname(fileURLToPath(import.meta.url));
     const stories = fs.readFileSync(

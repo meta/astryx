@@ -107,7 +107,8 @@ export const docs = {
     {
       name: 'searchSource',
       type: 'SearchSource<T>',
-      description: 'Data source providing search and bootstrap methods.',
+      description:
+        'Data source providing search and bootstrap methods. `search(query, context)` may call `context.update(items)` to show matches it already has before it returns; the value it returns is the final list, and every list after the first for a query keeps the shown rows first and adds new rows after them.',
       required: true,
     },
     {
@@ -175,7 +176,7 @@ export const docs = {
       name: 'isFocusableDisabled',
       type: 'boolean',
       description:
-        'Keep a disabled input focusable with aria-disabled and readOnly so a caller-owned disabled reason remains discoverable. It blocks text entry, but when applied after results are already open, Enter can still select the highlighted option.',
+        'Keep a disabled input focusable with aria-disabled and readOnly so a caller-owned disabled reason remains discoverable. It blocks text entry, opening the results and picking a result, also from results that were open before it applied; Escape or Tab still closes them.',
       default: 'false',
     },
     {
@@ -188,7 +189,7 @@ export const docs = {
       name: 'debounceMs',
       type: 'number',
       description:
-        'Debounce delay in ms before triggering search. Set to 0 for synchronous sources.',
+        'Debounce delay in ms before triggering search. Set to 0 for synchronous sources, and for a source that shows local matches through `context.update` and delays its own server request.',
       default: '150',
     },
     {
@@ -267,7 +268,8 @@ export const docsZh = {
     {
       name: 'searchSource',
       type: 'SearchSource<T>',
-      description: '提供搜索和引导方法的数据源。',
+      description:
+        '提供搜索和引导方法的数据源。`search(query, context)` 可调用 `context.update(items)` 先显示已有的匹配项；返回值是最终列表，同一查询在第一个列表之后的每个列表都保留已显示的行，并只在其后追加新行。',
       required: true,
     },
     {
@@ -334,7 +336,7 @@ export const docsZh = {
       name: 'isFocusableDisabled',
       type: 'boolean',
       description:
-        '使用 aria-disabled 和只读状态保持禁用输入框可聚焦，以便访问调用方提供的禁用原因。它会阻止文本输入，但如果结果已打开，按 Enter 仍可选择高亮选项。',
+        '使用 aria-disabled 和只读状态保持禁用输入框可聚焦，以便访问调用方提供的禁用原因。它会阻止文本输入、打开结果列表和选择结果，在它生效前已打开的结果中也是如此；Escape 或 Tab 仍可关闭列表。',
       default: 'false',
     },
     {
@@ -346,7 +348,8 @@ export const docsZh = {
     {
       name: 'debounceMs',
       type: 'number',
-      description: '触发搜索前的防抖延迟（毫秒）。同步数据源设置为 0。',
+      description:
+        '触发搜索前的防抖延迟（毫秒）。同步数据源，以及通过 `context.update` 显示本地匹配项并自行延迟服务器请求的数据源，设置为 0。',
       default: '150',
     },
     {
@@ -467,7 +470,7 @@ export const docsDense = {
     emptySearchText: 'Content when the query matched nothing. ReactNode.',
     isDisabled: 'Whether input disabled.',
     isFocusableDisabled:
-      'Keeps disabled input focusable and blocks text entry; an already-open highlight can still be selected with Enter.',
+      'Keeps disabled input focusable; blocks text entry, opening and picking, also from an already-open list (Escape/Tab close it).',
     hasAutoFocus: 'Auto-focus on mount.',
     debounceMs: 'Search debounce ms. 0 for sync.',
     size: 'Dropdown option padding size.',

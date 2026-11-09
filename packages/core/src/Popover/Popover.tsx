@@ -9,12 +9,11 @@
  * @output Exports Popover with conditional overflow and content-first focus above the layer runtime's viewport fit
  * @position Layer component; declarative wrapper around usePopover hook
  *
- * Under a finger (the shared touch resolver's coarse primary pointer, one
- * touch model on every touch device) the popover is presented and dismissed
- * the way a UIKit popover is: it grows out of its anchor on UIKit's present
- * spring and shrinks back into it on the dismiss spring
- * (popoverSurfaceMotion.ts). A fine primary pointer keeps the layer's own
- * entrance and the theme's motion tokens (spec:AST-094 FR31).
+ * Under a finger, the popover grows out of its anchor and shrinks back into
+ * it, as a UIKit popover does. The shared touch resolver's coarse primary
+ * pointer decides it, with one touch model on every touch device. The motion
+ * plays the theme's duration and easing tokens (popoverSurfaceMotion.ts). A
+ * fine primary pointer keeps the layer's own entrance.
  *
  * For hover-triggered overlays, use HoverCard instead.
  *
@@ -58,11 +57,16 @@ import {
 import {useThemeDefinition} from '../theme/useTheme';
 import * as stylex from '@stylexjs/stylex';
 import {devWarn} from '../utils/devWarning';
+import {matchesMediaQuery, watchMediaQuery} from '../utils/coarsePointer';
 import type {BaseProps} from '../BaseProps';
-import {usePopover} from './usePopover';
+import {FALLBACK_CLOSE_SELECTOR, usePopoverInternal} from './usePopover';
 import {usePresentationHold} from '../Layer/presentationHold';
 import {usePopoverSurfaceMotion} from './PopoverTouch';
-import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
+import {
+  FOCUSABLE_SELECTOR,
+  isDisabledWithin,
+  preferTabStops,
+} from '../hooks/focusableSelector';
 import type {LayerAlignment, LayerPlacement} from '../Layer/useLayer';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
@@ -76,7 +80,13 @@ import {
   preloadPopoverBottomSheet,
 } from './lazyPopoverBottomSheet';
 import {Button} from '../Button';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Popover/Popover.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Helpers
@@ -109,15 +119,12 @@ function usePresentationSurface(
     [points],
   );
   const subscribe = useCallback(
-    (onStoreChange: () => void) => {
-      const mql = window.matchMedia(query);
-      mql.addEventListener('change', onStoreChange);
-      return () => mql.removeEventListener('change', onStoreChange);
-    },
+    (onStoreChange: () => void) =>
+      watchMediaQuery(window, query, onStoreChange),
     [query],
   );
   const getSnapshot = useCallback(
-    () => window.matchMedia(query).matches,
+    () => matchesMediaQuery(window, query),
     [query],
   );
   const isCompactTouch = useSyncExternalStore(
@@ -436,6 +443,11 @@ const styles = stylex.create({
       `calc(${layerViewportInset.maxBlockSize})`,
       `calc(${layerViewportInset.maxBlockSizeFallback})`,
     ),
+    // A scroll container from the commit in which the software keyboard caps
+    // the layer, a frame before the overflow measure sees the shorter box.
+    // Otherwise `visible`. The type names the two values the property takes.
+    // SYNC: LAYER_KEYBOARD_OVERFLOW_PROPERTY (Layer/useLayerKeyboardClearance.ts).
+    overflow: 'var(--_layer-keyboard-overflow, visible)' as 'auto' | 'visible',
   },
   surfaceScrollable: {
     overflow: 'auto',
@@ -457,6 +469,15 @@ const styles = stylex.create({
     ),
   },
 });
+
+/**
+ * The window that holds `element`: the page's own, or a second document's (a
+ * same-origin iframe, a Document Picture-in-Picture window) when the Popover
+ * renders there.
+ */
+function windowOf(element: Element | null): Window & typeof globalThis {
+  return element?.ownerDocument.defaultView ?? window;
+}
 
 // =============================================================================
 // Component
@@ -522,15 +543,15 @@ export function Popover({
   style,
   'data-testid': testId,
 }: PopoverProps): ReactElement {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const measurementFrameRef = useRef<number | null>(null);
+  const measurementFrameRef = useRef<{id: number; view: Window} | null>(null);
   const [hasOverflow, setHasOverflow] = useState(false);
   const isControlled = isOpen !== undefined;
   // The element the popover is anchored to, whichever way it was attached:
   // the touch presentation grows the popover out of it.
   const anchorElementRef = useRef<HTMLElement | null>(null);
-  const presentSurface = usePopoverSurfaceMotion();
+  const surfaceMotion = usePopoverSurfaceMotion();
   // Runs as the popover opens, before it paints; set once `usePopover` has
   // returned the surface it presents.
   const presentSurfaceRef = useRef<() => void>(() => {});
@@ -548,7 +569,7 @@ export function Popover({
     onOpenChange?.(false);
   }, [onOpenChange]);
 
-  const popover = usePopover({
+  const popover = usePopoverInternal({
     dialogLabel: label,
     role,
     isModal,
@@ -567,27 +588,28 @@ export function Popover({
     xstyle: [
       styles.surfaceViewportFit,
       hasOverflow && styles.surfaceScrollable,
+      // The entrance runs on the surface: an anchored layer lays out again on
+      // each frame its own style animates.
+      layerAnimations[placement],
       xstyle,
     ],
     className,
     style,
     onShow: handlePopoverShow,
     onHide: handlePopoverHide,
+    onCloseStart: surfaceMotion.closeStart,
   });
 
-  // Syncs the layer's show handler, an event callback outside React, with
-  // the latest presentation call and the anchor element it reads: under a
-  // finger the popover grows out of its anchor and shrinks back into it, as a
-  // UIKit popover (usePopoverSurfaceMotion.ts). Nothing to clean up.
   const {contentRef: surfaceRef} = popover;
-  useIsomorphicLayoutEffect(() => {
-    presentSurfaceRef.current = () => {
-      presentSurface(
-        surfaceRef.current?.closest<HTMLElement>('[popover]') ?? null,
-        anchorElementRef.current,
-      );
-    };
-  }, [presentSurface, surfaceRef]);
+  // The layer's show handler calls this as the popover opens. It reads the
+  // surface and the anchor when it runs, so a render-time store is safe.
+  presentSurfaceRef.current = () => {
+    surfaceMotion.present(
+      surfaceRef.current?.closest<HTMLElement>('[popover]') ?? null,
+      anchorElementRef.current,
+      surfaceRef.current,
+    );
+  };
   // A controlled popover opens on the surface its presentation resolves to
   // as it opens, and keeps that surface until it closes: a phone rotated past
   // the compact width while the sheet is open keeps its sheet.
@@ -635,12 +657,12 @@ export function Popover({
     sheetPanelRef.current = panel;
     setSheetPanelAttached(panel != null);
   }, []);
-  // Focus enters the sheet at each opening as it enters the anchored popover
-  // (FR2): a caller's `[data-autofocus]`, else the first genuine content
-  // control (never the injected fallback close, never BottomSheet's own
-  // scroll area), else that scroll area: the sheet's labelled surface, which
-  // paints the shared focus ring under the keyboard. It runs a frame after
-  // BottomSheet presents the dialog; BottomSheet is unchanged.
+  // Focus enters the sheet at each opening, as in the anchored popover (FR2).
+  // A caller's `[data-autofocus]` wins. Else the first enabled tab stop in the
+  // content takes focus: never the injected fallback close or BottomSheet's
+  // own scroll area. Else the scroll area does: it is the sheet's labelled
+  // surface and shows the keyboard focus ring. This runs a frame after
+  // BottomSheet presents the dialog.
   useEffect(() => {
     if (!isSheetOpen || !isSheetPanelAttached) {
       return;
@@ -665,15 +687,18 @@ export function Popover({
       }
       const target =
         sheetPanel.querySelector<HTMLElement>('[data-autofocus]') ??
-        Array.from(
-          sheetPanel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
-        ).find(
-          element =>
-            // BottomSheet's scroll area is the panel's own child; content
-            // sits inside it.
-            element.parentElement !== sheetPanel &&
-            element.closest('[data-astryx-popover-fallback-close]') == null,
-        );
+        preferTabStops(
+          Array.from(
+            sheetPanel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+          ).filter(
+            element =>
+              // BottomSheet's scroll area is the panel's own child; content
+              // sits inside it.
+              element.parentElement !== sheetPanel &&
+              element.closest(FALLBACK_CLOSE_SELECTOR) == null &&
+              !isDisabledWithin(element, sheetPanel),
+          ),
+        )[0];
       if (target != null) {
         target.focus({preventScroll: true});
         return;
@@ -747,12 +772,19 @@ export function Popover({
     if (measurementFrameRef.current != null) {
       return;
     }
-    measurementFrameRef.current = window.requestAnimationFrame(() => {
-      measurementFrameRef.current = null;
-      measureOverflow();
-    });
-  }, [measureOverflow]);
+    // The surface's own window paints it, so its frame runs the measurement.
+    const view = windowOf(popover.contentRef.current);
+    measurementFrameRef.current = {
+      view,
+      id: view.requestAnimationFrame(() => {
+        measurementFrameRef.current = null;
+        measureOverflow();
+      }),
+    };
+  }, [measureOverflow, popover.contentRef]);
 
+  // Syncs the overflow measurement with the open surface. It measures, then
+  // observes resize and DOM changes until the surface closes.
   useIsomorphicLayoutEffect(() => {
     if (!popover.isOpen) {
       return;
@@ -761,11 +793,16 @@ export function Popover({
     if (!surface) {
       return;
     }
+    // Observe from the surface's own window. A Popover rendered into a second
+    // document resizes with that document's window, and a ResizeObserver the
+    // page created checks a box in a Picture-in-Picture window only while the
+    // page itself renders frames.
+    const view = windowOf(surface);
     measureOverflow();
     const resizeObserver =
-      typeof ResizeObserver === 'undefined'
+      typeof view.ResizeObserver === 'undefined'
         ? null
-        : new ResizeObserver(scheduleOverflowMeasurement);
+        : new view.ResizeObserver(scheduleOverflowMeasurement);
     const mutationObserver =
       typeof MutationObserver === 'undefined'
         ? null
@@ -777,8 +814,8 @@ export function Popover({
       subtree: true,
     });
     surface.addEventListener('load', scheduleOverflowMeasurement, true);
-    window.addEventListener('resize', scheduleOverflowMeasurement);
-    window.visualViewport?.addEventListener(
+    view.addEventListener('resize', scheduleOverflowMeasurement);
+    view.visualViewport?.addEventListener(
       'resize',
       scheduleOverflowMeasurement,
     );
@@ -786,18 +823,21 @@ export function Popover({
       resizeObserver?.disconnect();
       mutationObserver?.disconnect();
       surface.removeEventListener('load', scheduleOverflowMeasurement, true);
-      window.removeEventListener('resize', scheduleOverflowMeasurement);
-      window.visualViewport?.removeEventListener(
+      view.removeEventListener('resize', scheduleOverflowMeasurement);
+      view.visualViewport?.removeEventListener(
         'resize',
         scheduleOverflowMeasurement,
       );
-      if (measurementFrameRef.current != null) {
-        window.cancelAnimationFrame(measurementFrameRef.current);
+      const frame = measurementFrameRef.current;
+      if (frame != null) {
+        frame.view.cancelAnimationFrame(frame.id);
         measurementFrameRef.current = null;
       }
     };
   }, [measureOverflow, popover.isOpen, scheduleOverflowMeasurement]);
 
+  // Measures overflow again after the content changes while the surface is
+  // open.
   useIsomorphicLayoutEffect(() => {
     if (!popover.isOpen) {
       return;
@@ -1018,7 +1058,6 @@ export function Popover({
           ? width.trim()
           : clampInlineSize(width, layerViewportInset.maxInlineSizeFallback),
       );
-  const layerXstyle = [popoverSizeXstyle, layerAnimations[placement]];
 
   // One instance of the content at a time: the sheet holds it while it is
   // mounted, the anchored layer otherwise.
@@ -1068,7 +1107,7 @@ export function Popover({
         placement,
         alignment,
         offset: spacingVars['--spacing-1'],
-        xstyle: layerXstyle,
+        xstyle: popoverSizeXstyle,
       });
 
   // Sibling mode: render only the popover (no wrapper needed)

@@ -2,37 +2,30 @@
 
 /**
  * @file index.ts
- * @input useMobileKeyboard.ts, keyboardLayoutGuide.ts, keyboardModel.ts and
+ * @input keyboardHeight.ts, keyboardLayoutGuide.ts, keyboardModel.ts and
  *   rideKeyboard.ts
- * @output Re-exports the on-screen keyboard module (the keyboard height, its
- *   reports, the focus refusal, the reveal-pan watch, BottomSheet's hook),
- *   the keyboard layout guide (getKeyboardLayoutGuide, keyboardProfileOf,
- *   bringsUpKeyboard, createKeyboardModel) and rideKeyboard, with their types
- * @position Entry of the keyboard module. Internal to core: components
- *   import it from `../keyboard`; nothing here is exported from the package
- *   entry point
+ * @output Re-exports the on-screen keyboard module, the keyboard layout
+ *   guide and rideKeyboard, with their types
+ * @position Entry of the keyboard module. It is internal to core, and the
+ *   package entry point exports nothing here.
  *
  * SYNC: When modified, update /packages/core/src/keyboard/README.md
  */
 
 export {
-  claimTapFocus,
   findTextEntryControl,
-  getMobileKeyboardHeight,
+  getKeyboardHeight,
   isKeyboardMeasurable,
   isTextEntryControl,
   measureKeyboardHeight,
   refuseFocusReveal,
-  subscribeMobileKeyboard,
-  useKeyboardHeight,
-  useMobileKeyboard,
+  subscribeKeyboardHeight,
   watchRevealPan,
-  type ClaimTapFocusOptions,
-  type MobileKeyboardEvent,
+  type KeyboardHeightEvent,
   type RefuseFocusRevealOptions,
   type RevealPanWatch,
   type WatchRevealPanOptions,
-} from './useMobileKeyboard';
+} from './keyboardHeight';
 export {
   bringsUpKeyboard,
   getKeyboardLayoutGuide,
@@ -41,10 +34,14 @@ export {
 } from './keyboardLayoutGuide';
 export {rideKeyboard} from './rideKeyboard';
 export {
+  useMobileKeyboard,
+  type MobileKeyboard,
+  type MobileKeyboardOptions,
+} from './useMobileKeyboard';
+export {
   createKeyboardModel,
   type KeyboardCurve,
   type KeyboardModel,
-  type KeyboardModelOptions,
   type KeyboardProfile,
   type KeyboardTransition,
   type KeyboardTransitionKind,

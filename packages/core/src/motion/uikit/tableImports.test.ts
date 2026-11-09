@@ -17,14 +17,15 @@ import {dirname, join, relative, resolve} from 'node:path';
 import {describe, expect, it} from 'vitest';
 
 /**
- * The tables every touch module may share: the animator, gestures and the
- * on-screen keyboard module (keyboard/, spec:AST-099's one module, which times
- * the keyboard for every keyboard-aware component) read them.
+ * The tables shared code may read. The animator and gestures read these. The
+ * paging math and the pager, one hook for every paging component, read paging.
  */
 const SHARED_TABLES = new Set([
   'motion/uikit/gestures.ts',
-  'motion/uikit/keyboard.ts',
+  // The long-press values: useLongPress and the menus' press model read them.
+  'motion/uikit/longPress.ts',
   'motion/uikit/navigation.ts',
+  'motion/uikit/paging.ts',
   'motion/uikit/scroll.ts',
   'motion/uikit/springs.ts',
   'motion/uikit/timing.ts',

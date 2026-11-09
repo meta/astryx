@@ -237,6 +237,8 @@ export function useSwipeAction({
     reducedMotionRef.current = isReducedMotion;
   });
 
+  // Releases the settle timer, the animation frame and the pinch watch on
+  // unmount.
   useEffect(
     () => () => {
       if (settleTimerRef.current != null) {

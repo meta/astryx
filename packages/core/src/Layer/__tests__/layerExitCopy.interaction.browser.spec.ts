@@ -2,24 +2,24 @@
 
 /**
  * @file layerExitCopy.interaction.browser.spec.ts
- * @input The exit copy bundled with esbuild onto a blank fixture page: a
- *   popover layer inside a clipping, transformed panel, an entrance curve
- *   held halfway, and Chromium and WebKit
- * @output Proof that the engine shows the copy where the layer was drawn:
- *   placed as the layer closes (from script and by the browser's own light
- *   dismiss), it is in the top layer as a manual popover with no `z-index`,
- *   uncut by the clipping panel, and its drawn box equals the layer's drawn
- *   box mid-entrance within half a px; a second copy for the same layer
- *   replaces the first while another layer's copy stays
+ * @input The exit copy bundled with esbuild onto a blank fixture page, in
+ *   Chromium and WebKit. The page holds a popover layer inside a clipping,
+ *   transformed panel, with an entrance curve held halfway.
+ * @output Proof that the engine shows the copy where the layer was drawn.
+ *   The copy is placed as the layer closes, from script and by the browser's
+ *   own light dismiss. It is in the top layer as a manual popover with no
+ *   `z-index`. The clipping panel does not cut it. Its drawn box equals the
+ *   layer's drawn box mid-entrance, within half a px. A second copy for the
+ *   same layer replaces the first, while another layer's copy stays.
  * @position Browser proof for layerExitCopy.ts, run by `pnpm
- *   test:interaction`; jsdom has no layout and no top layer. The refusal
- *   path (Android Chromium 158 refuses a show during another popover's
- *   toggle) is proven on the Android gate emulator (pull request evidence):
- *   these engines do not refuse.
+ *   test:interaction`; jsdom has no layout and no top layer. Chromium 150
+ *   and later refuse a show during another popover's toggle. There the copy
+ *   opens after the closing script, or in the next frame. So a case that
+ *   closes a layer reads the copy after a frame.
  */
 
 import {fileURLToPath} from 'node:url';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {build} from 'esbuild';
 
 declare global {
@@ -47,7 +47,7 @@ test.beforeAll(async () => {
 const ATTRIBUTE = 'data-exit-copy';
 
 // A real navigation (not setContent): the page keeps its own window. The
-// layer sits in a panel that clips and is transformed: a fixed box placed
+// layer sits in a panel that clips and is transformed. A fixed box placed
 // there would be cut and moved; the top layer is neither.
 async function open(page: Page) {
   const html = `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -91,7 +91,7 @@ test('a copy placed as a layer closes mid-entrance is in the top layer, where th
       layer.addEventListener(
         'beforetoggle',
         event => {
-          if ((event).newState === 'closed') {
+          if (event.newState === 'closed') {
             copy = window.ExitCopy.placeLayerExitCopy(layer, attribute);
           }
         },
@@ -137,7 +137,7 @@ test('the browser\u2019s own light dismiss gets the copy too, uncut by the clipp
     layer.addEventListener(
       'beforetoggle',
       event => {
-        if ((event).newState === 'closed') {
+        if (event.newState === 'closed') {
           window.ExitCopy.placeLayerExitCopy(layer, attribute);
         }
       },
@@ -146,7 +146,10 @@ test('the browser\u2019s own light dismiss gets the copy too, uncut by the clipp
   }, ATTRIBUTE);
   // A press outside: the browser closes the layer by itself.
   await page.mouse.click(360, 700);
-  const result = await page.evaluate(attribute => {
+  const result = await page.evaluate(async attribute => {
+    // A refused show during the light dismiss opens the copy in the next
+    // frame.
+    await new Promise(resolve => requestAnimationFrame(resolve));
     const copy = document.querySelector<HTMLElement>(`[${attribute}]`);
     if (copy == null) {
       return null;
@@ -164,6 +167,133 @@ test('the browser\u2019s own light dismiss gets the copy too, uncut by the clipp
   // Where the layer stood, at its full size: the 60 x 40 clipping panel and
   // its 30 px transform neither cut nor moved it.
   expect(result!.rect).toEqual([40, 120, 280, 200]);
+});
+
+test('a layer that closes with the layer around it gets a copy that is drawn, outside both', async ({
+  page,
+}) => {
+  await open(page);
+  const result = await page.evaluate(async attribute => {
+    const outer = document.createElement('div');
+    outer.setAttribute('popover', 'auto');
+    outer.style.setProperty('--tone', 'rgb(10, 20, 30)');
+    // A dark scheme scope between the two layers, as a Theme inside a Dialog.
+    const scope = document.createElement('div');
+    scope.style.setProperty('color-scheme', 'dark');
+    const inner = document.createElement('div');
+    inner.setAttribute('popover', 'auto');
+    inner.style.setProperty('top', '360px');
+    inner.style.setProperty(
+      'background',
+      'light-dark(rgb(255, 255, 255), rgb(31, 31, 34))',
+    );
+    inner.innerHTML = '<p style="color: var(--tone)">Nested</p>';
+    scope.append(inner);
+    outer.append(scope);
+    document.body.append(outer);
+    outer.showPopover();
+    inner.showPopover();
+    let copy: HTMLElement | null = null;
+    inner.addEventListener(
+      'beforetoggle',
+      event => {
+        if (event.newState === 'closed') {
+          copy = window.ExitCopy.placeLayerExitCopy(inner, attribute);
+        }
+      },
+      {once: true},
+    );
+    // The outer layer's close takes the inner one with it, in one step.
+    outer.hidePopover();
+    // Where the browser refuses a show during the toggle, the copy opens
+    // after this script, before the next frame paints.
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    const placed = copy as HTMLElement | null;
+    if (placed == null) {
+      return null;
+    }
+    const rect = placed.getBoundingClientRect();
+    return {
+      open: placed.matches(':popover-open'),
+      visible: placed.checkVisibility(),
+      rect: [rect.left, rect.top, rect.width, rect.height],
+      insideOuter: outer.contains(placed),
+      tone: getComputedStyle(placed.querySelector('p')!).color,
+      background: getComputedStyle(placed).backgroundColor,
+      layersOpen: [outer, inner].map(layer => layer.matches(':popover-open')),
+    };
+  }, ATTRIBUTE);
+  expect(result).not.toBeNull();
+  expect(result!.layersOpen).toEqual([false, false]);
+  expect(result!.open).toBe(true);
+  // Drawn where the inner layer was: not a 0 x 0 box in a hidden layer.
+  expect(result!.visible).toBe(true);
+  expect(result!.rect).toEqual([40, 360, 280, 200]);
+  expect(result!.insideOuter).toBe(false);
+  // What the copy inherited inside the outer layer, outside it: its custom
+  // properties, and its scheme for `light-dark()`.
+  expect(result!.tone).toBe('rgb(10, 20, 30)');
+  expect(result!.background).toBe('rgb(31, 31, 34)');
+});
+
+test('when the close of the layer around it closes it too, its copy stays above that layer\u2019s copy', async ({
+  page,
+}) => {
+  await open(page);
+  const result = await page.evaluate(async attribute => {
+    const outer = document.createElement('div');
+    outer.setAttribute('popover', 'auto');
+    const inner = document.createElement('div');
+    inner.setAttribute('popover', 'auto');
+    // Over part of the outer layer, as a menu over its Popover.
+    inner.style.setProperty('top', '200px');
+    inner.style.setProperty('background', 'rgb(200, 30, 30)');
+    outer.append(inner);
+    document.body.append(outer);
+    outer.showPopover();
+    inner.showPopover();
+    const placed = new Map<HTMLElement, HTMLElement>();
+    for (const layer of [outer, inner]) {
+      layer.addEventListener(
+        'beforetoggle',
+        event => {
+          if (event.newState === 'closed') {
+            const copy = window.ExitCopy.placeLayerExitCopy(layer, attribute);
+            if (copy != null) {
+              placed.set(layer, copy);
+            }
+          }
+        },
+        {once: true},
+      );
+    }
+    // The browser closes the inner layer first, then the outer one.
+    outer.hidePopover();
+    // A refused show opens the copies before the next frame paints.
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    const innerCopy = placed.get(inner);
+    const outerCopy = placed.get(outer);
+    if (innerCopy == null || outerCopy == null) {
+      return null;
+    }
+    // Hit testing finds the topmost box once the copies take part in it.
+    for (const copy of [innerCopy, outerCopy]) {
+      copy.removeAttribute('inert');
+      copy.style.setProperty('pointer-events', 'auto');
+    }
+    const hit = document.elementFromPoint(100, 260);
+    return {
+      open: [innerCopy, outerCopy].map(copy => copy.matches(':popover-open')),
+      innerOnTop: hit != null && innerCopy.contains(hit),
+      outerUnder: document
+        .elementsFromPoint(100, 260)
+        .some(element => outerCopy.contains(element)),
+    };
+  }, ATTRIBUTE);
+  expect(result).not.toBeNull();
+  expect(result!.open).toEqual([true, true]);
+  expect(result!.outerUnder).toBe(true);
+  expect(result!.innerOnTop).toBe(true);
 });
 
 test('a second copy for the same layer replaces the first; another layer\u2019s copy stays', async ({

@@ -300,3 +300,57 @@ describe('Timer', () => {
     expect(timer).not.toHaveAttribute('role');
   });
 });
+
+describe('Timer hardening guards', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-22T00:00:00Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('caps the wait for a distant future origin at the 32-bit timeout ceiling', () => {
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    render(
+      <Timer
+        startTime={Date.now() + 30 * 24 * 60 * 60 * 1000}
+        data-testid="timer"
+      />,
+    );
+
+    // A raw startTime - now delay would exceed the 32-bit setTimeout range and
+    // fire immediately in some browsers; the ceiling keeps the wake scheduled.
+    expect(setTimeoutSpy).toHaveBeenLastCalledWith(
+      expect.any(Function),
+      2_147_483_647,
+    );
+  });
+
+  it('coerces an unknown format to elapsed', () => {
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    const now = Date.now();
+    const {rerender} = render(
+      <Timer
+        format={'stopwatch' as never}
+        startTime={now - 3_723_000}
+        data-testid="timer"
+      />,
+    );
+
+    // Past one hour, only the elapsed format moves to minute cadence: the
+    // next wake is the 57 s left in the minute, not one second.
+    expect(screen.getByTestId('timer')).toHaveTextContent('1h 02m');
+    expect(setTimeoutSpy).toHaveBeenLastCalledWith(
+      expect.any(Function),
+      57_000,
+    );
+
+    rerender(
+      <Timer format="clock" startTime={now - 3_723_000} data-testid="timer" />,
+    );
+    expect(screen.getByTestId('timer')).toHaveTextContent('1:02:03');
+  });
+});

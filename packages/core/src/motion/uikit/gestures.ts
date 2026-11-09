@@ -41,6 +41,10 @@
  */
 
 import {DELAYS_CONTENT_TOUCHES_MS} from './scroll';
+import {
+  LONG_PRESS_ALLOWABLE_MOVEMENT_PX,
+  LONG_PRESS_DURATION_MS,
+} from './longPress';
 
 export type GestureConstantUnit =
   'px' | 'ms' | 'px/s' | 'rad' | 'ratio' | 'count';
@@ -96,7 +100,7 @@ export const UIKIT_LONG_PRESS = {
    * @source measured: UIKit lab, iOS 26.2 simulator, ivar reads confirmed
    *   with HID touches, Oct 23 2026: _minimumPressDuration 0.5
    */
-  minimumPressDuration: {value: 500, unit: 'ms'},
+  minimumPressDuration: {value: LONG_PRESS_DURATION_MS, unit: 'ms'},
   /**
    * UILongPressGestureRecognizer.allowableMovement default, a distance.
    * @source apple-docs
@@ -104,7 +108,7 @@ export const UIKIT_LONG_PRESS = {
    * @source measured: UIKit lab, iOS 26.2 simulator, ivar reads confirmed
    *   with HID touches, Oct 23 2026: a (7, 7) drift begins, (7.2, 7.2) fails
    */
-  allowableMovement: {value: 10, unit: 'px'},
+  allowableMovement: {value: LONG_PRESS_ALLOWABLE_MOVEMENT_PX, unit: 'px'},
 } as const satisfies Record<string, GestureConstant>;
 
 export const UIKIT_PAN = {
@@ -247,6 +251,27 @@ export const UIKIT_PRESS = {
   momentumMemory: {value: 3000, unit: 'ms'},
 } as const satisfies Record<string, GestureConstant>;
 
+/**
+ * UIMenu presented by a button whose menu is its primary action: how far the
+ * finger that opened it travels before it picks. DropdownMenu's press model
+ * reads a copy in `hooks/menuPressValues.ts`.
+ */
+export const UIKIT_MENU_PRESS = {
+  /**
+   * After the menu opens under a still-held finger, the finger travels this
+   * far before it starts picking. The distance is a straight line from the
+   * first sample the menu receives after it opened. Until then nothing is
+   * lit, and lifting acts on nothing.
+   * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+   *   iPhone 17 Pro, gesture-state hook, steps 150 ms apart, Oct 23 2026
+   *   (M-MN2): with the menu open under a held finger and a 1 pt first step,
+   *   moves of (0, 9) and (7, 7) picked nothing; (0, 10), (0, 11), (10, 0),
+   *   (9, 9) and (10, 10) picked; a 9 pt step followed by 3 pt more picked
+   *   nothing
+   */
+  handoff: {value: 10, unit: 'px'},
+} as const satisfies Record<string, GestureConstant>;
+
 export const UIKIT_VELOCITY = {
   /**
    * UIPanGestureRecognizer.velocity(in:) is this times the newest event's
@@ -283,15 +308,19 @@ export const UIKIT_VELOCITY = {
   stillness: {value: 40, unit: 'ms'},
 } as const satisfies Record<string, GestureConstant>;
 
+/**
+ * The stray-click window, kept for importers written before the click guard
+ * owned it: `CLICK_GUARD_WINDOW_MS` (utils/clickGuard.ts) bounds the stray
+ * click, and `UIKIT_GESTURES` leaves this out.
+ * @deprecated Read `CLICK_GUARD_WINDOW_MS`.
+ */
 export const UIKIT_CLICK = {
   /**
-   * Longest the system waits for the browser's click after a touch it
-   * swallows. iOS and Chromium deliver it right after `touchend`; this only
-   * bounds a click that never comes.
-   * @source GUESS — A safety bound, not a UIKit number.
+   * Longest a guard waits for the browser's click after a touch it swallowed.
+   * @source GUESS — A safety bound, not a UIKit number; the click guard's own.
    * @measure M-G17
    */
-  strayClickWindow: {value: 1000, unit: 'ms'},
+  strayClickWindow: {value: 400, unit: 'ms'},
 } as const satisfies Record<string, GestureConstant>;
 
 /**
@@ -310,8 +339,8 @@ export const UIKIT_GESTURES = {
   screenEdgePan: UIKIT_SCREEN_EDGE_PAN,
   control: UIKIT_CONTROL,
   press: UIKIT_PRESS,
+  menuPress: UIKIT_MENU_PRESS,
   velocity: UIKIT_VELOCITY,
-  click: UIKIT_CLICK,
 } as const;
 
 /**

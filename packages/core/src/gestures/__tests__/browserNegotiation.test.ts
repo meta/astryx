@@ -15,17 +15,14 @@ import {LongPressGestureRecognizer} from '../LongPressGestureRecognizer';
 import {createNativeScrollProbe, parseTouchAction} from '../nativeScroll';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import {PinchGestureRecognizer} from '../PinchGestureRecognizer';
-import {RotationGestureRecognizer} from '../RotationGestureRecognizer';
 import {ScreenEdgePanGestureRecognizer} from '../ScreenEdgePanGestureRecognizer';
 import {SwipeGestureRecognizer} from '../SwipeGestureRecognizer';
 import {TapGestureRecognizer} from '../TapGestureRecognizer';
 import {deriveTouchAction, gestureHostStyle} from '../touchAction';
-import {HoverGestureRecognizer} from '../HoverGestureRecognizer';
 
 describe('deriveTouchAction', () => {
   it('needs nothing without touch recognizers', () => {
     expect(deriveTouchAction([])).toBeNull();
-    expect(deriveTouchAction([new HoverGestureRecognizer()])).toBeNull();
     expect(
       deriveTouchAction([
         new PanGestureRecognizer({allowedPointerTypes: ['mouse']}),
@@ -80,11 +77,8 @@ describe('deriveTouchAction', () => {
     ).toBe('manipulation');
   });
 
-  it('takes pinch-zoom only for a pinch or rotation recognizer', () => {
+  it('takes pinch-zoom only for a pinch recognizer', () => {
     expect(deriveTouchAction([new PinchGestureRecognizer()])).toBe(
-      'pan-x pan-y',
-    );
-    expect(deriveTouchAction([new RotationGestureRecognizer()])).toBe(
       'pan-x pan-y',
     );
     expect(

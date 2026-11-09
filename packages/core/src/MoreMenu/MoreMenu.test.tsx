@@ -9,6 +9,7 @@
  * SYNC: When MoreMenu.tsx changes, update tests to match new behavior
  */
 
+import {createRef} from 'react';
 import {describe, it, expect, vi, beforeAll, beforeEach} from 'vitest';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -254,6 +255,16 @@ describe('MoreMenu', () => {
     );
 
     expect(handleEdit).not.toHaveBeenCalled();
+  });
+
+  it('forwards its ref to the bottom-sheet trigger', () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(
+      <MoreMenu items={defaultItems} ref={ref} presentation="bottom-sheet" />,
+    );
+    expect(ref.current).toBe(
+      screen.getByRole('button', {name: 'More options'}),
+    );
   });
 
   it('supports forwardRef', () => {

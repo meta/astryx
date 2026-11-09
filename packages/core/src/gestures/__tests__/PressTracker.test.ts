@@ -11,7 +11,11 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {UIKIT_GESTURES} from '../../motion/uikit/gestures';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
-import {PRESS_PROFILES, PressTracker, type ControlEvent} from '../PressTracker';
+import {
+  PRESS_PROFILES,
+  createPressTracker,
+  type ControlEvent,
+} from '../PressTracker';
 import {TapGestureRecognizer} from '../TapGestureRecognizer';
 import {createHarness, scrollProbe} from './harness';
 
@@ -23,7 +27,7 @@ const FLASH = UIKIT_GESTURES.press.quickTapFlash.value;
 function setup() {
   const events: ControlEvent[] = [];
   const highlights: boolean[] = [];
-  const tracker = new PressTracker({
+  const tracker = createPressTracker({
     getBounds: () => BOUNDS,
     onControlEvent: event => events.push(event),
     onHighlightChange: value => highlights.push(value),
@@ -40,7 +44,7 @@ describe('PressTracker', () => {
   });
 
   it('a keepsTouch tracker keeps only the touch whose press it delivered: a quick tap leaves the next touch free until its own press (spec:AST-094 FR19)', () => {
-    const tracker = new PressTracker({
+    const tracker = createPressTracker({
       getBounds: () => BOUNDS,
       keepsTouch: true,
       highlightDelay: 'always',
@@ -71,6 +75,37 @@ describe('PressTracker', () => {
     expect(highlights).toEqual([true, false]);
   });
 
+  it('brakes only a finger: a mouse or pen press right after a finger-driven scroll still presses (spec:AST-094 FR11)', () => {
+    for (const pointerType of ['mouse', 'pen'] as const) {
+      const events: ControlEvent[] = [];
+      const tracker = createPressTracker({
+        getBounds: () => BOUNDS,
+        onControlEvent: event => events.push(event),
+        // A finger set a scroll moving a moment ago.
+        isBraking: () => true,
+      });
+      const h = createHarness();
+      h.finger(1).down(150, 120, 0, {
+        recognizers: [],
+        consumer: tracker,
+        pointerType,
+      });
+      h.finger(1).up(80);
+      expect(events).toEqual(['touchDown', 'touchUpInside']);
+    }
+    // A finger that brakes the scroll presses nothing.
+    const events: ControlEvent[] = [];
+    const tracker = createPressTracker({
+      getBounds: () => BOUNDS,
+      onControlEvent: event => events.push(event),
+      isBraking: () => true,
+    });
+    const h = createHarness();
+    h.finger(1).down(150, 120, 0, {recognizers: [], consumer: tracker});
+    h.finger(1).up(80);
+    expect(events).toEqual([]);
+  });
+
   it('keeps tracking inside the expanded bounds and exits past them', () => {
     const {events, highlights, tracker, h} = setup();
     const finger = h.finger(1).down(150, 120, 0, {
@@ -93,6 +128,46 @@ describe('PressTracker', () => {
       'touchUpOutside',
     ]);
     expect(highlights).toEqual([true, false, true, false]);
+  });
+
+  it("counts the content-touch delay from the touch's own time, so a touch delivered late still highlights on time", () => {
+    const {highlights, tracker, h} = setup();
+    const probe = scrollProbe(() => true, true);
+    // The page has run a while, so the touch's time is past zero.
+    vi.advanceTimersByTime(1000);
+    // A busy main thread delivers the touch 60 ms after it happened.
+    h.finger(1).down(150, 120, performance.now() - 60, {
+      recognizers: [],
+      consumer: tracker,
+      scroll: probe,
+    });
+    vi.advanceTimersByTime(DELAY - 60 - 1);
+    expect(highlights).toEqual([]);
+    vi.advanceTimersByTime(1);
+    expect(highlights).toEqual([true]);
+  });
+
+  it("reads a touch's time on the clock of its own window, as an iframe's touch carries", () => {
+    const {highlights, tracker, h} = setup();
+    const probe = scrollProbe(() => true, true);
+    vi.advanceTimersByTime(1000);
+    // The iframe's clock started 900 ms after this window's.
+    const frameClock = {now: () => performance.now() - 900};
+    const target = {
+      nodeType: 1,
+      ownerDocument: {defaultView: {performance: frameClock}},
+    };
+    // A busy main thread delivers the touch 60 ms after it happened.
+    h.finger(1).down(150, 120, frameClock.now() - 60, {
+      recognizers: [],
+      consumer: tracker,
+      scroll: probe,
+      target,
+    });
+    vi.advanceTimersByTime(DELAY - 60 - 1);
+    expect(highlights).toEqual([]);
+    vi.advanceTimersByTime(1);
+    expect(highlights).toEqual([true]);
   });
 
   it('waits the content-touch delay inside a scroller, and flashes a quicker tap', () => {
@@ -174,7 +249,7 @@ describe('PressTracker cell profile', () => {
   function cell() {
     const events: ControlEvent[] = [];
     const highlights: boolean[] = [];
-    const tracker = new PressTracker({
+    const tracker = createPressTracker({
       getBounds: () => BOUNDS,
       ...PRESS_PROFILES.cell,
       onControlEvent: event => events.push(event),
@@ -246,7 +321,7 @@ describe('PressTracker cell profile', () => {
 describe('PressTracker in the arena', () => {
   it("lets a control veto an ancestor's single tap (UIControl's rule)", () => {
     const h = createHarness();
-    const button = new PressTracker({getBounds: () => null, view: 'button'});
+    const button = createPressTracker({getBounds: () => null, view: 'button'});
     const tap = new TapGestureRecognizer({name: 'tap'});
     tap.view = 'row';
     const double = new TapGestureRecognizer({
@@ -258,5 +333,52 @@ describe('PressTracker in the arena', () => {
     expect(h.finger(1).up(50)).toBe('defer');
     expect(h.log[0]).toBe('tap:failed@50');
     expect(double.state).toBe('possible');
+  });
+});
+
+describe('PressTracker under a fine pointer (spec:AST-094 FR11, DEC-21)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('paints a mouse or a pen press at once, inside a scroller too: the fine profile has no delay', () => {
+    for (const pointerType of ['mouse', 'pen'] as const) {
+      const {events, highlights, tracker, h} = setup();
+      h.finger(1).down(150, 120, 0, {
+        recognizers: [],
+        consumer: tracker,
+        pointerType,
+        scroll: scrollProbe(() => true),
+      });
+      expect(highlights).toEqual([true]);
+      h.finger(1).up(80);
+      expect(events).toEqual(['touchDown', 'touchUpInside']);
+    }
+  });
+
+  it('brakes only a finger: a mouse press on a scroller a flick set moving still presses', () => {
+    const events: ControlEvent[] = [];
+    const highlights: boolean[] = [];
+    const tracker = createPressTracker({
+      getBounds: () => BOUNDS,
+      onControlEvent: event => events.push(event),
+      onHighlightChange: value => highlights.push(value),
+      isBraking: () => true,
+    });
+    const h = createHarness();
+    h.finger(1).down(150, 120, 0, {recognizers: [], consumer: tracker});
+    h.finger(1).up(80);
+    expect(events).toEqual([]);
+    h.finger(2).down(150, 120, 400, {
+      recognizers: [],
+      consumer: tracker,
+      pointerType: 'mouse',
+    });
+    expect(highlights).toEqual([true]);
+    h.finger(2).up(480);
+    expect(events).toEqual(['touchDown', 'touchUpInside']);
   });
 });

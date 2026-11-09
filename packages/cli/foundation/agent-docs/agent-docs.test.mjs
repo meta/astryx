@@ -25,6 +25,7 @@ import {
   AgentDocsHomeError,
   resolveAgentDocsRoot,
 } from './agent-docs.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
@@ -355,7 +356,7 @@ describe('generateCompressedIndex', () => {
 describe('renderAgentDocsBlock', () => {
   it('produces repeatable target bytes from configured manifests', async () => {
     const projectDir = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-agent-doc-render-'),
+      path.join(REPO_ROOT, '.astryx-agent-doc-render-'),
     );
     try {
       fs.writeFileSync(
@@ -433,7 +434,7 @@ describe('renderAgentDocsBlock', () => {
   });
   it('renders doc tokens in an integration line for the project', async () => {
     const projectDir = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-agent-doc-tokens-'),
+      path.join(REPO_ROOT, '.astryx-agent-doc-tokens-'),
     );
     try {
       fs.writeFileSync(
@@ -479,7 +480,7 @@ describe('renderAgentDocsBlock', () => {
 
   it('rejects a package label that could alter managed block structure', async () => {
     const projectDir = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-agent-doc-label-'),
+      path.join(REPO_ROOT, '.astryx-agent-doc-label-'),
     );
     try {
       fs.writeFileSync(
@@ -549,6 +550,11 @@ describe('detectStylingSystem', () => {
 
   it('detects the official Next.js plugin', () => {
     writePkg({'@stylexjs/nextjs-plugin': '0.10.0'});
+    expect(detectStylingSystem(tmpDir)).toBe('stylex');
+  });
+
+  it('detects the official unplugin (the standard Vite path)', () => {
+    writePkg({'@stylexjs/unplugin': '0.10.0'});
     expect(detectStylingSystem(tmpDir)).toBe('stylex');
   });
 
@@ -1761,7 +1767,7 @@ describe('agent docs never go into the home folder', () => {
     try {
       expect(() => installAgentDocs(link)).toThrow(AgentDocsHomeError);
     } finally {
-      fs.rmSync(link);
+      fs.unlinkSync(link);
     }
   });
 

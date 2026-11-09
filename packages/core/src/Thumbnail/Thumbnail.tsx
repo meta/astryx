@@ -48,7 +48,13 @@ import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Thumbnail/Thumbnail.generated';
+
+registerEnglishFallback(english);
 
 export interface ThumbnailProps extends BaseProps<HTMLDivElement> {
   /** Ref forwarded to the root element */
@@ -222,9 +228,27 @@ const styles = stylex.create({
         default: 'background-color',
         [PRESSED_ON]: 'none',
         [PRESSED_FADING]: 'none',
+        // Under reduced motion a colour changes at once. Only opacity may
+        // still fade on a touch screen.
+        '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+          'opacity',
       },
-      transitionDuration: durationVars['--duration-fast'],
-      transitionTimingFunction: easeVars['--ease-standard'],
+      transitionDuration: {
+        default: durationVars['--duration-fast'],
+        // Under reduced motion a fine pointer gets no transition. A touch
+        // screen's fade keeps the exit tokens, within 200 ms.
+        '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+          '0s',
+        // The 200 ms bound copies reducedMotionFadeConsts.duration. That
+        // module is internal, and a swizzled component imports only exported
+        // paths. reducedMotionValues.test.ts keeps the copies equal.
+        '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': `min(${durationVars['--duration-exit']}, 200ms)`,
+      },
+      transitionTimingFunction: {
+        default: easeVars['--ease-standard'],
+        '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+          easeVars['--ease-exit'],
+      },
       // While the controller paints, the colour yields to the image: a
       // touchscreen beside a fine pointer still matches `:active` under a
       // finger, and the press would otherwise paint twice.
@@ -358,7 +382,7 @@ export function Thumbnail({
   ...props
 }: ThumbnailProps) {
   const pressable = usePressFeedback();
-  const t = useTranslator();
+  const t = useComponentTranslator();
 
   // Track the exact src that failed (rather than a boolean) so a changed src
   // gets a fresh load attempt instead of the stale error.
@@ -379,7 +403,10 @@ export function Thumbnail({
   );
   const showPlaceholder = (!isLoading && !hasSrc) || hasError;
   const isInteractive = onClick != null && !isDisabled && !isLoading;
-  const hasRemove = onRemove != null && !isDisabled;
+  // Open and Remove stay mounted while they cannot act, inert and announced
+  // as disabled, so a focused one keeps focus (spec:AST-085 FR1, FR4, FR6).
+  const hasOpen = onClick != null;
+  const hasRemove = onRemove != null;
   const isHoverReveal = hasRemove && showRemoveOn === 'hover';
   const {getContainerProps, getContentRevealProps} = useContainerReveal({
     isEnabled: isHoverReveal,
@@ -449,9 +476,13 @@ export function Thumbnail({
         variant="secondary"
         size="sm"
         isIconOnly
+        aria-disabled={isDisabled ? 'true' : undefined}
+        onKeyDown={isDisabled ? suppressActivationKeys : undefined}
         onClick={e => {
           e.stopPropagation();
-          onRemove(e);
+          if (!isDisabled) {
+            onRemove(e);
+          }
         }}
         xstyle={styles.removeButtonOverrides}
       />
@@ -484,11 +515,13 @@ export function Thumbnail({
           ),
           isHoverReveal ? getContainerProps() : {},
         )}>
-        {isInteractive ? (
+        {hasOpen ? (
           <button
             type="button"
-            onClick={onClick}
+            onClick={isInteractive ? onClick : stopInertPress}
+            onKeyDown={isInteractive ? undefined : suppressActivationKeys}
             aria-label={t('@astryx.thumbnail.open', {accessibleName})}
+            aria-disabled={isInteractive ? undefined : 'true'}
             {...stylex.props(styles.interactiveButton)}>
             {imageContent}
           </button>
@@ -514,3 +547,24 @@ export function Thumbnail({
 }
 
 Thumbnail.displayName = 'Thumbnail';
+
+/**
+ * Enter and Space on an inert action dispatch no click at all, so no listener
+ * anywhere receives one (spec:AST-085 FR2), as Button does for its own
+ * aria-disabled state.
+ */
+function suppressActivationKeys(event: React.KeyboardEvent<HTMLElement>) {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+  }
+}
+
+/**
+ * A click that still reaches an inert Open (a pointer, or assistive
+ * technology dispatching one) calls nothing and stops here, so an ancestor's
+ * click handler does not take it either (spec:AST-085 FR2).
+ */
+function stopInertPress(event: React.MouseEvent<HTMLButtonElement>) {
+  event.preventDefault();
+  event.stopPropagation();
+}

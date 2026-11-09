@@ -22,7 +22,12 @@
  */
 
 import type {Locator, Page, TestInfo} from '@playwright/test';
-import {holdAnimations, seekAnimations, type HeldAnimation} from './curves';
+import {
+  holdAnimations,
+  seekAnimations,
+  type HeldAnimation,
+  type HoldJudges,
+} from './curves';
 import {timeline} from './math';
 import {writeEvidence} from './output';
 import type {TouchScript} from './scripts';
@@ -258,7 +263,7 @@ async function composeSheet(
   }
 }
 
-export interface AnimationStoryboardOptions extends StoryboardOptions {
+interface AnimationStoryboardBase extends StoryboardOptions {
   /**
    * Frame times, ms from the film's start: the earliest start among the held
    * animations that end (an animation that repeats forever, such as a
@@ -267,21 +272,38 @@ export interface AnimationStoryboardOptions extends StoryboardOptions {
    * each animation at its own offset (a held end value is not filmed).
    */
   readonly times?: readonly number[];
-  /** Restrict to animations inside this element. */
+  /** Restrict to animations inside this element (when `held` is not passed). */
   readonly scope?: Locator;
   /** Measurements per frame (runs after the seek). */
   readonly measure?: () => Promise<Readonly<Record<string, unknown>>>;
 }
 
 /**
+ * Either `held`, what an armed hold already took (`armHold`'s `held()`, which
+ * checked its judged motion): filmed instead of holding now, for an animation
+ * an action starts that a hold sent after the action could miss on a loaded
+ * runner. Or `judges`, the motion the film shows: the film holds now, and
+ * rejects as `holdAnimations` does when it took no animation of it.
+ */
+export type AnimationStoryboardOptions = AnimationStoryboardBase &
+  (
+    | {readonly held: readonly HeldAnimation[]; readonly judges?: undefined}
+    | {readonly held?: undefined; readonly judges: HoldJudges}
+  );
+
+/**
  * Holds every running animation, then seeks them together to each time and
- * photographs the clip. Call it right after starting the animation under test.
+ * photographs the clip. Call it right after starting the animation under test,
+ * or pass `held`, what an armed hold took (`armHold`): the film then uses that
+ * held set instead of holding now, and `scope` plays no part.
  */
 export async function animationStoryboard(
   page: Page,
   options: AnimationStoryboardOptions,
 ): Promise<{storyboard: Storyboard; held: HeldAnimation[]}> {
-  const held = await holdAnimations(page, options.scope);
+  const held = options.held
+    ? [...options.held]
+    : await holdAnimations(page, options.scope, {judges: options.judges});
   if (held.length === 0) {
     throw new Error(`storyboard ${options.name}: no running animation to hold`);
   }
@@ -378,7 +400,8 @@ export async function castStoryboard(
     readonly data: string;
     readonly format: 'png' | 'jpeg';
   }[],
-  options: StoryboardOptions & {
+  // A cast is already the screen's frames: no clip is applied to them.
+  options: Omit<StoryboardOptions, 'clip'> & {
     readonly zero: number;
     readonly from?: number;
     readonly to?: number;

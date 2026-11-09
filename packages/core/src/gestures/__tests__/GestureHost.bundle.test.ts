@@ -2,9 +2,11 @@
 
 /**
  * @file GestureHost.bundle.test.ts
- * @input GestureHost.ts and PressTracker.ts, bundled and minified by esbuild
- * @output The gesture host and the press tracker carry only the UIKit gesture
- *   groups they read, never the whole table
+ * @input GestureHost.ts, PressTracker.ts and usePressTracker.ts, bundled and
+ *   minified by esbuild
+ * @output The gesture host, the press tracker and its hook carry only the
+ *   UIKit gesture groups they read, never the whole table. The press tracker
+ *   carries only the timing table's press clocks
  *   (architecture:component-style-authoring INV6)
  * @position Bundle evidence for packages/core/src/gestures: every recognizer
  *   and press tracker attaches through the host, so what it imports ships
@@ -34,9 +36,9 @@ writeFileSync(
   script,
   [
     "import {build} from 'esbuild';",
-    'const [dir, name] = process.argv.slice(2);',
+    'const [dir, module, name] = process.argv.slice(2);',
     'const out = await build({',
-    "  stdin: {contents: `import {${name}} from './${name}'; console.log(${name});`, resolveDir: dir, loader: 'ts'},",
+    "  stdin: {contents: `import {${name}} from './${module}'; console.log(${name});`, resolveDir: dir, loader: 'ts'},",
     "  bundle: true, minify: true, format: 'esm', write: false, logLevel: 'silent',",
     '});',
     'console.log(JSON.stringify(out.outputFiles[0].text));',
@@ -44,9 +46,9 @@ writeFileSync(
 );
 
 /** The minified bundle of one gestures module's named export. */
-function bundle(name: string): string {
+function bundle(module: string, name = module): string {
   return JSON.parse(
-    execFileSync(process.execPath, [script, gestures, name], {
+    execFileSync(process.execPath, [script, gestures, module, name], {
       encoding: 'utf8',
       timeout: 120_000,
     })
@@ -59,9 +61,8 @@ function bundle(name: string): string {
 describe('the gesture host bundle', () => {
   const text = bundle('GestureHost');
 
-  it('carries the press and click groups it reads', () => {
+  it('carries the press group it reads', () => {
     expect(text).toContain('scrollBrake:');
-    expect(text).toContain('strayClickWindow:');
   });
 
   it('never carries the whole UIKit gesture table', () => {
@@ -79,9 +80,12 @@ describe('the gesture host bundle', () => {
   });
 });
 
-describe('the press tracker bundle', () => {
+describe.each([
+  ['PressTracker', 'createPressTracker'],
+  ['usePressTracker', 'usePressTracker'],
+])('the %s bundle', (module, name) => {
   // NumberInput's stepper and every control reach the press tracker.
-  const text = bundle('PressTracker');
+  const text = bundle(module, name);
 
   it('carries the press, pan and control groups it reads', () => {
     expect(text).toContain('scrollBrake:');
@@ -96,6 +100,13 @@ describe('the press tracker bundle', () => {
       'minimumMovementDecay:',
       'scrollReleaseWeight:',
     ]) {
+      expect(text).not.toContain(key);
+    }
+  });
+  it('carries only the press clocks of the UIKit timing table, never the whole table', () => {
+    expect(text).toContain('highlightOutMs:');
+    // Rows only the whole timing table has.
+    for (const key of ['navigationBarHideShowMs:', 'keyboardNotificationMs:']) {
       expect(text).not.toContain(key);
     }
   });

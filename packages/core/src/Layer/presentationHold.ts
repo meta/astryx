@@ -10,11 +10,11 @@
  *   at an open event) and usePresentationHold (the same hold taken during
  *   render): the presentation the opening chose, held until the component
  *   releases it
- * @position The layer runtime's presentation hold (architecture:layer-runtime
- *   INV14): keeping a layer's chosen presentation from the open until its
- *   close settles. Internal to core: not exported from the package or any
- *   barrel (presentationHold.test.tsx locks that). Not the input hold
- *   (inputHold.ts), which drops input while a presentation animates.
+ * @position The layer runtime's presentation hold: it keeps a layer's chosen
+ *   presentation from the open until its close settles. Internal to core: not
+ *   exported from the package or any barrel (presentationHold.test.tsx locks
+ *   that). Not the input hold (inputHold.ts), which drops input while a
+ *   presentation animates.
  *
  * A layer that can present more than one way (a popover that is a sheet on a
  * phone, a touch grow or a pointer entrance) chooses as it opens, and its

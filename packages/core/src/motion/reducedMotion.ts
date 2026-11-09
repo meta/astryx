@@ -4,7 +4,7 @@
  * @file reducedMotion.ts
  * @input The Reduced Motion preference, the primary pointer, the motion tables
  * @output reducedMotionFade (the fade the animator would play, for motion it
- *   does not drive) and the two media queries a StyleX transition spells
+ *   does not drive), playReducedMotionDip, and the queries a transition spells
  * @position The one Reduced Motion policy (design:reduced-motion) for code
  *   beside the animator: a raw Web Animations fade, a CSS transition
  *
@@ -46,6 +46,7 @@
 
 import {defaultIsCoarsePointer, defaultPrefersReducedMotion} from './animator';
 import {resolveMotion} from './resolveMotion';
+import {themeReducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import {
   reducedMotionCrossFade,
   registerReducedMotionCrossFade,
@@ -83,7 +84,8 @@ export function reducedMotionFade(
     touchRelease?: boolean;
   } = {},
 ): ReducedMotionFade | null {
-  if (!defaultPrefersReducedMotion()) {
+  // A theme that reduces motion for everyone counts as the setting.
+  if (!defaultPrefersReducedMotion() && !themeReducesMotion(element)) {
     return null;
   }
   const fades = options.touchRelease === true || defaultIsCoarsePointer();
@@ -101,4 +103,82 @@ export function reducedMotionFade(
     duration: reducedMotionCrossFade.durationMs,
     easing: `cubic-bezier(${curve.join(', ')})`,
   };
+}
+
+/** A running Reduced Motion dip. */
+export interface ReducedMotionDip {
+  /** Stops the dip. A change that has not landed yet never lands. */
+  cancel(): void;
+}
+
+/**
+ * Plays `fade` on `element` as a dip, and runs `land` at its middle: the
+ * fade-out, the change, then the fade-in. The fade-out holds at 0 until `land`
+ * has run, and the fade-in starts only after it. So the change never shows at
+ * full opacity, however late the main thread runs. A timer at the middle can
+ * fire after the fade-in has begun.
+ *
+ * `land` must apply the change before it returns: the fade-in starts right
+ * after it. `from` is the opacity the fade-out starts at: a leaving element
+ * fades out from where it is.
+ *
+ * @example
+ * ```
+ * const dip = playReducedMotionDip(scroller, fade, () => scroller.scrollTo({top}));
+ * // A newer change replaces it:
+ * dip.cancel();
+ * ```
+ */
+export function playReducedMotionDip(
+  element: Element,
+  fade: ReducedMotionFade,
+  land: () => void,
+  from = 1,
+): ReducedMotionDip {
+  const half = fade.duration / 2;
+  let isCancelled = false;
+  let fadeIn: Animation | null = null;
+  const fadeOut = element.animate(
+    [{opacity: from, easing: fade.easing}, {opacity: 0}],
+    {duration: half, fill: 'forwards'},
+  );
+  fadeOut.finished.then(
+    () => {
+      if (isCancelled) {
+        return;
+      }
+      land();
+      // The fade-in holds 0 until it starts: after a long stall, its start can
+      // come after the frame that runs this.
+      fadeIn = element.animate(
+        [{opacity: 0, easing: fade.easing}, {opacity: 1}],
+        {duration: half, fill: 'backwards'},
+      );
+      // The fade-in keeps the dip's own schedule: it starts where the fade-out
+      // ended, so the dip keeps its length. The clock is read after the
+      // landing, because a frame's timestamp does not count the landing's own
+      // work. After a long stall, half of the fade-in still plays.
+      const fadeOutEnd = endTime(fadeOut, half);
+      if (fadeOutEnd != null) {
+        fadeIn.startTime = Math.max(fadeOutEnd, performance.now() - half / 2);
+      }
+      // The fade-in now holds the opacity, so the held 0 can go.
+      fadeOut.cancel();
+    },
+    // A cancelled fade-out rejects `finished`: nothing lands.
+    () => {},
+  );
+  return {
+    cancel() {
+      isCancelled = true;
+      fadeOut.cancel();
+      fadeIn?.cancel();
+    },
+  };
+}
+
+/** When `animation` was due to end, on its timeline (ms), if it has started. */
+function endTime(animation: Animation, duration: number): number | null {
+  const start = animation.startTime;
+  return typeof start === 'number' ? start + duration : null;
 }

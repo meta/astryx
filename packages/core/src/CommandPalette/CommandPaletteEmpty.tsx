@@ -40,6 +40,8 @@ const styles = stylex.create({
     // instead of setting the centered line's minimum width, which pushes text
     // past both inline edges where neither side can scroll to it.
     overflowWrap: 'anywhere',
+    // Text inside keeps `anywhere` too (Text FR3).
+    '--_astryx-text-overflow-wrap': 'anywhere',
   },
 });
 

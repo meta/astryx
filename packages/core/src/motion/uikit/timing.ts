@@ -50,17 +50,19 @@ export const press = {
    */
   flashMs: 100,
   /**
-   * Highlight fade after release: UIKit's deselect cross-fade.
+   * Highlight fade after release: UIKit's deselect cross-fade. Reference
+   * only, not played: a press release plays the theme's exit motion tokens
+   * (`--duration-exit`, `--ease-exit`).
    * @source measured: Settings and Contacts, iOS 26.2, simulator driven
-   *   with real HID touches at 60 fps (PRESS_FADE_MS / pressConsts.releaseMs,
+   *   with real HID touches at 60 fps (touch press model,
    *   packages/core/src/utils/pressGesture.ts, 2026-10-06)
    */
   highlightOutMs: 200,
   /**
    * The highlight fade's curve after release: an ease-out that spends the
-   * whole clock fading (strength about 0.2 at the midpoint).
-   * @source GUESS — the release curve the touch press model ships with
-   *   (`RELEASE_EASE`, packages/core/src/utils/interactionOverlay.stylex.ts),
+   * whole clock fading (strength about 0.2 at the midpoint). Reference only,
+   * not played: a press release plays the theme's `--ease-exit`.
+   * @source GUESS — the release curve the touch press model shipped with,
    *   chosen to read as UIKit's deselect cross-fade, not read from UIKit
    * @measure M-PR1
    */
@@ -121,28 +123,6 @@ export const reducedMotionCrossFade = {
 const {durationMs: reducedMotionCrossFadeMs, curve: move} =
   reducedMotionCrossFade;
 
-/**
- * The keyboard notifications' duration, its own export so the keyboard layout
- * guide reads it without the rest of the table
- * (`architecture:component-style-authoring` INV6). `timing` composes it under
- * its table path, `keyboardNotificationMs`, which stays out of the roles.
- */
-export const keyboardNotification = {
-  /**
-   * The duration the keyboard notifications report
-   * (UIKeyboardAnimationDurationUserInfoKey, with curve 7), show and hide
-   * alike, in ms. The frame follows `springs.keyboard`, cut at this time.
-   * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
-   *   iPhone 17 Pro, UIKeyboardWillShow / WillHide / WillChangeFrame read,
-   *   Oct 23 2026
-   */
-  durationMs: 383.3,
-} as const;
-
-// Composed from a binding, so a bundle that reads only the keyboard's
-// duration drops the rest of the table.
-const {durationMs: keyboardNotificationMs} = keyboardNotification;
-
 export const timing = {
   press,
   curves: {
@@ -182,7 +162,15 @@ export const timing = {
    *   iPhone 17 Pro, read, Oct 23 2026
    */
   navigationBarHideShowMs: 200,
-  keyboardNotificationMs,
+  /**
+   * The duration the keyboard notifications report
+   * (UIKeyboardAnimationDurationUserInfoKey, with curve 7), show and hide
+   * alike, in ms. The frame follows `springs.keyboard`, cut at this time.
+   * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+   *   iPhone 17 Pro, UIKeyboardWillShow / WillHide / WillChangeFrame read,
+   *   Oct 23 2026
+   */
+  keyboardNotificationMs: 383.3,
   /**
    * Core Animation's implicit animation duration
    * (`CATransaction.animationDuration()`), in ms.

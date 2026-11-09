@@ -3,22 +3,40 @@
 /**
  * @file usePopoverSurfaceMotion.test.tsx
  * @input vitest (jsdom), React Testing Library, a stand-in popover layer and
- *   trigger, and a stubbed pointer query
- * @output Checks what the hook costs a popover that never presents under a
- *   finger: a fine pointer leaves the layer with no `beforetoggle` listener
- *   and nothing promoted (spec:AST-094 FR24)
+ *   trigger, a stubbed pointer query and a recording stand-in for the motion
+ * @output Checks when the hook creates, drives and releases the touch
+ *   presentation. A fine pointer creates and promotes nothing, and its close
+ *   start plays nothing.
  * @position Testing; Popover's touch presentation, the hook that drives it
  */
 
 import {renderHook} from '@testing-library/react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {TOUCH_QUERY} from '../utils/touchPresentation';
+import {createPopoverSurfaceMotion} from './popoverSurfaceMotion';
 import {usePopoverSurfaceMotion} from './usePopoverSurfaceMotion';
+
+vi.mock('./popoverSurfaceMotion', () => ({
+  createPopoverSurfaceMotion: vi.fn(() => ({
+    enter: vi.fn(),
+    exit: vi.fn(),
+    reset: vi.fn(),
+    dispose: vi.fn(),
+  })),
+}));
+
+const created = () =>
+  vi
+    .mocked(createPopoverSurfaceMotion)
+    .mock.results.map(
+      result => result.value as ReturnType<typeof createPopoverSurfaceMotion>,
+    );
 
 let isTouch = false;
 
 beforeEach(() => {
   isTouch = false;
+  vi.mocked(createPopoverSurfaceMotion).mockClear();
   vi.stubGlobal(
     'matchMedia',
     vi.fn((query: string) => ({
@@ -32,7 +50,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  vi.restoreAllMocks();
   document.body.innerHTML = '';
 });
 
@@ -42,51 +59,52 @@ function layerAndTrigger() {
   layer.innerHTML = '<div role="dialog" aria-label="Filters"></div>';
   const trigger = document.createElement('button');
   document.body.append(layer, trigger);
-  const listeners: string[] = [];
-  const add = layer.addEventListener.bind(layer);
-  layer.addEventListener = (type: string, ...rest: unknown[]) => {
-    listeners.push(type);
-    return (add as (type: string, ...rest: unknown[]) => void)(type, ...rest);
-  };
-  const removed: string[] = [];
-  const remove = layer.removeEventListener.bind(layer);
-  layer.removeEventListener = (type: string, ...rest: unknown[]) => {
-    removed.push(type);
-    return (remove as (type: string, ...rest: unknown[]) => void)(
-      type,
-      ...rest,
-    );
-  };
-  return {layer, trigger, listeners, removed};
+  return {layer, trigger};
 }
 
 describe('usePopoverSurfaceMotion', () => {
-  it('leaves a fine-pointer open untouched: no listener, no promotion (FR24)', () => {
-    const {layer, trigger, listeners} = layerAndTrigger();
+  it('leaves a fine-pointer open untouched: nothing created, nothing promoted, and its close start plays nothing', () => {
+    const {layer, trigger} = layerAndTrigger();
     const {result} = renderHook(() => usePopoverSurfaceMotion());
-    result.current(layer, trigger);
-    expect(listeners).not.toContain('beforetoggle');
-    expect(layer.style.willChange).toBe('');
+    result.current.present(layer, trigger);
+    result.current.closeStart();
+    expect(createPopoverSurfaceMotion).not.toHaveBeenCalled();
     expect(layer.getAttribute('style')).toBeNull();
   });
 
-  it('drives the touch presentation under a coarse pointer', () => {
+  it('under a coarse pointer, grows the popover as it opens and shrinks it as its close starts', () => {
     isTouch = true;
-    const {layer, trigger, listeners} = layerAndTrigger();
+    const {layer, trigger} = layerAndTrigger();
     const {result} = renderHook(() => usePopoverSurfaceMotion());
-    result.current(layer, trigger);
-    expect(listeners).toContain('beforetoggle');
+    result.current.present(layer, trigger);
+    const [motion] = created();
+    expect(motion.enter).toHaveBeenCalledTimes(1);
+    expect(motion.exit).not.toHaveBeenCalled();
+    result.current.closeStart();
+    expect(motion.exit).toHaveBeenCalledTimes(1);
   });
 
-  it('a fine-pointer open after a touch one keeps no touch listener (FR24)', () => {
+  it('a fine-pointer open after a touch one releases the touch motion, and its close start plays nothing', () => {
     isTouch = true;
-    const {layer, trigger, removed} = layerAndTrigger();
+    const {layer, trigger} = layerAndTrigger();
     const {result} = renderHook(() => usePopoverSurfaceMotion());
-    result.current(layer, trigger);
-    // The pointer turns fine (a keyboard attached): the next open releases
-    // the touch presentation's listener, not only its motion.
+    result.current.present(layer, trigger);
+    const [motion] = created();
+    // The pointer turns fine (a keyboard attached) for the next open.
     isTouch = false;
-    result.current(layer, trigger);
-    expect(removed).toContain('beforetoggle');
+    result.current.present(layer, trigger);
+    expect(motion.dispose).toHaveBeenCalledTimes(1);
+    result.current.closeStart();
+    expect(motion.exit).not.toHaveBeenCalled();
+  });
+
+  it('releases the motion at unmount', () => {
+    isTouch = true;
+    const {layer, trigger} = layerAndTrigger();
+    const {result, unmount} = renderHook(() => usePopoverSurfaceMotion());
+    result.current.present(layer, trigger);
+    const [motion] = created();
+    unmount();
+    expect(motion.dispose).toHaveBeenCalledTimes(1);
   });
 });

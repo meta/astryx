@@ -43,12 +43,15 @@ import {
   spacingVars,
   typographyVars,
   typeScaleVars,
+  focusVars,
 } from '../theme/tokens.stylex';
 import {composeEventHandlers, mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {useDropdownMenuContext} from './DropdownMenuContext';
+import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {menuPressLitRowStyle} from '../privateAttributes/menuPressLit.stylex';
 import {focusMenuItemOnHover} from './menuItemHover';
-import {isModifiedClick} from './menuItemRoles';
+import {isModifiedClick, keepDisabledRowUnfocused} from './menuItemRoles';
 import {themeProps} from '../utils/themeProps';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 
@@ -64,14 +67,16 @@ const menuItemStyles = stylex.create({
     color: colorVars['--color-text-primary'],
     backgroundColor: {
       default: 'transparent',
-      ':focus': colorVars['--color-overlay-hover'],
+      // menuPressLitRowStyle sets the variable on the row a held finger or pen
+      // lights.
+      ':focus': `var(--_menu-row-focus-paint, ${colorVars['--color-overlay-hover']})`,
       // The pressed look only where hover exists. Under a finger the row a
       // press BEGAN on would otherwise stay painted while the highlight (focus)
-      // moves to the row under the finger — two rows lit.
+      // moves to the row under the finger — two rows lit. A held finger or pen
+      // sets the variable on the menu. Then only the lit row keeps the look.
       '@media (hover: hover)': {
         default: null,
-        ':active:where(:not(:disabled,[aria-disabled="true"]))':
-          colorVars['--color-overlay-pressed'],
+        ':active:where(:not(:disabled,[aria-disabled="true"]))': `var(--_menu-row-active-paint, ${colorVars['--color-overlay-pressed']})`,
       },
     },
     borderWidth: 0,
@@ -81,7 +86,10 @@ const menuItemStyles = stylex.create({
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
     textAlign: 'start',
-    outline: 'none',
+    // Rows show focus with a translucent overlay, which forced colors replace
+    // with the page color. The standard focus ring (focusOutlineStyles), drawn
+    // inside the row by its own width, marks the focused row in every mode.
+    outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
   },
   disabled: {
     opacity: 0.5,
@@ -262,6 +270,10 @@ export function DropdownMenuItem({
   return (
     <Item
       {...rest}
+      onMouseDown={composeEventHandlers(
+        rest.onMouseDown,
+        isDisabled ? keepDisabledRowUnfocused : undefined,
+      )}
       ref={ref}
       // A row that navigates IS the link: its root is the application's
       // anchor, so a modified click, a middle click, copying the address and
@@ -269,7 +281,7 @@ export function DropdownMenuItem({
       // address keeps the default root.
       as={href != null ? LinkComponent : undefined}
       role="menuitem"
-      tabIndex={isDisabled ? undefined : -1}
+      tabIndex={-1}
       // The row's own handling runs first, then the caller's.
       onPointerMove={composeEventHandlers(handlePointerMove, onPointerMove)}
       {...pressable}
@@ -296,7 +308,9 @@ export function DropdownMenuItem({
       draggable={href != null ? false : undefined}
       isDisabled={isDisabled}
       xstyle={[
+        focusOutlineStyles.focusVisible,
         menuItemStyles.root,
+        menuPressLitRowStyle,
         itemSizeStyles[menuSize],
         isDestructive && menuItemStyles.destructive,
         isDisabled && menuItemStyles.disabled,

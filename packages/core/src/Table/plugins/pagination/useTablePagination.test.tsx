@@ -344,12 +344,16 @@ describe('useTablePagination', () => {
           pageSizeOptions={[10, 25, 50]}
         />,
       );
-      expect(screen.getByLabelText('Items per page')).toBeInTheDocument();
+      expect(
+        screen.getByRole('combobox', {name: 'Items per page'}),
+      ).toBeInTheDocument();
     });
 
     it('paginationProps exclude pageSizeOptions when not provided', () => {
       render(<PaginatedTable data={generateItems(50)} pageSize={10} />);
-      expect(screen.queryByLabelText('Items per page')).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('combobox', {name: 'Items per page'}),
+      ).not.toBeInTheDocument();
     });
   });
 
@@ -544,7 +548,7 @@ describe('useTablePagination', () => {
       const nextButton = screen.getByRole('button', {
         name: 'Go to next page',
       });
-      expect(nextButton).not.toBeDisabled();
+      expect(nextButton).not.toHaveAttribute('aria-disabled');
     });
 
     it('passes onPageSizeChange and pageSizeOptions', () => {
@@ -606,8 +610,8 @@ describe('useTablePagination', () => {
       const nextButton = screen.getByRole('button', {
         name: 'Go to next page',
       });
-      expect(prevButton).toBeDisabled();
-      expect(nextButton).toBeDisabled();
+      expect(prevButton).toHaveAttribute('aria-disabled', 'true');
+      expect(nextButton).toHaveAttribute('aria-disabled', 'true');
     });
 
     it('handles rapid page changes', async () => {
@@ -660,7 +664,7 @@ describe('useTablePagination', () => {
       const prevButton = screen.getByRole('button', {
         name: 'Go to previous page',
       });
-      expect(prevButton).toBeDisabled();
+      expect(prevButton).toHaveAttribute('aria-disabled', 'true');
     });
   });
 });

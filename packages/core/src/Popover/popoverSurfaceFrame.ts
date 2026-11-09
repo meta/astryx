@@ -3,13 +3,13 @@
 /**
  * @file popoverSurfaceFrame.ts
  * @input The popover's box and its source's, and UIKit's popover values
- * @output Exports `popoverCollapsedState` (where the popover grows from and
- *   the shape it starts as), `popoverFrame` (the surface at a progress of the
- *   present spring), the frame helpers the motion plays them with, and their
- *   types
+ * @output Exports `popoverCollapsedState`, where the popover grows from and
+ *   the shape it starts as. Exports `popoverFrame`, the surface at a progress
+ *   of the growth. Also exports the theme tokens that time the motion, the
+ *   frame helpers, and their types.
  * @position Internal to Popover: the pure geometry of the touch
- *   presentation, with no DOM and no animator, so a browser proof can import
- *   it on its own (popoverSurfaceMotion.ts plays it)
+ *   presentation, with no DOM and no animator. A browser proof imports it on
+ *   its own, and popoverSurfaceMotion.ts plays it.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Popover/popoverSurfaceMotion.ts
@@ -17,7 +17,30 @@
  */
 
 import type {LayerExitBox} from '../Layer/layerExitCopy';
+import type {ThemeTimingTokens} from '../motion/themeTiming';
 import {popover} from '../motion/uikit/popover';
+
+/**
+ * The growth plays `--duration-medium-min`, which in the Storybook theme is
+ * the step nearest iOS's measured growth (`popover.growMs`), with the
+ * entrance easing. A tap opens the popover, and a tap has no velocity, so no
+ * spring plays.
+ */
+export const POPOVER_ENTRANCE_TOKENS: ThemeTimingTokens = {
+  duration: '--duration-medium-min',
+  easing: '--ease-entrance',
+};
+
+/**
+ * The shrink plays the theme's exit duration and easing, which every overlay
+ * shares; iOS's measured shrink (`popover.shrinkMs`) is only a reference. A
+ * theme that sets no exit duration gets the fast duration, which is the exit
+ * duration's default.
+ */
+export const POPOVER_EXIT_TOKENS: ThemeTimingTokens = {
+  duration: '--duration-exit',
+  easing: '--ease-exit',
+};
 
 /** A box in viewport px. */
 export type PopoverSurfaceRect = LayerExitBox;
@@ -60,9 +83,9 @@ const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), max);
 
 /**
- * Where the popover meets its source and the shape it grows from: the
- * middle of the source on the popover's edge facing it (the arrow's tip),
- * kept on that edge.
+ * Where the popover meets its source, and the shape it grows from. The point
+ * is the middle of the source on the popover's edge facing it (the arrow's
+ * tip), kept on that edge.
  */
 export function popoverCollapsedState({
   surface,
@@ -74,7 +97,7 @@ export function popoverCollapsedState({
     right: surface.left - (source.left + source.width),
     left: source.left - (surface.left + surface.width),
   };
-  // The side with the widest gap is the one the popover was placed on; a
+  // The side with the widest gap is the one the popover was placed on. A
   // popover that overlaps its source grows from below, as the default.
   let side: keyof typeof gaps = 'below';
   for (const candidate of ['above', 'right', 'left'] as const) {
@@ -108,7 +131,6 @@ export function popoverCollapsedState({
 }
 
 export interface SurfaceState {
-  /** Uniform scale. */
   scale: number;
   /** Share of the full length along the axis. */
   length: number;
@@ -127,8 +149,8 @@ export function frameOf(state: SurfaceState, axis: 'x' | 'y'): PopoverFrame {
 }
 
 /**
- * The surface at progress `p` of the present spring (past 1 is the
- * spring's overshoot): what UIKit's popover view shows at that moment.
+ * The surface at progress `p` of the growth: the frame UIKit's popover view
+ * shows on its path at that progress.
  */
 export function popoverFrame(
   state: PopoverCollapsedState,
