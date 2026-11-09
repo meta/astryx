@@ -79,6 +79,26 @@ type ViewportRead = {
   scrollHeight: number;
   clientHeight: number;
 };
+/**
+ * Whether the scroller is the page's own (`document.scrollingElement`). It
+ * scrolls the viewport: its own box moves with the scroll, and its scroll
+ * events fire at the document.
+ */
+const isPageScroller = (el: HTMLElement): boolean =>
+  el === el.ownerDocument.scrollingElement;
+
+/**
+ * Where the scroller's visible area starts, in client coordinates. For the
+ * page's own scroller that is the viewport's top, not its box's top, which
+ * sits a full scroll offset above it.
+ */
+const scrollportTop = (el: HTMLElement): number =>
+  isPageScroller(el) ? 0 : el.getBoundingClientRect().top;
+
+/** Where the scroller's scroll events fire: the document for the page's. */
+const scrollEventTarget = (el: HTMLElement): HTMLElement | Document =>
+  isPageScroller(el) ? el.ownerDocument : el;
+
 const readViewport = (el: HTMLElement): ViewportRead => ({
   scrollTop: el.scrollTop,
   scrollHeight: el.scrollHeight,
@@ -257,11 +277,15 @@ export function ChatVirtualizer<T>(
       : ownScrollerRef.current;
   // The live scroller as a ref, for Core's finger-scroll watch, which reads
   // it after each commit and moves to a replaced element.
-  const liveScrollerRef = React.useRef<React.RefObject<HTMLElement | null>>({
-    get current(): HTMLElement | null {
-      return scrollElementRef.current !== undefined
-        ? scrollElementRef.current
-        : ownScrollerRef.current;
+  const liveScrollerRef = React.useRef<
+    React.RefObject<HTMLElement | Document | null>
+  >({
+    get current(): HTMLElement | Document | null {
+      const el =
+        scrollElementRef.current !== undefined
+          ? scrollElementRef.current
+          : ownScrollerRef.current;
+      return el == null ? null : scrollEventTarget(el);
     },
   }).current;
   const contentRef = React.useRef<HTMLDivElement | null>(null);
@@ -638,15 +662,15 @@ export function ChatVirtualizer<T>(
   // Same row anchorAt would pick; null when nothing is rendered.
   const anchorFromPaint = (el: HTMLElement, h: number): AnchorMode | null => {
     const g = geo.current;
-    const box = el.getBoundingClientRect();
+    const viewportTop = scrollportTop(el);
     let best: AnchorMode | null = null;
     for (const [key, rowEl] of rowEls.current) {
       if (!rowEl.isConnected || !g.index.has(key)) {
         continue;
       }
       const r = rowEl.getBoundingClientRect();
-      const top = r.top - box.top;
-      if (r.bottom - box.top <= 0 || top >= h) {
+      const top = r.top - viewportTop;
+      if (r.bottom - viewportTop <= 0 || top >= h) {
         continue;
       }
       if (best === null || top < best.viewportOffset) {
@@ -682,9 +706,7 @@ export function ChatVirtualizer<T>(
       return originRef.current;
     }
     originRef.current =
-      top.getBoundingClientRect().top -
-      el.getBoundingClientRect().top +
-      vp.scrollTop;
+      top.getBoundingClientRect().top - scrollportTop(el) + vp.scrollTop;
     belowRef.current = Math.max(
       0,
       vp.scrollHeight - originRef.current - geo.current.total,
@@ -1319,8 +1341,17 @@ export function ChatVirtualizer<T>(
     };
     setScrollAnchoringOff(el, true);
     const scrollHandler = (): void => onScrollRef.current();
-    el.addEventListener('scroll', scrollHandler, {passive: true});
+    const scrollTarget = scrollEventTarget(el);
+    scrollTarget.addEventListener('scroll', scrollHandler, {passive: true});
     el.addEventListener('wheel', onWheel, {passive: true});
+    // The page's own scroller's box does not change size with the viewport,
+    // so a window resize reaches it as a resize event instead.
+    const view = isPageScroller(el) ? el.ownerDocument.defaultView : null;
+    const onViewportResize = (): void => {
+      geoChanged.current = true;
+      syncRef.current();
+    };
+    view?.addEventListener('resize', onViewportResize, {passive: true});
     // Observe the CONTAINER too (rows alone miss clientHeight changes): a
     // window resize or a growing composer moves the end-mode target and the
     // window coverage without any row changing size. Container entries have
@@ -1328,8 +1359,9 @@ export function ChatVirtualizer<T>(
     observeSize(el);
     return () => {
       setScrollAnchoringOff(el, false);
-      el.removeEventListener('scroll', scrollHandler);
+      scrollTarget.removeEventListener('scroll', scrollHandler);
       el.removeEventListener('wheel', onWheel);
+      view?.removeEventListener('resize', onViewportResize);
       // A replaced or unmounted scroller ends the gesture with it: the
       // finger-scroll watch moves to the new element and reports no end for
       // the old one. The adjustment is dropped rather than folded — the
