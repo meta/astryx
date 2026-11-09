@@ -226,6 +226,7 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
       listed: [],
       issues: [],
       comments: [],
+      updates: [],
     });
     const github = {
       rest: {
@@ -262,6 +263,7 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
         issues: {
           create: async args => calls.issues.push(args),
           createComment: async args => calls.comments.push(args),
+          update: async args => calls.updates.push(args),
         },
       },
     };
@@ -593,6 +595,90 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
         expect(calls.issues[0].body).toContain('spec:AST-030 FR21');
       },
     );
+
+    const bot = {login: 'github-actions[bot]'};
+
+    it("closes this job's own open issue, naming the green run, once a later full unit run succeeds", async () => {
+      const calls = await run({
+        runs: [check(20, {head_sha: sha})],
+        units: [check(20)],
+        issue: {number: 42, title, user: bot},
+      });
+      expect(calls.comments).toEqual([
+        expect.objectContaining({issue_number: 42}),
+      ]);
+      expect(calls.comments[0].body).toContain(
+        'https://github.com/meta/astryx/actions/runs/20',
+      );
+      expect(calls.comments[0].body).toContain('succeeded');
+      // An unnamed run names no commit: it tested main's tip when it started.
+      expect(calls.comments[0].body).not.toMatch(/ for [0-9a-f]{7} /);
+      expect(calls.updates).toEqual([
+        expect.objectContaining({
+          issue_number: 42,
+          state: 'closed',
+          state_reason: 'completed',
+        }),
+      ]);
+      expect(calls.issues).toEqual([]);
+    });
+
+    it('names the commit a named run tested', async () => {
+      // The run's event commit differs from the commit it names, as when a
+      // dispatch races a merge.
+      const calls = await run({
+        runs: [check(20, {head_sha: sha})],
+        units: [unitAt(20, {head_sha: 'e'.repeat(40)})],
+        issue: {number: 42, title, user: bot},
+      });
+      expect(calls.comments[0].body).toContain(
+        ` for ${sha.slice(0, 7)} succeeded`,
+      );
+    });
+
+    it('leaves an issue a person opened with the same title open', async () => {
+      const calls = await run({
+        runs: [check(20, {head_sha: sha})],
+        units: [check(20)],
+        issue: {number: 43, title, user: {login: 'someone'}},
+      });
+      expect(calls.comments).toEqual([]);
+      expect(calls.updates).toEqual([]);
+    });
+
+    it('does nothing after a success when no issue is open', async () => {
+      const calls = await run({
+        runs: [check(20, {head_sha: sha})],
+        units: [check(20)],
+      });
+      expect(calls.comments).toEqual([]);
+      expect(calls.updates).toEqual([]);
+      expect(calls.issues).toEqual([]);
+    });
+
+    it('keeps the issue open while the newest full unit run did not complete', async () => {
+      const calls = await run({
+        runs: [check(20, {head_sha: sha})],
+        units: [check(20, {conclusion: 'cancelled'})],
+        issue: {number: 42, title, user: bot},
+      });
+      expect(calls.updates).toEqual([]);
+      expect(calls.comments).toEqual([
+        expect.objectContaining({issue_number: 42}),
+      ]);
+    });
+
+    it('warns and keeps going when the issue lookup fails after a success', async () => {
+      const calls = await run({
+        runs: [check(20, {head_sha: sha})],
+        units: [check(20)],
+        issue: 'unavailable',
+      });
+      expect(calls.updates).toEqual([]);
+      expect(calls.warnings.join('\n')).toMatch(
+        /Could not close the unit-run issue/,
+      );
+    });
 
     it('comments on the open guardian issue instead of opening another', async () => {
       const calls = await run({

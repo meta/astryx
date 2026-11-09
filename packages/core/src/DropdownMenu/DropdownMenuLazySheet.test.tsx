@@ -14,7 +14,7 @@
  */
 
 import {describe, it, expect, vi, beforeEach} from 'vitest';
-import {render, screen, act} from '@testing-library/react';
+import {render, screen, act, getConfig} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const sheetLoad = vi.hoisted(() => {
@@ -84,6 +84,29 @@ if ('eager' in sheetCode) {
   );
 }
 
+/**
+ * The row named `name`, once it renders, read once a frame for up to
+ * `frames` frames. A worker that stalls loses frames, not a wall-clock
+ * budget. React runs outside `act` meanwhile, as in a `findBy` query.
+ */
+async function rowWithinFrames(
+  name: string,
+  frames: number,
+): Promise<HTMLElement | null> {
+  return getConfig().asyncWrapper(async () => {
+    for (let frame = 0; frame < frames; frame++) {
+      const row = screen.queryByRole('button', {name});
+      if (row != null) {
+        return row;
+      }
+      await new Promise<void>(resolve => {
+        requestAnimationFrame(() => resolve());
+      });
+    }
+    return screen.queryByRole('button', {name});
+  });
+}
+
 beforeEach(() => {
   HTMLDialogElement.prototype.showModal = vi.fn(function (
     this: HTMLDialogElement,
@@ -150,14 +173,17 @@ describe('DropdownMenu touch sheet loaded on demand', () => {
     });
     expect(screen.queryByRole('button', {name: 'Edit project'})).toBeNull();
 
-    // The sheet's modules arrive, and React renders what they let through.
+    // The sheet's modules arrive.
     await act(async () => {
       sheetLoad.release();
-      await Promise.all([
-        import('./MenuBottomSheet'),
-        import('./MenuBottomSheetActionList'),
-      ]);
     });
+    // React renders the rows when the dropdown's own loads settle. On a busy
+    // machine that can be after this act, so wait for the rows themselves.
+    const action = await rowWithinFrames('Edit project', 120);
+    expect(
+      action,
+      'the rows render within 120 frames of the load',
+    ).not.toBeNull();
 
     // The dropdown focuses the first row a frame after the rows appear. The
     // frame this awaits runs after that one.
@@ -166,6 +192,6 @@ describe('DropdownMenu touch sheet loaded on demand', () => {
         requestAnimationFrame(() => resolve());
       });
     });
-    expect(screen.getByRole('button', {name: 'Edit project'})).toHaveFocus();
+    expect(action).toHaveFocus();
   });
 });

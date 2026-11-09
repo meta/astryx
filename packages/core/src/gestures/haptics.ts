@@ -45,6 +45,7 @@ import {
 } from '../motion/uikit/gestures';
 import {isDisabledControl} from '../utils/pressDisabled';
 import {markHapticSwitch} from '../privateAttributes/hapticSwitch.stylex';
+import {isHTMLElement} from '../utils/nodeType';
 
 /** Whether this browser vibrates at all. */
 export function canVibrate(): boolean {
@@ -112,7 +113,9 @@ function swallow(event: Event): void {
 export function attachTapHaptic(label: HTMLLabelElement): () => void {
   const existing = label.control;
   if (
-    (existing instanceof HTMLInputElement && isSwitch(existing)) ||
+    (isHTMLElement(existing) &&
+      existing.localName === 'input' &&
+      isSwitch(existing as HTMLInputElement)) ||
     (existing != null && label.htmlFor !== '')
   ) {
     return () => {};
@@ -143,7 +146,7 @@ export function attachTapHaptic(label: HTMLLabelElement): () => void {
   const onFocus = (event: FocusEvent) => {
     const previous = event.relatedTarget;
     if (
-      existing instanceof HTMLElement &&
+      isHTMLElement(existing) &&
       existing.tabIndex >= 0 &&
       !isDisabledControl(existing)
     ) {
@@ -152,7 +155,7 @@ export function attachTapHaptic(label: HTMLLabelElement): () => void {
     if (doc.activeElement !== input) {
       return;
     }
-    if (previous instanceof HTMLElement && previous.isConnected) {
+    if (isHTMLElement(previous) && previous.isConnected) {
       previous.focus({preventScroll: true});
     }
     if (doc.activeElement === input) {
@@ -171,7 +174,7 @@ export function attachTapHaptic(label: HTMLLabelElement): () => void {
   if (existing != null) {
     label.prepend(input);
     if (
-      existing instanceof HTMLElement &&
+      isHTMLElement(existing) &&
       !existing.hasAttribute('aria-labelledby') &&
       !existing.hasAttribute('aria-label')
     ) {

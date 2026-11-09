@@ -10,13 +10,14 @@
  */
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
-import {render, screen, fireEvent, act} from '@testing-library/react';
-import {createContext, createRef, use, useState} from 'react';
+import {render, screen, fireEvent, act, waitFor} from '@testing-library/react';
+import {StrictMode, createContext, createRef, use, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Drawer} from './Drawer';
 import {DrawerHeader} from './DrawerHeader';
 import {Button} from '../Button';
 import {ButtonGroup} from '../ButtonGroup';
+import {Tooltip} from '../Tooltip/Tooltip';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 
@@ -509,15 +510,19 @@ describe('Drawer', () => {
           </Drawer>
         </ButtonGroup>,
       );
-      expect(screen.getByRole('button', {name: 'Outer member'})).toBeDisabled();
+      expect(
+        screen.getByRole('button', {name: 'Outer member'}),
+      ).toHaveAttribute('aria-disabled', 'true');
       const independent = screen.getByRole('button', {name: 'Independent'});
-      expect(independent).toBeEnabled();
+      expect(independent).not.toHaveAttribute('aria-disabled');
       fireEvent.click(independent);
       expect(press).toHaveBeenCalledOnce();
       expect(
         screen.getByRole('button', {name: 'Explicit disabled'}),
-      ).toBeDisabled();
-      expect(screen.getByRole('button', {name: 'Inner member'})).toBeDisabled();
+      ).toHaveAttribute('aria-disabled', 'true');
+      expect(
+        screen.getByRole('button', {name: 'Inner member'}),
+      ).toHaveAttribute('aria-disabled', 'true');
     });
 
     it('keeps unrelated application contexts flowing into drawer content', () => {
@@ -1367,5 +1372,260 @@ describe('Drawer', () => {
         ),
       ).toBe('0px');
     });
+  });
+});
+
+describe('Drawer without a scrim, opened from the keyboard', () => {
+  it('lets a focused control open its tooltip after the show, with no error', async () => {
+    // A <dialog>'s showPopover() runs the dialog focusing steps and focuses
+    // its first control inside the show. After a key press that focus is
+    // :focus-visible, so the control's tooltip asks to show while the
+    // drawer's show is still running, which the browser refuses with an
+    // InvalidStateError. This stand-in refuses the same way.
+    let showing = 0;
+    const tooltipShows: HTMLElement[] = [];
+    HTMLElement.prototype.showPopover = vi.fn(function (this: HTMLElement) {
+      if (showing > 0) {
+        throw new DOMException(
+          'Invalid to show a popover during another show operation',
+          'InvalidStateError',
+        );
+      }
+      showing++;
+      try {
+        this.setAttribute('open', '');
+        if (this instanceof HTMLDialogElement) {
+          this.querySelector<HTMLElement>('button')?.focus();
+        } else {
+          tooltipShows.push(this);
+        }
+      } finally {
+        showing--;
+      }
+    });
+    const matches = Element.prototype.matches;
+    vi.spyOn(Element.prototype, 'matches').mockImplementation(function (
+      this: Element,
+      selector: string,
+    ) {
+      if (selector === ':focus-visible') {
+        return true;
+      }
+      return matches.call(this, selector);
+    });
+    const errors: unknown[] = [];
+    const onError = (event: ErrorEvent) => {
+      errors.push(event.error);
+      event.preventDefault();
+    };
+    window.addEventListener('error', onError);
+    try {
+      const {rerender} = render(
+        <Drawer
+          isOpen={false}
+          onOpenChange={() => {}}
+          label="Filters"
+          hasScrim={false}>
+          <Tooltip content="Close the filters">
+            <button type="button">Close</button>
+          </Tooltip>
+        </Drawer>,
+      );
+      rerender(
+        <Drawer isOpen onOpenChange={() => {}} label="Filters" hasScrim={false}>
+          <Tooltip content="Close the filters">
+            <button type="button">Close</button>
+          </Tooltip>
+        </Drawer>,
+      );
+      expect(document.activeElement).toBe(
+        screen.getByRole('button', {name: 'Close', hidden: true}),
+      );
+      await waitFor(() => expect(tooltipShows.length).toBeGreaterThan(0));
+      expect(errors).toEqual([]);
+    } finally {
+      window.removeEventListener('error', onError);
+    }
+  });
+});
+
+// A same-name native radio group is one Tab stop: its checked radio, or its
+// first when none is checked. Medium is checked and is neither first nor last.
+function SizeRadios({name}: {name: string}) {
+  return (
+    <fieldset>
+      <legend>Size</legend>
+      <input type="radio" name={name} value="s" aria-label="Small" />
+      <input
+        type="radio"
+        name={name}
+        value="m"
+        aria-label="Medium"
+        defaultChecked
+      />
+      <input type="radio" name={name} value="l" aria-label="Large" />
+    </fieldset>
+  );
+}
+
+function expectRadioGroupEndsTheCycle() {
+  const medium = screen.getByRole('radio', {name: 'Medium', hidden: true});
+  const first = screen.getByRole('button', {name: 'First', hidden: true});
+  medium.focus();
+  expect(fireEvent.keyDown(medium, {key: 'Tab'})).toBe(false);
+  expect(first).toHaveFocus();
+  expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(medium).toHaveFocus();
+}
+
+function expectRadioGroupStartsTheCycle() {
+  const medium = screen.getByRole('radio', {name: 'Medium', hidden: true});
+  const last = screen.getByRole('button', {name: 'Last', hidden: true});
+  medium.focus();
+  expect(fireEvent.keyDown(medium, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(last).toHaveFocus();
+  expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+  expect(medium).toHaveFocus();
+}
+
+describe('Drawer focus region: a radio group is one Tab stop', () => {
+  it('wraps Tab from the checked radio of a group that ends the drawer', () => {
+    render(
+      <Drawer isOpen onOpenChange={() => {}} label="Details">
+        <button type="button">First</button>
+        <SizeRadios name="size" />
+      </Drawer>,
+    );
+    expectRadioGroupEndsTheCycle();
+  });
+
+  it('wraps Shift+Tab from the checked radio of a group that starts the drawer', () => {
+    render(
+      <Drawer isOpen onOpenChange={() => {}} label="Details">
+        <SizeRadios name="size" />
+        <button type="button">Last</button>
+      </Drawer>,
+    );
+    expectRadioGroupStartsTheCycle();
+  });
+});
+
+// FR8: a drawer that unmounts while open (rendered only while open, or
+// removed with the rest of a view) returns focus to the element focused before
+// it opened, as a close does.
+describe('Drawer unmounting while open', () => {
+  // Read at collection, before any test replaces `matches`, so the stand-in
+  // below never calls itself.
+  const nativeMatches = Element.prototype.matches;
+
+  // A browser hides a popover host when it leaves the document, and a
+  // non-modal drawer sets no `open` attribute. The file's stand-ins set
+  // `open`, which jsdom keeps after removal.
+  beforeEach(() => {
+    const showing = new WeakSet<HTMLElement>();
+    HTMLElement.prototype.showPopover = vi.fn(function (this: HTMLElement) {
+      showing.add(this);
+    });
+    HTMLElement.prototype.hidePopover = vi.fn(function (this: HTMLElement) {
+      showing.delete(this);
+    });
+    vi.spyOn(HTMLElement.prototype, 'matches').mockImplementation(function (
+      this: HTMLElement,
+      selector: string,
+    ) {
+      return selector === ':popover-open'
+        ? showing.has(this) && this.isConnected
+        : nativeMatches.call(this, selector);
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function Inspector({
+    unmountWith,
+    hasScrim,
+  }: {
+    unmountWith: 'save' | 'view';
+    hasScrim: boolean;
+  }) {
+    const [isEditing, setIsEditing] = useState(false);
+    const [showView, setShowView] = useState(true);
+    return (
+      <>
+        <button type="button" onClick={() => setIsEditing(true)}>
+          Edit
+        </button>
+        <button type="button">Elsewhere</button>
+        {showView && isEditing ? (
+          <Drawer
+            isOpen
+            onOpenChange={setIsEditing}
+            label="Edit row"
+            hasScrim={hasScrim}>
+            <button
+              type="button"
+              onClick={() =>
+                unmountWith === 'save'
+                  ? setIsEditing(false)
+                  : setShowView(false)
+              }>
+              Save
+            </button>
+          </Drawer>
+        ) : null}
+      </>
+    );
+  }
+
+  function openAndFocusSave(): HTMLElement {
+    const edit = screen.getByRole('button', {name: 'Edit'});
+    edit.focus();
+    fireEvent.click(edit);
+    const save = screen.getByRole('button', {name: 'Save'});
+    save.focus();
+    return edit;
+  }
+
+  for (const hasScrim of [false, true]) {
+    for (const unmountWith of ['save', 'view'] as const) {
+      it(`returns focus to the opener (${hasScrim ? 'modal' : 'non-modal'}, ${unmountWith})`, async () => {
+        render(<Inspector unmountWith={unmountWith} hasScrim={hasScrim} />);
+        const edit = openAndFocusSave();
+
+        fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+        await Promise.resolve();
+
+        expect(screen.queryByRole('button', {name: 'Save'})).toBeNull();
+        expect(edit).toHaveFocus();
+      });
+    }
+  }
+
+  it('leaves focus where the user moved it before the unmount', async () => {
+    render(<Inspector unmountWith="save" hasScrim={false} />);
+    openAndFocusSave();
+    const save = screen.getByRole('button', {name: 'Save'});
+    const elsewhere = screen.getByRole('button', {name: 'Elsewhere'});
+    elsewhere.focus();
+
+    // The drawer's own control unmounts it while focus is outside.
+    fireEvent.click(save);
+    await Promise.resolve();
+
+    expect(elsewhere).toHaveFocus();
+  });
+
+  it('a StrictMode remount leaves focus inside the open drawer', async () => {
+    render(
+      <StrictMode>
+        <Inspector unmountWith="save" hasScrim={false} />
+      </StrictMode>,
+    );
+    openAndFocusSave();
+    await Promise.resolve();
+
+    expect(screen.getByRole('button', {name: 'Save'})).toHaveFocus();
   });
 });

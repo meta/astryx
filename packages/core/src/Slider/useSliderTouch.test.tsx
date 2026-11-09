@@ -469,6 +469,86 @@ describe('Slider touch presentation (UISlider tracking)', () => {
     expect(onChangeEnd).toHaveBeenCalledWith(50);
   });
 
+  it('commits nothing for a pen press that a window blur cancels, on the thumb or on the track, at its later lift either (spec:AST-094 FR44)', async () => {
+    stubMatchMedia(true);
+    stubControlGeometry();
+    const onChange = vi.fn();
+    const onChangeEnd = vi.fn();
+    await renderTouch(
+      <Controlled initial={50} onChange={onChange} onChangeEnd={onChangeEnd} />,
+    );
+    const hit = hitOf(screen.getByRole('slider'));
+    const control = document.querySelector(
+      '.astryx-slider-control',
+    ) as HTMLElement;
+    for (const [target, x] of [
+      [hit, 150],
+      [control, 250],
+    ] as const) {
+      const start = nextStart();
+      pen('pointerdown', target, x, 12, start);
+      act(() => {
+        window.dispatchEvent(new Event('blur'));
+      });
+      pen('pointerup', target, x, 12, start + 80);
+      act(() => {
+        target.dispatchEvent(
+          new MouseEvent('click', {bubbles: true, cancelable: true, detail: 1}),
+        );
+      });
+      for (let frame = 0; frame < 40; frame++) {
+        await act(async () => {
+          vi.advanceTimersByTime(16);
+        });
+      }
+    }
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onChangeEnd).not.toHaveBeenCalled();
+    expect(screen.getByRole('slider')).toHaveAttribute('aria-valuenow', '50');
+  });
+
+  it('commits nothing for a pen press that a window blur cancels under a fine primary pointer too (spec:AST-094 FR44)', async () => {
+    stubMatchMedia(false);
+    stubControlGeometry();
+    const onChange = vi.fn();
+    const onChangeEnd = vi.fn();
+    await renderTouch(
+      <Controlled initial={50} onChange={onChange} onChangeEnd={onChangeEnd} />,
+    );
+    const hit = hitOf(screen.getByRole('slider'));
+    const control = document.querySelector(
+      '.astryx-slider-control',
+    ) as HTMLElement;
+    for (const [target, x] of [
+      [hit, 150],
+      [control, 250],
+    ] as const) {
+      const start = nextStart();
+      pen('pointerdown', target, x, 12, start);
+      act(() => {
+        window.dispatchEvent(new Event('blur'));
+      });
+      // The microtask after the blur, where an armed press's listeners go.
+      await act(async () => {
+        await Promise.resolve();
+      });
+      pen('pointerup', target, x, 12, start + 80);
+      act(() => {
+        target.dispatchEvent(
+          new MouseEvent('click', {bubbles: true, cancelable: true, detail: 1}),
+        );
+      });
+      for (let frame = 0; frame < 40; frame++) {
+        await act(async () => {
+          vi.advanceTimersByTime(16);
+        });
+      }
+    }
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onChangeEnd).not.toHaveBeenCalled();
+    expect(screen.getByRole('slider')).toHaveAttribute('aria-valuenow', '50');
+  });
+
   it('fires onChangeEnd once, from the end of the touch, never again on a later render', async () => {
     stubMatchMedia(true);
     stubControlGeometry();

@@ -10,11 +10,15 @@
  */
 
 import {use} from 'react';
-import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 
 export type TopNavSlot = 'start' | 'center' | 'end';
 
-export const TopNavSlotContext = createContext<TopNavSlot>('start');
+export const TopNavSlotContext = createLayerScopedContext<TopNavSlot>(
+  'TopNavSlotContext',
+  1,
+  'start',
+);
 TopNavSlotContext.displayName = 'TopNavSlotContext';
 
 export function useTopNavSlot(): TopNavSlot {

@@ -3,9 +3,10 @@
 /**
  * @file actionGroupTracker.ts
  * @input The tracked elements, the action selector and hit expansion, and the
- *   press paint and fade clocks
+ *   press paint and the press controller's fade clock
  * @output createActionGroupTracker, ActionGroupTracker,
- *   ActionGroupTrackerOptions, ActionGroupTarget
+ *   ActionGroupTrackerOptions, ActionGroupTarget, measureActions (the actions
+ *   the tracker tracks, measured) and DISABLED_SELECTOR (the actions it skips)
  * @position Internal core tracker for a held finger that slides across a
  *   group of actions. Gesture recognizers drive it.
  *
@@ -14,11 +15,10 @@
 
 import {clickAndReport, clickForLift} from '../utils/browserClickWait';
 import {armClickGuard} from '../utils/clickGuard';
-import {PRESSED_ATTRIBUTE} from '../utils/pressFeedback';
-import {PRESS_FADE_MS} from '../utils/pressGesture';
+import {PRESSED_ATTRIBUTE, pressFadeMs} from '../utils/pressFeedback';
 
 /** An action that is not enabled takes no highlight and does not run. */
-const DISABLED = ':disabled, [aria-disabled="true"]';
+export const DISABLED_SELECTOR = ':disabled, [aria-disabled="true"]';
 
 /** A target the tracker measured: its element and viewport rect, px. */
 export interface ActionGroupTarget {
@@ -29,11 +29,38 @@ export interface ActionGroupTarget {
   readonly bottom: number;
 }
 
+/**
+ * The actions under `roots` that `itemSelector` selects, that are enabled and
+ * that `isItem` keeps, in document order. Each box is read once.
+ */
+export function measureActions(
+  roots: Iterable<Element | null | undefined>,
+  itemSelector: string,
+  isItem?: (element: HTMLElement) => boolean,
+): ActionGroupTarget[] {
+  const targets: ActionGroupTarget[] = [];
+  for (const root of roots) {
+    if (root == null) {
+      continue;
+    }
+    for (const element of root.querySelectorAll<HTMLElement>(itemSelector)) {
+      if (element.matches(DISABLED_SELECTOR) || isItem?.(element) === false) {
+        continue;
+      }
+      const {left, top, right, bottom} = element.getBoundingClientRect();
+      targets.push({element, left, top, right, bottom});
+    }
+  }
+  return targets;
+}
+
 export interface ActionGroupTrackerOptions {
   /** The elements whose actions are tracked, read when a press begins. */
   roots: () => Iterable<Element | null | undefined>;
   /** Selects the actions inside the roots. */
   itemSelector: string;
+  /** Keeps only the actions this accepts among those `itemSelector` selects. */
+  isItem?: (element: HTMLElement) => boolean;
   /** How far outside an action the finger keeps it highlighted, px. */
   highlightExpansion: number;
   /**
@@ -57,7 +84,8 @@ export interface ActionGroupTrackerOptions {
    * target past the group's ends commits the lift there wherever the finger
    * lifts.
    * @default the target whose rect, grown by `highlightExpansion`, holds the
-   *   point; none between or outside them
+   *   point, the one the press landed on where several do; none between or
+   *   outside them
    */
   resolveTarget?: (
     x: number,
@@ -83,8 +111,13 @@ export interface ActionGroupTracker {
   /**
    * A press began at viewport (x, y): read the actions' rects once and
    * highlight the one under it. An inert press is taken but tracks nothing.
+   * `landed` is the node the press landed on.
    */
-  begin(x: number, y: number, options?: {inert?: boolean}): void;
+  begin(
+    x: number,
+    y: number,
+    options?: {inert?: boolean; landed?: Node | null},
+  ): void;
   /** The finger moved to viewport (x, y). */
   move(x: number, y: number): void;
   /**
@@ -150,6 +183,7 @@ export function createActionGroupTracker(
   let actions: TrackedAction[] = [];
   let highlighted: HTMLElement | null = null;
   let beganOn: HTMLElement | null = null;
+  let landedOn: Node | null = null;
   let isTracking = false;
   let isInert = false;
   // The finger's last position: `remeasure` resolves it again.
@@ -186,6 +220,8 @@ export function createActionGroupTracker(
     }
     clearFade(element);
     element.setAttribute(PRESSED_ATTRIBUTE, 'fading');
+    // The stylesheet's release follows the theme's tempo, so the fade ends on
+    // the press controller's clock.
     fades.set(
       element,
       setTimeout(() => {
@@ -193,7 +229,7 @@ export function createActionGroupTracker(
         if (element.getAttribute(PRESSED_ATTRIBUTE) === 'fading') {
           element.removeAttribute(PRESSED_ATTRIBUTE);
         }
-      }, PRESS_FADE_MS),
+      }, pressFadeMs(element)),
     );
   };
 
@@ -213,27 +249,8 @@ export function createActionGroupTracker(
   };
 
   const measure = (): TrackedAction[] => {
-    const {roots, itemSelector} = getOptions();
-    const next: TrackedAction[] = [];
-    for (const root of roots()) {
-      if (root == null) {
-        continue;
-      }
-      for (const element of root.querySelectorAll<HTMLElement>(itemSelector)) {
-        if (element.matches(DISABLED)) {
-          continue;
-        }
-        const rect = element.getBoundingClientRect();
-        next.push({
-          element,
-          left: rect.left,
-          top: rect.top,
-          right: rect.right,
-          bottom: rect.bottom,
-        });
-      }
-    }
-    return next;
+    const {roots, itemSelector, isItem} = getOptions();
+    return measureActions(roots(), itemSelector, isItem);
   };
 
   const actionAt = (x: number, y: number): HTMLElement | null => {
@@ -241,6 +258,9 @@ export function createActionGroupTracker(
     if (resolveTarget != null) {
       return actions.length === 0 ? null : resolveTarget(x, y, actions);
     }
+    // Rects that share an edge, or that have no layout (a test renderer), can
+    // both hold the point: the one the press landed on wins.
+    let first: HTMLElement | null = null;
     for (const action of actions) {
       if (
         x >= action.left - margin &&
@@ -248,22 +268,26 @@ export function createActionGroupTracker(
         y >= action.top - margin &&
         y <= action.bottom + margin
       ) {
-        return action.element;
+        if (landedOn != null && action.element.contains(landedOn)) {
+          return action.element;
+        }
+        first ??= action.element;
       }
     }
-    return null;
+    return first;
   };
 
   const reset = () => {
     actions = [];
     highlighted = null;
     beganOn = null;
+    landedOn = null;
     isTracking = false;
     isInert = false;
   };
 
   return {
-    begin(x, y, {inert = false} = {}) {
+    begin(x, y, {inert = false, landed = null} = {}) {
       // A press can begin while another is tracked, when a second recognizer
       // takes over the finger (a trigger's held press, then the menu's): the
       // action the first one lit loses its paint.
@@ -276,6 +300,7 @@ export function createActionGroupTracker(
       highlighted = null;
       isTracking = true;
       isInert = inert;
+      landedOn = landed;
       lastX = x;
       lastY = y;
       getOptions().onMove?.(x, y);
@@ -306,7 +331,7 @@ export function createActionGroupTracker(
         return null;
       }
       release(lifted);
-      if (lifted.matches(DISABLED)) {
+      if (lifted.matches(DISABLED_SELECTOR)) {
         return null;
       }
       const {onActivate, onActivated, swallowsNativeClick} = getOptions();

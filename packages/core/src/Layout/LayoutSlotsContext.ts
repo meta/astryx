@@ -13,7 +13,7 @@
  * - /packages/core/src/Layout/Layout/index.ts
  */
 
-import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 
 /**
  * Information about which layout slots are filled.
@@ -47,6 +47,9 @@ export const DEFAULT_LAYOUT_SLOTS: LayoutSlots = {
  * Content area components use this to determine if they are at an edge
  * (for applying outer padding).
  */
-export const LayoutSlotsContext =
-  createContext<LayoutSlots>(DEFAULT_LAYOUT_SLOTS);
+export const LayoutSlotsContext = createLayerScopedContext<LayoutSlots>(
+  'LayoutSlotsContext',
+  1,
+  DEFAULT_LAYOUT_SLOTS,
+);
 LayoutSlotsContext.displayName = 'LayoutSlotsContext';

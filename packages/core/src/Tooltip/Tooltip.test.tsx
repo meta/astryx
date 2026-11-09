@@ -120,7 +120,7 @@ describe('Tooltip', () => {
   });
 
   describe('content taller than the room above and below (spec:AST-059 FR4)', () => {
-    it('carries the anchor-clear fallback list, so it never settles over its trigger', async () => {
+    it('carries its one combined fallback list from the start, so it never settles over its trigger', async () => {
       render(
         <Tooltip content="Tall tooltip" isDefaultOpen placement="below">
           <button type="button">Trigger</button>
@@ -131,13 +131,8 @@ describe('Tooltip', () => {
         expect(el).not.toBeNull();
         return el;
       });
-      expect(tooltip.style.positionTryFallbacks).toMatch(
-        /^var\(--_astryx-layer-try-fallbacks, /,
-      );
-      expect(
-        tooltip.style.getPropertyValue('--_astryx-layer-clear-fallbacks'),
-      ).toBe(
-        '--astryx-layer-beside-end, --astryx-layer-beside-start, flip-block, --astryx-layer-fit-below, --astryx-layer-fit-above',
+      expect(tooltip.style.positionTryFallbacks).toBe(
+        'flip-block, --astryx-layer-beside-end, --astryx-layer-beside-start, --astryx-layer-fit-below, --astryx-layer-fit-above',
       );
     });
   });
@@ -358,6 +353,51 @@ describe('Tooltip', () => {
   });
 
   describe('controlled', () => {
+    /** Whether the tooltip's layer is open. */
+    const isShown = () =>
+      screen
+        .getByRole('tooltip', {hidden: true})
+        .closest<HTMLElement>('[popover]')
+        ?.matches(':popover-open') ?? false;
+
+    it('reports keyboard-focus intent once while held closed, and shows nothing', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Tooltip
+          content="Held"
+          isOpen={false}
+          onOpenChange={onOpenChange}
+          delay={0}>
+          <button type="button">Trigger</button>
+        </Tooltip>,
+      );
+      const trigger = screen.getByRole('button', {name: 'Trigger'});
+      const realMatches = trigger.matches.bind(trigger);
+      vi.spyOn(trigger, 'matches').mockImplementation((selector: string) =>
+        selector === ':focus-visible' ? true : realMatches(selector),
+      );
+      fireEvent.keyDown(document, {key: 'Tab'});
+      fireEvent.focusIn(trigger);
+      await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(true));
+      await new Promise(r => setTimeout(r, 20));
+      expect(onOpenChange).toHaveBeenCalledTimes(1);
+      expect(isShown()).toBe(false);
+    });
+
+    it('reports Escape as onOpenChange(false) while held open, and stays shown', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Tooltip content="Held" isOpen onOpenChange={onOpenChange} delay={0}>
+          <button type="button">Trigger</button>
+        </Tooltip>,
+      );
+      await waitFor(() => expect(isShown()).toBe(true));
+      onOpenChange.mockClear();
+      fireEvent.keyDown(document, {key: 'Escape'});
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+      expect(isShown()).toBe(true);
+    });
+
     // Escape asks a controlled tooltip to close by calling this same handler,
     // so a consumer who complies sees the request and then this echo. Pinning
     // the echo here keeps the two straight.
@@ -547,6 +587,50 @@ describe('Tooltip', () => {
       fireEvent.click(trigger);
       await waitFor(() => {
         expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+    });
+
+    it('stays open when a pen that lands and stays down past the hover delay lifts', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Tooltip content="Tooltip text" onOpenChange={onOpenChange} delay={0}>
+          Abbreviation
+        </Tooltip>,
+      );
+
+      const trigger = screen.getByText('Abbreviation');
+      // A pen in range hovers like a mouse: its arrival starts the hover show.
+      fireEvent.pointerEnter(trigger, {pointerType: 'pen'});
+      fireEvent.mouseEnter(trigger);
+      fireEvent.pointerDown(trigger, {pointerType: 'pen'});
+      // The pen stays down past the hover delay, then lifts.
+      await new Promise(resolve => setTimeout(resolve, 50));
+      fireEvent.pointerUp(trigger, {pointerType: 'pen'});
+      fireEvent.click(trigger);
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+      expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    });
+
+    it('still opens on a mouse hover after its delay, and a mouse press still closes it', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Tooltip content="Tooltip text" onOpenChange={onOpenChange} delay={20}>
+          Abbreviation
+        </Tooltip>,
+      );
+
+      const trigger = screen.getByText('Abbreviation');
+      fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
+      fireEvent.mouseEnter(trigger);
+      expect(onOpenChange).not.toHaveBeenCalled();
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+      fireEvent.pointerDown(trigger, {pointerType: 'mouse'});
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenLastCalledWith(false);
       });
     });
 
@@ -979,18 +1063,15 @@ describe('Tooltip surface press', () => {
   });
 });
 
-describe('Tooltip triggerBehavior on every input (component:Tooltip FR5, FR9)', () => {
+describe('Tooltip on every input (component:Tooltip FR5)', () => {
   beforeEach(() => {
     __resetInteractionModalityForTest();
   });
 
-  type Behavior = 'adaptive' | 'hover' | 'toggle';
-
-  /** An info-only trigger: a span, or under the toggle the button it pins. */
+  /** An info-only trigger: a span, or a button. */
   function setup(
-    triggerBehavior?: Behavior,
     touchTrigger?: 'auto' | 'tap' | 'none',
-    trigger = triggerBehavior === 'toggle' ? 'button' : 'span',
+    trigger: 'span' | 'button' = 'span',
   ) {
     const onOpenChange = vi.fn<(open: boolean) => void>();
     render(
@@ -998,7 +1079,6 @@ describe('Tooltip triggerBehavior on every input (component:Tooltip FR5, FR9)', 
         content="Billed monthly"
         delay={0}
         onOpenChange={onOpenChange}
-        triggerBehavior={triggerBehavior}
         touchTrigger={touchTrigger}>
         {trigger === 'button' ? (
           <button type="button">Billing</button>
@@ -1026,21 +1106,16 @@ describe('Tooltip triggerBehavior on every input (component:Tooltip FR5, FR9)', 
       setTimeout(resolve, 50);
     });
 
-  describe.each([
-    ['adaptive by default', undefined, true],
-    ['adaptive', 'adaptive', true],
-    ['hover', 'hover', false],
-    ['toggle', 'toggle', true],
-  ] as const)('%s', (_, behavior, tapOpens) => {
+  describe('on an info-only trigger', () => {
     it('a mouse hover previews it', async () => {
-      const {trigger, opened} = setup(behavior);
+      const {trigger, opened} = setup();
       fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
       fireEvent.mouseEnter(trigger);
       await waitFor(() => expect(opened()).toBe(true));
     });
 
     it('keyboard focus previews it', async () => {
-      const {trigger, opened} = setup(behavior);
+      const {trigger, opened} = setup();
       const realMatches = trigger.matches.bind(trigger);
       vi.spyOn(trigger, 'matches').mockImplementation((selector: string) =>
         selector === ':focus-visible' ? true : realMatches(selector),
@@ -1051,19 +1126,19 @@ describe('Tooltip triggerBehavior on every input (component:Tooltip FR5, FR9)', 
     });
 
     it.each(['touch', 'pen'] as const)(
-      `a %s tap ${tapOpens ? 'opens' : 'never opens'} it`,
+      'a %s tap opens it',
       async pointerType => {
-        const {trigger, opened} = setup(behavior);
+        const {trigger, opened} = setup();
         tap(trigger, pointerType);
         await settle();
-        expect(opened()).toBe(tapOpens);
+        expect(opened()).toBe(true);
       },
     );
 
     it.each(['mouse click', 'touch tap'] as const)(
-      `a %s on a button trigger ${behavior === 'toggle' ? 'pins it' : 'pins nothing'}`,
+      'a %s on a button trigger pins nothing',
       async press => {
-        const {trigger} = setup(behavior, undefined, 'button');
+        const {trigger} = setup(undefined, 'button');
         if (press === 'mouse click') {
           fireEvent.pointerDown(trigger, {pointerType: 'mouse'});
           fireEvent.pointerUp(trigger, {pointerType: 'mouse'});
@@ -1072,28 +1147,21 @@ describe('Tooltip triggerBehavior on every input (component:Tooltip FR5, FR9)', 
           tap(trigger, 'touch');
         }
         await settle();
-        expect(trigger.getAttribute('aria-expanded')).toBe(
-          behavior === 'toggle' ? 'true' : null,
-        );
+        expect(trigger).not.toHaveAttribute('aria-expanded');
       },
     );
   });
 
   it.each([
-    ['adaptive', 'none', 'span', 'decides: no tap opens it', false],
-    ['adaptive', 'tap', 'button', 'decides: every tap opens it', true],
-    ['hover', 'tap', 'button', 'is ignored: no tap opens it', false],
-    ['toggle', 'none', 'button', 'is ignored: a tap pins it', true],
+    ['none', 'span', 'no tap opens it', false],
+    ['tap', 'button', 'every tap opens it', true],
   ] as const)(
-    'beside triggerBehavior="%s", touchTrigger="%s" on a %s %s',
-    async (behavior, touchTrigger, trigger, _, tapOpens) => {
-      const tip = setup(behavior, touchTrigger, trigger);
+    'touchTrigger="%s" on a %s decides: %s',
+    async (touchTrigger, trigger, _, tapOpens) => {
+      const tip = setup(touchTrigger, trigger);
       tap(tip.trigger, 'touch');
       await settle();
       expect(tip.opened()).toBe(tapOpens);
-      if (behavior === 'toggle') {
-        expect(tip.trigger.getAttribute('aria-expanded')).toBe('true');
-      }
     },
   );
 });

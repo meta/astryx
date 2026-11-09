@@ -299,3 +299,319 @@ describe('WheelSegmenter: a slowing drag with a merged wheel', () => {
     expect(liftTime(10)).toBe(control);
   });
 });
+
+/** Wheel times from the gaps between them, from 0 ms. */
+function timesOf(gaps: ReadonlyArray<number>): number[] {
+  const times = [0];
+  for (const gap of gaps) {
+    times.push(times[times.length - 1] + gap);
+  }
+  return times;
+}
+
+/**
+ * Two trackpad flicks a stalled page received in WebKit: 12 px steps, then a
+ * glide shrinking 1 px a frame. The page received some of the glide late and
+ * merged the wheels it held.
+ */
+const STALLED_FLICKS = [
+  {
+    name: 'a late step, then a merge of the rest',
+    deltas: [12, 12, 12, 12, 12, 12, 12, 36, 12, 12, 11, 10, 17, 7, 11, 4, 6],
+    gaps: [16, 27, 0, 12, 18, 94, 0, 10, 0, 58, 31, 0, 16, 0, 86, 0],
+    late: 15,
+  },
+  {
+    name: 'a late merge of the next two steps',
+    deltas: [
+      12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 11, 10, 9, 8, 7, 6, 5, 7,
+      2, 1,
+    ],
+    gaps: [
+      16, 25, 0, 28, 12, 17, 14, 17, 16, 16, 16, 16, 16, 16, 16, 17, 16, 52, 0,
+      12, 17,
+    ],
+    late: 18,
+  },
+] as const;
+
+/** Push a recorded stream as trackpad wheels, or as a mouse wheel's. */
+function replay(
+  deltas: ReadonlyArray<number>,
+  gaps: ReadonlyArray<number>,
+  continuous: boolean,
+) {
+  const segmenter = new WheelSegmenter();
+  const times = timesOf(gaps);
+  return deltas.map((delta, i) =>
+    segmenter.push(times[i], delta, 180, continuous),
+  );
+}
+
+describe("WheelSegmenter: a late, coalesced trackpad wheel that continues the glide's deceleration belongs to the same flick (spec:AST-094 FR43)", () => {
+  it.each(STALLED_FLICKS)(
+    'keeps a stalled flick one gesture: $name',
+    ({deltas, gaps}) => {
+      const seen = replay(deltas, gaps, true);
+      expect(seen.filter(segment => segment.liftNow)).toHaveLength(1);
+      expect(seen.slice(1).filter(segment => segment.boundary != null)).toEqual(
+        [],
+      );
+      expect(seen[seen.length - 1].phase).toBe('momentum');
+    },
+  );
+
+  it.each(STALLED_FLICKS)(
+    "splits the same stream at its late wheel when it is a mouse wheel's, as before: $name",
+    ({deltas, gaps, late}) => {
+      const seen = replay(deltas, gaps, false);
+      expect(seen[late].boundary).toBe('gap');
+    },
+  );
+
+  /**
+   * A glide of 1 px less a frame from 10 px, the lift read at its 8 px wheel.
+   */
+  function glide() {
+    const segmenter = new WheelSegmenter();
+    const seen = feed(segmenter, [10, 10, 10, 10, 9.5, 9, 8.5, 8]).map(
+      segment => segment.liftNow,
+    );
+    expect(seen[7]).toBe(true);
+    return segmenter;
+  }
+
+  it('keeps a trackpad wheel that carries the next two steps after a skipped frame', () => {
+    const segment = glide().push(7 * 16 + 32, 15, 180, true);
+    expect({boundary: segment.boundary, phase: segment.phase}).toEqual({
+      boundary: null,
+      phase: 'momentum',
+    });
+  });
+
+  it('still starts a new gesture at a trackpad wheel one frame later that rises against the decay', () => {
+    expect(glide().push(7 * 16 + 16, 15, 180, true).boundary).toBe('jump');
+  });
+
+  it('still starts a new gesture at a trackpad wheel after a pause that no sum of the glide explains: fingers come back', () => {
+    // Larger than every sum of the steps the pause spans.
+    expect(glide().push(7 * 16 + 60, 40, 180, true).boundary).toBe('gap');
+  });
+
+  it('keeps a late trackpad wheel at or below the next step, and starts a new gesture at the next one that grows: a slow drag speeds up', () => {
+    const segmenter = glide();
+    expect(segmenter.push(7 * 16 + 120, 2, 180, true).boundary).toBeNull();
+    const next = segmenter.push(7 * 16 + 136, 3, 180, true);
+    expect(next.boundary).toBe('jump');
+    expect(next.carried).toBe(2);
+  });
+
+  it('still starts a new gesture at a trackpad wheel after a pause that reverses', () => {
+    expect(glide().push(7 * 16 + 60, -7, 180, true).boundary).toBe('reversal');
+  });
+
+  it("starts a new gesture at a trackpad wheel that grows after a late one joined the glide, with the late one's travel: fingers come back", () => {
+    const segmenter = glide();
+    expect(segmenter.push(7 * 16 + 60, 7, 180, true).boundary).toBeNull();
+    const next = segmenter.push(7 * 16 + 76, 8, 180, true);
+    expect(next.boundary).toBe('jump');
+    expect(next.carried).toBe(7);
+  });
+
+  it('hands over only the late wheel just before: a wheel that grows two wheels after it carries nothing', () => {
+    const segmenter = glide();
+    expect(segmenter.push(7 * 16 + 60, 7, 180, true).boundary).toBeNull();
+    expect(segmenter.push(7 * 16 + 76, 6, 180, true).boundary).toBeNull();
+    const grows = segmenter.push(7 * 16 + 92, 9, 180, true);
+    expect(grows.boundary).toBe('jump');
+    expect(grows.carried).toBe(0);
+  });
+
+  it('keeps a whole-pixel glide one flick when it repeats a step after a late wheel joined it', () => {
+    const segmenter = new WheelSegmenter();
+    const seen = [12, 12, 12, 12, 11, 10, 9, 8, 8].map((delta, i) =>
+      segmenter.push(i * 16, delta, 180, true),
+    );
+    expect(seen.filter(segment => segment.liftNow)).toHaveLength(1);
+    // A whole-pixel glide slows by repeating steps: 7, 7, 6, 6, 5.
+    const late = 8 * 16 + 70;
+    expect(
+      [7, 7, 6, 6, 5].map(
+        (delta, i) => segmenter.push(late + i * 16, delta, 180, true).boundary,
+      ),
+    ).toEqual([null, null, null, null, null]);
+  });
+
+  /** A glide that ends at 7 px a frame, the lift read at its 8 px wheel. */
+  function glideToSeven() {
+    const segmenter = new WheelSegmenter();
+    const seen = [12, 12, 12, 12, 11, 10, 9, 8, 7].map((delta, i) =>
+      segmenter.push(i * 16, delta, 180, true),
+    );
+    expect(seen.findIndex(segment => segment.liftNow)).toBe(7);
+    return segmenter;
+  }
+
+  it.each([
+    [20, 100],
+    [25, 110],
+    [30, 120],
+  ])(
+    'hands a %i px trackpad wheel %i ms after a glide that ends at 7 px to the next wheel, which grows into a new gesture: a swipe resumes',
+    (size, after) => {
+      const segmenter = glideToSeven();
+      const time = 8 * 16 + after;
+      expect(segmenter.push(time, size, 180, true).boundary).toBeNull();
+      const next = segmenter.push(time + 16, size, 180, true);
+      expect(next.boundary).toBe('jump');
+      expect(next.carried).toBe(size);
+    },
+  );
+
+  it('hands nothing to a new gesture that starts late after a late wheel: a merged glide wheel looks the same', () => {
+    const segmenter = glideToSeven();
+    const time = 8 * 16 + 100;
+    expect(segmenter.push(time, 30, 180, true).boundary).toBeNull();
+    const next = segmenter.push(time + 60, 30, 180, true);
+    expect(next.boundary).toBe('gap');
+    expect(next.carried).toBe(0);
+  });
+
+  it("hands a resumed swipe's first two wheels to the new gesture when they arrive merged", () => {
+    const segmenter = glideToSeven();
+    const time = 8 * 16 + 100;
+    expect(segmenter.push(time, 30, 180, true).boundary).toBeNull();
+    expect(segmenter.push(time + 0.5, 30, 180, true).boundary).toBeNull();
+    const next = segmenter.push(time + 16, 30, 180, true);
+    expect(next.boundary).toBe('jump');
+    expect(next.carried).toBe(60);
+  });
+
+  it('starts a new gesture at a swipe on pace right after a whole-pixel glide, after an earlier gesture showed a 10 ms gap', () => {
+    const segmenter = new WheelSegmenter();
+    // An earlier gesture whose page delivered one wheel 10 ms after another.
+    for (const time of [0, 16, 26, 42]) {
+      segmenter.push(time, 12, 180, true);
+    }
+    const start = 342;
+    const deltas = [12, 12, 12, 12, 11, 10, 9, 8, 8, 7, 7];
+    const seen = deltas.map((delta, i) =>
+      segmenter.push(start + i * 16, delta, 180, true),
+    );
+    expect(seen[0].boundary).toBe('idle');
+    expect(seen.filter(segment => segment.liftNow)).toHaveLength(1);
+    expect(
+      segmenter.push(start + deltas.length * 16, 14, 180, true).boundary,
+    ).toBe('jump');
+  });
+
+  it("starts a new gesture at a swipe 16 ms after a stall delivered the glide's held wheels 3 ms apart", () => {
+    const segmenter = glideToSeven();
+    let time = 8 * 16;
+    for (const delta of [6, 6, 5, 5, 4, 4]) {
+      time += 3;
+      segmenter.push(time, delta, 180, true);
+    }
+    expect(segmenter.push(time + 16, 12, 180, true).boundary).toBe('jump');
+  });
+
+  it('keeps a 16 ms frame when a gesture starts with squeezed wheels', () => {
+    const segmenter = new WheelSegmenter();
+    const times = [0, 3, 6, ...Array.from({length: 9}, (_, i) => 22 + i * 16)];
+    const deltas = [12, 12, 12, 12, 12, 12, 11, 10, 9, 8, 7, 7];
+    const seen = deltas.map((delta, i) =>
+      segmenter.push(times[i], delta, 180, true),
+    );
+    expect(seen.filter(segment => segment.liftNow)).toHaveLength(1);
+    expect(
+      segmenter.push(times[times.length - 1] + 16, 14, 180, true).boundary,
+    ).toBe('jump');
+  });
+
+  it('keeps a 27 px trackpad wheel 100 ms after a glide that ends at 7 px in the flick: a six-frame stall merges its steps', () => {
+    const segmenter = glideToSeven();
+    expect(segmenter.push(8 * 16 + 100, 27, 180, true).boundary).toBeNull();
+    expect(segmenter.push(8 * 16 + 116, 3, 180, true).boundary).toBeNull();
+  });
+
+  it('hands a 20 px trackpad wheel 100 ms after a whole-pixel tail to the next wheel, which grows', () => {
+    const segmenter = new WheelSegmenter();
+    const seen = [12, 12, 12, 12, 11, 10, 9, 8, 8, 7, 7].map((delta, i) =>
+      segmenter.push(i * 16, delta, 180, true),
+    );
+    expect(seen.filter(segment => segment.liftNow)).toHaveLength(1);
+    // Steady 7 px steps fit the 20 px wheel as three of them.
+    expect(segmenter.push(10 * 16 + 100, 20, 180, true).boundary).toBeNull();
+    const next = segmenter.push(10 * 16 + 116, 24, 180, true);
+    expect(next.boundary).toBe('jump');
+    expect(next.carried).toBe(20);
+  });
+
+  it('keeps a trackpad glide that goes on falling after a late wheel joined it', () => {
+    const segmenter = glide();
+    expect(
+      [60, 76, 92].map(
+        (time, i) => segmenter.push(7 * 16 + time, 7 - i, 180, true).boundary,
+      ),
+    ).toEqual([null, null, null]);
+  });
+
+  /**
+   * Two flicks a stalled page received in WebKit with a merge of the
+   * shrinking run's steps, which the decay explains better than steady steps.
+   */
+  const MERGED_RUNS = [
+    {
+      name: 'three shrinking steps merged, then a late step',
+      deltas: [12, 12, 12, 24, 12, 36, 12, 12, 12, 11, 27, 7, 6, 5, 4, 6],
+      gaps: [25, 45, 0, 64, 0, 32, 0, 60, 31, 0, 14, 1, 65, 26, 0],
+      lift: 12,
+      before: 14,
+    },
+    {
+      name: 'late steps with the next ones merged after them',
+      deltas: [12, 12, 12, 12, 36, 12, 12, 12, 12, 50, 7, 11, 4, 5, 1],
+      gaps: [32, 0, 85, 0, 12, 0, 17, 90, 0, 82, 0, 9, 0, 17],
+      lift: 13,
+      before: -1,
+    },
+  ] as const;
+
+  it.each(MERGED_RUNS)(
+    "reads a stalled flick's lift where its shrinking run shows it: $name",
+    ({deltas, gaps, lift}) => {
+      const seen = replay(deltas, gaps, true);
+      expect(seen.findIndex(segment => segment.liftNow)).toBe(lift);
+      expect(seen.slice(1).filter(segment => segment.boundary != null)).toEqual(
+        [],
+      );
+    },
+  );
+
+  it.each(MERGED_RUNS)(
+    "reads the same stream's lift as before when it is a mouse wheel's: $name",
+    ({deltas, gaps, before}) => {
+      const seen = replay(deltas, gaps, false);
+      expect(seen.findIndex(segment => segment.liftNow)).toBe(before);
+    },
+  );
+
+  it("keeps a mouse wheel's rules for every wheel without the trackpad signature", () => {
+    // The trackpad wheels above that stay in the flick.
+    expect(glide().push(7 * 16 + 32, 15, 180).boundary).toBe('jump');
+    expect(glide().push(7 * 16 + 60, 7, 180).boundary).toBe('gap');
+    expect(glide().push(7 * 16 + 60, 7, 180, true).boundary).toBeNull();
+    // After a late trackpad wheel joined, a notch that stops falling keeps
+    // today's rule too.
+    const resumed = glide();
+    expect(resumed.push(7 * 16 + 60, 7, 180, true).boundary).toBeNull();
+    expect(resumed.push(7 * 16 + 76, 7, 180).boundary).toBeNull();
+  });
+
+  it('keeps a merge that a stall delivers after a late wheel in the glide: the steps of the whole stall', () => {
+    const segmenter = glide();
+    // The 6, 5 and 4 px steps arrive merged, 30 ms after a late 7.
+    expect(segmenter.push(7 * 16 + 65, 7, 180, true).boundary).toBeNull();
+    expect(segmenter.push(7 * 16 + 95, 15, 180, true).boundary).toBeNull();
+  });
+});

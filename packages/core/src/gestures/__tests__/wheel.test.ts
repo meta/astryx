@@ -892,6 +892,34 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     expect(states[0]).toBe('began');
   });
 
+  it('takes the trackpad scroll of a pan on its own scroller, whose derived touch-action keeps that axis from the browser; a scroller inside it still takes the wheel first', () => {
+    const {row, inner} = mount(
+      '<div id="row"><div id="inner"><div id="cell">cell</div></div></div>',
+    );
+    scrollableX(row, {scrollLeft: 0, scrollWidth: 600, clientWidth: 200});
+    const pan = new PanGestureRecognizer({
+      direction: 'horizontal',
+      allowedScrollTypes: ['continuous'],
+    });
+    const states = statesOf(pan);
+    detachers.push(host.attach(row, pan));
+    const cell = document.getElementById('cell') as HTMLElement;
+    // The row scrolls, but a finger's horizontal pan on it is the pan's: so
+    // is the trackpad's.
+    const taken = [0, 16, 32].map(time =>
+      wheel(cell, {trackpad: true, dx: 8, time}),
+    );
+    expect(taken.every(event => event.defaultPrevented)).toBe(true);
+    expect(states[0]).toBe('began');
+    clock.runDue(32 + 300);
+    // A scroller inside the row that can scroll that way takes the wheel.
+    scrollableX(inner, {scrollLeft: 0, scrollWidth: 600, clientWidth: 100});
+    const native = [500, 516].map(time =>
+      wheel(cell, {trackpad: true, dx: 8, time}),
+    );
+    expect(native.some(event => event.defaultPrevented)).toBe(false);
+  });
+
   it("tells a mouse wheel's notches from a trackpad: a pan leaves lines and whole notches to the page and takes a trackpad's scroll (spec:AST-094 FR43, DEC-24)", () => {
     const {smooth} = mount('<div id="smooth"></div>');
     const pan = new PanGestureRecognizer({
@@ -1455,6 +1483,382 @@ describe("a trackpad scroll through the splitter's undecided stretch (spec:AST-0
       expect(ended[0].x).toBeGreaterThan(-travel - 4.2);
     },
   );
+
+  /**
+   * Trackpad flicks as WebKit delivered them to a page: 12 px finger steps,
+   * then momentum. Each wheel is [time in whole ms, delta].
+   */
+  const RECORDED: Record<string, [number, number][]> = {
+    run9: [
+      [0, 12],
+      [16, 12],
+      [36, 12],
+      [49, 12],
+      [65, 12],
+      [81, 12],
+      [97, 12],
+      [113, 12],
+      [129, 12],
+      [145, 12],
+      [161, 12],
+      [177, 12],
+      [194, 11],
+      [210, 10],
+      [226, 9],
+      [242, 8],
+      [259, 7],
+      [274, 6],
+      [297, 5],
+      [297, 4],
+      [323, 3],
+      [339, 2],
+      [355, 1],
+    ],
+    run0: [
+      [0, 12],
+      [16, 12],
+      [39, 12],
+      [39, 12],
+      [68, 12],
+      [81, 12],
+      [97, 12],
+      [113, 12],
+      [145, 12],
+      [145, 12],
+      [161, 12],
+      [177, 12],
+      [193, 11],
+      [209, 10],
+      [225, 9],
+      [241, 8],
+      [258, 7],
+      [274, 6],
+      [297, 5],
+      [297, 4],
+      [322, 3],
+      [338, 2],
+      [354, 1],
+    ],
+    run4: [
+      [0, 12],
+      [15, 12],
+      [40, 12],
+      [40, 12],
+      [73, 12],
+      [81, 12],
+      [98, 12],
+      [115, 12],
+      [150, 12],
+      [150, 24],
+      [167, 12],
+      [197, 11],
+      [209, 10],
+      [225, 9],
+      [242, 8],
+      [257, 7],
+      [282, 6],
+      [283, 5],
+      [306, 4],
+      [322, 3],
+      [338, 2],
+      [354, 1],
+    ],
+    run6: [
+      [0, 12],
+      [16, 12],
+      [43, 12],
+      [43, 12],
+      [76, 12],
+      [83, 12],
+      [105, 12],
+      [105, 12],
+      [133, 12],
+      [133, 12],
+      [162, 12],
+      [177, 12],
+      [193, 11],
+      [209, 10],
+      [225, 9],
+      [241, 8],
+      [258, 7],
+      [299, 6],
+      [299, 9],
+      [327, 3],
+      [327, 2],
+      [354, 1],
+    ],
+    run18: [
+      [0, 12],
+      [15, 12],
+      [41, 12],
+      [42, 12],
+      [75, 12],
+      [83, 12],
+      [101, 12],
+      [113, 12],
+      [142, 12],
+      [143, 12],
+      [153, 12],
+      [193, 12],
+      [193, 11],
+      [209, 10],
+      [225, 9],
+      [241, 8],
+      [258, 7],
+      [273, 6],
+      [298, 5],
+      [298, 4],
+      [321, 3],
+      [338, 2],
+      [354, 1],
+    ],
+    run28: [
+      [0, 12],
+      [17, 12],
+      [43, 12],
+      [43, 12],
+      [56, 12],
+      [87, 12],
+      [87, 12],
+      [129, 12],
+      [129, 12],
+      [145, 12],
+      [178, 12],
+      [178, 12],
+      [194, 11],
+      [210, 10],
+      [226, 9],
+      [242, 8],
+      [259, 7],
+      [274, 6],
+      [302, 5],
+      [302, 4],
+      [322, 3],
+      [339, 2],
+      [354, 1],
+    ],
+  };
+
+  it.each([
+    ['with no stall', 'run9', -12 / 16],
+    ['with no stall, again', 'run0', -12 / 16],
+    ['whose stalls end before its last finger step', 'run4', -12 / 17],
+    ['whose momentum a stall merges', 'run6', -12 / 15],
+    [
+      'whose last finger step comes 40 ms late, with the first momentum step bunched 0 ms after it',
+      'run18',
+      -(12 + 11) / 40,
+    ],
+    [
+      'whose last finger step but one comes 33 ms late, with the last bunched 0 ms after it',
+      'run28',
+      -(12 + 12) / 33,
+    ],
+  ] as const)(
+    "releases a recorded WebKit flick at the fingers' speed: a flick %s",
+    (_flick, run, speed) => {
+      const {box, seen} = followed();
+      let last = 0;
+      for (const [time, dx] of RECORDED[run]) {
+        wheel(box, {trackpad: true, dx, time});
+        last = time;
+      }
+      clock.runDue(last + 500);
+      const ended = seen.filter(entry => entry.state === 'ended');
+      expect(ended).toHaveLength(1);
+      // In px/s. A late step and the wheel bunched after it share the late
+      // step's interval, which the stall took.
+      expect(ended[0].velocity).toBeCloseTo(speed * 1000, 6);
+    },
+  );
+
+  it("releases a flick at the fingers' speed when a stall delivers its held-back steps one by one, 1 ms apart, at 500 Hz", () => {
+    const {box, seen} = followed();
+    // 1.5 px every 2 ms, 750 px/s. A 50 ms stall holds 25 steps: the page
+    // receives one late, then the other 24 one by one, 1 ms apart. Momentum
+    // follows, and its fourth step reads as the lift.
+    const times: number[] = [];
+    const deltas: number[] = [];
+    for (let i = 0; i < 20; i++) {
+      times.push(i * 2);
+      deltas.push(1.5);
+    }
+    const late = times[times.length - 1] + 50;
+    for (let k = 0; k < 25; k++) {
+      times.push(late + k);
+      deltas.push(1.5);
+    }
+    for (const [k, dx] of [1.4, 1.3, 1.2, 1.1].entries()) {
+      times.push(late + 24 + 2 * (k + 1));
+      deltas.push(dx);
+    }
+    deltas.forEach((dx, i) => {
+      wheel(box, {trackpad: true, dx, time: times[i]});
+    });
+    clock.runDue(times[times.length - 1] + 500);
+    const ended = seen.filter(entry => entry.state === 'ended');
+    expect(ended).toHaveLength(1);
+    // The 25 steps' 37.5 px took the late step's 50 ms, not the delivery's.
+    expect(ended[0].velocity).toBeCloseTo(-750, 6);
+  });
+
+  it.each([
+    ['one 36 px wheel', [[137, 36]]],
+    [
+      'a 24 px and a 12 px wheel 1 ms apart',
+      [
+        [137, 24],
+        [138, 12],
+      ],
+    ],
+  ] as const)(
+    'reads a bunch after a held wheel the same however the stall splits it: %s',
+    (_bunch, bunch) => {
+      const {box, seen} = followed();
+      // 12 px every 16 ms. A step comes 40 ms late, and a held 11 px wheel 16
+      // ms after it. The bunch comes 1 ms after the held wheel, so no stamped
+      // interval holds its time. Momentum follows.
+      const stream: (readonly [number, number])[] = [
+        [0, 12],
+        [16, 12],
+        [32, 12],
+        [48, 12],
+        [64, 12],
+        [80, 12],
+        [120, 12],
+        [136, 11],
+        ...bunch,
+        [154, 11],
+        [170, 10],
+        [186, 9],
+        [202, 8],
+      ];
+      for (const [time, dx] of stream) {
+        wheel(box, {trackpad: true, dx, time});
+      }
+      clock.runDue(202 + 500);
+      const ended = seen.filter(entry => entry.state === 'ended');
+      expect(ended).toHaveLength(1);
+      // The late step's reading stands: 12 px in 40 ms.
+      expect(ended[0].velocity).toBeCloseTo(-300, 6);
+    },
+  );
+
+  it.each([
+    ['one 21 px wheel', [[121, 21]]],
+    [
+      'an 11 px and a 10 px wheel 1 ms apart',
+      [
+        [121, 11],
+        [122, 10],
+      ],
+    ],
+  ] as const)(
+    'reads a bunch that starts shrinking right after a late step the same however the stall splits it: %s',
+    (_bunch, bunch) => {
+      const {box, seen} = followed();
+      // 12 px every 16 ms. A step comes 40 ms late, and the bunch the stall
+      // held back arrives 1 ms after it. Momentum follows into the lift.
+      const stream: (readonly [number, number])[] = [
+        [0, 12],
+        [16, 12],
+        [32, 12],
+        [48, 12],
+        [64, 12],
+        [80, 12],
+        [120, 12],
+        ...bunch,
+        [137, 9],
+        [153, 8],
+        [169, 7],
+        [185, 6],
+      ];
+      for (const [time, dx] of stream) {
+        wheel(box, {trackpad: true, dx, time});
+      }
+      clock.runDue(185 + 500);
+      const ended = seen.filter(entry => entry.state === 'ended');
+      expect(ended).toHaveLength(1);
+      // The whole bunch joins the late step's 40 ms, held to the 750 px/s
+      // before it.
+      expect(ended[0].velocity).toBeCloseTo(-750, 6);
+    },
+  );
+
+  it("follows a swipe that resumes 100 ms after a flick's glide for all of its travel: six 30 px wheels", () => {
+    const {box, seen} = followed();
+    // The lift is read at the 8 px wheel, and the glide goes on at 7 px.
+    let time = stream(box, [12, 12, 12, 12, 11, 10, 9, 8, 7]);
+    // The fingers come back 100 ms after the glide's last wheel.
+    time += 100 - 16;
+    for (let i = 0; i < 6; i++) {
+      wheel(box, {trackpad: true, dx: 30, time});
+      time += 16;
+    }
+    clock.runDue(time + 500);
+    expect(seen.filter(entry => entry.state === 'began')).toHaveLength(2);
+    const ended = seen.filter(entry => entry.state === 'ended');
+    // All 180 px of the swipe, past the 10 px hysteresis.
+    expect(ended[ended.length - 1].x).toBeCloseTo(-170, 6);
+  });
+
+  it("follows a swipe that resumes after a flick's glide for all of its travel when its first two wheels arrive merged", () => {
+    const {box, seen} = followed();
+    let time = stream(box, [12, 12, 12, 12, 11, 10, 9, 8, 7]);
+    time += 100 - 16;
+    const times = [0, 0.5, 16, 32, 48, 64].map(offset => time + offset);
+    for (const at of times) {
+      wheel(box, {trackpad: true, dx: 30, time: at});
+    }
+    clock.runDue(times[times.length - 1] + 500);
+    expect(seen.filter(entry => entry.state === 'began')).toHaveLength(2);
+    const ended = seen.filter(entry => entry.state === 'ended');
+    expect(ended[ended.length - 1].x).toBeCloseTo(-170, 6);
+  });
+
+  it("never moves or releases faster than the fingers when a stall's bunch of shrinking wheels arrives 1 ms apart", () => {
+    const {box, seen} = followed();
+    // 12 px every 16 ms. A step comes 60 ms late, then 11, 10 and 9 px wheels
+    // 1 ms apart. The 8 px wheel on the next frame reads as the lift.
+    const times = [0, 16, 32, 48, 64, 80, 140, 141, 142, 143, 159];
+    const deltas = [12, 12, 12, 12, 12, 12, 12, 11, 10, 9, 8];
+    deltas.forEach((dx, i) => {
+      wheel(box, {trackpad: true, dx, time: times[i]});
+    });
+    clock.runDue(times[times.length - 1] + 500);
+    const shown = seen.filter(
+      entry => entry.state === 'changed' && entry.time >= 140,
+    );
+    for (let i = 1; i < shown.length; i++) {
+      const speed =
+        Math.abs(shown[i].x - shown[i - 1].x) /
+        (shown[i].time - shown[i - 1].time);
+      expect(speed).toBeLessThanOrEqual(12 / 16 + 1e-9);
+    }
+    const ended = seen.filter(entry => entry.state === 'ended');
+    expect(ended).toHaveLength(1);
+    // Each 1 ms of the bunch runs at the speed before its join. The release
+    // blends the last two intervals: 0.2 × 700 plus 0.8 × 550 px/s.
+    expect(ended[0].velocity).toBeCloseTo(-580, 6);
+  });
+
+  it('never reads the fingers faster than they last were when a bunched wheel carries more than its stall took', () => {
+    const {box, seen} = followed();
+    // 12 px every 16 ms. A step comes 20 ms late. Three more arrive as one
+    // 36 px wheel 0 ms after it. That is more travel than 20 ms at the
+    // fingers' speed covers. Momentum follows, and its fourth step reads as
+    // the lift.
+    const times = [0, 16, 32, 48, 64, 80, 100, 100, 116, 132, 148, 164];
+    const deltas = [12, 12, 12, 12, 12, 12, 12, 36, 11, 10, 9, 8];
+    deltas.forEach((dx, i) => {
+      wheel(box, {trackpad: true, dx, time: times[i]});
+    });
+    clock.runDue(times[times.length - 1] + 500);
+    const ended = seen.filter(entry => entry.state === 'ended');
+    expect(ended).toHaveLength(1);
+    // The joined reading, 48 px in 20 ms, holds at the 12 px in 16 ms before.
+    expect(ended[0].velocity).toBeCloseTo(-750, 6);
+  });
 
   it.each(STREAMS)(
     "keeps a trackpad pan moving at the fingers' speed through the undecided stretch at %s",

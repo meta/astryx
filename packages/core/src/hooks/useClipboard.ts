@@ -90,17 +90,61 @@ export interface UseClipboardReturn {
 export function useClipboard(
   options: UseClipboardOptions = {},
 ): UseClipboardReturn {
-  const {announce: announceMessage, resetAfterMs = DEFAULT_RESET_AFTER_MS} =
-    options;
+  const {copy, isCopied} = useClipboardCopy(options);
+  return {copy, isCopied};
+}
+
+/**
+ * Options of {@link useClipboardCopy}: the public options plus what a
+ * component needs to report a failed write.
+ */
+export interface UseClipboardCopyOptions extends UseClipboardOptions {
+  /** Message announced to the polite live region when a write fails. */
+  announceFailure?: string;
+  /**
+   * Called once with the rejection when a write fails. `copy` still resolves
+   * `false`, and `isCopied` is unchanged.
+   */
+  onError?: (error: unknown) => void;
+}
+
+/** Return value of {@link useClipboardCopy}. */
+export interface UseClipboardCopyReturn extends UseClipboardReturn {
+  /**
+   * True for `resetAfterMs` after the most recent write failed, until a write
+   * succeeds.
+   */
+  isFailed: boolean;
+}
+
+/**
+ * The body of {@link useClipboard}, plus the failed-write state a copy control
+ * shows (CodeBlock's cross and its `onCopyError`). Not exported from the
+ * package: the public hook's options and return type stay as they are.
+ */
+export function useClipboardCopy(
+  options: UseClipboardCopyOptions = {},
+): UseClipboardCopyReturn {
+  const {
+    announce: announceMessage,
+    announceFailure,
+    resetAfterMs = DEFAULT_RESET_AFTER_MS,
+    onError,
+  } = options;
   const announce = useAnnounce();
   const [isCopied, setIsCopied] = useState(false);
+  const [isFailed, setIsFailed] = useState(false);
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const failedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Clear a pending "copied" reset when the consumer unmounts.
+  // Clear pending resets when the consumer unmounts.
   useEffect(() => {
     return () => {
       if (resetTimerRef.current != null) {
         clearTimeout(resetTimerRef.current);
+      }
+      if (failedTimerRef.current != null) {
+        clearTimeout(failedTimerRef.current);
       }
     };
   }, []);
@@ -109,27 +153,45 @@ export function useClipboard(
     async (text: string): Promise<boolean> => {
       try {
         await navigator.clipboard.writeText(text);
-        setIsCopied(true);
-        if (announceMessage) {
-          announce(announceMessage);
+      } catch (error) {
+        // A failure leaves the copied state unchanged; it shows for as long
+        // as a copy would.
+        setIsFailed(true);
+        if (failedTimerRef.current != null) {
+          clearTimeout(failedTimerRef.current);
         }
-        // Restart the reset timer on every copy — otherwise a rapid re-copy
-        // is reverted early by the previous copy's timer.
-        if (resetTimerRef.current != null) {
-          clearTimeout(resetTimerRef.current);
-        }
-        resetTimerRef.current = setTimeout(() => {
-          resetTimerRef.current = null;
-          setIsCopied(false);
+        failedTimerRef.current = setTimeout(() => {
+          failedTimerRef.current = null;
+          setIsFailed(false);
         }, resetAfterMs);
-        return true;
-      } catch {
-        // Clipboard failures leave the copied state unchanged.
+        if (announceFailure) {
+          announce(announceFailure);
+        }
+        onError?.(error);
         return false;
       }
+      if (failedTimerRef.current != null) {
+        clearTimeout(failedTimerRef.current);
+        failedTimerRef.current = null;
+      }
+      setIsFailed(false);
+      setIsCopied(true);
+      if (announceMessage) {
+        announce(announceMessage);
+      }
+      // Restart the reset timer on every copy — otherwise a rapid re-copy
+      // is reverted early by the previous copy's timer.
+      if (resetTimerRef.current != null) {
+        clearTimeout(resetTimerRef.current);
+      }
+      resetTimerRef.current = setTimeout(() => {
+        resetTimerRef.current = null;
+        setIsCopied(false);
+      }, resetAfterMs);
+      return true;
     },
-    [announce, announceMessage, resetAfterMs],
+    [announce, announceMessage, announceFailure, resetAfterMs, onError],
   );
 
-  return {copy, isCopied};
+  return {copy, isCopied, isFailed};
 }

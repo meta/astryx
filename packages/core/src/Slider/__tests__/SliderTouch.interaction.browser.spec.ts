@@ -13,7 +13,12 @@
  *   are useSliderTouch.test.tsx and motion/uikit/slider.test.ts.
  */
 
-import {expect, test, type Locator, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   blockMainThread,
   busyWindowProof,
@@ -23,12 +28,14 @@ import {
   countBetween,
   drag,
   flick,
+  FRAME_STARVATION_MS,
   frames,
   holdAnimations,
   markElement,
   openStory,
   type Point,
   releaseAnimations,
+  requireFrames,
   sampleCurve,
   springStep,
   startBusyControl,
@@ -440,9 +447,11 @@ test('a release coasts on UIKit’s spring to 0.4 of the momentum projection, th
   // under load. The harness counts sample times from the earliest held
   // start, so the samples are taken at the coast's own times: its offset
   // plus 0, 20, …
-  const coast = (await holdAnimations(page, thumb)).find(held =>
-    held.keyframes.some(keyframe => 'translate' in keyframe),
-  );
+  const coast = (
+    await holdAnimations(page, thumb, {
+      judges: {target: thumb, property: 'translate'},
+    })
+  ).find(held => held.keyframes.some(keyframe => 'translate' in keyframe));
   expect(coast, 'the coast plays on the compositor').toBeDefined();
   const coastOffset = coast?.offsetMs ?? 0;
   const times = Array.from({length: 31}, (_, i) => coastOffset + i * 20);
@@ -681,6 +690,65 @@ test('Reduce Motion: no lift; a release keeps coasting and a track tap sets the 
       return samples;
     }, ms);
   type Sample = Awaited<ReturnType<typeof watch>>[number];
+  /**
+   * `watch`'s samples for `ms` after the page's own lift, timed from the lift.
+   * The record starts before the gesture plays, so it holds the release's
+   * first frames however late the runner reads the lift.
+   */
+  const watchFromLift = async (ms: number) => {
+    await thumb.evaluate(element => {
+      const record = {
+        on: true,
+        liftAt: null as number | null,
+        samples: [] as Sample[],
+      };
+      (window as unknown as {__liftWatch: typeof record}).__liftWatch = record;
+      window.addEventListener(
+        'touchend',
+        () => {
+          record.liftAt ??= performance.now();
+        },
+        {capture: true, passive: true},
+      );
+      const read = () => {
+        if (!record.on) {
+          return;
+        }
+        const style = getComputedStyle(element);
+        record.samples.push({
+          t: performance.now(),
+          opacity: Number(style.opacity),
+          scale: style.scale === 'none' ? 1 : Number(style.scale),
+          x: element.getBoundingClientRect().x,
+          value: Number(element.getAttribute('aria-valuenow')),
+        });
+        requestAnimationFrame(read);
+      };
+      requestAnimationFrame(read);
+    });
+    return async (): Promise<Sample[]> => {
+      await page.waitForFunction(duration => {
+        const {liftAt} = (
+          window as unknown as {__liftWatch: {liftAt: number | null}}
+        ).__liftWatch;
+        return liftAt != null && performance.now() - liftAt >= duration;
+      }, ms);
+      return page.evaluate(duration => {
+        const record = (
+          window as unknown as {
+            __liftWatch: {on: boolean; liftAt: number; samples: Sample[]};
+          }
+        ).__liftWatch;
+        record.on = false;
+        return record.samples
+          .filter(
+            sample =>
+              sample.t >= record.liftAt && sample.t <= record.liftAt + duration,
+          )
+          .map(sample => ({...sample, t: sample.t - record.liftAt}));
+      }, ms);
+    };
+  };
   const opacities = (samples: ReadonlyArray<Sample>) =>
     samples.map(sample => sample.opacity);
   // A held thumb keeps its size: the press shows in its paint alone (DR1).
@@ -699,16 +767,28 @@ test('Reduce Motion: no lift; a release keeps coasting and a track tap sets the 
   // value, at full opacity (DR2).
   const from = await center();
   const script = flick(from, {velocity: {x: 400, y: 0}, durationMs: 100});
-  const [release] = await playReading(
-    page,
-    driver,
-    script,
-    [script.length - 1],
-    async () => watch(500),
-  );
+  const releaseFrames = await watchFromLift(500);
+  await driver.play(script);
+  const release = await releaseFrames();
+  // The frames that show the coast run from the lift, at t 0, to the
+  // thumb's last move. A starved page draws too few of them to show five
+  // places. Then the proof fails by name, even when it stalled at the lift.
+  const place = (sample: Sample) => Math.round(sample.x * 4);
+  let lastMoveAt = release[0]?.t ?? 0;
+  release.forEach((sample, index) => {
+    if (index > 0 && place(sample) !== place(release[index - 1])) {
+      lastMoveAt = sample.t;
+    }
+  });
+  const lift = {t: 0};
+  requireFrames([lift, ...release], {
+    min: 5,
+    during: 'the released thumb coasted',
+    where: sample => sample !== lift && sample.t <= lastMoveAt,
+  });
   expect(Math.min(...opacities(release))).toBe(1);
   expect(Math.max(...release.map(sample => sample.scale))).toBe(1);
-  const positions = new Set(release.map(sample => Math.round(sample.x * 4)));
+  const positions = new Set(release.map(place));
   expect(positions.size).toBeGreaterThan(4);
   expect(release[release.length - 1].value).toBeGreaterThan(release[0].value);
   await frames(page, 6);
@@ -1157,17 +1237,32 @@ test('a finger held on a thumb or on the track starts no selection: the thumb’
 test('a finger lifted outside the tracking bounds coasts back to the lift value', async ({
   page,
 }) => {
-  const {driver, center, value} = await openSlider(
-    page,
-    'core-slider--default',
-  );
+  // The page reads where the thumb is drawn, in the lift's own task. The
+  // listener is added before the story loads, so it runs before the slider
+  // starts the release's coast. A read from here would hold the lift back,
+  // and a lift that late releases at rest. A drag draws the thumb in each
+  // move's own task, but its value attribute waits for a render.
+  await page.addInitScript(() => {
+    window.addEventListener(
+      'touchend',
+      () => {
+        const box = document
+          .querySelector('[role="slider"]')
+          ?.getBoundingClientRect();
+        (window as unknown as {__atLift?: number}).__atLift =
+          box == null ? undefined : box.left + box.width / 2;
+      },
+      {capture: true, passive: true},
+    );
+  });
+  const {driver, center} = await openSlider(page, 'core-slider--default');
   const at = await center();
   // Drag right 40 px, then 150 px up (outside the 70 px tracking margin),
   // and lift while moving right at 400 px/s.
   const right = {x: at.x + 40, y: at.y};
   const up = {x: right.x, y: at.y - 150};
   const out = {x: up.x + 20, y: up.y};
-  const {script, ends} = legs(
+  const {script} = legs(
     at,
     [
       {to: right, durationMs: 300},
@@ -1176,11 +1271,16 @@ test('a finger lifted outside the tracking bounds coasts back to the lift value'
     ],
     {hz: 120},
   );
-  const [atLift] = await playReading(page, driver, script, [ends[2]], value);
+  // A lift the page reads at rest releases at 0, and this proof would pass
+  // whatever the slider does. `'spacing'` fails such a play.
+  await driver.play(script, {pacing: 'spacing'});
+  const atLift = await page.evaluate(
+    () => (window as unknown as {__atLift: number}).__atLift,
+  );
   await page.waitForTimeout(900);
-  // Outside the tracking bounds the release does not project: the value
-  // settles where the finger left it.
-  expect(await value()).toBe(atLift);
+  // Outside the tracking bounds the release does not project: the thumb
+  // settles where the finger left it. One value is 3.5 px of travel.
+  expect(Math.abs((await center()).x - atLift)).toBeLessThan(0.5);
 });
 
 test('coincident range thumbs: the first movement picks the thumb that can follow it', async ({
@@ -1302,10 +1402,6 @@ test(
       'core-slider--touch-tracking',
       {name: 'Brightness'},
     );
-    test.skip(
-      !driver.scriptedTimestamps,
-      'WebKit stamps an injected touch when it arrives, so a stalled dispatch bunches the throw, and its cast moves in 2 px steps (README: engine limits)',
-    );
     await markElement(thumb);
     // A compositor-only control in the same screencast: the coast is judged
     // against what this machine's compositor presented in the block.
@@ -1322,20 +1418,35 @@ test(
       during: fillOf(thumb),
       minProgressMs: 48,
     });
-    // A moderate iPhone flick, 900 px/s over 60 ms, with the script's own
-    // timestamps.
-    await driver.play(flick(at, {velocity: {x: 900, y: 0}, durationMs: 60}));
+    // A moderate iPhone flick, 900 px/s over 60 ms. WebKit stamps a touch
+    // when it arrives, so the play keeps the script's spacing after a
+    // stalled dispatch. A page that read a resting finger, or no throw,
+    // fails the play and names whose fault it was.
+    const played = await driver.play(
+      flick(at, {velocity: {x: 900, y: 0}, durationMs: 60}),
+      {pacing: 'spacing'},
+    );
     const block = await blocking;
     await page.waitForTimeout(150);
     const castFrames = await cast.stop();
     const tracked = await trackMarker(page, castFrames);
     const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
-    // Judged until 2 px from rest: two of the cast's 1 px position steps.
+    // Judged until two of the cast's own steps from rest: 2 px in
+    // Chromium's PNG cast, 4 px in WebKit's JPEG cast. WebKit's tail then
+    // shows the cast's 2 px plateaus, not a stall.
     const proof = busyWindowProof(tracked, block, {
       axis: 'x',
-      settledWithin: 2,
+      settledWithinSteps: 2,
       control,
     });
+    // A slow runner stretches the throw, and a slow throw coasts too little
+    // to judge. The verdict names the release the page read, so that red
+    // names the runner.
+    const release = played.at(-1)?.release;
+    const summary =
+      release == null
+        ? proof.summary
+        : `${proof.summary}; the page read ${release.pagePxPerS.toFixed(0)} px/s of the script's ${release.scriptPxPerS.toFixed(0)} px/s`;
     await writeEvidence(
       'busy-main-thread/slider-coast',
       {
@@ -1343,6 +1454,7 @@ test(
           {
             block,
             proof,
+            release,
             frames: tracked.map(f => ({
               t: +(f.t - block.from).toFixed(1),
               x: f.box?.x ?? null,
@@ -1367,9 +1479,9 @@ test(
     await film.write(testInfo, {block, judged: proof.judged});
     testInfo.annotations.push({
       type: 'busy-main-thread',
-      description: proof.summary,
+      description: summary,
     });
-    expect(proof.verdict.failures, proof.summary).toEqual([]);
+    expect(proof.verdict.failures, summary).toEqual([]);
   },
 );
 
@@ -1464,7 +1576,7 @@ test('a drag lays out nothing per move, and the coast neither lays out nor paint
   const at = await center();
   const before = await value();
   let moves = {from: 0, to: 0};
-  let coast = {from: 0, to: 0};
+  let coast = {liftedAt: 0, restAt: 0};
   const {script, ends} = legs(
     at,
     [
@@ -1473,21 +1585,136 @@ test('a drag lays out nothing per move, and the coast neither lays out nor paint
     ],
     {hz: 60},
   );
+  // The lift drops the thumb's pressed paint in one commit, which paints
+  // once. The page records that commit, whether it came in the lift's own
+  // task, and its own frames until the test stops the record.
+  await thumb.evaluate(element => {
+    const release = {
+      on: true,
+      frames: [] as number[],
+      liftAt: null as number | null,
+      commitAt: null as number | null,
+      inLiftTask: false,
+      drawnAt: null as number | null,
+    };
+    (window as unknown as {__release: typeof release}).__release = release;
+    const now = () => performance.timeOrigin + performance.now();
+    const frame = () => {
+      if (!release.on) {
+        return;
+      }
+      release.frames.push(now());
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+    let liftTask = false;
+    // The lift's task dispatches its pointerup, then its touchend.
+    const lift = () => {
+      if (release.liftAt != null) {
+        return;
+      }
+      release.liftAt = now();
+      liftTask = true;
+      // The next task or the next frame ends the lift's task.
+      const channel = new MessageChannel();
+      channel.port1.onmessage = () => {
+        liftTask = false;
+        channel.port1.close();
+      };
+      channel.port2.postMessage(null);
+      requestAnimationFrame(() => {
+        liftTask = false;
+      });
+    };
+    for (const type of ['pointerup', 'touchend']) {
+      window.addEventListener(type, lift, {capture: true, passive: true});
+    }
+    new MutationObserver((_, observer) => {
+      if (release.liftAt == null) {
+        return;
+      }
+      observer.disconnect();
+      release.commitAt = now();
+      release.inLiftTask = liftTask;
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          release.drawnAt = now();
+        }),
+      );
+    }).observe(element, {attributes: true, attributeFilter: ['class']});
+  });
   const trace = await traceRendering(page, async () => {
     const played = await driver.play(script);
     moves = {
       from: played[3].dispatchedAt,
       to: played[ends[0]].dispatchedAt,
     };
-    const start = played[played.length - 1].dispatchedAt;
+    const liftedAt = played[played.length - 1].dispatchedAt;
     await waitForRest(thumb);
-    coast = {from: start, to: Date.now()};
+    coast = {liftedAt, restAt: Date.now()};
   });
   // The drag moved the thumb, so "nothing laid out" measures a real drag.
   expect(await value()).toBeGreaterThan(before + 20);
   const duringMoves = countBetween(trace, moves.from, moves.to);
   expect(duringMoves.Layout ?? 0, JSON.stringify(duringMoves)).toBe(0);
-  const duringCoast = countBetween(trace, coast.from + 80, coast.to - 120);
+  const release = await page.evaluate(() => {
+    const record = (
+      window as unknown as {
+        __release: {
+          on: boolean;
+          frames: number[];
+          liftAt: number | null;
+          commitAt: number | null;
+          inLiftTask: boolean;
+          drawnAt: number | null;
+        };
+      }
+    ).__release;
+    record.on = false;
+    return record;
+  });
+  const {liftAt, drawnAt} = release;
+  if (liftAt == null || release.commitAt == null || drawnAt == null) {
+    throw new Error('the lift did not drop the thumb’s pressed paint');
+  }
+  // When the lift's task ran more than FRAME_STARVATION_MS after its dispatch,
+  // with no frame in the FRAME_STARVATION_MS before it, the page was starved.
+  // Then the run proves nothing about when the release paints.
+  const waited = liftAt - coast.liftedAt;
+  if (waited > FRAME_STARVATION_MS) {
+    const around = [
+      ...release.frames.filter(t => t <= liftAt).slice(-1),
+      ...release.frames.filter(t => t > liftAt).slice(0, 1),
+    ];
+    requireFrames(
+      around.map(t => ({t})),
+      {
+        min: 1,
+        during: `the lift waited ${waited.toFixed(0)} ms for the page`,
+        where: frame =>
+          frame.t >= liftAt - FRAME_STARVATION_MS && frame.t <= liftAt,
+      },
+    );
+  }
+  // The pressed paint drops in the lift's own task. A later task would keep
+  // it on the thumb after the finger lifts.
+  expect(release.inLiftTask, 'the pressed paint drops in the lift’s task').toBe(
+    true,
+  );
+  // The coast's window opens two frames after that commit, on the page's
+  // clock. A loaded page draws the commit late, past any fixed time after
+  // the dispatch. The window must hold frames of the page's own, or a late
+  // commit would leave nothing to judge.
+  const coastEnd = coast.restAt - 120;
+  requireFrames(
+    release.frames.map(t => ({t})),
+    {
+      min: 4,
+      during: 'the thumb coasted',
+      where: frame => frame.t >= drawnAt && frame.t <= coastEnd,
+    },
+  );
+  const duringCoast = countBetween(trace, drawnAt, coastEnd);
   expect(duringCoast.Layout ?? 0, JSON.stringify(duringCoast)).toBe(0);
   expect(duringCoast.Paint ?? 0, JSON.stringify(duringCoast)).toBe(0);
 });

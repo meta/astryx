@@ -1125,6 +1125,49 @@ describe('FileInput', () => {
       expect(screen.getByText('Drop files here')).toBeInTheDocument();
     });
 
+    it.each([
+      ['busy', {isLoading: true}],
+      ['disabled', {isDisabled: true}],
+    ])(
+      'refuses the drag with the no-drop effect while %s, and still cancels it',
+      (_state, state) => {
+        render(
+          <FileInput
+            label="Upload"
+            value={null}
+            onChange={vi.fn()}
+            mode="dropzone"
+            {...state}
+          />,
+        );
+        const trigger = screen.getByRole('button', {name: 'Upload'});
+        for (const type of ['dragEnter', 'dragOver'] as const) {
+          const dataTransfer = {dropEffect: 'copy', files: []};
+          const event = createEvent[type](trigger, {dataTransfer});
+          fireEvent(trigger, event);
+          expect(dataTransfer.dropEffect).toBe('none');
+          expect(event.defaultPrevented).toBe(true);
+        }
+      },
+    );
+
+    it('keeps the copy effect for an idle dropzone', () => {
+      render(
+        <FileInput
+          label="Upload"
+          value={null}
+          onChange={vi.fn()}
+          mode="dropzone"
+        />,
+      );
+      const trigger = screen.getByRole('button', {name: 'Upload'});
+      for (const type of ['dragEnter', 'dragOver'] as const) {
+        const dataTransfer = {dropEffect: 'copy', files: []};
+        fireEvent(trigger, createEvent[type](trigger, {dataTransfer}));
+        expect(dataTransfer.dropEffect).toBe('copy');
+      }
+    });
+
     it('blocks a second pick while changeAction is pending and allows picking again after settlement', async () => {
       let finish: () => void = () => {};
       const pending = new Promise<void>(resolve => {
