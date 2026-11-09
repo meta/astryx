@@ -101,7 +101,7 @@ import {themes, defaultThemeSlug} from './astryx-themes';`,
         },
         {
           type: 'prose',
-          text: "`astryx.css` also sets Core's tokens on `:root`, above Tailwind's `theme` layer: `--color-accent`, `--color-border`, `--color-neutral`, the status colours (`--color-info`, `--color-success`, `--color-warning`, `--color-error`) and the other `--color-*` tokens, and also `--font-weight-normal`, `--font-weight-medium`, `--font-weight-semibold`, `--font-weight-bold`, `--spacing-*`, `--radius-*` and `--shadow-*`. If the app's `@theme` defines one of these names, rename that key or mark the block `@theme inline`, or the app's utilities take Astryx's value. Rename an app `:root` variable with one of these names too: inside the app's root Theme component, the theme stylesheet sets these tokens again, so the app's own rules there read Astryx's value.",
+          text: "Astryx's theme defines its own CSS custom properties (color, spacing, radius, shadow, font, motion and more). If your app defines tokens with the same names, Astryx's values win: `astryx.css` sets them on `:root` above Tailwind's `theme` layer, and the root Theme component sets them again inside it. {@link namespace:tokens} has the full list. Rename any app `@theme` key or `:root` variable that shares a name. For example, an app `:root` that sets `--font-size-base: 1rem` renders its text at Astryx's size inside the root Theme.",
         },
         {
           type: 'prose',
