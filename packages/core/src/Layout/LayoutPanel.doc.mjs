@@ -151,7 +151,7 @@ export const docsDense = {
   propDescriptions: {
     children: 'Panel content.',
     hasDivider:
-      'Line on the content-facing edge (start slot: inline end; end slot: inline start); without it and padding, panel and content share one gap. Layout defaultHasDividers does not apply. False beside a ResizeHandle with its own line.',
+      'Line on the content-facing edge (start slot: inline end; end slot: inline start); without it or padding, panel and content share one gap. Layout defaultHasDividers does not apply. False beside a ResizeHandle with its own line.',
     padding:
       'Padding on every edge; replaces the automatic inset and the shared gap. 0 is full bleed.',
     isScrollable: 'Enable scrollable overflow.',
