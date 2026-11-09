@@ -14,6 +14,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {requireNatively} from '../../test-utils/native-require.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const require = requireNatively(import.meta.url);
 /** @type {typeof import('../config/project.mjs')} */
@@ -39,7 +40,7 @@ let chartsManifest;
 
 beforeEach(() => {
   consumer = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-provider-conflict-'),
+    path.join(REPO_ROOT, '.astryx-provider-conflict-'),
   );
   const scope = path.join(consumer, 'node_modules', '@astryxdesign');
   fs.mkdirSync(scope, {recursive: true});

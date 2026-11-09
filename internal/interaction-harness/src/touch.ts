@@ -55,6 +55,7 @@ import {
   armInputRun,
   HELD_BACK_MS,
   installInputStart,
+  installInputStartBeforeLoad,
   type InputRun,
 } from './webInput';
 
@@ -1324,6 +1325,18 @@ async function webkitDriver(page: Page): Promise<TouchDriver> {
       await page.touchscreen.tap(Math.round(at.x), Math.round(at.y));
     },
   };
+}
+
+/**
+ * Adds the WebKit driver's listener-start mark to each page the tab loads
+ * next, before the page's scripts. A driver created after that load then tells
+ * a wait for the main thread from the page's listeners. `openStory` calls it.
+ * Other engines read no mark, so it adds none there.
+ */
+export async function installTouchStartBeforeLoad(page: Page): Promise<void> {
+  if (page.context().browser()?.browserType().name() === 'webkit') {
+    await installInputStartBeforeLoad(page, TOUCH_TYPES);
+  }
 }
 
 /** A touch driver for the page's engine. Firefox is not supported (no touch input path). */

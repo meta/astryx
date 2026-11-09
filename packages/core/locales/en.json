@@ -661,7 +661,7 @@
   },
   "@astryx.list.reorderPickedUp": {
     "defaultMessage": "Picked up, position {position, number} of {total, number}.",
-    "description": "Screen-reader announcement when a row of a List is picked up to be reordered, from its handle's keys or by a drag. `{position}` is the row's 1-based place, `{total}` the number of rows."
+    "description": "Screen-reader announcement when a drag picks up a row of a List to reorder it. `{position}` is the row's 1-based place, `{total}` the number of rows."
   },
   "@astryx.list.reorderDropped": {
     "defaultMessage": "Dropped, position {position, number} of {total, number}",
@@ -694,6 +694,10 @@
   "@astryx.listInput.reorderItem": {
     "defaultMessage": "Reorder {itemName} {position, number}",
     "description": "Accessible label on the drag-handle button that reorders one record in a lab ListInput. `{itemName}` is the consumer's singular noun for one record; `{position}` is its 1-based row number (e.g. \"Reorder guest 2\")."
+  },
+  "@astryx.listInput.itemName": {
+    "defaultMessage": "{itemName} {position, number}",
+    "description": "The name of one record in a lab ListInput, which its reorder handle (\"Reorder guest 2\") and the reorder announcements use. `{itemName}` is the consumer's singular noun for one record; `{position}` is its 1-based row number (e.g. \"guest 2\")."
   },
   "@astryx.listInput.fieldLabelWithPosition": {
     "defaultMessage": "{header}, {itemName} {position, number} of {total, number}",
@@ -1034,6 +1038,10 @@
   "@astryx.table.columnResize.resizeColumn": {
     "defaultMessage": "Resize column {label}",
     "description": "Accessible name for a Table column-resize handle (a vertical separator between header cells). `label` is the column header's visible text, or the column key when the header has no text."
+  },
+  "@astryx.table.columnResize.widthValue": {
+    "defaultMessage": "{width, number} {width, plural, one {pixel} other {pixels}}",
+    "description": "Value a screen reader announces for a Table column-resize handle when the column has no maximum width. `width` is the column's current value as a whole number of CSS pixels, for example \"133 pixels\"."
   },
   "@astryx.table.filter.allPlaceholder": {
     "defaultMessage": "All",

@@ -48,6 +48,13 @@ export interface Screencast {
    * position).
    */
   frameCount(): number;
+  /**
+   * When the latest frame captured so far was presented, epoch ms on the
+   * page's clock, as `stop()` stamps it; null before the first frame. A loaded
+   * machine delivers frames late and out of order, so a frame that arrives
+   * after a moment can still have been presented before it.
+   */
+  lastFrameAt(): number | null;
   /** Stops and returns every frame captured, in order. */
   stop(): Promise<CastFrame[]>;
 }
@@ -124,6 +131,7 @@ async function chromiumScreencast(
   });
   return {
     frameCount: () => frames.length,
+    lastFrameAt: () => latestFrameAt(frames),
     async stop() {
       await cdp.send('Page.stopScreencast');
       cdp.off('Page.screencastFrame', onFrame);
@@ -177,6 +185,10 @@ async function webkitScreencast(
   const wallMinusMonotonic = Date.now() - Number(process.hrtime.bigint()) / 1e6;
   return {
     frameCount: () => frames.length,
+    lastFrameAt: () => {
+      const latest = latestFrameAt(frames);
+      return latest == null ? null : latest + wallMinusMonotonic;
+    },
     async stop() {
       await session.send('Screencast.stopScreencast');
       session.off?.('Screencast.screencastFrame', onFrame);
@@ -189,6 +201,70 @@ async function webkitScreencast(
       }));
     },
   };
+}
+
+/**
+ * The latest presentation timestamp among `frames`, or null when there are
+ * none. A loaded machine can deliver frames out of order, so the frame that
+ * arrived last need not be the latest.
+ */
+export function latestFrameAt(
+  frames: readonly {readonly t: number}[],
+): number | null {
+  return frames.length === 0 ? null : Math.max(...frames.map(f => f.t));
+}
+
+/**
+ * Waits until `cast` holds a frame presented after `after`, epoch ms on the
+ * page's clock, and returns when that frame was presented. It reads
+ * presentation times, not counts: a frame delivered after `after` can still
+ * have been presented before it. `during` names what the frame had to show.
+ *
+ * Past `timeoutMs` (5 s) with no such frame, it fails. When the cast has
+ * sent no frame for longer than `FRAME_STARVATION_MS`, the error is
+ * `FrameStarvationError`. A starved page draws nothing, and a screen that
+ * does not change presents no frame either. So keep something moving, such
+ * as `startBusyControl`, for the wait to read starvation. While frames still
+ * come, all presented before `after`, the error names both times.
+ */
+export async function waitForCastFrame(
+  cast: Screencast,
+  {
+    after,
+    during,
+    timeoutMs = 5_000,
+  }: {
+    readonly after: number;
+    readonly during: string;
+    readonly timeoutMs?: number;
+  },
+): Promise<number> {
+  const start = Date.now();
+  for (;;) {
+    const latest = cast.lastFrameAt();
+    if (latest != null && latest > after) {
+      return latest;
+    }
+    const elapsed = Date.now() - start;
+    if (elapsed > timeoutMs) {
+      const quietMs =
+        latest == null ? Number.POSITIVE_INFINITY : Date.now() - latest;
+      if (latest == null || quietMs > FRAME_STARVATION_MS) {
+        throw new FrameStarvationError({
+          by: 'waitForCastFrame',
+          during: `${during} (${elapsed} ms)`,
+          frames: 0,
+          min: 1,
+          longestGapMs: quietMs,
+          cause: `the screen did not change after ${after.toFixed(1)}, or the page was starved of frames. Keep something moving, such as \`startBusyControl\`, to tell them apart`,
+        });
+      }
+      throw new Error(
+        `waitForCastFrame: no frame presented after ${after.toFixed(1)} while ${during} (${elapsed} ms). The cast's latest frame was presented ${(after - latest).toFixed(1)} ms before that, ${quietMs.toFixed(1)} ms ago, so frames still come`,
+      );
+    }
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
 }
 
 /**
@@ -819,6 +895,11 @@ export interface FrameShortfall {
    * drew fewer than two frames.
    */
   readonly longestGapMs: number;
+  /**
+   * Why no frame came, when more than starvation explains it, such as a
+   * screen that did not change. The default names starvation alone.
+   */
+  readonly cause?: string;
 }
 
 /**
@@ -831,7 +912,7 @@ export class FrameStarvationError extends Error {
   readonly numbers: FrameShortfall;
   constructor(numbers: FrameShortfall) {
     super(
-      `${numbers.by ?? 'requireFrames'}: the page drew ${framesDrawn(numbers.frames)} while ${numbers.during}, where the proof needs ${numbers.min}. ${Number.isFinite(numbers.longestGapMs) ? `No frame came for ${numbers.longestGapMs.toFixed(1)} ms` : 'No second frame came'}: the page was starved of frames (a loaded machine, or a long task on the page), so the run proves nothing about the motion`,
+      `${numbers.by ?? 'requireFrames'}: the page drew ${framesDrawn(numbers.frames)} while ${numbers.during}, where the proof needs ${numbers.min}. ${Number.isFinite(numbers.longestGapMs) ? `No frame came for ${numbers.longestGapMs.toFixed(1)} ms` : 'No second frame came'}: ${numbers.cause ?? 'the page was starved of frames (a loaded machine, or a long task on the page), so the run proves nothing about the motion'}`,
     );
     this.name = 'FrameStarvationError';
     this.numbers = numbers;
