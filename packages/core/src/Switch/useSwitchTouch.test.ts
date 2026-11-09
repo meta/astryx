@@ -5,8 +5,9 @@
  * @input vitest (jsdom), useSwitchTouch.ts's controller, and a recording
  *   stand-in for the compositor animator
  * @output Unit tests for what Switch's touch presentation asks the animator
- *   to do: a value change mid-fade swaps the colour layer on its running
- *   clock (a rebase), never from rest
+ *   to do. A value change mid-fade swaps the colour layer on its running
+ *   clock (a rebase), never from rest. A press's settle takes the theme's
+ *   tempo, as its lift does
  * @position Testing; the controller's calls, without a browser. The motion
  *   itself is proven in __tests__/Switch.interaction.browser.spec.ts and on
  *   the iOS simulator
@@ -17,6 +18,7 @@
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import type * as AnimatorModule from '../motion/animator';
+import type {MotionCurve} from '../motion/animator';
 
 interface Call {
   readonly name: string;
@@ -39,7 +41,7 @@ vi.mock('../motion/animator', async importOriginal => {
   const actual = await importOriginal<typeof AnimatorModule>();
   return {
     ...actual,
-    createMotionAnimator: (
+    createMotionEngine: (
       element: Element,
       options: {pseudoElement?: string} = {},
     ) => {
@@ -234,5 +236,69 @@ describe('the colour layer when the value changes', () => {
     fade.rest[0]();
     await flush();
     expect(fade.calls).toEqual([]);
+  });
+});
+
+describe('the thumb when the value changes', () => {
+  it('rebases toward the new rest, so a spring already heading there moves whole, then sends it there', () => {
+    const {controller, track} = mount();
+    const element = track.firstElementChild;
+    const thumb = animators.find(
+      animator =>
+        animator.element === element && animator.pseudoElement == null,
+    );
+    if (thumb == null) {
+      throw new Error('no thumb animator');
+    }
+    thumb.calls.length = 0;
+    render(controller, track, true);
+    // The CSS rest moved by the travel. The shift names the rest the spring
+    // heads for after it. The animator moves a spring whole only when its
+    // target lands there, and otherwise rebases as before.
+    const travel = switchTouchGeometry(40, 24).travel;
+    const rebase = thumb.calls.find(call => call.name === 'rebase');
+    expect(rebase?.args).toEqual([{x: -travel}, {towards: {x: 0}}]);
+    const animates = thumb.calls.filter(call => call.name === 'animate');
+    expect(animates.at(-1)?.args[0]).toEqual({x: 0});
+  });
+});
+
+describe("the press's lift and settle at the theme's tempo", () => {
+  /** The release curve's length when the thumb's theme plays at `tempo`. */
+  function settleSeconds(tempo: number): number {
+    const style = document.createElement('style');
+    style.textContent = `.paced { --_astryx-motion-tempo: ${tempo}; }`;
+    document.head.append(style);
+    const {controller, track} = mount();
+    const thumbElement = track.firstElementChild as HTMLElement;
+    thumbElement.className = 'paced';
+    const thumb = animators.find(
+      animator =>
+        animator.element === thumbElement && animator.pseudoElement == null,
+    );
+    if (thumb == null) {
+      throw new Error('no thumb animator');
+    }
+    // A press released at once: the settle waits out the minimum lift.
+    const press = controller as unknown as {
+      lift(time: number): void;
+      settle(time: number, touchRelease: boolean): void;
+    };
+    press.lift(0);
+    press.settle(0, false);
+    const play = thumb.calls.find(call => call.name === 'play');
+    const curve = (play?.args[0] as Record<string, MotionCurve>).scaleX;
+    document.body.innerHTML = '';
+    document.head.innerHTML = '';
+    animators.length = 0;
+    return curve.duration;
+  }
+
+  it('waits the minimum lift and settles on springs that all take the tempo times as long', () => {
+    const atOne = settleSeconds(1);
+    // The minimum lift alone is 235 ms, so the curve is on screen.
+    expect(atOne).toBeGreaterThan(0.235);
+    expect(settleSeconds(1.5) / atOne).toBeCloseTo(1.5, 6);
+    expect(settleSeconds(0.75) / atOne).toBeCloseTo(0.75, 6);
   });
 });

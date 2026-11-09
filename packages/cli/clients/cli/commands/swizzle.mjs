@@ -3,11 +3,10 @@
 /**
  * @file swizzle command — thin wrapper around api/swizzle.
  *
- * Copies a component's source into the consumer project for customization
- * (imports rewritten to the owner package's subpaths). All logic — owner
- * resolution, copy, import rewriting, StyleX detection, maintainer feedback —
- * lives in api/swizzle; this file only parses flags, prints, and prefixes
- * commands for the caller's package manager.
+ * Copies a component's source into the consumer project for customization,
+ * with the internal modules it needs. All logic — owner resolution, the copy,
+ * StyleX detection, maintainer feedback — lives in api/swizzle; this file only
+ * parses flags, prints, and prefixes commands for the caller's package manager.
  */
 
 import {jsonOut} from '../../../foundation/response/json.mjs';
@@ -85,11 +84,46 @@ export function registerSwizzle(program) {
         text(`[ok] Copied ${filesCopied} files to ${outputDir}/`),
         text(
           [
-            `Relative imports have been rewritten to use ${ownerPackage}.`,
+            `What ${ownerPackage} exports is imported from ${ownerPackage}; the internal modules the component needs are copied beside it.`,
             'You can now customize the component source freely.',
           ].join('\n'),
         ),
       ];
+      // Files the copy wrote outside the component folder: the internal
+      // modules it needs, in the package's folder layout.
+      const shared = (result.data.files ?? []).filter(f => f.startsWith('../'));
+      if (shared.length > 0) {
+        out.push(
+          text(
+            `Copied beside it: ${shared.join(', ')} (in the package's folder layout; imported by relative path)`,
+          ),
+        );
+      }
+
+      // npm packages the copy imports, each range quoted so the list pastes
+      // safely after an install command.
+      const dependencies = Object.entries(result.data.dependencies ?? {});
+      if (dependencies.length > 0) {
+        out.push(
+          text(
+            `It imports these npm packages; install any your project lacks: ${dependencies
+              .map(([name, range]) => (range === '*' ? name : `${name}@"${range}"`))
+              .join(' ')}`,
+          ),
+        );
+      }
+
+      const {marker} = result.data;
+      if (marker) {
+        const folder = marker.path.replace(/\/?astryx-swizzle\.json$/, '') || '.';
+        out.push(
+          text(
+            marker.written
+              ? `Marked ${folder}/ with astryx-swizzle.json: with @astryxdesign/build's Babel, PostCSS and Vite integrations, or withAstryx() under webpack, every module under it compiles below your theme, so theme overrides reach the copy. Keep only swizzled copies there. Turbopack does not read the marker yet.`
+              : `Did not mark ${folder}/ with astryx-swizzle.json: it already holds ${(marker.found ?? []).join(', ')} and no astryx-swizzle.json. If it holds only swizzled copies, add ${marker.path} to mark it, so theme overrides reach them; keep the product's own components out of a marked folder.`,
+          ),
+        );
+      }
 
       // StyleX build requirement — swizzled StyleX source throws on import
       // ("Unexpected 'stylex.create' call at runtime") unless the consumer's

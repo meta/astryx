@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "icon",
-    "matchCount": 226,
+    "matchCount": 233,
     "results": [
       {
         "domain": "component",
@@ -48,6 +48,17 @@
         "description": "<text>",
         "import": "@astryxdesign/core/InfoTip",
         "command": "astryx component InfoTip",
+        "mentions": []
+      },
+      {
+        "domain": "hook",
+        "name": "useIcon",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Icon",
+        "command": "astryx hook useIcon",
         "mentions": []
       },
       {
@@ -97,6 +108,19 @@
         "section": "<text>",
         "title": "<text>",
         "command": "astryx docs icons icon-variants",
+        "parent": "astryx docs icons --index",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "icons",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs icons component-icon-slots",
         "parent": "astryx docs icons --index",
         "mentions": []
       },
@@ -218,30 +242,6 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template ChatComposerDrawerShowcase --type block",
-        "mentions": []
-      },
-      {
-        "domain": "template",
-        "name": "ChatComposerDrawerWithProgress",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "displayName": "<text>",
-        "kind": "block",
-        "command": "astryx template ChatComposerDrawerWithProgress --type block",
-        "mentions": []
-      },
-      {
-        "domain": "template",
-        "name": "ChatComposerFooterActions",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "displayName": "<text>",
-        "kind": "block",
-        "command": "astryx template ChatComposerFooterActions --type block",
         "mentions": []
       }
     ]

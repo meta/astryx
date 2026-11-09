@@ -12,7 +12,7 @@
  */
 
 import {act, fireEvent, render, screen} from '@testing-library/react';
-import {useState} from 'react';
+import {useRef, useState} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {BottomSheet} from './BottomSheet';
 import {resetBottomSheetStackForTests} from './bottomSheetStack';
@@ -266,5 +266,388 @@ describe('BottomSheet close order for focus', () => {
 
     expect(sheet()).toHaveAttribute('inert');
     expect(sheet()).toHaveAttribute('aria-hidden', 'true');
+  });
+});
+
+describe('BottomSheet removed while open', () => {
+  // A non-modal sheet is a manual popover; jsdom's stand-ins keep the same
+  // `open` marker the dialog paths use, as the other BottomSheet tests do.
+  beforeEach(() => {
+    HTMLElement.prototype.showPopover = vi.fn(function (this: HTMLElement) {
+      this.setAttribute('open', '');
+    });
+    HTMLElement.prototype.hidePopover = vi.fn(function (this: HTMLElement) {
+      this.removeAttribute('open');
+    });
+  });
+
+  // Lets the removal's focus repair run: it waits for the commit to finish.
+  async function settle() {
+    await act(async () => {
+      await Promise.resolve();
+    });
+  }
+
+  function sheetNamed(label: string): HTMLDialogElement | null {
+    return document.querySelector<HTMLDialogElement>(
+      `dialog[aria-label="${label}"]`,
+    );
+  }
+
+  function RenderedWhileOpen({
+    hasScrim,
+    withFinalFocus = false,
+  }: {
+    hasScrim: boolean;
+    withFinalFocus?: boolean;
+  }) {
+    const [isOpen, setIsOpen] = useState(false);
+    const searchRef = useRef<HTMLInputElement>(null);
+    return (
+      <>
+        <input aria-label="Search" ref={searchRef} />
+        <button type="button" onClick={() => setIsOpen(true)}>
+          Filters
+        </button>
+        {isOpen && (
+          <BottomSheet
+            isOpen
+            onOpenChange={setIsOpen}
+            label="Filters"
+            hasScrim={hasScrim}
+            finalFocusRef={withFinalFocus ? searchRef : undefined}>
+            <button type="button" onClick={() => setIsOpen(false)}>
+              Done
+            </button>
+          </BottomSheet>
+        )}
+      </>
+    );
+  }
+
+  function openAndPressDone(element: React.ReactElement) {
+    render(element);
+    const opener = screen.getByRole('button', {name: 'Filters'});
+    act(() => opener.focus());
+    fireEvent.click(opener);
+    const done = screen.getByRole('button', {name: 'Done', hidden: true});
+    act(() => done.focus());
+    fireEvent.click(done);
+    return opener;
+  }
+
+  it.each([
+    ['a modal', true],
+    ['a non-modal', false],
+  ])(
+    'returns focus to the opener when %s sheet is removed from inside',
+    async (_label, hasScrim) => {
+      const opener = openAndPressDone(
+        <RenderedWhileOpen hasScrim={hasScrim} />,
+      );
+      await settle();
+
+      expect(sheetNamed('Filters')).toBeNull();
+      expect(opener).toHaveFocus();
+    },
+  );
+
+  it('leaves focus on the body when it rested there before a non-modal sheet was removed', async () => {
+    function NonModal() {
+      const [isOpen, setIsOpen] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setIsOpen(true)}>
+            Filters
+          </button>
+          <button type="button" onClick={() => setIsOpen(false)}>
+            Remove
+          </button>
+          {isOpen && (
+            <BottomSheet
+              isOpen
+              onOpenChange={setIsOpen}
+              label="Filters"
+              hasScrim={false}>
+              <button type="button">Done</button>
+            </BottomSheet>
+          )}
+        </>
+      );
+    }
+    render(<NonModal />);
+    const opener = screen.getByRole('button', {name: 'Filters'});
+    act(() => opener.focus());
+    fireEvent.click(opener);
+    // The person clicked the page behind the sheet: focus rests on the body.
+    act(() => (document.activeElement as HTMLElement | null)?.blur());
+    expect(document.activeElement).toBe(document.body);
+
+    fireEvent.click(screen.getByRole('button', {name: 'Remove'}));
+    await settle();
+
+    expect(sheetNamed('Filters')).toBeNull();
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it('returns focus to finalFocusRef when one is given', async () => {
+    openAndPressDone(<RenderedWhileOpen hasScrim withFinalFocus />);
+    await settle();
+
+    expect(screen.getByRole('textbox', {name: 'Search'})).toHaveFocus();
+  });
+
+  it('moves no focus when the opener was removed too', async () => {
+    function View() {
+      const [isShown, setIsShown] = useState(true);
+      const [isOpen, setIsOpen] = useState(false);
+      return isShown ? (
+        <div>
+          <button type="button" onClick={() => setIsOpen(true)}>
+            Filters
+          </button>
+          {isOpen && (
+            <BottomSheet isOpen onOpenChange={setIsOpen} label="Filters">
+              <button type="button" onClick={() => setIsShown(false)}>
+                Done
+              </button>
+            </BottomSheet>
+          )}
+        </div>
+      ) : null;
+    }
+    openAndPressDone(<View />);
+    await settle();
+
+    expect(sheetNamed('Filters')).toBeNull();
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it('returns focus into the revealed sheet when the top sheet is removed', async () => {
+    function Stack() {
+      const [isOpen, setIsOpen] = useState(false);
+      const [isSortOpen, setIsSortOpen] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setIsOpen(true)}>
+            Filters
+          </button>
+          <BottomSheet isOpen={isOpen} onOpenChange={setIsOpen} label="Filters">
+            <button type="button" onClick={() => setIsSortOpen(true)}>
+              Sort
+            </button>
+            {isSortOpen && (
+              <BottomSheet isOpen onOpenChange={setIsSortOpen} label="Sort by">
+                <button type="button" onClick={() => setIsSortOpen(false)}>
+                  Done
+                </button>
+              </BottomSheet>
+            )}
+          </BottomSheet>
+        </>
+      );
+    }
+    render(<Stack />);
+    fireEvent.click(screen.getByRole('button', {name: 'Filters'}));
+    const sort = screen.getByRole('button', {name: 'Sort', hidden: true});
+    act(() => sort.focus());
+    fireEvent.click(sort);
+    const done = screen.getByRole('button', {name: 'Done', hidden: true});
+    act(() => done.focus());
+
+    fireEvent.click(done);
+    await settle();
+
+    expect(sheetNamed('Sort by')).toBeNull();
+    expect(sort).toHaveFocus();
+  });
+
+  it('returns focus to the first opener when a whole stack is removed', async () => {
+    function Stack() {
+      const [isOpen, setIsOpen] = useState(false);
+      const [isSortOpen, setIsSortOpen] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setIsOpen(true)}>
+            Filters
+          </button>
+          {isOpen && (
+            <BottomSheet isOpen onOpenChange={setIsOpen} label="Filters">
+              <button type="button" onClick={() => setIsSortOpen(true)}>
+                Sort
+              </button>
+              {isSortOpen && (
+                <BottomSheet
+                  isOpen
+                  onOpenChange={setIsSortOpen}
+                  label="Sort by">
+                  <button type="button" onClick={() => setIsOpen(false)}>
+                    Apply all
+                  </button>
+                </BottomSheet>
+              )}
+            </BottomSheet>
+          )}
+        </>
+      );
+    }
+    render(<Stack />);
+    const opener = screen.getByRole('button', {name: 'Filters'});
+    act(() => opener.focus());
+    fireEvent.click(opener);
+    const sort = screen.getByRole('button', {name: 'Sort', hidden: true});
+    act(() => sort.focus());
+    fireEvent.click(sort);
+    const applyAll = screen.getByRole('button', {
+      name: 'Apply all',
+      hidden: true,
+    });
+    act(() => applyAll.focus());
+
+    fireEvent.click(applyAll);
+    await settle();
+
+    expect(sheetNamed('Filters')).toBeNull();
+    expect(sheetNamed('Sort by')).toBeNull();
+    expect(opener).toHaveFocus();
+  });
+
+  it('returns focus to the bottom sheet opener when a sibling stack declared top first is removed', async () => {
+    function Siblings() {
+      const [isOpen, setIsOpen] = useState(false);
+      const [isSortOpen, setIsSortOpen] = useState(false);
+      const searchRef = useRef<HTMLInputElement>(null);
+      return (
+        <>
+          <input aria-label="Search" ref={searchRef} />
+          <button type="button" onClick={() => setIsOpen(true)}>
+            Filters
+          </button>
+          {isOpen && isSortOpen && (
+            <BottomSheet
+              isOpen
+              onOpenChange={setIsSortOpen}
+              label="Sort by"
+              finalFocusRef={searchRef}>
+              <button type="button" onClick={() => setIsOpen(false)}>
+                Apply all
+              </button>
+            </BottomSheet>
+          )}
+          {isOpen && (
+            <BottomSheet isOpen onOpenChange={setIsOpen} label="Filters">
+              <button type="button" onClick={() => setIsSortOpen(true)}>
+                Sort
+              </button>
+            </BottomSheet>
+          )}
+        </>
+      );
+    }
+    render(<Siblings />);
+    const opener = screen.getByRole('button', {name: 'Filters'});
+    act(() => opener.focus());
+    fireEvent.click(opener);
+    const sort = screen.getByRole('button', {name: 'Sort', hidden: true});
+    act(() => sort.focus());
+    fireEvent.click(sort);
+    const applyAll = screen.getByRole('button', {
+      name: 'Apply all',
+      hidden: true,
+    });
+    act(() => applyAll.focus());
+
+    fireEvent.click(applyAll);
+    await settle();
+
+    expect(sheetNamed('Filters')).toBeNull();
+    expect(sheetNamed('Sort by')).toBeNull();
+    expect(opener).toHaveFocus();
+  });
+
+  it('moves no focus when a covered sheet is removed under a top sheet that stays', async () => {
+    function Siblings() {
+      const [isFiltersShown, setIsFiltersShown] = useState(true);
+      const [isSortOpen, setIsSortOpen] = useState(false);
+      return (
+        <>
+          {isFiltersShown && (
+            <BottomSheet isOpen onOpenChange={() => {}} label="Filters">
+              <button type="button" onClick={() => setIsSortOpen(true)}>
+                Sort
+              </button>
+            </BottomSheet>
+          )}
+          <BottomSheet
+            isOpen={isSortOpen}
+            onOpenChange={setIsSortOpen}
+            label="Sort by">
+            <button type="button" onClick={() => setIsFiltersShown(false)}>
+              Remove filters
+            </button>
+          </BottomSheet>
+        </>
+      );
+    }
+    render(<Siblings />);
+    const sort = screen.getByRole('button', {name: 'Sort', hidden: true});
+    act(() => sort.focus());
+    fireEvent.click(sort);
+    const remove = screen.getByRole('button', {
+      name: 'Remove filters',
+      hidden: true,
+    });
+    act(() => remove.focus());
+
+    fireEvent.click(remove);
+    await settle();
+
+    expect(sheetNamed('Filters')).toBeNull();
+    expect(remove).toHaveFocus();
+  });
+
+  it('leaves focus in a sheet that opens in the update that removes this one', async () => {
+    function Flow() {
+      const [step, setStep] = useState<'none' | 'filters' | 'sort'>('none');
+      return (
+        <>
+          <button type="button" onClick={() => setStep('filters')}>
+            Filters
+          </button>
+          {step === 'filters' && (
+            <BottomSheet
+              isOpen
+              onOpenChange={() => setStep('none')}
+              label="Filters">
+              <button type="button" onClick={() => setStep('sort')}>
+                Next
+              </button>
+            </BottomSheet>
+          )}
+          {step === 'sort' && (
+            <BottomSheet
+              isOpen
+              onOpenChange={() => setStep('none')}
+              label="Sort by">
+              <button type="button">Apply</button>
+            </BottomSheet>
+          )}
+        </>
+      );
+    }
+    render(<Flow />);
+    const opener = screen.getByRole('button', {name: 'Filters'});
+    act(() => opener.focus());
+    fireEvent.click(opener);
+    const next = screen.getByRole('button', {name: 'Next', hidden: true});
+    act(() => next.focus());
+
+    fireEvent.click(next);
+    await settle();
+
+    const sortSheet = sheetNamed('Sort by');
+    expect(sortSheet).not.toBeNull();
+    expect(sortSheet?.contains(document.activeElement)).toBe(true);
+    expect(opener).not.toHaveFocus();
   });
 });

@@ -621,7 +621,6 @@ export function SideNav({
     onCollapseChange: onCollapsedChange,
   });
 
-  // The region that sizes the rail: the caller's, or SideNav's own.
   const region = ownerRegion ?? resizableHook;
   const collapsed = region.isCollapsed;
 
@@ -1000,16 +999,18 @@ export function SideNav({
             collapsed && styles.stickyBottomCollapsed,
           )}>
           {footer}
-          <div
-            {...stylex.props(
-              styles.footerRow,
-              collapsed && styles.footerRowCollapsed,
-            )}>
-            <SizeProvider value={FOOTER_ICON_SIZE}>
-              {showCollapseButton && <SideNavCollapseButton />}
-              {footerIcons}
-            </SizeProvider>
-          </div>
+          {(showCollapseButton || isRenderable(footerIcons)) && (
+            <div
+              {...stylex.props(
+                styles.footerRow,
+                collapsed && styles.footerRowCollapsed,
+              )}>
+              <SizeProvider value={FOOTER_ICON_SIZE}>
+                {showCollapseButton && <SideNavCollapseButton />}
+                {footerIcons}
+              </SizeProvider>
+            </div>
+          )}
         </div>
       )}
     </nav>

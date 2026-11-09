@@ -50,9 +50,18 @@ function walk(dir) {
   });
 }
 
+/**
+ * Every `*.doc.mjs` file under the doc roots, as absolute paths. Listing them
+ * imports none.
+ * @returns {string[]}
+ */
+export function docFiles() {
+  return DOC_ROOTS.flatMap(walk);
+}
+
 /** @returns {Promise<{file: string, doc: any}[]>} */
 export async function collectDocs() {
-  const files = DOC_ROOTS.flatMap(walk);
+  const files = docFiles();
   const out = [];
   for (const f of files) {
     const mod = await import(pathToFileURL(f).href);

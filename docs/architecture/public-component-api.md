@@ -170,7 +170,9 @@ guidance owns the process used to propose and test APIs.
   calls it internal. Privacy requires removing the export or moving the capability
   behind a non-exported boundary. Core's `./internal/*` subpaths are the one
   exception: reachable, but reserved for Core and Lab, undocumented, versioned
-  in lockstep with Core, limited by lint to those two packages, and outside
+  in lockstep with Core, limited by lint to those two packages, and imported
+  by a swizzled copy only for an exported StyleX module whose identity is its
+  path (`spec:AST-110` FR1), and outside
   the compatibility promise (`spec:AST-017` FR21).
 - **INV13 — Public deltas route to their authority owner.** Every public API update
   and every public behavior change follows the result and disposition defined by
@@ -245,7 +247,9 @@ guidance owns the process used to propose and test APIs.
   output feeds one Astryx component prop, or `useAnimatedLayout`,
   `useEntryAnimation`, `useContainerReveal`, `useTouchTrigger`,
   `useTableRowExpansion`, `useTableColumnResize`) has none by default; the owner
-  may add one (owner decision, 2026-11-04).
+  may add one (owner decision, 2026-11-04). `useMenuPress` has no non-React
+  equivalent by owner decision (2026-11-04); one may be added when a caller
+  needs it.
 - **INV23 — Each private data attribute has one owner module.** A
   `data-astryx-*` attribute is private unless this invariant names it public.
   Each private attribute has one internal owner module in the package that
@@ -255,9 +259,21 @@ guidance owns the process used to propose and test APIs.
   written. The owner exports only ready-made styles that read the attribute, the
   props or writer that set it, and the runtime readers its package needs, such
   as a `closest` or `matches` helper or a getter; it never exports the raw name
-  or a selector. Every other file in that package spreads those exports and
+  or a selector. A plain-TS owner,
+  `packages/core/src/privateAttributes/<name>.ts`, may export its name and
+  selector text to its `.stylex.ts` sibling and to the theme engine in
+  `packages/core/src/theme/`; no other file imports it, and `.stylex.ts` owners
+  still never export them. When a plain-TS owner exists, its `.stylex.ts`
+  sibling is not an owner: it writes the attribute's selectors only as literals
+  for its own `stylex.create` calls, because StyleX resolves a selector only
+  where it is written, and it never exports them or sets the attribute. Every
+  other file in that package spreads those exports and
   never writes the attribute or its selector, and no package imports another
-  package's owner module through an internal path. StyleX merges styles one
+  package's owner module through an internal path. An owner module whose
+  attribute marks an element its package does not render may write its
+  selector once in an injected rule instead of `stylex.create`; Core may
+  re-export only that module's writer to Lab through an internal entry, and
+  the attribute name and selector stay private to the owner. StyleX merges styles one
   whole property at a time, so an owner style carries every condition of each
   property it sets, its rest state and pointer states included, and a caller
   does not set those properties again on the same element. Outside the owner
@@ -413,7 +429,7 @@ Rejected: component-local names for shared concepts.
 | INV20                   | Public-API review of new boolean props                                                                                   | A boolean whose only effect is a visual swap where a variant fits                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | INV21                   | Public-API review against existing props, components, hooks, and factories                                               | A new API that shares a job with an existing one that is not being deprecated in its favor; a hook fed to one component slot prop counted as a second API                                                                                                                                                                                                                                                                                                                               |
 | INV21a                  | Public-API review of each breaking or deprecating change to a shipped API                                                | A breaking or deprecating change to a shipped public API justified only by conformance to a system rule                                                                                                                                                                                                                                                                                                                                                                                 |
-| INV22                   | Public-API review of each public interaction utility hook against its `create…` equivalent                               | An interaction utility hook with no `create…` equivalent, outside hooks whose result only an Astryx component or StyleX can use, or an equivalent whose option names and meanings, events, or return concepts differ from its hook                                                                                                                                                                                                                                                      |
+| INV22                   | Public-API review of each public interaction utility hook against its `create…` equivalent                               | An interaction utility hook with no `create…` equivalent, outside hooks whose result only an Astryx component or StyleX can use and `useMenuPress` (by owner decision), or an equivalent whose option names and meanings, events, or return concepts differ from its hook                                                                                                                                                                                                               |
 | INV23                   | `@astryx/no-raw-private-attribute` lint with its baseline (test files exempt), plus public-API review of the public list | A `data-astryx-*` name or selector written outside its owner module, a test, or the public list; a `dataAttr()` call that names a private attribute; an owner module that exports its raw name or a selector; a package that imports another package's owner module; a caller that sets a property an owner style it spreads also sets; a private attribute in a public export, `.doc.mjs`, or Changeset; a baseline entry added; a public data attribute changed without INV9 evidence |
 | INV24                   | API report generator tests over representative entry points, plus the pull-request report's API changes                  | A promised export, prop, hook, type, custom property, theme target, or public attribute is missing from a report; a reachable internal-tagged member is missing; an `./internal/*` or Lab member appears; a stale committed report is not flagged, or its rows are listed as the pull request's API changes; the check fails a pull request                                                                                                                                             |
 | INV25                   | Public-API review routing against the pull request's API changes                                                         | A row that no current record decides does not reach human review; a row a current record decides is held for a human; an undeclared row alone draws a request for changes                                                                                                                                                                                                                                                                                                               |
@@ -442,7 +458,16 @@ Known verification gaps:
   another keeps its name until a minor renames it under INV9. Outline's
   `offset` is the distance below the top of its scroll root
   (`component:Outline` FR4), not a gap from an anchor.
-- INV22: known gaps include `useLongPress`, `useMenuPress`, `usePressFeedback`,
+- INV3: Carousel `hasSnap` takes `boolean | SnapPaging`. Omitted or `false` does
+  not snap, `true` is native scroll snap, and a value from `useSnapPaging` is
+  snap paging. It is a known deviation from three rules: an `is…` or `has…`
+  boolean names only a true on/off with no third state (INV3); a prop that
+  chooses how a component responds to input is a `<thing>Behavior` closed union
+  (INV2); and a behavior that differs by device offers a per-device value
+  (INV3), where the paging value pages under a finger and a trackpad swipe and
+  keeps native snap under a mouse wheel. It keeps one snap prop for builders
+  (`component:Carousel/DEC-2`) and is not renamed.
+- INV22: known gaps include `useLongPress`, `usePressFeedback`,
   `useClickableContainer`, `useInputContainer`, `useOverlay`, `useCombobox`,
   `useMultiCombobox`, `useResizable`, `useTooltip`, `useHoverCard`, and
   `useChatStreamScroll`: each attaches gesture, press, drag, or motion behavior

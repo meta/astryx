@@ -3,6 +3,7 @@
 import type {Meta, StoryObj} from '@storybook/react';
 import {InfoTip} from '@astryxdesign/core/InfoTip';
 import {HStack} from '@astryxdesign/core/Layout';
+import {List, ListItem} from '@astryxdesign/core/List';
 import {Text} from '@astryxdesign/core/Text';
 
 const meta: Meta<typeof InfoTip> = {
@@ -69,6 +70,38 @@ export const Sizes: Story = {
         <InfoTip content="Medium" size="md" />
         <InfoTip content="Large" size="lg" />
       </HStack>
+    </div>
+  ),
+};
+
+/**
+ * Info buttons at the end of divided List rows. Under a finger each button
+ * takes taps out toward 44 px, as anywhere else. The row's divider never
+ * widens that reach.
+ */
+export const InADividedList: Story = {
+  render: () => (
+    <div style={{maxWidth: 360}}>
+      <List hasDividers>
+        <ListItem
+          label="Rolling average"
+          endContent={
+            <InfoTip
+              content="30-day rolling average, recomputed nightly."
+              label="About rolling average"
+            />
+          }
+        />
+        <ListItem
+          label="Peak"
+          endContent={
+            <InfoTip
+              content="The highest daily value this month."
+              label="About peak"
+            />
+          }
+        />
+      </List>
     </div>
   ),
 };

@@ -79,8 +79,7 @@ registerEnglishFallback(english);
 const CONTENT_BLOCK_CAP = '480px';
 
 const styles = stylex.create({
-  // The tooltip-placement status info-tip sits beside the chevron and keeps
-  // its size when the trigger text is long.
+  // The status glyph or info-tip keeps its size when the trigger text is long.
   statusTip: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -598,13 +597,12 @@ export function ComplexSelector<Value>({
   const contentId = useId();
   const descriptionId = useId();
   const statusMessageId = useId();
-  // With `tooltip` placement Field renders no message box, so the status
-  // lives in an info-tip button on the trigger row (family:input-fields FR8).
-  // Only that placement renders an on-field status affordance here.
+  // With `tooltip` placement, Field renders no message box. The info-tip
+  // holds the message and describes the trigger.
   const isTooltipStatus = effectiveStatusVariant === 'tooltip';
   const {statusIcon: statusTip, describedBy: statusTipDescribedBy} =
     useInputStatusIcon({
-      status: isTooltipStatus ? status : undefined,
+      status,
       statusVariant: effectiveStatusVariant,
       size: 'sm',
     });
@@ -658,6 +656,9 @@ export function ComplexSelector<Value>({
     surfaceTarget: 'complex-selector-popup',
     onShow: handlePopoverShow,
     onHide: handlePopoverHide,
+    // The entrance runs on the surface: an anchored layer lays out again on
+    // each frame its own style animates.
+    xstyle: layerAnimations[placement],
   });
   popupContentRef.current = popover.contentRef.current;
 
@@ -805,7 +806,7 @@ export function ComplexSelector<Value>({
     placement,
     alignment,
     offset: spacingVars['--spacing-1'],
-    xstyle: [styles.popover, layerAnimations[placement]],
+    xstyle: styles.popover,
   });
 
   if (renderTrigger != null) {
@@ -927,32 +928,42 @@ export function ComplexSelector<Value>({
           {...stylex.props(styles.trigger)}>
           <span {...stylex.props(styles.triggerText)}>{triggerContent}</span>
         </button>
-        {isRenderable(statusTip) && (
-          // The info-tip is its own control: a press on it, or on its message
-          // bubble (portaled, so outside this span in the DOM but inside it in
-          // React), shows the message without opening the popup.
-          <span onClick={stopPropagation} {...stylex.props(styles.statusTip)}>
-            {statusTip}
-          </span>
-        )}
         {isBusy && <Spinner size="sm" aria-hidden="true" />}
-        <Icon
-          icon="chevronDown"
-          size="sm"
-          color="secondary"
-          // No wrapper: Icon's own span already provides the 16px box (`sm`)
-          // and the secondary icon color the wrapper used to set, so the glyph
-          // IS the trigger's icon element — one node carrying the box, the
-          // color, the rotation, and the theme target.
-          xstyle={[
-            styles.triggerIcon,
-            styles.triggerIconRotation,
-            isOpen && styles.triggerIconOpen,
-          ]}
-          {...themeProps('complex-selector-indicator-icon', {
-            state: isOpen ? 'expanded' : 'collapsed',
-          })}
-        />
+        {isRenderable(statusTip) &&
+          (isTooltipStatus ? (
+            // The info-tip is its own control: a press on it, or on its
+            // message bubble (portaled, so outside this span in the DOM but
+            // inside it in React), shows the message without opening the
+            // popup.
+            <span onClick={stopPropagation} {...stylex.props(styles.statusTip)}>
+              {statusTip}
+            </span>
+          ) : (
+            // The plain icon is part of the field: a press on it opens the
+            // popup, as a press on the trigger does.
+            <span {...stylex.props(styles.statusTip)}>{statusTip}</span>
+          ))}
+        {/* A status icon or info-tip takes the chevron's place, as in
+            Selector. */}
+        {!isRenderable(statusTip) && (
+          <Icon
+            icon="chevronDown"
+            size="sm"
+            color="secondary"
+            // No wrapper: Icon's own span already provides the 16px box (`sm`)
+            // and the secondary icon color the wrapper used to set, so the glyph
+            // IS the trigger's icon element — one node carrying the box, the
+            // color, the rotation, and the theme target.
+            xstyle={[
+              styles.triggerIcon,
+              styles.triggerIconRotation,
+              isOpen && styles.triggerIconOpen,
+            ]}
+            {...themeProps('complex-selector-indicator-icon', {
+              state: isOpen ? 'expanded' : 'collapsed',
+            })}
+          />
+        )}
       </div>
 
       {popup}
