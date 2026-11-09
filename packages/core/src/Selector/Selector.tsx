@@ -1603,17 +1603,14 @@ export function Selector<T extends SelectorOptionType>(
     noteHighlightMove();
   }, [comboboxTriggerClick, noteHighlightMove]);
 
-  // A new query is a new list: the highlight moves to its first enabled
-  // match, so aria-activedescendant always names a rendered option and Enter
-  // picks the one the user sees. Adjusted during render, as the query
-  // changes, rather than in an effect. Closing resets the query too; that
-  // reset is no new list, and a search list reopens with nothing highlighted.
+  // A new query is a new list: the old highlight's index would name another
+  // option, or one past the end, so it is cleared and ArrowDown starts at the
+  // first enabled match. Adjusted during render, as the query changes, rather
+  // than in an effect.
   const [highlightedQuery, setHighlightedQuery] = useState(searchQuery);
   if (highlightedQuery !== searchQuery) {
     setHighlightedQuery(searchQuery);
-    setHighlightedIndex(
-      surface.isOpen ? filteredItems.findIndex(item => !item.disabled) : -1,
-    );
+    setHighlightedIndex(-1);
   }
 
   // Type-to-select, shared with the other collections (menus, listboxes).

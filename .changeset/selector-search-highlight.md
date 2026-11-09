@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] In a searchable `Selector`, typing now highlights the first enabled match of the new list, so Enter picks the option you see highlighted; before, the highlight kept its old position, which could point at a different option or at nothing. In a searchable `MultiSelector`, typing clears the highlight instead, so Enter never picks a row you did not highlight, and ArrowDown starts at the first row (Select all or the create row when shown, otherwise the first match).
+[fix] In a searchable `Selector` or `MultiSelector`, typing now clears the highlight, so Enter never picks an option you did not highlight. Before, the highlight kept its old position, which could point at a different option of the filtered list or at nothing. ArrowDown then starts at the first row: the first enabled match in `Selector`, and Select all or the create row when shown in `MultiSelector`.
 
 @cixzhang

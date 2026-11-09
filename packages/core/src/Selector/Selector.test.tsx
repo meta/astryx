@@ -1904,7 +1904,7 @@ describe('Selector', () => {
           'Strawberry',
           'Blueberry',
         ]);
-        // The first match is highlighted as the query lands.
+        await user.keyboard('{ArrowDown}');
         expect(search).toHaveAttribute('aria-activedescendant', options[0].id);
         await user.keyboard('{ArrowDown}');
         expect(search).toHaveAttribute('aria-activedescendant', options[1].id);
