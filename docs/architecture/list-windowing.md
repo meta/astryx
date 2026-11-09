@@ -166,6 +166,19 @@ row-position accuracy.
 
 The owner approved the budget in INV5. It is set from the 2026-11-09 measurement of virtua's Virtualizer plus WindowVirtualizer, 4.9 KB with the same build settings.
 
+### DEC-6 — Table's public windowing API changes only one name
+
+**Reference:** `architecture:list-windowing/DEC-6`
+**Decider:** `cixzhang`, `2026-11-09`
+
+The owner said: "Va a". `useTableRowsVirtualization` keeps `rowHeight` and
+renames `viewportHeight` to `initialViewportHeight`, which Table reads for the
+first frame only. The shared vocabulary in DEC-3 (a scroll ref, exact or
+estimated item sizes, an anchor) reaches Table's public API only through a
+later owner decision.
+
+Rejected: adding the shared vocabulary to Table's public API now.
+
 ## Open questions
 
 - **OQ1 — Is the windowing module public (a hook) or internal only?** Not
