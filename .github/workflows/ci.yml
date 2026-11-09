@@ -301,6 +301,8 @@ jobs:
           mkdir -p "$TRUSTED_POLICY/scripts/release" "$TRUSTED_POLICY/scripts/lib"
           git show "origin/$RELEASE_BRANCH:scripts/release/active-release.mjs" \
             > "$TRUSTED_POLICY/scripts/release/active-release.mjs"
+          git show "origin/$RELEASE_BRANCH:scripts/release/release-paths.mjs" \
+            > "$TRUSTED_POLICY/scripts/release/release-paths.mjs"
           git show "origin/$RELEASE_BRANCH:scripts/lib/workspace-globs.mjs" \
             > "$TRUSTED_POLICY/scripts/lib/workspace-globs.mjs"
           VALIDATOR="$TRUSTED_POLICY/scripts/release/active-release.mjs"
@@ -371,26 +373,30 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      - name: Fetch release refs, base, and trusted release policy
+      - name: Fetch release refs, base, main, and trusted release policy
         run: |
           git fetch origin '+refs/heads/release/v*:refs/remotes/origin/release/v*'
-          git fetch origin "${{ github.base_ref }}" --depth=50
+          git fetch origin "${{ github.base_ref }}" --depth=200
+          git fetch origin 'main:refs/remotes/origin/main'
           TRUSTED_POLICY="$RUNNER_TEMP/release-policy"
           mkdir -p "$TRUSTED_POLICY/scripts/release" "$TRUSTED_POLICY/scripts/lib"
           git show "origin/${{ github.base_ref }}:scripts/release/active-release.mjs" \
             > "$TRUSTED_POLICY/scripts/release/active-release.mjs"
+          git show "origin/${{ github.base_ref }}:scripts/release/release-paths.mjs" \
+            > "$TRUSTED_POLICY/scripts/release/release-paths.mjs"
           git show "origin/${{ github.base_ref }}:scripts/lib/workspace-globs.mjs" \
             > "$TRUSTED_POLICY/scripts/lib/workspace-globs.mjs"
 
       - name: Setup Node and pnpm
         uses: ./.github/actions/setup
 
-      - name: Require generated-only release bookkeeping
+      - name: Require generated release bookkeeping or a proven test repair
         run: |
           node "$RUNNER_TEMP/release-policy/scripts/release/active-release.mjs" validate-diff \
             --root "$GITHUB_WORKSPACE" \
             --base "origin/${{ github.base_ref }}" \
-            --head "${{ github.event.pull_request.head.sha }}"
+            --head "${{ github.event.pull_request.head.sha }}" \
+            --main-ref origin/main
 
       - name: Validate branch, head, plan, versions, and Changeset consumption
         run: |
@@ -470,6 +476,8 @@ jobs:
           mkdir -p "$TRUSTED_POLICY/scripts/release" "$TRUSTED_POLICY/scripts/lib"
           git show origin/main:scripts/release/active-release.mjs \
             > "$TRUSTED_POLICY/scripts/release/active-release.mjs"
+          git show origin/main:scripts/release/release-paths.mjs \
+            > "$TRUSTED_POLICY/scripts/release/release-paths.mjs"
           git show origin/main:scripts/lib/workspace-globs.mjs \
             > "$TRUSTED_POLICY/scripts/lib/workspace-globs.mjs"
 
@@ -4289,10 +4297,19 @@ jobs:
         with:
           persist-credentials: false
 
+      # When the scope could not be decided, every file counts as changed.
+      - name: List every file when the scope is undecided
+        id: everything
+        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == '' && steps.scope.outputs.decided == 'false'
+        run: |
+          git ls-files > "$RUNNER_TEMP/every-file.txt"
+          echo "path=$RUNNER_TEMP/every-file.txt" >> "$GITHUB_OUTPUT"
+          echo "::notice title=Every contract in scope::The scope could not be decided, so every file counts as changed."
+
       # The changed-spec list and the folder rule both read this list. Without
       # it, a contract would not run and the job would still pass.
       - name: Require the changed-file list
-        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == ''
+        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == '' && steps.scope.outputs.decided != 'false'
         run: |
           echo "::error::The scope step could not list the changed files, so the contracts to run are unknown. Re-run the job."
           exit 1
@@ -4312,7 +4329,7 @@ jobs:
         id: touched
         if: steps.scope.outputs.applies == 'true'
         env:
-          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path || steps.everything.outputs.path }}
         run: |
           GITHUB_STEP_SUMMARY=/dev/null node .github/scripts/touched-components.mjs scope \
             --analysis analysis.json \
@@ -4323,7 +4340,7 @@ jobs:
         id: specs
         if: steps.scope.outputs.applies == 'true'
         env:
-          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path || steps.everything.outputs.path }}
         run: |
           list="$RUNNER_TEMP/changed-a11y-specs.txt"
           : > "$list"
@@ -4408,7 +4425,7 @@ jobs:
           ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           WORKFLOW_SHA: ${{ github.sha }}
           SPECS_PATH: ${{ steps.specs.outputs.path }}
-          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path || steps.everything.outputs.path }}
           OWNERS: ${{ steps.touched.outputs.contract_owners }}
           FOLDERS: ${{ steps.touched.outputs.contract_folders }}
           A11Y_CONTRACT_WORKERS: 4
