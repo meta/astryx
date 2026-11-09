@@ -19,6 +19,7 @@
 
 import {useCallback, useEffect, useRef} from 'react';
 import {isFocusLost} from '../utils/focusReturn';
+import {isHTMLElement} from '../utils/nodeType';
 
 import {FOCUSABLE_SELECTOR} from './focusableSelector';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
@@ -132,6 +133,61 @@ export function getFocusableElements(container: HTMLElement): HTMLElement[] {
 }
 
 /**
+ * The name of a named native radio, or null for any other element and for an
+ * unnamed radio, which is its own Tab stop.
+ */
+function radioNameOf(el: Element): string | null {
+  if (!el.matches('input[type="radio"][name]')) {
+    return null;
+  }
+  return (el as HTMLInputElement).name || null;
+}
+
+/**
+ * Whether two radios are one group: the same name and the same form owner (or
+ * both with no form).
+ */
+function isSameRadioGroup(a: Element, b: Element): boolean {
+  const name = radioNameOf(a);
+  return (
+    name != null &&
+    name === radioNameOf(b) &&
+    (a as HTMLInputElement).form === (b as HTMLInputElement).form
+  );
+}
+
+/**
+ * Drop the radios the browser skips for Tab, leaving every other element, and
+ * each kept radio, at its own place. In a named group the browser stops only at
+ * the focused radio, else the checked one; a group with nothing checked keeps
+ * every radio, so a forward entry reaches its first and a backward entry its
+ * last.
+ *
+ * Exported for menus that walk their own Tab stops (DropdownMenu's header and
+ * footer), so they skip radios exactly as the focus region does.
+ */
+export function collapseRadioGroups(
+  elements: HTMLElement[],
+  active: Element | null,
+): HTMLElement[] {
+  return elements.filter(el => {
+    if (radioNameOf(el) == null) {
+      return true;
+    }
+    if (active != null && isSameRadioGroup(el, active)) {
+      return el === active;
+    }
+    return (
+      (el as HTMLInputElement).checked ||
+      !elements.some(
+        other =>
+          isSameRadioGroup(el, other) && (other as HTMLInputElement).checked,
+      )
+    );
+  });
+}
+
+/**
  * The document a trap lives in: its container's. An app that renders into a
  * same-origin iframe or a Document Picture-in-Picture window through a portal
  * puts the trap in that window's document, whose key presses and focus
@@ -139,16 +195,6 @@ export function getFocusableElements(container: HTMLElement): HTMLElement[] {
  */
 function trapDocument(container: HTMLElement | null): Document {
   return container?.ownerDocument ?? document;
-}
-
-/**
- * `instanceof HTMLElement`, asked of the node's own window: an element of a
- * second document is an instance of that window's `HTMLElement`, not of this
- * one's.
- */
-function isHTMLElement(node: Node | null): node is HTMLElement {
-  const view = node?.ownerDocument?.defaultView;
-  return view != null && node instanceof view.HTMLElement;
 }
 
 /**
@@ -385,8 +431,13 @@ export function useFocusRegionContainment(
           return;
         }
 
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
+        // jsdom groups a selector list by selector, not in document order.
+        const stops = collapseRadioGroups(
+          [...focusable].sort((a, b) => (precedes(a, b) ? -1 : 1)),
+          active,
+        );
+        const first = stops[0];
+        const last = stops[stops.length - 1];
 
         if (doc.activeElement === container) {
           // Programmatic initial focus can sit on the trap container itself

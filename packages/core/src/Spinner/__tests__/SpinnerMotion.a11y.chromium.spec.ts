@@ -60,6 +60,59 @@ async function openSizes(page: Page) {
   return spinners;
 }
 
+/**
+ * Records the mount announcement from before the story loads. A Spinner that
+ * first renders before the page has loaded stays silent. Otherwise the polite
+ * live region shows the label, then empties 2 s later. Call it before
+ * `openSizes`.
+ */
+async function recordAnnouncement(page: Page) {
+  await page.addInitScript(() => {
+    const w = window as unknown as {
+      __spinnerAnnouncement?: 'shown' | 'ended';
+      __spinnerIsSilent?: boolean;
+    };
+    new MutationObserver(() => {
+      // The page's state when the first Spinner mounts decides whether it
+      // announces.
+      if (
+        w.__spinnerIsSilent == null &&
+        document.querySelector('.astryx-spinner') != null
+      ) {
+        w.__spinnerIsSilent = document.readyState !== 'complete';
+      }
+      const region = document.querySelector(
+        '[data-astryx-live-region="polite"]',
+      );
+      if (region == null) {
+        return;
+      }
+      if (region.textContent !== '') {
+        w.__spinnerAnnouncement = 'shown';
+      } else if (w.__spinnerAnnouncement === 'shown') {
+        w.__spinnerAnnouncement = 'ended';
+      }
+    }).observe(document, {childList: true, characterData: true, subtree: true});
+  });
+}
+
+/** Resolves once the mount announcement has ended, or was never made. */
+async function waitForAnnouncementToEnd(page: Page, timeout?: number) {
+  await page.waitForFunction(
+    () => {
+      const w = window as unknown as {
+        __spinnerAnnouncement?: string;
+        __spinnerIsSilent?: boolean;
+      };
+      return (
+        w.__spinnerAnnouncement === 'ended' || w.__spinnerIsSilent === true
+      );
+    },
+    undefined,
+    {timeout},
+  );
+}
+
 interface Box {
   x: number;
   y: number;
@@ -201,8 +254,14 @@ test('the ring keeps turning while a script holds the main thread', async ({
 });
 
 test('turning paints nothing on the main thread', async ({page}) => {
+  await recordAnnouncement(page);
   await openSizes(page);
   await page.waitForTimeout(200);
+  // Clearing the mount announcement repaints the shared live region, not the
+  // rotor. The trace starts once that announcement ended, or the Spinner
+  // stayed silent. A check for empty regions alone also passes before the
+  // announcement.
+  await waitForAnnouncementToEnd(page);
   // Four rings turn for two seconds. A paint animation repaints every frame;
   // a transform animation paints none. React listens for
   // `animationiteration`, so Chromium recalculates style a few times at each
@@ -327,6 +386,7 @@ test('storyboard: one revolution, frame by frame @storyboard', async ({
     name: 'spinner-ring-cycle',
     clip: xl,
     scope: xl,
+    judges: {target: rotor, property: 'transform'},
     columns: 12,
     cellScale: 2,
     times: timeline(duration - 1),

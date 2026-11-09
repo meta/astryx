@@ -8,7 +8,15 @@
  * fresh unpack.
  */
 
-import {afterAll, afterEach, describe, expect, it} from 'vitest';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  inject,
+  it,
+} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
@@ -16,9 +24,15 @@ import {
   packedCli,
   placeCli,
   recyclePlacedCopies,
+  releasePackedCli,
 } from './global-local-fixtures.mjs';
 import {cleanupFixtures, tempDir} from './release-fixtures.mjs';
 
+// Unpacking the CLI writes thousands of files. It is the suite's setup, as
+// in global-local.test.mjs, not part of whichever test places a copy first.
+beforeAll(() => {
+  packedCli();
+}, 120_000);
 afterEach(() => {
   try {
     recyclePlacedCopies();
@@ -27,7 +41,29 @@ afterEach(() => {
   }
 });
 afterAll(() => {
-  fs.rmSync(path.dirname(packedCli()), {recursive: true, force: true});
+  releasePackedCli();
+});
+
+/** The folder the node project's global setup made for this run, if any. */
+const runFolder = (() => {
+  try {
+    return inject('astryxPackedCliRunDir');
+  } catch {
+    return undefined;
+  }
+})();
+
+describe("the run's folder", () => {
+  it.runIf(typeof runFolder === 'string')(
+    'holds the unpacked CLI, which a suite leaves for the global teardown',
+    () => {
+      const unpacked = packedCli();
+      expect(path.dirname(path.dirname(unpacked))).toBe(runFolder);
+      releasePackedCli();
+      expect(fs.existsSync(unpacked)).toBe(true);
+      expect(packedCli()).toBe(unpacked);
+    },
+  );
 });
 
 /**

@@ -11,7 +11,14 @@
 
 import React, {useLayoutEffect} from 'react';
 import {beforeEach, describe, expect, it, vi} from 'vitest';
-import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Button} from '../Button/Button';
 import * as stylex from '@stylexjs/stylex';
@@ -432,9 +439,8 @@ describe('ComplexSelector', () => {
       </ComplexSelector>,
     );
 
-    const popover = screen
-      .getByRole('dialog', {hidden: true})
-      .closest('[popover]');
+    // Closed, the surface carries no dialog role, so find the layer itself.
+    const popover = document.querySelector('[popover]');
     expect(popover?.getAttribute('style')).toContain(
       'position-area: self-block-end span-self-inline-start',
     );
@@ -1118,6 +1124,49 @@ describe('ComplexSelector onOpenChange', () => {
       },
     );
 
+    it('shows the status icon in place of the chevron with attached status, and the chevron with detached', () => {
+      const {container, rerender} = render(
+        <ComplexSelector
+          label="Filter"
+          value={[]}
+          status={{type: 'error', message: 'Required'}}>
+          {() => <button type="button">Apply</button>}
+        </ComplexSelector>,
+      );
+      const controlBox = screen.getByRole('combobox', {name: 'Filter'})
+        .parentElement as HTMLElement;
+      expect(
+        controlBox.querySelector('.astryx-input-status-icon'),
+      ).toBeInTheDocument();
+      // A plain icon, not a control: the combobox stays the one tab stop.
+      expect(within(controlBox).queryAllByRole('button')).toHaveLength(0);
+      // It takes the chevron's place, as in Selector.
+      expect(
+        controlBox.querySelector('.astryx-complex-selector-indicator-icon'),
+      ).not.toBeInTheDocument();
+      rerender(
+        <ComplexSelector
+          label="Filter"
+          value={[]}
+          status={{type: 'error', message: 'Required'}}
+          statusVariant="detached">
+          {() => <button type="button">Apply</button>}
+        </ComplexSelector>,
+      );
+      const detachedBox = screen.getByRole('combobox', {name: 'Filter'})
+        .parentElement as HTMLElement;
+      expect(
+        detachedBox.querySelector('.astryx-input-status-icon'),
+      ).not.toBeInTheDocument();
+      expect(
+        detachedBox.querySelector('.astryx-complex-selector-indicator-icon'),
+      ).toBeInTheDocument();
+      // The detached message box shows its own icon.
+      expect(
+        container.querySelector('.astryx-field-status'),
+      ).toBeInTheDocument();
+    });
+
     it('renders no message box for statusVariant="tooltip"', () => {
       const {container} = render(
         <ComplexSelector
@@ -1155,6 +1204,10 @@ describe('ComplexSelector onOpenChange', () => {
         expect(document.getElementById(id)).not.toBeNull();
       }
       expect(trigger).toHaveAccessibleDescription('Required');
+      // The info-tip takes the chevron's place, as in Selector.
+      expect(
+        document.querySelector('.astryx-complex-selector-indicator-icon'),
+      ).not.toBeInTheDocument();
 
       // Focusing the info-tip reveals the message without opening the popup.
       await user.tab();

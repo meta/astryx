@@ -20,6 +20,7 @@ import {Project} from '../../foundation/config/project.mjs';
 import {collectDocInputs} from '../../foundation/doc-compiler/inputs.mjs';
 import {COMPONENT_REPLACES_CLI} from '../../foundation/integrations/cli-requirement.mjs';
 import {scopeIntegrationMember} from './_adapter.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const SLOW = 30_000;
 
@@ -59,7 +60,7 @@ function writeComponent(file, name, source, description, extra = {}) {
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-export-name-test-'),
+    path.join(REPO_ROOT, '.astryx-export-name-test-'),
   );
   fs.writeFileSync(
     path.join(tmpDir, 'package.json'),
