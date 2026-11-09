@@ -101,7 +101,7 @@ import {themes, defaultThemeSlug} from './astryx-themes';`,
         },
         {
           type: 'prose',
-          text: "Astryx's theme defines its own CSS custom properties (color, spacing, radius, shadow, font, motion and more). If your app defines tokens with the same names, Astryx's values win: `astryx.css` sets them on `:root` above Tailwind's `theme` layer, and the root Theme component sets them again inside it. {@link namespace:tokens} has the full list. Rename any app `@theme` key or `:root` variable that shares a name. For example, an app `:root` that sets `--font-size-base: 1rem` renders its text at Astryx's size inside the root Theme.",
+          text: "Astryx's theme defines its own CSS custom properties (color, spacing, radius, shadow, font, motion and more), and {@link namespace:tokens} has the full list. An app token with one of those names collides in one of two ways. An app `@theme` key takes Astryx's value, because `astryx.css` sets the tokens on `:root` above Tailwind's `theme` layer: with `@theme { --spacing-4: 1.5rem }`, the app's `gap-4` stays 16px. Marking the block `@theme inline` keeps the app's value in its utilities. An app `:root` variable replaces Astryx's value, so Astryx's own components change: `:root { --spacing-4: 1.5rem }` widens Astryx's spacing step 4 from 16px to 24px. Where the root Theme component sets a token again, such as `--color-warning`, the app's own rules inside it read Astryx's value instead. Rename any app token that shares a name.",
         },
         {
           type: 'prose',
