@@ -573,6 +573,28 @@ describe('Lightbox', () => {
       }
     });
 
+    // An index that is not a whole number opens the nearest item, as an
+    // index past either end does.
+    it.each([
+      ['a controlled NaN index', {index: Number.NaN}, 'Image A', 1],
+      ['a default NaN index', {defaultIndex: Number.NaN}, 'Image A', 1],
+      ['a controlled index of 1.5', {index: 1.5}, 'Image C', 3],
+      ['a controlled index of 0.4', {index: 0.4}, 'Image A', 1],
+      ['a default index of 1.2', {defaultIndex: 1.2}, 'Image B', 2],
+    ])('opens the nearest item for %s', (_, indexProps, alt, position) => {
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={media}
+          {...indexProps}
+        />,
+      );
+      const page = screen.getByAltText(alt).closest('[data-lightbox-page]')!;
+      expect(page).toHaveAttribute('data-current');
+      expect(screen.getByText(`${position} / ${media.length}`)).toBeTruthy();
+    });
+
     it('pauses a playing video once the viewer moves to another item', () => {
       const items = [
         {src: '/clip.mp4', alt: 'A clip', type: 'video' as const},

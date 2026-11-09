@@ -19,6 +19,12 @@ verified_by:
     packages/core/src/List/__tests__/ListDividers.interaction.browser.spec.ts,
     packages/core/src/List/listLayoutUpdates.test.tsx,
     packages/core/src/List/__tests__/ListUpdates.interaction.browser.spec.ts,
+    packages/core/src/List/__tests__/ListReorder.test.tsx,
+    packages/core/src/List/__tests__/ListReorderLayout.test.tsx,
+    packages/core/src/List/__tests__/ListReorderTouch.interaction.browser.spec.ts,
+    packages/core/src/List/__tests__/ListReorderPointer.interaction.browser.spec.ts,
+    packages/core/src/List/__tests__/ListReorderMode.interaction.browser.spec.ts,
+    packages/core/src/List/__tests__/reorderModel.test.ts,
     packages/core/src/theme/derivedVarRegistry.test.ts,
     packages/core/src/theme/generateThemeRules.test.ts,
     apps/storybook/stories/List.stories.tsx,
@@ -54,7 +60,7 @@ system_specs:
 | Behavior                | One edge treatment applies to every ListItem row and decides where row content and row paint sit relative to the list's edges and the host's padding. With `reorderable`, rows reorder by dragging a handle or through reorder mode (`spec:AST-103` FR3, FR4). Under a coarse pointer a row's press follows the cell profile (`spec:AST-094` FR11); with `animatedLayout`, row updates animate (`spec:AST-105`). A row menu opens from the row's own `<li>` on the context request (FR13).                                     |
 | End-user impact         | Row text can share the line of the list header and a heading above, with row paint stopping at the text, reaching into the host padding, or reaching the host edges. Touch users get a 44 px row target (FR10) and the cell press (FR11), and every pointer keeps a highlighted row's dividers visible (FR11); with `animatedLayout`, row updates animate for every pointer (FR12). A row with a menu opens it by a long press, a right click, or Shift+F10, or through its More actions button (FR13).                        |
 | Builder impact          | One `edge` choice per list. `flush` works anywhere; `outset` and `bleed` act only inside a host that publishes container padding. Passing an `animatedLayout` handle is one new choice, and a row menu is the other: the caller passes a ListItem's ref to `useContextMenu` (FR13), and who draws a plain row's More actions button is open (OQ2); and rows animate only with an `itemKey`; the touch target and press need none.                                                                                              |
-| Compatibility/readiness | Additive; omission keeps current geometry; `edgeCompensation` keeps working with a codemod to `edge`. `reorderable` is additive and stable, specified and not implemented yet. `itemKey` and `animatedLayout`'s row updates (FR12) are implemented; its start and end content motion is not. The touch target (FR10) and the press's compositor release (FR11) are implemented under coarse primary pointers. Neither changes anything under a fine pointer. Row menus (FR13) are additive and specified, not implemented yet. |
+| Compatibility/readiness | Additive; omission keeps current geometry; `edgeCompensation` keeps working with a codemod to `edge`. `reorderable` is stable and built, but for its `labels` and `positions`. `itemKey` and `animatedLayout`'s row updates (FR12) are implemented; its start and end content motion is not. The touch target (FR10) and the press's compositor release (FR11) are implemented under coarse primary pointers. Neither changes anything under a fine pointer. Row menus (FR13) are additive and specified, not implemented yet. |
 | Review checks           | Reject header movement, row paint past the host's padding edge, duplicated padding values, physical-edge logic, automatic opt-in, a ListItem-level edge prop, or a second prop that can contradict `edge`.                                                                                                                                                                                                                                                                                                                     |
 | Governing rules         | `architecture:container-padding/INV3`, `INV9–INV11`; `spec:AST-002/DEC-1–DEC-2`; `spec:AST-017/FR4`; `spec:AST-057/FR9`. `spec:AST-103`. `spec:AST-094` FR4, FR5, FR11, FR13; `spec:AST-105` FR1–FR5, FR8. `spec:AST-107` FR8 (row menus).                                                                                                                                                                                                                                                                                     |
 
@@ -189,7 +195,11 @@ Consumer migration instructions belong in consumer docs and release notes.
   listener, state, Effect, or render pass. Deprecation warnings are dev-only.
 - **PR2 — Motion only where it applies.** FR11 adds no listener, observer,
   measurement, or animation under a fine pointer, and FR12 measures rows only
-  with a handle. Every motion runs on transform and opacity.
+  with a handle. Every motion runs on transform and opacity. Implementation
+  gap: where the primary pointer is coarse, a reorder mode move forces one
+  style pass for each row that glides for the first time. The shared animator
+  then reads the row's `will-change` (`architecture:react-component-runtime`
+  INV18).
 
 ## Accessibility contract
 
