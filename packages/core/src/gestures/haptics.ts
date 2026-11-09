@@ -43,9 +43,9 @@ import {
   HAPTIC_VIBRATION_PATTERNS,
   type HapticFeedbackKind,
 } from '../motion/uikit/gestures';
-import {HAPTIC_SWITCH_ATTRIBUTE} from './hapticSwitch';
-
-export {HAPTIC_SWITCH_ATTRIBUTE};
+import {isDisabledControl} from '../utils/pressDisabled';
+import {markHapticSwitch} from '../privateAttributes/hapticSwitch.stylex';
+import {isHTMLElement} from '../utils/nodeType';
 
 /** Whether this browser vibrates at all. */
 export function canVibrate(): boolean {
@@ -74,11 +74,7 @@ export function playHaptic(kind: HapticFeedbackKind): boolean {
   if (!canVibrate()) {
     return false;
   }
-  try {
-    return navigator.vibrate([...HAPTIC_VIBRATION_PATTERNS[kind].value]);
-  } catch {
-    return false;
-  }
+  return navigator.vibrate([...HAPTIC_VIBRATION_PATTERNS[kind].value]);
 }
 
 const VISUALLY_HIDDEN =
@@ -87,14 +83,6 @@ const VISUALLY_HIDDEN =
   'opacity:0;pointer-events:none;';
 
 let nextLabelId = 0;
-
-/** A native disabled control, or one marked `aria-disabled`. */
-function isDisabledControl(control: HTMLElement): boolean {
-  return (
-    control.matches(':disabled') ||
-    control.getAttribute('aria-disabled') === 'true'
-  );
-}
 
 /** Whether `input` is a switch checkbox, which plays the tap haptic itself. */
 function isSwitch(input: HTMLInputElement): boolean {
@@ -125,7 +113,9 @@ function swallow(event: Event): void {
 export function attachTapHaptic(label: HTMLLabelElement): () => void {
   const existing = label.control;
   if (
-    (existing instanceof HTMLInputElement && isSwitch(existing)) ||
+    (isHTMLElement(existing) &&
+      existing.localName === 'input' &&
+      isSwitch(existing as HTMLInputElement)) ||
     (existing != null && label.htmlFor !== '')
   ) {
     return () => {};
@@ -134,7 +124,7 @@ export function attachTapHaptic(label: HTMLLabelElement): () => void {
   const input = doc.createElement('input');
   input.type = 'checkbox';
   input.setAttribute('switch', '');
-  input.setAttribute(HAPTIC_SWITCH_ATTRIBUTE, '');
+  markHapticSwitch(input);
   input.setAttribute('aria-hidden', 'true');
   input.tabIndex = -1;
   input.style.cssText = VISUALLY_HIDDEN;
@@ -156,7 +146,7 @@ export function attachTapHaptic(label: HTMLLabelElement): () => void {
   const onFocus = (event: FocusEvent) => {
     const previous = event.relatedTarget;
     if (
-      existing instanceof HTMLElement &&
+      isHTMLElement(existing) &&
       existing.tabIndex >= 0 &&
       !isDisabledControl(existing)
     ) {
@@ -165,7 +155,7 @@ export function attachTapHaptic(label: HTMLLabelElement): () => void {
     if (doc.activeElement !== input) {
       return;
     }
-    if (previous instanceof HTMLElement && previous.isConnected) {
+    if (isHTMLElement(previous) && previous.isConnected) {
       previous.focus({preventScroll: true});
     }
     if (doc.activeElement === input) {
@@ -184,7 +174,7 @@ export function attachTapHaptic(label: HTMLLabelElement): () => void {
   if (existing != null) {
     label.prepend(input);
     if (
-      existing instanceof HTMLElement &&
+      isHTMLElement(existing) &&
       !existing.hasAttribute('aria-labelledby') &&
       !existing.hasAttribute('aria-label')
     ) {

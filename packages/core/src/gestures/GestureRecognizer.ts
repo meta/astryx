@@ -36,13 +36,14 @@ import type {
   GestureTouch,
   Point,
   PointerKind,
+  ScrollType,
 } from './types';
 import {DEFAULT_ENVIRONMENT} from './types';
 
 /**
  * Turns text selection and the touch callout off on `elements` (and on a
  * non-text input `target` inside one) for one held press; returns the undo.
- * gestures/selectionLock.ts's `lockSelection` is the one implementation.
+ * utils/selectionLock.ts's `lockSelection` is the one implementation.
  */
 export type SelectionLock = (
   elements: Iterable<Element>,
@@ -66,7 +67,7 @@ export interface GestureRecognizerOptions<R = GestureRecognizer> {
    * For a hold that does something (a slider's thumb, a switch's or a
    * segmented control's drag): the lock that turns text selection and the
    * touch callout off on this recognizer's element for each held press
-   * (`spec:AST-094` FR41). Pass `lockSelection` from gestures/selectionLock.ts;
+   * (`spec:AST-094` FR41). Pass `lockSelection` from utils/selectionLock.ts;
    * the host calls it and never imports it, so a component without such a
    * hold does not bundle it. Content under a sheet's or a pager's pan stays
    * selectable, so there is none by default; a mouse keeps desktop selection
@@ -81,6 +82,17 @@ export interface GestureRecognizerOptions<R = GestureRecognizer> {
   delaysTouchesEnded?: boolean;
   /** Pointer kinds this recognizer listens to (UIKit's `allowedTouchTypes`). @default all */
   allowedPointerTypes?: ReadonlyArray<PointerKind>;
+  /**
+   * Scroll input this recognizer takes, as UIKit's `allowedScrollTypesMask`.
+   * A pan follows a trackpad's two-finger scroll (`continuous`), never a
+   * mouse wheel's notches. It moves as a contact with the content, along its
+   * own axis, after the scrollers under the pointer. Its own element is the
+   * pan's on the axis its `touch-action` keeps, as for a finger. A pinch takes
+   * a ctrl-wheel of either, as a trackpad pinches.
+   * @default none; a pinch takes both, the screen-edge pan none whatever a
+   *   caller passes
+   */
+  allowedScrollTypes?: ReadonlyArray<ScrollType>;
   /** Ignore a touch of a different kind than the ones already tracked. @default true */
   requiresExclusiveTouchType?: boolean;
   /**
@@ -178,9 +190,20 @@ export const MANIPULATION: NativeTouchBehavior = {
   doubleTapZoom: false,
 };
 
+/**
+ * What a recognizer is. The gesture code tells the family apart by it, never
+ * by `instanceof` (`architecture:react-component-runtime` INV13); a
+ * screen-edge pan is its own kind, though it is built on the pan.
+ */
+export type RecognizerKind =
+  'tap' | 'longPress' | 'pan' | 'screenEdgePan' | 'swipe' | 'pinch';
+
 let nextRecognizerId = 1;
 
 export abstract class GestureRecognizer {
+  /** What this recognizer is (see RecognizerKind). */
+  abstract get kind(): RecognizerKind;
+
   /** Stable id, for ordering and debugging. */
   readonly id = nextRecognizerId++;
   name: string;
@@ -191,6 +214,8 @@ export abstract class GestureRecognizer {
   delaysTouchesBegan: boolean;
   delaysTouchesEnded: boolean;
   allowedPointerTypes: ReadonlySet<PointerKind> | null;
+  /** See GestureRecognizerOptions.allowedScrollTypes. */
+  readonly allowedScrollTypes: ReadonlySet<ScrollType>;
   requiresExclusiveTouchType: boolean;
   /**
    * The element (or any object) the recognizer is attached to. The DOM host
@@ -236,6 +261,9 @@ export abstract class GestureRecognizer {
       options.allowedPointerTypes == null
         ? null
         : new Set(options.allowedPointerTypes);
+    this.allowedScrollTypes = new Set(
+      options.allowedScrollTypes ?? this.defaultScrollTypes,
+    );
     this.requiresExclusiveTouchType =
       options.requiresExclusiveTouchType ?? true;
   }
@@ -351,6 +379,16 @@ export abstract class GestureRecognizer {
     return this.options.shouldBegin?.(this) ?? true;
   }
 
+  /**
+   * @internal Whether this recognizer holds `touchId` before it begins: the
+   * host then cancels that finger's moves as for a touch a recognizer owns.
+   * None does by default (`spec:AST-094` FR19); a scroll-edge pan holds a
+   * finger pulling away from an edge every scroller under it is at.
+   */
+  protected keepsTouch(_touchId: number): boolean {
+    return false;
+  }
+
   /** UIKit's `canPrevent(_:)`: whether recognizing fails `other`. */
   canPrevent(_other: GestureRecognizer): boolean {
     return true;
@@ -458,6 +496,11 @@ export abstract class GestureRecognizer {
   /** Clear per-gesture state before the next attempt. */
   protected reset(): void {}
 
+  /** The scroll types taken when the options name none (UIKit's: none). */
+  protected get defaultScrollTypes(): ReadonlyArray<ScrollType> {
+    return [];
+  }
+
   /**
    * Whether a touch may join. The base checks enabled, pointer kind and
    * exclusivity of kind; subclasses narrow it (a one-finger pan ignores a
@@ -466,6 +509,13 @@ export abstract class GestureRecognizer {
   protected acceptsTouch(touch: GestureTouch): boolean {
     if (!this.isEnabled) {
       return false;
+    }
+    if (touch.scrollType != null) {
+      // Scroll input is no pointer: only the scroll types allowed count.
+      return (
+        this.allowedScrollTypes.has(touch.scrollType) &&
+        (this.options.shouldReceiveTouch?.(this, touch) ?? true)
+      );
     }
     if (
       this.allowedPointerTypes != null &&
@@ -507,6 +557,15 @@ export abstract class GestureRecognizer {
   /** The event clock's current time. */
   protected now(): number {
     return this.arena?.now() ?? 0;
+  }
+
+  /**
+   * Takes this recognizer's touches from the view, as a claiming winner does
+   * under `cancelsTouchesInView`: the view's press ends and no click follows.
+   * The touches stay unclaimed, so the page still scrolls.
+   */
+  protected cancelTouchesInView(): void {
+    this.arena?.cancelTouchesInViewOf(this);
   }
 
   // --- Arena hooks (internal) ----------------------------------------------

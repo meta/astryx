@@ -26,6 +26,10 @@ import {isAstryxMarkup} from '../../foundation/render/html-reader.mjs';
 import {rebuildPage} from '../../foundation/render/rebuild.mjs';
 import {cliVersion} from '../../foundation/integrations/cli-peer-version.mjs';
 import {assertWithin, PathSafetyError} from '../../foundation/fs/path-safety.mjs';
+import {requireCoreDir} from '../../foundation/fs/paths.mjs';
+import {runChoice} from '../../foundation/release/run-context.mjs';
+import {isServedPackage} from '../../foundation/render/served-packages.mjs';
+import {hostedRun, recordResolved} from '../../foundation/runtime/package-root.mjs';
 
 export {PAGE_EXTENSIONS, embeddedPathProblem};
 
@@ -239,6 +243,29 @@ function asAstryxError(e) {
 }
 
 /**
+ * The package set the CLI runs from, for a page outside a project
+ * (architecture:cli-surface INV30): the Core it carries, found by the rule of
+ * every command that answers from Core outside a project. Inside a project
+ * (spec AST-081: a Core or CLI the folder reads, or a package.json that
+ * declares one) the project's packages serve the page alone, so this is
+ * null.
+ * When the carried Core cannot be had, the reason is kept for the error a
+ * page that needs it gets (spec AST-081 FR3).
+ * @param {string} input absolute path of the page
+ * @returns {{dir: string, integrations: readonly string[]} | {unavailable: Error} | null}
+ */
+function servedSet(input) {
+  const dir = path.dirname(input);
+  if (runChoice(dir).inProject) return null;
+  try {
+    return {dir: requireCoreDir(dir), integrations: hostedRun()?.integrations ?? []};
+  } catch (e) {
+    const err = /** @type {any} */ (e);
+    return err?.code === ERROR_CODES.ERR_VERSIONS_UNAVAILABLE ? {unavailable: err} : null;
+  }
+}
+
+/**
  * Render a page module to one HTML file and write it.
  * @param {{cwd: string, input: string, output: string, title?: string}} args absolute paths
  * @returns {Promise<import('./render.type.mjs').RenderPageResponse['data']>}
@@ -249,9 +276,28 @@ export async function renderToFile({cwd, input, output, title}) {
   /** @type {import('../../foundation/render/render-page.mjs').RenderedPage} */
   let page;
   try {
-    page = await renderPage(input, {title, version: cliVersion()});
+    const set = servedSet(input);
+    try {
+      page = await renderPage(input, {title, version: cliVersion(), served: set && 'dir' in set ? set : null});
+    } catch (e) {
+      // A page that needs the Core the CLI could not obtain says why.
+      const missing = /** @type {any} */ (e)?.code === 'ERR_RENDER_MISSING_DEPENDENCY' ? /** @type {any} */ (e).detail?.package : null;
+      if (set && 'unavailable' in set && typeof missing === 'string' && isServedPackage(missing, hostedRun()?.integrations ?? [])) {
+        throw new AstryxError(set.unavailable.message, [], ERROR_CODES.ERR_VERSIONS_UNAVAILABLE);
+      }
+      throw e;
+    }
   } catch (e) {
     throw asAstryxError(e);
+  }
+  for (const {name, dir} of page.fromSet) {
+    let version = null;
+    try {
+      version = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')).version;
+    } catch {
+      // A package without a readable version is still named.
+    }
+    recordResolved(name, version, dir, 'package-set');
   }
   refuseProtected([output], cwd);
   // An existing file is replaced only when a render wrote it.
@@ -501,6 +547,15 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       exact: missing.length === 0,
       ...(missing.length > 0 ? {missing} : {}),
     };
+  }
+  // A file a render wrote, whose source block was taken out on the way
+  // (sanitizers and editors strip <script> elements), says so.
+  if (!isAstryxMarkup(html) && /<meta name="generator" content="Astryx[ "]/.test(html)) {
+    throw new AstryxError(
+      `${shown(cwd, input)} was rendered by Astryx, but its embedded source was removed (a sanitizer or an editor strips <script> blocks) and it has no Astryx components to rebuild from; nothing was written. Render the page again from its source and send the new file as is.`,
+      [],
+      ERROR_CODES.ERR_RENDER_SOURCE_DAMAGED,
+    );
   }
   if (!isAstryxMarkup(html)) {
     throw new AstryxError(

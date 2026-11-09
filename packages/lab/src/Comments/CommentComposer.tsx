@@ -21,6 +21,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -236,11 +237,21 @@ export function CommentComposerBase({
     [agentCommandTrigger, hostTriggers],
   );
   const latestValueRef = useRef(value);
-  latestValueRef.current = value;
   const isMountedRef = useRef(true);
   const actionPendingRef = useRef(false);
+  // The latest callback, read when reporting. An inline callback is new on
+  // every render; depending on it would re-run the unmount cleanup below on
+  // each render and leave the composer busy after its upload ends.
+  const onActionPendingChangeRef = useRef(onActionPendingChange);
   const isSubmittingRef = useRef(isSubmitting);
-  isSubmittingRef.current = isSubmitting;
+  // Syncs the handlers' refs with the committed props. The host owns these
+  // props, so no handler here sees each change. A render React discards, as
+  // a suspended transition does, must not leave its values.
+  useLayoutEffect(() => {
+    latestValueRef.current = value;
+    onActionPendingChangeRef.current = onActionPendingChange;
+    isSubmittingRef.current = isSubmitting;
+  });
   const imageInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<ChatComposerInputHandle | null>(null);
   // Focus lands once per `focusKey`, when the input attaches: the handle ref
@@ -259,30 +270,37 @@ export function CommentComposerBase({
     [focusKey],
   );
   const [actionError, setActionError] = useState<ErrorBannerContent>();
+  // Counts action failures so each one mounts its own Banner: a second failure
+  // with the same words is a new occasion and is announced again (AST-086 FR6).
+  const [actionErrorSerial, setActionErrorSerial] = useState(0);
+  const reportActionError = (content: ErrorBannerContent) => {
+    setActionError(content);
+    setActionErrorSerial(serial => serial + 1);
+  };
   const [isActionPending, setIsActionPending] = useState(false);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
 
-  const updateActionPending = useCallback(
-    (nextPending: boolean) => {
-      if (actionPendingRef.current === nextPending) {
-        return;
-      }
-      actionPendingRef.current = nextPending;
-      setIsActionPending(nextPending);
-      onActionPendingChange?.(nextPending);
-    },
-    [onActionPendingChange],
-  );
+  const updateActionPending = useCallback((nextPending: boolean) => {
+    if (actionPendingRef.current === nextPending) {
+      return;
+    }
+    actionPendingRef.current = nextPending;
+    setIsActionPending(nextPending);
+    onActionPendingChangeRef.current?.(nextPending);
+  }, []);
+  // Tracks mount for the upload's async completion, and on unmount releases
+  // the host's pending-action hold, which the upload's finally skips once
+  // unmounted.
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
       if (actionPendingRef.current) {
         actionPendingRef.current = false;
-        onActionPendingChange?.(false);
+        onActionPendingChangeRef.current?.(false);
       }
     };
-  }, [onActionPendingChange]);
+  }, []);
 
   const uploadImages = async (files: readonly File[]) => {
     if (onUploadImages == null || files.length === 0) {
@@ -303,7 +321,7 @@ export function CommentComposerBase({
       }
     } catch {
       if (isMountedRef.current) {
-        setActionError({
+        reportActionError({
           title: t('@astryx.commentComposer.uploadFailed'),
           actionLabel: t('@astryx.comments.retry'),
           onAction: () => beginImageUpload(files),
@@ -316,13 +334,20 @@ export function CommentComposerBase({
     }
   };
 
+  // The picker, a paste, and a drop all arrive here. A busy composer starts
+  // no upload, so none of them can add images to a draft in flight.
   const beginImageUpload = (files: readonly File[]) => {
-    if (onUploadImages == null || files.length === 0) {
+    if (
+      onUploadImages == null ||
+      files.length === 0 ||
+      isSubmittingRef.current ||
+      actionPendingRef.current
+    ) {
       return;
     }
     const images = files.filter(file => file.type.startsWith('image/'));
     if (images.length !== files.length) {
-      setActionError({
+      reportActionError({
         title: t('@astryx.commentComposer.imagesOnly'),
         actionLabel: t('@astryx.commentComposer.chooseImages'),
         onAction: () => {
@@ -378,6 +403,7 @@ export function CommentComposerBase({
       <VStack gap={1} width="100%" aria-busy={isBusy || undefined}>
         {errorBanner != null && (
           <ErrorBanner
+            key={error != null ? 'error' : `action-${actionErrorSerial}`}
             content={errorBanner}
             // The Banner unmounts once the retry starts; keep focus in the input.
             onBeforeAction={() => inputRef.current?.focus()}

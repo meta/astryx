@@ -21,7 +21,7 @@
  */
 
 import {UIKIT_LONG_PRESS, UIKIT_TAP} from '../motion/uikit/gestures';
-import {lockSelection} from './selectionLock';
+import {lockSelection} from '../utils/selectionLock';
 import {travel} from './geometry';
 import {
   GestureRecognizer,
@@ -42,6 +42,15 @@ export interface LongPressGestureRecognizerOptions extends GestureRecognizerOpti
 }
 
 export class LongPressGestureRecognizer extends GestureRecognizer {
+  override get kind(): GestureRecognizer['kind'] {
+    return 'longPress';
+  }
+
+  /** @internal The host's brand: a long press keeps the callout and selection off (recognizerInternals). */
+  protected get family(): 'longPress' {
+    return 'longPress';
+  }
+
   minimumPressDuration: number;
   allowableMovement: number;
   numberOfTapsRequired: number;

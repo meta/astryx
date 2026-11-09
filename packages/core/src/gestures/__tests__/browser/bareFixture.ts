@@ -3,26 +3,38 @@
 /**
  * @file bareFixture.ts
  * @input Nothing: bundled by esbuild and injected into a blank page
- * @output A page with nothing attached: the document's gesture host and the
- *   recognizers on `window.__api`, for a test to attach what it needs, and
- *   `window.__pageTouch`, the count of touch listeners on the window and the
- *   document right now
- * @position Browser fixture of gestures.browser.spec.ts for the checks that
- *   need a page with no other gesture on it (FR19, FR24); test-only
+ * @output A page with nothing attached. `window.__api` holds the document's
+ *   gesture host and the host lookup for another document. It also holds
+ *   the recognizers (pan, screen-edge pan, tap, long press) and the press
+ *   tracker, for a test to attach what it needs. `window.__pageTouch` is
+ *   the count of touch listeners on the window and the document right now.
+ * @position Browser fixture of gestures.interaction.browser.spec.ts for the
+ *   checks that need a page with no other gesture on it (FR19, FR24);
+ *   test-only
  */
 
 import {getGestureHost} from '../../GestureHost';
 import {LongPressGestureRecognizer} from '../../LongPressGestureRecognizer';
 import {PanGestureRecognizer} from '../../PanGestureRecognizer';
-import {lockSelection} from '../../selectionLock';
+import {PinchGestureRecognizer} from '../../PinchGestureRecognizer';
+import {createPressTracker} from '../../PressTracker';
+import {ScreenEdgePanGestureRecognizer} from '../../ScreenEdgePanGestureRecognizer';
+import {lockSelection} from '../../../utils/selectionLock';
+import {TapGestureRecognizer} from '../../TapGestureRecognizer';
 
 declare global {
   interface Window {
     __pageTouch: number;
+    __wheelLog: string[];
     __api: {
       host: ReturnType<typeof getGestureHost>;
+      getGestureHost: typeof getGestureHost;
       LongPressGestureRecognizer: typeof LongPressGestureRecognizer;
       PanGestureRecognizer: typeof PanGestureRecognizer;
+      PinchGestureRecognizer: typeof PinchGestureRecognizer;
+      ScreenEdgePanGestureRecognizer: typeof ScreenEdgePanGestureRecognizer;
+      TapGestureRecognizer: typeof TapGestureRecognizer;
+      createPressTracker: typeof createPressTracker;
       lockSelection: typeof lockSelection;
     };
   }
@@ -31,6 +43,7 @@ declare global {
 // The touch listeners on the window and the document, as the engine sees
 // them: what makes the page pay for touches.
 window.__pageTouch = 0;
+window.__wheelLog = [];
 const live = new Set<string>();
 const listenerIds = new WeakMap<object, number>();
 let nextListenerId = 1;
@@ -85,7 +98,12 @@ EventTarget.prototype.removeEventListener = function (
 document.body.style.margin = '0';
 window.__api = {
   host: getGestureHost(document),
+  getGestureHost,
   LongPressGestureRecognizer,
   PanGestureRecognizer,
+  PinchGestureRecognizer,
+  ScreenEdgePanGestureRecognizer,
+  TapGestureRecognizer,
+  createPressTracker,
   lockSelection,
 };

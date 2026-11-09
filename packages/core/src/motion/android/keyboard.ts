@@ -3,31 +3,26 @@
 /**
  * @file keyboard.ts
  * @input None
- * @output Exports `keyboard`: how the software keyboard moves on Android
- *   (Chrome with Gboard) as the page sees it: its slides up and down
- *   (durations and curves) and when they start relative to Chrome's report
- *   and to a blur
- * @position The keyboard domain of the Android constants table
- *   (motion/android); read by keyboard/keyboardModel.ts for Chrome's profile.
- *   The UIKit table (motion/uikit) holds iOS's keyboard; this table holds
- *   only Android's
- *
- * Chrome reports the keyboard once per slide, through the visual viewport,
- * just after the slide starts, never per frame. Content that rides the
- * keyboard plays these curves from the slide's start so it moves in step
- * with Gboard (spec:AST-099 FR8). These are Gboard's own motion, values and
- * no motion role: the system moves the keyboard on them whatever the page
- * does, so any other curve would leave the content out of step with it.
- *
- * Measured on the Android 15 emulator (golden image of Oct 25 2026, Chromium
- * 158, Gboard) by recording the screen at 540 × 1200 and reading Gboard's top
- * in every frame, with a marker the page paints on each report.
- *
- * Every leaf carries one or more `@source`. android.test.ts enforces it.
+ * @output `keyboard`: how the software keyboard moves on Android, in Chrome
+ *   with Gboard, as the page sees it. It holds the slides' durations and
+ *   curves, and when they start against Chrome's report and a blur.
+ * @position The keyboard domain of the Android constants table, read by
+ *   keyboard/keyboardModel.ts. The UIKit table holds iOS's keyboard.
  *
  * SYNC: When modified, update /packages/core/src/keyboard/README.md
  */
 
+// Chrome reports the keyboard once per slide, through the visual viewport,
+// just after the slide starts, never per frame. Content that rides the
+// keyboard plays these curves from the slide's start, so it moves in step
+// with Gboard. They are Gboard's own motion, with no motion role. The system
+// moves the keyboard on them whatever the page does, so any other curve
+// would leave the content out of step.
+//
+// The values come from the Android 15 emulator with Chromium 158 and Gboard.
+// A screen recording at 540 × 1200 gives Gboard's top in every frame, beside
+// a marker the page paints on each report. Every leaf carries one or more
+// `@source`, and android.test.ts enforces it.
 export const keyboard = {
   /**
    * How long Gboard takes to slide up, in ms: from its first moved frame to
@@ -89,7 +84,8 @@ export const keyboard = {
   hideAfterBlurMs: 16,
   /**
    * How long after Gboard starts to slide down Chrome's report of the hide
-   * fires, in ms, for a hide nothing predicted (Back).
+   * fires, in ms, measured on blurs. A hide nothing predicts, such as Back,
+   * reuses it, though Chrome can report Back later in the slide.
    *
    * @source measured: Chromium 158 with Gboard on Android 15 (API 35
    *   emulator); twelve scripted blurs: the visual viewport's resize came

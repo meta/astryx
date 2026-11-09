@@ -40,12 +40,12 @@ import {
   spacingVars,
   radiusVars,
   shadowVars,
-  durationVars,
   easeVars,
   borderVars,
   typeScaleVars,
   typographyVars,
 } from '../theme/tokens.stylex';
+import {inputWrapperStyles} from '../Field/inputStyles.stylex';
 import {mergeProps} from '../utils';
 import {Icon} from '../Icon';
 import {ChatComposerInput} from './ChatComposerInput';
@@ -57,13 +57,17 @@ import {
   focusInKeyboardSurface,
 } from './keyboardSurface';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {
-  getInteractionModality,
-  useInteractionModalityTracking,
-} from '../utils/interactionModality';
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Chat/ChatComposer.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Types
@@ -168,7 +172,8 @@ const styles = stylex.create({
       default: 'text',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
-    transition: `box-shadow ${durationVars['--duration-fast']} ${easeVars['--ease-standard']}, border-color ${durationVars['--duration-fast']} ${easeVars['--ease-standard']}`,
+    transitionProperty: 'box-shadow, border-color',
+    transitionTimingFunction: easeVars['--ease-standard'],
   },
   header: {
     display: 'flex',
@@ -264,7 +269,7 @@ const styles = stylex.create({
     backgroundColor: colorVars['--color-error-muted'],
     color: colorVars['--color-on-error-muted'],
     // Forced colors replace status fills with Canvas; this boundary keeps the
-    // fill's shape visible (architecture:theme-tokens INV11).
+    // fill's shape visible.
     outlineWidth: {default: null, '@media (forced-colors: active)': '1px'},
     outlineStyle: {default: null, '@media (forced-colors: active)': 'solid'},
     outlineColor: {
@@ -277,7 +282,7 @@ const styles = stylex.create({
     backgroundColor: colorVars['--color-warning-muted'],
     color: colorVars['--color-on-warning-muted'],
     // Forced colors replace status fills with Canvas; this boundary keeps the
-    // fill's shape visible (architecture:theme-tokens INV11).
+    // fill's shape visible.
     outlineWidth: {default: null, '@media (forced-colors: active)': '1px'},
     outlineStyle: {default: null, '@media (forced-colors: active)': 'solid'},
     outlineColor: {
@@ -345,7 +350,7 @@ function isComposerEditor(target: EventTarget | null): target is HTMLElement {
   return (
     target instanceof HTMLElement &&
     target.matches(
-      'textarea, [contenteditable="true"], [role="textbox"], input:not([type]), input[type="text"], input[type="search"], input[type="email"], input[type="url"], input[type="tel"], input[type="password"]',
+      'textarea, [contenteditable="true"], [role="textbox"], [role="combobox"][contenteditable], input:not([type]), input[type="text"], input[type="search"], input[type="email"], input[type="url"], input[type="tel"], input[type="password"]',
     )
   );
 }
@@ -367,7 +372,7 @@ function isComposerEditor(target: EventTarget | null): target is HTMLElement {
  * ```
  */
 export function ChatComposer(props: ChatComposerProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const {
     ref,
     onSubmit,
@@ -399,8 +404,6 @@ export function ChatComposer(props: ChatComposerProps) {
   const [internalValue, setInternalValue] = useState('');
   const [hasKeyboardEditorFocus, setHasKeyboardEditorFocus] = useState(false);
 
-  useInteractionModalityTracking();
-
   const isControlled = controlledValue !== undefined;
   const currentValue = isControlled ? controlledValue : internalValue;
 
@@ -429,14 +432,15 @@ export function ChatComposer(props: ChatComposerProps) {
   const canSend = currentValue.trim().length > 0 && !isDisabled;
 
   const bodyRef = useRef<HTMLDivElement>(null);
+  const {ref: modalityRef, readModality} = useInteractionModalityTracking();
+  const bodyComposedRef = useMergedRefs(bodyRef, modalityRef);
 
   // Input slot registers its focus (and future) control here so the shell can
   // drive it without knowing its DOM shape. Stable ref — safe in the memoized
   // context value.
   const inputControlRef = useRef<ChatComposerInputControl | null>(null);
-  // Inside ChatLayout's keyboard-aware region, under a finger, focus refuses
-  // the browser's reveal (spec:AST-099 FR4); elsewhere, and under a mouse
-  // (spec:AST-017 FR59), it is the browser's own.
+  // Inside ChatLayout's keyboard surface, a touch focus skips the browser's
+  // reveal. Elsewhere the browser's own focus applies.
   const isKeyboardSurface = use(KeyboardSurfaceContext);
 
   const handleBodyClick = useCallback(
@@ -472,11 +476,10 @@ export function ChatComposer(props: ChatComposerProps) {
   const handleBodyFocusCapture = useCallback(
     (event: FocusEvent<HTMLDivElement>) => {
       setHasKeyboardEditorFocus(
-        isComposerEditor(event.target) &&
-          getInteractionModality() === 'keyboard',
+        isComposerEditor(event.target) && readModality() === 'keyboard',
       );
     },
-    [],
+    [readModality],
   );
 
   const handleBodyBlurCapture = useCallback(
@@ -564,13 +567,14 @@ export function ChatComposer(props: ChatComposerProps) {
         {drawer}
 
         <div
-          ref={bodyRef}
+          ref={bodyComposedRef}
           onClick={handleBodyClick}
           onPointerDownCapture={() => setHasKeyboardEditorFocus(false)}
           onFocusCapture={handleBodyFocusCapture}
           onBlurCapture={handleBodyBlurCapture}
           {...stylex.props(
             styles.body,
+            inputWrapperStyles.textField,
             elevationStyles[elevation],
             hasKeyboardEditorFocus && focusOutlineStyles.focusWithin,
             density === 'compact' && styles.compact,

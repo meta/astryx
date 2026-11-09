@@ -41,6 +41,10 @@ export interface SwipeGestureRecognizerOptions extends GestureRecognizerOptions<
 const SWIPE = UIKIT_SWIPE;
 
 export class SwipeGestureRecognizer extends GestureRecognizer {
+  override get kind(): GestureRecognizer['kind'] {
+    return 'swipe';
+  }
+
   directions: ReadonlyArray<SwipeDirection>;
   numberOfTouchesRequired: number;
   minimumDistance: number;
@@ -97,7 +101,11 @@ export class SwipeGestureRecognizer extends GestureRecognizer {
     }
     if (this.numberOfTouches === touches.length) {
       this.setTimer(event.time + this.maximumDuration, () => {
-        this.setState('failed');
+        // A swipe already recognized, waiting on a recognizer it requires to
+        // fail, holds its recognition (spec:AST-094 FR15).
+        if (this.pending == null) {
+          this.setState('failed');
+        }
       });
     }
     // Measure from where every required finger is down.
@@ -106,7 +114,10 @@ export class SwipeGestureRecognizer extends GestureRecognizer {
   }
 
   protected override touchesMoved(): void {
-    if (this.numberOfTouches !== this.numberOfTouchesRequired) {
+    if (
+      this.pending != null ||
+      this.numberOfTouches !== this.numberOfTouchesRequired
+    ) {
       return;
     }
     const current = centroid(this.touches.values());
@@ -157,7 +168,10 @@ export class SwipeGestureRecognizer extends GestureRecognizer {
   }
 
   protected override touchesEnded(): void {
-    this.setState('failed');
+    // Recognized and waiting, it holds past the lift (FR15).
+    if (this.pending == null) {
+      this.setState('failed');
+    }
   }
 
   protected override reset(): void {

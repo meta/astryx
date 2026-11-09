@@ -16,7 +16,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {Button} from '../../Button/Button';
 import {Item} from '../../Item/Item';
 import {GestureHost} from '../GestureHost';
-import {PressTracker} from '../PressTracker';
+import {createPressTracker} from '../PressTracker';
 import {ManualClock} from './harness';
 import {coarsePrimaryPointer} from './pointerQuery';
 
@@ -73,11 +73,11 @@ describe('blocking touchmove listeners', () => {
     const onStepper = vi.spyOn(stepper, 'addEventListener');
     const detachPlain = host.attachConsumer(
       plain,
-      new PressTracker({getBounds: () => null}),
+      createPressTracker({getBounds: () => null}),
     );
     const detachStepper = host.attachConsumer(
       stepper,
-      new PressTracker({getBounds: () => null, keepsTouch: true}),
+      createPressTracker({getBounds: () => null, keepsTouch: true}),
     );
     touchStart(plain);
     expect(blockingTouchMoves(onPlain)).toBe(0);

@@ -9,9 +9,11 @@ import {
   ChatComposerInput,
   type ChatComposerInputHandle,
 } from './ChatComposerInput';
+import {Tooltip} from '../Tooltip/Tooltip';
 import {ChatLayout} from './ChatLayout';
 import {KeyboardSurfaceContext} from './keyboardSurface';
 import {useChatComposerContext} from './ChatContext';
+import {createStaticSource} from '../Typeahead/createStaticSource';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import type * as AnnounceModule from '../hooks/useAnnounce';
 
@@ -77,6 +79,36 @@ describe('ChatComposer focus indication', () => {
     fireEvent.keyDown(document, {key: 'Tab'});
     fireEvent.focus(editor);
 
+    expect(body.className).not.toBe(restingClass);
+  });
+
+  it('adds the composer ring when Tab enters a disabled trigger editor', async () => {
+    const user = userEvent.setup();
+    render(
+      <ChatComposer
+        isDisabled
+        onSubmit={() => {}}
+        input={
+          <ChatComposerInput
+            triggers={[
+              {
+                character: '@',
+                searchSource: createStaticSource([]),
+                onSelect: () => '',
+              },
+            ]}
+          />
+        }
+      />,
+    );
+    const editor = screen.getByRole('combobox');
+    const body = editor.parentElement!.parentElement!.parentElement!;
+    const restingClass = body.className;
+    expect(editor).toHaveAttribute('aria-disabled', 'true');
+
+    await user.tab();
+
+    expect(editor).toHaveFocus();
     expect(body.className).not.toBe(restingClass);
   });
 
@@ -253,6 +285,28 @@ describe('ChatComposer input composition contract', () => {
     expect(focusSpy).toHaveBeenCalled();
   });
 
+  it('keeps a click on an open tooltip in the body from focusing the input (Tooltip FR11)', () => {
+    const {getByTestId} = render(
+      <ChatComposer
+        onSubmit={() => {}}
+        input={
+          <div>
+            <textarea data-testid="bare-textarea" />
+            <Tooltip content="Tooltip text" isOpen>
+              <span tabIndex={0}>Info</span>
+            </Tooltip>
+          </div>
+        }
+      />,
+    );
+    const textarea = getByTestId('bare-textarea') as HTMLTextAreaElement;
+    fireEvent.click(screen.getByText('Tooltip text'));
+    expect(document.activeElement).not.toBe(textarea);
+    // Positive control: a click on the body's own space still focuses it.
+    fireEvent.click(textarea.parentElement!.parentElement!.parentElement!);
+    expect(document.activeElement).toBe(textarea);
+  });
+
   it('falls back to focusing a bare textarea when no control is registered', () => {
     const {getByTestId} = render(
       <ChatComposer
@@ -271,9 +325,9 @@ describe('ChatComposer input composition contract', () => {
 });
 
 describe('ChatComposer focus inside a keyboard-aware surface (spec:AST-099 FR4)', () => {
-  // Every route into the text refuses the browser's reveal there under a
-  // finger, which scrolls the whole page on iOS; elsewhere, and under a
-  // mouse, the browser's focus applies.
+  // Under a finger, every route into the text refuses the browser's reveal,
+  // which scrolls the whole page on iOS. Elsewhere, and under a mouse, the
+  // browser's focus applies.
   const inSurface = (node: ReactNode) => (
     <KeyboardSurfaceContext value={true}>{node}</KeyboardSurfaceContext>
   );
@@ -292,7 +346,7 @@ describe('ChatComposer focus inside a keyboard-aware surface (spec:AST-099 FR4)'
   beforeEach(() => {
     primaryPointer('coarse');
     // A top-level document with a visual viewport, where the keyboard is
-    // measured (spec:AST-099 FR6, FR7); jsdom has none of its own.
+    // measured. jsdom has none of its own.
     Object.defineProperty(window, 'visualViewport', {
       configurable: true,
       value: Object.assign(new EventTarget(), {

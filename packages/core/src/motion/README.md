@@ -7,7 +7,8 @@ source), the spring, decay, rubber-band and projection math UIKit uses, and a
 compositor animator that plays it. Nothing here is exported from the package
 entry point. Core's motion and gesture modules read the table by path;
 components read touch motion through its internal motion roles (`roles.ts`),
-so each keeps its measured value; no shipped component reads the roles yet.
+so each keeps its measured value; ProgressBar plays the progress table's two
+roles through `resolveMotion`.
 
 ## Files
 
@@ -15,25 +16,39 @@ so each keeps its measured value; no shipped component reads the roles yet.
 | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `uikit/`                                         | THE constants table: every spring, duration, deceleration rate, rubber-band constant and curve, with its source.                                                     |
 | `uikit/springs.ts`                               | Interaction springs (navigation, sheets, alerts, menus, controls, keyboard, banners) and the SwiftUI / UIKit presets.                                                |
-| `uikit/scroll.ts`                                | UIScrollView: deceleration rates, rubber band, bounce-back spring, paging, `delaysContentTouches`, scroll to top.                                                    |
+| `uikit/scroll.ts`                                | UIScrollView: deceleration rates, rubber band, bounce-back spring, `delaysContentTouches`, scroll to top.                                                            |
 | `uikit/timing.ts`                                | Non-spring clocks and curves: press highlight, Core Animation's named curves, keyboard, Reduced Motion cross-fade.                                                   |
+| `uikit/paging.ts`                                | A paging UIScrollView: the integrator that settles a release on its page, the page rule, the catch, `setContentOffset(animated:)`.                                   |
+| `uikit/alert.ts`                                 | UIAlertController: how a finger is tracked across the actions (highlight onset and bounds).                                                                          |
 | `uikit/navigation.ts`                            | UINavigationController: push velocity, parallax, dimming, transition clock, interactive pop finish rule.                                                             |
+| `uikit/progressBar.ts`                           | UIProgressView's fill: the whole-track duration and curve, its minimum length and empty alpha; the reduced-motion pulse (three roles).                               |
 | `uikit/popover.ts`                               | UIPopoverPresentationController: the scale and the length a popover grows out of and shrinks back into.                                                              |
-| `uikit/keyboard.ts`                              | The software keyboard as a page sees it: Mobile Safari's late viewport report on a show, and when a hide starts after a blur.                                        |
-| `android/keyboard.ts`                            | Android's software keyboard (Chrome with Gboard): its slides' durations and curves (no theme's) and when they start against Chrome's report and a blur.              |
 | `uikit/gestures.ts`                              | Gesture recognizer thresholds, the velocity filter and haptic stand-ins, as `{value, unit}` entries (sources in JSDoc).                                              |
-| `roles.ts`                                       | Motion roles: each spring, duration and curve of a registered table, named by its path, and its CSS variable.                                                        |
-| `resolveMotion.ts`                               | A role's value: its table value while touch motion stays internal (`spec:AST-094` DEC-11).                                                                           |
+| `uikit/picker.ts`                                | UIPickerView: row pitch, height and rubber band, velocity floor, the coast's stop speed, snap at rest, tap spin, tick.                                               |
+| `uikit/segmented.ts`                             | UISegmentedControl: the selection indicator's spring; under Reduce Motion the animator's cross-fade replaces it.                                                     |
+| `uikit/sheet.ts`                                 | UISheetPresentationController: the flick speed, how near a detent counts as on it, how far ahead a release is projected, and the speed below which it is not.        |
+| `uikit/switch.ts`                                | UISwitch on iOS 26.2: geometry, the lift, settle, travel and tracking springs, the flip distance, the track colour.                                                  |
+| `uikit/datePicker.ts`                            | UIDatePicker: the rules it adds to its wheels.                                                                                                                       |
+| `uikit/reorder.ts`                               | UITableView edit-mode reorder: the reorder control's claim and the edge autoscroll (the glides play `springs.settle`).                                               |
+| `android/keyboard.ts`                            | Android's software keyboard (Chrome with Gboard): its slides' durations and curves (no theme's) and when they start against Chrome's report and a blur.              |
+| `uikit/zoomMedia.ts`                             | UIScrollView zooming for a photo viewer: overshoot past the limits, double-tap and maximum zoom.                                                                     |
+| `roles.ts`                                       | The internal motion roles: the springs, durations and curves `spec:AST-094` FR4 names, registered by the shared tables, and a role's CSS form read back.             |
+| `roleValue.ts`                                   | A role's CSS form, written: a spring's duration and bounce, a duration in ms, a curve's `cubic-bezier()`.                                                            |
+| `resolveMotion.ts`                               | A role's value: its table value, as the per-role tables stay internal (`spec:AST-094` DEC-15).                                                                       |
 | `MEASUREMENTS.md`                                | The UIKit reference captures each unconfirmed value still needs.                                                                                                     |
 | `spring.ts`                                      | Closed-form damped spring, every Apple parameterization, settling duration, a spring chasing a moving target.                                                        |
 | `decay.ts`                                       | UIScrollView's momentum coast.                                                                                                                                       |
 | `coast.ts`                                       | A release's momentum curves for `animator.decay`: the coast, the edge spring, a release past an edge.                                                                |
 | `rubberBand.ts`                                  | UIScrollView's resistance past an edge, and its inverse.                                                                                                             |
-| `projection.ts`                                  | Release targets: the rest point nearest the projected coast; paging.                                                                                                 |
+| `projection.ts`                                  | Release targets: the rest point nearest the projected coast.                                                                                                         |
+| `paging.ts`                                      | Paging: UIKit's paging settle as a playable curve, its velocity floor, the animated page scroll.                                                                     |
+| `resolveSnapPoint.ts`                            | Release policy: the snap point a release lands on (flick, back-out cancel, step limit), on `selectSnapPoint`. Internal.                                              |
 | `bezier.ts`                                      | Cubic-bézier timing functions (Core Animation's named curves).                                                                                                       |
 | `animator.ts`                                    | Compositor animator: springs, coasts and any closed-form curve compiled to Web Animations, read back analytically.                                                   |
+| `progress.ts`                                    | A spring's progress, one curve mapped from another (companions, clamped ranges), the velocity that continues a motion.                                               |
+| `presentation.ts`                                | Where each moving element is drawn relative to where the engine hit-tests it, reported by the animator while translate runs; read by the gesture host at touch-down. |
 | `reducedMotionPlan.ts`                           | The animator's Reduce Motion planner: what one call becomes, a cross-fade whose travel lands while transparent or at once.                                           |
-| `useAnimator.ts`                                 | React wrapper that never re-renders per frame.                                                                                                                       |
+| `opacityFloor.ts`                                | The lowest opacity a compositor entrance fades in from: Chromium skips drawing a layer at exactly 0 as its animation starts.                                         |
 | `__tests__/animator.interaction.browser.spec.ts` | Browser proofs on the interaction harness (Chromium and WebKit): busy main thread, end state through a block, no Layout / Paint, seeked curves, a dialog's backdrop. |
 
 Component-specific values (a sheet's detents, a switch's geometry, a context
@@ -46,31 +61,31 @@ The motion roles are the springs, durations and curves `spec:AST-094` FR4
 names for their use (`springs.settle`, `timing.stateChangeMs`,
 `timing.curves.move`, …): a shared table lists them when it registers
 (`roles`), and every other value, a component's measured spring included, is
-a plain constant. Touch motion stays internal (`spec:AST-094` DEC-11): a role
-plays its table value, and nothing reads its CSS variable
-(`--motion-springs-settle`), so no page or theme style retunes it. A table's
-roles exist once its `register<Name>Table()` has run: the animator registers
-the Reduce Motion fade's curve, and code that plays the shared springs calls
-`registerSpringsTable()` before its first motion. The animator resolves each
-role it is handed when the motion starts; code that times something itself
+a plain constant. The per-role tables stay internal (`spec:AST-094` DEC-15): a
+role plays its table value at the theme's tempo, and nothing reads the
+role's own CSS variable (`--motion-springs-settle`), so no page or theme
+style sets a role. A table's roles exist once its `register<Name>Table()`
+has run. A page that plays no spring ships no springs registry; each spring
+role registers itself when the module that plays it loads (one idempotent
+in-memory write, no DOM). The navigation, paging and picker tables register
+themselves at import, and the animator registers the Reduce Motion fade's
+curve. The animator resolves each role it is handed when the
+motion starts; code that times something itself
 calls `resolveMotion(element, timing, 'stateChangeMs')`. Gesture thresholds and
 the timings that decide who gets a touch are not roles.
 
 ## Animator
 
 ```
-import {createAnimator} from '../motion/animator';
+import {createMotionEngine} from '../motion/animator';
 import {coast} from '../motion/coast';
 import {solveSpringTowardRamp, toSpring} from '../motion/spring';
 import {resolveMotion} from '../motion/resolveMotion';
-import {registerSpringsTable, springs} from '../motion/uikit';
+import {springs} from '../motion/uikit';
 
-// Once, so the springs are registered as their roles:
-registerSpringsTable();
-
-const animator = createAnimator(sheet);
-// The animator plays a motion role (spec:AST-094 FR4), its table value while
-// touch motion stays internal (DEC-11); math on a spring reads the role with
+const animator = createMotionEngine(sheet);
+// The animator plays a motion role (spec:AST-094 FR4), its table value, as the
+// per-role tables stay internal (DEC-15); math on a spring reads the role with
 // resolveMotion.
 const spring = springs.settle;
 
@@ -89,13 +104,16 @@ animator.stop(['y']); // freezes at the value on screen
 animator.decay(coast(animator, {x: velocityX}, {bounds: {x: {min: -maxScroll, max: 0}}}));
 
 // Any closed-form curve, here a press that keeps deepening: the target
-// scale falls at 0.16/s and the platter follows it on a spring.
-const ramp = solveSpringTowardRamp(toSpring(resolveMotion(sheet, springs.quickChange)), {
-  from: 1,
-  target: 1,
-  slope: -0.16,
-});
-animator.play({scale: {duration: 0.266, at: ramp.value, velocity: ramp.velocity}});
+// scale falls at 0.16/s and the platter follows it on a spring. Press
+// feedback has no fade of its own, so it is skipped under Reduce Motion.
+if (animator.reducedMotion() === 'off') {
+  const ramp = solveSpringTowardRamp(toSpring(resolveMotion(sheet, springs.quickChange)), {
+    from: 1,
+    target: 1,
+    slope: -0.16,
+  });
+  animator.play({scale: {duration: 0.266, at: ramp.value, velocity: ramp.velocity}});
+}
 
 await handle.finished; // true if it ran to the end, false if interrupted
 ```
@@ -124,11 +142,21 @@ await handle.finished; // true if it ran to the end, false if interrupted
   velocity unless a velocity is handed in, so retargeting is continuous
   (`handle.retarget(to)` keeps the call's spring).
 - A call from rest gets no start time, so the browser starts it when it
-  commits it, as Core Animation does: in Chromium a block before that frame
-  delays the motion instead of skipping into it (WebKit starts it at the
-  frame before the block). Everything the call starts shares that start
-  (`handle.started`); a retarget keeps an explicit one, and `{at}` puts
-  several animators on one clock.
+  commits it, as Core Animation does: a block before that frame delays the
+  motion instead of skipping into it. WebKit dates the start at the frame
+  before the block, so when the task that created the animations (a
+  presented call's second frame) runs on over two frames, the start moves to
+  the call's first read after it, with every call of that task. Everything
+  the call starts shares that start
+  (`handle.started`); a retarget of a curve that still moves keeps an
+  explicit one, while one on a tail that already shows as at rest (within two
+  sample tolerances of its target, and slower than one a frame) counts as a
+  call from rest. `{at}` puts several animators on one clock. `{start: 'commit'}` lets the browser date
+  a retarget too; `{start: 'presented'}` waits two frames, until the
+  element at rest has been presented. `handle.curve(property)` is the curve
+  a call plays, for a companion to follow. `{additive: true}` retargets the
+  way UIKit does: the old curve keeps going and the change is added on top,
+  in one animation.
 - Reduced Motion (`prefers-reduced-motion: reduce`, design:reduced-motion):
   every `animate` and `play` is replaced and nothing moves, scales or
   springs. On a coarse primary pointer, or for a call started by a touch
@@ -152,22 +180,40 @@ await handle.finished; // true if it ran to the end, false if interrupted
 - `animatorFor(element)` returns the one animator for an element, so code
   that animates it from several places (a swipe on x, a removal on y)
   composes in one `translate` track.
-- `createAnimator(dialog, {pseudoElement: '::backdrop'})` drives a
+- `createMotionEngine(dialog, {pseudoElement: '::backdrop'})` drives a
   pseudo-element; with no inline style to hold it, a static filling animation
-  holds its end value until the next animation replaces it.
-- `useAnimator()` returns a stable `{ref, animator}`; attach `ref` to the
-  element.
+  holds its end value until the next animation replaces it, while the
+  pseudo-element exists. A value equal to its `base` (`{base: {opacity: 0}}`,
+  what its stylesheet shows at rest) is not held, so the pseudo-element keeps
+  no compositing layer at rest; in development, the first such value warns
+  when the stylesheet shows another. A dialog's `::backdrop` is made again each time the
+  dialog opens, so a presentation `set`s its starting value right after
+  `showModal()`, in the same task (a `set` before it lands on the backdrop
+  the open replaces).
 
 ### How it stays on the compositor
 
-Each curve is baked into keyframes, sampled adaptively until linear
-interpolation is within 0.05 px, and played with `easing: linear` on one
-start time. The element's inline style already holds the end values,
-and the keyframes hold the end state for a few seconds past the curve's end;
-the main thread drops the animation as soon as it runs after that end. So the
+Each curve is baked into keyframes on a 30 Hz grid, refined until linear
+interpolation is within each channel's tolerance (`SAMPLE_TOLERANCE`, a
+quarter pixel for a move), and played with `easing: linear` on one start
+time. The element's inline style holds the
+value the curve starts from, where the element is, never where it is going;
+the keyframes hold the end state for a minute past the curve's end
+(`END_HOLD_MS`), and the main thread retires a finished animation as soon as
+it runs after that end, writing the end values inline in the same task. So the
 frame an animation ends needs no main thread and shows no flicker, even when
 the main thread is blocked as the curve ends (WebKit's compositor otherwise
 falls back to the last value its main thread committed, mid-flight).
+
+While translate runs, the animator reports the element to `presentation.ts`:
+its offset (the curve's value now minus the value the engine last resolved,
+read live) and a `resolve` that makes the engine hit-test it where it is
+drawn now (one custom-property write). iOS WebKit keeps the transform it
+resolved when an animation went to the compositor, so it reports and
+hit-tests the element at that start for the whole curve, until a style
+write resolves it again. The gesture host resolves the moving elements at
+touch-down, so a touch reaches what is drawn (`gestures/README.md`,
+"Touches on moving elements"). Translation only.
 
 Keyframes rather than one `linear()` easing: measured in Chromium, both are
 composited and, for the same samples, equally precise; but WebKit's Core
@@ -209,14 +255,15 @@ Chromium and WebKit on the phone profile.
 - A spring that ends inside the block keeps showing its end state. Without the
   animator's end-state hold, WebKit falls back to a mid-flight value.
 - No Layout or Paint runs while it animates (Chromium trace).
-- Seeked to fixed times, the engine plays the analytic curve within 0.05 px,
-  with every channel on one start time.
+- Seeked to fixed times, the engine plays the analytic curve within the
+  sampling tolerance, with every channel on one start time.
 - A finished animation leaves the element within a frame or two of the curve's
   end.
 - A dialog's `::backdrop` follows the curve when seeked and holds its end
   state.
-- A scope that sets `springs.settle`'s variable changes nothing: touch motion
-  stays internal (DEC-11), so the engine plays the table's spring there too.
+- A scope that sets `springs.settle`'s variable changes nothing: the per-role
+  tables stay internal (DEC-15), so the engine plays the table's spring there
+  too.
 
 ```
 pnpm test:interaction packages/core/src/motion

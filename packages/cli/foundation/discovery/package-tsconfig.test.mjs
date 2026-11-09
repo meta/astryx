@@ -12,6 +12,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {createRequire} from 'node:module';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
+import {recordReads} from '../fs/read-record.mjs';
 import {readPackageTsconfig} from './package-tsconfig.mjs';
 
 const require = createRequire(import.meta.url);
@@ -79,6 +80,51 @@ describe('readPackageTsconfig', () => {
     expect(own.declarations.sort()).toEqual(
       [global, ambient, script, namespace].sort(),
     );
+  });
+
+  it('reads an included file as TypeScript once while it is unchanged, and again once it changes', () => {
+    const source = write('src/Button.tsx', 'export {};\n');
+    write('tsconfig.json', {
+      compilerOptions: OPTIONS,
+      include: ['src', 'types'],
+    });
+    // A module: only reading it as TypeScript tells that it is not ambient.
+    const file = write('types/maybe.ts', 'export interface Maybe {}\n');
+    let reads = 0;
+    const counted = {
+      ...ts,
+      /** @param {any[]} args */
+      createSourceFile: (...args) => {
+        if (args[0] === file) reads += 1;
+        return ts.createSourceFile(...args);
+      },
+    };
+    expect(readPackageTsconfig(counted, root, [source]).declarations).toEqual(
+      [],
+    );
+    // The kept answer still counts as reading the file, for an operation
+    // that keeps its own result while what it read is unchanged.
+    const seen = new Map();
+    expect(
+      recordReads(seen, () => readPackageTsconfig(counted, root, [source]))
+        .declarations,
+    ).toEqual([]);
+    expect(reads).toBe(1);
+    expect(seen.has(file)).toBe(true);
+
+    // Now a script, a different size: ambient.
+    fs.writeFileSync(file, 'interface Maybe {}\n');
+    expect(readPackageTsconfig(counted, root, [source]).declarations).toEqual([
+      file,
+    ]);
+    // A module again at the same size, seen by its modification time.
+    fs.writeFileSync(file, 'export type X = 1;\n');
+    const later = new Date(Date.now() + 2000);
+    fs.utimesSync(file, later, later);
+    expect(readPackageTsconfig(counted, root, [source]).declarations).toEqual(
+      [],
+    );
+    expect(reads).toBe(2);
   });
 
   it("follows a solution-style config's references, at any depth and through a cycle, to the config that includes the sources", () => {

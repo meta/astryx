@@ -4,10 +4,12 @@
  * @file layerExitCopy.test.ts
  * @input vitest (jsdom), layerExitCopy
  * @output Checks the static copy a closing layer leaves for its close to
- *   play on: out of reach and out of the accessibility tree, no ids or form
- *   names, only in the top layer (hidden until a refused show succeeds, none
- *   without the popover API), on the layer's layout box with the transform
- *   it was drawn with, one per layer, scrolled where the layer was
+ *   play on. It is out of reach and out of the accessibility tree, with no
+ *   ids or form names. It is only in the top layer: hidden until a refused
+ *   show succeeds, and none without the popover API or past the copy cap. It
+ *   sits on the layer's layout box with fractions, and with the transform and
+ *   opacity it was drawn with. No keyframes or transitions replay, there is
+ *   one copy per layer, and it is scrolled where the layer was.
  * @position Testing; the browser proofs are in
  *   __tests__/layerExitCopy.interaction.browser.spec.ts
  */
@@ -104,6 +106,59 @@ describe('placeLayerExitCopy', () => {
     expect(copy.style.getPropertyValue('pointer-events')).toBe('none');
   });
 
+  it('lays the copy of a layer inside other layers after the outermost one, with what it inherited there', () => {
+    popoverApi(true);
+    const sheet = document.createElement('style');
+    sheet.textContent =
+      '#layer { --menu-tone: rgb(1, 2, 3); color-scheme: dark; }';
+    document.head.append(sheet);
+    const element = layer();
+    const host = element.parentElement as HTMLElement;
+    const outer = document.createElement('div');
+    outer.setAttribute('popover', 'auto');
+    const inner = document.createElement('div');
+    inner.setAttribute('popover', 'manual');
+    host.append(outer);
+    outer.append(inner);
+    inner.append(element);
+    const copy = place(element);
+    sheet.remove();
+    // Outside both: a closing layer around it would hide it.
+    expect(copy.parentElement).toBe(host);
+    expect(copy.previousElementSibling).toBe(outer);
+    // The copy has no id, so only the written values carry the tone and the
+    // scheme.
+    expect(copy.style.getPropertyValue('--menu-tone')).toBe('rgb(1, 2, 3)');
+    expect(copy.style.getPropertyValue('color-scheme')).toBe('dark');
+  });
+
+  it("reads what the outer layer's parent passes before it inserts the copy there, so no style read follows that write", () => {
+    popoverApi(true);
+    const element = layer();
+    const host = element.parentElement as HTMLElement;
+    const outer = document.createElement('div');
+    outer.setAttribute('popover', 'auto');
+    host.append(outer);
+    outer.append(element);
+    const order: string[] = [];
+    const read = window.getComputedStyle.bind(window);
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((node, pseudo) => {
+      if (node === host) {
+        order.push('read the host');
+      }
+      return read(node, pseudo);
+    });
+    const insert = outer.after.bind(outer);
+    outer.after = (...nodes: (Node | string)[]) => {
+      order.push('insert the copy');
+      insert(...nodes);
+    };
+    const copy = place(element);
+    expect(copy.parentElement).toBe(host);
+    expect(order).toContain('read the host');
+    expect(order.at(-1)).toBe('insert the copy');
+  });
+
   it('takes the copy out of every form and radio group, so the live selection stays', () => {
     popoverApi(true);
     const element = layer();
@@ -147,6 +202,47 @@ describe('placeLayerExitCopy', () => {
     }
   });
 
+  it('shows the copy of a layer inside again after the copy of the layer around it, so it stays on top', () => {
+    // The popover API, with an open state the top-layer order is read from.
+    const shown: Element[] = [];
+    Object.defineProperty(HTMLElement.prototype, 'showPopover', {
+      configurable: true,
+      writable: true,
+      value(this: HTMLElement) {
+        this.setAttribute('data-open', '');
+        shown.push(this);
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, 'hidePopover', {
+      configurable: true,
+      writable: true,
+      value(this: HTMLElement) {
+        this.removeAttribute('data-open');
+      },
+    });
+    const matches = HTMLElement.prototype.matches;
+    vi.spyOn(HTMLElement.prototype, 'matches').mockImplementation(function (
+      this: HTMLElement,
+      selector: string,
+    ) {
+      return selector === ':popover-open'
+        ? this.hasAttribute('data-open')
+        : matches.call(this, selector);
+    });
+    try {
+      const outer = layer();
+      const inner = layer();
+      inner.id = 'inner';
+      outer.querySelector('#list')!.append(inner);
+      const innerCopy = place(inner);
+      const outerCopy = place(outer);
+      expect(shown.slice(-2)).toEqual([outerCopy, innerCopy]);
+      expect(innerCopy.hasAttribute('data-open')).toBe(true);
+    } finally {
+      Reflect.deleteProperty(HTMLElement.prototype, 'hidePopover');
+    }
+  });
+
   it('keeps one copy per layer: a second takes only that layer\u2019s first away', () => {
     popoverApi(true);
     const element = layer();
@@ -162,7 +258,7 @@ describe('placeLayerExitCopy', () => {
     expect(document.querySelectorAll(`[${ATTRIBUTE}]`)).toHaveLength(2);
   });
 
-  it('stands on the layer\u2019s box, free of the live layer\u2019s anchoring and motion', () => {
+  it('stands on the layer\u2019s box, free of the live layer\u2019s anchoring, drawn with its inline scale and opacity', () => {
     popoverApi(true);
     const element = layer();
     const copy = place(element);
@@ -171,39 +267,48 @@ describe('placeLayerExitCopy', () => {
     expect(copy.style.getPropertyValue('top')).toBe('204px');
     expect(copy.style.getPropertyValue('width')).toBe('320px');
     expect(copy.style.getPropertyValue('height')).toBe('253px');
-    for (const property of [
-      'position-anchor',
-      'scale',
-      'opacity',
-      'transition',
-    ]) {
+    for (const property of ['position-anchor', 'transition']) {
       expect(copy.style.getPropertyValue(property), property).toBe('');
     }
+    // A layer drawn with these and no animation closes from a copy drawn the
+    // same, not at full size and full opacity.
+    expect(copy.style.getPropertyValue('scale')).toBe('0.5 0.4');
+    expect(copy.style.getPropertyValue('opacity')).toBe('0.3');
     expect(copy.style.getPropertyValue('animation-name')).toBe('none');
     // No alignment against the anchor it left (a phone menu's anchor-center).
     expect(copy.style.getPropertyValue('justify-self')).toBe('normal');
     expect(copy.style.getPropertyValue('align-self')).toBe('normal');
   });
 
-  it('holds where a layer still entering was drawn: its layout box, with the transform it was drawn with', () => {
+  it('holds where a layer still entering was drawn: its layout box with fractions, with the transform it was drawn with', () => {
     popoverApi(true);
     const element = layer();
-    // Mid-entrance: drawn at half size about its top-left corner, so its
-    // drawn rect is not its layout box.
-    element.getBoundingClientRect = () => ({
-      left: 41,
-      top: 204,
-      width: 160,
-      height: 126.5,
-      x: 41,
-      y: 204,
-      right: 201,
-      bottom: 330.5,
-      toJSON: () => ({}),
-    });
+    // Mid-entrance: drawn at half size about its top-left corner, at a
+    // fractional position its whole-pixel offsets round away. Like a real
+    // engine, the box is laid out on the 1/64 px grid.
+    const laidOut = {
+      left: 40.390625,
+      top: 120.59375,
+      width: 320.40625,
+      height: 253,
+    };
+    const drawn = {...laidOut, width: 160.203125, height: 126.5};
+    // jsdom keeps no `!important`: the read's override shows as `none`.
+    const settled = () => element.style.getPropertyValue('scale') === 'none';
+    element.getBoundingClientRect = () => {
+      const box = settled() ? laidOut : drawn;
+      return {
+        ...box,
+        x: box.left,
+        y: box.top,
+        right: box.left + box.width,
+        bottom: box.top + box.height,
+        toJSON: () => ({}),
+      };
+    };
     for (const [name, value] of [
-      ['offsetLeft', 41],
-      ['offsetTop', 204],
+      ['offsetLeft', 40],
+      ['offsetTop', 121],
       ['offsetWidth', 320],
       ['offsetHeight', 253],
     ] as const) {
@@ -216,7 +321,7 @@ describe('placeLayerExitCopy', () => {
     const presented: Record<string, string> = {
       scale: '0.5',
       'transform-origin': '0px 0px',
-      width: '320.4px',
+      width: '320.40625px',
       height: '253px',
       'box-sizing': 'border-box',
     };
@@ -224,19 +329,26 @@ describe('placeLayerExitCopy', () => {
     vi.spyOn(window, 'getComputedStyle').mockImplementation((node, pseudo) =>
       node === element
         ? ({
-            getPropertyValue: (property: string) => presented[property] ?? '',
-          } as CSSStyleDeclaration)
+            getPropertyValue: (property: string) =>
+              property === 'scale' && settled()
+                ? 'none'
+                : (presented[property] ?? ''),
+            transitionProperty: 'all',
+            transitionDuration: '0s',
+          } as unknown as CSSStyleDeclaration)
         : original(node, pseudo),
     );
     const copy = place(element);
     // Laid out where the layer is, at its used size, fractions kept...
-    expect(copy.style.getPropertyValue('left')).toBe('41px');
-    expect(copy.style.getPropertyValue('top')).toBe('204px');
-    expect(copy.style.getPropertyValue('width')).toBe('320.4px');
+    expect(copy.style.getPropertyValue('left')).toBe('40.390625px');
+    expect(copy.style.getPropertyValue('top')).toBe('120.59375px');
+    expect(copy.style.getPropertyValue('width')).toBe('320.40625px');
     expect(copy.style.getPropertyValue('height')).toBe('253px');
     // ...and drawn as it was drawn.
     expect(copy.style.getPropertyValue('scale')).toBe('0.5');
     expect(copy.style.getPropertyValue('transform-origin')).toBe('0px 0px');
+    // The read leaves the live layer's own transform as it was.
+    expect(element.style.getPropertyValue('scale')).toBe('0.5 0.4');
   });
 
   it('shows the copy only in the top layer, as a manual popover, with no z-index', () => {
@@ -352,29 +464,97 @@ describe('placeLayerExitCopy', () => {
     ).toBe(list.getAttribute('style'));
   });
 
-  it.each(['iframe', 'object', 'embed', 'video', 'audio', 'canvas'])(
-    'copies a %s as an empty box of its size, so nothing loads or plays again',
+  it.each(['iframe', 'object', 'embed', 'video', 'audio'])(
+    'copies a %s with no source, so nothing loads or plays again',
     tag => {
       popoverApi(true);
       const element = layer();
       const live = document.createElement(tag);
       live.className = 'media';
-      live.style.setProperty('margin', '4px');
-      Object.defineProperty(live, 'offsetWidth', {value: 320});
-      Object.defineProperty(live, 'offsetHeight', {value: 180});
+      live.setAttribute('src', 'about:blank');
+      live.setAttribute('data', 'about:blank');
+      live.setAttribute('autoplay', '');
       element.querySelector('.list')!.appendChild(live);
       const copy = place(element);
-      expect(copy.querySelector(tag)).toBeNull();
-      const box = copy.querySelector<HTMLElement>('.list > .media')!;
-      expect(box.tagName).toBe('SPAN');
-      expect(box.childNodes).toHaveLength(0);
-      expect(box.style.getPropertyValue('width')).toBe('320px');
-      expect(box.style.getPropertyValue('height')).toBe('180px');
-      expect(box.style.getPropertyValue('margin')).toBe('4px');
+      const copied = copy.querySelector('.list > .media')!;
+      expect(copied.localName).toBe(tag);
+      for (const name of ['src', 'data', 'autoplay']) {
+        expect(copied.hasAttribute(name)).toBe(false);
+      }
       // The live one is untouched.
       expect(element.querySelector(tag)).toBe(live);
+      expect(live.getAttribute('src')).toBe('about:blank');
     },
   );
+
+  it('places no copy for content holding a canvas that reads back empty: the close is immediate', () => {
+    popoverApi(true);
+    const element = layer();
+    const canvas = document.createElement('canvas');
+    canvas.width = 4;
+    canvas.height = 4;
+    element.querySelector('.list')!.appendChild(canvas);
+    // A canvas whose pixels read back empty: a WebGL one without
+    // preserveDrawingBuffer, or a tainted one.
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage: () => {},
+      getImageData: () => ({data: new Uint8ClampedArray(64)}),
+    } as unknown as CanvasRenderingContext2D);
+    expect(placeLayerExitCopy(element, ATTRIBUTE)).toBeNull();
+    expect(document.querySelector(`[${ATTRIBUTE}]`)).toBeNull();
+  });
+
+  it('carries no test ids, label targets or autofocus, so a query or the focus finds only the live layer', () => {
+    popoverApi(true);
+    const element = layer();
+    element.setAttribute('data-testid', 'menu');
+    const label = document.createElement('label');
+    label.htmlFor = 'live-field';
+    const field = document.createElement('input');
+    field.id = 'live-field';
+    field.autofocus = true;
+    field.setAttribute('data-testid', 'field');
+    element.querySelector('.list')!.append(label, field);
+    const copy = place(element);
+    expect(copy.hasAttribute('data-testid')).toBe(false);
+    expect(copy.querySelector('[data-testid]')).toBeNull();
+    expect(copy.querySelector('label')!.hasAttribute('for')).toBe(false);
+    expect(copy.querySelector('input')!.hasAttribute('autofocus')).toBe(false);
+    expect(document.querySelectorAll('[data-testid="field"]')).toHaveLength(1);
+  });
+
+  it('restores scroll positions at once, whatever the scroller\u2019s own scroll-behavior', () => {
+    popoverApi(true);
+    const element = layer();
+    const list = element.querySelector<HTMLElement>('.list')!;
+    list.style.setProperty('scroll-behavior', 'smooth');
+    list.scrollTop = 120;
+    const original = Object.getOwnPropertyDescriptor(
+      Element.prototype,
+      'scrollTo',
+    );
+    const scrollTo = vi.fn();
+    Object.defineProperty(Element.prototype, 'scrollTo', {
+      configurable: true,
+      writable: true,
+      value: scrollTo,
+    });
+    try {
+      const copy = place(element);
+      expect(scrollTo).toHaveBeenCalledWith({
+        top: 120,
+        left: 0,
+        behavior: 'instant',
+      });
+      expect(scrollTo.mock.contexts).toContain(copy.querySelector('.list'));
+    } finally {
+      if (original == null) {
+        Reflect.deleteProperty(Element.prototype, 'scrollTo');
+      } else {
+        Object.defineProperty(Element.prototype, 'scrollTo', original);
+      }
+    }
+  });
 
   it('keeps scrolled content where it was scrolled to', () => {
     popoverApi(true);
@@ -383,5 +563,86 @@ describe('placeLayerExitCopy', () => {
     list.scrollTop = 120;
     const copy = place(element);
     expect(copy.querySelector<HTMLElement>('.list')!.scrollTop).toBe(120);
+  });
+
+  it('keeps a scrolling layer\u2019s own overflow and its own scroll position', () => {
+    popoverApi(true);
+    const element = layer();
+    element.style.setProperty('overflow-y', 'auto');
+    element.scrollTop = 80;
+    const copy = place(element);
+    expect(copy.style.getPropertyValue('overflow-y')).toBe('auto');
+    expect(copy.scrollTop).toBe(80);
+  });
+
+  it('takes a form-associated custom element out of every form, as it does a native control', () => {
+    popoverApi(true);
+    if (customElements.get('x-exit-form-field') == null) {
+      customElements.define(
+        'x-exit-form-field',
+        class extends HTMLElement {
+          static formAssociated = true;
+        },
+      );
+    }
+    const element = layer();
+    element
+      .querySelector('.list')!
+      .insertAdjacentHTML(
+        'beforeend',
+        '<x-exit-form-field></x-exit-form-field><x-exit-plain></x-exit-plain>',
+      );
+    const copy = place(element);
+    expect(copy.querySelector('x-exit-form-field')?.getAttribute('form')).toBe(
+      '',
+    );
+    expect(copy.querySelector('x-exit-plain')?.hasAttribute('form')).toBe(
+      false,
+    );
+  });
+
+  it('keeps its descendants\u2019 keyframes from starting again, and writes nothing where none are set', () => {
+    popoverApi(true);
+    const element = layer();
+    element
+      .querySelector<HTMLElement>('[role="dialog"]')!
+      .style.setProperty('animation-name', 'rise');
+    const copy = place(element);
+    expect(
+      copy
+        .querySelector<HTMLElement>('[role="dialog"]')!
+        .style.getPropertyValue('animation-name'),
+    ).toBe('none');
+    expect(
+      copy.querySelector<HTMLElement>('.list')!.getAttribute('style'),
+    ).toBe(element.querySelector('.list')!.getAttribute('style'));
+  });
+
+  it('stops the transitions the layer and its descendants run, so none replays its entry in the copy', () => {
+    popoverApi(true);
+    const element = layer();
+    element.style.setProperty('transition-duration', '0.2s');
+    element
+      .querySelector<HTMLElement>('[role="dialog"]')!
+      .style.setProperty('transition-duration', '0s, 0.3s');
+    const copy = place(element);
+    expect(copy.style.getPropertyValue('transition')).toBe('none');
+    expect(
+      copy
+        .querySelector<HTMLElement>('[role="dialog"]')!
+        .style.getPropertyValue('transition'),
+    ).toBe('none');
+    // Nothing is written where no transition runs.
+    expect(
+      copy.querySelector<HTMLElement>('.list')!.getAttribute('style'),
+    ).toBe(element.querySelector('.list')!.getAttribute('style'));
+  });
+
+  it('places no copy for content past the copy cap, as the swap does: the close is immediate', () => {
+    popoverApi(true);
+    const element = layer();
+    element.querySelector('.list')!.innerHTML = '<i></i>'.repeat(1600);
+    expect(placeLayerExitCopy(element, ATTRIBUTE)).toBeNull();
+    expect(document.querySelector(`[${ATTRIBUTE}]`)).toBeNull();
   });
 });

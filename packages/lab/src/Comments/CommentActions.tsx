@@ -4,15 +4,15 @@
 
 /**
  * @file CommentActions.tsx
- * @input Uses React, React DOM flushSync, StyleX, IconButton, Button, Tooltip,
- *   ToggleButton, OverflowList, DropdownMenu, Popover, Text
+ * @input Uses React, React DOM flushSync, StyleX, useClipboard, IconButton,
+ *   Button, Tooltip, ToggleButton, OverflowList, DropdownMenu, Popover, Text
  * @output Exports CommentActions (a comment's header actions), ReactionSummary
  *   (its reaction toggles), and the action-lookup helpers rows use for focus
  *   hand-offs
  * @position Internal parts of a comment row in the Comments family
  */
 
-import {useCallback, useEffect, useRef, useState, type ReactNode} from 'react';
+import {useCallback, useRef, useState, type ReactNode} from 'react';
 import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '@astryxdesign/core/Button';
@@ -20,6 +20,7 @@ import {
   DropdownMenu,
   type DropdownMenuOption,
 } from '@astryxdesign/core/DropdownMenu';
+import {useClipboard} from '@astryxdesign/core/hooks';
 import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
@@ -35,7 +36,6 @@ import {CommentIcon} from './icons';
 import {commentAnchorId, type AnyComment} from './utils';
 import type {CommentReaction, CommentReactionOption} from './types';
 
-const LINK_COPIED_RESET_MS = 2_000;
 const MORE_MENU_MIN_WIDTH = `calc(${spacingVars['--spacing-8']} * 5)`;
 
 const styles = stylex.create({
@@ -256,7 +256,7 @@ export function CommentActions({
   resolveAction?: ResolveAction;
 }) {
   const t = useTranslator();
-  const [isLinkCopied, setIsLinkCopied] = useState(false);
+  const {copy: copyToClipboard, isCopied: isLinkCopied} = useClipboard();
   const [isLinkTooltipOpen, setIsLinkTooltipOpen] = useState(false);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(NO_COLLAPSED_ACTIONS);
@@ -276,30 +276,8 @@ export function CommentActions({
     <CommentIcon name="copyLink" />
   );
 
-  const copyCommentLink = async () => {
-    if (navigator.clipboard == null) {
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(
-        new URL(href, window.location.href).href,
-      );
-      setIsLinkCopied(true);
-    } catch {
-      setIsLinkCopied(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!isLinkCopied) {
-      return;
-    }
-    const timer = window.setTimeout(
-      () => setIsLinkCopied(false),
-      LINK_COPIED_RESET_MS,
-    );
-    return () => window.clearTimeout(timer);
-  }, [isLinkCopied]);
+  const copyCommentLink = () =>
+    copyToClipboard(new URL(href, window.location.href).href);
 
   const changePicker = (isOpen: boolean) => {
     setIsPickerOpen(isOpen);

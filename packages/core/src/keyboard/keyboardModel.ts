@@ -2,76 +2,24 @@
 
 /**
  * @file keyboardModel.ts
- * @input `keyboard` (its spring and report timings) and
- *   `keyboardNotification` (the notifications' duration, without the rest of
- *   the timing table) from the UIKit table
- * @output Exports createKeyboardModel (the keyboard layout guide's clock-free
- *   core) and the KeyboardTransition / KeyboardModel types
- * @position The state of the keyboard layout guide (keyboardLayoutGuide.ts):
- *   which transition the keyboard is in, inferred from the visual viewport's
- *   reports and focus changes, each input carrying its own time. Internal to
- *   core
- *
- * Mobile Safari reports the keyboard late and once (README.md, "What the
- * page sees"):
- *
- * - Show: the viewport's one `resize` arrives about `keyboard.showReportLagMs`
- *   after the keyboard started to rise, and later when the main thread was
- *   busy: the report waits for it, while the keyboard rises on its own
- *   schedule, `keyboard.focusToShowMs` after the focus. A report that
- *   follows a gap in the page's frames is dated from the focus that brought
- *   the keyboard up (no earlier than the last frame before the report),
- *   however late it is, so content following the keyboard joins its spring
- *   where the keyboard is by then. Without a focus to date from, it goes
- *   back to the last frame before the report, at most
- *   `keyboard.showReportLagMaxMs`.
- * - Hide: the `resize` arrives once the keyboard is down. The keyboard starts
- *   to fall `keyboard.hideAfterBlurMs` after the focused control loses focus
- *   to nothing that brings up a keyboard, so the model starts the hide from
- *   the blur (a prediction) and takes the late `resize` as its confirmation.
- *   A prediction the viewport has not confirmed once it should have ended
- *   gives way to what the viewport says (`verify`).
- * - A change while the keyboard is up (a field that brings up the number
- *   pad) jumps: UIKit posts it with a zero duration.
- *
- * Chrome (the `chromium` profile) reports each keyboard slide through the
- * visual viewport just after it starts (README.md, "What the page sees", for
- * Chrome), and content rides Gboard's own slides (motion/android/keyboard.ts,
- * fitted on Chromium 158 with Gboard):
- *
- * - Show: from the report, dated back `androidKeyboard.showReportLagMs` (the
- *   report's first painted frame trails Gboard's first moved frame by 14 to
- *   35 ms), on `showCurve` over `showMs`, joining the slide where it is. An
- *   `<input>` that brings an accessory bar first (a smaller report, the
- *   keyboard's following) rides to the last keyboard's height instead
- *   (predicted), and the keyboard's report confirms it.
- * - Hide: on `hideCurve` over `hideMs`, from `androidKeyboard.hideAfterBlurMs`
- *   after a blur that brings no keyboard (predicted, as Gboard starts down at
- *   the blur), or from Chrome's report dated back `hideReportLagMs` when
- *   nothing predicted it (Back).
- * - A keyboard that changes while up (another keyboard) lays out at once.
+ * @input `keyboard` from the Android table: Gboard's slides and Chrome's
+ *   report timings
+ * @output createKeyboardModel, the keyboard layout guide's clock-free core,
+ *   and the KeyboardTransition and KeyboardModel types
+ * @position The state of the keyboard layout guide (keyboardLayoutGuide.ts).
+ *   It infers the keyboard's transition from the visual viewport's reports
+ *   and focus changes, each input with its own time. It is internal to core.
  *
  * SYNC: When modified, update /packages/core/src/keyboard/README.md
  */
 
-import {keyboard} from '../motion/uikit/keyboard';
 import {keyboard as androidKeyboard} from '../motion/android/keyboard';
 import {cubicBezier} from '../motion/bezier';
-import {keyboardNotification} from '../motion/uikit/timing';
-import {
-  solveSpring,
-  toSpring,
-  type SpringCurve,
-  type SpringDescription,
-} from '../motion/spring';
 
-/** Which browser's keyboard reports the model reads. */
-export type KeyboardProfile = 'webkit' | 'chromium';
+/** Which browser's keyboard reports the guide reads. */
+export type KeyboardProfile = 'chromium';
 
-/**
- * An eased slide: the curve a transition plays instead of UIKit's keyboard
- * spring (Android's keyboard going down).
- */
+/** An eased slide: the curve a transition plays (Gboard going up or down). */
 export interface KeyboardCurve {
   /** Length, ms. */
   readonly durationMs: number;
@@ -91,44 +39,23 @@ export interface KeyboardTransition {
   readonly to: number;
   /**
    * When the keyboard starts to move, ms on the document timeline
-   * (`performance.now()` clock): in the past for a show Safari reported late,
-   * shortly ahead for a hide that starts after a blur.
+   * (`performance.now()`). For a slide Chrome reported, the guide dates it
+   * back to Gboard's start. For a hide after a blur, it is shortly ahead.
    */
   readonly start: number;
   /** The inset's velocity at `start`, px/s (0 unless it interrupts one). */
   readonly velocity: number;
-  /** False when the inset jumps at `start`, as UIKit's zero-duration changes. */
+  /** False when the inset jumps at `start` (another keyboard while one is up). */
   readonly animated: boolean;
   /** True until the visual viewport confirms a transition the guide inferred. */
   readonly predicted: boolean;
   /**
-   * The eased slide the keyboard moves on where it slides on one (Gboard in
-   * Chrome on Android), or null where it moves on `spring`.
+   * The eased slide the keyboard moves on (Gboard in Chrome on Android), or
+   * null when the inset jumps. A surface riding the keyboard plays it from
+   * `start`, as rideKeyboard does. It is the keyboard's own motion, with no
+   * motion role.
    */
   readonly curve: KeyboardCurve | null;
-  /**
-   * The spring the keyboard moves on where `curve` is null (UIKit's keyboard
-   * spring: the system's own, no motion role). A surface riding the keyboard
-   * plays `curve` when it is set and this spring otherwise, from `start`
-   * (architecture:react-component-runtime INV11; rideKeyboard does).
-   */
-  readonly spring: SpringDescription;
-}
-
-/** Timing of the keyboard as the page sees it; the UIKit table's by default. */
-export interface KeyboardModelOptions {
-  /** How long after the keyboard starts to rise the viewport reports it, ms. */
-  showReportLagMs?: number;
-  /** The furthest a show is dated back to the frame before its report, ms. */
-  showReportLagMaxMs?: number;
-  /** How long after a focus the keyboard starts to rise, ms. */
-  focusToShowMs?: number;
-  /** How long after the blur the keyboard starts to fall, ms. */
-  hideAfterBlurMs?: number;
-  /** When a transition counts as over (the notification duration), ms. */
-  durationMs?: number;
-  /** Mobile Safari's reports (`webkit`, the default) or Chrome's. */
-  profile?: KeyboardProfile;
 }
 
 /** The guide's clock-free core: inputs carry their own times. */
@@ -143,16 +70,9 @@ export interface KeyboardModel {
   velocity(time: number): number;
   /**
    * The visual viewport reports an inset (null when unknown) at `time` (the
-   * event's timestamp). `frameBefore` is the last animation frame the page
-   * rendered before the report: a busy main thread holds the report back,
-   * and the keyboard then started at about that frame. Returns the
-   * transition the report starts, if any.
+   * event's timestamp). Returns the transition the report starts, if any.
    */
-  report(
-    inset: number | null,
-    time: number,
-    frameBefore?: number,
-  ): KeyboardTransition | null;
+  report(inset: number | null, time: number): KeyboardTransition | null;
   /**
    * A control that brings up a keyboard lost focus to nothing that brings
    * up one.
@@ -176,22 +96,31 @@ interface InsetCurve {
 }
 
 /**
- * Creates the guide's core. Tests drive it with explicit times; the window's
- * guide feeds it events.
+ * Creates the guide's core. Tests drive it with explicit times, and the
+ * window's guide feeds it events.
+ *
+ * Chrome reports each keyboard slide through the visual viewport just after
+ * it starts (README.md, "What the page sees"). Content rides Gboard's own
+ * slides, fitted on Chromium 158 with Gboard (motion/android/keyboard.ts).
+ *
+ * - Show: from the report, dated back `androidKeyboard.showReportLagMs`, on
+ *   `showCurve` over `showMs`, joining the slide where it is. The report's
+ *   first painted frame trails Gboard's first moved frame by 14 to 35 ms. An
+ *   `<input>` that brings an accessory bar first gives a smaller report
+ *   before the keyboard's. It rides to the last keyboard's height instead, as
+ *   a prediction, and the keyboard's report confirms it.
+ * - Hide: on `hideCurve` over `hideMs`. It starts
+ *   `androidKeyboard.hideAfterBlurMs` after a blur that brings no keyboard,
+ *   as a prediction, because Gboard starts down at the blur. When nothing
+ *   predicted it, as with Back, it starts from Chrome's report, dated back
+ *   `hideReportLagMs`, the lag measured on blurs.
+ * - A keyboard that changes while up, such as another keyboard, lays out at
+ *   once.
+ *
+ * A prediction the viewport has not confirmed by its end gives way to what
+ * the viewport says (`verify`).
  */
-export function createKeyboardModel(
-  initialInset = 0,
-  {
-    showReportLagMs = keyboard.showReportLagMs,
-    showReportLagMaxMs = keyboard.showReportLagMaxMs,
-    focusToShowMs = keyboard.focusToShowMs,
-    hideAfterBlurMs = keyboard.hideAfterBlurMs,
-    durationMs = keyboardNotification.durationMs,
-    profile = 'webkit',
-  }: KeyboardModelOptions = {},
-): KeyboardModel {
-  const spring = toSpring(keyboard.spring);
-  const chromium = profile === 'chromium';
+export function createKeyboardModel(initialInset = 0): KeyboardModel {
   let transition: KeyboardTransition = {
     kind: 'change',
     from: initialInset,
@@ -201,11 +130,10 @@ export function createKeyboardModel(
     animated: false,
     predicted: false,
     curve: null,
-    spring: keyboard.spring,
   };
   // The inset over seconds since the transition's start.
   let curve: InsetCurve | null = null;
-  // An eased slide's value and velocity (Chromium).
+  // An eased slide's value and velocity.
   const easedCurve = (
     from: number,
     to: number,
@@ -238,13 +166,10 @@ export function createKeyboardModel(
   };
   // How long the current transition moves for.
   const lengthOf = () =>
-    transition.curve != null ? transition.curve.durationMs : durationMs;
+    transition.curve != null ? transition.curve.durationMs : 0;
   // The inset of the last keyboard that was up, for a hide that turns back.
   let shownInset = initialInset;
-  // When a control that brings up a keyboard last gained focus.
-  let focusAt: number | null = null;
 
-  // Core Animation cuts the keyboard's spring at the notification duration.
   const presentation = (time: number): number => {
     // A jump has happened at its start; a curve starts from `from`.
     if (time < transition.start) {
@@ -264,8 +189,6 @@ export function createKeyboardModel(
     }
     return curve.velocity((time - transition.start) / 1000);
   };
-  const moving = (time: number): boolean =>
-    transition.animated && time < transition.start + lengthOf();
 
   const begin = (
     kind: KeyboardTransitionKind,
@@ -277,8 +200,7 @@ export function createKeyboardModel(
     const at = Math.max(start, transition.start);
     const from = presentation(at);
     const v = animated ? velocity(at) : 0;
-    const slide =
-      chromium && animated ? (to > from ? showSlide : hideSlide) : null;
+    const slide = animated ? (to > from ? showSlide : hideSlide) : null;
     transition = {
       kind,
       from,
@@ -288,13 +210,10 @@ export function createKeyboardModel(
       animated,
       predicted,
       curve: slide,
-      spring: keyboard.spring,
     };
     curve =
-      animated && Math.abs(to - from) + Math.abs(v) > 0
-        ? slide != null
-          ? easedCurve(from, to, slide)
-          : solveSpring(spring, {from, to, velocity: v})
+      slide != null && Math.abs(to - from) + Math.abs(v) > 0
+        ? easedCurve(from, to, slide)
         : null;
     if (to > EPSILON) {
       shownInset = to;
@@ -317,7 +236,7 @@ export function createKeyboardModel(
     },
     presentation,
     velocity,
-    report(inset, time, frameBefore) {
+    report(inset, time) {
       if (inset == null) {
         return null;
       }
@@ -325,78 +244,37 @@ export function createKeyboardModel(
       if (Math.abs(inset - target) < EPSILON) {
         return confirm();
       }
-      if (chromium) {
-        if (inset <= EPSILON) {
-          // A hide nothing predicted (Back): Chrome reports it just after
-          // Gboard starts down, so it rides from that moment.
-          return begin('hide', 0, time - androidKeyboard.hideReportLagMs);
-        }
-        if (target <= EPSILON) {
-          // Chrome reports the show just after Gboard starts up: ride from
-          // that moment, joining the slide where it is. A smaller first
-          // report is the accessory bar, the keyboard's own following: ride
-          // to the last keyboard's height and let its report confirm it.
-          const predicted = shownInset > inset + EPSILON;
-          return begin(
-            'show',
-            predicted ? shownInset : inset,
-            time - androidKeyboard.showReportLagMs,
-            {predicted},
-          );
-        }
-        // The keyboard changed while up (another keyboard, or the keyboard's
-        // report after the accessory bar's): Chrome lays the page out at
-        // once.
-        return begin('change', inset, time, {animated: false});
+      if (inset <= EPSILON) {
+        // A hide nothing predicted (Back): Chrome reports it just after
+        // Gboard starts down, so it rides from that moment.
+        return begin('hide', 0, time - androidKeyboard.hideReportLagMs);
       }
       if (target <= EPSILON) {
-        // The keyboard came up: Safari reports it after it started to move,
-        // later still when the main thread was busy (the report waited for
-        // it, so the keyboard started at about the last frame before it).
-        let start = time - showReportLagMs;
-        if (frameBefore != null && frameBefore < start) {
-          // A busy main thread held the report back. The keyboard rose on
-          // UIKit's schedule after the focus that brought it up; without
-          // one, it started at about the last frame before the report.
-          start =
-            focusAt != null && focusAt < time
-              ? Math.min(start, Math.max(frameBefore, focusAt + focusToShowMs))
-              : Math.max(frameBefore, time - showReportLagMaxMs);
-        }
-        return begin('show', inset, start);
+        // Chrome reports the show just after Gboard starts up: ride from
+        // that moment, joining the slide where it is. A smaller first
+        // report is the accessory bar, the keyboard's own following: ride
+        // to the last keyboard's height and let its report confirm it.
+        const predicted = shownInset > inset + EPSILON;
+        return begin(
+          'show',
+          predicted ? shownInset : inset,
+          time - androidKeyboard.showReportLagMs,
+          {predicted},
+        );
       }
-      if (inset <= EPSILON) {
-        // A hide nobody predicted (no blur): the keyboard is already down,
-        // so the content follows from now rather than jumping.
-        return begin('hide', 0, time);
-      }
-      if (moving(time) && transition.kind === 'show') {
-        // A show still under way lands somewhere else: same start, new end.
-        transition = {...transition, to: inset};
-        curve = solveSpring(spring, {
-          from: transition.from,
-          to: inset,
-          velocity: transition.velocity,
-        });
-        shownInset = inset;
-        return transition;
-      }
-      // Another keyboard while one is up: UIKit's zero-duration change.
+      // The keyboard changed while up (another keyboard, or the keyboard's
+      // report after the accessory bar's): Chrome lays the page out at once.
       return begin('change', inset, time, {animated: false});
     },
     blurred(time) {
       if (transition.to <= EPSILON) {
         return null;
       }
-      return begin(
-        'hide',
-        0,
-        time + (chromium ? androidKeyboard.hideAfterBlurMs : hideAfterBlurMs),
-        {predicted: true},
-      );
+      return begin('hide', 0, time + androidKeyboard.hideAfterBlurMs, {
+        predicted: true,
+      });
     },
     focused(time) {
-      focusAt = time;
       if (transition.kind !== 'hide' || !transition.predicted) {
         return null;
       }

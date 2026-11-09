@@ -3,10 +3,11 @@
 /**
  * @file touchAction.ts
  * @input The recognizers attached to one element
- * @output Exports deriveTouchAction (the element's `touch-action`) and
- *   gestureHostStyle (the inline style a host sets for its recognizers). The
- *   selection and callout lock for one held press is the recognizer's own
- *   `selectionLock` (gestures/selectionLock.ts), which the host calls
+ * @output Exports deriveTouchAction (the element's `touch-action`),
+ *   gestureHostStyle (the inline style a host sets for its recognizers) and
+ *   intersectTouchAction (what both a derived and a caller's value allow).
+ *   The selection and callout lock for one held press is the recognizer's
+ *   own `selectionLock` (gestures/selectionLock.ts), which the host calls
  * @position Browser negotiation of packages/core/src/gestures, pure so a
  *   server render can emit the same style the client would set
  *
@@ -17,10 +18,12 @@
  * - A tap or long press only removes double-tap zoom (`manipulation`): no
  *   300 ms click delay, scrolling and pinch-zoom untouched.
  * - A one-axis pan or swipe gives the browser the other axis.
- * - A pan that coordinates with native scrolling keeps both axes: the
- *   browser scrolls until the edge, and the pan claims from there.
- * - `pinch-zoom` stays in every value unless a pinch or rotation recognizer
- *   is attached, so the page stays zoomable (WCAG 1.4.4).
+ * - A pan that coordinates with native scrolling (`scrollEdge`) keeps both
+ *   axes: who gets the drag is decided once, when it begins, and a drag the
+ *   browser began scrolling stays the browser's to the lift (`spec:AST-094`
+ *   FR14).
+ * - `pinch-zoom` stays in every value unless a pinch recognizer is attached,
+ *   so the page stays zoomable (WCAG 1.4.4).
  *
  * WebKit pans a drag with any vertical component even under `pan-y`, so the
  * value alone does not protect a horizontal pan there: the host also cancels

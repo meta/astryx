@@ -15,7 +15,7 @@ const styles = stylex.create({
 });
 
 const meta: Meta<typeof Markdown> = {
-  title: 'Core/Markdown/Plugins/Heading links',
+  title: 'Core/Markdown',
   component: Markdown,
 };
 
@@ -60,7 +60,7 @@ const compactPlugins = [
   createMarkdownHeadingLinks({headingIdPrefix: 'heading-links-compact'}),
 ];
 
-export const Overview: Story = {
+export const HeadingLinks: Story = {
   name: 'Heading links',
   parameters: {
     docs: {

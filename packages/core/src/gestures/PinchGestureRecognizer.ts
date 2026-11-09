@@ -27,7 +27,12 @@ import {
   type GestureRecognizerOptions,
   type NativeTouchBehavior,
 } from './GestureRecognizer';
-import type {GestureEventContext, GestureTouch, Point} from './types';
+import type {
+  GestureEventContext,
+  GestureTouch,
+  Point,
+  ScrollType,
+} from './types';
 import {VelocityTracker} from './VelocityTracker';
 
 export interface PinchGestureRecognizerOptions extends GestureRecognizerOptions<PinchGestureRecognizer> {
@@ -35,15 +40,30 @@ export interface PinchGestureRecognizerOptions extends GestureRecognizerOptions<
 }
 
 export class PinchGestureRecognizer extends GestureRecognizer {
+  override get kind(): GestureRecognizer['kind'] {
+    return 'pinch';
+  }
+
   hysteresis: number;
   private initialSpan = 0;
   private scaleValue = 1;
   private readonly tracker = new VelocityTracker();
-  private lastTime = 0;
+  /** The lift's event time, for the stillness reset. */
+  private liftTime: number | undefined;
 
   constructor(options: PinchGestureRecognizerOptions = {}) {
     super(options);
     this.hysteresis = options.hysteresis ?? UIKIT_PINCH.hysteresis.value;
+  }
+
+  /** @internal The host's brand: a ctrl-wheel drives a pinch (recognizerInternals). */
+  protected get family(): 'pinch' {
+    return 'pinch';
+  }
+
+  /** A ctrl-wheel drives a pinch, from a trackpad or a mouse. */
+  protected override get defaultScrollTypes(): ReadonlyArray<ScrollType> {
+    return ['continuous', 'discrete'];
   }
 
   /** Current span over the span the fingers started at. */
@@ -55,17 +75,18 @@ export class PinchGestureRecognizer extends GestureRecognizer {
   set scale(value: number) {
     const span = this.span();
     if (span > 0 && value > 0) {
+      const factor = this.scaleValue > 0 ? value / this.scaleValue : 1;
       this.initialSpan = span / value;
       this.scaleValue = value;
-      // The velocity continues from the re-based value, without a jump.
-      this.tracker.reset();
-      this.tracker.add(value, 0, this.lastTime);
+      // The velocity continues from the re-based value, without a jump: the
+      // samples scale with it, keeping the release.
+      this.tracker.scaleBy(factor);
     }
   }
 
   /** Scale per second (UIKit's filter; measured for pans, assumed here). */
   get velocity(): number {
-    return this.tracker.velocity().x;
+    return this.tracker.velocity(this.liftTime).x;
   }
 
   /** The midpoint between the two fingers. */
@@ -86,7 +107,6 @@ export class PinchGestureRecognizer extends GestureRecognizer {
     _touches: ReadonlyArray<GestureTouch>,
     event: GestureEventContext,
   ): void {
-    this.lastTime = event.time;
     if (this.numberOfTouches === 2) {
       this.initialSpan = this.span();
       this.scaleValue = 1;
@@ -102,9 +122,10 @@ export class PinchGestureRecognizer extends GestureRecognizer {
     if (this.numberOfTouches < 2 || this.initialSpan <= 0) {
       return;
     }
-    this.lastTime = event.time;
     const span = this.span();
-    if (this.state === 'possible') {
+    // Once recognized, a pinch waiting on a recognizer it requires to fail
+    // keeps its re-based start: its moves only follow the fingers.
+    if (this.state === 'possible' && this.pending == null) {
       if (Math.abs(span - this.initialSpan) >= this.hysteresis) {
         // UIKit measures from the start moved by the hysteresis, and its
         // first velocity spans from the touch-down (scale 1) to here.
@@ -125,11 +146,16 @@ export class PinchGestureRecognizer extends GestureRecognizer {
     }
   }
 
-  protected override touchesEnded(): void {
+  protected override touchesEnded(
+    _touches: ReadonlyArray<GestureTouch>,
+    event: GestureEventContext,
+  ): void {
+    this.liftTime = event.time;
     this.setState(isActive(this.state) ? 'ended' : 'failed');
   }
 
   protected override reset(): void {
+    this.liftTime = undefined;
     this.initialSpan = 0;
     this.scaleValue = 1;
     this.tracker.reset();

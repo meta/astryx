@@ -5,123 +5,191 @@
  * @input The built "Full AI Chat" ChatLayout story, a stand-in visual
  *   viewport that reports a software keyboard, real touch input and the
  *   interaction harness
- * @output Interaction and animation proofs for ChatLayout's keyboard
- *   behavior: the dock rides the keyboard on `keyboard.spring` (sampled
- *   curve), keeps moving while the main thread is blocked, does no Layout or
- *   Paint per frame, the transcript stays at its newest message, the dock
- *   comes down with the hide and goes back up when the viewport says the
- *   keyboard stayed, a tap on the composer's text focuses it without
- *   scrolling the page; a storyboard of the show
+ * @output Proofs that on Chrome's profile the dock rides Gboard's slide up
+ *   and down with no Layout or Paint per frame. Under Reduce Motion it never
+ *   travels, also on a hide reported in steps. The transcript stays at its
+ *   newest message. A tap on the composer's text scrolls no page. Done's park
+ *   shows the focus ring after typing only. A storyboard shows the rise
  * @position Browser proofs for Chat/useChatKeyboard.ts and
  *   keyboard/keyboardLayoutGuide.ts. Headless browsers have no software
- *   keyboard, so the page's `visualViewport` is replaced by one the test
- *   shrinks the way Mobile Safari does (one `resize`, final height); Mobile
- *   Safari itself is proven on the iOS simulator (pull request evidence)
+ *   keyboard, so the test shrinks the page's `visualViewport` as Mobile
+ *   Safari does: one `resize`, to the final height
  */
 
-import {expect, test, type Locator, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {cubicBezier} from '../../motion/bezier';
 import {keyboard as ANDROID_KEYBOARD} from '../../motion/android/keyboard';
 import {
   animationStoryboard,
-  blockMainThread,
-  busyWindowProof,
-  castStoryboard,
   compareCurve,
-  countBetween,
   curveOf,
   holdAnimations,
   type HeldAnimation,
-  markElement,
   openStory,
   releaseAnimations,
+  type RenderingEvent,
+  type RenderingTrace,
   sampleCurve,
-  springStep,
-  startScreencast,
+  type TracedTask,
   timeline,
   touchDriver,
   traceRendering,
-  trackMarker,
   waitForAnimation,
   waitForRest,
   withStorybook,
-  writeEvidence,
 } from '@astryxdesign/interaction-harness';
 
 const storybook = withStorybook(test);
-
-// UIKit's keyboard spring (motion/uikit keyboard.spring): mass 1,
-// stiffness 555.0265, damping 47.118 — critically damped, response 2π/√k.
-const KEYBOARD = {
-  response: (2 * Math.PI) / Math.sqrt(555.0265),
-  dampingFraction: 47.118 / (2 * Math.sqrt(555.0265)),
-};
 // The cover Mobile Safari reports on an iPhone 17 Pro (keyboard, accessory
 // bar and the floating address bar over a 714 px layout viewport).
 const COVER = 337;
-// How long after the focus UIKit starts the keyboard
-// (motion/uikit/keyboard.ts focusToShowMs).
-const FOCUS_TO_SHOW_MS = 187;
+// How often Chrome's caret blinks, ms.
+const CARET_BLINK_MS = 500;
+// One frame at 60 Hz, ms.
+const FRAME_MS = 1000 / 60;
+
+// The shortest steady part that can judge the rise, ms.
+const MIN_STEADY_MS = 2 * FRAME_MS;
+
+/** `PRE class='a b'` reads as `PRE.a`. */
+const shortNode = (node: string) =>
+  node.replace(/ class='([^' ]*)[^']*'/, '.$1');
 
 /**
- * In the page: focuses the composer text, blocks the main thread for
- * `blockMs` from 40 ms after the focus, then reports the keyboard as Mobile
- * Safari does once the block ends (late), and reads the dock's presented
- * position on each of the next `count` frames.
+ * Whether `e` could only move the ride. It restyles two elements at most, as
+ * many as the ride moves, lays out nothing, and paints only the root layer and
+ * the code block. The count does not tell which elements those are.
  */
-async function blockThenReport(
-  editable: Locator,
-  blockMs: number,
-  count = 24,
-): Promise<{focusAt: number; reportAt: number; frames: [number, number][]}> {
-  return editable.evaluate(
-    async (el, [cover, block, n]) => {
-      let dock: HTMLElement | null = el as HTMLElement;
-      while (dock != null && getComputedStyle(dock).position !== 'sticky') {
-        dock = dock.parentElement;
-      }
-      // The presented position: translate less the layout's bottom offset.
-      const read = () => {
-        const style = getComputedStyle(dock as HTMLElement);
-        const value = style.translate;
-        const translate =
-          value === 'none' ? 0 : parseFloat(value.split(' ')[1] ?? '0');
-        return translate - (parseFloat(style.bottom) || 0);
-      };
-      let focusAt = 0;
-      el.addEventListener(
-        'focus',
-        event => {
-          focusAt = event.timeStamp;
-        },
-        {once: true},
-      );
-      (el as HTMLElement).focus({preventScroll: true});
-      await new Promise(resolve => setTimeout(resolve, 40));
-      const until = performance.now() + block;
-      while (performance.now() < until) {
-        // The page's main thread is busy.
-      }
-      (window as unknown as {__keyboard: (c: number) => void}).__keyboard(
-        cover,
-      );
-      const reportAt = performance.now();
-      const frames: [number, number][] = [];
-      await new Promise<void>(resolve => {
-        const tick = (time: number) => {
-          frames.push([time, read()]);
-          if (frames.length < n) {
-            requestAnimationFrame(tick);
-          } else {
-            resolve();
-          }
-        };
-        requestAnimationFrame(tick);
-      });
-      return {focusAt, reportAt, frames};
-    },
-    [COVER, blockMs, count] as const,
+function ridesOnly(e: RenderingEvent): boolean {
+  return (
+    e.name !== 'Layout' &&
+    (e.name !== 'UpdateLayoutTree' || (e.elements ?? Infinity) <= 2) &&
+    (e.name !== 'Paint' ||
+      e.node === '#document' ||
+      (e.node?.startsWith("PRE class='astryx-code-block") ?? false))
   );
+}
+
+interface RideStart {
+  /** The report's own layout, which starts the commit frame. */
+  readonly layout: RenderingEvent;
+  /** The frame of each rendering event from that layout on. */
+  readonly frameOf: ReadonlyMap<RenderingEvent, number>;
+  /** How many frames start the ride: the commit, then its start restyles. */
+  readonly frames: number;
+  /** The time of the last event in those frames, epoch ms. */
+  readonly end: number;
+}
+
+/**
+ * The frames that start the ride. The report's layout starts the commit
+ * frame, which starts the ride. Then each ridden element can take one restyle
+ * frame to start, at most two here: the dock and the transcript. Such a frame
+ * only moves the ride, and it comes within three frames of the frame before
+ * it. A starved main thread runs all of them late.
+ */
+function rideStart(trace: RenderingTrace, reported: number): RideStart | null {
+  const layout = trace.events.find(e => e.t >= reported && e.name === 'Layout');
+  if (layout == null) {
+    return null;
+  }
+  // A frame paints once. Its restyle and layout come before its PrePaint, and
+  // its paints after it.
+  const frameOf = new Map<RenderingEvent, number>();
+  let prePaints = 0;
+  const after = trace.events
+    .filter(e => e.t >= layout.t)
+    .sort((x, y) => x.t - y.t);
+  for (const e of after) {
+    const before = ['UpdateLayoutTree', 'Layout', 'PrePaint'].includes(e.name);
+    frameOf.set(e, before ? prePaints : Math.max(0, prePaints - 1));
+    if (e.name === 'PrePaint') {
+      prePaints += 1;
+    }
+  }
+  const eventsOf = (frame: number) =>
+    after.filter(e => frameOf.get(e) === frame);
+  let frames = 1;
+  let end = eventsOf(0).at(-1)?.t ?? layout.t;
+  for (const frame of [1, 2]) {
+    const events = eventsOf(frame);
+    const first = events.at(0);
+    if (
+      first == null ||
+      first.t - end > 3 * FRAME_MS ||
+      !events.every(ridesOnly)
+    ) {
+      break;
+    }
+    frames += 1;
+    end = events.at(-1)?.t ?? end;
+  }
+  return {layout, frameOf, frames, end};
+}
+
+/**
+ * The page's task that holds `t`, long or stretched. A starved task ran its
+ * main thread 50 ms or less, so the trace keeps it with the stretched tasks.
+ */
+function taskAt(trace: RenderingTrace, t: number): TracedTask | undefined {
+  return [...trace.longTasks, ...trace.stretchedTasks].find(
+    task => task.start <= t && task.start + task.durationMs >= t,
+  );
+}
+
+/**
+ * The evidence that a starved main thread moved the ride's start where the
+ * window cannot place it, or null. The report's layout comes more than two
+ * frames late, and its task had the main thread for half its wall time or
+ * less. Then the window holds only start restyles too late to place. Or it
+ * holds nothing, and the start leaves less than two frames of it.
+ */
+function starvation(
+  start: RideStart,
+  task: TracedTask | undefined,
+  counted: ReadonlyArray<RenderingEvent>,
+  judged: number,
+  reported: number,
+): Record<string, unknown> | null {
+  const {layout} = start;
+  if (layout.t - reported <= 2 * FRAME_MS) {
+    return null;
+  }
+  if (task == null || task.threadMs > task.durationMs / 2) {
+    return null;
+  }
+  const lateRestyle = (frame: number) =>
+    (frame === 1 || frame === 2) &&
+    [...start.frameOf]
+      .filter(([, f]) => f === frame)
+      .every(([e]) => ridesOnly(e));
+  const late =
+    counted.length > 0 &&
+    counted.every(e => lateRestyle(start.frameOf.get(e) ?? -1));
+  const unjudged = counted.length === 0 && judged < MIN_STEADY_MS;
+  if (!late && !unjudged) {
+    return null;
+  }
+  const at = (t: number) => Math.round(t - reported);
+  return {
+    layoutMs: at(layout.t),
+    reportTask: {
+      wallMs: Math.round(task.durationMs),
+      threadMs: Math.round(task.threadMs),
+    },
+    startFrames: start.frames,
+    startEndMs: at(start.end),
+    steadyLeftMs: Math.round(judged),
+    window: counted.map(
+      e =>
+        `${e.name}${e.node == null ? '' : ` ${shortNode(e.node)}`}@${at(e.t)}`,
+    ),
+  };
 }
 
 /**
@@ -131,9 +199,8 @@ async function blockThenReport(
  */
 async function installKeyboard(page: Page) {
   await page.addInitScript(() => {
-    // Mobile Safari has no keyboard geometry API: where one exists (Chrome's
-    // navigator.virtualKeyboard), the keyboard module measures nothing
-    // (spec:AST-099 FR6).
+    // Mobile Safari has no VirtualKeyboard API, so the keyboard layout guide
+    // publishes no slide there.
     Reflect.deleteProperty(Navigator.prototype, 'virtualKeyboard');
     const viewport = Object.assign(new EventTarget(), {
       height: window.innerHeight,
@@ -157,11 +224,10 @@ async function installKeyboard(page: Page) {
 }
 
 /**
- * Chrome on Android: the same visual viewport the test drives (headless
- * browsers have no keyboard), and a VirtualKeyboard object the guide must
- * leave alone, so the guide reads Chrome's profile. Run it under a finger,
- * as Chrome on Android runs: the composer's focus routes are the touch ones
- * there (the keyboard module measures under any pointer).
+ * Chrome on Android: the visual viewport the test drives, and a
+ * VirtualKeyboard object the guide must leave alone, so the guide reads
+ * Chrome's profile. It runs under a finger, as Chrome on Android does, so the
+ * composer's focus routes are the touch ones.
  */
 async function installAndroidKeyboard(page: Page) {
   await page.addInitScript(() => {
@@ -243,31 +309,22 @@ async function openChat(
   return {dock, messages, editable, lift};
 }
 
-// WebKit's Linux build runs no animation inside a sticky element that sits in
-// an overflow scroller on its compositor: with the main thread blocked, the
-// dock (and a plain box nested in it) froze, while a box in the same scroller
-// outside the sticky dock kept moving, as did a sticky element in the
-// document. Mobile Safari scrolls overflow on the compositor with sticky
-// nodes of its own; this proof runs in Chromium and on the iOS simulator.
-const STICKY_IN_SCROLLER_SKIP =
-  "WebKit's Linux build does not composite animations inside a sticky element in an overflow scroller";
-
 const showKeyboard = async (page: Page, cover = COVER) =>
   page.evaluate(
     c => (window as unknown as {__keyboard: (c: number) => void}).__keyboard(c),
     cover,
   );
 
-// Where the dock is drawn relative to its rest without a keyboard, CSS px
-// (negative is up): its presented vertical `translate` (the animator moves
-// the individual property, not `transform`), less the `bottom` offset the
-// layout gives it from the keyboard height (spec:AST-099 FR3).
+// Where the dock is drawn relative to its rest without a keyboard, CSS px,
+// negative up. It is its presented vertical `translate`, less the `bottom`
+// offset the layout gives it from the keyboard height. The animator moves the
+// individual property, not `transform`.
 const dockY = async (dock: Locator) => dock.evaluate(presentedY);
 
 // How far above the bottom of the transcript's scrollport the dock is drawn:
 // 0 at rest with no keyboard. A sticky dock leaves the bottom when the
-// content ends inside the scrollport, which a translate or a deferred scroll
-// clamp can cause, and its styles alone would not show it.
+// content ends inside the scrollport. A translate or a late scroll clamp can
+// cause that, and the dock's styles alone would not show it.
 const dockGap = async (dock: Locator) =>
   dock.evaluate(
     el =>
@@ -287,39 +344,6 @@ function presentedY(el: Element): number {
       : 0;
   return translate - bottom;
 }
-
-test('the dock rises on the keyboard spring by the cover over it', async ({
-  page,
-}, testInfo) => {
-  const {dock, lift} = await openChat(page);
-  await showKeyboard(page);
-  await waitForAnimation(dock);
-  const held = await holdAnimations(page, dock);
-  const curveEnd = Math.max(...held.map(a => a.curveEndMs));
-  const samples = curveOf(
-    await sampleCurve(dock, timeline(curveEnd)),
-    'translateY',
-  );
-  await releaseAnimations(page);
-  // The dock moves from rest to −lift on UIKit's keyboard spring.
-  const expected = (t: number) => -lift * springStep(KEYBOARD, t);
-  const result = compareCurve(samples, expected, 0.5);
-  await writeEvidence(
-    'curves/chatlayout-keyboard-show',
-    {
-      [`${testInfo.project.name}.json`]: JSON.stringify(
-        {held, comparison: result},
-        null,
-        2,
-      ),
-    },
-    testInfo,
-  );
-  expect(result.maxError, JSON.stringify(result.worst)).toBeLessThanOrEqual(
-    0.5,
-  );
-  expect(samples.at(-1)?.value).toBeCloseTo(-lift, 0);
-});
 
 test('one keyboard change reads the layout once, however many read the height (architecture:react-component-runtime INV11)', async ({
   page,
@@ -462,18 +486,50 @@ test('the transcript at its newest message stays there', async ({page}) => {
   expect(await dockY(dock)).toBeCloseTo(-lift, 0);
 });
 
+test.describe('under a mouse', () => {
+  // A desktop browser: the primary pointer is fine (the projects emulate a
+  // phone).
+  test.use({hasTouch: false, isMobile: false});
+
+  test('a click in the dock beside the composer does not focus the composer group (spec:AST-017 FR59)', async ({
+    page,
+  }) => {
+    const {dock, editable} = await openChat(page);
+    await editable.click();
+    // The composer region: the dock's last box, a plain container under a
+    // mouse.
+    const region = dock.locator(':scope > div').last();
+    await expect(region).not.toHaveAttribute('role', 'group');
+    const outer = await region.boundingBox();
+    const inner = await region.locator(':scope > div').boundingBox();
+    if (outer == null || inner == null) {
+      throw new Error('the composer region is not laid out');
+    }
+    // The region's own gutter, beside the composer.
+    const gutter = inner.x - outer.x;
+    expect(gutter).toBeGreaterThan(2);
+    await page.mouse.click(outer.x + gutter / 2, inner.y + inner.height / 2);
+    expect(
+      await region.evaluate(element => element === document.activeElement),
+    ).toBe(false);
+  });
+});
+
 test('the dock comes down when the composer text loses focus', async ({
   page,
 }) => {
-  const {dock, editable} = await openChat(page);
+  const {dock, editable, lift} = await openChat(page);
   await editable.focus();
   await showKeyboard(page);
   await waitForRest(dock);
   await editable.evaluate(el => (el as HTMLElement).blur());
-  // The hide starts from the blur; Mobile Safari reports it once the
-  // keyboard is down.
-  await waitForAnimation(dock);
+  // Mobile Safari reports the keyboard gone once it is down, 0.47 to 0.5 s
+  // after a blur on an iOS 26.2 simulator. The ride follows Chrome's slide
+  // only, so until that report the dock stays above the keyboard. The wait
+  // stands for most of that delay. Nothing moves the dock before the report
+  // the test scripts, so a slow runner cannot fail this check.
   await page.waitForTimeout(440);
+  expect(await dockY(dock)).toBeCloseTo(-lift, 0);
   await showKeyboard(page, 0);
   await waitForRest(dock);
   await page.waitForTimeout(100);
@@ -500,117 +556,6 @@ test('a hide the home-screen app reports early: the dock rests at the bottom onc
   expect(await dockGap(dock)).toBeCloseTo(0, 0);
 });
 
-test('a hide the viewport never confirms puts the dock back on the keyboard', async ({
-  page,
-}) => {
-  const {dock, editable, lift} = await openChat(page);
-  await editable.focus();
-  await showKeyboard(page);
-  await waitForRest(dock);
-  // Focus leaves, but the keyboard stays up (the viewport keeps reporting it).
-  await editable.evaluate(el => (el as HTMLElement).blur());
-  await waitForAnimation(dock);
-  await page.waitForTimeout(800);
-  await waitForRest(dock);
-  expect(await dockY(dock)).toBeCloseTo(-lift, 0);
-});
-
-test('Reduce Motion: the dock never travels, it cross-fades to the keyboard (design:reduced-motion)', async ({
-  page,
-}) => {
-  await page.emulateMedia({reducedMotion: 'reduce'});
-  const {dock, lift} = await openChat(page);
-  await showKeyboard(page);
-  // Every frame of the change: the dock is where it was or where it lands,
-  // never in between (DR1); only its opacity animates (DR2).
-  const frames = await dock.evaluate(
-    async el =>
-      new Promise<{y: number; opacity: number}[]>(resolve => {
-        const out: {y: number; opacity: number}[] = [];
-        const step = () => {
-          const style = getComputedStyle(el);
-          const translate =
-            style.translate === 'none'
-              ? 0
-              : Number(style.translate.split(' ')[1]?.replace('px', '') ?? 0);
-          out.push({
-            // The presented position: translate less the layout's offset.
-            y: translate - (parseFloat(style.bottom) || 0),
-            opacity: Number(style.opacity),
-          });
-          if (out.length < 60) {
-            requestAnimationFrame(step);
-          } else {
-            resolve(out);
-          }
-        };
-        requestAnimationFrame(step);
-      }),
-  );
-  for (const {y} of frames) {
-    expect(
-      Math.abs(y) < 0.5 || Math.abs(y + lift) < 0.5,
-      JSON.stringify(frames.map(f => Math.round(f.y))),
-    ).toBe(true);
-  }
-  await waitForRest(dock);
-  expect(await dockY(dock)).toBeCloseTo(-lift, 0);
-});
-
-test('focus returning mid-hide turns the dock back up without a jump', async ({
-  page,
-}) => {
-  const {dock, editable, lift} = await openChat(page);
-  await editable.focus();
-  await showKeyboard(page);
-  await waitForRest(dock);
-  // In the page, so no round trip sits between the steps: blur, let the
-  // hide run 150 ms, focus again, and read the dock's presented position on
-  // every frame throughout.
-  const ys = await editable.evaluate(async el => {
-    let dock: HTMLElement | null = el as HTMLElement;
-    while (dock != null && getComputedStyle(dock).position !== 'sticky') {
-      dock = dock.parentElement;
-    }
-    // The presented position: translate less the layout's bottom offset.
-    const read = () => {
-      const style = getComputedStyle(dock as HTMLElement);
-      const value = style.translate;
-      const translate =
-        value === 'none' ? 0 : parseFloat(value.split(' ')[1] ?? '0');
-      return translate - (parseFloat(style.bottom) || 0);
-    };
-    const out: [number, number][] = [];
-    const until = performance.now() + 900;
-    const sample = (time: number) => {
-      out.push([time, read()]);
-      if (performance.now() < until) {
-        requestAnimationFrame(sample);
-      }
-    };
-    requestAnimationFrame(sample);
-    (el as HTMLElement).blur();
-    await new Promise(resolve => setTimeout(resolve, 150));
-    (el as HTMLElement).focus();
-    await new Promise(resolve => setTimeout(resolve, 800));
-    return out;
-  });
-  // It went down, came back to the keyboard, and never jumped: nothing
-  // moved faster than the hide's own fastest frame (about 51 px in 16.7 ms),
-  // judged per elapsed time, so a frame the browser drops is no jump.
-  const FASTEST = 80 / (1000 / 60);
-  expect(Math.max(...ys.map(([, y]) => y))).toBeGreaterThan(-lift + 5);
-  for (let i = 1; i < ys.length; i += 1) {
-    const [t0, y0] = ys[i - 1];
-    const [t1, y1] = ys[i];
-    expect(
-      Math.abs(y1 - y0),
-      JSON.stringify(ys.map(([t, y]) => [Math.round(t), Math.round(y)])),
-    ).toBeLessThan(FASTEST * Math.max(1000 / 60, t1 - t0));
-  }
-  expect(ys.at(-1)?.[1]).toBeCloseTo(-lift, 0);
-});
-
 test('a tap on the composer text focuses it without scrolling the page', async ({
   page,
 }) => {
@@ -633,268 +578,8 @@ test('a tap on the composer text focuses it without scrolling the page', async (
   expect(after).toEqual(before);
 });
 
-test('a 600 ms block 40 ms after the focus: the first frame after it shows the dock where the keyboard is', async ({
-  page,
-}) => {
-  const {editable, lift} = await openChat(page);
-  const {focusAt, reportAt, frames} = await blockThenReport(editable, 600);
-  // UIKit started the keyboard FOCUS_TO_SHOW_MS after the focus; by the
-  // first frame after the report its spring is over, so the dock is there
-  // at once rather than starting its rise half a second late. (A frame the
-  // browser began during the block carries that earlier time.)
-  const after = frames.filter(([time]) => time >= reportAt);
-  expect(after.length).toBeGreaterThan(10);
-  expect(after[0][0] - (focusAt + FOCUS_TO_SHOW_MS)).toBeGreaterThan(400);
-  for (const [, y] of after) {
-    expect(y).toBeCloseTo(-lift, 0);
-  }
-});
-
-test('a block that ends mid-rise: the dock joins the keyboard spring where it is and follows it', async ({
-  page,
-}) => {
-  const {editable, lift} = await openChat(page);
-  const {focusAt, reportAt, frames} = await blockThenReport(editable, 240);
-  const start = focusAt + FOCUS_TO_SHOW_MS;
-  const expected = (time: number) => -lift * springStep(KEYBOARD, time - start);
-  // The first frame after the report is part-way up the spring, not at rest;
-  // every frame shows the dock where the spring is at that frame's time.
-  const first = frames.find(([time]) => time >= reportAt);
-  expect(first?.[1]).toBeLessThan(-lift / 3);
-  for (const [time, y] of frames) {
-    expect(
-      Math.abs(y - expected(time)),
-      JSON.stringify({t: time - start, y, expected: expected(time)}),
-    ).toBeLessThan(2);
-  }
-});
-
-test('the rise keeps advancing every frame while the main thread is blocked', async ({
-  page,
-  browserName,
-}, testInfo) => {
-  test.skip(browserName === 'webkit', STICKY_IN_SCROLLER_SKIP);
-  const {dock} = await openChat(page);
-  await markElement(dock);
-  const cast = await startScreencast(page);
-  await showKeyboard(page);
-  // Mid-flight. The show is dated back to the keyboard's start, so its first
-  // frame already reads more than 16 ms: blocking in that frame would stop
-  // the animation before its first commit, which no compositor can run. Let
-  // two frames pass (the first commit) and block once it has run 70 ms.
-  await page.evaluate(
-    async () =>
-      new Promise(resolve =>
-        requestAnimationFrame(() => requestAnimationFrame(resolve)),
-      ),
-  );
-  const block = await blockMainThread(page, 500, {
-    during: dock,
-    minProgressMs: 70,
-  });
-  await page.waitForTimeout(150);
-  const castFrames = await cast.stop();
-  const tracked = await trackMarker(page, castFrames);
-  const proof = busyWindowProof(tracked, block, {settledWithin: 2});
-  await writeEvidence(
-    'busy-main-thread/chatlayout-keyboard-show',
-    {
-      [`${testInfo.project.name}.json`]: JSON.stringify(
-        {
-          block,
-          proof,
-          frames: tracked.map(f => ({
-            t: +(f.t - block.from).toFixed(1),
-            y: f.box?.y ?? null,
-          })),
-        },
-        null,
-        1,
-      ),
-    },
-    testInfo,
-  );
-  const film = await castStoryboard(page, castFrames, {
-    name: 'chatlayout-keyboard-busy-main-thread',
-    zero: block.from,
-    from: block.from - 40,
-    to: proof.judged.to + 40,
-    columns: 8,
-    cellScale: 0.35,
-    data: t => ({y: tracked.find(f => f.t === t)?.box?.y ?? -1}),
-  });
-  await film.write(testInfo, {block, judged: proof.judged});
-  testInfo.annotations.push({
-    type: 'busy-main-thread',
-    description: proof.summary,
-  });
-  expect(proof.verdict.failures, proof.summary).toEqual([]);
-  expect(proof.monotonic).toBe(true);
-});
-
-test('the rise does no Layout or Paint per frame', async ({
-  page,
-  browserName,
-}) => {
-  test.skip(browserName !== 'chromium', 'rendering traces are Chromium-only');
-  await openChat(page);
-  // No polling inside the trace: reading a sticky element's presented style
-  // from the test forces a layout every frame by itself.
-  let rise = {from: 0, to: 0};
-  const trace = await traceRendering(
-    page,
-    async () => {
-      rise = await page.evaluate(async cover => {
-        const from = performance.timeOrigin + performance.now();
-        (window as unknown as {__keyboard: (c: number) => void}).__keyboard(
-          cover,
-        );
-        await new Promise(resolve => setTimeout(resolve, 450));
-        return {from, to: performance.timeOrigin + performance.now()};
-      }, COVER);
-    },
-    {invalidations: true},
-  );
-  // The steady part of the rise, 150–400 ms after the report. Its start lays
-  // out and paints a few times (the end padding, the scroll to the newest message,
-  // the scroll's handlers), within 75 ms of the report at a 6x CPU slowdown;
-  // its end (about 480 ms) hands the layers back, which lays out once. A
-  // window that followed the late timer under load would take that in. On a
-  // loaded machine Chrome may also deliver the dock's and the messages'
-  // compositor start times late and make one pass for them by itself (no
-  // script, every recalculation for `Animation` on those composited
-  // elements): that pass is Chrome's, not the rise's, and is left out.
-  const during = countBetween(trace, rise.from + 150, rise.from + 400, {
-    skipCompositorAnimationUpdates: true,
-  });
-  // On failure, every rendering event of the rise and the long tasks, in ms
-  // after the report.
-  const detail = JSON.stringify({
-    during,
-    events: trace.events
-      .filter(e => e.t >= rise.from - 20 && e.t <= rise.from + 500)
-      .map(e => `${e.name}@${Math.round(e.t - rise.from)}`),
-    longTasks: trace.longTasks.map(
-      task =>
-        `${Math.round(task.start - rise.from)}+${Math.round(task.durationMs)}`,
-    ),
-    recalcs: (trace.styleInvalidations ?? [])
-      .filter(inv => inv.t >= rise.from - 20 && inv.t <= rise.from + 500)
-      .map(
-        inv => `${inv.reason}#${inv.nodeId}@${Math.round(inv.t - rise.from)}`,
-      ),
-    scripts: (trace.scripts ?? [])
-      .filter(t => t >= rise.from + 100 && t <= rise.from + 450)
-      .map(t => Math.round(t - rise.from)),
-  });
-  expect(during.Layout ?? 0, detail).toBe(0);
-  expect(during.Paint ?? 0, detail).toBe(0);
-});
-
-test(
-  'storyboard: the keyboard shows and the composer rides it',
-  {tag: '@storyboard'},
-  async ({page}, testInfo) => {
-    const {dock, messages, lift} = await openChat(page);
-    const viewport = page.viewportSize() ?? {width: 402, height: 714};
-    await showKeyboard(page);
-    await waitForAnimation(dock);
-    const {storyboard} = await animationStoryboard(page, {
-      name: 'chatlayout-keyboard-show',
-      clip: {x: 0, y: 0, width: viewport.width, height: viewport.height},
-      times: timeline(400, 400 / 12),
-      columns: 6,
-      cellScale: 0.4,
-      measure: async () => ({
-        dockY: await dockY(dock),
-        messagesY: await dockY(messages),
-      }),
-    });
-    await storyboard.write(testInfo);
-    const trace = storyboard.frames.map(f => f.data as {dockY: number});
-    // The dock only ever rises during the show, ending at the cover.
-    for (let i = 1; i < trace.length; i += 1) {
-      expect(trace[i].dockY).toBeLessThanOrEqual(trace[i - 1].dockY + 0.01);
-    }
-    expect(trace.at(-1)?.dockY).toBeCloseTo(-lift, 0);
-  },
-);
-
 test.describe('under a finger', () => {
   test.use({hasTouch: true, isMobile: true});
-
-  test('Reduce Motion: the dock cross-fades down on a hide and rests where the layout puts it (design:reduced-motion)', async ({
-    page,
-  }) => {
-    await page.emulateMedia({reducedMotion: 'reduce'});
-    const {dock, editable, lift} = await openChat(page);
-    await editable.focus();
-    // The home-screen app reports the show in two steps, 33 ms apart (the
-    // keyboard, then its bar settling).
-    await page.evaluate(async cover => {
-      const keyboard = (window as unknown as {__keyboard: (c: number) => void})
-        .__keyboard;
-      keyboard(cover + 17);
-      await new Promise(resolve => setTimeout(resolve, 33));
-      keyboard(cover);
-    }, COVER);
-    await page.waitForTimeout(800);
-    expect(await dockY(dock)).toBeCloseTo(-lift, 0);
-    // In the page, so the frames are read without a round trip: blur (the
-    // predicted hide), report the keyboard gone the way the home-screen app
-    // does, 30 ms later, and read every frame.
-    const {ys, faded} = await editable.evaluate(async el => {
-      let host: HTMLElement | null = el as HTMLElement;
-      while (host != null && getComputedStyle(host).position !== 'sticky') {
-        host = host.parentElement;
-      }
-      const read = () => {
-        const style = getComputedStyle(host as HTMLElement);
-        const value = style.translate;
-        const translate =
-          value === 'none' ? 0 : parseFloat(value.split(' ')[1] ?? '0');
-        return translate - (parseFloat(style.bottom) || 0);
-      };
-      const out: number[] = [];
-      // When the dock was less than fully opaque: the fade's span.
-      const faded: number[] = [];
-      const until = performance.now() + 900;
-      const sample = (now: number) => {
-        out.push(read());
-        if (parseFloat(getComputedStyle(host as HTMLElement).opacity) < 0.999) {
-          faded.push(now);
-        }
-        if (performance.now() < until) {
-          requestAnimationFrame(sample);
-        }
-      };
-      requestAnimationFrame(sample);
-      (el as HTMLElement).blur();
-      await new Promise(resolve => setTimeout(resolve, 30));
-      (window as unknown as {__keyboard: (c: number) => void}).__keyboard(0);
-      await new Promise(resolve => setTimeout(resolve, 900));
-      return {ys: out, faded};
-    });
-    for (const y of ys) {
-      expect(
-        Math.abs(y) < 0.5 || Math.abs(y + lift) < 0.5,
-        JSON.stringify(ys.map(Math.round)),
-      ).toBe(true);
-    }
-    expect(ys.at(-1)).toBeCloseTo(0, 0);
-    expect(await dockGap(dock)).toBeCloseTo(0, 0);
-    // An opacity-only fade of at most 200 ms (DR2), give or take a frame
-    // either side.
-    expect(faded.length).toBeGreaterThan(0);
-    expect((faded.at(-1) ?? 0) - (faded[0] ?? 0)).toBeLessThanOrEqual(200 + 34);
-    // The fade ends shown: the dock and the transcript are fully opaque.
-    const opacities = await dock.evaluate(el => {
-      const read = (node: Element) => getComputedStyle(node).opacity;
-      const transcript = (el.parentElement as HTMLElement).firstElementChild;
-      return [read(el), transcript == null ? '1' : read(transcript)];
-    });
-    expect(opacities).toEqual(['1', '1']);
-  });
 
   test('the browser\u2019s own reveal pan is put back: the composer rests on the keyboard and the page does not move (spec:AST-099 FR4)', async ({
     page,
@@ -935,12 +620,48 @@ test.describe('under a finger', () => {
     expect(result.putBacks).toBeGreaterThan(0);
     expect(result.offsetTop).toBe(0);
   });
+
+  test('after typing, Done parks focus on the composer group, which shows the shared focus ring (architecture:interaction-modality INV1)', async ({
+    page,
+  }) => {
+    const {dock, editable} = await openChat(page);
+    await editable.focus();
+    await page.keyboard.type('Hi');
+    // Done blurs the composer's text, and focus goes to nothing.
+    await editable.evaluate(element => (element as HTMLElement).blur());
+    const region = dock.locator(':scope > div').last();
+    await expect(region).toHaveAttribute('role', 'group');
+    await expect(region).toBeFocused();
+    const ring = await region.evaluate(element => {
+      const style = getComputedStyle(element);
+      return {style: style.outlineStyle, width: parseFloat(style.outlineWidth)};
+    });
+    expect(ring.style).not.toBe('none');
+    expect(ring.width).toBeGreaterThan(0);
+  });
+
+  test('after a tap and no typing, Done parks focus on the composer group with no focus ring (architecture:interaction-modality INV1)', async ({
+    page,
+  }) => {
+    const {dock, editable} = await openChat(page);
+    await editable.tap();
+    await expect(editable).toBeFocused();
+    // Done blurs the composer's text, and focus goes to nothing.
+    await editable.evaluate(element => (element as HTMLElement).blur());
+    const region = dock.locator(':scope > div').last();
+    await expect(region).toBeFocused();
+    const ring = await region.evaluate(element => {
+      const style = getComputedStyle(element);
+      return {style: style.outlineStyle, width: parseFloat(style.outlineWidth)};
+    });
+    expect(ring.style === 'none' || ring.width === 0).toBe(true);
+  });
 });
 
-// The dock's ride among what a hold takes on the dock (a CSS transition that
-// starts at the blur comes too): the one script animation that moves
-// `translate`. Its samples count from its own start, `offsetMs` after the
-// held origin (the earliest start the hold took).
+// The dock's ride among the animations a hold takes on the dock: the one
+// script animation that moves `translate`. A CSS transition that starts at
+// the blur comes too. Its samples count from its own start, `offsetMs` after
+// the hold's earliest start.
 function rideOf(held: ReadonlyArray<HeldAnimation>): HeldAnimation {
   const ride = held.find(
     a => a.kind === 'Animation' && a.keyframes.some(k => 'translate' in k),
@@ -973,6 +694,211 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
       return at;
     }, cover);
 
+  test('the rise does no Layout or Paint per frame', async ({page}) => {
+    const {editable} = await openChat(page, {android: true});
+    // Records each ride the motion engine starts on the dock, when it starts
+    // and when it is cancelled. Reading an animation's times reads no layout.
+    // The engine sets the start in the task that makes the ride, so a
+    // microtask reads it. A promise on `ready` would add a main-thread frame
+    // when the compositor starts the ride.
+    await page.evaluate(() => {
+      const dock = document.querySelector('[data-testid="keyboard-dock"]');
+      const rides: {start: number | null; cancelled: number | null}[] = [];
+      (window as unknown as {__rides: typeof rides}).__rides = rides;
+      const animate = Element.prototype.animate;
+      Element.prototype.animate = function (
+        this: Element,
+        keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
+        options?: number | KeyframeAnimationOptions,
+      ) {
+        const animation = animate.call(this, keyframes, options);
+        if (
+          this === dock &&
+          Array.isArray(keyframes) &&
+          keyframes.some(keyframe => 'translate' in keyframe)
+        ) {
+          const ride = {
+            start: null as number | null,
+            cancelled: null as number | null,
+          };
+          rides.push(ride);
+          queueMicrotask(() => {
+            if (animation.startTime != null) {
+              ride.start = performance.timeOrigin + Number(animation.startTime);
+            }
+          });
+          animation.addEventListener('cancel', () => {
+            ride.cancelled = performance.timeOrigin + performance.now();
+          });
+        }
+        return animation;
+      };
+    });
+    // No polling inside the trace: reading a sticky element's presented style
+    // from the test forces a layout every frame by itself.
+    let reported = 0;
+    let focusedFor = 0;
+    const trace = await traceRendering(page, async () => {
+      ({reported, focusedFor} = await editable.evaluate(
+        async (element, cover) => {
+          // As on a phone, focus brings up the keyboard. Under a fine pointer,
+          // focus starts the composer's own feedback, a short box-shadow
+          // transition that paints every frame. The report waits for it to
+          // end. Under a coarse pointer, as here, the focus look shows at once
+          // and the wait ends at once.
+          const focusedAt = performance.timeOrigin + performance.now();
+          (element as HTMLElement).focus();
+          await Promise.all(
+            document
+              .getAnimations()
+              .filter(animation => animation instanceof CSSTransition)
+              .map(async transition =>
+                transition.finished.catch(() => undefined),
+              ),
+          );
+          const from = performance.timeOrigin + performance.now();
+          (window as unknown as {__keyboard: (c: number) => void}).__keyboard(
+            cover,
+          );
+          await new Promise(resolve => setTimeout(resolve, 400));
+          return {reported: from, focusedFor: from - focusedAt};
+        },
+        COVER,
+      ));
+    });
+    // The steady part of Gboard's slide, 125–220 ms after the report. Its start
+    // lays out once and paints in its first frames. From about 230 ms, its end
+    // paints twice and hands the layers back with one layout.
+    const steady = {from: reported + 125, to: reported + 220};
+    // The caret blinks every 500 ms from the focus, Chrome's interval, and
+    // each blink is a main-thread frame. A report soon after the focus keeps
+    // the first blink after the window.
+    expect(
+      focusedFor,
+      'the caret\u2019s first blink could fall in the window',
+    ).toBeLessThan(CARET_BLINK_MS - (steady.to - reported));
+    // A ride runs through that window: it starts before the window, its slide
+    // ends after it, and nothing cancels it sooner. So no rendering in the
+    // window means the dock rode without it, not that nothing moved.
+    const rides = await page.evaluate(
+      () =>
+        (
+          window as unknown as {
+            __rides: {start: number | null; cancelled: number | null}[];
+          }
+        ).__rides,
+    );
+    const riding = rides.some(
+      ({start, cancelled}) =>
+        start != null &&
+        start <= steady.from &&
+        start + ANDROID_KEYBOARD.showMs >= steady.to &&
+        (cancelled == null || cancelled >= steady.to),
+    );
+    expect(riding, JSON.stringify({reported, rides})).toBe(true);
+    const start = rideStart(trace, reported);
+    if (start == null) {
+      throw new Error('the report laid nothing out, so no ride started');
+    }
+    // The ride's own start frames do not count when a starved main thread
+    // runs them late, into the window. The report's task then had the main
+    // thread for half its wall time or less. A start the page itself delays
+    // into the window fails, by name.
+    const reportTask = taskAt(trace, start.layout.t);
+    const isStarved =
+      reportTask != null && reportTask.threadMs <= reportTask.durationMs / 2;
+    expect(
+      start.end >= steady.from && !isStarved
+        ? {
+            startEndMs: Math.round(start.end - reported),
+            reportTask:
+              reportTask == null
+                ? null
+                : {
+                    wallMs: Math.round(reportTask.durationMs),
+                    threadMs: Math.round(reportTask.threadMs),
+                  },
+          }
+        : null,
+      'the ride\u2019s start reached the window without a starved thread',
+    ).toBeNull();
+    const counted = trace.events.filter(
+      e =>
+        e.t >= steady.from &&
+        e.t <= steady.to &&
+        (!isStarved || (start.frameOf.get(e) ?? start.frames) >= start.frames),
+    );
+    const judged = steady.to - Math.max(steady.from, start.end);
+    expect(
+      starvation(start, reportTask, counted, judged, reported),
+      'the main thread was starved, so the ride\u2019s start reached the window',
+    ).toBeNull();
+    const during: Record<string, number> = {};
+    for (const e of counted) {
+      during[e.name] = (during[e.name] ?? 0) + 1;
+    }
+    // On failure, every rendering event of the rise and the long and
+    // stretched tasks, in ms after the report.
+    const detail = JSON.stringify({
+      during,
+      start: {
+        frames: start.frames,
+        layoutMs: Math.round(start.layout.t - reported),
+        endMs: Math.round(start.end - reported),
+      },
+      events: trace.events
+        .filter(e => e.t >= reported - 20 && e.t <= reported + 400)
+        .map(e => `${e.name}@${Math.round(e.t - reported)}`),
+      longTasks: trace.longTasks.map(
+        task =>
+          `${Math.round(task.start - reported)}+${Math.round(task.durationMs)}`,
+      ),
+      stretchedTasks: trace.stretchedTasks.map(
+        task =>
+          `${Math.round(task.start - reported)}+${Math.round(task.durationMs)}`,
+      ),
+    });
+    expect(during.Layout ?? 0, detail).toBe(0);
+    expect(during.Paint ?? 0, detail).toBe(0);
+    expect(
+      judged,
+      'the ride\u2019s start left no steady part to judge',
+    ).toBeGreaterThanOrEqual(MIN_STEADY_MS);
+  });
+
+  test(
+    'storyboard: the keyboard shows and the composer rides Gboard’s slide',
+    {tag: '@storyboard'},
+    async ({page}, testInfo) => {
+      const {dock, editable, messages, lift} = await openChat(page, {
+        android: true,
+      });
+      const viewport = page.viewportSize() ?? {width: 402, height: 714};
+      await editable.focus();
+      await reportAt(page, COVER);
+      await waitForAnimation(dock);
+      const {storyboard} = await animationStoryboard(page, {
+        name: 'chatlayout-keyboard-show',
+        judges: {target: dock, property: 'translate'},
+        clip: {x: 0, y: 0, width: viewport.width, height: viewport.height},
+        times: timeline(300, 300 / 12),
+        columns: 6,
+        cellScale: 0.4,
+        measure: async () => ({
+          dockY: await dockY(dock),
+          messagesY: await dockY(messages),
+        }),
+      });
+      await storyboard.write(testInfo);
+      const trace = storyboard.frames.map(f => f.data as {dockY: number});
+      // The dock only ever rises during the show, ending at the cover.
+      for (let i = 1; i < trace.length; i += 1) {
+        expect(trace[i].dockY).toBeLessThanOrEqual(trace[i - 1].dockY + 0.01);
+      }
+      expect(trace.at(-1)?.dockY).toBeCloseTo(-lift, 0);
+    },
+  );
+
   test('the dock rides up on Gboard’s slide from the report, dated back to Gboard’s start', async ({
     page,
   }) => {
@@ -988,7 +914,11 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
     expect(
       Math.abs(start - (reported - ANDROID_KEYBOARD.showReportLagMs)),
     ).toBeLessThan(2);
-    const ride = rideOf(await holdAnimations(page, dock));
+    const ride = rideOf(
+      await holdAnimations(page, dock, {
+        judges: {target: dock, property: 'translate'},
+      }),
+    );
     const samples = curveOf(
       await sampleCurve(dock, timeline(ride.offsetMs + ride.curveEndMs)),
       'translateY',
@@ -1056,7 +986,11 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
     expect(
       Math.abs(start - (blurAt + ANDROID_KEYBOARD.hideAfterBlurMs)),
     ).toBeLessThan(8);
-    const ride = rideOf(await holdAnimations(page, dock));
+    const ride = rideOf(
+      await holdAnimations(page, dock, {
+        judges: {target: dock, property: 'translate'},
+      }),
+    );
     const samples = curveOf(
       await sampleCurve(dock, timeline(ride.offsetMs + ride.curveEndMs)),
       'translateY',
@@ -1123,5 +1057,65 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
     }
     expect(ys.at(-1)).toBeCloseTo(-lift, 0);
     expect(await dock.evaluate(el => getComputedStyle(el).opacity)).toBe('1');
+  });
+
+  test('Reduce Motion: a hide Chrome reports in steps moves the dock once, after the keyboard has gone', async ({
+    page,
+  }) => {
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    const {dock, editable, lift} = await openChat(page, {android: true});
+    await editable.focus();
+    await showKeyboard(page);
+    // The layout has taken the keyboard's lift: the show is over.
+    await expect
+      .poll(async () =>
+        dock.evaluate(el => parseFloat(getComputedStyle(el).bottom) || 0),
+      )
+      .toBeCloseTo(lift, 0);
+    await expect.poll(async () => dockY(dock)).toBeCloseTo(-lift, 0);
+    // Under Remove animations, Chrome reports Back's hide as lower keyboards
+    // that are still up, then none. Each frame records where the dock is drawn
+    // and the layout's offset.
+    const frames = await dock.evaluate(async (el, cover) => {
+      const out: {y: number; bottom: number}[] = [];
+      const read = () => {
+        const style = getComputedStyle(el);
+        const translate =
+          style.translate === 'none'
+            ? 0
+            : parseFloat(style.translate.split(' ')[1] ?? '0') || 0;
+        const bottom = parseFloat(style.bottom) || 0;
+        out.push({y: translate - bottom, bottom});
+      };
+      const until = performance.now() + 900;
+      const sample = () => {
+        read();
+        if (performance.now() < until) {
+          requestAnimationFrame(sample);
+        }
+      };
+      requestAnimationFrame(sample);
+      const keyboard = (window as unknown as {__keyboard: (c: number) => void})
+        .__keyboard;
+      for (const share of [0.6, 0.35, 0.15, 0]) {
+        await new Promise(resolve => setTimeout(resolve, 40));
+        keyboard(Math.round(cover * share));
+      }
+      await new Promise(resolve => setTimeout(resolve, 900));
+      return out;
+    }, COVER);
+    const detail = JSON.stringify(
+      frames.map(({y, bottom}) => [Math.round(y), Math.round(bottom)]),
+    );
+    // Every frame draws the dock where the keyboard's top was, or at rest.
+    for (const {y} of frames) {
+      expect(Math.abs(y + lift) < 0.5 || Math.abs(y) < 0.5, detail).toBe(true);
+    }
+    // The layout's offset changes once: from the lift to none.
+    expect(
+      [...new Set(frames.map(({bottom}) => Math.round(bottom)))],
+      detail,
+    ).toEqual([Math.round(lift), 0]);
+    expect(frames.at(-1)?.y ?? Number.NaN, detail).toBeCloseTo(0, 0);
   });
 });

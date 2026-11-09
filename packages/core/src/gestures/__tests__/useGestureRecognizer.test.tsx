@@ -16,10 +16,12 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import type {SelectionLock} from '../GestureRecognizer';
 import {getGestureHost} from '../GestureHost';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
+import {TOUCH_ACTION_ATTRIBUTE} from '../touchActionRule';
 import type {ControlEvent} from '../PressTracker';
-import {lockSelection} from '../selectionLock';
+import {lockSelection} from '../../utils/selectionLock';
 import {TapGestureRecognizer} from '../TapGestureRecognizer';
-import {useGestureRecognizer, usePressTracker} from '../useGestureRecognizer';
+import {useGestureRecognizer} from '../useGestureRecognizer';
+import {usePressTracker} from '../usePressTracker';
 import {coarsePrimaryPointer, pointerQuery} from './pointerQuery';
 
 function touch(
@@ -75,13 +77,6 @@ afterEach(() => {
 });
 
 /** Wait for the next animation frame, where the host writes touch-action. */
-async function nextFrame(): Promise<void> {
-  await act(async () => {
-    await new Promise<void>(resolve => {
-      requestAnimationFrame(() => resolve());
-    });
-  });
-}
 describe('useGestureRecognizer', () => {
   afterEach(() => {
     renders = 0;
@@ -214,7 +209,7 @@ describe('useGestureRecognizer', () => {
     touch('touchend', surface, {id: 6, x: 30, y: 0}, 32, true);
   });
 
-  it("attaches a recognizer that reads each event's pointer where the primary pointer is fine (spec:AST-057)", () => {
+  it('attaches a recognizer for every pointer: a mouse drag pans where the primary pointer is fine (spec:AST-094 FR43)', () => {
     const pointer = pointerQuery(false);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
@@ -225,16 +220,30 @@ describe('useGestureRecognizer', () => {
           ref,
           () => new PanGestureRecognizer({direction: 'horizontal'}),
           onPan,
-          {perEventPointer: true},
         );
         return <div data-testid="surface" ref={ref} />;
       }
       const {getByTestId, unmount} = render(<Swipe />);
       const surface = getByTestId('surface');
-      touch('touchstart', surface, {id: 9, x: 0, y: 0}, 0);
-      touch('touchmove', surface, {id: 9, x: 30, y: 0}, 16);
+      const mouse = (type: string, x: number, time: number) => {
+        const event = new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          pointerId: 9,
+          pointerType: 'mouse',
+          clientX: x,
+          clientY: 0,
+          button: 0,
+          buttons: type === 'pointerup' ? 0 : 1,
+        });
+        Object.defineProperty(event, 'timeStamp', {value: time});
+        surface.dispatchEvent(event);
+      };
+      mouse('pointerdown', 0, 0);
+      mouse('pointermove', 30, 16);
       expect(onPan).toHaveBeenCalled();
-      touch('touchend', surface, {id: 9, x: 30, y: 0}, 32, true);
+      mouse('pointerup', 30, 32);
       unmount();
       expect(warn).not.toHaveBeenCalled();
     } finally {
@@ -243,8 +252,11 @@ describe('useGestureRecognizer', () => {
     }
   });
 
-  it('reports nothing from the isEnabled Effect for a recognizer that required the disabled one to fail (react-component-runtime INV2)', () => {
-    const onSingle = vi.fn();
+  it('reports a recognizer that required the disabled one to fail after the isEnabled Effect, not inside it, in its recognized state (react-component-runtime INV2)', async () => {
+    const states: string[] = [];
+    const onSingle = vi.fn((recognizer: TapGestureRecognizer) => {
+      states.push(recognizer.state);
+    });
     function Taps({isDoubleEnabled}: {isDoubleEnabled: boolean}) {
       const ref = useRef<HTMLDivElement>(null);
       const double = useGestureRecognizer(
@@ -269,10 +281,115 @@ describe('useGestureRecognizer', () => {
     touch('touchend', surface, {id: 1, x: 5, y: 5}, 40, true);
     // The single tap waits for the double tap to fail.
     expect(onSingle).not.toHaveBeenCalled();
-    // Turning the double tap off fails it in the Effect, and the single tap
-    // recognizes in that same arena pass: its caller hears nothing from it.
+    // Turning the double tap off fails it in the Effect; the single tap
+    // waiting on it recognizes in a pass just after, so its caller hears it
+    // outside the Effect, reading the recognized state.
     rerender(<Taps isDoubleEnabled={false} />);
     expect(onSingle).not.toHaveBeenCalled();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(states).toEqual(['ended']);
+  });
+
+  it('reports a recognizer that required one a replaced node cancelled after that layout Effect, not inside it (react-component-runtime INV2)', async () => {
+    const states: string[] = [];
+    function Nested({innerKey}: {innerKey: string}) {
+      const outerRef = useRef<HTMLDivElement>(null);
+      const innerRef = useRef<HTMLDivElement>(null);
+      const double = useGestureRecognizer(
+        innerRef,
+        () => new TapGestureRecognizer({numberOfTapsRequired: 2}),
+      );
+      const single = useGestureRecognizer(
+        outerRef,
+        () => new TapGestureRecognizer(),
+        recognizer => {
+          states.push(recognizer.state);
+        },
+      );
+      useEffect(() => {
+        single.requireToFail(double);
+      }, [single, double]);
+      return (
+        <div ref={outerRef}>
+          <div key={innerKey} data-testid="inner" ref={innerRef} />
+        </div>
+      );
+    }
+    const {getByTestId, rerender} = render(<Nested innerKey="first" />);
+    const inner = getByTestId('inner');
+    touch('touchstart', inner, {id: 2, x: 5, y: 5}, 0);
+    touch('touchend', inner, {id: 2, x: 5, y: 5}, 40, true);
+    expect(states).toEqual([]);
+    // The double tap's node is replaced: detaching it cancels its wait in a
+    // layout Effect, and the outer single tap recognizes just after.
+    rerender(<Nested innerKey="second" />);
+    expect(states).toEqual([]);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(states).toEqual(['ended']);
+  });
+
+  it('serves a mouse press under a fine pointer, on an action group or not (family:action-groups FR5; spec:AST-094 FR43)', () => {
+    const primary = pointerQuery(false);
+    const states: string[] = [];
+    function Group({actionGroup}: {actionGroup: boolean}) {
+      const ref = useRef<HTMLDivElement>(null);
+      useGestureRecognizer(
+        ref,
+        () => new TapGestureRecognizer(),
+        recognizer => {
+          states.push(recognizer.state);
+        },
+        {actionGroup},
+      );
+      return (
+        <div data-testid="group" ref={ref}>
+          <button data-testid="action" type="button">
+            OK
+          </button>
+        </div>
+      );
+    }
+    const press = (target: Element, pointerId: number, time: number) => {
+      for (const [type, buttons] of [
+        ['pointerdown', 1],
+        ['pointerup', 0],
+      ] as const) {
+        const event = new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          pointerId,
+          pointerType: 'mouse',
+          clientX: 5,
+          clientY: 5,
+          button: 0,
+          buttons,
+        });
+        Object.defineProperty(event, 'timeStamp', {value: time});
+        target.dispatchEvent(event);
+      }
+    };
+    try {
+      const {getByTestId, rerender, unmount} = render(
+        <Group actionGroup={false} />,
+      );
+      const action = getByTestId('action');
+      // Not a group: served too, as every attachment (FR43).
+      press(action, 1, 0);
+      expect(states).toEqual(['ended']);
+      act(() => {
+        rerender(<Group actionGroup />);
+      });
+      press(action, 2, 1000);
+      expect(states).toEqual(['ended', 'ended']);
+      unmount();
+    } finally {
+      primary.restore();
+    }
   });
 
   it('attaches nothing while disabled: no touch-action, no gesture (FR24)', async () => {
@@ -281,16 +398,14 @@ describe('useGestureRecognizer', () => {
       <Draggable onPan={r => states.push(r.state)} />,
     );
     const surface = getByTestId('surface');
-    // The host writes its touch-action in the next frame (FR18).
-    await nextFrame();
-    const remove = vi.spyOn(surface.style, 'removeProperty');
+    expect(surface.hasAttribute(TOUCH_ACTION_ATTRIBUTE)).toBe(true);
     act(() => {
       rerender(
         <Draggable onPan={r => states.push(r.state)} isEnabled={false} />,
       );
     });
-    // Disabling detaches: the host gives the element its touch-action back.
-    expect(remove).toHaveBeenCalledWith('touch-action');
+    // Disabling detaches: the host takes its touch-action off the element.
+    expect(surface.hasAttribute(TOUCH_ACTION_ATTRIBUTE)).toBe(false);
     touch('touchstart', surface, {id: 6, x: 0, y: 0}, 0);
     touch('touchmove', surface, {id: 6, x: 30, y: 0}, 16);
     touch('touchend', surface, {id: 6, x: 30, y: 0}, 32, true);
@@ -326,15 +441,97 @@ describe('useGestureRecognizer', () => {
     touch('touchend', second, {id: 9, x: 30, y: 0}, 32, true);
   });
 
-  it('detaches on unmount', async () => {
+  it('ends a gesture in flight on unmount without calling the listener from the cleanup (INV2)', () => {
+    const states: string[] = [];
+    // A listener of the recognizer's own, outside the hook, hears the cancel.
+    const heard: string[] = [];
+    let pan: PanGestureRecognizer | null = null;
+    const {getByTestId, unmount} = render(
+      <Draggable
+        onPan={r => states.push(r.state)}
+        onRecognizer={r => {
+          if (pan == null) {
+            pan = r;
+            r.addListener(current => heard.push(current.state));
+          }
+        }}
+      />,
+    );
+    const surface = getByTestId('surface');
+    touch('touchstart', surface, {id: 5, x: 0, y: 0}, 0);
+    touch('touchmove', surface, {id: 5, x: 30, y: 0}, 16);
+    expect(states).toEqual(['began']);
+    unmount();
+    expect(heard).toContain('cancelled');
+    expect(states).toEqual(['began']);
+  });
+
+  it('ends a gesture in flight when the node is replaced without calling the listener from the effect (INV2)', () => {
+    const states: string[] = [];
+    function Swapped({id}: {id: string}) {
+      const ref = useRef<HTMLDivElement>(null);
+      useGestureRecognizer(
+        ref,
+        () => new PanGestureRecognizer({direction: 'horizontal'}),
+        r => states.push(r.state),
+      );
+      return <div key={id} data-testid={id} ref={ref} />;
+    }
+    const {getByTestId, rerender} = render(<Swapped id="first" />);
+    const first = getByTestId('first');
+    touch('touchstart', first, {id: 10, x: 0, y: 0}, 0);
+    touch('touchmove', first, {id: 10, x: 30, y: 0}, 16);
+    expect(states).toEqual(['began']);
+    act(() => {
+      rerender(<Swapped id="second" />);
+    });
+    expect(states).toEqual(['began']);
+  });
+
+  it('keeps a recognizer that waits on one being disabled from calling its listener from the effect, and delivers it right after (INV2)', async () => {
+    const heard: string[] = [];
+    let inCommit = false;
+    function Pair({isDoubleTapEnabled}: {isDoubleTapEnabled: boolean}) {
+      const ref = useRef<HTMLDivElement>(null);
+      const doubleTap = useGestureRecognizer(
+        ref,
+        () => new TapGestureRecognizer({numberOfTapsRequired: 2}),
+        () => {},
+        {isEnabled: isDoubleTapEnabled},
+      );
+      useGestureRecognizer(
+        ref,
+        () => new TapGestureRecognizer().requireToFail(doubleTap),
+        tap => heard.push(`${inCommit ? 'effect' : 'handler'}:${tap.state}`),
+      );
+      return <div data-testid="surface" ref={ref} />;
+    }
+    const {getByTestId, rerender} = render(<Pair isDoubleTapEnabled />);
+    const surface = getByTestId('surface');
+    touch('touchstart', surface, {id: 5, x: 10, y: 10}, 0);
+    touch('touchend', surface, {id: 5, x: 10, y: 10}, 40, true);
+    // The single tap waits for the double tap to fail.
+    expect(heard).toEqual([]);
+    inCommit = true;
+    act(() => {
+      rerender(<Pair isDoubleTapEnabled={false} />);
+    });
+    inCommit = false;
+    // Disabling the double tap fails it, and the single tap it held back
+    // recognizes in the arena's next pass, a microtask after that Effect: no
+    // listener hears it from the Effect, and the tap is still delivered.
+    expect(heard.filter(entry => entry.startsWith('effect:'))).toEqual([]);
+    await Promise.resolve();
+    expect(heard).toEqual(['handler:ended']);
+  });
+
+  it('detaches on unmount', () => {
     const onPan = vi.fn();
     const {getByTestId, unmount} = render(<Draggable onPan={onPan} />);
     const surface = getByTestId('surface');
-    // The host writes its touch-action in the next frame (FR18).
-    await nextFrame();
-    const remove = vi.spyOn(surface.style, 'removeProperty');
+    expect(surface.hasAttribute(TOUCH_ACTION_ATTRIBUTE)).toBe(true);
     unmount();
-    expect(remove).toHaveBeenCalledWith('touch-action');
+    expect(surface.hasAttribute(TOUCH_ACTION_ATTRIBUTE)).toBe(false);
     touch('touchstart', surface, {id: 4, x: 0, y: 0}, 0);
     touch('touchmove', surface, {id: 4, x: 30, y: 0}, 16);
     expect(onPan).not.toHaveBeenCalled();
@@ -371,8 +568,9 @@ function Button({
 
 describe('usePressTracker', () => {
   it('gives the host no listener while the control is disabled (FR24)', () => {
-    const add = vi.spyOn(document, 'addEventListener');
-    const remove = vi.spyOn(document, 'removeEventListener');
+    // The host listens through the window's input stream (utils/inputStream).
+    const add = vi.spyOn(window, 'addEventListener');
+    const remove = vi.spyOn(window, 'removeEventListener');
     const {rerender, unmount} = render(
       <Button onEvent={() => {}} isDisabled />,
     );
@@ -505,7 +703,7 @@ describe('usePressTracker', () => {
     expect(events).toEqual(seenEvents);
   });
 
-  it('attaches a per-event press tracker where the primary pointer is fine, which takes no mouse press there, beside one that stays inactive', () => {
+  it('gives a press tracker a mouse press where the primary pointer is fine, with or without perEventPointer (spec:AST-094 FR43, DEC-21)', () => {
     const pointer = pointerQuery(false);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
@@ -555,14 +753,13 @@ describe('usePressTracker', () => {
       boundsOf(stepper, 44, 44);
       mouse('pointerdown', stepper, 1);
       mouse('pointerup', stepper, 1);
-      // Its press feedback is for a finger (spec:AST-094 FR19): a mouse
-      // keeps the desktop's handling.
-      expect(held).toEqual([]);
+      // A mouse press is a press (DEC-21).
+      expect(held).toEqual(['touchDown', 'touchUpInside']);
       const other = getByTestId('other');
       boundsOf(other, 44, 44);
       mouse('pointerdown', other, 2);
       mouse('pointerup', other, 2);
-      expect(inactive).toEqual([]);
+      expect(inactive).toEqual(['touchDown', 'touchUpInside']);
     } finally {
       warn.mockRestore();
       pointer.restore();
@@ -603,6 +800,84 @@ describe('usePressTracker', () => {
     expect(events).toEqual([]);
   });
 
+  function PressInTaps({
+    isDoubleEnabled,
+    hasSingle,
+    onEvent,
+  }: {
+    isDoubleEnabled: boolean;
+    hasSingle: boolean;
+    onEvent: (event: ControlEvent | 'highlight' | 'unhighlight') => void;
+  }) {
+    const outerRef = useRef<HTMLDivElement>(null);
+    const innerRef = useRef<HTMLButtonElement>(null);
+    const double = useGestureRecognizer(
+      outerRef,
+      () => new TapGestureRecognizer({numberOfTapsRequired: 2}),
+      undefined,
+      {isEnabled: isDoubleEnabled},
+    );
+    const single = useGestureRecognizer(
+      outerRef,
+      () => new TapGestureRecognizer(),
+      undefined,
+      {isEnabled: hasSingle},
+    );
+    useEffect(() => {
+      single.requireToFail(double);
+    }, [single, double]);
+    usePressTracker(innerRef, {
+      onControlEvent: onEvent,
+      onHighlightChange: isHighlighted =>
+        onEvent(isHighlighted ? 'highlight' : 'unhighlight'),
+    });
+    return (
+      <div ref={outerRef}>
+        <button data-testid="press" ref={innerRef} type="button" />
+      </div>
+    );
+  }
+
+  it.each([
+    ['alone', false],
+    ['with a single tap waiting on it', true],
+  ])(
+    'ends a press that waits on an ancestor double tap after, not inside, the isEnabled Effect that turns it off (%s; react-component-runtime INV2)',
+    async (_event, hasSingle) => {
+      const events: (ControlEvent | 'highlight' | 'unhighlight')[] = [];
+      const {getByTestId, rerender} = render(
+        <PressInTaps
+          isDoubleEnabled
+          hasSingle={hasSingle}
+          onEvent={event => events.push(event)}
+        />,
+      );
+      const button = getByTestId('press');
+      touch('touchstart', button, {id: 21, x: 1, y: 1}, 0);
+      touch('touchend', button, {id: 21, x: 1, y: 1}, 40, true);
+      const before = [...events];
+      // Turning the double tap off fails it in the Effect: whatever that
+      // arena pass resolves for the press reaches no caller callback.
+      rerender(
+        <PressInTaps
+          isDoubleEnabled={false}
+          hasSingle={hasSingle}
+          onEvent={event => events.push(event)}
+        />,
+      );
+      expect(events).toEqual(before);
+      // Just after it, the press ends and un-highlights: nothing is left
+      // highlighted.
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(events.slice(before.length)).toEqual([
+        'touchUpInside',
+        'unhighlight',
+      ]);
+    },
+  );
+
   it('tracks the element behind the ref when it is replaced (INV6)', () => {
     const events: ControlEvent[] = [];
     function Swapped({id}: {id: string}) {
@@ -633,6 +908,31 @@ describe('usePressTracker', () => {
     touch('touchend', button, {id: 7, x: 1, y: 1}, 50, true);
     expect(events).toEqual([]);
     brake.mockRestore();
+  });
+
+  it("keeps the tracker's own ancestor veto when the caller gives none: a single tap by its kind, nothing else with the same counts (architecture:react-component-runtime INV13)", () => {
+    let tracker: ReturnType<typeof usePressTracker> | null = null;
+    function Tracked() {
+      const ref = useRef<HTMLButtonElement>(null);
+      tracker = usePressTracker(ref);
+      return (
+        <button ref={ref} type="button">
+          Go
+        </button>
+      );
+    }
+    render(<Tracked />);
+    const tap = new TapGestureRecognizer({});
+    expect(tracker!.allowsAncestorRecognizer(tap)).toBe(false);
+    // A discrete recognizer that is not a tap, carrying the same counts.
+    const notATap = {
+      kind: 'swipe',
+      isDiscrete: true,
+      numberOfTapsRequired: 1,
+      numberOfTouchesRequired: 1,
+      view: null,
+    };
+    expect(tracker!.allowsAncestorRecognizer(notATap)).toBe(true);
   });
 });
 

@@ -9,7 +9,11 @@
 import {readFileSync} from 'node:fs';
 import * as path from 'node:path';
 import {requireCoreDir} from '../../foundation/fs/paths.mjs';
-import {recordReads, unchangedSince} from '../../foundation/fs/read-record.mjs';
+import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
+import {
+  reusedWhileUnchanged,
+  unchangedSince,
+} from '../../foundation/fs/read-record.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {coreDirOrThrow} from '../error.mjs';
 import {CORELESS_DOMAINS} from './_query.mjs';
@@ -34,42 +38,67 @@ export function requireSearchCoreDir(cwd) {
 }
 
 /**
- * Gathers every candidate the query's domains hold.
+ * Gathers every candidate the query's domains hold. The gather runs in one
+ * listing-cache operation, so its discovery helpers list each folder once, as
+ * in the CLI's searches. A caller that runs its own operation shares it.
  *
  * @param {{cwd?: string, type?: string}} options
- * @returns {Promise<{all: Candidate[], components: Candidate[], searchedComponents: boolean, outside: boolean, coreSkipped: string | null}>}
+ * @returns {Promise<{all: Candidate[], components: Candidate[], searchedComponents: boolean, outside: boolean, coreSkipped: string | null, coreSkippedCode: string | null}>}
  */
-export async function gatherCandidates(options) {
-  const {cwd = process.cwd(), type} = options;
-  // `astryx docs` reads docs without @astryxdesign/core, and `astryx theme
-  // list` reads themes without it (bundled themes need no project), so a
-  // search of either must too. Every other domain reads core: asked for by
-  // name, it is an error without core; an open search then covers the docs
-  // and themes alone.
+export function gatherCandidates(options) {
+  return withListingCache(() => gatherDomains(options));
+}
+
+/**
+ * The Core a search of `type` reads, and the domains it gathers. `astryx docs`
+ * reads docs without @astryxdesign/core, and `astryx theme list` reads themes
+ * without it, so a docs or themes search never looks for Core. Every other
+ * domain reads Core: the project's, else the answering release's own,
+ * installed into the per-user cache on first need (spec AST-081 FR3). A Core
+ * domain asked for by name throws the lookup's coded error. An open search
+ * without Core gathers the docs and themes alone and records why in
+ * `coreSkipped`; it never fails silently.
+ * @param {string | undefined} type
+ * @param {(cwd: string) => string} lookup finds the Core folder, or throws
+ * @param {string} cwd
+ * @returns {{coreDir: string | null, coreSkipped: string | null, coreSkippedCode: string | null, wants: (domain: string) => boolean}}
+ */
+export function resolveSearchCore(type, lookup, cwd) {
   const needsCore = !type || !CORELESS_DOMAINS.includes(type);
-  // A domain that reads Core gets it as `component` does: the project's, else
-  // the answering release's own, installed into the per-user cache on first
-  // need (spec AST-081 FR3). Asked for by name, a Core that cannot be had is
-  // the error; an open search answers from the rest and says what it skipped
-  // and why, never silently.
   /** @type {string | null} */
   let coreDir = null;
   /** @type {string | null} */
   let coreSkipped = null;
+  /** @type {string | null} */
+  let coreSkippedCode = null;
   if (needsCore && type) {
-    coreDir = coreDirOrThrow(requireSearchCoreDir, cwd);
+    coreDir = coreDirOrThrow(lookup, cwd);
   } else if (needsCore) {
     try {
-      coreDir = requireSearchCoreDir(cwd);
+      coreDir = lookup(cwd);
     } catch (error) {
       coreSkipped = /** @type {Error} */ (error).message;
+      const code = /** @type {any} */ (error)?.code;
+      coreSkippedCode = typeof code === 'string' ? code : null;
     }
   }
+  /** @param {string} domain */
+  const wants = domain =>
+    (!type && (coreDir != null || CORELESS_DOMAINS.includes(domain))) ||
+    type === domain;
+  return {coreDir, coreSkipped, coreSkippedCode, wants};
+}
 
-  // Gather candidates from each requested domain in parallel.
-  /** @param {string} d */
-  const wants = d =>
-    (!type && (coreDir != null || CORELESS_DOMAINS.includes(d))) || type === d;
+/**
+ * @param {{cwd?: string, type?: string}} options
+ */
+async function gatherDomains(options) {
+  const {cwd = process.cwd(), type} = options;
+  const {coreDir, coreSkipped, coreSkippedCode, wants} = resolveSearchCore(
+    type,
+    requireSearchCoreDir,
+    cwd,
+  );
   const [components, hooks, docTopics, templates, themes] = await Promise.all([
     wants('component')
       ? gatherComponents(/** @type {string} */ (coreDir), cwd)
@@ -90,12 +119,13 @@ export async function gatherCandidates(options) {
     searchedComponents: wants('component'),
     outside,
     coreSkipped,
+    coreSkippedCode,
   };
 }
 
 /**
  * @typedef {Awaited<ReturnType<typeof gatherCandidates>>} Gathered
- * @type {Map<string, {reads: Map<string, string>, value: Promise<Gathered>}>}
+ * @type {Map<string, (options?: {fresh?: boolean}) => Promise<Gathered>>}
  */
 const gathered = new Map();
 
@@ -104,30 +134,27 @@ const gathered = new Map();
  * folder, for the same `type`, ranks the candidates an earlier search
  * gathered when none of the files that gather read, and none of the folders
  * it listed or probed, changed since (each is checked by its change time and
- * size, so an edited doc in a linked package is seen on the next call). A
+ * size, so an edited doc in a linked package is seen on the next call). That
+ * holds for a gather that is still running too, so searches that start
+ * together (a docs site's search right after it starts) share one gather. A
  * long-running caller (a docs site's search, an agent harness) then pays the
  * gather once. A one-shot `astryx search` gathers once, as before.
  * @param {{cwd?: string, type?: string}} options
  * @returns {Promise<Gathered>}
  */
-export async function gatherCandidatesReused(options) {
+export function gatherCandidatesReused(options) {
   const cwd = path.resolve(options.cwd ?? process.cwd());
-  const key = `${cwd}\0${options.type ?? ''}`;
-  const hit = gathered.get(key);
-  if (hit && unchangedSince(hit.reads)) return hit.value;
-  /** @type {Map<string, string>} */
-  const seen = new Map();
-  const value = recordReads(seen, () => gatherCandidates({...options, cwd}));
-  try {
-    await value;
-  } catch (error) {
-    if (gathered.get(key)?.value === value) gathered.delete(key);
-    throw error;
+  const type = options.type;
+  const key = `${cwd}\0${type ?? ''}`;
+  let gather = gathered.get(key);
+  if (!gather) {
+    gather = reusedWhileUnchanged(
+      () => gatherCandidates({cwd, type}),
+      unchangedSince,
+    );
+    gathered.set(key, gather);
   }
-  // Each path's state was taken as it was first read, so an edit made while
-  // the gather ran shows as a change on the next call.
-  gathered.set(key, {reads: seen, value});
-  return value;
+  return gather();
 }
 
 /**

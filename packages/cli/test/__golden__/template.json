@@ -8,7 +8,8 @@
     "type": "block",
     "components": [],
     "source": "export default function Hero() { return <section>zorblax</section>; }\n",
-    "demoMediaReplaced": 0
+    "demoMediaReplaced": 0,
+    "demoContentReplaced": 0
   },
   "meta": {
     "answeredBy": {

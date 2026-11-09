@@ -2,14 +2,14 @@
 
 /**
  * @file layoutViewport.test.ts
- * @input vitest, a stand-in window, visual viewport and document root (the
+ * @input vitest, a stand-in window, visual viewport and document root. The
  *   horizontal scrollbar's cases run on jsdom's window, in
- *   keyboard/useMobileKeyboard.test.ts)
- * @output Tests layoutViewportHeight: innerHeight at a scale of 1 (a classic
- *   scrollbar included), scaled back where WebKit reports it in the zoomed
- *   visual viewport's px (the states measured in Safari on iOS 26.2), left as
- *   is where innerHeight ignores the zoom, and innerHeight with no visual
- *   viewport
+ *   keyboard/keyboardHeight.test.ts.
+ * @output Tests layoutViewportHeight. It is innerHeight at a scale of 1, a
+ *   classic scrollbar included. The function scales it back where WebKit
+ *   reports it in the zoomed visual viewport's px, as in Safari on iOS 26.2.
+ *   It leaves innerHeight as is where innerHeight ignores the zoom, or with no
+ *   visual viewport.
  * @position Unit tests for utils/layoutViewport.ts
  */
 

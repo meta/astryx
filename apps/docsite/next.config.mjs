@@ -1,21 +1,18 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Configure the docsite's routes, response headers, and theme resolution.
+ * @file Configure docsite routes, response headers, theme resolution, and build
+ *   memory.
  * @input Next.js build configuration, the early playground cookie guard, and
  *   staged preview-only static exports.
  * @output Docsite routes plus Storybook and Sandbox at /storybook/ and /sandbox/.
- *   Client main-app chunks start with the preview's cookie compatibility guard.
+ *   Client main-app chunks start with the preview's cookie compatibility guard;
+ *   large Webpack builds run with isolated, memory-optimized compilation.
  * @position Next.js configuration for the existing Vercel docsite deployment.
  */
 
-import {existsSync, readFileSync, readdirSync, realpathSync} from 'node:fs';
-import {createRequire} from 'node:module';
+import {existsSync, readFileSync, readdirSync} from 'node:fs';
 import {resolve} from 'node:path';
-
-const coreInternalModules = createRequire(import.meta.url)(
-  '../../scripts/core-internal-modules.cjs',
-);
 
 const playgroundCookieCompatibility = readFileSync(
   resolve(
@@ -43,6 +40,13 @@ const stagesStaticApps =
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   cacheComponents: true,
+  // The custom Webpack hook below disables Next's default build worker. The
+  // canary docsite compiles the live workspace, so keep that compilation in a
+  // separate process and use Next's low-risk peak-memory optimization.
+  experimental: {
+    webpackBuildWorker: true,
+    webpackMemoryOptimizations: true,
+  },
   // The search API (app/api/search) runs `astryx search` itself. The CLI stays
   // an external module (see webpack below), so its code and dependencies are
   // traced as installed; these are the files it reads from disk at run time:
@@ -161,28 +165,6 @@ const nextConfig = {
         {'@astryxdesign/cli/api': 'module @astryxdesign/cli/api'},
       ];
     }
-    // Lab's build imports core's internal motion and gesture modules by their
-    // module paths, which core's "exports" do not list. Resolve each to the
-    // file core's own built components import, so a page keeps one gesture
-    // host and one animator per element.
-    const coreDir = realpathSync(
-      resolve(import.meta.dirname, 'node_modules/@astryxdesign/core'),
-    );
-    config.plugins.push(
-      new webpack.NormalModuleReplacementPlugin(
-        coreInternalModules.CORE_INTERNAL_SPECIFIER,
-        resource => {
-          const file = coreInternalModules.resolveCoreInternal(
-            resource.request,
-            {coreDir},
-          );
-          if (file != null) {
-            resource.request = file;
-          }
-        },
-      ),
-    );
-
     // Webpack's CSS @import resolver doesn't follow package.json "exports".
     // Map each theme's /theme.css subpath to the actual dist file.
     const themesDir = resolve(import.meta.dirname, '../../packages/themes');
