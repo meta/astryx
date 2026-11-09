@@ -7,14 +7,7 @@ export const docs = {
   displayName: 'MetricTile',
   group: 'Charts',
   category: 'Data Visualization',
-  keywords: [
-    'metric',
-    'kpi',
-    'stat',
-    'tile',
-    'dashboard',
-    'delta',
-  ],
+  keywords: ['metric', 'kpi', 'stat', 'tile', 'dashboard', 'delta'],
 
   theming: {
     targets: [{className: 'astryx-metric-tile', visualProps: ['size']}],
@@ -69,8 +62,7 @@ export const docs = {
       {
         name: 'Value',
         required: true,
-        description:
-          'Headline metric rendered large with tabular numerals.',
+        description: 'Headline metric rendered large with tabular numerals.',
       },
       {
         name: 'Delta',
