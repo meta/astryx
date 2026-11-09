@@ -390,16 +390,20 @@ test.describe('with a finger', () => {
     expect(first.events.has('keydown')).toBe(true);
     expect(first.rounds).toBeGreaterThan(0);
     // The reorder's own reads, in the key's move and in its commit, are one
-    // measurement pass at most. The shared animator reads a row's will-change
-    // on its first glide, a cost of its own. Two rows glide here for the first
-    // time, so it adds two passes at most.
+    // measurement pass at most. On their first glide, the shared animator
+    // reads the rows' stylesheets in one pass of its own, after the callback.
+    const isAnimator = (pass: (typeof first.passes)[number]) =>
+      pass.sources[0]?.includes('animator') === true;
     const moves = passesUnder(first.passes, ['step', 'commit']);
-    const animators = moves.filter(pass =>
-      pass.sources[0]?.includes('animator'),
-    );
     const firstReport = describePasses(first.passes);
-    expect(moves.length - animators.length, firstReport).toBeLessThanOrEqual(1);
-    expect(animators.length, firstReport).toBeLessThanOrEqual(2);
+    expect(
+      moves.filter(pass => !isAnimator(pass)).length,
+      firstReport,
+    ).toBeLessThanOrEqual(1);
+    expect(
+      first.passes.filter(isAnimator).length,
+      firstReport,
+    ).toBeLessThanOrEqual(1);
     // Once the glides end, a move back over the same rows counts every read.
     await waitForRest(row(page, 'Inbox'));
     await waitForRest(row(page, 'Sent'));

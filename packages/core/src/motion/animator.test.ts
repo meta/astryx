@@ -2136,6 +2136,8 @@ describe('promotion: a compositing layer while it moves', () => {
     const {animator, element} = setup();
     stylesheet = {'will-change': 'transform, opacity'};
     animator.animate({y: 40, opacity: 0.5}, {spring: springs.quickChange});
+    // The stylesheet's reasons join once the callback's microtasks run.
+    await Promise.resolve();
     expect(element.style.willChange).toBe('transform, translate, opacity');
     await advance(5000 + PROMOTION_LINGER_MS);
     expect(element.style.willChange).toBe('');
@@ -2186,7 +2188,7 @@ describe('promotion: a compositing layer while it moves', () => {
     kept.remove();
   });
 
-  it("keeps the stylesheet's will-change when a node read nothing before it moves", () => {
+  it("keeps the stylesheet's will-change when a node read nothing before it moves", async () => {
     // Put back after its read was skipped, a node reads its stylesheet's
     // reasons when a promotion needs them.
     stylesheet['will-change'] = 'transform, opacity';
@@ -2198,15 +2200,41 @@ describe('promotion: a compositing layer while it moves', () => {
     });
     document.body.append(element);
     animator.set({y: 10});
+    await Promise.resolve();
     expect(element.style.willChange).toBe('transform, opacity, translate');
     element.remove();
   });
 
-  it("keeps the stylesheet's will-change when an element attached in this task moves at once", () => {
+  it("keeps the stylesheet's will-change when an element attached in this task moves at once", async () => {
     stylesheet['will-change'] = 'transform, opacity';
     const {animator, element} = setup();
     animator.animate({y: 100}, {spring: springs.settle});
+    await Promise.resolve();
     expect(element.style.willChange).toBe('transform, opacity, translate');
+  });
+
+  it("reads the stylesheets of the motions one callback starts in one pass once it ends, not between one element's writes and the next's", async () => {
+    // A list's reorder glides every row at once, each row's animator new.
+    stylesheet['will-change'] = 'opacity';
+    const rows = [setup(), setup(), setup()];
+    // A bare spring, which reads no theme tempo.
+    const spring = {response: 0.3, dampingRatio: 1};
+    const readsOf = (node: Element) =>
+      vi
+        .mocked(window.getComputedStyle)
+        .mock.calls.filter(([read]) => read === node).length;
+    for (const {animator} of rows) {
+      animator.animate({y: 40}, {spring});
+    }
+    for (const {element} of rows) {
+      expect(readsOf(element)).toBe(0);
+      expect(element.style.willChange).toBe('translate');
+    }
+    await Promise.resolve();
+    for (const {element} of rows) {
+      expect(readsOf(element)).toBe(1);
+      expect(element.style.willChange).toBe('opacity, translate');
+    }
   });
 
   it('promotes during direct manipulation, until the writes stop', async () => {

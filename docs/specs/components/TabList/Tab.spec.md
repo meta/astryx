@@ -14,6 +14,7 @@ verified_by:
   [
     packages/core/src/TabList/TabList.test.tsx,
     packages/core/src/TabList/__tests__/Tabs.a11y.test.tsx,
+    packages/core/src/TabList/__tests__/TabDescription.test.tsx,
     packages/core/src/TabList/__tests__/Tabs.a11y.chromium.spec.ts,
     packages/core/src/TabList/__tests__/TabListTextSize.interaction.browser.spec.ts,
     apps/storybook/stories/TabList.stories.tsx,
@@ -152,6 +153,10 @@ Consumer migration instructions belong in consumer docs and release notes.
 - **AR1 — Pattern semantics.** FR1 and FR2.
 - **AR2 — One tab stop.** FR3.
 - **AR3 — Names.** Visible label or, when hidden, `aria-label` from `label`.
+- **AR4 — Help text describes the tab.** A tab's help text is a Tooltip
+  anchored on the Tab through its forwarded ref, so the description lands on
+  the tab and the Tooltip renders outside the strip; `endContent` holds only
+  non-interactive content (FR2).
 
 ## Design relationships
 
@@ -172,14 +177,15 @@ FR1–FR2.
 
 ## Verification map
 
-| Contract      | Verification                                                                                                                                      | Representative states             | Mutation or failure expectation                                             | Audit section             |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- | --------------------------------------------------------------------------- | ------------------------- |
-| FR1, FR2      | `TabList.test.tsx` aria-current, polymorphic link, and tabs-pattern tests; `Tabs.a11y.test.tsx`; `Tabs.a11y.chromium.spec.ts` for `aria-selected` | Navigation, link, tabs            | Wrong role or state fails.                                                  | `audit:Tab/accessibility` |
-| FR3           | `TabList.test.tsx` single tab stop and roving tabindex tests                                                                                      | Selected                          | Extra tab stops, or a wrong starting stop, fail.                            | `audit:Tab/accessibility` |
-| FR4, FR5      | `TabList.test.tsx` onChange and disabled tests                                                                                                    | Click, disabled button            | Selection when disabled fails.                                              | `audit:Tab/behavior`      |
-| FR6, FR7      | `TabList.test.tsx` icon, icon-only, and pressed-overlay tests                                                                                     | Icon, selected icon, hidden label | Wrong icon, name, or overlay fails.                                         | `audit:Tab/behavior`      |
-| AV1 text size | `TabListTextSize.interaction.browser.spec.ts` at a 200% and 250% default font size                                                                | Default, size variants, with menu | A tab or tab strip that clips its label, or a label outside its tab, fails. | `audit:Tab/behavior`      |
-| RTL relation  | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `TabList / With icons`                                                   | Tab icon and label; LTR and RTL   | An icon that is not at the inline start of its label fails D2.              | `audit:Tab/i18n-rtl`      |
+| Contract      | Verification                                                                                                                                      | Representative states                                          | Mutation or failure expectation                                                                                                                 | Audit section             |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| FR1, FR2      | `TabList.test.tsx` aria-current, polymorphic link, and tabs-pattern tests; `Tabs.a11y.test.tsx`; `Tabs.a11y.chromium.spec.ts` for `aria-selected` | Navigation, link, tabs                                         | Wrong role or state fails.                                                                                                                      | `audit:Tab/accessibility` |
+| FR3           | `TabList.test.tsx` single tab stop and roving tabindex tests                                                                                      | Selected                                                       | Extra tab stops, or a wrong starting stop, fail.                                                                                                | `audit:Tab/accessibility` |
+| FR4, FR5      | `TabList.test.tsx` onChange and disabled tests                                                                                                    | Click, disabled button                                         | Selection when disabled fails.                                                                                                                  | `audit:Tab/behavior`      |
+| FR6, FR7      | `TabList.test.tsx` icon, icon-only, and pressed-overlay tests                                                                                     | Icon, selected icon, hidden label                              | Wrong icon, name, or overlay fails.                                                                                                             | `audit:Tab/behavior`      |
+| AV1 text size | `TabListTextSize.interaction.browser.spec.ts` at a 200% and 250% default font size                                                                | Default, size variants, with menu                              | A tab or tab strip that clips its label, or a label outside its tab, fails.                                                                     | `audit:Tab/behavior`      |
+| RTL relation  | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `TabList / With icons`                                                   | Tab icon and label; LTR and RTL                                | An icon that is not at the inline start of its label fails D2.                                                                                  | `audit:Tab/i18n-rtl`      |
+| AR4           | `TabDescription.test.tsx`                                                                                                                         | A Tooltip anchored on a Tab with an info glyph in `endContent` | A tab without the tooltip's `aria-describedby`, a focusable element inside the tab, a tooltip inside the strip, or a development warning fails. | `audit:Tab/accessibility` |
 
 Read from source, with no focused test yet:
 

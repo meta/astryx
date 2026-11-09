@@ -242,6 +242,18 @@ raw numbers for the report. Frames are judged in presentation order: a loaded
 machine can deliver them out of order. `castStoryboard` turns the frames of the
 block into a filmstrip.
 
+To read frames after a moment, such as the rest after a block, wait for them by
+time: `waitForCastFrame(cast, {after, during})` returns once the cast holds a
+frame presented after `after`, epoch ms on the page's clock. A frame that
+arrives after that moment can still have been presented before it, so a count
+of frames delivered is no such wait. `cast.lastFrameAt()` reads the latest
+presentation time captured so far. Past 5 s with no such frame, the wait fails.
+When no frame came for longer than `FRAME_STARVATION_MS`, it throws
+`FrameStarvationError`: the screen did not change, or the page was starved of
+frames. Keep something moving, such as `startBusyControl`, to tell them apart.
+While frames still come, all presented before `after`, the error names both
+times.
+
 A just-started animation can reach the screen after the block began (50–100 ms
 later in WebKit on a loaded machine). When the cast saw the element at rest
 before the block (wait for `cast.frameCount()` to pass 0 before starting the
@@ -299,7 +311,10 @@ moved and its longest stall is no longer than the control's. Both are read from
 the same screencast frames, so a compositor animation misses none. A window in
 which the control moved on fewer than four frames fails, since the machine
 presented too little to judge; the failure names the cast's frames in the
-window and its longest gap. A run of frames with no new position counts as
+window and its longest gap. When no frame came for longer than
+`FRAME_STARVATION_MS` there too, the machine starved the run, and
+`busyWindowProof` throws `FrameStarvationError` instead of returning a verdict.
+A run of frames with no new position counts as
 moved when the change that ends it is a single cast step: the component moves
 under one step a frame there, as on an easing tail, which the cast cannot show
 on every frame. Where it moved under two steps a frame over the frames just
@@ -345,7 +360,8 @@ belongs to its run. A run whose control moved on fewer frames than
 `minRunFrames` (1 by default) is too little to judge: the summary names it,
 and the pool leaves it out, so it never counts as a pass. A run whose block
 began after its motion had settled is left out the same way: its `runs` entry
-is null, and `late` holds its `BusyWindowTooLateError`. The pool fails with
+is null, and `late` holds its `BusyWindowTooLateError`. The pool reads each
+run without the starvation throw. The pool fails with
 fewer than `minJudgedRuns` judged runs (half of all the runs, rounded up). In each judged run,
 the component must move on every frame its control moved on, so a freeze fails
 its run.
@@ -608,9 +624,9 @@ the burst throws `WheelPageStallError`, the page split the gesture, and the
 proof fails. A page can only widen a gap, so one no wider than the send
 spacing is the dispatch's even when a starved renderer also held the step.
 Otherwise the dispatch stalled before the page (a loaded runner) and it throws
-`WheelPacingError` with the gaps. Wrap such a
-proof in `retakeOnWheelPacing(testInfo, attempt)`: one re-take, only on
-`WheelPacingError`, listed as a `wheel-retake` annotation. The burst times the
+`WheelPacingError` with the gaps. A proof never re-takes itself: a
+`WheelPacingError` stays red, named as the runner's. Where one shows in CI's
+profile, fix the wheel's delivery, not the proof. The burst times the
 page's handling with a listener on the window that runs after the page's own.
 A step whose propagation the page stops is marked by a task queued when it
 arrived, and never later than the next step's arrival. So its handling, with
