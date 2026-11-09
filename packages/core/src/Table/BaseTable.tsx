@@ -195,13 +195,17 @@ function isActivationNeutralized<T extends Record<string, unknown>>(
     plugin => plugin.transformBodyRow != null && plugin.wholeRowOwner != null,
   );
   if (claims.length > 1) {
-    warnOnce(
-      'table-whole-row-owner',
-      'Table',
-      'More than one plugin claims whole-row ownership (' +
-        claims.map(plugin => plugin.wholeRowOwner).join(', ') +
-        '), so row activation stays inert. Declare a single whole-row owner.',
-    );
+    // The diagnostic names activation: two non-activation owners leave the
+    // pipeline unchanged for activation, so they stay silent here.
+    if (claims.some(plugin => plugin.wholeRowOwner === 'activation')) {
+      warnOnce(
+        'table-whole-row-owner',
+        'Table',
+        'More than one plugin claims whole-row ownership (' +
+          claims.map(plugin => plugin.wholeRowOwner).join(', ') +
+          '), so row activation stays inert. Declare a single whole-row owner.',
+      );
+    }
     return true;
   }
   return false;

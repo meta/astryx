@@ -570,12 +570,9 @@ export function useTableActivation<T extends Record<string, unknown>>(
         const priorOnClick = props.htmlProps.onClick;
         const priorOnKeyDown = props.htmlProps.onKeyDown;
 
-        // An earlier plugin's explicit tabIndex (including -1 for roving
-        // focus) stays authoritative; rows are sequential stops by default.
-        // The default below is only seeded into the props downstream
-        // transforms see: the subscriber owns the mounted attribute (see the
-        // ref callback), so a later plugin's explicit value is never mistaken
-        // for this default.
+        // Fallback tab stop. The subscriber writes it only when the mounted
+        // row has none; an earlier plugin's explicit tabIndex (including -1
+        // for roving focus) stays authoritative.
         const tabIndex = props.htmlProps.tabIndex ?? 0;
 
         // Imperative active-state reflection, subscribed to the store: a
@@ -595,20 +592,21 @@ export function useTableActivation<T extends Record<string, unknown>>(
           // key announcements, so the mounted values are exactly what earlier
           // and later plugins declared. That snapshot is the owned baseline —
           // restoring it later never strands or steals another plugin's focus
-          // ownership, whichever side of activation declared it. Matching
-          // values are no signal (a later plugin's explicit `tabIndex={0}`
-          // reads the same as this module's default), so ownership is
-          // positional — what the DOM holds before this module first writes —
-          // never inferred from equality.
+          // ownership, whichever side of activation declared it.
+          //
+          // Ownership follows observed writes, not values. The observer below
+          // adopts every write this module did not make, so a plugin that
+          // starts declaring `tabIndex={0}` after this module wrote its
+          // default is recorded as the owner even though the live value
+          // equals the last write. The equality check that follows only
+          // covers writes that predate observation; any other live value
+          // belongs to another owner.
           //
           // The ref re-attaches whenever the transform re-renders the row, so
-          // a later snapshot can hold this module's own writes. A live value
-          // that matches the last write is never adopted as someone else's:
-          // the earlier baseline and the write record survive, and only a
-          // value nobody wrote becomes the new baseline. A row the record
-          // does not know (or one recycled for another key) snapshots fresh.
-          // `data-activation-eligible` is exempt: it is namespaced to this
-          // module, so no other plugin writes it.
+          // a later snapshot can hold this module's own writes. A row the
+          // record does not know (or one recycled for another key) snapshots
+          // fresh. `data-activation-eligible` is exempt: it is namespaced to
+          // this module, so no other plugin writes it.
           const liveTabIndex = row.getAttribute('tabindex');
           const liveShortcuts = row.getAttribute('aria-keyshortcuts');
           const previousBaseline = rowBaselines.get(row);
@@ -648,13 +646,45 @@ export function useTableActivation<T extends Record<string, unknown>>(
           // Last applied reflection for this row: a store broadcast over
           // an unchanged row stays a DOM no-op, so key-only updates keep
           // the at-most-two-rows bound even with an inline `onActivate`.
-          // Last affordance values this module wrote: a live value that
-          // differs is someone else's (a later plugin's imperative roving
-          // update — the declarative props carry none of this module's),
-          // so it is adopted into the baseline rather than overwritten.
           let lastInteractive: boolean | null = null;
           let lastActive = false;
+          // The observer adopts every tabindex and key-announcement write
+          // this module did not make. Self writes drain synchronously after
+          // every batch below, so an observed record is always external.
+          // Every apply syncs first, so adoption never waits on task timing;
+          // the callback only re-resolves rows whose baseline just changed.
+          const syncOwnership = (): boolean => {
+            const records = observer.takeRecords();
+            let changed = false;
+            for (const record of records) {
+              if (record.attributeName === 'tabindex') {
+                baseline.ownedTabIndex = row.getAttribute('tabindex');
+                baseline.writtenTabIndex = undefined;
+                changed = true;
+              } else if (record.attributeName === 'aria-keyshortcuts') {
+                baseline.ownedShortcuts = stripActivationTokens(
+                  row.getAttribute('aria-keyshortcuts'),
+                );
+                baseline.writtenShortcuts = undefined;
+                changed = true;
+              }
+            }
+            return changed;
+          };
+          const observer = new MutationObserver(() => {
+            if (syncOwnership()) {
+              lastInteractive = null;
+              applyStyle(isEligibleNow());
+            }
+          });
+          observer.observe(row, {
+            attributes: true,
+            attributeFilter: ['tabindex', 'aria-keyshortcuts'],
+          });
           const applyStyle = (eligibleNow: boolean) => {
+            // External writes land here before any decision, so the exclusion
+            // path below restores the current owner, not a stale snapshot.
+            syncOwnership();
             // Keyboard affordances and the pointer cursor follow the same
             // liveness as paint and presses: a row a later plugin marked
             // current, or one the caller predicate now excludes, is not a
@@ -726,6 +756,9 @@ export function useTableActivation<T extends Record<string, unknown>>(
               }
               baseline.writtenShortcuts = undefined;
             }
+            // Self writes never reach the observer: its records are always
+            // external, so adoption above needs no write-origin check.
+            observer.takeRecords();
           };
           // The first apply reuses the render-time eligibility above, so the
           // caller predicate runs once per row on mount; later notifies
@@ -733,6 +766,7 @@ export function useTableActivation<T extends Record<string, unknown>>(
           applyStyle(eligible);
           const unsubscribe = store.subscribe(key, () => {
             if (!row.isConnected) {
+              observer.disconnect();
               clearRowActivationStyle(row);
               unsubscribe();
               return;
@@ -740,6 +774,10 @@ export function useTableActivation<T extends Record<string, unknown>>(
             applyStyle(isEligibleNow());
           });
           return () => {
+            // Drain first: disconnect drops queued records, which may hold
+            // another plugin's declaration committed with this same render.
+            syncOwnership();
+            observer.disconnect();
             clearRowActivationStyle(row);
             unsubscribe();
           };

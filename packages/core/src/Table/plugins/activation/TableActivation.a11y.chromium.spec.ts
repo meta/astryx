@@ -3,7 +3,8 @@
 
 /**
  * @file TableActivation.a11y.chromium.spec.ts
- * @input Storybook story core-tableactivation--master-detail
+ * @input Storybook stories core-tableactivation--master-detail and
+ *   core-tableactivation--large-table
  * @output Chromium's own accessibility tree and keyboard order for an
  *   activating table: the active row is the single current-state owner,
  *   every eligible row keeps one sequential tab stop, and the ineligible
@@ -14,11 +15,14 @@
  * Platform notes, verified against this repo's pinned Chromium with a static
  * probe page: table rows expose no accessible name (cell text lands on the
  * cell nodes), and `aria-current` surfaces no `current` property on rows or
- * links in the CDP tree. Current-state exposure is therefore asserted at the
- * DOM contract (exactly one owner) plus cell-name presence in the tree;
- * tab-stop exposure is asserted through the `focusable` tree property that
- * tabbable rows carry. Row locators stay scoped to the story's own table so
- * documentation tables elsewhere on the page cannot leak in.
+ * links in the CDP tree. Current-state exposure is therefore asserted as a
+ * tree-to-DOM join (exactly one accessibility-tree row maps to a DOM row
+ * carrying `aria-current="true"` with `data-active`) plus cell-name presence
+ * in the tree; tab-stop exposure is asserted through the `focusable` tree
+ * property that tabbable rows carry, and through a Tab walk that records row
+ * stops only, stepping over each row's own controls. Row locators stay scoped
+ * to the story's own table so documentation tables elsewhere on the page
+ * cannot leak in.
  */
 
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
@@ -43,6 +47,9 @@ test.afterAll(async () => {
 const STORY_URL =
   'iframe.html?id=core-tableactivation--master-detail&viewMode=story';
 
+const LARGE_STORY_URL =
+  'iframe.html?id=core-tableactivation--large-table&viewMode=story';
+
 /**
  * The story's own table: the one whose rows carry activation state.
  * Documentation tables elsewhere on the page never do, so they cannot leak
@@ -50,6 +57,45 @@ const STORY_URL =
  */
 function storyTable(page: Page) {
   return page.locator('table:has(tbody tr[data-activation-eligible])').first();
+}
+
+type AxNode = {
+  role?: {value?: string};
+  name?: {value?: string};
+  backendDOMNodeId?: number;
+  properties?: {name: string; value?: {value?: unknown}}[];
+};
+
+/**
+ * Press Tab until `wantStops` table-row stops land, recording row text only.
+ * Rows carry their own controls (every story row has an Open button), so a
+ * raw focus sequence interleaves buttons; only `TR` stops count, and only
+ * tabbable rows can take them — documentation-table rows never do.
+ */
+async function tabToRowStops(page: Page, wantStops: number): Promise<string[]> {
+  const stops: string[] = [];
+  for (
+    let step = 0;
+    step < wantStops * 6 + 30 && stops.length < wantStops;
+    step += 1
+  ) {
+    const stop = await page.evaluate(() => {
+      const active = document.activeElement;
+      if (active == null || active.tagName !== 'TR') {
+        return null;
+      }
+      return (active as HTMLElement).innerText ?? '';
+    });
+    if (stop != null && stop !== stops[stops.length - 1]) {
+      stops.push(stop);
+    }
+    await page.keyboard.press('Tab');
+  }
+  return stops;
+}
+
+async function activeTagName(page: Page): Promise<string> {
+  return page.evaluate(() => document.activeElement?.tagName ?? '');
 }
 
 test('the active row is the single current-state owner', async ({page}) => {
@@ -80,11 +126,7 @@ test('the active row is the single current-state owner', async ({page}) => {
   // stop) and plain documentation rows never do.
   const cdp = await page.context().newCDPSession(page);
   const {nodes} = (await cdp.send('Accessibility.getFullAXTree')) as {
-    nodes: {
-      role?: {value?: string};
-      name?: {value?: string};
-      properties?: {name: string; value: {value?: unknown}}[];
-    }[];
+    nodes: AxNode[];
   };
   const cellNames = nodes
     .filter(node => node.role?.value === 'cell')
@@ -106,6 +148,48 @@ test('the active row is the single current-state owner', async ({page}) => {
       ),
   );
   expect(focusableRows).toHaveLength(3);
+
+  // Tree-level current state: join each accessibility-tree row back to its
+  // DOM row and read the contract attributes there. Exactly one story-table
+  // row maps to `aria-current="true"` with `data-active`; every other
+  // story-table row maps to neither.
+  await cdp.send('DOM.getDocument', {depth: 0});
+  const treeRows: {current: unknown; active: unknown; inStory: unknown}[] = [];
+  for (const node of nodes) {
+    if (node.role?.value !== 'row' || node.backendDOMNodeId == null) {
+      continue;
+    }
+    const {object} = (await cdp.send('DOM.resolveNode', {
+      backendNodeId: node.backendDOMNodeId,
+    })) as {object: {objectId?: string}};
+    if (object.objectId == null) {
+      continue;
+    }
+    const read = async (expression: string) =>
+      (
+        (await cdp.send('Runtime.callFunctionOn', {
+          objectId: object.objectId,
+          functionDeclaration: `function () { return (${expression}); }`,
+          returnByValue: true,
+        })) as {result: {value?: unknown}}
+      ).result.value;
+    treeRows.push({
+      current: await read('this.getAttribute("aria-current")'),
+      active: await read('this.getAttribute("data-active")'),
+      inStory: await read(
+        'this.closest("table")?.querySelector("tbody tr[data-activation-eligible]") != null',
+      ),
+    });
+  }
+  const storyTreeRows = treeRows.filter(row => row.inStory === true);
+  const currentTreeRows = storyTreeRows.filter(row => row.current === 'true');
+  expect(currentTreeRows).toHaveLength(1);
+  expect(currentTreeRows[0].active).toBe('true');
+  for (const row of storyTreeRows) {
+    if (row.current !== 'true') {
+      expect(row.active).toBeNull();
+    }
+  }
 });
 
 test('eligible rows keep one sequential tab stop and the archived row keeps none', async ({
@@ -117,23 +201,50 @@ test('eligible rows keep one sequential tab stop and the archived row keeps none
   await expect(bodyRows).toHaveCount(4);
   await bodyRows.nth(0).focus();
 
-  const focused: string[] = [];
-  for (let step = 0; step < 4; step += 1) {
-    focused.push(
-      await page.evaluate(
-        () => (document.activeElement as HTMLElement | null)?.innerText ?? '',
-      ),
-    );
-    await page.keyboard.press('Tab');
+  // Tab walks the three eligible rows in order, stepping over each row's
+  // own Open button; the archived Legacy importer row never takes focus,
+  // and focus leaves the rows afterwards.
+  const stops = await tabToRowStops(page, 3);
+  expect(stops).toHaveLength(3);
+  expect(stops[0]).toContain('API gateway');
+  expect(stops[1]).toContain('Search index');
+  expect(stops[2]).toContain('Billing worker');
+  for (const stop of stops) {
+    expect(stop).not.toContain('Legacy importer');
   }
+  for (let step = 0; step < 8; step += 1) {
+    await page.keyboard.press('Tab');
+    expect(await activeTagName(page)).not.toBe('TR');
+  }
+});
 
-  // Tab walks the three eligible rows in order, then leaves the rows: the
-  // archived Legacy importer row never takes focus.
-  expect(focused[0]).toContain('API gateway');
-  expect(focused[1]).toContain('Search index');
-  expect(focused[2]).toContain('Billing worker');
-  expect(focused[3]).not.toContain('Legacy importer');
-  for (const text of focused) {
-    expect(text).not.toContain('Legacy importer');
+test('a large unvirtualized table keeps one sequential stop per eligible row', async ({
+  page,
+}) => {
+  await page.goto(`${storybook.origin}/${LARGE_STORY_URL}`, {
+    waitUntil: 'load',
+  });
+  const table = storyTable(page);
+  const bodyRows = table.locator('tbody tr');
+  await expect(bodyRows).toHaveCount(60);
+  await bodyRows.nth(0).focus();
+
+  // Fifty-four eligible rows in row order (every tenth row is archived);
+  // each row's own Open button is stepped over, archived rows never stop,
+  // and focus leaves the rows at the end.
+  const stops = await tabToRowStops(page, 54);
+  expect(stops).toHaveLength(54);
+  const order = stops.map(stop => {
+    const match = /Service (\d+)/.exec(stop);
+    expect(match).not.toBeNull();
+    return Number(match?.[1]);
+  });
+  const expected = Array.from({length: 60}, (_, index) => index).filter(
+    index => index % 10 !== 9,
+  );
+  expect(order).toEqual(expected);
+  for (let step = 0; step < 8; step += 1) {
+    await page.keyboard.press('Tab');
+    expect(await activeTagName(page)).not.toBe('TR');
   }
 });
