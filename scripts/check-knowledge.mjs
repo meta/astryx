@@ -886,17 +886,25 @@ function readKnowledgeRecordsAtRevision(
   });
 }
 
+// A decision starts at a `DEC-n` or `Amendment` heading, or at a
+// `- **DEC-n …**` list item. Its Decider line may share a line with its
+// Reference, and may name several deciders.
 const DECISION_HEADING = /^#{2,4} (DEC-[0-9]+[a-z]?)\b/;
+const AMENDMENT_HEADING = /^#{2,4} (Amendment\b.*?)\s*$/;
+const DECISION_ITEM = /^\s*[-*] \*\*(DEC-[0-9]+[a-z]?)\b/;
 const ANY_HEADING = /^#{1,4} /;
-const DECIDER_LINE = /^\*\*Decider:?\*\*:?\s*(.*)$/;
+const DECIDER_LINE = /\*\*Deciders?:?\*\*:?\s*(.*)$/;
 const PLACEHOLDER_DECIDER = /pending|<[^>]*>/i;
 
 function deciderLines(content) {
   const deciders = new Map();
   let decision = null;
   for (const line of content.split(/\r?\n/)) {
-    const heading = line.match(DECISION_HEADING);
+    const heading =
+      line.match(DECISION_HEADING) ?? line.match(AMENDMENT_HEADING);
     if (heading || ANY_HEADING.test(line)) decision = heading?.[1] ?? null;
+    const item = line.match(DECISION_ITEM);
+    if (item) decision = item[1];
     const decider = decision && line.match(DECIDER_LINE);
     if (decider && !deciders.has(decision)) {
       deciders.set(decision, decider[1].replace(/\s+/g, ' ').trim());
@@ -912,7 +920,12 @@ function approvers(document) {
 }
 
 function originalDecider(line) {
-  return line.split(',')[0].replace(/[`@]/g, '').replace(/\.$/, '').trim();
+  return line
+    .split(';')[0]
+    .split(',')
+    .map(field => field.replace(/[`@]/g, '').replace(/\.$/, '').trim())
+    .filter(field => field && !/^\d{4}-\d{2}-\d{2}/.test(field))
+    .join(', ');
 }
 
 // Only the decider and date fields can hold a placeholder. The rest of the

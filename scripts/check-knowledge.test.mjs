@@ -965,6 +965,65 @@ describe('approval line history', () => {
     }
   });
 
+  it('reads every decided-line shape the records use', () => {
+    const doc = lines => ({
+      path: 'docs/specs/AST-900/spec.md',
+      content: [
+        '---',
+        'id: spec:AST-900',
+        'authority: current',
+        'approved_by: owner-a',
+        '---',
+        '',
+        ...lines,
+      ].join('\n'),
+    });
+    const shapes = [
+      // Reference and Decider on one line.
+      [
+        '### DEC-1 — One line',
+        '',
+        '**Reference:** `spec:AST-900/DEC-1` · **Decider:** `owner-a`, `2026-08-31`',
+      ],
+      // Several deciders.
+      [
+        '### DEC-2 — Two owners',
+        '',
+        '**Deciders:** `owner-a`, `owner-c`, `2026-09-03`',
+      ],
+      // A list-item decision with an indented Decider line.
+      [
+        '- **DEC-3 — A list item.**',
+        '',
+        '  **Decider:** `owner-a`, 2026-10-24',
+      ],
+      // An amendment heading.
+      [
+        '### Amendment — Narrow the name',
+        '',
+        '**Decider:** `owner-a`, `2026-09-12`',
+      ],
+    ];
+    const expected = [
+      {claim: 'DEC-1', decider: 'owner-a'},
+      {claim: 'DEC-2', decider: 'owner-a, owner-c'},
+      {claim: 'DEC-3', decider: 'owner-a'},
+      {claim: 'Amendment — Narrow the name', decider: 'owner-a'},
+    ];
+    shapes.forEach((shape, i) => {
+      const rewritten = shape.map(line => line.replace('owner-a', 'owner-b'));
+      expect(
+        findApprovalLineRewrites([doc(shape)], [doc(rewritten)]),
+        shape[0],
+      ).toEqual([expect.objectContaining(expected[i])]);
+      expect(
+        findApprovalLineRewrites([doc(shape)], [doc(['## Notes'])]),
+        `${shape[0]} removed`,
+      ).toEqual([expect.objectContaining({...expected[i], to: null})]);
+      expect(findApprovalLineRewrites([doc(shape)], [doc(shape)])).toEqual([]);
+    });
+  });
+
   it('warns for a platform component record too', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'approval-lines-'));
     try {
