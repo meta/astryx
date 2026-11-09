@@ -362,8 +362,9 @@ export default function AnimatedLayoutPerfPage() {
       walkMs: median(walks),
       rectsRead: median(reads),
       animated: median(animations),
-      longTasks,
-      longTaskMs,
+      // Without the Long Tasks API (Firefox), show no reading, not zero.
+      longTasks: observer ? longTasks : null,
+      longTaskMs: observer ? longTaskMs : null,
       frames,
       droppedFrames: dropped,
       firstFrameMs: median(firstFrames),
