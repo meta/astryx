@@ -321,6 +321,29 @@ describe("touchPacingFault on a paced play's arrivals", () => {
     );
     expect(touchPacingFault(FLICK, stalled, TOLERANCE)?.heldByPage).toBeNull();
   });
+
+  it("counts a listener's time from when it began, so an event's wait for the main thread before it is named as a wait, not the page's listeners", () => {
+    // The fourth event waited 28 ms for the main thread, then its listeners
+    // ran 2 ms: its successor reaches the page 46 ms after it.
+    const arrivals = at([0, 16, 32, 48, 94, 110, 126]);
+    const waited = arrivals.map((a, i) =>
+      i === 3 ? {...a, startedAt: a.stamp + 28, handledAt: a.stamp + 30} : a,
+    );
+    const fault = touchPacingFault(FLICK, waited, TOLERANCE);
+    expect(fault?.heldByPage).toBeNull();
+    expect(fault?.waited).toEqual({gapMs: 46, waitMs: 28});
+    expect(String(new TouchPacingError(fault!))).toMatch(
+      /an event waited 28 ms for the main thread before the page's listeners began, so the next reached it 46 ms later: another page task held the thread, or the runner starved it/,
+    );
+    // Its listeners began at once and ran 30 ms: the page's.
+    const listened = arrivals.map((a, i) =>
+      i === 3 ? {...a, startedAt: a.stamp, handledAt: a.stamp + 30} : a,
+    );
+    expect(touchPacingFault(FLICK, listened, TOLERANCE)?.heldByPage).toEqual({
+      gapMs: 46,
+      handlingMs: 30,
+    });
+  });
 });
 
 describe("the release a paced play's page reads, as Core's velocity tracker reads it", () => {
