@@ -40,6 +40,41 @@ describe('brands a swizzled copy shares with the package', () => {
     expect(copy.isSnapPaging(value)).toBe(true);
   });
 
+  it("a copy of List's reorder context reads a package reorderable object", async () => {
+    const {createReorderable} =
+      await import('../reorderable/createReorderable');
+    const pkg = await import('../List/listReorderContext');
+    vi.resetModules();
+    const copy = await import('../List/listReorderContext');
+    expect(copy).not.toBe(pkg);
+    // A swizzled List carries its own listReorderContext and reads the
+    // object the package's createReorderable made.
+    const reorderable = createReorderable({onReorder: () => {}});
+    const internals = reorderable as unknown as Record<symbol, unknown>;
+    expect(internals[copy.REORDER_ENGINE]).toBeDefined();
+    expect(internals[copy.REORDER_ENGINE]).toBe(internals[pkg.REORDER_ENGINE]);
+  });
+
+  it('the package List reads an object a copy of the Lab reorder entry adapted', async () => {
+    const {createReorderable} =
+      await import('../reorderable/createReorderable');
+    const pkg = await import('../List/listReorderContext');
+    vi.resetModules();
+    const copy = await import('../internal/reorder');
+    // A swizzled TransferList or ListInput carries Core's internal reorder
+    // entry and adapts the owner's object with it, for the package List.
+    const reorderable = createReorderable({onReorder: () => {}});
+    const adapted = copy.adaptReorderable(reorderable, {onReorder: () => {}});
+    expect(
+      (adapted as unknown as Record<symbol, unknown>)[pkg.REORDER_ENGINE],
+    ).toBe(
+      (reorderable as unknown as Record<symbol, unknown>)[pkg.REORDER_ENGINE],
+    );
+    expect(
+      (adapted as unknown as Record<symbol, unknown>)[pkg.REORDER_ENGINE],
+    ).toBeDefined();
+  });
+
   it('the package and a copy give the branded types one shape', () => {
     // Two paths to Core's source that TypeScript reads as two modules each,
     // as it reads a package module and the copy of it.
