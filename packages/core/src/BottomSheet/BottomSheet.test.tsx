@@ -19,7 +19,15 @@ import {
   onTestFinished,
 } from 'vitest';
 import {act, cleanup, render, screen, fireEvent} from '@testing-library/react';
-import {Profiler, createRef, useState, type ReactNode} from 'react';
+import {
+  Profiler,
+  Suspense,
+  createRef,
+  startTransition,
+  use,
+  useState,
+  type ReactNode,
+} from 'react';
 import {BottomSheet} from './BottomSheet';
 import {BottomSheetEscapeContext} from './bottomSheetEscape';
 import {resetBottomSheetStackForTests} from './bottomSheetStack';
@@ -966,6 +974,61 @@ describe('BottomSheet', () => {
       } finally {
         elsewhere.remove();
         target.remove();
+      }
+    });
+
+    it('returns focus to the committed finalFocusRef when it unmounts after React discards a render with another', async () => {
+      // A transition that suspends for good: React renders it, then keeps the
+      // committed tree and never commits that render.
+      const forever = new Promise<never>(() => {});
+      function Forever(): null {
+        use(forever);
+        return null;
+      }
+      const target = document.createElement('button');
+      const discardedTarget = document.createElement('button');
+      document.body.append(target, discardedTarget);
+      const finalFocusRef = {current: target as HTMLElement | null};
+      const discardedFinalFocusRef = {
+        current: discardedTarget as HTMLElement | null,
+      };
+      const page = (
+        focusRef: {current: HTMLElement | null} | null,
+        isPending = false,
+      ) => (
+        <Suspense fallback={null}>
+          {focusRef == null ? null : (
+            <BottomSheet
+              isOpen
+              onOpenChange={() => {}}
+              finalFocusRef={focusRef}
+              label="Filters">
+              <button type="button">Inside</button>
+            </BottomSheet>
+          )}
+          {isPending ? <Forever /> : null}
+        </Suspense>
+      );
+      try {
+        const {rerender} = render(page(finalFocusRef));
+        act(() =>
+          screen.getByRole('button', {name: 'Inside', hidden: true}).focus(),
+        );
+        await act(async () => {
+          startTransition(() => {
+            rerender(page(discardedFinalFocusRef, true));
+          });
+        });
+
+        // The page removes the open sheet; its removal returns focus.
+        rerender(page(null));
+        await act(async () => {});
+
+        expect(document.activeElement).not.toBe(discardedTarget);
+        expect(document.activeElement).toBe(target);
+      } finally {
+        target.remove();
+        discardedTarget.remove();
       }
     });
 

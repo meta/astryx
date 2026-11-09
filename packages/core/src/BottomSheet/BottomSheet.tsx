@@ -459,7 +459,11 @@ function StandaloneBottomSheet({
   // only if the person was still in the sheet; a modal sheet always does.
   const hadFocusAtCloseRef = useRef(false);
   const finalFocusRefRef = useRef(finalFocusRef);
-  finalFocusRefRef.current = finalFocusRef;
+  // Syncs the stack's return target with the committed `finalFocusRef`. It
+  // runs before any layout effect, where the stack can close the sheet.
+  useInsertionEffect(() => {
+    finalFocusRefRef.current = finalFocusRef;
+  });
   // A sheet rendered in another sheet's content is presented only while that
   // sheet is open: it leaves with its host and, if its own state is still
   // open, comes back when the host does (see BottomSheetHostContext). Its
@@ -562,8 +566,9 @@ function StandaloneBottomSheet({
     },
     [],
   );
+  // The stack's view for the handlers. The registry's `onView` writes it with
+  // each view it reports, together with the state.
   const stackViewRef = useRef(stackView);
-  stackViewRef.current = stackView;
   const scrimWriteRef = useRef<BottomSheetScrimWrite>({frame: null});
   // Releases the pending scrim write frame on unmount.
   useEffect(() => () => cancelScrimWrite(scrimWriteRef.current), []);
