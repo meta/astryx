@@ -36,7 +36,7 @@ import {flushSync} from 'react-dom';
 import {holdEntranceInput} from '../Layer/holdEntranceInput';
 import {notifyTopLayerEntry} from '../Layer/modalOutlet';
 import {runPopoverOperation} from '../Layer/popoverOperations';
-import {returnFocusIfLost} from '../utils/focusReturn';
+import {prepareFocusReturnOnRemoval} from '../utils/focusReturn';
 
 /** Slack past the computed transition before the backstop gives up waiting. */
 const EXIT_BACKSTOP_BUFFER_MS = 50;
@@ -195,6 +195,8 @@ export function useDrawerDialogPresence({
   // that cleanup would cut off every delayed slide-out.
   useEffect(() => {
     const dialog = dialogRef.current;
+    const returnFocusOnRemoval =
+      dialog == null ? null : prepareFocusReturnOnRemoval(dialog);
     return () => {
       if (dialog && isDrawerHostOpen(dialog, isModal)) {
         if (hideDrawerHost(dialog, isModal)) {
@@ -205,31 +207,9 @@ export function useDrawerDialogPresence({
       }
       // Removal already hid a popover host, so this runs outside the check
       // above. The trigger is null outside an open cycle.
-      if (dialog) {
-        returnFocusAfterRemoval(dialog, triggerElementRef.current);
-      }
+      returnFocusOnRemoval?.(triggerElementRef.current);
     };
   }, [dialogRef, isModal]);
-}
-
-/**
- * Removing an open drawer drops its focus to the page. Return focus to the
- * trigger only when focus is lost. StrictMode replay and a hidden Activity
- * keep the drawer in the document, so they are not a removal. The check waits
- * for the commit to finish.
- */
-function returnFocusAfterRemoval(
-  dialog: HTMLDialogElement,
-  trigger: HTMLElement | null,
-): void {
-  if (trigger == null) {
-    return;
-  }
-  queueMicrotask(() => {
-    if (!dialog.isConnected) {
-      returnFocusIfLost(dialog, trigger);
-    }
-  });
 }
 
 /**
