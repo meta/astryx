@@ -14,7 +14,7 @@ import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {act, fireEvent, render, screen, within} from '@testing-library/react';
-import {useRef, useState} from 'react';
+import {Suspense, startTransition, use, useRef, useState} from 'react';
 import {
   MENU_PRESS_AUTOSCROLL_ZONE_PX,
   MENU_PRESS_LONG_PRESS_MS,
@@ -294,6 +294,46 @@ describe('useMenuPress — tracking inside the menu', () => {
       onHighlight.mock.calls.map(([el]) => el?.textContent ?? null),
     ).toEqual(['A', 'B', null]);
     expect(row('A')).not.toHaveFocus();
+  });
+
+  it('drives the committed highlight callback after React discards a render with another', async () => {
+    // A transition that suspends for good: React renders it, then keeps the
+    // committed tree and never commits that render.
+    const forever = new Promise<never>(() => {});
+    function Forever(): null {
+      use(forever);
+      return null;
+    }
+    function Screen({
+      onHighlight,
+      isPending = false,
+    }: {
+      onHighlight: (row: HTMLElement | null) => void;
+      isPending?: boolean;
+    }) {
+      return (
+        <Suspense fallback={null}>
+          <Harness onHighlight={onHighlight} />
+          {isPending ? <Forever /> : null}
+        </Suspense>
+      );
+    }
+    const onHighlight = vi.fn<(row: HTMLElement | null) => void>();
+    const discardedOnHighlight = vi.fn<(row: HTMLElement | null) => void>();
+    const {rerender} = render(<Screen onHighlight={onHighlight} />);
+    await act(async () => {
+      startTransition(() => {
+        rerender(<Screen onHighlight={discardedOnHighlight} isPending />);
+      });
+    });
+
+    fireEvent.pointerDown(row('A'), touch());
+    fireEvent.pointerMove(row('B'), touch());
+
+    expect(
+      onHighlight.mock.calls.map(([el]) => el?.textContent ?? null),
+    ).toEqual(['A', 'B']);
+    expect(discardedOnHighlight).not.toHaveBeenCalled();
   });
 
   it('carries the release button and modifiers on the dispatched activation', () => {

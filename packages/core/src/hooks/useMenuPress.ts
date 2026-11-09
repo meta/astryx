@@ -28,6 +28,7 @@ import {
   type RefObject,
 } from 'react';
 import {currentGesture} from '../Layer/gestureCounter';
+import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 import {isInputShield} from '../Layer/inputHold';
 import {
   IDLE_MENU_PRESS,
@@ -335,7 +336,10 @@ export function useDropdownMenuPress(
   options: DropdownMenuPressOptions,
 ): DropdownMenuPressReturn {
   const optionsRef = useRef(options);
-  optionsRef.current = options;
+  // Syncs the gesture callbacks' options with the committed ones.
+  useIsomorphicLayoutEffect(() => {
+    optionsRef.current = options;
+  });
   // The highlight, and the hover focus of the rows in this menu, follow the
   // last input, which this tracks for the menu's own document.
   useInteractionModalityTrackingFor(options.menuRef);
@@ -559,11 +563,6 @@ export function useDropdownMenuPress(
     });
   }, []);
 
-  // Declared before `step` so the mutual recursion through refs type-checks.
-  const stepRef = useRef<
-    (event: MenuPressInput<HTMLElement>, native?: PointerEvent) => void
-  >(() => {});
-
   const applyEffect = useCallback(
     (
       effect: MenuPressOutcome<HTMLElement>,
@@ -630,7 +629,6 @@ export function useDropdownMenuPress(
     },
     [applyEffect],
   );
-  stepRef.current = step;
 
   const getScroller = useCallback((): HTMLElement | null => {
     const {getScroller: custom, menuRef} = optionsRef.current;
@@ -682,7 +680,7 @@ export function useDropdownMenuPress(
           const last = lastPointerEventRef.current;
           if (last != null) {
             const point = resolvePoint(last);
-            stepRef.current(
+            step(
               {
                 type: 'move',
                 row: point.row,
@@ -696,7 +694,7 @@ export function useDropdownMenuPress(
       };
       autoscroll.update();
     },
-    [autoscroll, getScroller, resolvePoint, stopAutoscroll],
+    [autoscroll, getScroller, resolvePoint, step, stopAutoscroll],
   );
 
   const attach = useCallback(
@@ -720,12 +718,12 @@ export function useDropdownMenuPress(
             y: event.clientY,
           });
           if (isPending === false) {
-            stepRef.current({type: 'cancel'});
+            step({type: 'cancel'});
           }
           return;
         }
         const point = resolvePoint(event);
-        stepRef.current(
+        step(
           {
             type: 'move',
             row: point.row,
@@ -745,7 +743,7 @@ export function useDropdownMenuPress(
           return;
         }
         const point = resolvePoint(event);
-        stepRef.current(
+        step(
           {
             type: 'up',
             row: point.row,
@@ -764,18 +762,18 @@ export function useDropdownMenuPress(
         if (event.pointerId !== pointerIdRef.current) {
           return;
         }
-        stepRef.current({type: 'cancel'});
+        step({type: 'cancel'});
       };
       const onOtherPointerDown = (event: PointerEvent) => {
         // A second pointer ends the gesture: two fingers are a pinch or a
         // scroll, never a pick.
         if (event.pointerId !== pointerIdRef.current) {
           ignoredPointerIdRef.current = event.pointerId;
-          stepRef.current({type: 'cancel'});
+          step({type: 'cancel'});
         }
       };
       const onBlur = () => {
-        stepRef.current({type: 'cancel'});
+        step({type: 'cancel'});
       };
 
       doc.addEventListener('pointermove', onMove, true);
@@ -791,7 +789,7 @@ export function useDropdownMenuPress(
         view?.removeEventListener('blur', onBlur);
       };
     },
-    [getDocument, resolvePoint, updateAutoscroll],
+    [getDocument, resolvePoint, step, updateAutoscroll],
   );
 
   const fireLongPress = useCallback(() => {
@@ -825,9 +823,13 @@ export function useDropdownMenuPress(
   // stream this model already observes. Only its hold time, movement
   // tolerance and timer are used. The trigger uses one drift allowance under
   // every primary pointer, so no menu, row or trigger reads the pointer query.
-  longPressApiRef.current = useLongPressDetector({
+  const longPressApi = useLongPressDetector({
     onLongPress: fireLongPress,
     delayMs: options.longPressDelayMs ?? MENU_PRESS_LONG_PRESS_MS,
+  });
+  // Syncs the gesture callbacks' long-press detector with the committed one.
+  useIsomorphicLayoutEffect(() => {
+    longPressApiRef.current = longPressApi;
   });
 
   const handleMenuPointerDown = useCallback(
