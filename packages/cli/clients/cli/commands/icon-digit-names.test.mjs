@@ -273,6 +273,21 @@ describe('library names that start with a digit once the prefix comes off', () =
     expect(fs.readFileSync(setFile('digits', 'icons.json'), 'utf-8')).toBe(
       before,
     );
+    // An option pair the command refuses is reported first, as an option.
+    const pair = await json([
+      'experimental',
+      'icon',
+      'add',
+      '--all',
+      '--variant',
+      'solid',
+      '--from',
+      '@acme/more-digits',
+      '--id',
+      '7',
+    ]);
+    expect(pair.code).not.toBe(0);
+    expect(pair.body.code).toBe('ERR_INVALID_OPTION');
     // A library name the set does not export yet is refused the same way.
     const refusedFree = await json([
       'experimental',
