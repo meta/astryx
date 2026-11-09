@@ -493,6 +493,38 @@ describe('RichTextEditor', () => {
     expect(textbox).not.toHaveAttribute('tabindex', '0');
   });
 
+  it('keeps a link in a disabled editor out of the tab order and inert', () => {
+    render(
+      <RichTextEditor
+        label="Notes"
+        isDisabled
+        defaultValue={markdownToEditorStateJSON(
+          'See [the guide](https://example.com/guide).\n',
+        )}
+      />,
+    );
+    const link = screen.getByText('the guide').closest('a');
+    expect(link).not.toBeNull();
+    // An enabled editor's links are not tab stops; a disabled one adds none
+    // (FR1), and activation never navigates (FR2).
+    expect(link).toHaveAttribute('tabindex', '-1');
+    expect(link).toHaveAttribute('aria-disabled', 'true');
+    expect(fireEvent.click(link as HTMLAnchorElement)).toBe(false);
+  });
+
+  it('gives a link back its default behavior when the editor is enabled again', () => {
+    const document = markdownToEditorStateJSON(
+      'See [the guide](https://example.com/guide).\n',
+    );
+    const {rerender} = render(
+      <RichTextEditor label="Notes" isDisabled defaultValue={document} />,
+    );
+    rerender(<RichTextEditor label="Notes" defaultValue={document} />);
+    const link = screen.getByText('the guide').closest('a');
+    expect(link).not.toHaveAttribute('tabindex');
+    expect(link).not.toHaveAttribute('aria-disabled');
+  });
+
   it('keeps the dimmed treatment on a disabled editor', () => {
     const {container} = render(<RichTextEditor label="Notes" isDisabled />);
     const wrapper = container.querySelector('.astryx-rich-text-editor');

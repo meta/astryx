@@ -4468,10 +4468,21 @@ jobs:
         with:
           persist-credentials: false
 
+      # When the scope could not be decided (a diff GitHub truncates at 3,000
+      # files, say), everything is in scope: every file counts as changed, and
+      # the job runs every contract its budget fits and lists the rest.
+      - name: List every file when the scope is undecided
+        id: everything
+        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == '' && steps.scope.outputs.decided == 'false'
+        run: |
+          git ls-files > "$RUNNER_TEMP/every-file.txt"
+          echo "path=$RUNNER_TEMP/every-file.txt" >> "$GITHUB_OUTPUT"
+          echo "::notice title=Every contract in scope::The scope could not be decided, so every file counts as changed."
+
       # The changed-spec list and the folder rule both read this list. Without
       # it, a contract would not run and the job would still pass.
       - name: Require the changed-file list
-        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == ''
+        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == '' && steps.scope.outputs.decided != 'false'
         run: |
           echo "::error::The scope step could not list the changed files, so the contracts to run are unknown. Re-run the job."
           exit 1
@@ -4491,7 +4502,7 @@ jobs:
         id: touched
         if: steps.scope.outputs.applies == 'true'
         env:
-          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path || steps.everything.outputs.path }}
         run: |
           GITHUB_STEP_SUMMARY=/dev/null node .github/scripts/touched-components.mjs scope \
             --analysis analysis.json \
@@ -4587,7 +4598,7 @@ jobs:
           ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           WORKFLOW_SHA: ${{ github.sha }}
           SPECS_PATH: ${{ steps.specs.outputs.path }}
-          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path || steps.everything.outputs.path }}
           OWNERS: ${{ steps.touched.outputs.contract_owners }}
           FOLDERS: ${{ steps.touched.outputs.contract_folders }}
           A11Y_CONTRACT_WORKERS: 4
@@ -4685,9 +4696,12 @@ jobs:
           CHANGED_FILES: ${{ steps.scope.outputs.changed_files_path }}
           ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
+          TRUNCATED: ${{ steps.scope.outputs.truncated }}
         run: |
           if [ -n "$CHANGED_FILES" ]; then
             changes=(--changed "$CHANGED_FILES")
+          elif [ "$TRUNCATED" = true ]; then
+            changes=(--all --truncated)
           else
             changes=(--all)
           fi

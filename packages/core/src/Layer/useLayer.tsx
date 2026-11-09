@@ -31,7 +31,11 @@ import {createPortal} from 'react-dom';
 import {LayerContentBoundary} from './layerScopedContext';
 import {layerClickBoundary} from './layerClickBoundary';
 import {addAnchorName, readAnchorNames, removeAnchorName} from './anchorName';
-import {currentGesture, currentGestureHasClicked} from './gestureCounter';
+import {
+  claimContextMenuPress,
+  currentGesture,
+  currentGestureHasClicked,
+} from './gestureCounter';
 import {resolveLayerPortalTarget} from './layerHost';
 import {layerTextReset} from './layerTextReset.stylex';
 import {layerStructureReset} from './layerStructureReset.stylex';
@@ -1539,6 +1543,9 @@ function useLayerImplementation(
         closedAnimations !== 'none' &&
         closedAnimations !== animationNames(popover);
       closeKeepsShownRef.current = closeTransitionHolds || closeStartsAnimation;
+      if (lightDismiss) {
+        claimContextMenuPress(popover);
+      }
       if (keepsAnchorClear) {
         keepAnchorClear(popover, triggerRef.current);
       }
@@ -1550,6 +1557,7 @@ function useLayerImplementation(
     anchorId,
     onShow,
     keepsAnchorClear,
+    lightDismiss,
     requestContextMount,
     applyDeferredWritingContext,
     showPopoverElement,
