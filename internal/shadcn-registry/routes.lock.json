@@ -3997,6 +3997,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-truncation-truncated-table-cells",
+      "path": "examples/use-truncation/truncated-table-cells",
+      "aliases": []
+    },
+    {
       "name": "example-use-typeahead-type-to-focus-a-country",
       "path": "examples/use-typeahead/type-to-focus-a-country",
       "aliases": []
@@ -4409,6 +4414,11 @@
     {
       "name": "hook-use-tree-focus",
       "path": "hooks/use-tree-focus",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-truncation",
+      "path": "hooks/use-truncation",
       "aliases": []
     },
     {
@@ -5299,6 +5309,11 @@
     {
       "name": "template-ai-chat-landing",
       "path": "templates/ai-chat-landing",
+      "aliases": []
+    },
+    {
+      "name": "template-blank",
+      "path": "templates/blank",
       "aliases": []
     },
     {
