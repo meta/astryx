@@ -51,6 +51,38 @@ function Fixture({
   );
 }
 
+describe('Table windowing at mount', () => {
+  it('does not remount a Table whose capability exists at its first render', () => {
+    let tableMounts = 0;
+    const tableRef = (node: HTMLTableElement | null) => {
+      if (node != null) {
+        tableMounts += 1;
+      }
+    };
+    function Counted({items = data}: {items?: Item[]}) {
+      const virtualization = useTableRowsVirtualization({
+        rowHeight: 48,
+        viewportHeight: 240,
+      });
+      return (
+        <Table
+          ref={tableRef}
+          data={items}
+          columns={columns}
+          idKey="id"
+          virtualization={virtualization}
+        />
+      );
+    }
+    const view = render(<Counted />);
+    const table = view.container.querySelector('table');
+    view.rerender(<Counted items={data.slice(0, 50)} />);
+    view.rerender(<Counted />);
+    expect(tableMounts).toBe(1);
+    expect(view.container.querySelector('table')).toBe(table);
+  });
+});
+
 describe('Table virtualization capability', () => {
   it('exports only the row-specific virtualization hook name', () => {
     expect(typeof Reflect.get(TableApi, 'useTableRowsVirtualization')).toBe(
