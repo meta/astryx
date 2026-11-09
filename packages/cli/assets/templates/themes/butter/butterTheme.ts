@@ -361,6 +361,17 @@ export const butterTheme = defineTheme({
   },
 
   components: {
+    // An unselected SegmentedControl label sits on the translucent track,
+    // which lifts a dark card under it. Secondary text falls under 4.5:1
+    // there, so the label takes the next stop.
+    'segmented-control-item': {
+      base: {
+        '--color-text-secondary': lightDark(
+          neutral.light[45],
+          neutral.dark[75],
+        ),
+      },
+    },
     // TopNav uses Butter's blue accent: the heading and the selected item are
     // the full brand blue; unselected items (default + hover) use a lighter
     // blue. Dark mode keeps the theme's butter-yellow accent.

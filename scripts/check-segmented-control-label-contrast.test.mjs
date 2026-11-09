@@ -164,16 +164,10 @@ function measurements() {
 // Known gaps, each for its own theme fix. A pair leaves this list when it
 // passes, and the last test fails until it does.
 const KNOWN_GAPS = new Set([
-  // The track lifts the dark card under secondary text (5.99:1 on the card).
-  'butter dark on --color-background-card',
   // Secondary text already falls under 4.5:1 on the plain page background.
   'chocolate light on --color-background-surface',
   'chocolate light on --color-background-body',
   'chocolate light on --color-background-card',
-  'matcha light on --color-background-surface',
-  'matcha light on --color-background-body',
-  'matcha light on --color-background-card',
-  'y2k light on --color-background-body',
 ]);
 
 const pairName = row => `${row.theme} ${row.mode} on ${row.page}`;

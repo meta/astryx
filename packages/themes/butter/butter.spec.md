@@ -14,6 +14,8 @@ verified_by:
     packages/themes/butter/src/butterColorMapping.test.ts,
     packages/themes/butter/src/butterPalettes.test.ts,
     scripts/generate-butter-palette-refs.test.mjs,
+    scripts/check-secondary-text-contrast.test.mjs,
+    scripts/check-segmented-control-label-contrast.test.mjs,
   ]
 package: '@astryxdesign/theme-butter'
 source_theme: packages/themes/butter/src/butterTheme.ts
@@ -91,7 +93,7 @@ Butter-specific mapping and rendered-component evidence covers light and dark
 semantic and categorical states. A palette stop alone is not an accessibility
 claim; contextual component evidence remains authoritative.
 
-Butter's maintained Badge, Banner, FieldStatus, and TopNav text pairings use
+Butter's maintained Badge, Banner, FieldStatus, SegmentedControl, and TopNav text pairings use
 named palette stops that clear normal-text AA in their rendered contexts:
 
 - info Badge, Banner title, Banner body, and FieldStatus text use Neutral Light
@@ -101,7 +103,10 @@ named palette stops that clear normal-text AA in their rendered contexts:
 - the neutral Badge uses Accent Light 35 on exact Butter Yellow at 5.49:1;
 - light-mode TopNav items use Accent Light 40 at 5.01:1 or Accent Light 35
   at 6.20:1 on the warm navigation surface; and
-- success and warning states retain their darker Neutral Light 15 text.
+- success and warning states retain their darker Neutral Light 15 text; and
+- an unselected SegmentedControl label uses Neutral Dark 75 in dark mode, 5.56:1
+  on the translucent track over the card, where Neutral Dark 70 secondary text
+  measures 4.47:1.
 
 These checks cover normal-sized text in each named component state; every pairing
 clears the 4.5:1 normal-text threshold. The same visible status icon and text
