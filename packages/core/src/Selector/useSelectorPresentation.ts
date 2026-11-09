@@ -11,11 +11,13 @@
 
 import {
   useCallback,
+  useInsertionEffect,
   useRef,
   useState,
   type FocusEvent,
   type RefObject,
 } from 'react';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
   usePopover,
   type UsePopoverOptions,
@@ -92,8 +94,12 @@ export function useSelectorPresentation({
     prepareFocusReturn,
     resetFocusReturn,
   } = useFocusReturnVisibility(triggerModality);
-  onHideRef.current = onHide;
-  onShowRef.current = onShow;
+  // Syncs the popover's show and hide reports with the committed callbacks,
+  // ahead of any layout effect that shows or hides it in the same commit.
+  useInsertionEffect(() => {
+    onHideRef.current = onHide;
+    onShowRef.current = onShow;
+  });
 
   const handlePopoverHide = useCallback(() => {
     onHideRef.current();
@@ -126,7 +132,10 @@ export function useSelectorPresentation({
     onHide: handlePopoverHide,
     onShow: handlePopoverShow,
   });
-  popoverContentRef.current = popover.contentRef.current;
+  // Syncs the hide's view of the popover content with the committed element.
+  useIsomorphicLayoutEffect(() => {
+    popoverContentRef.current = popover.contentRef.current;
+  });
   const {hide: hidePopover, show: showPopover} = popover;
 
   const show = useCallback((): boolean => {
