@@ -177,8 +177,9 @@ Rejected: only unbranded or opted-in themes following the person's size.
 
 The person's size is honored by default, so products need no switch to turn it
 on. Core reads it where the platform exposes it only through a system text
-style, as on iOS, and lets the root font size carry it elsewhere; neither read
-is a theme option, prop, or document attribute.
+style, as on iOS, or only through `env(preferred-text-scale)`, as on Android,
+and lets the root font size carry it elsewhere; no read is a theme option,
+prop, or document attribute.
 
 Rejected: a public opt-in option or document attribute for the size.
 

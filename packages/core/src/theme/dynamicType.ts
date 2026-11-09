@@ -24,10 +24,9 @@
  * Every scale is 1 at the default category. macOS Safari knows the keyword,
  * but its fixed 13px Body names no category.
  *
- * Other engines read the reader's text scale from
- * `env(preferred-text-scale)`, which Chrome on Android sets from the system
- * font scale. Every scale reads it, with 1 as the fallback, so an engine
- * without it changes nothing. A page that carries
+ * Elsewhere every scale reads `env(preferred-text-scale)`, with 1 as the
+ * fallback, so an engine without it changes nothing. Chromium on Android sets
+ * it from the system font scale. A page that carries
  * `<meta name="text-scale" content="scale">` already scales its root font
  * size, so it gets no scales: rem sizes follow the root once.
  *
@@ -455,7 +454,7 @@ function startPreferredTextScale(
   doc: Document,
   view: Window & typeof globalThis,
 ): (() => void) | undefined {
-  if (doc.querySelector('meta[name="text-scale"]') != null) {
+  if (doc.querySelector('meta[name="text-scale"][content="scale" i]') != null) {
     return undefined;
   }
   const sheet = new view.CSSStyleSheet();

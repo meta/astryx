@@ -1033,6 +1033,24 @@ describe('the root sync', () => {
     }
   });
 
+  // `legacy` keeps the root at 16 px, so the scales still apply.
+  it('still reads env(preferred-text-scale) under a legacy text-scale meta', () => {
+    pretendEngine({textSize: false});
+    const meta = document.createElement('meta');
+    meta.name = 'text-scale';
+    meta.content = 'legacy';
+    document.head.append(meta);
+    try {
+      const cleanup = syncReaderTextSize(document);
+      expect(adoptedText()).toContain(
+        `${dynamicTypeScaleProperty('body')}: env(preferred-text-scale, 1);`,
+      );
+      cleanup?.();
+    } finally {
+      meta.remove();
+    }
+  });
+
   it('follows the reader text size wherever the engine provides it, with no platform check', () => {
     pretendEngine({textSize: true, touchCallout: false});
     probeSize = '23px';
