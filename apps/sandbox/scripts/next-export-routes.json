@@ -818,6 +818,7 @@
     "/templates/useInteractiveRoleHookUsage/",
     "/templates/useKeyboardHintHookUsage/",
     "/templates/useLinkComponentHookUsage/",
+    "/templates/useLinkifyHookUsage/",
     "/templates/useListFocusHookUsage/",
     "/templates/useLocaleHookUsage/",
     "/templates/useMergedRefsHookUsage/",

@@ -3837,6 +3837,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-linkify-links-in-a-comment-thread",
+      "path": "examples/use-linkify/links-in-a-comment-thread",
+      "aliases": []
+    },
+    {
       "name": "example-use-list-focus-recent-files",
       "path": "examples/use-list-focus/recent-files",
       "aliases": []
@@ -4204,6 +4209,11 @@
     {
       "name": "hook-use-link-component",
       "path": "hooks/use-link-component",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-linkify",
+      "path": "hooks/use-linkify",
       "aliases": []
     },
     {
