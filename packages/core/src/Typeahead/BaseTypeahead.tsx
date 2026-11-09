@@ -32,7 +32,8 @@ import React, {
   type RefObject,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {useBusyIndicatorLane} from './busyIndicatorLane';
+import {useBusyIndicatorLane, useIsInputBusy} from './busyIndicatorLane';
+import {useFocusHandoff} from './focusHandoff';
 import {useTrailingKeyDown} from './trailingKeyDown';
 import {useCommittedChoices} from './committedChoicesKey';
 import type {StyleXStyles} from '@stylexjs/stylex';
@@ -722,6 +723,13 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // A wrapper that owns the inline-end lane subscribes through context; see
   // busyIndicatorLane.tsx for why this is not a prop.
   const busyLane = useBusyIndicatorLane();
+  // The wrapper's half of busy: its field value resolving or being saved
+  // (`isLoading`, or a `changeAction` still pending). It reaches only the
+  // combobox's `aria-busy` below; the search lifecycle never reads it.
+  const isInputBusy = useIsInputBusy();
+  // Set by a wrapper that moves focus here to keep the person's place; that
+  // focus opens no suggestions.
+  const focusHandoffRef = useFocusHandoff();
   // Without a wrapper that took the indicator over, this input announces each
   // search's busy start (spec:AST-086 FR8); its Spinner stays named but is not
   // a live region (family:input-fields FR7).
@@ -1446,8 +1454,12 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
 
   // Handle focus
   const handleFocus = useCallback(() => {
+    if (focusHandoffRef?.current) {
+      focusHandoffRef.current = false;
+      return;
+    }
     openIfEligible();
-  }, [openIfEligible]);
+  }, [openIfEligible, focusHandoffRef]);
 
   // Handle click — a click that focuses a previously-unfocused input is
   // already covered by handleFocus. A click on an input that was ALREADY
@@ -1714,7 +1726,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
             : undefined
         }
         aria-autocomplete="list"
-        aria-busy={isLoading || undefined}
+        aria-busy={isLoading || isInputBusy || undefined}
         aria-describedby={inputAriaDescribedBy}
         aria-labelledby={inputAriaLabelledBy}
         aria-disabled={isFocusableDisabled ? 'true' : undefined}

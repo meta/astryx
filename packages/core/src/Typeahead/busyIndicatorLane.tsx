@@ -4,8 +4,8 @@
 
 /**
  * @file busyIndicatorLane.tsx
- * @input A wrapper's loading setter, provided around BaseTypeahead
- * @output Context the base uses to hand its busy state to that wrapper
+ * @input A wrapper's loading setter and its own input-busy flag, provided around BaseTypeahead
+ * @output Context the base uses to hand its busy state to that wrapper, and context the wrapper uses to hand its input-busy state to the base
  * @position Package-internal; not exported from the package entry point
  */
 
@@ -111,4 +111,31 @@ export const BusyIndicatorLaneProvider = BusyIndicatorLaneContext.Provider;
  */
 export function useBusyIndicatorLane(): BusyIndicatorLane | null {
   return use(BusyIndicatorLaneContext);
+}
+
+/**
+ * The wrapper's own value-busy state, sent the other way.
+ *
+ * `isLoading` and a pending `changeAction` mean that the field value is
+ * resolving or being saved. Only the wrapper knows this. The base owns
+ * search busy only. The combobox shows both kinds as one `aria-busy`, so the
+ * wrapper sends its kind down through this context and the base adds it to
+ * the attribute. The search lifecycle does not read it.
+ *
+ * This is a plain context value, not a store entry. The wrapper already
+ * re-renders for the state that makes it, and the base is its child, so no
+ * other component re-renders. The value is false when the base is used
+ * directly.
+ */
+const InputBusyContext = createSharedContext<boolean>(
+  'InputBusyContext',
+  1,
+  false,
+);
+InputBusyContext.displayName = 'InputBusyContext';
+
+export const InputBusyProvider = InputBusyContext.Provider;
+
+export function useIsInputBusy(): boolean {
+  return use(InputBusyContext);
 }

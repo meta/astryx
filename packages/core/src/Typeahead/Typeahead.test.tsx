@@ -27,12 +27,14 @@ import {
   waitFor,
   act,
   cleanup,
+  within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {colorVars} from '../theme/tokens.stylex';
 import {
+  Component,
   createRef,
   Profiler,
   startTransition,
@@ -42,6 +44,7 @@ import {
   useRef,
   useState,
   type ProfilerOnRenderCallback,
+  type ReactNode,
 } from 'react';
 import {FormLayout} from '../FormLayout/FormLayout';
 import {Dialog} from '../Dialog/Dialog';
@@ -55,7 +58,7 @@ import {
 } from './busyIndicatorLane';
 import type {SearchSource, SearchableItem} from './types';
 import {InternationalizationProvider} from '../i18n';
-import {InputGroup} from '../InputGroup';
+import {InputGroup, InputGroupText} from '../InputGroup';
 
 // Store original matches to restore later
 const originalMatches = HTMLElement.prototype.matches;
@@ -2395,6 +2398,46 @@ describe('Typeahead collapsed input tab order', () => {
     expect(screen.getByRole('combobox')).not.toHaveFocus();
   });
 
+  it('hands focus to the input when the parent clears the value under a focused token', () => {
+    const at = (value: SearchableItem | null) => (
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={value}
+        onChange={() => {}}
+      />
+    );
+    const view = render(at(fruits[0]));
+    screen.getByRole('button', {name: /Apple/}).focus();
+    // The token leaves with the value; focus goes to the input that takes its
+    // place rather than falling to the document.
+    view.rerender(at(null));
+    expect(screen.getByRole('combobox')).toHaveFocus();
+  });
+
+  it('opens no suggestions when the handoff focuses a hasEntriesOnFocus input', () => {
+    const bootstrap = vi.fn(() => fruits.slice(0, 3));
+    const onOpenChange = vi.fn();
+    const at = (value: SearchableItem | null) => (
+      <Typeahead
+        label="Fruit"
+        searchSource={{...fruitSource, bootstrap}}
+        value={value}
+        onChange={() => {}}
+        onOpenChange={onOpenChange}
+        hasEntriesOnFocus
+      />
+    );
+    const view = render(at(fruits[0]));
+    screen.getByRole('button', {name: /Apple/}).focus();
+    view.rerender(at(null));
+    const input = screen.getByRole('combobox');
+    expect(input).toHaveFocus();
+    expect(bootstrap).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalledWith(true);
+    expect(input).not.toHaveAttribute('aria-expanded', 'true');
+  });
+
   it('keeps the input in the Tab order when no token is shown', () => {
     render(
       <Typeahead
@@ -3539,5 +3582,1098 @@ describe('Typeahead caller aria-labelledby', () => {
     expect(
       screen.getByRole('combobox', {name: 'Contact Fruit Billing'}),
     ).toBeInTheDocument();
+  });
+});
+
+describe('input busy: isLoading and changeAction', () => {
+  // The input-field family's second busy meaning (docs/families/input-fields.md,
+  // FR5–FR7): `isLoading` and a pending `changeAction` say the field VALUE is
+  // resolving or being saved. A search in flight is the other meaning, owned by
+  // BaseTypeahead. Both surface as the one Spinner in the end lane and one
+  // `aria-busy` on the combobox, never two.
+  const apple = fruits[0];
+
+  /** A source that stays in flight until the test settles it. */
+  const pendingSource = () => {
+    let settle: (items: SearchableItem[]) => void = () => {};
+    return {
+      source: {
+        search: async () =>
+          new Promise<SearchableItem[]>(resolve => {
+            settle = resolve;
+          }),
+        bootstrap: () => [],
+      },
+      settle: (items: SearchableItem[] = []) => settle(items),
+    };
+  };
+
+  const selectApple = async (input: HTMLElement) => {
+    fireEvent.change(input, {target: {value: 'App'}});
+    const option = await screen.findByRole('option', {
+      name: 'Apple',
+      hidden: true,
+    });
+    fireEvent.click(option);
+  };
+
+  const token = (container: HTMLElement) =>
+    container.querySelector('.astryx-token');
+
+  /**
+   * Every Action a test leaves pending. React entangles all async actions in
+   * one instance-wide scope (ReactFiberAsyncAction), so an Action one test
+   * never settles keeps every later test's transition from ever completing.
+   * Settling them here keeps each test's settlement its own.
+   */
+  const pendingActions: (() => void)[][] = [];
+
+  /** Settle a deferred Action and let React finish its transition. */
+  const settleAction = async (resolve: () => void) => {
+    await act(async () => {
+      resolve();
+      // A macrotask rather than a fixed count of microtask hops: two
+      // entangled Actions take more hops to settle than one.
+      await new Promise(r => setTimeout(r, 0));
+    });
+  };
+
+  /** An Action that stays pending until the test settles it, one resolver per call. */
+  const deferredAction = () => {
+    const resolvers: (() => void)[] = [];
+    pendingActions.push(resolvers);
+    const changeAction = vi.fn<(item: SearchableItem | null) => Promise<void>>(
+      async () =>
+        new Promise<void>(resolve => {
+          resolvers.push(resolve);
+        }),
+    );
+    return {changeAction, resolvers};
+  };
+
+  afterEach(async () => {
+    const outstanding = pendingActions.splice(0);
+    await settleAction(() => {
+      outstanding.flat().forEach(resolve => resolve());
+    });
+  });
+
+  it('isLoading marks the value busy without touching the search (FR5)', async () => {
+    const onChange = vi.fn();
+    render(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={null}
+        onChange={onChange}
+        debounceMs={0}
+        isLoading
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    expect(input).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getAllByRole('img', {name: 'Loading'})).toHaveLength(1);
+    // Busy is a presentation, not a lock: the field stays editable and the
+    // source's results stay reachable and selectable.
+    expect(input).not.toBeDisabled();
+    expect(input).not.toHaveAttribute('readonly');
+
+    await selectApple(input);
+    expect(onChange).toHaveBeenCalledWith(apple);
+  });
+
+  it('changes nothing for a caller that passes neither prop', async () => {
+    const onChange = vi.fn();
+    render(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={null}
+        onChange={onChange}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await selectApple(input);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith(apple);
+    expect(input).not.toHaveAttribute('aria-busy');
+    expect(
+      screen.queryByRole('img', {name: 'Loading'}),
+    ).not.toBeInTheDocument();
+  });
+
+  it('runs onChange first, then changeAction with the same proposed value (FR6)', async () => {
+    const order: string[] = [];
+    const onChange = vi.fn((item: SearchableItem | null) => {
+      order.push(`onChange:${item?.id}`);
+    });
+    const changeAction = vi.fn((item: SearchableItem | null) => {
+      order.push(`changeAction:${item?.id}`);
+    });
+    render(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={null}
+        onChange={onChange}
+        changeAction={changeAction}
+        debounceMs={0}
+      />,
+    );
+    await selectApple(screen.getByRole('combobox'));
+    await waitFor(() => {
+      expect(changeAction).toHaveBeenCalledWith(apple);
+    });
+    expect(order).toEqual(['onChange:1', 'changeAction:1']);
+  });
+
+  it('shows the proposed value and busy state until the Action settles, then yields to the prop', async () => {
+    let resolveAction: (() => void) | undefined;
+    const changeAction = vi.fn(
+      async () =>
+        new Promise<void>(resolve => {
+          resolveAction = resolve;
+        }),
+    );
+    // The parent never accepts the value: the proposed token must show while
+    // the Action is pending and give way to the prop once it settles.
+    const {container} = render(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={null}
+        onChange={() => {}}
+        changeAction={changeAction}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await selectApple(input);
+
+    await waitFor(() => {
+      expect(token(container)).toHaveTextContent('Apple');
+    });
+    expect(input).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getAllByRole('img', {name: 'Loading'})).toHaveLength(1);
+
+    await act(async () => {
+      resolveAction?.();
+      await Promise.resolve();
+    });
+    expect(token(container)).toBeNull();
+    expect(input).not.toHaveAttribute('aria-busy');
+    expect(
+      screen.queryByRole('img', {name: 'Loading'}),
+    ).not.toBeInTheDocument();
+  });
+
+  it('keeps the value once the parent accepts it', async () => {
+    let resolveAction: (() => void) | undefined;
+    const changeAction = vi.fn(
+      async () =>
+        new Promise<void>(resolve => {
+          resolveAction = resolve;
+        }),
+    );
+    function Harness() {
+      const [value, setValue] = useState<SearchableItem | null>(null);
+      return (
+        <Typeahead
+          label="Fruit"
+          searchSource={fruitSource}
+          value={value}
+          onChange={setValue}
+          changeAction={changeAction}
+          debounceMs={0}
+        />
+      );
+    }
+    const {container} = render(<Harness />);
+    const input = screen.getByRole('combobox');
+    await selectApple(input);
+    await waitFor(() => {
+      expect(token(container)).toHaveTextContent('Apple');
+    });
+
+    await act(async () => {
+      resolveAction?.();
+      await Promise.resolve();
+    });
+    expect(token(container)).toHaveTextContent('Apple');
+    expect(input).not.toHaveAttribute('aria-busy');
+    expect(
+      screen.queryByRole('img', {name: 'Loading'}),
+    ).not.toBeInTheDocument();
+  });
+
+  it('routes the clear button through the Action too (FR6, no clear-path gap)', async () => {
+    const order: string[] = [];
+    const onChange = vi.fn((item: SearchableItem | null) => {
+      order.push(`onChange:${item?.id ?? 'null'}`);
+    });
+    const changeAction = vi.fn((item: SearchableItem | null) => {
+      order.push(`changeAction:${item?.id ?? 'null'}`);
+    });
+    render(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={apple}
+        onChange={onChange}
+        changeAction={changeAction}
+        hasClear
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Clear selection'}));
+    await waitFor(() => {
+      expect(changeAction).toHaveBeenCalledWith(null);
+    });
+    expect(order).toEqual(['onChange:null', 'changeAction:null']);
+  });
+
+  it('enters edit mode with the proposed value, not the stale prop', async () => {
+    const {changeAction} = deferredAction();
+    const {container} = render(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={null}
+        onChange={() => {}}
+        changeAction={changeAction}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await selectApple(input);
+    await waitFor(() => {
+      expect(token(container)).toHaveTextContent('Apple');
+    });
+
+    fireEvent.click(token(container) as HTMLElement);
+    await waitFor(() => {
+      expect(input).toHaveValue('Apple');
+    });
+  });
+
+  it('paints one Spinner and one aria-busy when a search and the value are busy at once (FR7)', async () => {
+    const {source, settle} = pendingSource();
+    render(
+      <Typeahead
+        label="Fruit"
+        searchSource={source}
+        value={null}
+        onChange={() => {}}
+        debounceMs={0}
+        isLoading
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: 'App'}});
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-busy', 'true');
+    });
+    expect(screen.getAllByRole('img', {name: 'Loading'})).toHaveLength(1);
+
+    // The search settles; the value is still busy, so the one indicator stays.
+    await act(async () => {
+      settle();
+      await Promise.resolve();
+    });
+    expect(screen.getAllByRole('img', {name: 'Loading'})).toHaveLength(1);
+    expect(input).toHaveAttribute('aria-busy', 'true');
+  });
+
+  /** Click the token, then wait for edit mode to seed the input with its label. */
+  const enterEditMode = async (
+    container: HTMLElement,
+    input: HTMLElement,
+    label: string,
+  ) => {
+    fireEvent.click(token(container) as HTMLElement);
+    await waitFor(() => {
+      expect(input).toHaveValue(label);
+    });
+  };
+
+  // In edit mode the label's search opens the list: the first Escape hides
+  // it, and the second leaves edit mode.
+  const escapeEditMode = async (input: HTMLElement) => {
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+    });
+    fireEvent.keyDown(input, {key: 'Escape'});
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.keyDown(input, {key: 'Escape'});
+  };
+
+  it('runs a second selection at once while the first Action is pending and stays busy until both settle', async () => {
+    const onChange = vi.fn<(item: SearchableItem | null) => void>();
+    const {changeAction, resolvers} = deferredAction();
+    const {container} = render(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={null}
+        onChange={onChange}
+        changeAction={changeAction}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await selectApple(input);
+    await waitFor(() => {
+      expect(token(container)).toHaveTextContent('Apple');
+    });
+
+    // Re-open from the proposed token and pick something else before the
+    // first Action has settled.
+    await enterEditMode(container, input, 'Apple');
+    fireEvent.change(input, {target: {value: 'Ban'}});
+    fireEvent.click(
+      await screen.findByRole('option', {name: 'Banana', hidden: true}),
+    );
+    await waitFor(() => {
+      expect(token(container)).toHaveTextContent('Banana');
+    });
+    // The second Action does not wait behind the first.
+    expect(changeAction.mock.calls.map(call => call[0])).toEqual([
+      apple,
+      fruits[1],
+    ]);
+    expect(onChange.mock.calls.map(call => call[0])).toEqual([
+      apple,
+      fruits[1],
+    ]);
+    expect(input).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getAllByRole('img', {name: 'Loading'})).toHaveLength(1);
+
+    // One of two pending Actions settling is not "settled": the latest
+    // proposal stays and so does busy.
+    await settleAction(resolvers[0]);
+    expect(token(container)).toHaveTextContent('Banana');
+    expect(input).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getAllByRole('img', {name: 'Loading'})).toHaveLength(1);
+
+    await settleAction(resolvers[1]);
+    expect(token(container)).toBeNull();
+    expect(input).not.toHaveAttribute('aria-busy');
+    expect(
+      screen.queryByRole('img', {name: 'Loading'}),
+    ).not.toBeInTheDocument();
+  });
+
+  it('clears at once while a selection Action is still pending, running changeAction(null) immediately', async () => {
+    const {changeAction, resolvers} = deferredAction();
+    function Harness() {
+      const [value, setValue] = useState<SearchableItem | null>(null);
+      return (
+        <Typeahead
+          label="Fruit"
+          searchSource={fruitSource}
+          value={value}
+          onChange={setValue}
+          changeAction={changeAction}
+          debounceMs={0}
+          hasClear
+        />
+      );
+    }
+    const {container} = render(<Harness />);
+    const input = screen.getByRole('combobox');
+    await selectApple(input);
+    await waitFor(() => {
+      expect(token(container)).toHaveTextContent('Apple');
+    });
+
+    fireEvent.click(screen.getByRole('button', {name: 'Clear selection'}));
+    expect(changeAction.mock.calls.map(call => call[0])).toEqual([apple, null]);
+    expect(token(container)).toBeNull();
+    expect(input).toHaveFocus();
+    // The parent accepted the clear synchronously, so nothing diverges.
+    expect(input).not.toHaveAttribute('aria-busy');
+    expect(
+      screen.queryByRole('img', {name: 'Loading'}),
+    ).not.toBeInTheDocument();
+
+    await settleAction(() => {
+      resolvers[0]();
+      resolvers[1]();
+    });
+    expect(token(container)).toBeNull();
+    expect(input).not.toHaveAttribute('aria-busy');
+  });
+
+  it('gates the clear button on the accepted value, not the proposed one, on both Action paths', async () => {
+    const {changeAction} = deferredAction();
+    // Selection path: a proposal the parent has not accepted offers no clear.
+    const first = render(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={null}
+        onChange={() => {}}
+        changeAction={changeAction}
+        debounceMs={0}
+        hasClear
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await selectApple(input);
+    await waitFor(() => {
+      expect(token(first.container)).toHaveTextContent('Apple');
+    });
+    expect(input).toHaveAttribute('aria-busy', 'true');
+    expect(
+      screen.queryByRole('button', {name: 'Clear selection'}),
+    ).not.toBeInTheDocument();
+    // Once the parent accepts it, the clear button follows the prop.
+    first.rerender(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={apple}
+        onChange={() => {}}
+        changeAction={changeAction}
+        debounceMs={0}
+        hasClear
+      />,
+    );
+    expect(
+      screen.getByRole('button', {name: 'Clear selection'}),
+    ).toBeInTheDocument();
+    expect(input).not.toHaveAttribute('aria-busy');
+    first.unmount();
+
+    // Clear path: the token leaves with the proposal, the clear button stays
+    // with the prop (Selector parity).
+    const second = render(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={apple}
+        onChange={() => {}}
+        changeAction={changeAction}
+        hasClear
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Clear selection'}));
+    await waitFor(() => {
+      expect(token(second.container)).toBeNull();
+    });
+    expect(screen.getByRole('combobox')).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getAllByRole('img', {name: 'Loading'})).toHaveLength(1);
+    expect(
+      screen.getByRole('button', {name: 'Clear selection'}),
+    ).toBeInTheDocument();
+  });
+
+  it('marks the proposed item selected in the listbox while its Action is pending', async () => {
+    const {changeAction} = deferredAction();
+    const {container} = render(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={null}
+        onChange={() => {}}
+        changeAction={changeAction}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await selectApple(input);
+    await waitFor(() => {
+      expect(token(container)).toHaveTextContent('Apple');
+    });
+
+    await enterEditMode(container, input, 'Apple');
+    // Widen the query so the list holds more than the proposed item.
+    fireEvent.change(input, {target: {value: 'a'}});
+    const proposed = await screen.findByRole('option', {
+      name: 'Apple',
+      hidden: true,
+    });
+    expect(proposed).toHaveAttribute('aria-selected', 'true');
+    expect(
+      screen.getByRole('option', {name: 'Banana', hidden: true}),
+    ).toHaveAttribute('aria-selected', 'false');
+    expect(input).toHaveAttribute('aria-busy', 'true');
+  });
+
+  it('holds busy while either isLoading or a pending Action is active, and releases only when both do', async () => {
+    const {changeAction, resolvers} = deferredAction();
+    const at = (isLoading: boolean) => (
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={null}
+        onChange={() => {}}
+        changeAction={changeAction}
+        debounceMs={0}
+        isLoading={isLoading}
+      />
+    );
+    const view = render(at(false));
+    const input = screen.getByRole('combobox');
+    await selectApple(input);
+    await waitFor(() => {
+      expect(token(view.container)).toHaveTextContent('Apple');
+    });
+    expect(input).toHaveAttribute('aria-busy', 'true');
+
+    view.rerender(at(true));
+    expect(input).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getAllByRole('img', {name: 'Loading'})).toHaveLength(1);
+
+    // The Action settles (the parent never accepted, so the proposal leaves)
+    // but isLoading still holds: still busy, still one indicator.
+    await settleAction(resolvers[0]);
+    expect(token(view.container)).toBeNull();
+    expect(input).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getAllByRole('img', {name: 'Loading'})).toHaveLength(1);
+
+    view.rerender(at(false));
+    expect(input).not.toHaveAttribute('aria-busy');
+    expect(
+      screen.queryByRole('img', {name: 'Loading'}),
+    ).not.toBeInTheDocument();
+  });
+
+  it('keeps the one Spinner and aria-busy when isLoading turns off while a search is still in flight (FR7)', async () => {
+    const {source, settle} = pendingSource();
+    const at = (isLoading: boolean) => (
+      <Typeahead
+        label="Fruit"
+        searchSource={source}
+        value={null}
+        onChange={() => {}}
+        debounceMs={0}
+        isLoading={isLoading}
+      />
+    );
+    const view = render(at(true));
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: 'App'}});
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-busy', 'true');
+    });
+
+    // The value settles first; the search-busy half alone keeps the indicator.
+    view.rerender(at(false));
+    expect(input).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getAllByRole('img', {name: 'Loading'})).toHaveLength(1);
+
+    await act(async () => {
+      settle();
+      await Promise.resolve();
+    });
+    expect(input).not.toHaveAttribute('aria-busy');
+    expect(
+      screen.queryByRole('img', {name: 'Loading'}),
+    ).not.toBeInTheDocument();
+  });
+
+  it('restores the proposed token on Escape while the Action is pending, and none once it is withdrawn', async () => {
+    const onChange = vi.fn();
+    const {changeAction, resolvers} = deferredAction();
+    const {container} = render(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={null}
+        onChange={onChange}
+        changeAction={changeAction}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await selectApple(input);
+    await waitFor(() => {
+      expect(token(container)).toHaveTextContent('Apple');
+    });
+
+    // Escape in edit mode restores the pre-edit presentation: the proposed
+    // token, not the stale prop, and the Action is still the one pending.
+    await enterEditMode(container, input, 'Apple');
+    await escapeEditMode(input);
+    expect(token(container)).toHaveTextContent('Apple');
+    expect(input).toHaveAttribute('tabindex', '-1');
+    expect(input).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getAllByRole('img', {name: 'Loading'})).toHaveLength(1);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(changeAction).toHaveBeenCalledTimes(1);
+
+    // Withdrawn while editing (the parent never accepted it): leaving edit
+    // mode has no token to restore and resurrects none from the edit state.
+    await enterEditMode(container, input, 'Apple');
+    await settleAction(resolvers[0]);
+    await escapeEditMode(input);
+    expect(token(container)).toBeNull();
+    expect(input).not.toHaveAttribute('tabindex', '-1');
+    expect(input).not.toHaveAttribute('aria-busy');
+    expect(
+      screen.queryByRole('img', {name: 'Loading'}),
+    ).not.toBeInTheDocument();
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a controlled replacement at once while the Action is pending and ends that proposal's busy state", async () => {
+    const {changeAction, resolvers} = deferredAction();
+    const at = (value: SearchableItem | null) => (
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={value}
+        onChange={() => {}}
+        changeAction={changeAction}
+        debounceMs={0}
+      />
+    );
+    const view = render(at(null));
+    const input = screen.getByRole('combobox');
+    await selectApple(input);
+    await waitFor(() => {
+      expect(token(view.container)).toHaveTextContent('Apple');
+    });
+    expect(input).toHaveAttribute('aria-busy', 'true');
+
+    // A different item from the parent mid-flight (external validation,
+    // another controlled update) replaces the proposal at once, before the
+    // old Action settles, and that proposal no longer holds the field busy:
+    // optimism ends when the controlled value accepts or replaces it
+    // (input-fields.md FR6).
+    view.rerender(at(fruits[1]));
+    expect(token(view.container)).toHaveTextContent('Banana');
+    expect(input).not.toHaveAttribute('aria-busy');
+    expect(
+      screen.queryByRole('img', {name: 'Loading'}),
+    ).not.toBeInTheDocument();
+    expect(changeAction).toHaveBeenCalledTimes(1);
+
+    // The old Action settling later changes nothing the user can see.
+    await settleAction(resolvers[0]);
+    expect(token(view.container)).toHaveTextContent('Banana');
+    expect(input).not.toHaveAttribute('aria-busy');
+    // Edit mode reads the replacement, not the superseded proposal.
+    await enterEditMode(view.container, input, 'Banana');
+  });
+
+  it('keeps the proposal and busy state when the parent re-renders the same item as a fresh object', async () => {
+    const {changeAction, resolvers} = deferredAction();
+    // A parent mapping its rows (`{id: row.id, label: row.name}`) passes a
+    // new object for the same item on every render. That is not a
+    // replacement: item identity is its `id`, as for the listbox selection.
+    const at = (value: SearchableItem | null) => (
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={value}
+        onChange={() => {}}
+        changeAction={changeAction}
+        debounceMs={0}
+      />
+    );
+    const view = render(at({...fruits[1]}));
+    const input = screen.getByRole('combobox');
+    await enterEditMode(view.container, input, 'Banana');
+    await selectApple(input);
+    await waitFor(() => {
+      expect(token(view.container)).toHaveTextContent('Apple');
+    });
+
+    view.rerender(at({...fruits[1]}));
+    expect(token(view.container)).toHaveTextContent('Apple');
+    expect(input).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getAllByRole('img', {name: 'Loading'})).toHaveLength(1);
+    expect(changeAction).toHaveBeenCalledTimes(1);
+
+    // Not accepted: the proposal leaves as its Action settles.
+    await settleAction(resolvers[0]);
+    expect(token(view.container)).toHaveTextContent('Banana');
+    expect(input).not.toHaveAttribute('aria-busy');
+  });
+
+  it('returns focus to the input when an unaccepted selection Action withdraws the focused token', async () => {
+    const {changeAction, resolvers} = deferredAction();
+    const {container} = render(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={null}
+        onChange={() => {}}
+        changeAction={changeAction}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await selectApple(input);
+    // The post-selection frame hands focus to the proposed token.
+    await act(async () => {
+      await new Promise(r => requestAnimationFrame(r));
+    });
+    expect(screen.getByRole('button', {name: /Apple/})).toHaveFocus();
+
+    // Not accepted: the token leaves with its proposal, and focus moves to
+    // the input that takes its place instead of falling to the document.
+    await settleAction(resolvers[0]);
+    expect(token(container)).toBeNull();
+    expect(input).toHaveFocus();
+  });
+
+  it('opens no suggestions when an unaccepted Action hands focus to a hasEntriesOnFocus input', async () => {
+    const {changeAction, resolvers} = deferredAction();
+    const onOpenChange = vi.fn();
+    const {container} = render(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={null}
+        onChange={() => {}}
+        changeAction={changeAction}
+        onOpenChange={onOpenChange}
+        hasEntriesOnFocus
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await selectApple(input);
+    await act(async () => {
+      await new Promise(r => requestAnimationFrame(r));
+    });
+    expect(screen.getByRole('button', {name: /Apple/})).toHaveFocus();
+    expect(input).not.toHaveAttribute('aria-expanded', 'true');
+    onOpenChange.mockClear();
+
+    await settleAction(resolvers[0]);
+    expect(token(container)).toBeNull();
+    expect(input).toHaveFocus();
+    await act(async () => {
+      await new Promise(r => setTimeout(r, 20));
+    });
+    expect(onOpenChange).not.toHaveBeenCalledWith(true);
+    expect(input).not.toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('moves focus to the restored token when a clear Action is not accepted', async () => {
+    const {changeAction, resolvers} = deferredAction();
+    const {container} = render(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={apple}
+        onChange={() => {}}
+        changeAction={changeAction}
+        hasClear
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.click(screen.getByRole('button', {name: 'Clear selection'}));
+    await waitFor(() => {
+      expect(token(container)).toBeNull();
+    });
+    expect(input).toHaveFocus();
+
+    // Not accepted: the token comes back over the input, which is hidden and
+    // out of the Tab order again, so focus moves to the token.
+    await settleAction(resolvers[0]);
+    expect(token(container)).toHaveTextContent('Apple');
+    expect(input).toHaveAttribute('tabindex', '-1');
+    expect(screen.getByRole('button', {name: /Apple/})).toHaveFocus();
+    expect(input).not.toHaveFocus();
+  });
+
+  it('keeps busy feedback while focusable-disabled and blocks every Action path', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const changeAction = vi.fn();
+    const {container, unmount} = render(
+      <Typeahead
+        label="Assignee"
+        description="Pick a fruit"
+        status={{type: 'error', message: 'Selection required'}}
+        searchSource={fruitSource}
+        value={apple}
+        onChange={onChange}
+        changeAction={changeAction}
+        isDisabled
+        disabledMessage="You need the Editor role"
+        isLoading
+        hasClear
+        hasEntriesOnFocus
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    // Busy is presentation, not a lock, and the reason stays reachable (FR4,
+    // FR5): the combobox is perceivable, busy, and blocked, not natively
+    // disabled.
+    expect(input).toHaveAttribute('aria-busy', 'true');
+    expect(input).toHaveAttribute('aria-disabled', 'true');
+    expect(input).toHaveAttribute('readonly');
+    expect(input).not.toBeDisabled();
+    expect(screen.getAllByRole('img', {name: 'Loading'})).toHaveLength(1);
+    expect(
+      screen.queryByRole('button', {name: 'Clear selection'}),
+    ).not.toBeInTheDocument();
+    // The Spinner is never a description: description, status, reason only.
+    const tooltip = screen.getByRole('tooltip', {hidden: true});
+    expect(input.getAttribute('aria-describedby')?.split(' ')).toEqual([
+      screen.getByText('Pick a fruit').closest('[id]')?.id,
+      screen.getByText('Selection required').closest('[id]')?.id,
+      tooltip.id,
+    ]);
+
+    // A disabled token lets the pointer fall through to the field (Token
+    // sets pointer-events: none), so the click paths are the token and the
+    // field itself; the keyboard reaches the focused input.
+    fireEvent.click(token(container) as HTMLElement);
+    fireEvent.click(
+      container.querySelector('.astryx-typeahead') as HTMLElement,
+    );
+    input.focus();
+    await user.keyboard('App');
+    expect(input).toHaveValue('');
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    // ArrowDown must not open the entries shown on focus, and Enter must not
+    // select one: the readOnly input still receives keys.
+    await user.keyboard('{ArrowDown}');
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 60));
+    });
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      screen.queryByRole('option', {hidden: true}),
+    ).not.toBeInTheDocument();
+    await user.keyboard('{Enter}');
+    expect(token(container)).toHaveTextContent('Apple');
+    expect(onChange).not.toHaveBeenCalled();
+    expect(changeAction).not.toHaveBeenCalled();
+    expect(input).toHaveAttribute('aria-busy', 'true');
+    unmount();
+
+    // Without a reason the input keeps its tab stop and is still busy.
+    render(
+      <Typeahead
+        label="Assignee"
+        searchSource={fruitSource}
+        value={apple}
+        onChange={onChange}
+        isDisabled
+        isLoading
+        hasClear
+      />,
+    );
+    const disabled = screen.getByRole('combobox');
+    expect(disabled).not.toBeDisabled();
+    expect(disabled).toHaveAttribute('aria-disabled', 'true');
+    expect(disabled).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getAllByRole('img', {name: 'Loading'})).toHaveLength(1);
+    expect(
+      screen.queryByRole('button', {name: 'Clear selection'}),
+    ).not.toBeInTheDocument();
+  });
+
+  it('surfaces a rejected changeAction to the nearest error boundary after onChange, without swallowing it', async () => {
+    class Boundary extends Component<
+      {children: ReactNode},
+      {error: Error | null}
+    > {
+      state: {error: Error | null} = {error: null};
+      static getDerivedStateFromError(error: Error) {
+        return {error};
+      }
+      render(): ReactNode {
+        return this.state.error ? (
+          <p>fallback: {this.state.error.message}</p>
+        ) : (
+          this.props.children
+        );
+      }
+    }
+    // React reports the caught error to the console; keep the run quiet.
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const onChange = vi.fn();
+      const changeAction = vi.fn(async () => {
+        throw new Error('save failed');
+      });
+      render(
+        <Boundary>
+          <Typeahead
+            label="Fruit"
+            searchSource={fruitSource}
+            value={null}
+            onChange={onChange}
+            changeAction={changeAction}
+            debounceMs={0}
+          />
+        </Boundary>,
+      );
+      await selectApple(screen.getByRole('combobox'));
+      await waitFor(() => {
+        expect(screen.getByText('fallback: save failed')).toBeInTheDocument();
+      });
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(changeAction).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('leaves no stranded busy state after a synchronous, void-returning changeAction', async () => {
+    const seen: (SearchableItem | null)[] = [];
+    const changeAction = vi.fn((item: SearchableItem | null) => {
+      seen.push(item);
+    });
+    const {container} = render(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={null}
+        onChange={() => {}}
+        changeAction={changeAction}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await selectApple(input);
+    await settleAction(() => {});
+    expect(seen).toEqual([apple]);
+    // Nothing was awaited, so the transition is over: the proposal yields to
+    // the prop and the field is neither busy nor collapsed.
+    expect(token(container)).toBeNull();
+    expect(input).not.toHaveAttribute('aria-busy');
+    expect(input).not.toHaveAttribute('tabindex', '-1');
+    expect(
+      screen.queryByRole('img', {name: 'Loading'}),
+    ).not.toBeInTheDocument();
+  });
+
+  it('settles cleanly when unmounted while an Action is pending', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const uncaught = vi.fn();
+    window.addEventListener('error', uncaught);
+    try {
+      const {changeAction, resolvers} = deferredAction();
+      const {unmount} = render(
+        <Typeahead
+          label="Fruit"
+          searchSource={fruitSource}
+          value={null}
+          onChange={() => {}}
+          changeAction={changeAction}
+          debounceMs={0}
+        />,
+      );
+      await selectApple(screen.getByRole('combobox'));
+      // Before the post-selection frame that focuses the token.
+      unmount();
+      await act(async () => {
+        await new Promise(r => requestAnimationFrame(r));
+      });
+      await settleAction(resolvers[0]);
+      expect(changeAction).toHaveBeenCalledTimes(1);
+      expect(errorSpy).not.toHaveBeenCalled();
+      expect(uncaught).not.toHaveBeenCalled();
+      expect(document.body.querySelector('.astryx-token')).toBeNull();
+    } finally {
+      window.removeEventListener('error', uncaught);
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('names the value-busy Spinner from the provider catalog, not a hardcoded fallback', () => {
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        overrides={{fr: {'@astryx.typeahead.loading': 'Chargement'}}}>
+        <Typeahead
+          label="Fruit"
+          searchSource={fruitSource}
+          value={null}
+          onChange={() => {}}
+          isLoading
+        />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByRole('img', {name: 'Chargement'})).toBeInTheDocument();
+    expect(
+      screen.queryByRole('img', {name: 'Loading'}),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox')).toHaveAttribute('aria-busy', 'true');
+  });
+
+  it('paints one named Spinner and aria-busy inside an InputGroup row without a nested Field', () => {
+    const {container} = render(
+      <InputGroup label="Favorite fruit">
+        <InputGroupText>Fruit</InputGroupText>
+        <Typeahead
+          label="Selection"
+          isLabelHidden
+          searchSource={fruitSource}
+          value={apple}
+          onChange={() => {}}
+          isLoading
+          hasClear
+        />
+      </InputGroup>,
+    );
+    const group = screen.getByRole('group', {name: 'Favorite fruit'});
+    const spinner = within(group).getByRole('img', {name: 'Loading'});
+    expect(within(group).getAllByRole('img', {name: 'Loading'})).toHaveLength(
+      1,
+    );
+    expect(within(group).getByRole('combobox')).toHaveAttribute(
+      'aria-busy',
+      'true',
+    );
+    // Busy and clear stay one end lane, inside the field, on the group path.
+    const clear = within(group).getByRole('button', {name: 'Clear selection'});
+    expect(spinner.parentElement).toBe(clear.parentElement);
+    expect(
+      container.querySelector('.astryx-typeahead')?.contains(spinner),
+    ).toBe(true);
+    expect(container.querySelectorAll('.astryx-field')).toHaveLength(1);
+  });
+
+  it('does not run changeAction or show a proposed token on a composing (IME) Enter', async () => {
+    const onChange = vi.fn();
+    const {changeAction} = deferredAction();
+    const {container} = render(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={null}
+        onChange={onChange}
+        changeAction={changeAction}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: 'App'}});
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    // The Enter that commits an IME candidate (isComposing, or legacy
+    // keyCode 229) is not a selection: no onChange, no Action, no proposal.
+    fireEvent.keyDown(input, {key: 'Enter', isComposing: true});
+    fireEvent.keyDown(input, {key: 'Enter', keyCode: 229});
+    expect(onChange).not.toHaveBeenCalled();
+    expect(changeAction).not.toHaveBeenCalled();
+    expect(token(container)).toBeNull();
+    expect(input).not.toHaveAttribute('aria-busy');
+    expect(input).toHaveValue('App');
+
+    // A real Enter runs the whole path: onChange, then the Action, then the
+    // proposed token.
+    fireEvent.keyDown(input, {key: 'Enter'});
+    await waitFor(() => {
+      expect(changeAction).toHaveBeenCalledWith(apple);
+    });
+    expect(onChange).toHaveBeenCalledWith(apple);
+    await waitFor(() => {
+      expect(token(container)).toHaveTextContent('Apple');
+    });
   });
 });

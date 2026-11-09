@@ -348,6 +348,61 @@ export const Loading: Story = {
 };
 
 /**
+ * The other busy meaning. The search is idle; the VALUE is being resolved or
+ * saved, which is what the input-field family's `isLoading` describes. The
+ * field stays editable and the source's results stay selectable.
+ */
+export const InputBusy: Story = {
+  render: () => {
+    const [value, setValue] = useState<SearchableItem | null>(fruits[0]);
+    return (
+      <div style={{width: 320}}>
+        <Typeahead
+          label="Fruit"
+          placeholder="Type to search…"
+          searchSource={fruitSource}
+          value={value}
+          onChange={setValue}
+          hasClear
+          isLoading
+        />
+      </div>
+    );
+  },
+  name: 'Input busy (isLoading)',
+};
+
+/**
+ * `changeAction` after every selection and clear. The proposed value shows at
+ * once, and the field is busy until the controlled value accepts or replaces
+ * it — here the parent commits only once the Action settles, the way a server
+ * round-trip would, so the busy state is visible. A parent that sets the value
+ * synchronously in `onChange` accepts it immediately and is never busy.
+ */
+export const TransitionAction: Story = {
+  render: () => {
+    const [value, setValue] = useState<SearchableItem | null>(null);
+    return (
+      <div style={{width: 320}}>
+        <Typeahead
+          label="Fruit"
+          placeholder="Type to search…"
+          searchSource={fruitSource}
+          value={value}
+          onChange={() => {}}
+          changeAction={async item => {
+            await new Promise<void>(resolve => setTimeout(resolve, 1200));
+            setValue(item);
+          }}
+          hasClear
+        />
+      </div>
+    );
+  },
+  name: 'Transition action (changeAction)',
+};
+
+/**
  * People the page already has, and a directory server that answers later.
  * The source shows its local matches through `context.update` at once and
  * returns the server answer with the shown rows first and new rows after
