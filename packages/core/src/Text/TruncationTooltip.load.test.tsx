@@ -113,4 +113,42 @@ describe('TruncationTooltip loading', () => {
       {timeout: 3000},
     );
   });
+  it('mounts the tooltip on a text whose own load failed, after another text loaded the module', async () => {
+    withOverflowAndPopover();
+    loads.tooltipFailures = 1;
+    const {Text} = await import('./Text');
+    render(
+      <div>
+        <Text type="body" maxLines={1}>
+          First {LABEL}
+        </Text>
+        <Text type="body" maxLines={1}>
+          Second {LABEL}
+        </Text>
+      </div>,
+    );
+    await settle();
+    expect(loads.tooltip).toBe(1);
+    const first = screen.getByText(`First ${LABEL}`);
+    const second = screen.getByText(`Second ${LABEL}`);
+
+    // The second text's hover loads the module for the page.
+    fireEvent.pointerEnter(second, {pointerType: 'mouse'});
+    await waitFor(
+      () => {
+        expect(second).toHaveAttribute('aria-describedby');
+      },
+      {timeout: 3000},
+    );
+
+    // The first text, whose own load failed, takes the loaded module.
+    fireEvent.pointerEnter(first, {pointerType: 'mouse'});
+    await waitFor(
+      () => {
+        expect(first).toHaveAttribute('aria-describedby');
+      },
+      {timeout: 3000},
+    );
+    expect(loads.tooltip).toBe(2);
+  });
 });

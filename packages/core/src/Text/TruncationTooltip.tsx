@@ -104,12 +104,11 @@ export function useTruncationTooltipInterest(
       state.tapEvent = tapEvent;
       setIsWanted(true);
       // After a failed load, this interaction asks the module loader again.
-      if (tooltipModule.loaded() == null) {
-        tooltipModule.load().then(
-          loaded => setTooltip(() => loaded.Tooltip),
-          () => {},
-        );
-      }
+      // The loader returns its cached module when another element loaded it.
+      tooltipModule.load().then(
+        loaded => setTooltip(() => loaded.Tooltip),
+        () => {},
+      );
     },
     [isEnabled],
   );
