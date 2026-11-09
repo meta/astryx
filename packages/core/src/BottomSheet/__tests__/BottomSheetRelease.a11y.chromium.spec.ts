@@ -301,10 +301,18 @@ test('a mouse close under reduced motion moves the sheet no further', async ({
   await page.evaluate(() => {
     const frames = {
       samples: [] as [number, number][],
+      moveAt: Number.NEGATIVE_INFINITY,
       upAt: Number.POSITIVE_INFINITY,
       done: false,
     };
     (window as unknown as {sheetFrames: typeof frames}).sheetFrames = frames;
+    window.addEventListener(
+      'pointermove',
+      () => {
+        frames.moveAt = performance.now();
+      },
+      {capture: true},
+    );
     window.addEventListener(
       'pointerup',
       () => {
@@ -326,7 +334,7 @@ test('a mouse close under reduced motion moves the sheet no further', async ({
   const cdp = await page.context().newCDPSession(page);
   // 150 px in 50 ms is 3,000 px/s, so the mouse release projects past the
   // dismiss line even when event delivery is slow.
-  await mouseDrag(cdp, sheet, 150, 50);
+  await mouseDrag(cdp, sheet, 150, 50, 400);
   // While the dialog closes, no drag exit plays: no inline transition and no
   // animation moves the sheet.
   const exitPlayed = await page.evaluate(async () => {
@@ -352,7 +360,6 @@ test('a mouse close under reduced motion moves the sheet no further', async ({
     return played;
   });
   expect(exitPlayed).toBe(false);
-  await expect(dialog).toBeHidden({timeout: 2_000});
   const read = async () =>
     page.evaluate(
       () =>
@@ -360,12 +367,22 @@ test('a mouse close under reduced motion moves the sheet no further', async ({
           window as unknown as {
             sheetFrames: {
               samples: [number, number][];
+              moveAt: number;
               upAt: number;
               done: boolean;
             };
           }
         ).sheetFrames,
     );
+  // The sheet drops aria-modal when the release asks it to close. A release
+  // read as still projects short of the dismiss line and keeps it.
+  const lift = await read();
+  const gap = Math.round(lift.upAt - lift.moveAt);
+  await expect(
+    dialog,
+    `the release did not ask the sheet to close: the drag read as a still release (${gap} ms from the last move to the lift), so its projection stayed short of the dismiss line`,
+  ).not.toHaveAttribute('aria-modal', 'true', {timeout: 2_000});
+  await expect(dialog).toBeHidden({timeout: 2_000});
   await expect
     .poll(async () => (await read()).done, {timeout: 2_000})
     .toBe(true);
@@ -388,6 +405,7 @@ async function mouseDrag(
   sheet: Locator,
   distance: number,
   ms: number,
+  holdMs = 1,
 ) {
   const box = await sheet.boundingBox();
   if (box == null) {
@@ -423,7 +441,7 @@ async function mouseDrag(
     button: 'left',
     buttons: 0,
     clickCount: 1,
-    timestamp: base + (ms + 1) / 1000,
+    timestamp: base + (ms + holdMs) / 1000,
   });
 }
 
