@@ -484,6 +484,9 @@ the rest:
   - **a status line** is allowed: at most one line, such as
     `Status: in progress`, that says only that the record is still in
     progress.
+  - **a lifecycle field** is allowed: a field a knowledge template requires,
+    such as a system spec's `phase` or the `Released default preserved`
+    line, states the record's own lifecycle, not build progress, and stays.
   - Implementation plans (`plan.md`) track work and are outside this rule.
 
 ## Path applicability
@@ -620,8 +623,9 @@ Then write the authoritative body:
   in its description before review.
 - State intended behavior and decisions, not project status: no build status
   and no work order (INV32). A requirement gap reads
-  `<FR or INV id> gap: <observable mismatch>`, and one line such as
-  `Status: in progress` may say the record is still in progress.
+  `<FR or INV id> gap: <observable mismatch>`, one line such as
+  `Status: in progress` may say the record is still in progress, and the
+  lifecycle fields a template requires stay.
 - Use familiar words and short, direct sentences.
 - State each rule fully once, beside the conditions and exceptions that control it.
   Later sections cite its ID or canonical owner instead of restating the prose.
@@ -1380,7 +1384,7 @@ Rejected: a check that fails on status phrases, because the same words also desc
 | INV28, DEC-16        | `apps/docsite/src/lib/exampleCoverage.mjs` and `apps/docsite/src/__tests__/example-coverage.test.ts` (advisory: the report prints and never gates), plus review of each hook example against INV28's criteria                                                                                                                                                                                                                              | The report omits a public hook that has no hook doc or no conforming example block, or a missing or non-conforming hook example fails a merge or release                                                                                                                                                                                                                                                                           |
 | INV29                | Baselined lint over comments in package source (not built): record ids, pull request and issue numbers, date stamps, and long quote blocks fail in new comments, and existing sites are baselined. Review reports narration and file headers past about 12 lines as non-blocking findings. Cleanup lands in per-area pull requests with no behavior change, each with a `pnpm specs:for` comparison of every touched file before and after | A new comment cites a record, pull request, issue, or date, quotes a record, or narrates the code; a header grows past about 12 lines, with no lint failure or review finding; removing a comment drops a record or cited claim from a file's `pnpm specs:for` result because that comment was the file's only link to it; or cleanup removes or rewrites a directive a tool reads, such as a `@pr-a11y` line                      |
 | INV30, DEC-17        | Human-owner review of each new external URL in a pull request from an author outside the team, enforced by review and merge tooling outside the repository; no repository CI check (the INV30 enforcement gap below)                                                                                                                                                                                                                       | An outside pull request that adds an external URL under package docs or the docsite is approved or merged without a human owner's exact-head approval, or a team pull request that adds one is held for a human owner                                                                                                                                                                                                              |
-| INV32, DEC-20        | Review of each changed record against rubric item R7 in `docs/contributing/spec-writing.md`, reported under `## Writing rubric results`; no failing repository check (the INV32 enforcement gap below)                                                                                                                                                                                                                                     | A changed record states build status or work order outside a requirement gap or one status line, with no R7 finding; or a requirement gap in the `<FR or INV id> gap:` form or a single status line is reported as an R7 finding                                                                                                                                                                                                   |
+| INV32, DEC-20        | Review of each changed record against rubric item R7 in `docs/contributing/spec-writing.md`, reported under `## Writing rubric results`; no repository check (DEC-20)                                                                                                                                                                                                                                                                      | A changed record states build status or work order outside a requirement gap or one status line, with no R7 finding; or a requirement gap in the `<FR or INV id> gap:` form, a single status line, or a template-required lifecycle field is reported as an R7 finding                                                                                                                                                             |
 | DEC-15               | `.github/scripts/knowledge-paths.test.mjs`, `.github/scripts/change-scope.test.mjs`, `scripts/check-knowledge.test.mjs`, `scripts/specs-for-file.test.mjs`, and `pnpm check:knowledge`                                                                                                                                                                                                                                                     | A component or module record outside `docs/specs/components/<ComponentRoot>/`, a `*.spec.md` left in a component package's source tree or beside a Swift view, a record matched to the wrong package when two share a root, a record whose component root no registered package's source tree has, a platform record whose id or `platform_of` does not match its path, or a platform record change that skips the spec-owner gate |
 
 Evidence placement is enforced by contributors and reviewers. The local
@@ -1408,9 +1412,9 @@ paths exist. Its theme-target block has no core theming contract to check
 against. The spec-owner gate and `pnpm specs:for` treat a platform record like
 the core record beside it.
 
-Current enforcement gap: no checked-in gate proves the open-pull-request
-search. The pull-request summary records the search terms, canonical
-owner/path, and overlapping open work inspected.
+Review enforces the open-pull-request search (INV13): the pull-request
+summary records the search terms, canonical owner/path, and overlapping open
+work inspected.
 
 Current enforcement gap: the example-coverage report lists each public hook
 that has no hook doc or no example block naming it, but it cannot see whether
@@ -1421,5 +1425,5 @@ Current enforcement gap: no repository CI check detects a new external URL in a
 pull request from an author outside the team (INV30). Review and merge tooling
 outside the repository enforces this.
 
-Current enforcement gap: no repository check fails on project status in a
-record (INV32). Review against rubric item R7 enforces it.
+INV32 has no repository check (DEC-20); review against rubric item R7
+enforces it.
