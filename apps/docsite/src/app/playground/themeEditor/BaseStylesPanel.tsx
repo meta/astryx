@@ -9,7 +9,6 @@ import {VStack, HStack} from '@astryxdesign/core/Stack';
 import {Grid} from '@astryxdesign/core/Grid';
 import {Selector} from '@astryxdesign/core/Selector';
 import {NumberInput} from '@astryxdesign/core/NumberInput';
-import {Switch} from '@astryxdesign/core/Switch';
 import {ToggleButton, ToggleButtonGroup} from '@astryxdesign/core/ToggleButton';
 import {Tooltip} from '@astryxdesign/core/Tooltip';
 import {Icon} from '@astryxdesign/core/Icon';
@@ -18,13 +17,11 @@ import {expandRadiusScale, expandTypeScale} from '@astryxdesign/core/theme';
 import {ColorSwatch} from './ColorSwatch';
 import {SelectableCard} from '@astryxdesign/core/SelectableCard';
 import {FONT_OPTIONS, RATIO_OPTIONS, UNIFIED_PRESETS} from './constants';
-import {getConcentricityWarning} from './helpers';
+import {getConcentricityWarning, spacingToPx} from './helpers';
 import {useLiveNumberInput} from '@/lib/useLiveNumberInput';
 
 const styles = stylex.create({
   fullWidthField: {width: '100%'},
-  // 4px below the accent header, on top of the section's own gap.
-  headerSpace: {marginBottom: 'var(--spacing-1)'},
 });
 
 interface ScaleOption {
@@ -149,7 +146,6 @@ interface BaseStylesPanelProps {
   sizeBase: number;
   durationStep: number;
   activePreset: string | null;
-  autoPickColors: boolean;
   onTokenChange: (name: string, value: string) => void;
   onApplyTypeScale: (base: number, ratio: number) => void;
   onApplyRadiusScale: (base: number) => void;
@@ -157,8 +153,6 @@ interface BaseStylesPanelProps {
   onApplySizeScale: (base: number) => void;
   onApplyDurationScale: (multiplier: number) => void;
   onApplyUnifiedPreset: (key: string) => void;
-  onSetAutoPickColors: (val: boolean) => void;
-  onExpandColorScale: (accent: string) => void;
 }
 
 export function BaseStylesPanel({
@@ -171,7 +165,6 @@ export function BaseStylesPanel({
   sizeBase,
   durationStep,
   activePreset,
-  autoPickColors,
   onTokenChange,
   onApplyTypeScale,
   onApplyRadiusScale,
@@ -179,8 +172,6 @@ export function BaseStylesPanel({
   onApplySizeScale,
   onApplyDurationScale,
   onApplyUnifiedPreset,
-  onSetAutoPickColors,
-  onExpandColorScale,
 }: BaseStylesPanelProps) {
   // Reflect the active token values in the typography controls. Fonts map
   // directly to a token; the type scale ratio is derived from the raw
@@ -247,9 +238,10 @@ export function BaseStylesPanel({
     return keys.every(k => tokens[k] === expected[k]) ? inner : null;
   })();
 
-  // Spacing — linear scale where step N = base × N (base = --spacing-1).
+  // Spacing — linear scale where step N = base × N (base = --spacing-1), read
+  // in px whether a step is written in rem (the defaults) or px (a theme).
   const spacingMatch = (() => {
-    const base = parseInt(tokens['--spacing-1'] ?? '', 10);
+    const base = spacingToPx(tokens['--spacing-1']);
     if (!Number.isFinite(base)) {
       return null;
     }
@@ -271,7 +263,7 @@ export function BaseStylesPanel({
       '--spacing-12': 12,
     };
     const ok = Object.entries(steps).every(
-      ([k, step]) => tokens[k] === `${Math.round(base * step)}px`,
+      ([k, step]) => spacingToPx(tokens[k]) === Math.round(base * step),
     );
     return ok ? base : null;
   })();
@@ -306,64 +298,27 @@ export function BaseStylesPanel({
     <VStack gap={5}>
       {/* Color */}
       <VStack gap={3}>
-        <HStack vAlign="center" justify="between" xstyle={styles.headerSpace}>
-          <Text type="label" color="secondary">
-            Create from accent
-          </Text>
-          <Switch
-            label="Create from accent"
-            isLabelHidden
-            value={autoPickColors}
-            onChange={val => {
-              onSetAutoPickColors(val);
-              if (val) {
-                const accentRaw = tokens['--color-accent'] || '';
-                const parsed = accentRaw.match(
-                  /^light-dark\(([^,]+),\s*([^)]+)\)$/,
-                );
-                const accentHex = parsed ? parsed[1].trim() : accentRaw;
-                if (accentHex && accentHex.startsWith('#')) {
-                  onExpandColorScale(accentHex);
-                }
-              }
-            }}
-          />
-        </HStack>
+        <Text type="label" color="secondary">
+          Colors
+        </Text>
         <VStack gap={0}>
-          <ColorSwatch
-            tokenName="--color-accent"
-            value={tokens['--color-accent'] || ''}
-            onChange={(name, value) => {
-              onTokenChange(name, value);
-              if (autoPickColors) {
-                const parsed = value.match(
-                  /^light-dark\(([^,]+),\s*([^)]+)\)$/,
-                );
-                const hex = parsed ? parsed[1].trim() : value;
-                if (hex && hex.startsWith('#') && hex.length >= 7) {
-                  onExpandColorScale(hex);
-                }
-              }
-            }}
-            mode={mode}
-          />
-          {!autoPickColors &&
-            [
-              '--color-neutral',
-              '--color-background-card',
-              '--color-background-surface',
-              '--color-background-body',
-              '--color-background-muted',
-              '--color-text-primary',
-            ].map(tokenName => (
-              <ColorSwatch
-                key={tokenName}
-                tokenName={tokenName}
-                value={tokens[tokenName] || ''}
-                onChange={onTokenChange}
-                mode={mode}
-              />
-            ))}
+          {[
+            '--color-accent',
+            '--color-neutral',
+            '--color-background-card',
+            '--color-background-surface',
+            '--color-background-body',
+            '--color-background-muted',
+            '--color-text-primary',
+          ].map(tokenName => (
+            <ColorSwatch
+              key={tokenName}
+              tokenName={tokenName}
+              value={tokens[tokenName] || ''}
+              onChange={onTokenChange}
+              mode={mode}
+            />
+          ))}
         </VStack>
       </VStack>
 
@@ -465,7 +420,7 @@ export function BaseStylesPanel({
                 isLabelHidden
                 size="sm"
                 placeholder="Custom"
-                xstyle={styles.fullWidthField}
+                controlXstyle={styles.fullWidthField}
                 options={FONT_OPTIONS}
                 value={fontValue(token)}
                 onChange={(val: string) => onTokenChange(token, val)}
@@ -478,7 +433,7 @@ export function BaseStylesPanel({
               isLabelHidden
               size="sm"
               placeholder="Default"
-              xstyle={styles.fullWidthField}
+              controlXstyle={styles.fullWidthField}
               options={[
                 ...RATIO_OPTIONS.map(opt => ({
                   value: String(opt.value),

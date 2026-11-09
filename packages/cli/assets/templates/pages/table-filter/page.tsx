@@ -1130,18 +1130,6 @@ const COMPACT_SURFACE_QUERY =
   '(max-width: 768px), (max-width: 1024px) and (pointer: coarse) and (hover: none)';
 
 /**
- * Top padding for whatever opens a BottomSheet, on the spacing scale.
- *
- * The panel's grab pill floats over the content instead of reserving layout
- * space for itself: it is 4px centered in a 24px band, so it covers the top
- * 10-14px of the sheet. Content that starts at the usual 16px gutter clears it
- * by 2px, which does not read as a gap — it reads as the sheet being cut off.
- * Opening at the full 24px band puts real space under the pill, and every
- * sheet here uses this one value so they all start on the same line.
- */
-const SHEET_TOP_INSET = 6;
-
-/**
  * Width the filter row holds back, in px, for the readout that trails the
  * clauses — the density toggle, the result count and Clear all.
  *
@@ -1698,6 +1686,7 @@ const styles = stylex.create({
     fontSize: typeScaleVars['--text-body-size'],
     fontWeight: typeScaleVars['--text-body-weight'],
     height: 'auto',
+    minHeight: 0,
     lineHeight: typeScaleVars['--text-body-leading'],
     paddingBlock: 0,
     paddingInline: 0,
@@ -2052,7 +2041,8 @@ function FilterOverflow({
     <VStack
       gap={2}
       padding={isCompactSurface ? 4 : 0}
-      paddingBlockStart={isCompactSurface ? SHEET_TOP_INSET : 0}>
+      // In a sheet the sheet's band under its grab bar is the top inset.
+      paddingBlockStart={0}>
       {items.map(({child, index}) => (
         <StackItem key={index} xstyle={styles.overflowItem}>
           {child}
@@ -2084,7 +2074,8 @@ function FilterOverflow({
           isOpen={isOpen}
           onOpenChange={setIsOpen}
           label={label}
-          height="hug">
+          height="hug"
+          padding={0}>
           {body}
         </BottomSheet>
       </>
@@ -2144,7 +2135,8 @@ function AdaptiveSavedViewForm({
         <Section
           variant="transparent"
           padding={4}
-          paddingBlockStart={SHEET_TOP_INSET}>
+          // The sheet's band under its grab bar is the top inset.
+          paddingBlockStart={0}>
           <VStack gap={4}>
             <HStack gap={2}>
               <StackItem size="fill">
@@ -3249,7 +3241,7 @@ export default function TableFilterTemplate() {
         renderValue={option =>
           `${field.label} ${field.operatorLabel} ${option.label ?? option.value}`
         }
-        xstyle={active ? styles.filterFill : undefined}
+        controlXstyle={active ? styles.filterFill : undefined}
         onChange={next =>
           setFieldFilter(
             field.key,
@@ -3318,7 +3310,7 @@ export default function TableFilterTemplate() {
         }
         options={[...field.options]}
         value={multiValues[field.key]}
-        xstyle={
+        controlXstyle={
           multiValues[field.key].length > 0 ? styles.filterFill : undefined
         }
         onChange={next => setMultiValues(field.key, next)}
@@ -3341,7 +3333,7 @@ export default function TableFilterTemplate() {
       value={quoteDraft}
       onChange={commitQuote}
       contentXstyle={styles.quotePopover}
-      xstyle={hasQuoteFilter ? styles.filterFill : undefined}>
+      controlXstyle={hasQuoteFilter ? styles.filterFill : undefined}>
       {(range, onChange, close) => (
         <VStack gap={4}>
           <VStack gap={0}>
@@ -4087,15 +4079,18 @@ export default function TableFilterTemplate() {
       isOpen={isCompactSurface && isViewOpen}
       onOpenChange={setIsViewOpen}
       label="View options"
-      height="tall">
-      {/* The inset is the wrapper's, so the strip's own box starts at the tab
-          row and its scroll arrow lands on the tabs rather than above them. */}
-      <VStack gap={0} paddingBlockStart={SHEET_TOP_INSET}>
+      height="tall"
+      // The tab strip compensates against a container inset, so the sheet
+      // publishes none; its band under the grab bar is the only top inset,
+      // so the strip's own box starts at the tab row and its scroll arrow
+      // lands on the tabs rather than above them.
+      padding={0}>
+      <VStack gap={0}>
         {/* The heading the popover puts above the pane is dropped here: it
             restates the selected tab word for word, and the strip already
             marks which one that is. On a phone that is a line of vertical
             space spent saying it twice. The panel keeps the name for anyone
-            not seeing the strip, as its accessible label. */}
+            not seeing the strip: its selected tab labels it. */}
         <TabList
           value={viewSection}
           onChange={value => setViewSection(value as ViewSection)}
@@ -4105,6 +4100,7 @@ export default function TableFilterTemplate() {
           {VIEW_SECTIONS.map(section => (
             <Tab
               key={section.key}
+              id={`${viewPanelId}-tab-${section.key}`}
               value={section.key}
               label={section.label}
               icon={section.icon}
@@ -4122,7 +4118,7 @@ export default function TableFilterTemplate() {
           gap={0}
           id={viewPanelId}
           role="tabpanel"
-          aria-label={activeSection?.title}
+          aria-labelledby={`${viewPanelId}-tab-${viewSection}`}
           paddingBlockStart={3}>
           {viewPanelBody()}
         </VStack>
@@ -4143,14 +4139,15 @@ export default function TableFilterTemplate() {
   const detailBody =
     activeJob == null ? null : (
       <VStack gap={0} xstyle={styles.detailPanel}>
-        {/* The only part of the body that knows which host it is in: the sheet
-            needs the pill cleared, the docked panel has no pill and would just
-            sit 8px lower than the panels beside it. The two never coexist —
-            Layout drops the panel entirely on a compact surface. */}
+        {/* The only part of the body that knows which host it is in: in the
+            sheet, the sheet's band under its grab bar is the top inset; the
+            docked panel has no pill and keeps the 16px gutter of the panels
+            beside it. The two never coexist — Layout drops the panel entirely
+            on a compact surface. */}
         <Section
           variant="transparent"
           padding={4}
-          paddingBlockStart={isCompactSurface ? SHEET_TOP_INSET : 4}>
+          paddingBlockStart={isCompactSurface ? 0 : 4}>
           <VStack gap={4}>
             <HStack gap={2}>
               <StackItem size="fill">
@@ -4313,7 +4310,8 @@ export default function TableFilterTemplate() {
       isOpen={isCompactSurface && activeJob != null}
       onOpenChange={open => !open && setActiveJobId(null)}
       label="Job details"
-      height="tall">
+      height="tall"
+      padding={0}>
       {detailBody}
     </BottomSheet>
   );

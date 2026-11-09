@@ -1,0 +1,10 @@
+/* Copyright (c) Meta Platforms, Inc. and affiliates. */
+
+/*
+ * A heading reached through its copied link scrolls clear of the sticky app
+ * header, as docs section headings do (AnchorHeading). The window is what
+ * scrolls on a blog page, so the header offset goes on the target itself.
+ */
+.body :is(h1, h2, h3, h4, h5, h6)[id] {
+  scroll-margin-top: calc(var(--appshell-header-height, 0px) + 16px);
+}

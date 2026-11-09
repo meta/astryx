@@ -21,9 +21,11 @@
  * @output Ordered, case-insensitively deduped family names, and the human
  *   help snippet (<link> pair + @font-face) printed after the install
  *   instructions.
- * @position Sits beside build.mjs (api/theme/build/). Pure functions, no IO,
- *   so the `--json` receipt and the human output share one source of truth.
+ * @position Sits beside build.mjs (api/theme/build/). Pure functions, no IO
+ *   beyond the CLI invocation the human help names (formatCliCommand), so the
+ *   `--json` receipt and the human output share one source of truth.
  */
+import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
 
 // font-family values that never need loading: CSS generic families, the ui-*
 // system keywords, and CSS-wide keywords that can appear in a token value.
@@ -202,6 +204,33 @@ export function collectUnloadedFonts(resolvedTheme) {
  */
 export function formatFontLoadingHelp(themeName, families) {
   const named = families.map(f => `"${f}"`).join(', ');
+  return `
+[note] Theme "${themeName}" names fonts it does not load: ${named}
+${fontLoadingRecipe(families)}`;
+}
+
+/**
+ * The same fix once for a batch build: each family the built themes name but
+ * do not load, with the themes that name it, then one recipe for all of them.
+ *
+ * @param {Array<{family: string, themes: string[]}>} entries
+ * @returns {string}
+ */
+export function formatBatchFontLoadingHelp(entries) {
+  const named = entries
+    .map(({family, themes}) => `  "${family}" (${themes.join(', ')})`)
+    .join('\n');
+  return `
+[note] The built themes name fonts they do not load:
+${named}
+${fontLoadingRecipe(entries.map(entry => entry.family))}`;
+}
+
+/**
+ * @param {string[]} families
+ * @returns {string}
+ */
+function fontLoadingRecipe(families) {
   const cssHref =
     'https://fonts.googleapis.com/css2?' +
     families
@@ -210,12 +239,10 @@ export function formatFontLoadingHelp(themeName, families) {
     '&display=swap';
   const first = families[0];
   const slug = first.toLowerCase().replace(/ /g, '-');
-  return `
-⚠ Theme "${themeName}" names fonts it does not load: ${named}
-  The built CSS only sets font-family — load these in your app, or every
+  return `  The built CSS only sets font-family; load these in your app, or every
   browser quietly falls back.
 
-  Google Fonts (add :wght@… axes as your theme's weights require):
+  Google Fonts (add :wght@... axes as your theme's weights require):
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -229,6 +256,6 @@ export function formatFontLoadingHelp(themeName, families) {
       font-display: swap;
     }
 
-  Recipe and fallback-stack guidance: astryx docs typography
+  Recipe and fallback-stack guidance: ${formatCliCommand('docs typography')}
 `;
 }

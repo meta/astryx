@@ -12,4 +12,5 @@ export const doc = {
   isShowcase: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['Toolbar', 'Button', 'Icon', 'Text', 'Card', 'Section'],
+  icons: {ArrowLeftIcon: 'arrowLeft'},
 };

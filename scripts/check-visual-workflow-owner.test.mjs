@@ -169,7 +169,6 @@ describe('single visual workflow owner', () => {
           {
             run: 'node .github/scripts/gh-pages-publisher.mjs immutable-path --scope pr-visual/evidence',
           },
-          {run: 'node .github/scripts/visual-gate/gate.mjs reach'},
           {run: 'pnpm test:a11y-contract'},
           {run: 'pnpm rtl:audit'},
           {run: 'npx playwright install chromium'},

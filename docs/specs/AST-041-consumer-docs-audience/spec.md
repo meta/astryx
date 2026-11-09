@@ -7,16 +7,28 @@ authority: current
 archive_reason: null
 superseded_by: null
 approved_by: josephfarina
-approved_at: 2026-09-23
+approved_at: 2026-10-09
 phase: accepted
 owners: [josephfarina]
 affects_architecture: []
 affects_families: []
 affects_contributing: []
-affects_consumer_docs: []
+affects_consumer_docs: [is-my-code-good]
 ---
 
 # Consumer documentation audience boundary system spec
+
+<!-- path-applicability:v1 -->
+
+```json
+{
+  "paths": [
+    "packages/cli/assets/docs/**",
+    "packages/**/*.doc.mjs",
+    "packages/**/*.doc.*.mjs"
+  ]
+}
+```
 
 ## Intent
 
@@ -41,12 +53,15 @@ consumer surfaces, including docs that integrations contribute.
 - **FR1 — Shipped docs are for callers.** Every section of a shipped doc MUST
   describe something a caller can use or rely on: purpose and alternatives, API
   and defaults, observable behavior and its guarantees, composition, costs and
-  obligations the caller inherits, theming seams, or migration.
+  obligations the caller inherits, theming seams, migration, or quality criteria
+  they can apply to a product surface or artifact they create with Astryx from
+  public evidence.
 - **FR2 — Maintainer process is excluded.** A shipped doc MUST NOT ask its reader
-  to produce review evidence, meet grading or promotion criteria, follow Astryx's
-  contribution lifecycle, or run Astryx's own test and CI tooling. That material
-  belongs in the contributor surface that owns the topic, or in the contributing
-  guide when no specific surface exists. It never defaults back to a shipped doc.
+  to produce evidence for Astryx maintainers, meet Astryx's internal grading or
+  promotion criteria, follow Astryx's contribution lifecycle, or run Astryx's own
+  test and CI tooling. That material belongs in the contributor surface that owns
+  the topic, or in the contributing guide when no specific surface exists. It
+  never defaults back to a shipped doc.
 - **FR3 — System guarantees stay, as guarantees.** A fact about the system's
   behavior that a caller can rely on MUST stay in shipped docs, stated as a
   guarantee to the caller. For example, "theme targets are stable once
@@ -68,6 +83,12 @@ consumer surfaces, including docs that integrations contribute.
 - **FR6 — Contributed docs follow the same boundary.** Docs that an integration
   contributes to consumer surfaces MUST meet FR1–FR4. The integration authoring
   reference MUST state this rule.
+- **FR7 — The shared caller rubric has one owner.** The shipped `is-my-code-good`
+  guide MUST own the shared criteria for whether caller-created product code uses
+  Astryx well. Specialized rubrics MAY add weights and artifact-specific checks,
+  but MUST link to the shared criteria instead of redefining them. A caller rubric
+  MUST use public inputs and MUST report missing evidence as uninspected, not as a
+  pass.
 
 ### Platform support
 
@@ -79,10 +100,12 @@ consumer surfaces, including docs that integrations contribute.
 
 The shipped topic directory has a README that states the caller-action test,
 common signs of maintainer writing, and where that material goes. Repository
-instructions state the same audience. No automated check enforces the boundary
-yet. The authoring types declare a distribution audience field with public and
-internal values for the docs graph; nothing reads it yet. FR4 keeps that field
-separate from the reader boundary.
+instructions state the same audience. FR7 assigns the shared caller-facing
+rubric to `is-my-code-good`; its guide and the specialized links are companion
+implementation outside this specification-only change. No automated check
+enforces the audience boundary yet. The authoring types declare a distribution
+audience field with public and internal values for the docs graph; nothing reads
+it yet. FR4 keeps that field separate from the reader boundary.
 
 This specification-only change alters no runtime behavior or published package
 and needs no Changeset.
@@ -95,6 +118,7 @@ and needs no Changeset.
 | FR4      | Compiled public and internal bundle tests           | public doc, internal doc, maintainer material marked internal                         | Maintainer material appears in any bundle                                                       |
 | FR5      | Check fixtures and a run over the shipped corpus    | clean corpus, real violation, caller instruction with a flagged term, exemption       | The corpus fails, the violation passes, the caller instruction fails, or an exemption is silent |
 | FR6      | Integration doc fixtures                            | contributed topic that addresses maintainers                                          | A contributed doc bypasses the boundary                                                         |
+| FR7      | Docs graph and rubric review                        | shared code rubric, specialized template scoring, missing rendered evidence           | Shared criteria have two owners, a specialization does not link, or missing evidence passes     |
 
 ## Decision log
 
@@ -122,6 +146,19 @@ with maintainer process.
 
 Rejected: a bare word list as a gate, and a distribution audience used as a
 place for maintainer material.
+
+### DEC-3 — Caller-owned quality review stays in shipped docs
+
+**Reference:** `spec:AST-041/DEC-3`
+**Decider:** `josephfarina`, `2026-10-09`
+
+A person or agent building with Astryx can act on public criteria that evaluate
+its own product code. The `is-my-code-good` guide owns the shared criteria;
+artifact-specific guides link to it and add only their own checks or scoring.
+Missing evidence remains visible instead of becoming a pass.
+
+Rejected: treating every quality rubric as maintainer process, and copying the
+shared criteria into each artifact-specific guide.
 
 ## Open questions
 

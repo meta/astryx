@@ -330,20 +330,27 @@ describe('Timer hardening guards', () => {
   });
 
   it('coerces an unknown format to elapsed', () => {
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
     const now = Date.now();
     const {rerender} = render(
       <Timer
         format={'stopwatch' as never}
-        startTime={now - 128_000}
+        startTime={now - 3_723_000}
         data-testid="timer"
       />,
     );
 
-    expect(screen.getByTestId('timer')).toHaveTextContent('2m 08s');
+    // Past one hour, only the elapsed format moves to minute cadence: the
+    // next wake is the 57 s left in the minute, not one second.
+    expect(screen.getByTestId('timer')).toHaveTextContent('1h 02m');
+    expect(setTimeoutSpy).toHaveBeenLastCalledWith(
+      expect.any(Function),
+      57_000,
+    );
 
     rerender(
-      <Timer format="clock" startTime={now - 128_000} data-testid="timer" />,
+      <Timer format="clock" startTime={now - 3_723_000} data-testid="timer" />,
     );
-    expect(screen.getByTestId('timer')).toHaveTextContent('2:08');
+    expect(screen.getByTestId('timer')).toHaveTextContent('1:02:03');
   });
 });

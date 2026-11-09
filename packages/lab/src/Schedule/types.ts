@@ -41,6 +41,31 @@ export interface ScheduleRange {
 
 export type ScheduleViewOptions = object;
 
+/**
+ * Options the week and day views share: they paint the same time grid of
+ * timed blocks and all-day pills, so they take the same hour window and the
+ * same event popover.
+ */
+export interface ScheduleTimeGridViewOptions {
+  /** First hour drawn, 0–23. @default 0 */
+  minHour?: number;
+  /** Hour the grid ends at, 1–24, kept above `minHour`. @default 24 */
+  maxHour?: number;
+  /** Height of one hour in pixels. @default 100 */
+  hourHeight?: number;
+  /**
+   * Content of the popover the view opens from an event. The view renders
+   * each event with content as a native button and owns the popover it
+   * opens: one popover for the grid, named by the event's title, with the
+   * system's standard surface, padding, dismissal, and focus return. Called
+   * during render for every painted event block, so keep it pure and cheap,
+   * like a table cell renderer. Return `null` for an event that has nothing
+   * to open: that block stays read-only. When the option is absent the whole
+   * grid is read-only.
+   */
+  renderPopover?: (event: CalendarEvent) => ReactNode;
+}
+
 export interface ScheduleViewComponentProps<
   Options extends ScheduleViewOptions = ScheduleViewOptions,
 > {

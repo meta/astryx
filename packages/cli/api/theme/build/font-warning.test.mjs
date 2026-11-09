@@ -15,6 +15,7 @@
 
 import {describe, it, expect} from 'vitest';
 import {collectUnloadedFonts, formatFontLoadingHelp} from './font-warning.mjs';
+import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
 
 describe('collectUnloadedFonts', () => {
   it('returns webfont families from font-family tokens, skipping known fallbacks', () => {
@@ -227,10 +228,13 @@ describe('formatFontLoadingHelp', () => {
   const help = formatFontLoadingHelp('ocean', ['Fraunces', 'JetBrains Mono']);
 
   it('names the theme and every family in the headline', () => {
-    expect(help).toContain('⚠');
-    expect(help).toContain('ocean');
+    expect(help).toContain('[note] Theme "ocean"');
     expect(help).toContain('"Fraunces"');
     expect(help).toContain('"JetBrains Mono"');
+  });
+
+  it('is plain ASCII', () => {
+    expect(help).not.toMatch(/[\u0080-\uffff]/);
   });
 
   it('includes the Google Fonts recipe: preconnect pair + the exact css2 URL', () => {
@@ -252,7 +256,7 @@ describe('formatFontLoadingHelp', () => {
   });
 
   it('points at the docs recipe', () => {
-    expect(help).toContain('astryx docs typography');
+    expect(help).toContain(formatCliCommand('docs typography'));
   });
 
   it('percent-encodes family names in the css2 URL', () => {

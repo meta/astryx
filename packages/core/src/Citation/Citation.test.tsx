@@ -6,6 +6,7 @@
  * @output Tests for Citation component
  */
 
+import {createRef} from 'react';
 import {render, screen} from '@testing-library/react';
 import {describe, it, expect} from 'vitest';
 import * as stylex from '@stylexjs/stylex';
@@ -20,6 +21,7 @@ const probe = stylex.create({
   secondaryText: {color: colorVars['--color-text-secondary']},
   accentText: {color: colorVars['--color-text-accent']},
   badgeBackground: {backgroundColor: colorVars['--color-accent-muted']},
+  consumerOverride: {color: colorVars['--color-text-accent']},
   pointerCursor: {
     cursor: {
       default: 'pointer',
@@ -58,6 +60,10 @@ describe('Citation', () => {
     const el = screen.getByTestId('citation');
     expect(el.tagName).toBe('A');
     expect(el).toHaveAttribute('href', 'https://example.com');
+    expect(el).toHaveAttribute('target', '_blank');
+    expect(el).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(el).toHaveAttribute('role', 'doc-noteref');
+    expect(el).toHaveAttribute('aria-label', 'Citation 1: Example Source');
     expect(el).toHaveTextContent('Example Source');
   });
 
@@ -86,9 +92,73 @@ describe('Citation', () => {
     );
     const el = screen.getByTestId('citation');
     expect(el.tagName).toBe('SPAN');
-    // doc-noteref is a reference role that is not permitted on a plain
-    // (unlinked) span (axe: aria-allowed-role), so it must be omitted here.
-    expect(el).not.toHaveAttribute('role');
+    // `doc-noteref` is a link role and must be omitted on an inert span. A
+    // supported naming role still lets the component-authored aria-label name
+    // the inert citation, including the number-only variant.
+    expect(el).toHaveAttribute('role', 'group');
+    expect(el).toHaveAccessibleName('Citation 1: No link');
+    expect(el).not.toHaveAttribute('href');
+    expect(el).not.toHaveAttribute('target');
+    expect(el).not.toHaveAttribute('rel');
+  });
+
+  it('names an inert number-only citation', () => {
+    render(
+      <Citation
+        source={{title: 'No link'}}
+        number={5}
+        variant="number"
+        data-testid="citation"
+      />,
+    );
+    const el = screen.getByTestId('citation');
+    expect(el).toHaveAttribute('role', 'group');
+    expect(el).toHaveAccessibleName('Citation 5: No link');
+    expect(el).not.toHaveAttribute('href');
+  });
+
+  it('forwards the ref and supported root props across linked and inert roots', () => {
+    const ref = createRef<HTMLElement>();
+    const rootProps = {
+      ref,
+      className: 'consumer-class',
+      style: {opacity: 0.5},
+      xstyle: probe.consumerOverride,
+      role: 'button',
+      'aria-label': 'Caller label',
+      'data-owner': 'citation-consumer',
+      'data-testid': 'citation',
+    } as const;
+    const {rerender} = render(
+      <Citation source={source} number={1} {...rootProps} />,
+    );
+
+    let el = screen.getByTestId('citation');
+    expect(el.tagName).toBe('A');
+    expect(ref.current).toBe(el);
+    expect(el).toHaveAttribute('role', 'doc-noteref');
+    expect(el).toHaveAccessibleName('Citation 1: Example Source');
+    expect(el).toHaveClass('consumer-class');
+    expect(el).toHaveStyle({opacity: 0.5});
+    expect(el).toHaveAttribute('data-owner', 'citation-consumer');
+    for (const cls of atomicClasses(probe.consumerOverride)) {
+      expect(el.classList.contains(cls)).toBe(true);
+    }
+
+    rerender(
+      <Citation source={{title: 'No link'}} number={1} {...rootProps} />,
+    );
+    el = screen.getByTestId('citation');
+    expect(el.tagName).toBe('SPAN');
+    expect(ref.current).toBe(el);
+    expect(el).toHaveAttribute('role', 'group');
+    expect(el).toHaveAccessibleName('Citation 1: No link');
+    expect(el).toHaveClass('consumer-class');
+    expect(el).toHaveStyle({opacity: 0.5});
+    expect(el).toHaveAttribute('data-owner', 'citation-consumer');
+    for (const cls of atomicClasses(probe.consumerOverride)) {
+      expect(el.classList.contains(cls)).toBe(true);
+    }
   });
 
   it('renders astryx-* class names for theme targeting', () => {

@@ -15,12 +15,15 @@ verified_by:
     packages/core/src/__tests__/PressedState.a11y.chromium.spec.ts,
     packages/core/src/CheckboxInput/CheckboxInput.test.tsx,
     packages/core/src/Collapsible/Collapsible.test.tsx,
+    packages/core/src/Field/__tests__/TextFieldFocusTiming.interaction.browser.spec.ts,
+    packages/core/src/Field/__tests__/textFieldFocusTiming.test.tsx,
     packages/core/src/Link/Link.test.tsx,
     packages/core/src/RadioList/RadioList.test.tsx,
     packages/core/src/SegmentedControl/SegmentedControl.test.tsx,
     packages/core/src/Slider/Slider.test.tsx,
     packages/core/src/Switch/Switch.test.tsx,
     packages/core/src/TabList/TabList.test.tsx,
+    packages/richtext/src/RichTextEditor.focusTiming.test.tsx,
   ]
 architecture: [architecture:interaction-modality, architecture:theme-tokens]
 components:
@@ -52,12 +55,13 @@ surface.
 - **DR1 — Press the manipulated surface.** During pointer hold or drag, each
   enabled surface in the matrix below MUST paint `--color-overlay-pressed` on
   the named visual part. The overlay is transient and MUST clear when the press
-  or drag ends.
+  or drag ends. The overlay's timing follows `spec:AST-094` FR11's press profiles under every pointer.
 - **DR2 — Disabled means no response.** A disabled control in the matrix MUST
   remain inoperable and MUST NOT gain a pressed visual treatment.
 - **DR3 — Persistent selection wins.** A selected SegmentedControl item MUST
   keep its raised selected surface during pointer hold; only an unselected item
-  receives the pressed overlay.
+  receives the pressed overlay. Under every pointer the item keeps that surface, and its press timing follows
+  `spec:AST-094` FR11.
 
 ## Anatomy and hierarchy
 
@@ -135,15 +139,25 @@ actively responding. The decision is intentionally limited to the surfaces in
 the matrix, preserves disabled behavior, and keeps an already-selected segment's
 raised surface stable.
 
+### DEC-2 — A tapped text field shows its focus look at once
+
+**Reference:** `design:user-states/DEC-2`
+**Decider:** `cixzhang`, 2026-11-07
+
+A tapped text field shows its focus look at once, without a fade, matching the web's immediate focus look while preserving the performance: in Chromium, 2 repaints instead of 18; in Safari on iPhone the focus stall already hides most of the fade.
+
+The device's primary pointer decides the timing, so Tab on a tablet with a hardware keyboard shows the focus look at once too.
+
 ## Open questions
 
-None for this bounded pressed-state decision. Hover, focus, selection treatments
-outside the selected-segment exception, and adoption by other components remain
-outside this record's current claim.
+None for the bounded pressed-state decision or DEC-2. Hover, focus beyond
+DEC-2, selection treatments outside the selected-segment exception, and adoption
+by other components remain outside this record's current claim.
 
 ## Content boundary
 
 This file defines the approved cross-component pressed-state intent and its
-bounded adoption matrix. Component implementations own selectors and event
-mechanics; architecture records own interaction modality and token behavior;
-tests and CI artifacts own current conformance evidence.
+bounded adoption matrix, and a tapped text field's focus timing (DEC-2).
+Component implementations own selectors and event mechanics; architecture
+records own interaction modality and token behavior; tests and CI artifacts own
+current conformance evidence.

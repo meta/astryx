@@ -1,0 +1,26 @@
+{
+  "apiVersion": 1,
+  "type": "component.detail.props",
+  "package": "@acme/kit",
+  "data": [
+    {
+      "name": "title",
+      "type": "string",
+      "required": true,
+      "description": "Heading text."
+    },
+    {
+      "name": "tone",
+      "type": "'calm' | 'loud'",
+      "default": "'calm'",
+      "description": "Visual weight."
+    }
+  ],
+  "meta": {
+    "answeredBy": {
+      "cli": "<cli version>",
+      "core": "<cli version>",
+      "copy": "project"
+    }
+  }
+}

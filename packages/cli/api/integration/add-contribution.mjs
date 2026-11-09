@@ -5,8 +5,7 @@
  * contribution into an integration package.
  *
  * Dispatches component, doc, template, codemod, and agent-doc. Theme
- * delegates to the existing `integrationAddTheme` (not modified here).
- * Every root-based kind shares: first add creates the manifest; one shared
+ * delegates to the dedicated same-stem descriptor writer. Every root-based kind shares: first add creates the manifest; one shared
  * writer; never creates `files`/`exports`; atomic staged writes; no clobber;
  * dry-run receipt predicts real run; post-write verify through the real
  * discovery/parser seam.
@@ -26,7 +25,6 @@ import {
   findManifestObject,
   unwrapManifestExpression,
   patchIntegrationRoot,
-  findLocalIntegrationManifestOrNull,
   IntegrationRootConflictError,
 } from '../../foundation/integrations/manifest-writer.mjs';
 import {
@@ -35,10 +33,20 @@ import {
 } from '../../foundation/integrations/integrations.mjs';
 import {isValidSemver} from '../../foundation/env/semver.mjs';
 import {assertContributionVisible} from '../../foundation/integrations/contribution-inventory.mjs';
+import {
+  docsTreeCliProblem,
+  withDocsTreeCli,
+} from '../../foundation/integrations/cli-requirement.mjs';
+import {discoverIntegrationDocs} from '../../foundation/discovery/docs-discovery.mjs';
+import {findIntegrationComponentDoc} from '../../foundation/discovery/component-discovery.mjs';
 import {parseAgentDocsField} from '../../authoring/integration/schema.mjs';
 import {integrationAddTheme} from './add-theme.mjs';
 import {
-  findPackageDir,
+  KEBAB_NAME_RE,
+  kebabToTitle,
+  loadCurrentManifest,
+  receipt,
+  resolvePackage,
   projectPath,
   packageJsonUpdate,
   packageJsonFilesUpdate,
@@ -48,7 +56,6 @@ import {
 // ── Name grammars ───────────────────────────────────────────────────
 
 const COMPONENT_NAME_RE = /^[A-Z][A-Za-z0-9]*$/;
-const KEBAB_NAME_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
 const TOPIC_NAME_RE = /^[\w-]+$/;
 
 // ── Default roots (used when the manifest declares nothing) ─────────
@@ -62,92 +69,11 @@ const DEFAULT_ROOTS = {
 
 // ── Shared manifest / package plumbing ──────────────────────────────
 
-/**
- * Read package identity + resolve the manifest path.
- * @param {string} cwd
- */
-function resolvePackage(cwd) {
-  const packageDir = findPackageDir(cwd);
-  const packageFile = path.join(packageDir, 'package.json');
-  /** @type {any} */
-  let pkg;
-  try {
-    pkg = JSON.parse(fs.readFileSync(packageFile, 'utf-8'));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new AstryxError(
-      `Cannot read package.json: ${message}`,
-      undefined,
-      ERROR_CODES.ERR_INVALID_ARGUMENT,
-    );
-  }
-  const owner = typeof pkg.name === 'string' ? pkg.name : '(local integration)';
-  const existingManifest = findLocalIntegrationManifestOrNull(packageDir);
-  const manifestFile =
-    existingManifest ?? path.join(packageDir, 'astryx.integration.mjs');
-  return {
-    packageDir,
-    packageFile,
-    pkg,
-    owner,
-    manifestFile,
-    manifestExists: existingManifest != null,
-  };
-}
-
-/**
- * Load the current manifest's parsed object (or an empty object when no
- * manifest exists yet).
- * @param {string} manifestFile
- * @param {boolean} manifestExists
- * @returns {Promise<import('../../authoring/integration/type').AstryxIntegration>}
- */
-async function loadCurrentManifest(manifestFile, manifestExists) {
-  if (!manifestExists) return {};
-  return loadManifestObject(
-    manifestFile,
-    `Integration manifest ${path.basename(manifestFile)}`,
-    {fresh: true},
-  );
-}
-
-/**
- * Build and return the common receipt shape.
- * @param {import('./integration-authoring.type.mjs').IntegrationAddResponse['data']['kind']} kind
- * @param {string} name
- * @param {{path: string, created: boolean}|null} root
- * @param {string} manifestPath
- * @param {string[]} files
- * @param {boolean} dryRun
- * @returns {import('./integration-authoring.type.mjs').IntegrationAddResponse}
- */
-function receipt(kind, name, root, manifestPath, files, dryRun) {
-  return {
-    type: 'integration.add',
-    data: {
-      kind,
-      name,
-      root,
-      manifest: manifestPath,
-      files,
-      written: !dryRun,
-      dryRun,
-    },
-  };
-}
-
 // ── Helpers ─────────────────────────────────────────────────────────
 
 /** @param {string} slug */
 function kebabToPascal(slug) {
   return slug.replace(/(^|-)([a-z0-9])/gu, (_, _sep, ch) => ch.toUpperCase());
-}
-
-/** @param {string} slug */
-function kebabToTitle(slug) {
-  const words = slug.split(/[-_]+/u).filter(Boolean);
-  if (words.length === 0) return slug;
-  return words.map(word => word[0].toUpperCase() + word.slice(1)).join(' ');
 }
 
 // ── AST helper (for agent-doc manifest patching) ────────────────────
@@ -248,11 +174,25 @@ async function addComponent(name, options) {
       ERROR_CODES.ERR_FILE_EXISTS,
     );
   }
+  // A second doc under a name discovery already records, by a doc's file name
+  // anywhere under the root or by a name a doc documents, would shadow one of
+  // the two.
+  const existingDoc = findIntegrationComponentDoc(
+    {name: owner, components: root, __packageDir: packageDir},
+    name,
+  );
+  if (existingDoc != null) {
+    throw new AstryxError(
+      `Refusing to add component "${name}": ${projectPath(path.relative(packageDir, existingDoc))} already defines it.`,
+      undefined,
+      ERROR_CODES.ERR_FILE_EXISTS,
+    );
+  }
 
   const sourcePath = projectPath(path.relative(packageDir, sourceFile));
   const extensionlessPath = sourcePath.replace(/\.tsx?$/u, '');
   const importSpecifier = `${owner}/${extensionlessPath}`;
-  const docContents = `export default {\n  type: 'component',\n  name: '${name}',\n  import: ${JSON.stringify(importSpecifier)},\n  description: '${name} component.',\n  props: [],\n};\n`;
+  const docContents = `/** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */\nexport default {\n  type: 'component',\n  name: '${name}',\n  displayName: '${name}',\n  import: ${JSON.stringify(importSpecifier)},\n  usage: {description: '${name} component.'},\n  props: [],\n};\n`;
   const sourceContents = `export function ${name}() {\n  return <div>${name}</div>;\n}\n`;
 
   /** @type {import('./add-helpers.mjs').WritePlan[]} */
@@ -343,7 +283,7 @@ async function addComponent(name, options) {
 
 /**
  * @param {string} name  topic name (must match [\w-]+)
- * @param {{cwd?: string, dryRun?: boolean, replaces?: string, extends?: string}} options
+ * @param {{cwd?: string, dryRun?: boolean, replaces?: string, extends?: string, parent?: string}} options
  * @returns {Promise<import('./integration-authoring.type.mjs').IntegrationAddResponse>}
  */
 async function addDoc(name, options) {
@@ -358,6 +298,20 @@ async function addDoc(name, options) {
   if (options.replaces != null && options.extends != null) {
     throw new AstryxError(
       'A topic either replaces another or extends it, not both.',
+      undefined,
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
+  if (options.parent != null && (options.replaces != null || options.extends != null)) {
+    throw new AstryxError(
+      'A guide placed in a namespace has its own route: it cannot also replace or extend a topic.',
+      undefined,
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
+  if (options.parent != null && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(options.parent)) {
+    throw new AstryxError(
+      '--parent must name a namespace in lowercase letters and digits joined by single hyphens, such as "acme".',
       undefined,
       ERROR_CODES.ERR_INVALID_ARGUMENT,
     );
@@ -422,20 +376,92 @@ async function addDoc(name, options) {
   }
 
   const title = kebabToTitle(name);
+  // --parent names a namespace of this package by its name, wherever its file
+  // is. An existing one is used as it is: its `guides` slot, or else its only
+  // slot that takes a guide. Otherwise the namespace doc is written, unless a
+  // file of that name is already something else (spec:AST-046 FR11).
+  const namespaceFile =
+    options.parent == null
+      ? null
+      : assertWithin(`${options.parent}.doc.mjs`, root, {
+          label: 'namespace doc file',
+        });
+  let parentSlot = 'guides';
+  let writeNamespace = false;
+  if (options.parent != null && namespaceFile != null) {
+    const {namespaces} = await discoverIntegrationDocs({
+      name: owner,
+      docs: root,
+    });
+    const existing = namespaces.find(ns => ns.doc.name === options.parent);
+    if (existing != null) {
+      const takesGuides = Object.entries(existing.doc.slots ?? {})
+        .filter(([, slot]) => slot?.accepts?.kinds?.includes('generic'))
+        .map(([slotName]) => slotName);
+      const slot = takesGuides.includes('guides')
+        ? 'guides'
+        : takesGuides.length === 1
+          ? takesGuides[0]
+          : null;
+      if (slot == null) {
+        throw new AstryxError(
+          takesGuides.length === 0
+            ? `Namespace "${options.parent}" (${existing.source}) has no slot that takes a guide. Add one, such as guides: {title: 'Guides', accepts: {kinds: ['generic']}}.`
+            : `Namespace "${options.parent}" (${existing.source}) has more than one slot that takes a guide (${takesGuides.join(', ')}). Write the guide yourself, and name its slot in its placement.`,
+          undefined,
+          ERROR_CODES.ERR_INVALID_ARGUMENT,
+        );
+      }
+      parentSlot = slot;
+    } else if (fs.existsSync(namespaceFile)) {
+      throw new AstryxError(
+        `${projectPath(path.relative(packageDir, namespaceFile))} exists but does not load as the namespace "${options.parent}". Fix or rename that file, or pass another --parent.`,
+        undefined,
+        ERROR_CODES.ERR_FILE_EXISTS,
+      );
+    } else {
+      writeNamespace = true;
+    }
+  }
   const relationship = options.replaces
     ? `\n  replaces: '${options.replaces}',`
     : options.extends
       ? `\n  extends: '${options.extends}',`
-      : '';
-  const docContents = `export default {\n  type: 'generic',\n  name: '${name}',\n  title: '${title}',\n  description: '${title} documentation.',${relationship}\n  sections: [\n    {\n      title: 'Overview',\n      content: [\n        { type: 'prose', text: '${title} documentation.' },\n      ],\n    },\n  ],\n};\n`;
+      : options.parent
+        ? `\n  placement: {parent: 'namespace:${options.parent}', slot: '${parentSlot}'},`
+        : '';
+  const namespaceTitle =
+    options.parent == null ? '' : kebabToTitle(options.parent);
+  const namespaceContents = `/** @type {import('@astryxdesign/cli/authoring').NamespaceDoc} */\nexport default {\n  type: 'namespace',\n  name: '${options.parent}',\n  title: '${namespaceTitle}',\n  summary: 'Guides for ${namespaceTitle}.',\n  slots: {\n    guides: {title: 'Guides', accepts: {kinds: ['generic']}},\n  },\n};\n`;
+  const docContents = `/** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */\nexport default {\n  type: 'generic',\n  name: '${name}',\n  title: '${title}',\n  description: '${title} documentation.',${relationship}\n  sections: [\n    {\n      title: 'Overview',\n      content: [\n        { type: 'prose', text: '${title} documentation.' },\n      ],\n    },\n  ],\n};\n`;
 
   /** @type {import('./add-helpers.mjs').WritePlan[]} */
   const plans = [{path: docFile, contents: docContents, createOnly: true}];
-  const pkgUpdate = packageJsonUpdate(
+  if (namespaceFile != null && writeNamespace) {
+    plans.push({path: namespaceFile, contents: namespaceContents, createOnly: true});
+  }
+  let pkgUpdate = packageJsonUpdate(
     packageFile,
     rootPath,
     path.basename(manifestFile),
   );
+  // A namespace doc needs a CLI that reads it: an older one hides every doc
+  // topic the package ships. Declare that CLI as a peer, so an older one fails
+  // at install instead (spec:AST-046 FR11).
+  if (options.parent != null) {
+    const expectedOriginal =
+      pkgUpdate?.expectedOriginal ?? fs.readFileSync(packageFile);
+    const text = pkgUpdate?.contents ?? expectedOriginal.toString('utf-8');
+    const current = JSON.parse(text);
+    if (docsTreeCliProblem(current) != null) {
+      pkgUpdate = {
+        contents:
+          JSON.stringify(withDocsTreeCli(current), null, 2) +
+          (text.endsWith('\n') ? '\n' : ''),
+        expectedOriginal,
+      };
+    }
+  }
   if (pkgUpdate != null) {
     plans.push({
       path: packageFile,
@@ -554,8 +580,8 @@ async function addTemplate(name, options) {
     throw error;
   }
 
-  const specFile = assertWithin(`${name}.template.mjs`, root, {
-    label: 'template spec',
+  const specFile = assertWithin(`${name}.doc.mjs`, root, {
+    label: 'template descriptor',
   });
   const sourceFile = assertWithin(`${name}.tsx`, root, {
     label: 'template source',
@@ -578,7 +604,8 @@ async function addTemplate(name, options) {
   const pascalName = kebabToPascal(name);
   const sourcePath = projectPath(path.relative(packageDir, sourceFile));
   const extensionlessPath = sourcePath.replace(/\.tsx?$/u, '');
-  const specContents = `export default {\n  type: '${templateType}',\n  name: '${name}',\n  description: '${kebabToTitle(name)} template.',\n};\n`;
+  const blockFields = templateType === 'block' ? '\n  aspectRatio: 1,' : '';
+  const specContents = `/** @type {import('@astryxdesign/cli/authoring').IntegrationTemplateDoc} */\nexport default {\n  type: '${templateType}',\n  name: '${name}',\n  displayName: '${kebabToTitle(name)}',\n  description: '${kebabToTitle(name)} template.',${blockFields}\n};\n`;
   const sourceContents = `export default function ${pascalName}() {\n  return <div>${kebabToTitle(name)}</div>;\n}\n`;
 
   /** @type {import('./add-helpers.mjs').WritePlan[]} */
@@ -1094,11 +1121,11 @@ export function integrationAddAgentDoc(line, options = {}) {
 
 const KIND_OPTIONS = {
   component: new Set(['cwd', 'dryRun']),
-  doc: new Set(['cwd', 'dryRun', 'replaces', 'extends']),
+  doc: new Set(['cwd', 'dryRun', 'replaces', 'extends', 'parent']),
   template: new Set(['cwd', 'dryRun', 'templateType']),
   codemod: new Set(['cwd', 'dryRun', 'to']),
   'agent-doc': new Set(['cwd', 'dryRun']),
-  theme: new Set(['cwd', 'dryRun']),
+  theme: new Set(['cwd', 'dryRun', 'from']),
 };
 
 /**
@@ -1123,9 +1150,9 @@ function validateKindOptions(kind, options) {
 /**
  * Add one contribution to the local integration package.
  *
- * @param {'component'|'doc'|'template'|'codemod'|'agent-doc'|'theme'} kind
+ * @param {import('./integration-authoring.type.mjs').IntegrationAddKind} kind
  * @param {string} name
- * @param {{cwd?: string, dryRun?: boolean, templateType?: 'page'|'block', to?: string, replaces?: string, extends?: string}} [options]
+ * @param {import('./integration-authoring.type.mjs').IntegrationAddOptions} [options]
  * @returns {Promise<import('./integration-authoring.type.mjs').IntegrationAddResponse>}
  */
 export async function integrationAdd(kind, name, options = {}) {
@@ -1157,6 +1184,10 @@ export async function integrationAdd(kind, name, options = {}) {
     case 'agent-doc':
       return integrationAddAgentDoc(name, options);
     case 'theme':
-      return integrationAddTheme(name, options);
+      return integrationAddTheme(name, {
+        cwd: options.cwd,
+        dryRun: options.dryRun,
+        from: options.from,
+      });
   }
 }

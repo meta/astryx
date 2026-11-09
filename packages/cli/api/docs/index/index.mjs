@@ -15,7 +15,7 @@
  */
 
 import {indexView} from '../../../foundation/doc-compiler/lenses.mjs';
-import {resolveTopicDocs} from '../_adapter.mjs';
+import {resolveTopicDocs, sectionPackageOf, topicLinks} from '../_adapter.mjs';
 
 /**
  * @param {string} topic
@@ -27,6 +27,32 @@ import {resolveTopicDocs} from '../_adapter.mjs';
  * @returns {Promise<import('../docs.type.mjs').DocsIndexResponse>}
  */
 export async function index(topic, options = {}) {
-  const {node} = await resolveTopicDocs(topic, options);
-  return {type: 'docs.index', data: indexView(node)};
+  const {node, entry, catalog} = await resolveTopicDocs(topic, options);
+  const view = indexView(node);
+  const sectionPackage = sectionPackageOf(entry, node);
+  /** @type {import('../docs.type.mjs').DocsIndex} */
+  const data = {
+    ...view,
+    // A guide the docs tree places is read by its route, not its doc name.
+    name: entry.tree ? entry.name : view.name,
+    // What it took the place of, and whose that was (INV28).
+    ...(entry.replaces != null
+      ? {
+          replaces: entry.replaces,
+          ...(entry.replacedPackage != null
+            ? {replacedPackage: entry.replacedPackage}
+            : {}),
+        }
+      : {}),
+    // Each section names the package that wrote it: the topic's own, or an
+    // extension's.
+    sections: view.sections.map(s => ({
+      id: s.id,
+      title: s.title,
+      package: sectionPackage(s.id),
+      summary: s.summary,
+    })),
+    links: await topicLinks(catalog, entry),
+  };
+  return {type: 'docs.index', package: entry.package, data};
 }

@@ -1,0 +1,198 @@
+
+Building theme from themes/amber.mjs...
+
+[ok] themes/amber.css
+[ok] themes/amber.css.d.ts
+  3 token overrides, 0 component overrides
+  <size> KB
+[ok] themes/amber.js
+[ok] themes/amber.d.ts
+
+Building theme from themes/basil.mjs...
+
+[ok] themes/basil.css
+[ok] themes/basil.css.d.ts
+  2 token overrides, 0 component overrides
+  <size> KB
+[ok] themes/basil.js
+[ok] themes/basil.d.ts
+
+Building theme from themes/cedar.mjs...
+
+[ok] themes/cedar.css
+[ok] themes/cedar.css.d.ts
+  2 token overrides, 0 component overrides
+  <size> KB
+[ok] themes/cedar.js
+[ok] themes/cedar.d.ts
+
+Building theme from themes/dune.mjs...
+
+[ok] themes/dune.css
+[ok] themes/dune.css.d.ts
+  3 token overrides, 0 component overrides
+  <size> KB
+[ok] themes/dune.js
+[ok] themes/dune.d.ts
+
+Building theme from themes/ember.mjs...
+
+[ok] themes/ember.css
+[ok] themes/ember.css.d.ts
+  2 token overrides, 0 component overrides
+  <size> KB
+[ok] themes/ember.js
+[ok] themes/ember.d.ts
+
+Building theme from themes/fjord.mjs...
+
+[ok] themes/fjord.css
+[ok] themes/fjord.css.d.ts
+  2 token overrides, 0 component overrides
+  <size> KB
+[ok] themes/fjord.js
+[ok] themes/fjord.d.ts
+
+Building theme from themes/grove.mjs...
+
+[ok] themes/grove.css
+[ok] themes/grove.css.d.ts
+  3 token overrides, 0 component overrides
+  <size> KB
+[ok] themes/grove.js
+[ok] themes/grove.d.ts
+
+Building theme from themes/harbor.mjs...
+
+[ok] themes/harbor.css
+[ok] themes/harbor.css.d.ts
+  2 token overrides, 0 component overrides
+  <size> KB
+[ok] themes/harbor.js
+[ok] themes/harbor.d.ts
+
+Building theme from themes/iris.mjs...
+
+[ok] themes/iris.css
+[ok] themes/iris.css.d.ts
+  2 token overrides, 0 component overrides
+  <size> KB
+[ok] themes/iris.js
+[ok] themes/iris.d.ts
+
+Building theme from themes/juniper.mjs...
+
+[ok] themes/juniper.css
+[ok] themes/juniper.css.d.ts
+  3 token overrides, 0 component overrides
+  <size> KB
+[ok] themes/juniper.js
+[ok] themes/juniper.d.ts
+
+Building theme from themes/kelp.mjs...
+
+[ok] themes/kelp.css
+[ok] themes/kelp.css.d.ts
+  2 token overrides, 0 component overrides
+  <size> KB
+[ok] themes/kelp.js
+[ok] themes/kelp.d.ts
+
+Building theme from themes/lagoon.mjs...
+
+[ok] themes/lagoon.css
+[ok] themes/lagoon.css.d.ts
+  2 token overrides, 0 component overrides
+  <size> KB
+[ok] themes/lagoon.js
+[ok] themes/lagoon.d.ts
+
+Building theme from themes/meadow.mjs...
+
+[ok] themes/meadow.css
+[ok] themes/meadow.css.d.ts
+  3 token overrides, 0 component overrides
+  <size> KB
+[ok] themes/meadow.js
+[ok] themes/meadow.d.ts
+
+Building theme from themes/nimbus.mjs...
+
+[ok] themes/nimbus.css
+[ok] themes/nimbus.css.d.ts
+  2 token overrides, 0 component overrides
+  <size> KB
+[ok] themes/nimbus.js
+[ok] themes/nimbus.d.ts
+
+Building theme from themes/orchid.mjs...
+
+[ok] themes/orchid.css
+[ok] themes/orchid.css.d.ts
+  2 token overrides, 0 component overrides
+  <size> KB
+[ok] themes/orchid.js
+[ok] themes/orchid.d.ts
+
+Install in your app (paths are relative to a file in src/; adjust if yours lives elsewhere):
+
+  import { Theme } from '@astryxdesign/core/theme';
+  import { amberTheme } from './themes/amber';
+  import './themes/amber.css';
+
+  <Theme theme={amberTheme}>
+    <App />
+  </Theme>
+
+Or with a <link> tag:
+
+  import { Theme } from '@astryxdesign/core/theme';
+  import { amberTheme } from './themes/amber';
+
+  <link rel="stylesheet" href="./themes/amber.css" />
+  <Theme theme={amberTheme}>
+    <App />
+  </Theme>
+
+Each built theme imports the same way:
+  import { amberTheme } from './themes/amber'; import './themes/amber.css';
+  import { basilTheme } from './themes/basil'; import './themes/basil.css';
+  import { cedarTheme } from './themes/cedar'; import './themes/cedar.css';
+  import { duneTheme } from './themes/dune'; import './themes/dune.css';
+  import { emberTheme } from './themes/ember'; import './themes/ember.css';
+  import { fjordTheme } from './themes/fjord'; import './themes/fjord.css';
+  import { groveTheme } from './themes/grove'; import './themes/grove.css';
+  import { harborTheme } from './themes/harbor'; import './themes/harbor.css';
+  import { irisTheme } from './themes/iris'; import './themes/iris.css';
+  import { juniperTheme } from './themes/juniper'; import './themes/juniper.css';
+  import { kelpTheme } from './themes/kelp'; import './themes/kelp.css';
+  import { lagoonTheme } from './themes/lagoon'; import './themes/lagoon.css';
+  import { meadowTheme } from './themes/meadow'; import './themes/meadow.css';
+  import { nimbusTheme } from './themes/nimbus'; import './themes/nimbus.css';
+  import { orchidTheme } from './themes/orchid'; import './themes/orchid.css';
+
+[note] The built themes name fonts they do not load:
+  "Space Grotesk" (amber, basil, fjord, grove, kelp, lagoon)
+  "JetBrains Mono" (amber, dune, grove, iris, juniper, meadow, nimbus)
+  "Figtree" (cedar, harbor, meadow)
+  The built CSS only sets font-family; load these in your app, or every
+  browser quietly falls back.
+
+  Google Fonts (add :wght@... axes as your theme's weights require):
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk&family=JetBrains+Mono&family=Figtree&display=swap" />
+
+  Self-hosted (repeat per family and weight):
+
+    @font-face {
+      font-family: "Space Grotesk";
+      src: url('/fonts/space-grotesk.woff2') format('woff2');
+      font-display: swap;
+    }
+
+  Recipe and fallback-stack guidance: astryx docs typography
+
+
+[ok] Built 15 themes.

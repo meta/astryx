@@ -1,7 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, expect, it} from 'vitest';
-import {generateMarkdownFixture, nextStreamOffset} from './benchmark';
+import {
+  formatBenchmarkChange,
+  generateMarkdownFixture,
+  nextStreamOffset,
+} from './benchmark';
 
 describe('Markdown performance fixture', () => {
   it('generates the requested deterministic section count', () => {
@@ -11,6 +15,15 @@ describe('Markdown performance fixture', () => {
     expect(second).toBe(first);
     expect(first.match(/^## Section /gm)).toHaveLength(3);
     expect(first).toContain('const section3 = {id: 3, ready: true};');
+  });
+
+  it('formats missing, zero, positive, and negative baseline changes', () => {
+    expect(formatBenchmarkChange(null, 10)).toBe('—');
+    expect(formatBenchmarkChange(10, null)).toBe('—');
+    expect(formatBenchmarkChange(0, 0)).toBe('0.0%');
+    expect(formatBenchmarkChange(1, 0)).toBe('new');
+    expect(formatBenchmarkChange(110, 100)).toBe('+10.0%');
+    expect(formatBenchmarkChange(90, 100)).toBe('-10.0%');
   });
 
   it('advances streaming offsets monotonically to the exact source length', () => {

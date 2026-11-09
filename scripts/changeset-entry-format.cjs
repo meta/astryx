@@ -31,6 +31,7 @@
 // changelog. `label` is the changelog section heading.
 const CATEGORIES = [
   {key: 'breaking', label: 'Breaking Changes'},
+  {key: 'experimental', label: 'Experimental APIs'},
   {key: 'component', label: 'New Components'},
   {key: 'feat', label: 'New Features'},
   {key: 'fix', label: 'Fixes'},

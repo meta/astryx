@@ -7,7 +7,10 @@
  */
 
 import type {AuthoredDocGraphFields, AuthoredDocKind} from '../base/type.js';
-import type {ReferenceContentBlock} from '../reference/type.js';
+import type {
+  GraphContentBlock,
+  ReferenceContentBlock,
+} from '../reference/type.js';
 
 /** Which providers may contribute appearances to a namespace slot. */
 export type NamespaceProviderScope = 'same' | 'configured';
@@ -34,6 +37,13 @@ export interface NamespaceAdoptionSource {
   group: string;
   /** Optional subset of authored kinds from the group. */
   kinds?: AuthoredDocKind[];
+  /**
+   * Experimental: `all` adopts the group's docs from every package, not
+   * only the namespace's own. Read only on the CLI's own namespaces marked
+   * `stability: 'experimental'` (the icon definitions).
+   * @experimental
+   */
+  packages?: 'all';
 }
 
 /**
@@ -67,5 +77,5 @@ export interface NamespaceDoc extends AuthoredDocGraphFields {
   /** Optional source-adoption rules for otherwise-unplaced docs. */
   adopts?: NamespaceAdoptionRule[];
   /** Ordered renderer-neutral content and collection blocks. */
-  blocks?: ReferenceContentBlock[];
+  blocks?: (ReferenceContentBlock | GraphContentBlock)[];
 }

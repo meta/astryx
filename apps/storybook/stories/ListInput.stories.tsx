@@ -9,11 +9,18 @@
 
 import * as stylex from '@stylexjs/stylex';
 import type {Meta, StoryObj} from '@storybook/react';
-import {useCallback, useMemo, useState} from 'react';
+import {
+  useCallback,
+  useMemo,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from 'react';
 import type {ISODateString} from '@astryxdesign/core/Calendar';
 import {DateInput} from '@astryxdesign/core/DateInput';
 import {NumberInput} from '@astryxdesign/core/NumberInput';
 import {Selector} from '@astryxdesign/core/Selector';
+import {createReorderable} from '@astryxdesign/core';
 import {pixel, proportional} from '@astryxdesign/core/Table';
 import {Text} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
@@ -189,8 +196,33 @@ function createTagColumns(
   ];
 }
 
+/**
+ * The owner's reorder: each move ListInput reports lands in the records,
+ * found by `getItemKey`'s key.
+ */
+function useRecordReorder<T extends {id: string}>(
+  setRecords: Dispatch<SetStateAction<T[]>>,
+) {
+  return useMemo(
+    () =>
+      createReorderable({
+        onReorder: ({key, to}: {key: string | number; to: number}) =>
+          setRecords(current => {
+            const moved = current.find(record => record.id === key);
+            if (moved == null) {
+              return current;
+            }
+            const rest = current.filter(record => record !== moved);
+            return [...rest.slice(0, to), moved, ...rest.slice(to)];
+          }),
+      }),
+    [setRecords],
+  );
+}
+
 function TagOptionsExample({isReorderable}: {isReorderable?: boolean}) {
   const [tags, setTags] = useState(INITIAL_TAGS);
+  const reorderable = useRecordReorder(setTags);
   const {isFieldTouched, markFieldTouched} = useTouchedFields();
   const columns = useMemo(
     () => createTagColumns(markFieldTouched),
@@ -235,7 +267,7 @@ function TagOptionsExample({isReorderable}: {isReorderable?: boolean}) {
           ? {type: 'error', message: 'Enter a label.'}
           : undefined
       }
-      isReorderable={isReorderable || undefined}
+      reorderable={isReorderable ? reorderable : undefined}
     />
   );
 }
@@ -800,6 +832,7 @@ const INITIAL_TRIP_LEGS: TripLeg[] = [
 
 function ResponsiveItineraryExample() {
   const [legs, setLegs] = useState(INITIAL_TRIP_LEGS);
+  const reorderable = useRecordReorder(setLegs);
   const {isFieldTouched, markFieldTouched} = useTouchedFields();
   const columns = useMemo<ListInputColumn<TripLeg>[]>(
     () => [
@@ -906,7 +939,7 @@ function ResponsiveItineraryExample() {
           }
           return undefined;
         }}
-        isReorderable
+        reorderable={reorderable}
         isRequired
       />
     </div>
@@ -940,6 +973,7 @@ function StaticTagsExample({
   status?: React.ComponentProps<typeof ListInput<TagOption>>['status'];
 }) {
   const [tags, setTags] = useState(INITIAL_TAGS.slice(0, 3));
+  const reorderable = useRecordReorder(setTags);
   const columns = useMemo(() => createTagColumns(() => {}), []);
 
   return (
@@ -955,7 +989,7 @@ function StaticTagsExample({
       isDisabled={isDisabled}
       isLoading={isLoading}
       status={status}
-      isReorderable
+      reorderable={reorderable}
     />
   );
 }
@@ -1025,6 +1059,7 @@ const STRESS_TAGS: TagOption[] = Array.from({length: 25}, (_, index) => ({
 
 function StressExample() {
   const [tags, setTags] = useState(STRESS_TAGS);
+  const reorderable = useRecordReorder(setTags);
   const columns = useMemo(() => createTagColumns(() => {}), []);
 
   return (
@@ -1037,7 +1072,7 @@ function StressExample() {
       createItem={() => ({id: crypto.randomUUID(), color: 'blue', label: ''})}
       columns={columns}
       itemName="tag"
-      isReorderable
+      reorderable={reorderable}
     />
   );
 }

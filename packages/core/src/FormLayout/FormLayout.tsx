@@ -60,6 +60,7 @@ const styles = stylex.create({
       display: 'flex',
       flexDirection: 'column',
       gap: spacingVars['--spacing-4'],
+      alignItems: 'stretch',
     },
   },
 });
@@ -81,10 +82,11 @@ export interface FormLayoutProps extends BaseProps<HTMLDivElement> {
    * Direction of field arrangement.
    *
    * - `'vertical'` — Fields stack top-to-bottom (default). Most common.
-   * - `'horizontal'` — Fields arrange left-to-right in equal-width columns
-   *   using CSS Grid. Each child occupies one equal column.
-   * - `'horizontal-labels'` — CSS Grid with labels to the left of inputs.
-   *   Collapses to vertical when the container is narrow (≤480px).
+   * - `'horizontal'` — Fields occupy one `1fr` CSS Grid track per child in
+   *   logical inline order.
+   * - `'horizontal-labels'` — CSS Grid with labels beside their inputs on the
+   *   inline-start side. Collapses to vertical when the viewport is narrow
+   *   (≤480px).
    *
    * @default 'vertical'
    */
@@ -101,7 +103,11 @@ export interface FormLayoutProps extends BaseProps<HTMLDivElement> {
    *   shows an indicator (the "required" one).
    * - `'required'` — fields read as required; only a field with `isOptional`
    *   shows an indicator (the "optional" one). Fields without `isOptional`
-   *   expose `aria-required` even though they show no indicator.
+   *   expose `aria-required` even though they show no indicator. Checkboxes,
+   *   switches and checkbox groups are the exception: an unchecked box, an off
+   *   switch or an empty group is an answer, so they take no required state
+   *   from the default. A checkbox or switch is required only through its own
+   *   `isRequired`.
    * - unset — today's behavior: `isRequired` and `isOptional` each show their
    *   own indicator independently.
    *
@@ -152,6 +158,7 @@ export function FormLayout({
     <FormLayoutContext value={contextValue}>
       <div
         ref={ref}
+        {...props}
         {...mergeProps(
           themeProps('form-layout', {direction}),
           stylex.props(
@@ -162,8 +169,7 @@ export function FormLayout({
           ),
           className,
           style,
-        )}
-        {...props}>
+        )}>
         {children}
       </div>
     </FormLayoutContext>

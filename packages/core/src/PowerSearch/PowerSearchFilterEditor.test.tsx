@@ -370,7 +370,8 @@ describe('PowerSearchFilterEditor', () => {
 
     expect(screen.queryByRole('button', {name: 'Delete'})).toBeNull();
     const [fieldTrigger, operatorTrigger] = selectorTriggers();
-    expect(fieldTrigger).toBeDisabled();
-    expect(operatorTrigger).toBeDisabled();
+    // Disabled triggers stay focusable (spec:AST-085 FR1).
+    expect(fieldTrigger).toHaveAttribute('aria-disabled', 'true');
+    expect(operatorTrigger).toHaveAttribute('aria-disabled', 'true');
   });
 });

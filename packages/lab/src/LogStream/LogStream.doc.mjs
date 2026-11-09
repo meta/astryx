@@ -11,7 +11,7 @@ export const docs = {
 
   usage: {
     description:
-      'Experimental streaming log viewer: mono grid rows (timestamp | level | source | message) with token-derived level accents, expandable per-row detail panels, follow-scroll live tailing with a "Jump to latest" affordance, and an always-dark terminal variant. Appended rows fade in via @starting-style. Live announcements follow the pinning state: the role="log" region is aria-live="polite" only while following the tail, and aria-live="off" while unfollowed, so a busy stream never floods assistive tech.',
+      'Experimental streaming log viewer: mono grid rows (timestamp | level | source | message) with token-derived level accents, expandable per-row detail panels, follow-scroll live tailing with a "Jump to latest" affordance, and an always-dark terminal variant. In the default variant, warning and error labels use their plain-surface status foreground roles. Appended rows fade in via @starting-style. Live announcements follow the pinning state: the role="log" region is aria-live="polite" only while following the tail, and aria-live="off" while unfollowed, so a busy stream never floods assistive tech.',
   },
 
   props: [

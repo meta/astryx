@@ -4,7 +4,7 @@
 
 import {useState} from 'react';
 import {InternationalizationProvider} from '@astryxdesign/core/i18n';
-import frFR from '@astryxdesign/core/locales/fr-FR.json';
+import frFR from '@astryxdesign/core/locales/fr-FR.generated.js';
 import {Stack} from '@astryxdesign/core/Layout';
 import {
   SegmentedControl,
@@ -29,7 +29,7 @@ export default function InternationalizationProviderShippedLocale() {
           <SegmentedControlItem value="fr-FR" label="FR" />
         </SegmentedControl>
         <Selector
-          style={{width: 300}}
+          controlStyle={{width: 300}}
           label="Billing region"
           options={[
             {value: 'americas', label: 'Americas'},

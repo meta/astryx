@@ -74,6 +74,37 @@ describe('swizzle path safety', () => {
     expect(fs.existsSync(absTarget)).toBe(false);
   });
 
+  it('rejects a component directory that is a symlink out of the project', async () => {
+    const {project, outside} = buildFakeRepo(tmpDir);
+    const base = path.join(project, 'components', 'astryx');
+    fs.mkdirSync(base, {recursive: true});
+    fs.symlinkSync(outside, path.join(base, 'Button'));
+
+    const result = await runCli(['--json', 'swizzle', 'Button'], project);
+
+    expect(result.code).not.toBe(0);
+    expect(JSON.parse(result.stdout).code).toBe('ERR_PATH_TRAVERSAL');
+    expect(fs.readdirSync(outside)).toEqual([]);
+  });
+
+  it('rejects an existing file that is a symlink out of the project, even with --overwrite', async () => {
+    const {project, outside} = buildFakeRepo(tmpDir);
+    const outDir = path.join(project, 'components', 'astryx', 'Button');
+    fs.mkdirSync(outDir, {recursive: true});
+    const target = path.join(outside, 'kept.txt');
+    fs.writeFileSync(target, 'kept\n');
+    fs.symlinkSync(target, path.join(outDir, 'Button.tsx'));
+
+    const result = await runCli(
+      ['--json', 'swizzle', 'Button', '--overwrite'],
+      project,
+    );
+
+    expect(result.code).not.toBe(0);
+    expect(JSON.parse(result.stdout).code).toBe('ERR_PATH_TRAVERSAL');
+    expect(fs.readFileSync(target, 'utf-8')).toBe('kept\n');
+  });
+
   it('requires --overwrite in non-interactive mode when files already exist', async () => {
     const {project} = buildFakeRepo(tmpDir);
     const outDir = path.join(project, 'components', 'astryx', 'Button');
@@ -91,5 +122,16 @@ describe('swizzle path safety', () => {
     expect(result.stderr + result.stdout).toMatch(/overwrite/i);
     // Existing file unchanged
     expect(fs.readFileSync(existingPath, 'utf-8')).toBe('// my customizations\n');
+  });
+
+  // The CLI never prompts: without --overwrite it refuses with a code, and the
+  // manifest agents read must say so.
+  it('describes --overwrite by its refusal, not a prompt', async () => {
+    const {project} = buildFakeRepo(tmpDir);
+    const result = await runCli(['--json', 'manifest'], project);
+    const swizzle = JSON.parse(result.stdout).data.commands.find(c => c.name === 'swizzle');
+    const overwrite = swizzle.options.find(o => o.flag.includes('--overwrite'));
+    expect(overwrite.description).not.toMatch(/prompt/i);
+    expect(overwrite.description).toContain('ERR_FILE_EXISTS');
   });
 });

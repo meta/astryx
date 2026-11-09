@@ -1,6 +1,6 @@
 ---
 schema_version: 3
-template_version: 6
+template_version: 7
 kind: component
 id: component:<Name>
 authority: draft
@@ -20,6 +20,8 @@ system_specs: [spec:AST-000/DEC-0]
 ---
 
 # <Name> component contract
+
+<!-- Describe the system, not the project: present tense, what it does. No proposals, history, pull requests, or research in the record; see docs/contributing/spec-writing.md and report its rubric results in the pull request. -->
 
 ## Contract at a glance
 
@@ -181,7 +183,7 @@ edit an existing component contract merely to backlink to those drafts.
 
 ## Decision log
 
-<!-- Record a durable boundary or requirement, not a review transcript. Keep a rejected alternative only when it is consequential and likely to recur. -->
+<!-- Record the boundary or requirement, not how it was reached. A rejected alternative is at most one line here, kept only when it is consequential and likely to recur. -->
 
 ### DEC-1 — `<component-local decision>`
 

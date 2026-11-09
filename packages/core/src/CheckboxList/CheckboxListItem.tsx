@@ -4,11 +4,13 @@
 
 /**
  * @file CheckboxListItem.tsx
- * @input Uses React, CheckboxInput, ListItem, CheckboxListContext
+ * @input Uses React, CheckboxInput, ListItem, CheckboxListContext,
+ *   CheckboxRowPressContext, the touch presentation and the row press paint
  * @output Exports CheckboxListItem component, CheckboxListItemProps
  * @position Core implementation; consumed by index.ts, tested by CheckboxList.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
+ * - /packages/core/src/CheckboxList/CheckboxListItem.doc.mjs
  * - /packages/core/src/CheckboxList/CheckboxList.doc.mjs
  * - /packages/core/src/CheckboxList/CheckboxList.test.tsx
  * - /packages/core/src/CheckboxList/index.ts
@@ -16,18 +18,33 @@
  * - /packages/cli/assets/templates/blocks/components/CheckboxList/ (showcase blocks)
  */
 
-import {use, useId, useRef, type ReactNode} from 'react';
+import {use, useCallback, useId, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
 import {CheckboxInput} from '../CheckboxInput/CheckboxInput';
 import type {CheckboxInputProps} from '../CheckboxInput/CheckboxInput';
+import type {InputStatus} from '../Field/types';
+import {CheckboxRowPressContext} from '../CheckboxInput/CheckboxRowPressContext';
+import {rowPressPaintStyles} from '../privateAttributes/press.stylex';
+import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {useTouchPresentation} from '../utils/touchPresentation';
 import {ListItem} from '../List/ListItem';
 import {ListContext} from '../List/ListContext';
 import {CheckboxListContext} from './CheckboxListContext';
-import {useTranslator} from '../i18n';
 import {ItemDescriptionContext} from '../Item/ItemDescriptionContext';
+import {joinAriaIDs} from '../utils/inputAria';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {themeDataAttributes} from '../utils/themeProps';
+import type {ItemAlign} from '../Item';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/CheckboxList/CheckboxListItem.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Styles
@@ -44,6 +61,13 @@ const styles = stylex.create({
 // =============================================================================
 
 export interface CheckboxListItemProps extends BaseProps<HTMLLIElement> {
+  /**
+   * Vertical alignment of the start and end content against the label,
+   * forwarded to Item. Use `first-line` to keep the checkbox level with the
+   * first line of a wrapped label.
+   * @default 'center'
+   */
+  align?: ItemAlign;
   /**
    * Primary text label for the item.
    *
@@ -81,8 +105,9 @@ export interface CheckboxListItemProps extends BaseProps<HTMLLIElement> {
    */
   'aria-label'?: string;
   /**
-   * Identity key for collection mode (REQUIRED inside CheckboxList).
-   * Throws a runtime error if missing when used inside CheckboxList.
+   * Identity key for collection mode. Required when the parent CheckboxList
+   * has a `value` array: the item throws without it there. An item inside
+   * List, or inside a CheckboxList without `value`, may omit it.
    */
   value?: string;
   /**
@@ -112,13 +137,16 @@ export interface CheckboxListItemProps extends BaseProps<HTMLLIElement> {
    */
   isLoading?: boolean;
   /**
-   * Direct checked state (standalone mode only).
-   * Ignored when inside CheckboxList.
+   * Direct checked state for standalone mode: an item inside List, or inside
+   * a CheckboxList without `value` (for example, a select-all item). Ignored
+   * when the parent CheckboxList has a `value` array, which then owns the
+   * checked state.
    */
   isChecked?: boolean | 'indeterminate';
   /**
-   * Direct check handler (standalone mode only).
-   * Ignored when inside CheckboxList.
+   * Direct check handler for standalone mode: an item inside List, or inside a
+   * CheckboxList without `value`. Ignored when the parent CheckboxList has a
+   * `value` array; that list's `onChange` receives the change instead.
    */
   onCheck?: (checked: boolean) => void;
   /** Ref forwarded to the root element */
@@ -128,6 +156,8 @@ export interface CheckboxListItemProps extends BaseProps<HTMLLIElement> {
 // =============================================================================
 // Component
 // =============================================================================
+
+const ERROR_STATUS: InputStatus = {type: 'error'};
 
 /**
  * The row's visible description is the checkbox's accessible description. Item
@@ -140,20 +170,32 @@ export interface CheckboxListItemProps extends BaseProps<HTMLLIElement> {
  *
  * This component owns `aria-describedby`, so the prop is omitted rather than
  * accepted and overwritten: a caller passing one would otherwise lose the id
- * silently.
+ * silently. After the row's description comes the group's disabled reason
+ * (CheckboxList's disabledMessage), which describes each checkbox (FR9).
  */
 function DescribedCheckboxInput(
   props: Omit<CheckboxInputProps, 'aria-describedby'>,
 ) {
   const describedBy = use(ItemDescriptionContext);
+  const listContext = use(CheckboxListContext);
   return (
-    <CheckboxInput {...props} aria-describedby={describedBy ?? undefined} />
+    <CheckboxInput
+      {...props}
+      aria-describedby={joinAriaIDs(
+        describedBy ?? undefined,
+        listContext?.disabledMessageID,
+      )}
+      // The status has no message, so CheckboxInput renders nothing. The list
+      // renders the message.
+      status={listContext?.isInvalid ? ERROR_STATUS : undefined}
+    />
   );
 }
 
 /**
- * A checkbox item for use within CheckboxList (collection mode)
- * or List (standalone mode).
+ * A checkbox item for use within CheckboxList (collection mode, when the list
+ * has a `value` array) or standalone (inside List, or inside a CheckboxList
+ * without `value`).
  *
  * In collection mode, checked state is derived from the parent's value array.
  * In standalone mode, uses isChecked/onCheck props directly.
@@ -186,9 +228,10 @@ export function CheckboxListItem({
   className,
   style,
   onClick: onClickProp,
+  align,
   ...restProps
 }: CheckboxListItemProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const ctx = use(CheckboxListContext);
 
   if (ctx && ctx.value !== undefined && value === undefined) {
@@ -220,13 +263,11 @@ export function CheckboxListItem({
   // Disabled: parent-level OR item-level
   const effectiveDisabled = (ctx?.isDisabled ?? false) || isItemDisabled;
   const effectiveReadOnly = ctx?.isReadOnly ?? false;
-  // Loading is per-item: explicit item prop OR (collection mode) the item
+  // Loading is per-item: explicit item prop OR (collection mode) an item
   // whose `changeAction` is currently pending in the parent.
   const isBusy =
     isItemLoading ||
-    (ctx?.loadingValue != null && value !== undefined
-      ? ctx.loadingValue === value
-      : false);
+    (value !== undefined && (ctx?.loadingValues?.includes(value) ?? false));
 
   // Resolve checked state:
   // 1. Collection mode (inside CheckboxList with value[])
@@ -249,6 +290,44 @@ export function CheckboxListItem({
   // a toggleable item, or one carrying a consumer `onClick`.
   const checkboxRef = useRef<HTMLInputElement | null>(null);
   const hasRowInteraction = isInteractive || onClickProp != null;
+
+  // A required group decides which box carries native `required` from the
+  // state of every box. A change to this box's state registers it again.
+  const requiredGroup = ctx?.requiredGroup;
+  const isBoxChecked = resolvedChecked === true;
+  const isBoxEnabled = !effectiveDisabled && !effectiveReadOnly;
+  const registerWithRequiredGroup = useCallback(
+    (input: HTMLInputElement | null) =>
+      input != null && requiredGroup != null
+        ? requiredGroup.register(input, {
+            isChecked: isBoxChecked,
+            isEnabled: isBoxEnabled,
+          })
+        : undefined,
+    [requiredGroup, isBoxChecked, isBoxEnabled],
+  );
+  const checkboxInputRef = useMergedRefs(
+    checkboxRef,
+    registerWithRequiredGroup,
+  );
+
+  // Under a finger, a delegating row is the option's only press surface. A
+  // touch anywhere on it presses the row. A fine pointer keeps the box's own
+  // press.
+  const {isTouch} = useTouchPresentation();
+  const rowOwnsPress = isTouch && hasRowInteraction && !effectiveDisabled;
+
+  // A read-only checkbox carries aria-readonly, which the row's clickable
+  // container treats as a non-interactive target, so a click on it would be
+  // delegated straight back to the checkbox without end. Stop that click at
+  // the checkbox; the consumer onClick still fires once per click.
+  const handleCheckboxClick: typeof onClickProp =
+    effectiveReadOnly && onClickProp != null
+      ? event => {
+          onClickProp(event);
+          event.stopPropagation();
+        }
+      : onClickProp;
 
   const handleToggle = () => {
     if (effectiveDisabled || effectiveReadOnly || isBusy) {
@@ -274,13 +353,19 @@ export function CheckboxListItem({
     }
   };
 
+  // The state follows the fill, so a theme can restyle the text on it.
+  const isCheckedRow =
+    resolvedChecked === true && !effectiveDisabled && !effectiveReadOnly;
+
   return (
     <ListItem
       {...restProps}
+      {...themeDataAttributes({selected: isCheckedRow ? 'selected' : null})}
       ref={ref}
       label={namesFromVisibleLabel ? <span id={labelID}>{label}</span> : label}
       description={description}
       endContent={endContent}
+      align={align}
       isDisabled={effectiveDisabled}
       // Delegate row clicks to the checkbox instead of wiring onClick (which
       // would add an invisible row button = a second tab stop). The checkbox
@@ -291,29 +376,36 @@ export function CheckboxListItem({
       aria-busy={isBusy || undefined}
       xstyle={
         [
-          resolvedChecked === true &&
-            !effectiveDisabled &&
-            !effectiveReadOnly &&
-            styles.selected,
+          // The row's own press paint, which the layer over its box reads.
+          rowOwnsPress && rowPressPaintStyles.checkboxRow,
+          // Item's row layer drops the strength's release, and the box paints
+          // at that strength. So the row brings the release back, and the box
+          // fades with the row.
+          rowOwnsPress && interactionOverlayStyles.pressedAlpha,
+          isCheckedRow && styles.selected,
           xstyle,
         ] as StyleXStyles
       }
       className={className}
       style={style}
       startContent={
-        <DescribedCheckboxInput
-          ref={checkboxRef}
-          label={checkboxLabel}
-          aria-labelledby={namesFromVisibleLabel ? labelID : undefined}
-          isLabelHidden
-          value={resolvedChecked}
-          onChange={() => handleToggle()}
-          onClick={onClickProp}
-          isDisabled={effectiveDisabled}
-          isReadOnly={effectiveReadOnly}
-          isLoading={isBusy}
-          size={checkboxSize}
-        />
+        // Only the row's own checkbox: a checkbox placed in the row's content
+        // keeps its own press.
+        <CheckboxRowPressContext value={rowOwnsPress}>
+          <DescribedCheckboxInput
+            ref={checkboxInputRef}
+            label={checkboxLabel}
+            aria-labelledby={namesFromVisibleLabel ? labelID : undefined}
+            isLabelHidden
+            value={resolvedChecked}
+            onChange={() => handleToggle()}
+            onClick={handleCheckboxClick}
+            isDisabled={effectiveDisabled}
+            isReadOnly={effectiveReadOnly}
+            isLoading={isBusy}
+            size={checkboxSize}
+          />
+        </CheckboxRowPressContext>
       }
     />
   );

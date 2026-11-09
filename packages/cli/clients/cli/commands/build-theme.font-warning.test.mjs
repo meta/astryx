@@ -2,11 +2,12 @@
 
 /**
  * @file End-to-end test for the `astryx theme build` font-loading warning
- * (#5015). A theme that names webfont families gets, AFTER the install
- * instructions, a stdout notice naming the fonts plus the copy-pasteable
- * fix — the Google Fonts <link> pair and a self-hosted @font-face with
- * font-display: swap — and still exits 0 (it is a warning, not an error).
- * Themes that only name generics or known system stacks get none of it.
+ * (#5015). A theme that names webfont families gets a one-line stdout notice
+ * naming the fonts; with `--detail full` it gets, AFTER the install
+ * instructions, the copy-pasteable fix — the Google Fonts <link> pair and a
+ * self-hosted @font-face with font-display: swap. It still exits 0 (it is a
+ * warning, not an error). Themes that only name generics or known system
+ * stacks get none of it.
  */
 
 import {describe, it, expect, beforeAll, beforeEach, afterEach} from 'vitest';
@@ -54,7 +55,7 @@ describe('theme build font-loading warning', () => {
     );
 
     const result = await runCli(
-      ['theme', 'build', path.relative(project, themeFile)],
+      ['--detail', 'full', 'theme', 'build', path.relative(project, themeFile)],
       project,
     );
 
@@ -74,7 +75,7 @@ describe('theme build font-loading warning', () => {
     expect(result.stdout).toContain('display=swap');
     expect(result.stdout).toContain('@font-face');
     expect(result.stdout).toContain('font-display: swap');
-    expect(result.stdout).toContain('astryx docs typography');
+    expect(result.stdout).toContain(' docs typography');
     // The one-line summaries follow the CLI's stream contract. These are
     // NOTICES about a correct theme, not warnings, so they go to stdout with
     // the rest of the build's progress — stderr stays for the defects an
@@ -82,6 +83,34 @@ describe('theme build font-loading warning', () => {
     expect(result.stdout).toContain('note: Font "Space Grotesk"');
     expect(result.stdout).toContain('note: Font "JetBrains Mono"');
     expect(result.stderr).not.toContain('Font "');
+  });
+
+  it('names the unloaded fonts in one line by default', async () => {
+    const project = path.join(tmpDir, 'project');
+    const themeFile = writeTheme(
+      project,
+      'fonty',
+      `export default {
+  name: 'fonty',
+  typography: {
+    body: {family: 'Space Grotesk', fallbacks: 'Arial, sans-serif'},
+    code: {family: 'JetBrains Mono'},
+  },
+};\n`,
+    );
+
+    const result = await runCli(
+      ['theme', 'build', path.relative(project, themeFile)],
+      project,
+    );
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toMatch(
+      /\[note\] Fonts named but not loaded: "Space Grotesk", "JetBrains Mono"\. Load them in your app \(recipe: .+ docs typography\)\.\n/,
+    );
+    expect(result.stdout).not.toContain('fonts.googleapis.com');
+    expect(result.stdout).not.toContain('@font-face');
+    expect(result.stdout).toContain('Run with --detail full');
   });
 
   it('keeps --json stdout one valid envelope: notices inside, snippet suppressed', async () => {
@@ -127,7 +156,7 @@ describe('theme build font-loading warning', () => {
     );
 
     const result = await runCli(
-      ['theme', 'build', path.relative(project, themeFile)],
+      ['--detail', 'full', 'theme', 'build', path.relative(project, themeFile)],
       project,
     );
 

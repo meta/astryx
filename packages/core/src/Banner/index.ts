@@ -33,8 +33,11 @@ export interface BannerContainerMap {
  * Extensible status map for Banner.
  *
  * Theme packages can add custom statuses via TypeScript module augmentation.
- * A status the library does not know falls through to the base treatment: no
- * status fill, no default glyph, and `role="status"`.
+ * A status the library does not know falls through to the base visual treatment:
+ * no status fill and no default glyph. Status never chooses a live-region role.
+ * Announce a status change with `useAnnounce`. Pass `role="alert"` through
+ * BaseProps only for an urgent message; Banner puts it on the title and
+ * description.
  * @example
  * ```
  * declare module '@astryxdesign/core/Banner' {

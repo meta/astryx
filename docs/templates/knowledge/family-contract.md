@@ -1,6 +1,6 @@
 ---
 schema_version: 1
-template_version: 1
+template_version: 2
 kind: family
 id: family:<family-name>
 authority: draft
@@ -18,6 +18,8 @@ deciding_specs: [spec:AST-000/DEC-0]
 ---
 
 # <Family name> contract
+
+<!-- Describe the system, not the project: present tense, what it does. No proposals, history, pull requests, or research in the record; see docs/contributing/spec-writing.md and report its rubric results in the pull request. -->
 
 ## Intent
 

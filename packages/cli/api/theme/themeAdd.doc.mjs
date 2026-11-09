@@ -1,48 +1,53 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-/**
- * @file FunctionDoc for `themeAdd()` / `astryx theme add`.
- */
+/** @file FunctionDoc for `themeAdd()` / `astryx theme add`. */
 
 /** @type {import('@astryxdesign/cli/authoring').FunctionDoc} */
 export const doc = {
   type: 'function',
   kind: 'api',
   name: 'themeAdd',
+  namespace: 'cli/api',
   displayName: 'themeAdd()',
-  summary: 'Copy an available theme into a project as editable source.',
+  summary: 'Add a built theme to the app.',
   description:
-    'Resolves a theme from the CLI bundle or an installed integration and copies every catalog-listed source file into the consumer project. Writes are staged and existing files require explicit overwrite. Duplicate slugs fail closed until the caller selects an owner package.',
+    'Records a package or built local theme and regenerates the app theme module with its built module and stylesheets. options.import is an accepted compatibility no-op, as is options.overwrite set to false. Passing targetPath or options.overwrite set to true fails before writing and names themeEject, which owns source copying.',
   importPath: '@astryxdesign/cli/api',
   signature:
-    'themeAdd(slug: string, options?: {targetPath?: string, overwrite?: boolean, cwd?: string, package?: string}): Promise<ThemeAddResponse>',
-  keywords: ['theme', 'add', 'integration', 'scaffold', 'copy', 'eject'],
+    'themeAdd(slug: string, options?: {targetPath?: string, overwrite?: boolean, import?: boolean, cwd?: string, package?: string}): Promise<ThemeAppResponse>',
+  keywords: ['theme', 'add', 'import', 'app', 'default', 'local'],
   params: [
     {
       name: 'slug',
       type: 'string',
-      description:
-        'Slug of the available theme to copy (matched case-insensitively).',
+      description: 'Slug of the available theme.',
       required: true,
     },
     {
       name: 'options.targetPath',
       type: 'string',
       description:
-        'Destination directory for copied files. Must resolve within cwd.',
-      default: "'src/themes/<slug>'",
+        'Removed copy destination. Passing it throws ERR_THEME_INVALID. Call themeEject instead.',
     },
     {
       name: 'options.overwrite',
       type: 'boolean',
-      description: 'Replace existing files instead of refusing.',
+      description:
+        'False is a compatibility no-op. True throws ERR_THEME_INVALID. Call themeEject instead.',
+      default: 'false',
+    },
+    {
+      name: 'options.import',
+      type: 'boolean',
+      description:
+        'Compatibility no-op; the built theme is added with or without this option.',
       default: 'false',
     },
     {
       name: 'options.cwd',
       type: 'string',
-      description:
-        'Project directory used for integration discovery and target paths.',
+      description: 'Project directory used for discovery and app-theme state.',
+      default: 'process.cwd()',
     },
     {
       name: 'options.package',
@@ -52,14 +57,9 @@ export const doc = {
   ],
   returns: [
     {
-      type: 'theme.add',
+      type: 'theme.app',
       description:
-        'Copy receipt with slug, displayName, maintained flag, owner package, outputDir, entry, exportName, and files.',
-    },
-    {
-      type: 'theme.list',
-      description:
-        'The CLI list affordance routes a bare `astryx theme add` or `--list` to themeListAvailable() and returns every available theme with its owner.',
+        'The complete generated-module state and add change. Its envelope package names the npm package that owns the added theme, except for a local theme.',
     },
   ],
   throws: [
@@ -70,23 +70,28 @@ export const doc = {
     {code: 'ERR_AMBIGUOUS_THEME', when: 'more than one package owns the slug'},
     {
       code: 'ERR_THEME_INVALID',
-      when: 'the selected installed package has a blocking integration or theme-catalog error',
+      when: 'the selected theme is invalid, targetPath is passed, or overwrite is true',
     },
-    {code: 'ERR_PATH_TRAVERSAL', when: 'the target path escapes cwd'},
-    {code: 'ERR_NO_SOURCE', when: 'a catalog-listed source file is missing'},
     {
       code: 'ERR_FILE_EXISTS',
-      when: 'a destination exists and overwrite is not set',
+      when: 'the generated module path conflicts with an authored file',
     },
-    {code: 'ERR_WRITE_FAILED', when: 'writing files fails'},
+    {code: 'ERR_WRITE_FAILED', when: 'module generation fails'},
   ],
   examples: [
-    {label: 'Copy a bundled theme', code: "await themeAdd('ocean');"},
     {
-      label: 'Copy an integration theme',
+      label: 'Add a built theme',
+      code: "await themeAdd('butter');",
+    },
+    {
+      label: 'Select a package theme over a local theme',
       code: "await themeAdd('ocean', {package: '@acme/themes'});",
+    },
+    {
+      label: 'Keep the earlier opt-in spelling',
+      code: "await themeAdd('butter', {import: true});",
     },
   ],
   command: 'theme add',
-  related: ['themeList', 'listThemes'],
+  related: ['themeRemove', 'themeUse', 'themeEject', 'themeListAvailable'],
 };

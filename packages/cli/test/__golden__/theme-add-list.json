@@ -1,0 +1,69 @@
+{
+  "apiVersion": 1,
+  "type": "theme.list",
+  "data": [
+    {
+      "slug": "butter",
+      "displayName": "Butter",
+      "description": "Warm, creamy yellows with a friendly blue accent. Playful enough for consumer surfaces, soft enough to stay readable.",
+      "maintained": false,
+      "package": "@astryxdesign/cli"
+    },
+    {
+      "slug": "chocolate",
+      "displayName": "Chocolate",
+      "description": "Warm chocolate theme for Astryx — rich brown palette with Fraunces headings, Albert Sans body, and Lucide icons",
+      "maintained": false,
+      "package": "@astryxdesign/cli"
+    },
+    {
+      "slug": "gothic",
+      "displayName": "Gothic",
+      "description": "Deep blue-grays and a signature display serif. Dramatic and editorial, for surfaces that want to be remembered.",
+      "maintained": false,
+      "package": "@astryxdesign/cli"
+    },
+    {
+      "slug": "matcha",
+      "displayName": "Matcha",
+      "description": "Earthy greens with a calm, organic feel. Naturalistic and grounded, great for wellness or content-first apps.",
+      "maintained": false,
+      "package": "@astryxdesign/cli"
+    },
+    {
+      "slug": "neutral",
+      "displayName": "Neutral",
+      "description": "Restrained warm grays. Minimal and quiet, so the content stays the focus.",
+      "maintained": true,
+      "package": "@astryxdesign/cli"
+    },
+    {
+      "slug": "stone",
+      "displayName": "Stone",
+      "description": "Warm stone and slate, earthy and understated, with just enough character to feel handcrafted.",
+      "maintained": false,
+      "package": "@astryxdesign/cli"
+    },
+    {
+      "slug": "y2k",
+      "displayName": "Y2K",
+      "description": "Hot pinks, lime greens, and Poppins. Bubbly, playful, and unmistakably retro.",
+      "maintained": false,
+      "package": "@astryxdesign/cli"
+    },
+    {
+      "slug": "ocean",
+      "displayName": "Ocean",
+      "description": "A zorblax blue.",
+      "maintained": true,
+      "package": "@acme/kit"
+    }
+  ],
+  "meta": {
+    "answeredBy": {
+      "cli": "<cli version>",
+      "core": "<cli version>",
+      "copy": "project"
+    }
+  }
+}

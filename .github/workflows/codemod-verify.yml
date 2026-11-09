@@ -15,6 +15,7 @@ name: Codemod Verify
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: ["main"]
     paths:
       - "packages/cli/assets/codemods/**"
@@ -22,12 +23,13 @@ on:
 permissions: {}
 
 concurrency:
-  group: "codemod-verify-${{ github.head_ref }}"
+  group: "codemod-verify-${{ github.event.pull_request.number }}"
   cancel-in-progress: true
 
 jobs:
   verify-codemods:
-    runs-on: 2-core-ubuntu-arm
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
       pull-requests: write

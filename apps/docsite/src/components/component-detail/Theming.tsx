@@ -66,11 +66,6 @@ function TargetsTable({targets, props}: TargetsTableProps) {
                   <Text type="code" color="secondary">
                     .{target.className}
                   </Text>
-                  {target.deprecatedFor && (
-                    <Text type="supporting" color="secondary">
-                      Deprecated: use {target.deprecatedFor}
-                    </Text>
-                  )}
                   {dataAttrs.length > 0 && (
                     <Text type="supporting" color="secondary">
                       Data attrs: {dataAttrs.map(a => `[${a}]`).join(', ')}
@@ -98,7 +93,6 @@ function TargetsTable({targets, props}: TargetsTableProps) {
   const data = targets.map(target => ({
     key: configKey(target) as unknown,
     className: target.className as unknown,
-    deprecatedFor: (target.deprecatedFor ?? '') as unknown,
     dataAttrs: targetDataAttributes(target) as unknown,
     props: targetPropValues(target, props) as unknown,
     states: (target.states ?? []) as unknown,
@@ -131,19 +125,6 @@ function TargetsTable({targets, props}: TargetsTableProps) {
                 .{item.className as string}
               </Text>
             ),
-          },
-          {
-            key: 'deprecatedFor',
-            header: 'Status',
-            width: pixel(180),
-            renderCell: (item: Record<string, unknown>) => {
-              const replacement = item.deprecatedFor as string;
-              return replacement ? (
-                <Text color="secondary">Deprecated: use {replacement}</Text>
-              ) : (
-                <Text color="secondary">Current</Text>
-              );
-            },
           },
           {
             key: 'dataAttrs',

@@ -1,8 +1,8 @@
 {
-  "version": "0.17.5",
-  "generatedAt": "2026-03-17T11:34:45.797Z",
+  "version": "0.19.0",
+  "generatedAt": "2026-09-28T15:06:32.081Z",
   "total": 92,
-  "supported": 82,
+  "supported": 88,
   "results": [
     {
       "category": "At-Rules",
@@ -241,7 +241,7 @@
       "name": "Pseudo-class on pseudo-element (::backdrop + condition)",
       "supported": true,
       "hasInject": true,
-      "output": "ltr: \".xph5o2a::backdrop{opacity:0}\",\nltr: \".x1pgog5j.x1pgog5j::backdrop:where([data-open])::backdrop{opacity:1}\","
+      "output": "ltr: \".xph5o2a::backdrop{opacity:0}\",\nltr: \".x1pgog5j.x1pgog5j:where([data-open])::backdrop::backdrop{opacity:1}\","
     },
     {
       "category": "Compound Selectors",
@@ -262,7 +262,7 @@
       "name": "CSS variables (custom properties)",
       "supported": true,
       "hasInject": true,
-      "output": "ltr: \".x14qql8p{color:var(--color-primary)}\","
+      "output": "ltr: \".xqwr325{color:var(--color-accent)}\","
     },
     {
       "category": "CSS Values",
@@ -330,9 +330,8 @@
     {
       "category": "Transitions & Animations",
       "name": "animation (shorthand)",
-      "supported": true,
-      "hasInject": false,
-      "output": ""
+      "supported": false,
+      "error": "<repo>/test.tsx: animation is not supported"
     },
     {
       "category": "Transitions & Animations",
@@ -351,14 +350,18 @@
     {
       "category": "Variables",
       "name": "stylex.defineVars",
-      "supported": false,
-      "error": "/vercel/sandbox/repos/xds-worktrees/stylex-caps/test.tsx: Unable to generate hash for defineVars(). Check that the file has a valid extension and that unstable_moduleResolution is configured."
+      "filename": "test.stylex.ts",
+      "supported": true,
+      "hasInject": true,
+      "output": "ltr: \":root, .x1cptbry{--x15ffsfu:blue;--x1gusifi:green;}\","
     },
     {
       "category": "Variables",
       "name": "stylex.createTheme",
-      "supported": false,
-      "error": "/vercel/sandbox/repos/xds-worktrees/stylex-caps/test.tsx: Unable to generate hash for defineVars(). Check that the file has a valid extension and that unstable_moduleResolution is configured."
+      "filename": "test.stylex.ts",
+      "supported": true,
+      "hasInject": true,
+      "output": "ltr: \":root, .x1cptbry{--x15ffsfu:blue;}\",\nltr: \".x1il70uh, .x1il70uh:root{--x15ffsfu:red;}\","
     },
     {
       "category": "Ancestor/Sibling Selectors",
@@ -398,8 +401,9 @@
     {
       "category": "Ancestor/Sibling Selectors",
       "name": "stylex.when.ancestor([data-attr])",
-      "supported": false,
-      "error": "/vercel/sandbox/repos/xds-worktrees/stylex-caps/test.tsx: Pseudo selector must start with \":\""
+      "supported": true,
+      "hasInject": true,
+      "output": "ltr: \".x1e2nbdu{color:red}\",\nltr: \".x1vt6d5i.x1vt6d5i:where(.x-default-marker[data-selected] *){color:blue}\","
     },
     {
       "category": "Ancestor/Sibling Selectors",
@@ -446,29 +450,33 @@
     {
       "category": "StyleX APIs",
       "name": "stylex.viewTransitionClass()",
-      "supported": false,
-      "error": "/vercel/sandbox/repos/xds-worktrees/stylex-caps/test.tsx: viewTransitionClass() should have 1 argument."
+      "supported": true,
+      "hasInject": true,
+      "output": "ltr: \"::view-transition-old(*.x8n7qjs){opacity:0;}::view-transition-new(*.x8n7qjs){opacity:1;}\",\nltr: \".x18eo8ei{view-transition-name:x8n7qjs}\","
     },
     {
       "category": "StyleX APIs",
       "name": "stylex.defineConsts()",
       "filename": "test.stylex.ts",
-      "supported": false,
-      "error": "/vercel/sandbox/repos/xds-worktrees/stylex-caps/test.stylex.ts: Unable to generate hash for defineConsts(). Check that the file has a valid extension and that unstable_moduleResolution is configured."
+      "supported": true,
+      "hasInject": true,
+      "output": "ltr: \"\",\nltr: \"\","
     },
     {
       "category": "StyleX APIs",
       "name": "stylex.types.color()",
       "filename": "test.stylex.ts",
-      "supported": false,
-      "error": "/vercel/sandbox/repos/xds-worktrees/stylex-caps/test.stylex.ts: Unable to generate hash for defineVars(). Check that the file has a valid extension and that unstable_moduleResolution is configured."
+      "supported": true,
+      "hasInject": true,
+      "output": "ltr: \"@property --x15ffsfu { syntax: \\\"<color>\\\"; inherits: true; initial-value: blue }\",\nltr: \":root, .x1cptbry{--x15ffsfu:blue;}\","
     },
     {
       "category": "StyleX APIs",
       "name": "stylex.types.length()",
       "filename": "test.stylex.ts",
-      "supported": false,
-      "error": "/vercel/sandbox/repos/xds-worktrees/stylex-caps/test.stylex.ts: Unable to generate hash for defineVars(). Check that the file has a valid extension and that unstable_moduleResolution is configured."
+      "supported": true,
+      "hasInject": true,
+      "output": "ltr: \"@property --xdwkrp { syntax: \\\"<length>\\\"; inherits: true; initial-value: 16px }\",\nltr: \":root, .x1cptbry{--xdwkrp:16px;}\","
     },
     {
       "category": "Bleeding Edge",
@@ -517,7 +525,7 @@
       "category": "Bleeding Edge",
       "name": "CSS nesting (&)",
       "supported": false,
-      "error": "/vercel/sandbox/repos/xds-worktrees/stylex-caps/test.tsx: Invalid pseudo or at-rule."
+      "error": "<repo>/test.tsx: Invalid pseudo or at-rule."
     },
     {
       "category": "Bleeding Edge",

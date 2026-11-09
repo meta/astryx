@@ -71,7 +71,7 @@ function createFixture({
   );
   fs.writeFileSync(
     path.join(compDir, 'MetaAppShell.doc.mjs'),
-    `export const docs = {\n  name: 'MetaAppShell',\n  usage: { description: 'Meta-flavored app shell.' },\n  props: [{ name: 'title', type: 'string', description: 'Header title' }],\n};\n`,
+    `export default {\n  type: 'component',\n  name: 'MetaAppShell',\n  usage: { description: 'Meta-flavored app shell.' },\n  props: [{ name: 'title', type: 'string', description: 'Header title' }],\n};\n`,
   );
   if (withSource) {
     fs.writeFileSync(
@@ -82,7 +82,7 @@ function createFixture({
   if (extraComponent) {
     fs.writeFileSync(
       path.join(compDir, `${extraComponent}.doc.mjs`),
-      `export const docs = {\n  name: '${extraComponent}',\n  usage: { description: '${extraComponent} from meta.' },\n};\n`,
+      `export default {\n  type: 'component',\n  name: '${extraComponent}',\n  usage: { description: '${extraComponent} from meta.' },\n  props: [],\n};\n`,
     );
     fs.writeFileSync(
       path.join(compDir, `${extraComponent}.tsx`),
@@ -100,7 +100,7 @@ function createFixture({
       : '';
     fs.writeFileSync(
       path.join(entryDir, `${entryPoint.component}.doc.mjs`),
-      `export const docs = {\n  name: '${entryPoint.component}',${ownSpecifier}\n  usage: { description: '${entryPoint.component} from an entry point.' },\n};\n`,
+      `export default {\n  type: 'component',\n  name: '${entryPoint.component}',${ownSpecifier}\n  usage: { description: '${entryPoint.component} from an entry point.' },\n  props: [],\n};\n`,
     );
   }
 
@@ -223,7 +223,7 @@ describe('component() — integration ownership via config', () => {
       caught = e;
     }
     expect(caught).toBeTruthy();
-    expect(caught.code).toBe('ERR_UNKNOWN_COMPONENT');
+    expect(caught.code).toBe('ERR_AMBIGUOUS_COMPONENT');
     const pkgs = (caught.suggestions ?? []).map(s => s.name);
     expect(pkgs).toContain(CORE_PACKAGE);
     expect(pkgs).toContain(INTEGRATION_NAME);
@@ -275,6 +275,95 @@ describe('component() — integration ownership via config', () => {
     });
     const result = await component('ToolbarSearch', {cwd: tmpDir});
     expect(result.data.import).toBe(`${INTEGRATION_NAME}/Toolbar/Search`);
+  });
+
+  it('reports every installed candidate for an ambiguous batch selector', async () => {
+    createFixture({extraComponent: 'AppShell'});
+    const result = await component(['MetaAppShell', 'AppShell'], {cwd: tmpDir});
+    expect(result.type).toBe('component.batch');
+    expect(result.data.results[0]).toMatchObject({
+      selector: 'MetaAppShell',
+      status: 'found',
+    });
+    expect(result.data.results[1]).toMatchObject({
+      selector: 'AppShell',
+      status: 'ambiguous',
+      code: 'ERR_AMBIGUOUS_COMPONENT',
+    });
+    expect(result.data.results[1].candidates).toEqual(
+      expect.arrayContaining([
+        {
+          package: CORE_PACKAGE,
+          component: 'AppShell',
+          kind: 'component',
+          installed: true,
+        },
+        {
+          package: INTEGRATION_NAME,
+          component: 'AppShell',
+          kind: 'component',
+          installed: true,
+        },
+      ]),
+    );
+  });
+
+  it('keeps the single-result envelope for one package-qualified selector', async () => {
+    createFixture();
+    const result = await component('@test/meta@1.2.3/MetaAppShell', {
+      cwd: tmpDir,
+    });
+    expect(result.type).toBe('component.detail');
+    expect(result.data).toMatchObject({
+      name: 'MetaAppShell',
+      package: INTEGRATION_NAME,
+    });
+  });
+
+  it('resolves an exact installed package version and refuses another version', async () => {
+    createFixture();
+    const result = await component(
+      [
+        '@test/meta@1.2.3/MetaAppShell',
+        '@test/meta@9.9.9/MetaAppShell',
+      ],
+      {cwd: tmpDir},
+    );
+    expect(result.type).toBe('component.batch');
+    expect(result.data.results[0]).toMatchObject({
+      selector: '@test/meta@1.2.3/MetaAppShell',
+      status: 'found',
+      result: {type: 'component.detail'},
+    });
+    expect(result.data.results[1]).toMatchObject({
+      selector: '@test/meta@9.9.9/MetaAppShell',
+      status: 'not_found',
+      code: 'ERR_UNKNOWN_PACKAGE',
+      suggestions: [
+        {
+          name: 'astryx discover @test/meta@9.9.9',
+          reason: 'look up this package version',
+        },
+      ],
+    });
+  });
+
+  it('reports a package-qualified selector that conflicts with --package', async () => {
+    createFixture();
+    const result = await component(
+      ['@test/meta/MetaAppShell', 'Button'],
+      {cwd: tmpDir, package: CORE_PACKAGE},
+    );
+    expect(result.type).toBe('component.batch');
+    expect(result.data.results[0]).toMatchObject({
+      selector: '@test/meta/MetaAppShell',
+      status: 'error',
+      code: 'ERR_INVALID_ARGUMENT',
+    });
+    expect(result.data.results[1]).toMatchObject({
+      selector: 'Button',
+      status: 'found',
+    });
   });
 
   it('JSON list includes integration components as {name, package} objects', async () => {

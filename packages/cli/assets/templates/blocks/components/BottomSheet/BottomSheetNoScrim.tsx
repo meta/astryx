@@ -33,7 +33,7 @@ export default function BottomSheetNoScrim() {
         label="Place details"
         height="hug"
         hasScrim={false}>
-        <VStack gap={4} style={{padding: 'var(--spacing-4)'}}>
+        <VStack gap={4}>
           <Heading level={3}>Central Park</Heading>
           <Divider />
           <Text type="body">

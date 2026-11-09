@@ -12,7 +12,7 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 
-import {VStack, HStack} from '@astryxdesign/core/Layout';
+import {Layout, LayoutContent, VStack, HStack} from '@astryxdesign/core/Layout';
 import {Text, Heading} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Button} from '@astryxdesign/core/Button';
@@ -32,12 +32,9 @@ import {MetadataList, MetadataListItem} from '@astryxdesign/core/MetadataList';
 import {Section} from '@astryxdesign/core/Section';
 import {Table, proportional, pixel} from '@astryxdesign/core/Table';
 import type {TableColumn, TablePlugin} from '@astryxdesign/core/Table';
-import {
-  colorVars,
-  radiusVars,
-  spacingVars,
-} from '@astryxdesign/core/theme/tokens.stylex';
-import {Drawer, Stat} from '@astryxdesign/lab';
+import {colorVars, radiusVars} from '@astryxdesign/core/theme/tokens.stylex';
+import {Drawer, DrawerHeader} from '@astryxdesign/core/Drawer';
+import {Stat} from '@astryxdesign/lab';
 
 import {
   AUDIT_PROMPT,
@@ -385,14 +382,8 @@ function AuditDetails({
     entry.rubricVersion !== currentRubricVersion;
 
   return (
-    <VStack gap={5} padding={5}>
-      <VStack gap={2} xstyle={styles.drawerHeader}>
-        <Heading level={2} tabIndex={-1} data-autofocus>
-          {row.component}
-        </Heading>
-        <Text type="supporting" color="secondary">
-          {row.package} component audit
-        </Text>
+    <VStack gap={5}>
+      <VStack gap={2}>
         <HStack gap={2} vAlign="center" wrap="wrap">
           <Badge
             variant={
@@ -601,6 +592,7 @@ export default function ComponentScoresPage() {
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [isAuditPanelOpen, setIsAuditPanelOpen] = useState(false);
   const drawerRef = useRef<HTMLDialogElement>(null);
+  const auditContentRef = useRef<HTMLDivElement>(null);
   const auditTriggerRef = useRef<HTMLElement | null>(null);
   const filterInputRef = useRef<HTMLInputElement>(null);
 
@@ -658,7 +650,7 @@ export default function ComponentScoresPage() {
 
   // Switching rows keeps the non-modal drawer open. Reset its reading
   // position and move focus to the new heading so the changed audit is
-  // announced and Escape continues to reach the drawer's key handler.
+  // announced and Escape continues to reach the shared dismissal owner.
   useEffect(() => {
     if (!isAuditPanelOpen || !selectedRowId) {
       return;
@@ -666,9 +658,10 @@ export default function ComponentScoresPage() {
 
     const frame = window.requestAnimationFrame(() => {
       const dialog = drawerRef.current;
-      const scrollContainer = dialog?.firstElementChild;
-      if (scrollContainer instanceof HTMLElement) {
-        scrollContainer.scrollTop = 0;
+      // The Layout's content region is the scroller; the drawer keeps its
+      // header pinned above it.
+      if (auditContentRef.current) {
+        auditContentRef.current.scrollTop = 0;
       }
       dialog?.querySelector<HTMLElement>('[data-autofocus]')?.focus();
     });
@@ -917,7 +910,7 @@ export default function ComponentScoresPage() {
                     hasClear
                     variant="ghost"
                     size="sm"
-                    xstyle={styles.filterToken}
+                    controlXstyle={styles.filterToken}
                   />
                   <Selector
                     label="Package"
@@ -931,7 +924,7 @@ export default function ComponentScoresPage() {
                     hasClear
                     variant="ghost"
                     size="sm"
-                    xstyle={styles.filterToken}
+                    controlXstyle={styles.filterToken}
                   />
                   <Text type="supporting" color="secondary">
                     {visible.length}{' '}
@@ -1046,12 +1039,31 @@ export default function ComponentScoresPage() {
             : 'Component audit details'
         }
         hasScrim={false}
-        hasCloseButton
         width={560}>
         {selectedRow ? (
-          <AuditDetails
-            row={selectedRow}
-            currentRubricVersion={ledger?.rubricVersion ?? null}
+          <Layout
+            header={
+              <DrawerHeader
+                // The title is the focus target on open and on row switch,
+                // so the changed audit is announced.
+                title={
+                  <span tabIndex={-1} data-autofocus>
+                    {selectedRow.component}
+                  </span>
+                }
+                subtitle={selectedRow.package + ' component audit'}
+                onOpenChange={setIsAuditPanelOpen}
+                hasDivider
+              />
+            }
+            content={
+              <LayoutContent ref={auditContentRef}>
+                <AuditDetails
+                  row={selectedRow}
+                  currentRubricVersion={ledger?.rubricVersion ?? null}
+                />
+              </LayoutContent>
+            }
           />
         ) : null}
       </Drawer>
@@ -1066,9 +1078,6 @@ const styles = stylex.create({
   filterToken: {
     backgroundColor: colorVars['--color-neutral'],
     borderRadius: radiusVars['--radius-inner'],
-  },
-  drawerHeader: {
-    paddingInlineEnd: spacingVars['--spacing-10'],
   },
   tabularValue: {
     fontVariantNumeric: 'tabular-nums',

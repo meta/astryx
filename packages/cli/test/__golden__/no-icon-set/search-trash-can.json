@@ -1,0 +1,51 @@
+{
+  "apiVersion": 1,
+  "type": "search",
+  "data": {
+    "query": "trash can",
+    "matchCount": 3,
+    "results": [
+      {
+        "domain": "component",
+        "name": "Icon",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Icon",
+        "command": "astryx component Icon",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "IconButton",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/IconButton",
+        "command": "astryx component IconButton",
+        "mentions": []
+      },
+      {
+        "domain": "template",
+        "name": "ButtonWithIcon",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "displayName": "<text>",
+        "kind": "block",
+        "command": "astryx template ButtonWithIcon --type block",
+        "mentions": []
+      }
+    ]
+  },
+  "meta": {
+    "answeredBy": {
+      "cli": "<version>",
+      "core": "<version>",
+      "copy": "project"
+    }
+  }
+}

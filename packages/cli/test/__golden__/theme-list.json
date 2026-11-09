@@ -1,0 +1,23 @@
+{
+  "apiVersion": 1,
+  "type": "theme.list",
+  "data": [
+    {
+      "slug": "ocean",
+      "displayName": "Ocean",
+      "description": "A zorblax blue.",
+      "maintained": true,
+      "package": "@acme/kit",
+      "added": false,
+      "default": false,
+      "source": "package"
+    }
+  ],
+  "meta": {
+    "answeredBy": {
+      "cli": "<cli version>",
+      "core": "<cli version>",
+      "copy": "project"
+    }
+  }
+}

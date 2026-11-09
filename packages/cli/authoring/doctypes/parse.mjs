@@ -4,8 +4,8 @@
  * @file The doc load boundary. `parseDoc` validates an unknown loaded doc value
  * into its typed shape (or throws a readable error), dispatching on the stamped
  * `type` and falling back to legacy shape-sniffing for unstamped docs. Its
- * acceptance set matches the old permissive `ComponentDocSchema` exactly, so
- * every existing `.doc.*` keeps loading unchanged.
+ * acceptance set preserves the old permissive `ComponentDocSchema` while new
+ * stamped kinds, including `theme`, `icon-set`, and `icon-definition`, use their sealed parser.
  */
 
 import {parseComponent} from './component/parse.mjs';
@@ -16,6 +16,9 @@ import {parseSchema} from './schema/parse.mjs';
 import {parseCommand} from './command/parse.mjs';
 import {parseEnum} from './enum/parse.mjs';
 import {parseNamespace} from './namespace/parse.mjs';
+import {parseTheme} from './theme/parse.mjs';
+import {parseIconSet} from './icon-set/parse.mjs';
+import {parseIconDefinition} from './icon-definition/parse.mjs';
 import {parseLegacyDoc} from './legacy.mjs';
 
 /** @typedef {import('./types.js').ComponentDoc} ComponentDoc */
@@ -27,6 +30,9 @@ import {parseLegacyDoc} from './legacy.mjs';
 /** @typedef {import('./types.js').CommandDoc} CommandDoc */
 /** @typedef {import('./types.js').EnumDoc} EnumDoc */
 /** @typedef {import('./types.js').NamespaceDoc} NamespaceDoc */
+/** @typedef {import('./types.js').ThemeDoc} ThemeDoc */
+/** @typedef {import('./types.js').IconSetDoc} IconSetDoc */
+/** @typedef {import('./types.js').IconDefinitionDoc} IconDefinitionDoc */
 
 /**
  * Validate an unknown loaded doc value into its typed shape, or throw.
@@ -36,7 +42,7 @@ import {parseLegacyDoc} from './legacy.mjs';
  *
  * @param {unknown} input
  * @param {string} [label]
- * @returns {ComponentDoc | HookDoc | FunctionDoc | ReferenceDoc | TemplateDoc | SchemaDoc | CommandDoc | EnumDoc | NamespaceDoc}
+ * @returns {ComponentDoc | HookDoc | FunctionDoc | ReferenceDoc | TemplateDoc | SchemaDoc | CommandDoc | EnumDoc | NamespaceDoc | ThemeDoc | IconSetDoc | IconDefinitionDoc}
  */
 export function parseDoc(input, label = 'doc') {
   const type =
@@ -62,9 +68,16 @@ export function parseDoc(input, label = 'doc') {
       return parseEnum(input, label);
     case 'namespace':
       return parseNamespace(input, label);
+    case 'theme':
+      return parseTheme(input, label);
+    case 'icon-set':
+      return parseIconSet(input, label);
+    case 'icon-definition':
+      return parseIconDefinition(input, label);
     case undefined:
-      return parseLegacyDoc(input, label);
     default:
-      throw new Error(`${label} has unsupported type ${JSON.stringify(type)}.`);
+      // 0.6.x shape-sniffed unknown stamps. Keep accepting them through the
+      // patch compatibility window; canonical writers emit a known stamp.
+      return parseLegacyDoc(input, label);
   }
 }

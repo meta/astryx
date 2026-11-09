@@ -12,9 +12,11 @@ import type {
   EnumDoc,
   FunctionDoc,
   HookDoc,
+  IconDefinitionDoc,
   ReferenceDoc,
   SchemaDoc,
   TemplateDoc,
+  ThemeDoc,
 } from '@astryxdesign/cli/authoring';
 import type {BlockTemplateDoc, PageTemplateDoc} from '@astryxdesign/cli/doc';
 
@@ -97,6 +99,21 @@ export const enumDoc = {
   description: 'Every state a widget reports.',
   members: [{value: 'ready', description: 'Loaded and usable.'}],
 } satisfies EnumDoc;
+
+export const theme = {
+  type: 'theme',
+  name: 'ocean',
+  displayName: 'Ocean',
+  description: 'Blue and calm.',
+  maintained: true,
+} satisfies ThemeDoc;
+
+export const iconDefinition = {
+  type: 'icon-definition',
+  name: 'delete',
+  description: 'Delete something permanently.',
+  words: ['trash', 'bin'],
+} satisfies IconDefinitionDoc;
 
 // A required field left out is a type error, not a runtime surprise.
 export const missingUsage = {

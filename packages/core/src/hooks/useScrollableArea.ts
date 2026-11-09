@@ -8,6 +8,9 @@
  * @output Safe prop getters, native keyboard entry, and stable per-axis effective scroll state
  * @position Canonical behavior core for ScrollableArea and structure-owning adopters
  *
+ * Geometry and style signals cause one full measurement per frame. A scroll
+ * moves only the offset, so it reads only box geometry.
+ *
  * SYNC: When modified, update:
  * - /packages/core/src/hooks/useScrollableArea.doc.mjs
  * - /packages/core/src/hooks/useScrollableArea.test.tsx
@@ -35,9 +38,11 @@ import {
   getLogicalAxisMapping,
   measureLogicalOverflowGeometry,
   measureLogicalScrollAxis,
+  measureLogicalScrollPosition,
   type LogicalAxisMapping,
   type LogicalOverflowGeometry,
 } from './scrollGeometry';
+import {publishScrollGeometry} from './scrollGeometrySubscriptions';
 import {
   registerScrollOwner,
   unregisterScrollOwner,
@@ -106,6 +111,7 @@ const INITIAL_MAPPING: LogicalAxisMapping = {
   inlineReversed: false,
   blockReversed: false,
 };
+const LOGICAL_AXES = ['inline', 'block'] as const;
 
 const styles = stylex.create({
   overflow: (
@@ -113,6 +119,52 @@ const styles = stylex.create({
     overflowY: 'auto' | 'hidden' | 'clip',
   ) => ({overflowX, overflowY}),
 });
+
+/**
+ * The inline declarations of an ancestor that change what the hook measures
+ * without changing a box: the axis mapping, and whether the boxes exist. A
+ * size change reaches the hook through the resize observers whatever caused
+ * it.
+ */
+const ANCESTOR_STYLE_PROPERTIES = [
+  'direction',
+  'writing-mode',
+  'display',
+  'visibility',
+  'content-visibility',
+] as const;
+
+function inlineDeclaration(
+  cssText: string | null,
+  property: string,
+): string | null {
+  if (cssText == null || !cssText.includes(property)) {
+    return null;
+  }
+  const match = new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*([^;]*)`, 'i').exec(
+    cssText,
+  );
+  return match == null ? null : match[1].trim();
+}
+
+/**
+ * Whether an ancestor's `style` attribute changed a declaration the
+ * measurement depends on (ANCESTOR_STYLE_PROPERTIES), between its old and new
+ * text.
+ */
+function inlineStyleChangesMapping(
+  before: string | null,
+  after: string | null,
+): boolean {
+  if (before === after) {
+    return false;
+  }
+  return ANCESTOR_STYLE_PROPERTIES.some(
+    property =>
+      inlineDeclaration(before, property) !==
+      inlineDeclaration(after, property),
+  );
+}
 
 function axisIsRequested(requested: ScrollAxis, axis: 'inline' | 'block') {
   return requested === axis || requested === 'both';
@@ -200,6 +252,7 @@ export function useScrollableArea({
     useState<LogicalOverflowGeometry>(INITIAL_OVERFLOW);
   const [mapping, setMapping] = useState<LogicalAxisMapping>(INITIAL_MAPPING);
   const stateRef = useRef<ScrollableAreaState>(INITIAL_STATE);
+  const measureRef = useRef<(() => void) | null>(null);
 
   const viewportRef = useCallback((node: HTMLElement | null) => {
     setViewport(current => (current === node ? current : node));
@@ -210,6 +263,8 @@ export function useScrollableArea({
   const getComposedViewportRef = useStableComposedRef(viewportRef);
   const getComposedContentRef = useStableComposedRef(contentRef);
 
+  // Syncs the scroll geometry with the viewport and content nodes. It measures
+  // them, then follows resize, scroll, transition and font events.
   useIsomorphicLayoutEffect(() => {
     if (viewport == null || content == null) {
       return;
@@ -217,9 +272,25 @@ export function useScrollableArea({
 
     let frame: number | null = null;
     let isActive = true;
+    // What the last full measurement read from computed style and geometry.
+    // A scroll changes neither, so the scroll path reuses them.
+    let measuredMapping = INITIAL_MAPPING;
+    let measuredOverflow = INITIAL_OVERFLOW;
 
-    const measure = () => {
-      frame = null;
+    const publish = (nextState: ScrollableAreaState) => {
+      stateRef.current = nextState;
+      registerScrollOwner(viewport, nextState);
+      setMeasured(current =>
+        statesEqual(current, nextState) ? current : nextState,
+      );
+    };
+    let hasContentInvalidation = true;
+    let hasLayoutInvalidation = true;
+
+    // Measures now; `measure` is the frame callback that also clears the
+    // pending frame. The same-commit remeasure below calls this one, so a frame
+    // already scheduled stays the only pending one.
+    const measureNow = () => {
       const computedStyle = getComputedStyle(viewport);
       const nextMapping = getLogicalAxisMapping(
         computedStyle.writingMode,
@@ -254,20 +325,31 @@ export function useScrollableArea({
         block: blockOverflow,
       };
       const nextState = {inline, block};
-      stateRef.current = nextState;
-      registerScrollOwner(viewport, nextState);
-      // eslint-disable-next-line @eslint-react/set-state-in-effect -- measured DOM geometry controls whether the viewport becomes a CSS scroll container
+      measuredMapping = nextMapping;
+      measuredOverflow = nextOverflow;
+      // Measured DOM geometry decides whether the viewport becomes a CSS
+      // scroll container.
       setOverflow(current =>
         overflowEqual(current, nextOverflow) ? current : nextOverflow,
       );
-      // eslint-disable-next-line @eslint-react/set-state-in-effect -- measured DOM state is the hook's output
-      setMeasured(current =>
-        statesEqual(current, nextState) ? current : nextState,
+      // The measured DOM state is the hook's output.
+      publish(nextState);
+      publishScrollGeometry(
+        viewport,
+        hasContentInvalidation,
+        hasLayoutInvalidation,
       );
-      // eslint-disable-next-line @eslint-react/set-state-in-effect -- writing-mode changes remap behavior-owned physical CSS
+      hasContentInvalidation = false;
+      hasLayoutInvalidation = false;
+      // A writing-mode change remaps the behavior-owned physical CSS.
       setMapping(current =>
         mappingsEqual(current, nextMapping) ? current : nextMapping,
       );
+    };
+
+    const measure = () => {
+      frame = null;
+      measureNow();
     };
 
     const scheduleMeasure = () => {
@@ -277,12 +359,121 @@ export function useScrollableArea({
       frame = window.requestAnimationFrame(measure);
     };
 
-    registerScrollOwner(viewport, stateRef.current);
-    measure();
-    const stopObservingViewport = observeResize(viewport, scheduleMeasure);
-    const stopObservingContent = observeResize(content, scheduleMeasure);
+    // A scroll moves only the offset, so it derives the logical edges from
+    // box geometry when the event fires. Style and layout are usually still
+    // clean then, so no computed style is read and no frame is requested.
+    // When the scroll cannot explain a change (overflow on a requested axis
+    // appears or goes away, or the offset sign does not match the writing
+    // direction), it schedules the full measurement.
+    const onScroll = () => {
+      if (!isActive || frame != null) {
+        // A full measurement is already pending for this frame.
+        return;
+      }
+      const current = stateRef.current;
+      let next = current;
+      for (const logicalAxis of LOGICAL_AXES) {
+        if (!axisIsRequested(axis, logicalAxis)) {
+          continue;
+        }
+        const position = measureLogicalScrollPosition(
+          viewport,
+          logicalAxis,
+          measuredMapping,
+        );
+        if (position == null) {
+          return;
+        }
+        if (
+          position.overflows !== measuredOverflow[logicalAxis] ||
+          position.contradictsMapping
+        ) {
+          scheduleMeasure();
+          return;
+        }
+        const axisState = current[logicalAxis];
+        if (
+          !axisState.isScrollable ||
+          (axisState.atStart === position.atStart &&
+            axisState.atEnd === position.atEnd)
+        ) {
+          continue;
+        }
+        next = {
+          ...next,
+          [logicalAxis]: {
+            isScrollable: true,
+            atStart: position.atStart,
+            atEnd: position.atEnd,
+          },
+        };
+      }
+      if (next !== current) {
+        publish(next);
+      }
+      publishScrollGeometry(viewport);
+    };
 
-    viewport.addEventListener('scroll', scheduleMeasure, {passive: true});
+    const scheduleContentMeasure = () => {
+      hasContentInvalidation = true;
+      scheduleMeasure();
+    };
+    const scheduleLayoutMeasure = () => {
+      hasLayoutInvalidation = true;
+      scheduleContentMeasure();
+    };
+    // An ancestor's inline style reaches the measurement two ways: through the
+    // viewport's or the content's box, which the resize observers report, or
+    // through the axis mapping and the boxes' existence. So an ancestor's
+    // `style` mutation counts only when one of those declarations changed.
+    // A surface that moves under a finger writes its transform on every input
+    // sample; measuring on each of those forced a style recalculation and a
+    // layout every frame of the drag.
+    const isUnmappedAncestorStyle = (record: MutationRecord) => {
+      const target = record.target;
+      return (
+        record.type === 'attributes' &&
+        record.attributeName === 'style' &&
+        target instanceof Element &&
+        !viewport.contains(target) &&
+        !content.contains(target) &&
+        !inlineStyleChangesMapping(
+          record.oldValue,
+          target.getAttribute('style'),
+        )
+      );
+    };
+    // A change below the content root, such as a mounted row, is content
+    // only. A change to the content root, the viewport or an ancestor can
+    // change how mounted content fits.
+    const onMutations = (records: MutationRecord[]) => {
+      const counted = records.filter(
+        record => !isUnmappedAncestorStyle(record),
+      );
+      if (counted.length === 0) {
+        return;
+      }
+      if (
+        counted.some(
+          record =>
+            record.target === content || !content.contains(record.target),
+        )
+      ) {
+        scheduleLayoutMeasure();
+      } else {
+        scheduleContentMeasure();
+      }
+    };
+    registerScrollOwner(viewport, stateRef.current);
+    measureRef.current = measureNow;
+    measure();
+    const stopObservingViewport = observeResize(
+      viewport,
+      scheduleLayoutMeasure,
+    );
+    const stopObservingContent = observeResize(content, scheduleLayoutMeasure);
+
+    viewport.addEventListener('scroll', onScroll, {passive: true});
     window.addEventListener('resize', scheduleMeasure);
     window.visualViewport?.addEventListener('resize', scheduleMeasure);
     content.addEventListener('load', scheduleMeasure, true);
@@ -296,7 +487,7 @@ export function useScrollableArea({
     const mutationObserver =
       typeof MutationObserver === 'undefined'
         ? null
-        : new MutationObserver(scheduleMeasure);
+        : new MutationObserver(onMutations);
     mutationObserver?.observe(viewport, {
       attributes: true,
       attributeFilter: ['class', 'dir', 'hidden', 'style'],
@@ -313,21 +504,23 @@ export function useScrollableArea({
       mutationObserver?.observe(ancestor, {
         attributes: true,
         attributeFilter: ['class', 'dir', 'hidden', 'style'],
+        attributeOldValue: true,
       });
       ancestor = ancestor.parentElement;
     }
 
     const fonts = document.fonts;
-    fonts?.addEventListener?.('loadingdone', scheduleMeasure);
-    void fonts?.ready.then(scheduleMeasure);
+    fonts?.addEventListener?.('loadingdone', scheduleLayoutMeasure);
+    void fonts?.ready.then(scheduleLayoutMeasure);
 
     return () => {
       isActive = false;
+      measureRef.current = null;
       unregisterScrollOwner(viewport);
       stopObservingViewport();
       stopObservingContent();
       mutationObserver?.disconnect();
-      viewport.removeEventListener('scroll', scheduleMeasure);
+      viewport.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', scheduleMeasure);
       window.visualViewport?.removeEventListener('resize', scheduleMeasure);
       content.removeEventListener('load', scheduleMeasure, true);
@@ -335,12 +528,35 @@ export function useScrollableArea({
       viewport.removeEventListener('animationend', scheduleMeasure);
       content.removeEventListener('transitionend', scheduleMeasure);
       content.removeEventListener('animationend', scheduleMeasure);
-      fonts?.removeEventListener?.('loadingdone', scheduleMeasure);
+      fonts?.removeEventListener?.('loadingdone', scheduleLayoutMeasure);
       if (frame != null) {
         window.cancelAnimationFrame(frame);
       }
     };
   }, [axis, content, viewport]);
+
+  // The first measure runs before an overflowing axis can scroll (it is
+  // `clip` until then). So when an axis gains overflow, or the axis mapping
+  // changes, measure again in the same commit. Then the viewport is a tab
+  // stop from the first frame it scrolls (AST-025). Do this only on a gain:
+  // content that fits only when a scrollbar takes space would flip in one
+  // commit. A loss waits for the next frame.
+  const previousOverflowRef = useRef<LogicalOverflowGeometry>(INITIAL_OVERFLOW);
+  const previousMappingRef = useRef<LogicalAxisMapping>(INITIAL_MAPPING);
+  // Measures the layout again when overflow starts or the writing-mode mapping
+  // changes. A new scrollbar gutter changes the geometry.
+  useIsomorphicLayoutEffect(() => {
+    const previous = previousOverflowRef.current;
+    const hasGainedOverflow =
+      (overflow.inline && !previous.inline) ||
+      (overflow.block && !previous.block);
+    const hasRemapped = mapping !== previousMappingRef.current;
+    previousOverflowRef.current = overflow;
+    previousMappingRef.current = mapping;
+    if (hasGainedOverflow || hasRemapped) {
+      measureRef.current?.();
+    }
+  }, [overflow, mapping]);
 
   const state = useMemo<ScrollableAreaState>(
     () => ({

@@ -7,18 +7,20 @@
  * lets an AI agent drive the entire CLI WITHOUT scraping `--help` text. It is
  * to the CLI what an OpenAPI spec is to an HTTP API.
  *
- * Most of the manifest is DERIVED from Commander metadata (program.commands,
- * cmd.options, cmd.registeredArguments, cmd.description()) so it cannot drift
- * out of sync with the real command definitions. The two pieces Commander does
- * not know about — whether a command supports `--json`, and which response
- * `type` discriminators it can emit — are layered on from:
+ * Its per-command facts come from the command's own definitions: names,
+ * arguments and options from Commander metadata (program.commands, cmd.options,
+ * cmd.registeredArguments, cmd.description()); examples, exit codes, and what
+ * it does outside a project from its CommandDoc;
+ * response `type` discriminators from the returns of the FunctionDoc it wraps
+ * (both attached by `defineCommand`); `--json` support from the JSON_SUPPORTED
+ * allowlist in index.mjs. The hand-kept lists are CLI_LAYER_RESPONSE_TYPES,
+ * for envelopes no API function returns, and ROOT_RESPONSE_TYPES, for the two
+ * (help and version) that no single command owns.
  *
- *   - JSON_SUPPORTED  (the allowlist in index.mjs), and
- *   - RESPONSE_TYPES  (the declarative map below).
- *
- * A drift-guard test (manifest.test.mjs) asserts every registered command
- * appears in the manifest and every JSON-supported command has a response-type
- * entry, so adding a command without describing it fails CI.
+ * Drift-guard tests (manifest.test.mjs) assert every registered command appears
+ * in the manifest, every JSON-supported command has response types, and the
+ * examples and response types equal the docs, so adding a command without
+ * describing it fails CI.
  *
  * DESIGN DECISION — manifest stays CLI-special; there is intentionally NO
  * `api/manifest`. It describes the CLI's own Commander tree, so it takes the live
@@ -35,148 +37,41 @@
  */
 
 import {API_VERSION} from '../../../foundation/response/json.mjs';
+import {commandDocsOf} from './define-command.mjs';
+import {doc as manifestDoc} from '../commands/manifest.doc.mjs';
 
 /**
- * Response `type` discriminators each fully-qualified command can emit in
- * `--json` mode. Keyed by the same name Commander reports (parent + leaf,
- * space-joined), e.g. `theme build`. Commander has no knowledge of these —
- * they come from each command's `jsonOut(...)` call sites — so we keep them
- * here, close to the JSON_SUPPORTED allowlist, and guard them with a test.
- *
+ * What a run may do beyond the command it was asked for (spec AST-081;
+ * `spec:AST-017` FR14), and where it is explained.
+ */
+export const GLOBAL_MODE = Object.freeze({
+  docs: 'astryx docs global',
+  summary:
+    "In a folder that belongs to a project, the project's own CLI answers: this copy hands the run to it. In a project with no CLI of its own, and outside any project, this copy answers. A copy installed for the computer checks the registry for a newer release once a day in the background, and keeps one agent skill file in the home folder.",
+});
+
+/**
+ * Envelopes the CLI layer builds itself, so the wrapped FunctionDoc cannot
+ * declare them: `manifest` wraps no API function, `theme build` batches several
+ * `themeBuild()` receipts, and `theme add` with no slug (or `--list`) answers
+ * with `themeListAvailable()`'s `theme.list` instead of calling `themeAdd()`.
+ * manifest.test.mjs fails once the wrapped FunctionDoc declares one of these, so
+ * the list only shrinks.
  * @type {Record<string, string[]>}
  */
-export const RESPONSE_TYPES = {
-  init: ['init.run', 'init.remove'],
-  component: [
-    'component.list',
-    'component.detail',
-    'component.detail.props',
-    'component.detail.source',
-    'component.detail.showcase',
-    'component.detail.blocks',
-  ],
-  docs: ['docs.list', 'docs.index', 'docs.detail', 'docs.detail.section'],
-  blog: ['blog.list', 'blog.detail'],
-  discover: [
-    'discover.list',
-    'discover.detail',
-    'discover.detail.doc',
-    'discover.search',
-  ],
-  search: ['search'],
-  build: ['build.help', 'build.kit'],
-  swizzle: ['swizzle.list', 'swizzle.copy'],
-  'gap-report': ['gap-report.categories', 'gap-report.file'],
-  template: [
-    'template.list',
-    'template.show',
-    'template.skeleton',
-    'template.copy',
-    'template.cdn',
-  ],
-  hook: ['hook.list', 'hook.detail', 'hook.detail.params'],
-  'theme build': ['theme.build', 'theme.build.check', 'theme.build.batch'],
-  'theme list': ['theme.list'],
-  'theme add': ['theme.list', 'theme.add'],
-  'theme template': ['theme.template'],
-  'theme targets': ['theme.targets'],
-  'theme palette generate': ['theme.palette.generate'],
-  'integration add': ['integration.add'],
-  'integration pack': ['integration.pack-check'],
-  upgrade: ['upgrade.list', 'upgrade.status', 'upgrade.run'],
+const CLI_LAYER_RESPONSE_TYPES = {
   manifest: ['manifest'],
-  doctor: ['doctor'],
-  'doctor integration validate': ['integration.validate'],
-  'doctor integration templates': ['integration.template-conflicts'],
-  'doctor integration components': ['integration.component-conflicts'],
-  'doctor integration docs': ['integration.doc-conflicts'],
-  'layout expand': ['layout.expand'],
-  'layout check': ['layout.check'],
-  'layout grammar': ['layout.grammar'],
+  'theme build': ['theme.build.batch'],
+  'theme add': ['theme.list'],
 };
 
 /**
- * Example invocations per fully-qualified command. Optional, agent-facing.
- * @type {Record<string, string[]>}
+ * Response types no single command owns: `help` (a bare `astryx --json`, and
+ * `--help --json` on any command) and `version` (`astryx --version --json`).
+ * The response-types enum lists them beside the per-command response types.
+ * @type {readonly string[]}
  */
-const EXAMPLES = {
-  component: [
-    'astryx component',
-    'astryx component XDSButton',
-    'astryx component XDSButton --props --json',
-  ],
-  docs: [
-    'astryx docs',
-    'astryx docs spacing --json',
-    'astryx docs theme --index',
-    'astryx docs theme quick-start',
-  ],
-  discover: ['astryx discover --json'],
-  search: [
-    'astryx search modal --json',
-    'astryx search button --type component --json',
-  ],
-  build: ['astryx build', 'astryx build "analytics dashboard" --json'],
-  swizzle: ['astryx swizzle XDSButton'],
-  'gap-report': [
-    'astryx gap-report --list-categories',
-    "astryx gap-report Button --category docs_gap --reason 'Missing keyboard example'",
-  ],
-  template: [
-    'astryx template --json',
-    'astryx template dashboard ./src/app',
-    'astryx template --cdn',
-  ],
-  hook: ['astryx hook', 'astryx hook useFocusTrap --json'],
-  'theme build': [
-    'astryx theme build ./src/themes/ocean.ts --out ./dist/ocean.css',
-    'astryx theme build ./src/themes/ocean.ts --check',
-  ],
-  'theme list': ['astryx theme list --json'],
-  'theme add': [
-    'astryx theme add matcha',
-    'astryx theme add matcha ./src/themes/matcha',
-  ],
-  'theme template': ['astryx theme template', 'astryx theme template --json'],
-  'theme targets': [
-    'astryx theme targets Switch',
-    'astryx --json theme targets',
-  ],
-  'theme palette generate': [
-    'astryx theme palette generate palette.config.json',
-    'astryx theme palette generate palette.config.json --out ocean.palette.json',
-  ],
-  'integration add': [
-    'astryx integration add component AcmeWidget',
-    'astryx integration add doc deploying --dry-run --json',
-  ],
-  'integration pack': ['astryx integration pack --check --json'],
-  upgrade: ['astryx upgrade --json'],
-  manifest: ['astryx manifest --json', 'astryx --json'],
-  doctor: ['astryx doctor', 'astryx doctor --json'],
-  'doctor integration validate': [
-    'astryx doctor integration validate',
-    'astryx doctor integration validate @acme/widgets --json',
-  ],
-  'doctor integration templates': [
-    'astryx doctor integration templates',
-    'astryx doctor integration templates @acme/widgets --json',
-  ],
-  'doctor integration components': [
-    'astryx doctor integration components',
-    'astryx doctor integration components @acme/widgets --json',
-  ],
-  'doctor integration docs': [
-    'astryx doctor integration docs',
-    'astryx doctor integration docs @acme/widgets --json',
-  ],
-  init: ['astryx init', 'astryx init --all --json'],
-  'layout expand': [
-    `astryx layout expand 'V[g6] > C{card-callout}*4' ./src/Page.tsx`,
-  ],
-  'layout check': [`astryx layout check 'A[cp6] > L > LC > S[p6]' --json`],
-  'layout grammar': ['astryx layout grammar'],
-};
+export const ROOT_RESPONSE_TYPES = Object.freeze(['help', 'version']);
 
 /**
  * Map a Commander Option to a flag descriptor. Derives type from whether the
@@ -238,6 +133,18 @@ function fullName(cmd, root) {
 }
 
 /**
+ * The docs a command was built from. `manifest` is registered by hand in
+ * index.mjs, so its CommandDoc is read here.
+ * @param {import('commander').Command} cmd
+ * @param {string} name
+ */
+function docsOf(cmd, name) {
+  return (
+    commandDocsOf(cmd) ?? (name === 'manifest' ? {doc: manifestDoc} : undefined)
+  );
+}
+
+/**
  * Recursively describe a Commander command and its subcommands.
  *
  * @param {import('commander').Command} cmd
@@ -251,6 +158,8 @@ function describeCommand(cmd, root, jsonSupported) {
   // (e.g. the postinstall shim) — agents never invoke these directly.
   // `_hidden` is a Commander internal not present on its public types.
   if (!name || /** @type {any} */ (cmd)._hidden || name === 'help') return null;
+
+  const docs = docsOf(cmd, name);
 
   const subcommands = /** @type {object[]} */ (
     (cmd.commands || [])
@@ -278,11 +187,27 @@ function describeCommand(cmd, root, jsonSupported) {
   const aliases = cmd.aliases ? cmd.aliases() : [];
   if (aliases && aliases.length > 0) entry.aliases = [...aliases];
 
-  // Response types this command can emit in --json mode (only meaningful for
-  // JSON-supported leaves). Subcommand groups (e.g. bare `theme`) have none.
-  if (RESPONSE_TYPES[name]) entry.responseTypes = [...RESPONSE_TYPES[name]];
+  // Response types this command can emit in --json mode: the returns of the
+  // FunctionDoc it wraps, then any envelope the CLI layer builds. Subcommand
+  // groups (e.g. bare `theme`) have none.
+  const responseTypes = [
+    ...(docs?.fn?.returns ?? []).map(r => r.type),
+    ...(CLI_LAYER_RESPONSE_TYPES[name] ?? []),
+  ];
+  if (responseTypes.length > 0) entry.responseTypes = responseTypes;
 
-  if (EXAMPLES[name]) entry.examples = [...EXAMPLES[name]];
+  const examples = (docs?.doc.examples ?? []).map(e => e.cli);
+  if (examples.length > 0) entry.examples = examples;
+
+  const exitCodes = (docs?.doc.exitCodes ?? []).map(({code, when}) => ({
+    code,
+    when,
+  }));
+  if (exitCodes.length > 0) entry.exitCodes = exitCodes;
+
+  // What the command does outside a project (spec AST-081 FR4). Every command
+  // declares it in its CommandDoc; a group that only holds subcommands does not.
+  if (docs?.doc.outsideProject) entry.outsideProject = docs.doc.outsideProject;
 
   // Sort subcommands by name for a stable, agent-facing contract — the same
   // guarantee the top-level command list makes. Otherwise Commander
@@ -320,6 +245,15 @@ function describeGlobalOptions(program) {
 }
 
 /**
+ * Every command in a described tree, depth first.
+ * @param {any[]} commands
+ * @returns {any[]}
+ */
+function flattenCommands(commands) {
+  return commands.flatMap(c => [c, ...flattenCommands(c.subcommands || [])]);
+}
+
+/**
  * Build the full capability manifest from a configured Commander program.
  *
  * @param {import('commander').Command} program  the root program
@@ -346,10 +280,13 @@ export function buildManifest(program, opts = {}) {
     globalOptions: describeGlobalOptions(program),
     commands,
     jsonSupported: [...jsonSupported].sort(),
+    globalMode: GLOBAL_MODE,
     // Flat index of every response `type` discriminator the CLI can emit,
     // keyed by command — lets an agent know what to expect back per call.
     responseTypes: Object.fromEntries(
-      Object.entries(RESPONSE_TYPES).map(([k, v]) => [k, [...v]]),
+      flattenCommands(commands)
+        .filter(c => c.responseTypes)
+        .map(c => [c.name, [...c.responseTypes]]),
     ),
   };
 }

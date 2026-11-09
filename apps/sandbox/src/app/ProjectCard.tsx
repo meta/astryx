@@ -2,7 +2,7 @@
 
 'use client';
 
-import Link from 'next/link';
+import Link from '../router';
 import * as stylex from '@stylexjs/stylex';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {Card} from '@astryxdesign/core/Card';

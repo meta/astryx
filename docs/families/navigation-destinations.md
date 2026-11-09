@@ -23,6 +23,7 @@ verified_by:
     apps/docsite/src/__tests__/link-navigation.test.ts,
     packages/core/src/hooks/useClickableContainer.test.tsx,
     packages/core/src/ClickableCard/ClickableCard.test.tsx,
+    packages/core/src/DropdownMenu/DropdownMenu.test.tsx,
   ]
 members:
   [
@@ -31,6 +32,7 @@ members:
     component:Button,
     component:Citation,
     component:ClickableCard,
+    component:DropdownMenuItem,
     component:Item,
     component:Link,
     component:ListItem,
@@ -86,7 +88,9 @@ renderers, and callbacks are outside the boundary after Astryx hands over
 control.
 
 - **Current members:** Avatar; BreadcrumbItem; Button link mode; Citation;
-  ClickableCard; Item; Link; ListItem; Markdown links; NavHeadingMenuItem;
+  ClickableCard; DropdownMenuItem link rows (and the data-mode item they render,
+  in the pointer menu and the touch sheet); Item; Link; ListItem; Markdown
+  links; NavHeadingMenuItem;
   SideNavHeading and SideNavItem; navigation-mode Tab; Token link mode;
   TopNavHeading, TopNavItem, TopNavMenu, TopNavMegaMenuItem, and
   TopNavMegaMenuFeaturedCard; and TreeListItem.

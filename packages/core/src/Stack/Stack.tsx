@@ -30,7 +30,7 @@ import {
   paddingBlockStartStyles,
   paddingBlockEndStyles,
 } from '../Layout/padding.stylex';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
 
 const overflowStyles = stylex.create({
@@ -56,7 +56,7 @@ export interface StackProps extends BaseProps<HTMLElement> {
   ref?: React.Ref<HTMLElement>;
   /**
    * Direction of the stack layout.
-   * - `horizontal`: Items flow left-to-right (like HStack)
+   * - `horizontal`: Items flow along the inline axis, right to left in RTL (like HStack)
    * - `vertical`: Items flow top-to-bottom (like VStack)
    * @default 'vertical'
    */

@@ -3,14 +3,17 @@
 /**
  * @file themeAdaptations.ts
  * @input Ordered environment-conditioned theme value rules from defineTheme
- * @output Validated breakpoint metadata and resolved CSS-first rule layers
+ * @output Validated breakpoint metadata, the compact definition, and resolved
+ *   CSS-first rule layers
  * @position Theme system core; consumed by defineTheme, AppShell, and the CSS compiler
  *
  * Adaptations are deliberately closed and ordered. Width points are fixed names,
  * sparse rules and reserved token routing are rejected during normalization,
  * condition fields are ANDed, and rule order is the precedence model: every
- * matching rule writes after the root theme and later matching writes win. Token
- * cycles are judged only after each reachable ordered cascade is complete.
+ * matching rule writes after the root theme and later matching writes win.
+ * Invariant type-scale component defaults already declared at root are omitted;
+ * authored rule leaves and generated token writes retain their cascade order.
+ * Token cycles are judged after each reachable ordered cascade is complete.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/theme/defineTheme.ts (`DefineThemeInput.adaptations`)
@@ -24,6 +27,7 @@
 import type {ComponentStyleMap, TokenName, TokenValue} from './defineTheme';
 import type {TypographyConfig, TypographyRole} from './types';
 import type {MotionScaleConfig} from './expandMotionScale';
+import type {ThemeMotionConfig, ThemeMotionKnobs} from './themeMotion';
 import type {RadiusScaleConfig} from './expandRadiusScale';
 import type {ColorScaleConfig} from './expandColorScale';
 import {resolveThemeValues, type ThemeValuesInput} from './resolveThemeValues';
@@ -51,6 +55,47 @@ export const DEFAULT_WIDTH_BREAKPOINTS: Readonly<WidthBreakpoints> =
     xl: 1280,
     '2xl': 1536,
   });
+
+/**
+ * When a screen is compact, for a component that chooses a presentation by
+ * screen size (`spec:AST-012` FR9): width below the theme's effective `md`
+ * point, or height below 500. The numbers are the same on every platform (CSS
+ * pixels on the web, points on iOS, density-independent pixels on Android).
+ */
+export interface CompactDefinition {
+  /** Compact below this viewport width: the effective `md` point. */
+  readonly widthBelow: number;
+  /** Compact below this viewport height. */
+  readonly heightBelow: number;
+  /** The definition as a media query list, without the `@media` keyword. */
+  readonly query: string;
+  /** Compact and a coarse primary pointer, without the `@media` keyword. */
+  readonly coarsePointerQuery: string;
+}
+
+/** The viewport height below which a screen is compact (`spec:AST-012` FR9). */
+const COMPACT_HEIGHT_BELOW = 500;
+
+/**
+ * The compact definition for a theme's width points (`spec:AST-012` FR9).
+ * Pass a theme's effective width breakpoints; omit them for the defaults.
+ */
+export function compactDefinition(
+  points: Readonly<Pick<WidthBreakpoints, 'md'>> = DEFAULT_WIDTH_BREAKPOINTS,
+): CompactDefinition {
+  const width = `(width < ${points.md}px)`;
+  const height = `(height < ${COMPACT_HEIGHT_BELOW}px)`;
+  return Object.freeze({
+    widthBelow: points.md,
+    heightBelow: COMPACT_HEIGHT_BELOW,
+    query: `${width}, ${height}`,
+    coarsePointerQuery: `${width} and (pointer: coarse), ${height} and (pointer: coarse)`,
+  });
+}
+
+/** The compact definition at the default width points. */
+export const DEFAULT_COMPACT_DEFINITION: CompactDefinition =
+  compactDefinition();
 
 /** Inclusive lower and exclusive upper edges for one width condition. */
 export interface ThemeAdaptationWidthCondition {
@@ -89,8 +134,11 @@ export interface ThemeAdaptationValue {
   color?: Partial<ColorScaleConfig>;
   /** Radius axis overrides, completed from root metadata. */
   radius?: Partial<RadiusScaleConfig>;
-  /** Motion axis overrides, completed from root metadata. */
-  motion?: Partial<MotionScaleConfig>;
+  /**
+   * Motion axis overrides, completed from root metadata: scale fields, or the
+   * `tempo` and `character` knobs (spec:AST-108 FR5).
+   */
+  motion?: Partial<MotionScaleConfig> & ThemeMotionKnobs;
   /** Portable semantic-token writes. */
   tokens?: Partial<Record<TokenName, TokenValue>>;
   /** Replacements for exact theme-local names enrolled by the root lineage. */
@@ -132,7 +180,7 @@ export interface ThemeGenerativeAxes {
   typography?: TypographyConfig;
   color?: ColorScaleConfig;
   radius?: RadiusScaleConfig;
-  motion?: MotionScaleConfig;
+  motion?: ThemeMotionConfig;
 }
 
 /** One rule lowered to concrete CSS writes. */
@@ -526,13 +574,41 @@ function completeRadius(
 }
 
 function completeMotion(
-  root: MotionScaleConfig | undefined,
-  rule: Partial<MotionScaleConfig>,
+  root: ThemeMotionConfig | undefined,
+  rule: Partial<MotionScaleConfig> & ThemeMotionKnobs,
   path: string,
-): MotionScaleConfig {
-  const fast = rule.fast ?? root?.fast;
-  const medium = rule.medium ?? root?.medium;
-  const ratio = rule.ratio ?? root?.ratio;
+): ThemeMotionConfig {
+  // Not a public field, but a plain-JS caller may still pass it.
+  if ((rule as {reducedMotion?: unknown}).reducedMotion !== undefined) {
+    throw new Error(
+      `${path}.reducedMotion is a theme-wide setting: set it on the theme's own ` +
+        `motion, not in an adaptation rule.`,
+    );
+  }
+  const tempo = rule.tempo ?? root?.tempo;
+  const character = rule.character ?? root?.character;
+  const knobs: ThemeMotionKnobs = {
+    ...(tempo !== undefined ? {tempo} : {}),
+    ...(character !== undefined ? {character} : {}),
+  };
+  if (knobs.tempo !== undefined) {
+    assertFiniteNumber(knobs.tempo, `${path}.tempo`);
+  }
+  const rootScale: Partial<MotionScaleConfig> =
+    root != null && 'fast' in root ? root : {};
+  const writesScale =
+    rule.fast !== undefined ||
+    rule.medium !== undefined ||
+    rule.ratio !== undefined ||
+    rule.slow !== undefined ||
+    rule.easing !== undefined;
+  if (!writesScale && 'fast' in rootScale === false) {
+    // Knobs only, over a root with no scale: the knobs generate the tokens.
+    return knobs;
+  }
+  const fast = rule.fast ?? rootScale.fast;
+  const medium = rule.medium ?? rootScale.medium;
+  const ratio = rule.ratio ?? rootScale.ratio;
   if (fast === undefined || medium === undefined || ratio === undefined) {
     throw new Error(
       `${path} must supply \`fast\`, \`medium\`, and \`ratio\` unless each missing field exists on the effective root motion axis.`,
@@ -541,17 +617,18 @@ function completeMotion(
   assertFiniteNumber(fast, `${path}.fast`);
   assertFiniteNumber(medium, `${path}.medium`);
   assertFiniteNumber(ratio, `${path}.ratio`);
-  const slow = rule.slow ?? root?.slow;
+  const slow = rule.slow ?? rootScale.slow;
   if (slow !== undefined) {
     assertFiniteNumber(slow, `${path}.slow`);
   }
-  const easing = rule.easing ?? root?.easing;
+  const easing = rule.easing ?? rootScale.easing;
   return {
     fast,
     medium,
     ratio,
     ...(slow !== undefined ? {slow} : {}),
     ...(easing !== undefined ? {easing} : {}),
+    ...knobs,
   };
 }
 
@@ -888,6 +965,42 @@ export function resolveThemeGenerativeAxes(
   };
 }
 
+/**
+ * Type-scale component generation is invariant var() wiring, not scale values.
+ * Keep root declarations (including authored pins) in the root cascade instead
+ * of resetting them in a rule that only changes tokens. Fill missing root paths
+ * for rule-only scales, and retain every authored rule leaf, even when it equals
+ * the root: that write may intentionally undo an earlier matching rule.
+ *
+ * SYNC: expandTypeScale.ts (generateTypeScaleComponents)
+ */
+function omitRootTypeScaleDefaults(
+  resolved: ComponentStyleMap | undefined,
+  root: ComponentStyleMap | undefined,
+  authored: ComponentStyleMap | undefined,
+): ComponentStyleMap | undefined {
+  if (!resolved || !root) {
+    return resolved;
+  }
+
+  const components: ComponentStyleMap = {};
+  for (const [component, rules] of Object.entries(resolved)) {
+    for (const [key, styles] of Object.entries(rules)) {
+      const writes = Object.fromEntries(
+        Object.entries(styles).filter(
+          ([property]) =>
+            root[component]?.[key]?.[property] === undefined ||
+            Object.hasOwn(authored?.[component]?.[key] ?? {}, property),
+        ),
+      );
+      if (Object.keys(writes).length > 0) {
+        (components[component] ??= {})[key] = writes;
+      }
+    }
+  }
+  return Object.keys(components).length > 0 ? components : undefined;
+}
+
 /** Lower ordered normalized rules to concrete CSS writes. */
 export function resolveThemeAdaptationRules(
   themeName: string,
@@ -895,20 +1008,29 @@ export function resolveThemeAdaptationRules(
   axes: ThemeGenerativeAxes,
   rootTokens: Record<string, string>,
   rootLocalTokens: Record<string, string> | undefined,
+  rootComponents?: ComponentStyleMap,
 ): ResolvedThemeAdaptationRule[] | undefined {
   if (adaptations.rules.length === 0) {
     return undefined;
   }
 
   const resolvedRules = adaptations.rules.map((rule, index) => {
+    const input = valueToThemeInput(themeName, index, rule.value, axes);
     const resolved = resolveThemeValues(
-      valueToThemeInput(themeName, index, rule.value, axes),
+      input,
       undefined,
       // Authored adaptation values are a new surface with no legacy
       // acceptance to preserve, so a malformed token is rejected here rather
       // than emitted. The root path stays lenient for compatibility.
       // SYNC: packages/core/src/theme/resolveThemeValues.ts (resolveTokenValue)
-      {strictTokens: true},
+      // A rule without motion of its own keeps the theme's character, so its
+      // explicit --ease-standard leaves that character's curves alone; one
+      // at 'standard' matches the theme's --ease-standard.
+      {
+        strictTokens: true,
+        inheritedCharacter: axes.motion?.character,
+        standardBeneath: rootTokens['--ease-standard'],
+      },
     );
     for (const [name, value] of Object.entries(resolved.tokens)) {
       assertConcreteLeaf(
@@ -951,7 +1073,13 @@ export function resolveThemeAdaptationRules(
       ),
       tokens: resolved.tokens,
       localTokens,
-      components: resolved.components,
+      components: input.typography?.scale
+        ? omitRootTypeScaleDefaults(
+            resolved.components,
+            rootComponents,
+            rule.value.components,
+          )
+        : resolved.components,
     };
   });
 
