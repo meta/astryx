@@ -21,8 +21,8 @@ export const docs = {
 import {Theme, defineTheme, useTheme} from '@astryxdesign/core/theme';
 import {appTheme} from './theme';
 
-// By default the selected indicator spans the tab's content and stops at its
-// inline padding. An editor-style strip can run it edge to edge by restyling
+// Without a nested Theme, the selected indicator spans the tab's content and
+// stops at its inline padding. An editor-style strip can run it edge to edge by restyling
 // the tab-indicator target in a nested Theme. Only this strip changes: every
 // other TabList keeps the app theme's indicator. insetInline is not a
 // guaranteed property of the tab-indicator target, so treat this override as
