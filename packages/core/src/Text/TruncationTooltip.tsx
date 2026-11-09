@@ -69,12 +69,10 @@ export function useTruncationTooltipInterest(
   const [tooltip, setTooltip] = useState<TooltipComponent | null>(
     () => tooltipModule.loaded()?.Tooltip ?? null,
   );
-  // True after a failed load, until the next interaction asks again.
-  const [hasLoadFailed, setHasLoadFailed] = useState(false);
   // Syncs with the module loader: truncated text loads the Tooltip module, so
   // the first interaction mounts the tooltip at once.
   useEffect(() => {
-    if (!isEnabled || tooltip != null || hasLoadFailed) {
+    if (!isEnabled || tooltip != null) {
       return;
     }
     let isCurrent = true;
@@ -84,16 +82,12 @@ export function useTruncationTooltipInterest(
           setTooltip(() => loaded.Tooltip);
         }
       },
-      () => {
-        if (isCurrent) {
-          setHasLoadFailed(true);
-        }
-      },
+      () => {},
     );
     return () => {
       isCurrent = false;
     };
-  }, [isEnabled, tooltip, hasLoadFailed]);
+  }, [isEnabled, tooltip]);
   const interestRef = useRef<TooltipPresentInterestState>({
     interest: null,
     tapEvent: null,
@@ -109,8 +103,13 @@ export function useTruncationTooltipInterest(
       state.interest = interest;
       state.tapEvent = tapEvent;
       setIsWanted(true);
-      // After a failed load, an interaction asks the module loader again.
-      setHasLoadFailed(false);
+      // After a failed load, this interaction asks the module loader again.
+      if (tooltipModule.loaded() == null) {
+        tooltipModule.load().then(
+          loaded => setTooltip(() => loaded.Tooltip),
+          () => {},
+        );
+      }
     },
     [isEnabled],
   );
