@@ -383,6 +383,12 @@ export interface InputRun {
   /** When the page's first listener received each event. */
   receivedAt: number[];
   /**
+   * True while every event of the run carries the mark `installInputStart`
+   * added before the page's scripts. Then `receivedAt` comes before every
+   * page listener.
+   */
+  startsFirst: boolean;
+  /**
    * When the page's own listeners had finished with each event, NaN until
    * seen. An event whose propagation the page stops is marked by a task
    * queued when it arrived, and never later than the next event's arrival.
@@ -403,10 +409,38 @@ export interface InputRun {
 }
 
 /**
+ * Marks when the page's listeners begin on each trusted event of `types`,
+ * with a passive window capture listener. Added before the page's scripts, it
+ * runs before every page listener, a window capture one included, and
+ * `armInputRun` uses its mark. A page already loaded gets it too. There it
+ * runs after the window capture listeners the page added at load, such as a
+ * gesture host's, so its mark is not used.
+ */
+export async function installInputStart(
+  page: Page,
+  types: readonly string[],
+): Promise<void> {
+  const script = (first: boolean) => `(() => {
+  if (window.__harnessInputStart) return;
+  const starts = new WeakMap();
+  window.__harnessInputStart = {starts, first: ${first}};
+  for (const type of ${JSON.stringify([...types])}) {
+    window.addEventListener(type, event => {
+      if (event.isTrusted && !starts.has(event)) starts.set(event, performance.now());
+    }, {capture: true, passive: true});
+  }
+})()`;
+  await page.addInitScript(script(true));
+  await page.evaluate(script(false));
+}
+
+/**
  * Arms two passive listeners on the window before a run is dispatched. A
  * capture listener stamps each trusted event of `types` before the page's
  * own listeners. A bubble listener, after them, notes when the page has
- * finished with the event. The wheel and touch drivers share it.
+ * finished with the event. The wheel and touch drivers share it. Where
+ * `installInputStart` marked, before the page's scripts, when the page's
+ * listeners began on an event, that mark is the event's `receivedAt`.
  */
 export function armInputRun(
   page: Page,
@@ -420,10 +454,19 @@ export function armInputRun(
       // A message runs as a task of its own, after the dispatch that queued
       // it: it marks an event whose bubble listener never ran.
       const channel = new MessageChannel();
+      const mark = (
+        window as unknown as {
+          __harnessInputStart?: {
+            starts: WeakMap<Event, number>;
+            first: boolean;
+          };
+        }
+      ).__harnessInputStart;
       const run = {
         types: [...eventTypes],
         stamps: [] as number[],
         receivedAt: [] as number[],
+        startsFirst: mark?.first === true,
         handledAt: [] as number[],
         eventTypes: [] as string[],
         pointerTypes: [] as string[],
@@ -457,7 +500,13 @@ export function armInputRun(
         const i = run.stamps.length;
         index.set(event, i);
         run.stamps.push(event.timeStamp);
-        run.receivedAt.push(performance.now());
+        const markedAt = run.startsFirst ? mark?.starts.get(event) : undefined;
+        // A page that reopens its document drops the mark's listener but
+        // keeps the mark. Its events go unmarked, and the run reads as before.
+        if (markedAt == null) {
+          run.startsFirst = false;
+        }
+        run.receivedAt.push(markedAt ?? performance.now());
         run.handledAt.push(Number.NaN);
         run.eventTypes.push(event.type);
         run.pointerTypes.push(
