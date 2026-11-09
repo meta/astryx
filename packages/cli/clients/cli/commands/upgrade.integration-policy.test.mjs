@@ -23,6 +23,7 @@ import {
   generateCompressedIndex,
   renderAgentDocsBlock,
 } from '../../../foundation/agent-docs/agent-docs.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 let tmpDir;
 let originalCwd;
@@ -33,7 +34,7 @@ let exitCode;
 beforeEach(() => {
   originalCwd = process.cwd();
   // Repo-local temp dir: under cwd so Vite allows config/integration imports.
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-upgrade-policy-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-upgrade-policy-'));
   process.chdir(tmpDir);
   logCalls = [];
   errCalls = [];

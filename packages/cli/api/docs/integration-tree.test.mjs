@@ -14,6 +14,7 @@ import {loadDocsCatalog} from './_adapter.mjs';
 import {search} from '../search/search.mjs';
 import {checkDocsTree} from '../doctor/doctor.mjs';
 import {integrationDocConflicts} from '../integration/authoring-checks.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const SLOW = 60_000;
 
@@ -133,7 +134,7 @@ function scaffold(files) {
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-integration-tree-test-'),
+    path.join(REPO_ROOT, '.astryx-integration-tree-test-'),
   );
 });
 
