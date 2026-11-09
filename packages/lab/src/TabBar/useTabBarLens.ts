@@ -37,6 +37,7 @@ import {
   itemWidth,
   lensTarget,
   liftScale,
+  nearestIndex,
 } from './tabBarModel';
 import {useMotionEngine} from '../internal/useMotionEngine';
 import {tabBar} from './uikitTabBar';
@@ -62,6 +63,8 @@ interface Press {
   isDragging: boolean;
   /** A tab was selected when the finger landed: the lens follows it. */
   hasLens: boolean;
+  /** It landed on a disabled tab: nothing moves until the finger drags. */
+  isIgnored: boolean;
   readonly count: number;
   /** No tab was selected when it landed, so no lens shows it: it paints. */
   readonly paints: boolean;
@@ -93,6 +96,11 @@ export interface UseTabBarLensOptions {
   readonly isTouch: boolean;
   /** A press lifted over the item at `index`. */
   readonly onLift: (index: number) => void;
+  /**
+   * Whether the item at `index` is disabled. A finger that lands on it moves
+   * nothing until it drags, as UIKit ignores a tap on a disabled tab.
+   */
+  readonly isDisabled?: (index: number) => boolean;
 }
 
 export interface TabBarLensRefs {
@@ -159,6 +167,9 @@ function useAnimatorList(count: number) {
  *   cancelled touch settles back onto the selected item.
  * - off the bar: the lens shows the selected item again, and a lift there
  *   chooses nothing. Sliding off cancels.
+ * - over a disabled tab: the tracker skips it, so the lens shows the selected
+ *   item, as off the bar. A finger that lands on one moves nothing until it
+ *   drags.
  * The choice reaches the app (`onLift`) from the lift itself, right after the
  * settle has started in the same task. The settle's first frame waits for the
  * browser's commit, so the app rendering the new tab delays its start rather
@@ -174,9 +185,9 @@ function useAnimatorList(count: number) {
  * moves retarget them, so the lens keeps moving through a busy main thread.
  * Under Reduce Motion a press scales nothing, and a selection change from a
  * key or the app cross-fades instead of moving. Under a finger the lens is
- * put where the finger is at once, as UIKit's is. Only its lifted look fades,
- * since a travel would play as a dip, with frames that show no lens. Each
- * spring plays as measured, from the UIKit table.
+ * put where the finger is at once, as UIKit's is. A travel would play as a
+ * dip, with frames that show no lens. Its lifted look shows at once too, and
+ * fades only at the lift. Each spring plays as measured, from the UIKit table.
  *
  * Under a fine pointer nothing here runs. A press there is a plain button
  * press: its click chooses the tab, and TabBar's CSS slides the lens.
@@ -187,6 +198,7 @@ export function useTabBarLens({
   selectedIndex,
   isTouch,
   onLift,
+  isDisabled,
 }: UseTabBarLensOptions): TabBarLensRefs {
   const capsule = useMotionEngine();
   const body = useMotionEngine();
@@ -218,6 +230,8 @@ export function useTabBarLens({
   selectedRef.current = selectedIndex;
   const onLiftRef = useRef(onLift);
   onLiftRef.current = onLift;
+  const isDisabledRef = useRef(isDisabled);
+  isDisabledRef.current = isDisabled;
   const tabsOf = (capsule: HTMLElement) =>
     [...capsule.children].filter(
       (child): child is HTMLElement => child.getAttribute('role') === 'tab',
@@ -301,9 +315,23 @@ export function useTabBarLens({
   };
 
   /**
+   * Use after `body.animator.set()`. Under Reduce Motion, `play()` turns the
+   * copy's travel into a cross-fade.
+   */
+  const placeCopy = () => {
+    copy.animator.set(
+      copyTransform(
+        body.animator.get('x'),
+        body.animator.get('scaleX'),
+        body.animator.get('scaleY'),
+      ),
+    );
+  };
+
+  /**
    * Lifts (true) or lowers (false) a lens `size` px wide and flexes the
    * capsule. Under Reduce Motion a press scales nothing: the glass and its
-   * shadow only fade.
+   * shadow show at once, and fade only when lowered.
    */
   const lift = (
     isLifted: boolean,
@@ -313,9 +341,17 @@ export function useTabBarLens({
   ) => {
     const options = {at, touchRelease};
     const spring = {spring: tabBar.lift};
-    shadow.animator.animate({opacity: isLifted ? 1 : 0}, spring, options);
-    glass.animator.animate({opacity: isLifted ? 1 : 0}, spring, options);
-    if (body.animator.reducedMotion({touchRelease}) !== 'off') {
+    const isReduced = body.animator.reducedMotion({touchRelease}) !== 'off';
+    // Under Reduce Motion the lifted look shows at once at the press, as
+    // UIKit's does. Its lowering still fades, as UIKit's settle does.
+    if (isReduced && isLifted) {
+      shadow.animator.set({opacity: 1});
+      glass.animator.set({opacity: 1});
+    } else {
+      shadow.animator.animate({opacity: isLifted ? 1 : 0}, spring, options);
+      glass.animator.animate({opacity: isLifted ? 1 : 0}, spring, options);
+    }
+    if (isReduced) {
       return;
     }
     const lifted = liftScale(size);
@@ -353,6 +389,10 @@ export function useTabBarLens({
     const centers = itemCenters(element.offsetWidth, count, isRtl);
     const size = itemWidth(element.offsetWidth, count);
     const x = clientX - left;
+    // UIKit ignores a tap on a disabled tab. So a finger that lands on one
+    // moves nothing unless it then drags.
+    const isIgnored =
+      isDisabledRef.current?.(nearestIndex(x, centers)) === true;
     pressRef.current = {
       centers,
       size,
@@ -361,6 +401,7 @@ export function useTabBarLens({
       lastX: x,
       isDragging: false,
       hasLens: selected >= 0,
+      isIgnored,
       count,
       paints: selected < 0,
       painted: null,
@@ -369,17 +410,16 @@ export function useTabBarLens({
     paintTab(pressRef.current, tab);
     // No tab selected: there is no lens to move; the lift chooses the tab
     // nearest the finger.
-    if (selected < 0) {
+    if (selected < 0 || isIgnored) {
       return;
     }
-    // The lifted lens magnifies the selected look: its copy mounts now, in
-    // this event (its animators attach to it with their curves running).
-    // Under Reduce Motion nothing lifts or travels, so no copy mounts.
+    // The lifted lens shows the selected look: its copy mounts now, in this
+    // event (its animators attach to it with their curves running). It mounts
+    // under Reduce Motion too. UIKit's held lens keeps the touched tab's
+    // selected look. Only the magnification is motion.
     motionRef.current += 1;
     const isReduced = body.animator.reducedMotion({}) !== 'off';
-    if (!isReduced) {
-      flushSync(() => setIsCopyShown(true));
-    }
+    flushSync(() => setIsCopyShown(true));
     const at = performance.now();
     const travel = {x: chaseTarget(x, centers) - centers[selected]};
     // Under Reduce Motion the lens is put under the finger at once, as
@@ -390,7 +430,11 @@ export function useTabBarLens({
       body.animator.animate(travel, {spring: tabBar.lensTravel}, {at});
     }
     lift(true, at, size);
-    playCopy(at);
+    if (isReduced) {
+      placeCopy();
+    } else {
+      playCopy(at);
+    }
   };
 
   const move = (clientX: number, tab: HTMLElement | null) => {
@@ -404,6 +448,20 @@ export function useTabBarLens({
     const x = clientX - press.left;
     press.lastX = x;
     press.isDragging ||= Math.abs(x - press.startX) > DRAG_SLOP;
+    if (press.isIgnored) {
+      // The ignore ends once the finger drags or rests on an enabled tab:
+      // the tab under a held finger shows, and the lift chooses it.
+      if (!press.isDragging && tab == null) {
+        return;
+      }
+      press.isIgnored = false;
+      if (press.hasLens && selected >= 0) {
+        motionRef.current += 1;
+        // The copy mounts under Reduce Motion too, as at a press's start.
+        flushSync(() => setIsCopyShown(true));
+        lift(true, performance.now(), press.size);
+      }
+    }
     if (!press.hasLens || selected < 0) {
       return;
     }
@@ -411,6 +469,7 @@ export function useTabBarLens({
     const chase = {x: chaseTarget(x, press.centers) - press.centers[selected]};
     if (body.animator.reducedMotion({}) !== 'off') {
       body.animator.set(chase);
+      placeCopy();
       return;
     }
     body.animator.animate(
@@ -442,7 +501,9 @@ export function useTabBarLens({
     // The app's answer to this lift, as rendered now: the tab the finger
     // chose is the one under it at the lift, whatever renders after.
     const deliver = onLiftRef.current;
-    if (!press.hasLens || selected < 0) {
+    // A press that landed on a disabled tab moved no lens. The tab it lifts
+    // on, if any, still acts, as for any press.
+    if (press.isIgnored || !press.hasLens || selected < 0) {
       // No lens moved: the tab the tracker took runs at once.
       if (chosen >= 0) {
         liftRef.current = () => flushSync(() => deliver(chosen));
@@ -456,7 +517,9 @@ export function useTabBarLens({
     };
     // Under Reduce Motion the lens is already under the finger: it settles
     // in place, with no dip, and only its lifted look fades.
-    if (body.animator.reducedMotion({touchRelease: true}) !== 'off') {
+    const isReduced =
+      body.animator.reducedMotion({touchRelease: true}) !== 'off';
+    if (isReduced) {
       body.animator.set(settle);
     } else {
       body.animator.animate(
@@ -466,7 +529,11 @@ export function useTabBarLens({
       );
     }
     lift(false, at, press.size, true);
-    playCopy(at);
+    if (isReduced) {
+      placeCopy();
+    } else {
+      playCopy(at);
+    }
     dropCopyAtRest();
     if (chosen < 0) {
       return;
@@ -490,14 +557,15 @@ export function useTabBarLens({
         const now = performance.now();
         if (body.animator.reducedMotion({touchRelease: true}) !== 'off') {
           body.animator.set({x: 0});
+          placeCopy();
         } else {
           body.animator.animate(
             {x: 0},
             {spring: tabBar.lensSettle},
             {at: now, touchRelease: true},
           );
+          playCopy(now);
         }
-        playCopy(now);
         dropCopyAtRest();
       }
     };
@@ -570,6 +638,25 @@ export function useTabBarLens({
     const velocity = body.animator.getVelocity('x', now);
     body.animator.set({x: offset});
     const press = pressRef.current;
+    // Under Reduce Motion, set the finger's lens and its copy in place. A played
+    // curve fades the copy out and back in at the lift.
+    if (
+      (press != null || fromLift) &&
+      body.animator.reducedMotion({}) !== 'off'
+    ) {
+      body.animator.set({
+        x:
+          press == null
+            ? 0
+            : chaseTarget(press.lastX, press.centers) -
+              press.centers[selectedIndex],
+      });
+      placeCopy();
+      if (press == null) {
+        dropCopyAtRest();
+      }
+      return;
+    }
     if (press != null) {
       // A finger is down (the selection changed under it): the lens keeps
       // heading for the finger, now measured from its new resting place.

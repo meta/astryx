@@ -353,6 +353,7 @@ export function useTableGroupedRows<T extends Record<string, unknown>>(
 
   const plugin = useMemo(
     (): TablePlugin<T> => ({
+      rowModel: 'grouped',
       // A header row is not one of the caller's rows, so running a cell
       // renderer against it can only misread it or throw — and the cells are
       // discarded by `transformBodyRow` below regardless.

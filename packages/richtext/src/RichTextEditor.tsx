@@ -79,11 +79,13 @@ import {TextSemanticsExtension} from './textSemantics';
 import {TableColumnFloorPlugin} from './TableColumnFloorPlugin';
 import {CodeBackspacePlugin} from './CodeBackspacePlugin';
 import {CodeBlockHeaderPlugin} from './CodeBlockHeaderPlugin';
+import {CodePastePlugin} from './CodePastePlugin';
 import {CodeSyntaxPlugin} from './CodeSyntaxPlugin';
 import {MarkdownExtensionsPlugin} from './MarkdownExtensionsPlugin';
 import type {RichTextMarkdownExtension} from './markdownExtensions';
 import type {CodeLanguage} from '@astryxdesign/core/CodeBlock';
 import {TaskCheckboxPlugin} from './TaskCheckboxPlugin';
+import {DisabledLinkGuardPlugin} from './DisabledLinkGuardPlugin';
 import {SelectAllScopePlugin} from './SelectAllScopePlugin';
 import {ImageSourceCaretPlugin} from './ImageSourceCaretPlugin';
 import {type Transformer} from '@lexical/markdown';
@@ -360,7 +362,8 @@ export interface RichTextEditorProps extends Omit<
   isReadOnly?: boolean;
   /**
    * Whether the editor is disabled: non-editable, dimmed, out of the tab
-   * order, and announced as disabled. Wins when `isReadOnly` is also set.
+   * order, and announced as disabled. Its links do not navigate and are not
+   * tab stops. Wins when `isReadOnly` is also set.
    * Takes effect when changed after mount.
    * @default false
    */
@@ -661,6 +664,7 @@ export const RichTextEditor = function RichTextEditor({
           }),
           stylex.props(
             inputWrapperStyles.base,
+            inputWrapperStyles.textField,
             styles.wrapper,
             // Only disabled is dimmed, matching TextArea: a read-only editor
             // keeps full-opacity text and stays keyboard-reachable.
@@ -713,6 +717,7 @@ export const RichTextEditor = function RichTextEditor({
               <ListPlugin />
               <TaskCheckboxPlugin isReadOnly={isReadOnly || isDisabled} />
               <LinkPlugin />
+              <DisabledLinkGuardPlugin isDisabled={isDisabled} />
               {/* Tab keeps its editor meaning inside a table (indent, and
                   Escape then Tab to leave the editor); arrow keys move
                   between cells. GFM tables have no merged cells or cell
@@ -729,6 +734,7 @@ export const RichTextEditor = function RichTextEditor({
               {/* Backspace at the very start of a code block makes it a
                   paragraph, instead of merging it into the block above. */}
               <CodeBackspacePlugin />
+              <CodePastePlugin />
               {markdownExtensions != null && markdownExtensions.length > 0 ? (
                 <MarkdownExtensionsPlugin
                   extensions={markdownExtensions}

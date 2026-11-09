@@ -678,6 +678,31 @@ test('callbacks: the new page once the settle is moving, the settle when the tra
   expect(await log(page)).toEqual(['index:2:drag:moving', 'settle:2:1']);
 });
 
+test('a flick pages on when a page pointerup listener holds its touchend: the lift is read where the moves were', async ({
+  page,
+}) => {
+  const {driver} = await open(page);
+  // A busy app's pointerup listener: WebKit stamps the touchend after it.
+  await page.evaluate(() => {
+    addEventListener('pointerup', () => {
+      const end = performance.now() + 50;
+      while (performance.now() < end) {
+        // The listener's own work.
+      }
+    });
+  });
+  await driver.play(
+    flick(
+      {x: 320, y: 200},
+      {velocity: {x: -1500, y: 0}, durationMs: 80, hz: 120},
+    ),
+    {pacing: 'spacing'},
+  );
+  await expect
+    .poll(async () => page.evaluate(() => window.pager.index))
+    .toBe(2);
+});
+
 test('a flick pages exactly one page, and the settle starts from the release velocity', async ({
   page,
   browserName,

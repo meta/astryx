@@ -138,7 +138,7 @@ export const VerticalSplit: Story = {
   },
 };
 
-/** Collapsible sidebar — drag past threshold or double-click to collapse. */
+/** Collapsible sidebar: a lift or a key step past the threshold, or a double-click, collapses it. */
 export const Collapsible: Story = {
   render: () => {
     const resizable = useResizable({
@@ -851,13 +851,15 @@ export const CollapsingScrollPanelFixture: Story = {
 function SlidingPanelSplit({
   side,
   lineCount = 0,
+  minSize = 120,
 }: {
   side: 'start' | 'end';
   lineCount?: number;
+  minSize?: number;
 }) {
   const resizable = useResizable({
     defaultSize: 200,
-    minSize: 120,
+    minSize,
     maxSize: 320,
     collapsible: true,
   });
@@ -931,6 +933,15 @@ export const SlidingEndPanel: Story = {
 export const SlidingScrolledPanelFixture: Story = {
   tags: ['!autodocs', 'no-visual'],
   render: () => <SlidingPanelSplit side="start" lineCount={40} />,
+};
+
+/**
+ * A sliding start panel at the hook's default minimum (50 px), so a key step
+ * from it ends under the collapsed size.
+ */
+export const SlidingPanelAtDefaultMinimumFixture: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  render: () => <SlidingPanelSplit side="start" minSize={50} />,
 };
 
 /**
