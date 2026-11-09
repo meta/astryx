@@ -652,6 +652,24 @@ describe('touchPlayError on a starved runner', () => {
     );
   });
 
+  it("names the gesture's longest frame gap, as every pacing error does", () => {
+    const fault = touchPacingFault(FLICK, lateLift);
+    if (fault?.kind !== 'rest') {
+      throw new Error('expected the page to read a rest');
+    }
+    const error = touchPlayError(
+      FLICK,
+      lateLift,
+      {...fault, frameGapMs: longestFrameGap(starved, lateLift)},
+      quick,
+      starved,
+    );
+    expect(error).toBeInstanceOf(TouchStarvationError);
+    expect(error.message).toMatch(
+      /the page drew no frame for 152 ms during the gesture/,
+    );
+  });
+
   it('keeps a dispatch that stalled while the page drew frames a TouchPacingError', () => {
     const drawing = Array.from({length: 15}, (_, k) => 16 * k);
     expect(errorFor(lateLift, drawing)).toBeInstanceOf(TouchPacingError);

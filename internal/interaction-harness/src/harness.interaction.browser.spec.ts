@@ -208,10 +208,10 @@ function startWakeControl(): {
   const wakes: {at: number; lateMs: number; ranMs: number}[] = [];
   let timer: ReturnType<typeof setTimeout> | undefined;
   const arm = () => {
-    const due = Date.now() + 4;
+    const due = performance.now() + 4;
     const cpu = process.cpuUsage();
     timer = setTimeout(() => {
-      const now = Date.now();
+      const now = performance.now();
       const ran = process.cpuUsage(cpu);
       wakes.push({
         at: now,
@@ -348,12 +348,13 @@ test.describe('touch input', () => {
     // stalls the test process also wakes the harness late, or holds a send.
     // A chain of 4 ms control timers then wakes late too: when the harness
     // woke, or while it sent. A control timer wakes no more than 4 ms less
-    // late than the harness in the same stall. A move off pace by no more than
-    // that is the runner's: the test names it and does not fail. Harness code
+    // late than the harness in the same stall. So a move is the runner's when
+    // the control woke more than 2 ms late, and the move was at most 4 ms
+    // later. The test names such a move and does not fail. Harness code
     // that holds the process delays the control timers too, but the process
-    // runs through that wait. So a control wake counts only when the process
-    // ran for less than half of its wait. A take fails when more than half
-    // its moves are off pace while the control woke on time.
+    // runs through that delay. So a control wake counts only when the process
+    // ran for less than half of how late the wake was. A take fails when more
+    // than half its moves are off pace while the control woke on time.
     const {played, answeredAt, playStart, wakes, log} = await take();
     const {moves} = checkInput(log);
     const sentAt = played.map(step => step.dispatchedAt);
@@ -381,30 +382,33 @@ test.describe('touch input', () => {
       }
     }
     // How late the control woke between two times, ms. With no wake in that
-    // span, the first wake after it. A wake through which the process ran for
-    // half its wait or more counts as on time. The test process itself held
-    // it, not the runner.
+    // span, the first wake after it. A wake whose process ran for half its
+    // delay or more counts as on time. The test process itself held it, not
+    // the runner.
     const controlLateMs = (from: number, to: number) => {
       const within = wakes.filter(wake => wake.at >= from && wake.at <= to);
       const next = wakes.find(wake => wake.at > to);
       return Math.max(
         0,
         ...(within.length > 0 ? within : next == null ? [] : [next]).map(
-          wake => (wake.ranMs < (4 + wake.lateMs) / 2 ? wake.lateMs : 0),
+          wake => (wake.ranMs < wake.lateMs / 2 ? wake.lateMs : 0),
         ),
       );
     };
     // Each move's paced deadline, from the latest the play clock can have
     // started (the start event's send) and WebKit's answer to the step
-    // before.
+    // before. Both come from the clock the play paces on, which reads a
+    // fraction of a millisecond, as do the control's wakes.
+    const pacedSent = played.map(step => step.pacedSentAt);
+    const pacedReturned = played.map(step => step.pacedReturnedAt);
     const offPace = moveSteps.flatMap((i, move) => {
       const spacing = played[i].t - played[i - 1].t;
       const deadline = Math.max(
-        sentAt[0] + played[i].t,
-        answeredAt[i - 1] + spacing - ANSWER_SLACK_MS,
+        pacedSent[0] + played[i].t,
+        pacedReturned[i - 1] + spacing - ANSWER_SLACK_MS,
       );
-      const lateMs = sentAt[i] - deadline;
-      const sendMs = answeredAt[i - 1] - sentAt[i - 1];
+      const lateMs = pacedSent[i] - deadline;
+      const sendMs = pacedReturned[i - 1] - pacedSent[i - 1];
       return [
         // The control wakes that a stall ending at the harness's own wake
         // delayed too.
@@ -414,7 +418,7 @@ test.describe('touch input', () => {
                 move,
                 why: 'left late',
                 ms: lateMs,
-                runnerMs: controlLateMs(sentAt[i] - 2, sentAt[i] + 8),
+                runnerMs: controlLateMs(pacedSent[i] - 2, pacedSent[i] + 8),
               },
             ]
           : []),
@@ -424,14 +428,19 @@ test.describe('touch input', () => {
                 move,
                 why: 'followed a slow send',
                 ms: sendMs - ANSWER_SLACK_MS,
-                runnerMs: controlLateMs(sentAt[i - 1], answeredAt[i - 1] + 4),
+                runnerMs: controlLateMs(
+                  pacedSent[i - 1],
+                  pacedReturned[i - 1] + 4,
+                ),
               },
             ]
           : []),
       ];
     });
-    const runner = offPace.filter(move => move.ms <= move.runnerMs + 4);
-    const harness = offPace.filter(move => move.ms > move.runnerMs + 4);
+    const byRunner = (move: (typeof offPace)[number]) =>
+      move.runnerMs > 2 && move.ms <= move.runnerMs + 4;
+    const runner = offPace.filter(byRunner);
+    const harness = offPace.filter(move => !byRunner(move));
     // A move can be off pace for both reasons: it counts once.
     const countMoves = (list: typeof offPace) =>
       new Set(list.map(entry => entry.move)).size;

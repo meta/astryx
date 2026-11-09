@@ -198,6 +198,13 @@ export interface PlayedEvent extends TouchEventStep {
    * the page has the event by then.
    */
   readonly returnedAt: number;
+  /**
+   * When the event left, on the clock a play paces on: the test process's
+   * `performance.now()`, ms, to a fraction of a millisecond.
+   */
+  readonly pacedSentAt: number;
+  /** When the dispatch command returned, on that same clock, ms. */
+  readonly pacedReturnedAt: number;
   /** The timestamp handed to the engine, epoch ms (Chromium only). */
   readonly timestamp: number | null;
   /**
@@ -884,7 +891,7 @@ export class TouchStarvationError extends Error {
     },
   ) {
     super(
-      `touchDriver: the page drew no frame for ${fault.starvedMs.toFixed(0)} ms across a ${fault.late.gapMs.toFixed(0)} ms gap where the script spaces ${fault.late.scriptedGapMs.toFixed(0)} ms, and ${describeReading(fault)}. Neither the page's listeners nor a page task held the event: the runner starved the page. Judge the proof from a run with CI's CPU limits`,
+      `touchDriver: the page drew no frame for ${fault.starvedMs.toFixed(0)} ms across a ${fault.late.gapMs.toFixed(0)} ms gap where the script spaces ${fault.late.scriptedGapMs.toFixed(0)} ms, and ${describeFault(fault)}. Neither the page's listeners nor a page task held the event: the runner starved the page. Judge the proof from a run with CI's CPU limits`,
     );
     this.name = 'TouchStarvationError';
   }
@@ -1086,8 +1093,16 @@ async function playSteps(
     const dispatchedAt = Date.now();
     const sentAt = performance.now();
     await dispatch(step, timestamp);
-    previous = {sentAt, returnedAt: performance.now()};
-    played.push({...step, dispatchedAt, returnedAt: Date.now(), timestamp});
+    const answered = performance.now();
+    previous = {sentAt, returnedAt: answered};
+    played.push({
+      ...step,
+      dispatchedAt,
+      returnedAt: Date.now(),
+      pacedSentAt: sentAt,
+      pacedReturnedAt: answered,
+      timestamp,
+    });
     const watched = performance.now();
     await onEvent?.(step, index);
     onEventMs.push(performance.now() - watched);
