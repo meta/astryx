@@ -2173,6 +2173,38 @@ describe('ChatComposerInput', () => {
       expect(selection.anchorOffset).toBe('inserted text'.length);
     });
 
+    it('one Backspace after a token removes the token and its space', () => {
+      let handle: ChatComposerInputHandle | null = null;
+      render(
+        <ChatComposer
+          onSubmit={() => {}}
+          input={
+            <ChatComposerInput
+              handleRef={h => {
+                handle = h;
+              }}
+            />
+          }
+        />,
+      );
+      const textbox = screen.getByRole('textbox');
+      act(() => textbox.focus());
+      act(() => {
+        handle?.insertToken({
+          value: '@cindy',
+          label: '@Cindy Zhang',
+          variant: 'blue',
+        });
+      });
+      expect(textbox.querySelector('[data-astryx-token]')).not.toBeNull();
+
+      fireEvent.keyDown(textbox, {key: 'Backspace'});
+
+      expect(textbox.querySelector('[data-astryx-token]')).toBeNull();
+      expect(textbox.textContent).toBe('');
+      expect(textbox.querySelector('br')).toBeNull();
+    });
+
     it('anchors caret inside trailing text node after inserting a token', async () => {
       let handle: ChatComposerInputHandle | null = null;
       render(

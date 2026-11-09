@@ -73,8 +73,9 @@ export function restoreSelectionRange(range: Range): void {
  * When a collapsed range sits on an element boundary, walk it into the preceding
  * text node if one exists. Chromium anchors an IME composition to the DOM boundary
  * where it starts; from an element boundary, the first preedit commits as raw
- * letters instead of composing. Without a preceding text node, the range stays
- * where it is.
+ * letters instead of composing. A preceding editable element counts too: the
+ * range lands at the end of its last text node. Otherwise the range stays where
+ * it is.
  */
 export function landInsideTrailingTextNode(
   editable: HTMLElement,
