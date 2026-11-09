@@ -22,6 +22,7 @@ import {
   serveStorybook,
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
+import {waitForRest} from '@astryxdesign/interaction-harness';
 
 let storybook: StaticServer;
 test.beforeAll(async () => {
@@ -157,6 +158,9 @@ test.describe('DropdownMenu trigger focus ring follows the last input (Chromium)
     await touchEnd(cdp);
     const menu = page.getByRole('menu');
     await expect(menu).toBeVisible();
+    // The menu ignores a tap while it is still entering, so tap the row once
+    // the entrance rests.
+    await waitForRest(page.locator('[popover]:has([role="menu"])').first());
     await touchAt(
       cdp,
       'touchStart',
