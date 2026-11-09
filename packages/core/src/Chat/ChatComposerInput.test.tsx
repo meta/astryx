@@ -2239,6 +2239,43 @@ describe('ChatComposerInput', () => {
       expect(selection.anchorOffset).toBe('hey '.length);
     });
 
+    it('one Backspace on a token that starts the last line keeps that line for the caret', () => {
+      let handle: ChatComposerInputHandle | null = null;
+      render(
+        <ChatComposer
+          onSubmit={() => {}}
+          input={
+            <ChatComposerInput
+              handleRef={h => {
+                handle = h;
+              }}
+            />
+          }
+        />,
+      );
+      const textbox = screen.getByRole('textbox');
+      act(() => textbox.focus());
+      act(() => handle?.insertText('hey\n'));
+      act(() => {
+        handle?.insertToken({
+          value: '@cindy',
+          label: '@Cindy Zhang',
+          variant: 'blue',
+        });
+      });
+
+      fireEvent.keyDown(textbox, {key: 'Backspace'});
+
+      // The emptied line keeps a placeholder, as the browser's own delete
+      // does, and the caret sits on it, not at the end of the line above.
+      expect(textbox.querySelector('[data-astryx-token]')).toBeNull();
+      expect(textbox.lastChild?.nodeName).toBe('BR');
+      const selection = window.getSelection()!;
+      expect(selection.anchorNode?.nodeType).toBe(Node.TEXT_NODE);
+      expect(selection.anchorNode?.nextSibling?.nodeName).toBe('BR');
+      expect(selection.anchorOffset).toBe(0);
+    });
+
     it('anchors caret inside trailing text node after inserting a token', async () => {
       let handle: ChatComposerInputHandle | null = null;
       render(

@@ -58,7 +58,6 @@ import {
   isSelectionAtStart,
   isSelectionAtEnd,
   placeCaretAtEnd,
-  placeCaretAfterNode,
   getSelectionRangeInside,
   restoreSelectionRange,
 } from './chatComposerSelection';
@@ -599,6 +598,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     onEmitChange: emitChange,
   });
   cleanupPortalsRef.current = tokens.cleanupPortals;
+  const handleTokenKeyDown = tokens.handleKeyDown;
 
   // --- Paste-as-token (internal default) ---
   const defaultPasteAsToken = useChatPasteAsToken({inputRef: selfRef});
@@ -707,49 +707,9 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
         return;
       }
 
-      // Handle Backspace near tokens — prevent browser from creating
-      // stray <br> elements or moving the cursor unexpectedly.
-      if (e.key === 'Backspace') {
-        const selection = window.getSelection();
-        if (selection && selection.isCollapsed && selection.rangeCount > 0) {
-          const range = selection.getRangeAt(0);
-          const {startContainer, startOffset} = range;
-
-          // Case 1: Cursor is in a text node right after a token.
-          // If the text node is just the trailing NBSP, remove it
-          // and place cursor after the token.
-          if (
-            startContainer.nodeType === Node.TEXT_NODE &&
-            startOffset === 0 &&
-            startContainer.previousSibling instanceof HTMLElement &&
-            startContainer.previousSibling.hasAttribute('data-astryx-token')
-          ) {
-            // Cursor is at start of text node right after a token — let
-            // the browser handle it normally (it will select/delete the token)
-          } else if (
-            startContainer.nodeType === Node.TEXT_NODE &&
-            startContainer.textContent === ' ' &&
-            startOffset <= 1 &&
-            startContainer.previousSibling instanceof HTMLElement &&
-            startContainer.previousSibling.hasAttribute('data-astryx-token')
-          ) {
-            // Cursor is in or after the trailing NBSP — remove the NBSP
-            // and the token in one action
-            e.preventDefault();
-            const tokenSpan = startContainer.previousSibling;
-            const before = tokenSpan.previousSibling;
-            const parent = startContainer.parentNode;
-            if (parent) {
-              parent.removeChild(startContainer);
-              parent.removeChild(tokenSpan);
-              if (parent instanceof HTMLElement) {
-                placeCaretAfterNode(parent, before);
-              }
-            }
-            emitChange();
-            return;
-          }
-        }
+      // Backspace next to a token: the token hook owns it.
+      if (handleTokenKeyDown(e)) {
+        return;
       }
 
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -860,6 +820,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
       emitChange,
       triggerMenu,
       onKeyDownProp,
+      handleTokenKeyDown,
     ],
   );
 

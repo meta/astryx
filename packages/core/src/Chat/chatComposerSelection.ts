@@ -134,6 +134,58 @@ export function placeCaretAfterNode(
   selection.addRange(range);
 }
 
+/** Whether `node` ends a line: a line break element, or text that ends in one. */
+function endsLine(node: Node | null): boolean {
+  if (node == null) {
+    return false;
+  }
+  if (node.nodeName === 'BR') {
+    return true;
+  }
+  return (
+    node.nodeType === Node.TEXT_NODE && (node.textContent ?? '').endsWith('\n')
+  );
+}
+
+/** Whether `node` or a later sibling holds content; empty text holds none. */
+function hasContentFrom(node: Node | null): boolean {
+  for (let current = node; current != null; current = current.nextSibling) {
+    if (current.nodeType !== Node.TEXT_NODE || current.textContent !== '') {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Place the caret where a removed token was. `before` and `after` are the
+ * nodes that were next to the token and its trailing space. When the removal
+ * empties the last line, the line keeps a `<br>` placeholder, as the browser's
+ * own delete keeps it, and the caret lands in an empty text node before it, so
+ * a composition there composes. Otherwise the caret lands after `before`.
+ */
+export function placeCaretAfterRemovedToken(
+  editable: HTMLElement,
+  before: Node | null,
+  after: Node | null,
+): void {
+  if (!hasContentFrom(after) && endsLine(before)) {
+    const selection = window.getSelection();
+    if (!selection) {
+      return;
+    }
+    const text = document.createTextNode('');
+    editable.append(text, document.createElement('br'));
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return;
+  }
+  placeCaretAfterNode(editable, before);
+}
+
 /**
  * Collapse the Selection to the very end of `editable`'s content,
  * replacing whatever the Selection held before.
