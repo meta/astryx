@@ -94,10 +94,9 @@ clearing normal-text AA. Syntax comments use `neutral.dark[65]` (`#7e8791`) on
 `neutral.dark[10]` (`#101314`) at 5.12:1, so the maintained syntax mapping also
 clears normal-text AA without an off-palette value.
 
-On a light media surface, accent text and accent icons follow the surface's
-accent, `--color-on-light` (`neutral.dark[10]`, `#101314`), at 16.3:1 against
-`--color-on-dark` (`#e8f1f6`). On a dark media surface they keep
-`neutral.dark[95]`.
+On a light media surface, accent text and accent icons use the surface's
+accent, `--color-on-light` (`neutral.dark[10]`, `#101314`), at 18.7:1 against a
+white surface. On a dark media surface they keep `neutral.dark[95]`.
 
 ## Build and artifact contract
 
