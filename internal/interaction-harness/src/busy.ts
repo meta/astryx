@@ -38,6 +38,7 @@ import {
   type CastFrame,
   type FrameShortfall,
   type FrameStats,
+  type PooledRunCounts,
   type TrackedFrame,
 } from './frames';
 
@@ -787,14 +788,19 @@ const ONE_FRAME_MS = 16;
  * by `busyWindowProof` when the tracked value had settled before the judged
  * part of the window began. Thrown too when a held curve that keeps no end
  * value ends so soon in the block that too few frames are left
- * (`curveEndMs`). Always a red, with the numbers; never a pass. Start the
- * block earlier: call `blockMainThread` before the action that starts the
- * motion, and await it after.
+ * (`curveEndMs`). Thrown by `pooledBusyProof` when runs that began too late
+ * left the pool short of judged runs, and on time would have filled it.
+ * Always a red, with the numbers; never a pass. Start the block earlier: call
+ * `blockMainThread` before the action that starts the motion, and await it
+ * after.
  */
 export class BusyWindowTooLateError extends Error {
   constructor(
     message: string,
-    /** The times the error is read from, ms. */
+    /**
+     * The numbers the error is read from: times in ms, or, from
+     * `pooledBusyProof`, the pool's run counts (`PooledRunCounts`).
+     */
     readonly numbers: Readonly<Record<string, number>>,
   ) {
     super(message);
@@ -3080,8 +3086,10 @@ export interface PooledBusyProof {
  * fewer than `minJudgedFrames` frames over them, the pool is under the floor.
  * Under the floor, a pool with no component failure on the frames shown is too
  * little to judge, and it throws `FrameStarvationError`. A pool left short of
- * judged runs by a run that began too late keeps its failure instead. So does a
- * pool whose judged runs show a component red.
+ * judged runs with a run that began too late throws by the cause that decided
+ * it. When the late runs, on time, would have filled the pool, it throws
+ * `BusyWindowTooLateError`. Otherwise it throws `FrameStarvationError`. A pool
+ * whose judged runs show a component red fails its verdict instead.
  */
 export function pooledBusyProof(
   runs: readonly BusyRun[],
@@ -3206,10 +3214,24 @@ export function pooledBusyProof(
     }
   });
   // A pool whose compositor presented too little proves nothing about the
-  // motion, as one starved window does. A run that began too late keeps the
-  // pool's failure. So does a judged run's component red.
+  // motion, as one starved window does. A judged run's component red keeps the
+  // pool's verdict failure.
   const lateFailure = judgedReads.length < minJudgedRuns && lateRuns > 0;
   const componentFailed = failedRuns.some((failed, i) => judged[i] && failed);
+  if (lateFailure && !componentFailed) {
+    throw shortPoolError(
+      {
+        judgedRuns: judgedReads.length,
+        runs: runs.length,
+        minJudgedRuns,
+        lateRuns,
+        starvedRuns: runs.length - judgedReads.length - lateRuns,
+      },
+      runCasts.filter(
+        (cast): cast is {frames: number; longestGapMs: number} => cast != null,
+      ),
+    );
+  }
   if ((tooFewFrames || tooFewRuns) && !lateFailure && !componentFailed) {
     const casts = runCasts.filter(
       (cast, i): cast is {frames: number; longestGapMs: number} =>
@@ -3265,4 +3287,38 @@ export function pooledBusyProof(
     verdict: {pass: failures.length === 0, failures},
     summary,
   };
+}
+
+/**
+ * The error for a pool short of judged runs with a run that began too late,
+ * by the cause that decided it. When the late runs, on time, would have
+ * filled the pool, they decided it: `BusyWindowTooLateError`. Otherwise
+ * starvation decided it, late runs or not: `FrameStarvationError`, with the
+ * frames of every run that was not late.
+ */
+function shortPoolError(
+  counts: PooledRunCounts,
+  casts: readonly {frames: number; longestGapMs: number}[],
+): BusyWindowTooLateError | FrameStarvationError {
+  const {judgedRuns, runs, minJudgedRuns, lateRuns, starvedRuns} = counts;
+  const tally =
+    `${judgedRuns} of ${runs} runs judged, under ${minJudgedRuns}: ${lateRuns} began too late for their motion` +
+    (starvedRuns > 0
+      ? `, and ${starvedRuns} had too few control frames to judge`
+      : '');
+  if (judgedRuns + lateRuns >= minJudgedRuns) {
+    return new BusyWindowTooLateError(
+      `pooledBusyProof: ${tally}. On time, the late runs would have filled the pool, so the pool holds nothing to judge: start the blocks earlier`,
+      {...counts},
+    );
+  }
+  return new FrameStarvationError({
+    by: 'pooledBusyProof',
+    during: `${runs} blocks held the main thread, and ${judgedRuns} of them had enough control frames to judge`,
+    frames: casts.reduce((sum, cast) => sum + cast.frames, 0),
+    min: minJudgedRuns,
+    longestGapMs: Math.max(...casts.map(cast => cast.longestGapMs)),
+    cause: `${tally}: even on time, the late runs would leave the pool short, so the pool proves nothing about the motion`,
+    pool: counts,
+  });
 }

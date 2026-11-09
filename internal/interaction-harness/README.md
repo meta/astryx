@@ -444,11 +444,13 @@ run without the starvation throw. With fewer than `minJudgedRuns` judged runs
 (half of all the runs, rounded up), or a control that moved on fewer than four
 frames over them, the pool is under the floor. Under the floor, a pool with no
 component failure on the frames shown is too little to judge, and it throws
-`FrameStarvationError`. A pool left short of judged runs by a run that began
-too late fails instead, and so does a pool whose judged runs show a component
-red. In each judged run,
-the component must move on every frame its control moved on, so a freeze fails
-its run.
+`FrameStarvationError`. A pool left short of judged runs with a run that began
+too late throws by the cause that decided it. When the late runs, on time,
+would have filled the pool, it throws `BusyWindowTooLateError`: start the
+blocks earlier. Otherwise it throws `FrameStarvationError`. A pool whose judged
+runs show a component red fails its verdict instead. In each judged run, the
+component must move on every frame its control moved on, so a freeze fails its
+run.
 
 On a loaded machine Chromium's screencast can skip frames the compositor
 still presents. `startCompositorTrace(page)`, started with the screencast and

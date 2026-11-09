@@ -908,6 +908,22 @@ export interface FrameShortfall {
    * screen that did not change. The default names starvation alone.
    */
   readonly cause?: string;
+  /** With a pooled proof short of judged runs, how its runs fell. */
+  readonly pool?: PooledRunCounts;
+}
+
+/** A pooled proof's runs, as an error from it counts them. */
+export interface PooledRunCounts {
+  /** The runs it judged. */
+  readonly judgedRuns: number;
+  /** All its runs. */
+  readonly runs: number;
+  /** The judged runs it needs. */
+  readonly minJudgedRuns: number;
+  /** The runs whose block began too late for their motion. */
+  readonly lateRuns: number;
+  /** The runs whose control moved on too few frames to judge. */
+  readonly starvedRuns: number;
 }
 
 /**

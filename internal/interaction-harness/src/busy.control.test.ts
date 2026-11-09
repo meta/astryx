@@ -567,7 +567,7 @@ describe('pooledBusyProof', () => {
     );
   });
 
-  it('fails by name a pool left with fewer judged runs than its minimum, however many began too late', () => {
+  it('throws BusyWindowTooLateError for a pool left with fewer judged runs than its minimum, when the late runs would have filled it', () => {
     const control = asControl(moving());
     const settled = moving().map(f =>
       f.t < 950
@@ -575,20 +575,110 @@ describe('pooledBusyProof', () => {
         : ({...f, box: {...f.box!, y: 3 * at(950)}} as TrackedFrame),
     );
     // One long run passes every floor alone, beside two that began too late.
-    const pooled = pooledBusyProof(
-      [
-        {tracked: settled, control, window: short(1000)},
-        {tracked: settled, control, window: short(1000)},
-        {tracked: moving(), control, window: {from: 1100, to: 1700}},
-      ],
-      {settledWithin: 2},
+    const pool = () =>
+      pooledBusyProof(
+        [
+          {tracked: settled, control, window: short(1000)},
+          {tracked: settled, control, window: short(1000)},
+          {tracked: moving(), control, window: {from: 1100, to: 1700}},
+        ],
+        {settledWithin: 2},
+      );
+    expect(pool).toThrow(BusyWindowTooLateError);
+    expect(pool).toThrow(
+      'pooledBusyProof: 1 of 3 runs judged, under 2: 2 began too late for their motion. On time, the late runs would have filled the pool',
     );
-    expect(pooled.verdict.pass).toBe(false);
-    expect(pooled.verdict.failures).toEqual([
-      '1 of 3 runs judged, under 2: 2 began too late for their motion, and the compositor presented too little in any other to judge',
-    ]);
-    expect(pooled.summary).toMatch(/run 1: too late to judge/);
-    expect(pooled.summary).toMatch(/run 2: too late to judge/);
+  });
+
+  /**
+   * A pool of four short runs. Run 1 began after its motion had settled.
+   * The runs in `starved` saw their control stand still, and the others are
+   * judged. `tracked` is each judged run's component.
+   */
+  const mixedPool = (
+    starved: readonly number[],
+    tracked: (run: number) => TrackedFrame[] = () => moving(),
+  ) => {
+    const windows = [1000, 1250, 1500, 1750].map(short);
+    const settled = moving().map(f =>
+      f.t < 950
+        ? f
+        : ({...f, box: {...f.box!, y: 3 * at(950)}} as TrackedFrame),
+    );
+    const still = (frames: TrackedFrame[], from: number) =>
+      frames.map(f =>
+        f.t >= from && f.t <= from + 90
+          ? ({...f, box: {...f.box!, y: 3 * at(from)}} as TrackedFrame)
+          : f,
+      );
+    const control = asControl(
+      starved.reduce(
+        (frames, run) => still(frames, windows[run].from),
+        moving(),
+      ),
+    );
+    return () =>
+      pooledBusyProof(
+        windows.map((window, run) => ({
+          tracked: run === 0 ? settled : tracked(run),
+          control,
+          window,
+        })),
+        {settledWithin: 2},
+      );
+  };
+
+  /** The error `run` throws. */
+  const thrown = (run: () => unknown): unknown => {
+    try {
+      run();
+    } catch (error) {
+      return error;
+    }
+    throw new Error('no error');
+  };
+
+  it('throws FrameStarvationError, with the counts, for a pool with no judged run where even on time the late run would leave it short', () => {
+    // Run 1 began too late; runs 2 to 4 saw their control stand still.
+    const error = thrown(mixedPool([1, 2, 3]));
+    expect(error).toBeInstanceOf(FrameStarvationError);
+    expect(String(error)).toMatch(
+      /pooledBusyProof: .*0 of 4 runs judged, under 2: 1 began too late for their motion, and 3 had too few control frames to judge: even on time, the late runs would leave the pool short/,
+    );
+    expect((error as FrameStarvationError).numbers.pool).toEqual({
+      judgedRuns: 0,
+      runs: 4,
+      minJudgedRuns: 2,
+      lateRuns: 1,
+      starvedRuns: 3,
+    });
+  });
+
+  it('throws BusyWindowTooLateError, with the counts, for a pool short of judged runs that its late run would have filled on time', () => {
+    // Run 1 began too late, run 2 is judged, runs 3 and 4 starved.
+    const error = thrown(mixedPool([2, 3]));
+    expect(error).toBeInstanceOf(BusyWindowTooLateError);
+    expect(String(error)).toMatch(
+      /pooledBusyProof: 1 of 4 runs judged, under 2: 1 began too late for their motion, and 2 had too few control frames to judge\. On time, the late runs would have filled the pool/,
+    );
+    expect((error as BusyWindowTooLateError).numbers).toEqual({
+      judgedRuns: 1,
+      runs: 4,
+      minJudgedRuns: 2,
+      lateRuns: 1,
+      starvedRuns: 2,
+    });
+  });
+
+  it('still fails the verdict of a pool short of judged runs with a late run when its judged run shows a component red', () => {
+    // Run 2 is judged, and its component stands still while its control moves.
+    const pooled = mixedPool([2, 3], () =>
+      held(moving(), 1250, 1340),
+    )() as ReturnType<typeof pooledBusyProof>;
+    expect(pooled.judged).toEqual([false, true, false, false]);
+    expect(pooled.verdict.failures.join('\n'), pooled.summary).toMatch(
+      /run 2: moved on 0 of the 3 frames its control moved/,
+    );
   });
 
   it('still fails a component that is frozen in every run while the control moves', () => {
