@@ -112,4 +112,35 @@ describe('Selector: the highlight follows its option by value', () => {
     rerender(<SelectorWith options={['Novice', 'Master']} />);
     expect(activeOptionText(trigger)).toBeNull();
   });
+
+  it('moves to the previous remaining option when every option after it left', () => {
+    const {rerender} = render(
+      <SelectorWith options={['Easy', 'Hard', 'Expert']} />,
+    );
+    const trigger = openAndHighlight(1);
+    expect(activeOptionText(trigger)).toBe('Hard');
+
+    rerender(<SelectorWith options={['Easy']} />);
+    expect(activeOptionText(trigger)).toBe('Easy');
+  });
+
+  it('does not throw when the highlight already sits past the end of the list', () => {
+    const FIVE = ['Apple', 'Banana', 'Cherry', 'Date', 'Elder'];
+    const {rerender} = render(<SelectorWith options={FIVE} />);
+    const trigger = openAndHighlight(1);
+    expect(activeOptionText(trigger)).toBe('Banana');
+    // A row under a still pointer is reported as entered while the keyboard
+    // move holds the highlight; the hover applies on the next pointer move.
+    const elder = screen
+      .getAllByRole('option', {hidden: true})
+      .find(row => row.textContent === 'Elder');
+    expect(elder).toBeDefined();
+    fireEvent.mouseEnter(elder as HTMLElement);
+
+    rerender(<SelectorWith options={FIVE.slice(0, 3)} />);
+    fireEvent.pointerMove(document);
+    expect(() =>
+      rerender(<SelectorWith options={FIVE.slice(0, 2)} />),
+    ).not.toThrow();
+  });
 });

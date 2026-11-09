@@ -1127,13 +1127,19 @@ function followHighlight(
     return stayed;
   }
   for (let after = index + 1; after < previous.length; after++) {
-    const found = enabledIndexOf(previous[after].value);
+    const found = enabledIndexOf(previous[after]?.value);
     if (found >= 0) {
       return found;
     }
   }
-  for (let before = index - 1; before >= 0; before--) {
-    const found = enabledIndexOf(previous[before].value);
+  // The highlight can sit past the end of the list it was set in: a hover
+  // applied after the list shrank. Start from the list's own last option.
+  for (
+    let before = Math.min(index, previous.length) - 1;
+    before >= 0;
+    before--
+  ) {
+    const found = enabledIndexOf(previous[before]?.value);
     if (found >= 0) {
       return found;
     }
