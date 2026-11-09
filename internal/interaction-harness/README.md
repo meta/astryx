@@ -394,8 +394,10 @@ harness's own animation recorder stands down while the trace runs, since its
 frame loop would make every frame a main-thread one, restyling each running
 animation's target and laying out an anchored one: it reads only the element a
 CSS animation or transition event names, once, when that animation starts, and
-catches up afterwards. The frame it requested before the trace runs before the
-start mark, so the whole window counts none of its work. A `waitForRest`
+catches up afterwards. A CSS run's end event reads nothing then either: the
+recorder keeps the end and dates the run once the trace ends. The frame it
+requested before the trace runs before the start mark, so the whole window
+counts none of its work. A `waitForRest`
 awaited inside the traced body stands
 down too: it waits on timers for the scheduled ends of the element's curves
 (looking `frames` times a frame apart before settling on none, so an
