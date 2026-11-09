@@ -20,7 +20,12 @@ import {firstStrongDirection} from '@astryxdesign/core/i18n';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import {mergeRegister} from '@lexical/utils';
 import {HeadingNode, QuoteNode} from '@lexical/rich-text';
-import {ListItemNode, ListNode} from '@lexical/list';
+import {
+  $isListItemNode,
+  $isListNode,
+  ListItemNode,
+  ListNode,
+} from '@lexical/list';
 import {CodeNode} from '@lexical/code';
 import {TableCellNode, TableNode, TableRowNode} from '@lexical/table';
 import {
@@ -98,9 +103,48 @@ function $isOwnDirectionBlock(node: LexicalNode): node is ElementNode {
  * item left-to-right. Core Markdown skips the same nodes when it reads a
  * block's direction. A fenced code block is skipped for its own reason:
  * each of its lines reads on its own terms.
+ *
+ * Lexical puts a nested list in an item of its own after the item it hangs
+ * from. That holder shows no text and is not a block a reader sees: it
+ * belongs to the item above it, and FR5 anchors a nested list on its parent
+ * item's text start. So it takes that item's direction, not the direction of
+ * the list inside it. Reading its own contents instead would anchor the
+ * nested list on whichever language its first item happened to use, which
+ * costs an item that reads the other way its nesting step, and leaves a
+ * neutral item — digits, an image — following that first item rather than
+ * the document.
  */
 function $ownDirection(node: ElementNode): 'ltr' | 'rtl' | null {
+  const holds = $heldList(node);
+  if (holds !== null) {
+    const parentItem = $parentItemOf(node);
+    return parentItem === null ? null : $ownDirection(parentItem);
+  }
   return firstStrongDirection($proseText(node));
+}
+
+/** The list a holder item exists to carry, or null when it carries prose. */
+function $heldList(node: ElementNode): ElementNode | null {
+  if (!$isListItemNode(node)) {
+    return null;
+  }
+  const children = node.getChildren();
+  const lists = children.filter($isListNode);
+  return lists.length === 1 && children.length === lists.length
+    ? lists[0]
+    : null;
+}
+
+/** The item a holder hangs from: the nearest prose item before it. */
+function $parentItemOf(node: ElementNode): ElementNode | null {
+  let sibling = node.getPreviousSibling();
+  while (sibling !== null) {
+    if ($isListItemNode(sibling) && $heldList(sibling) === null) {
+      return sibling;
+    }
+    sibling = sibling.getPreviousSibling();
+  }
+  return null;
 }
 
 /** The text of a node's prose descendants, decorators and code aside. */

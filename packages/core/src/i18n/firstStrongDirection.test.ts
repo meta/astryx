@@ -67,7 +67,7 @@ describe('firstStrongDirection', () => {
     expect(firstStrongDirection('\u061f Annual')).toBe('rtl');
   });
 
-  it('reads letter numbers as strong and right-to-left numerals as weak', () => {
+  it('reads letter numbers as strong and tells Rumi from the Siyaq numerals', () => {
     // Bidi_Class L, General_Category Nl, which \p{Letter} does not cover.
     expect(firstStrongDirection('\u2160')).toBe('ltr');
     expect(firstStrongDirection('\u2160\u05e9\u05dc\u05d5\u05dd')).toBe('ltr');
@@ -75,9 +75,12 @@ describe('firstStrongDirection', () => {
     expect(firstStrongDirection('\u{10E60}\u{10E61} Annual report')).toBe(
       'ltr',
     );
-    expect(firstStrongDirection('\u{1EC71} Annual')).toBe('ltr');
-    expect(firstStrongDirection('\u{1ED01} Annual')).toBe('ltr');
     expect(firstStrongDirection('\u{10E60}')).toBeNull();
+    // Siyaq numerals sit beside Rumi and are Bidi_Class AL, not AN, so they
+    // are strong and an Arabic-script ledger opening with one reads
+    // right-to-left.
+    expect(firstStrongDirection('\u{1EC71} Annual')).toBe('rtl');
+    expect(firstStrongDirection('\u{1ED01} Annual')).toBe('rtl');
     // Still strong in the same planes.
     expect(firstStrongDirection('\u{1E802}')).toBe('rtl');
     expect(firstStrongDirection('\u{1EE01}')).toBe('rtl');
