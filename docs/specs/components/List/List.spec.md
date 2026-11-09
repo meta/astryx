@@ -195,11 +195,7 @@ Consumer migration instructions belong in consumer docs and release notes.
   listener, state, Effect, or render pass. Deprecation warnings are dev-only.
 - **PR2 — Motion only where it applies.** FR11 adds no listener, observer,
   measurement, or animation under a fine pointer, and FR12 measures rows only
-  with a handle. Every motion runs on transform and opacity. Implementation
-  gap: where the primary pointer is coarse, a reorder mode move forces one
-  style pass for each row that glides for the first time. The shared animator
-  then reads the row's `will-change` (`architecture:react-component-runtime`
-  INV18).
+  with a handle. Every motion runs on transform and opacity.
 
 ## Accessibility contract
 
