@@ -32,7 +32,15 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
-import React, {useRef} from 'react';
+import React, {
+  Suspense,
+  startTransition,
+  use,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import {createPortal} from 'react-dom';
 import {readFileSync} from 'node:fs';
 import {type AnnounceFn, __resetLiveRegionsForTest} from '../hooks/useAnnounce';
@@ -452,6 +460,219 @@ describe('ToastViewport visible limit', () => {
       within(viewport).getAllByRole('button', {name: 'Dismiss notification'}),
     ).toHaveLength(1);
     expect(within(viewport).getByText('Three')).toBeInTheDocument();
+  });
+});
+
+describe('ToastViewport and a descendant committing together', () => {
+  it('keeps a toast a descendant raises in a layout effect, for a repeat in that commit', () => {
+    function Raiser({isOn}: {isOn: boolean}) {
+      const toast = useToast();
+      // Raised as the descendant commits, then repeated after the commit.
+      useLayoutEffect(() => {
+        if (isOn) {
+          toast({uniqueID: 'b', isAutoHide: false, body: 'Toast B'});
+        }
+      }, [isOn, toast]);
+      useEffect(() => {
+        if (isOn) {
+          toast({uniqueID: 'b', isAutoHide: false, body: 'Toast B'});
+        }
+      }, [isOn, toast]);
+      return null;
+    }
+    function Controls() {
+      const toast = useToast();
+      const [isOn, setIsOn] = useState(false);
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              toast({isAutoHide: false, body: 'Toast A'});
+              setIsOn(true);
+            }}>
+            Raise
+          </button>
+          <Raiser isOn={isOn} />
+        </>
+      );
+    }
+    render(
+      <ToastViewport isTopLayer={false}>
+        <Controls />
+      </ToastViewport>,
+    );
+
+    act(() => {
+      fireEvent.click(screen.getByText('Raise'));
+    });
+
+    // The repeat finds the first 'b' and does not add a second one.
+    const rows = [...document.querySelectorAll('[data-toast-id]')];
+    expect(
+      rows.filter(row => row.textContent?.includes('Toast B')),
+    ).toHaveLength(1);
+  });
+});
+
+describe('ToastViewport and a descendant cleanup in the same commit', () => {
+  it("keeps a toast a descendant's layout-effect cleanup raises, for a repeat in that commit", () => {
+    function Raiser({step}: {step: number}) {
+      const toast = useToast();
+      // The cleanup runs as the next step commits; the passive effect after.
+      useLayoutEffect(
+        () => () => {
+          toast({uniqueID: 'b', isAutoHide: false, body: 'Toast B'});
+        },
+        [step, toast],
+      );
+      useEffect(() => {
+        if (step > 0) {
+          toast({uniqueID: 'b', isAutoHide: false, body: 'Toast B'});
+        }
+      }, [step, toast]);
+      return null;
+    }
+    function Controls() {
+      const toast = useToast();
+      const [step, setStep] = useState(0);
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              toast({isAutoHide: false, body: 'Toast A'});
+              setStep(1);
+            }}>
+            Raise
+          </button>
+          <Raiser step={step} />
+        </>
+      );
+    }
+    render(
+      <ToastViewport isTopLayer={false}>
+        <Controls />
+      </ToastViewport>,
+    );
+
+    act(() => {
+      fireEvent.click(screen.getByText('Raise'));
+    });
+
+    // Toast.spec.md FR8: the repeat replaces the first 'b'.
+    const rows = [...document.querySelectorAll('[data-toast-id]')];
+    expect(
+      rows.filter(row => row.textContent?.includes('Toast B')),
+    ).toHaveLength(1);
+  });
+
+  it('keeps a toast an unmounting direct child raises in its cleanup, for a repeat in that commit', () => {
+    function Leaving() {
+      const toast = useToast();
+      useLayoutEffect(
+        () => () => {
+          toast({uniqueID: 'b', isAutoHide: false, body: 'Toast B'});
+        },
+        [toast],
+      );
+      return null;
+    }
+    function Arriving() {
+      const toast = useToast();
+      useEffect(() => {
+        toast({uniqueID: 'b', isAutoHide: false, body: 'Toast B'});
+      }, [toast]);
+      return null;
+    }
+    function App({isSwapped}: {isSwapped: boolean}) {
+      // The swap is a direct child of the viewport, as an app root can be.
+      return (
+        <ToastViewport isTopLayer={false}>
+          {isSwapped ? <Arriving /> : <Leaving />}
+        </ToastViewport>
+      );
+    }
+    const {rerender} = render(<App isSwapped={false} />);
+
+    act(() => {
+      rerender(<App isSwapped />);
+    });
+
+    const rows = [...document.querySelectorAll('[data-toast-id]')];
+    expect(
+      rows.filter(row => row.textContent?.includes('Toast B')),
+    ).toHaveLength(1);
+  });
+
+  it('reports onHide once when a layout cleanup and a passive cleanup dismiss a toast pushed out in that commit', () => {
+    const onHide = vi.fn();
+    let dismissFirst: (() => void) | null = null;
+    function Dismisser({step}: {step: number}) {
+      useLayoutEffect(
+        () => () => {
+          if (step > 0) {
+            dismissFirst?.();
+          }
+        },
+        [step],
+      );
+      useEffect(
+        () => () => {
+          if (step > 0) {
+            dismissFirst?.();
+          }
+        },
+        [step],
+      );
+      return null;
+    }
+    function Controls() {
+      const toast = useToast();
+      const [step, setStep] = useState(0);
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              dismissFirst = toast({
+                isAutoHide: false,
+                body: 'First',
+                onHide,
+              });
+              setStep(1);
+            }}>
+            Show first
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              toast({isAutoHide: false, body: 'Second'});
+              setStep(2);
+            }}>
+            Show second
+          </button>
+          <Dismisser step={step} />
+        </>
+      );
+    }
+    render(
+      <ToastViewport isTopLayer={false} maxVisible={1}>
+        <Controls />
+      </ToastViewport>,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText('Show first'));
+    });
+
+    // The second pushes the first out of the one visible slot, and both
+    // cleanups of the step it sets dismiss the first.
+    act(() => {
+      fireEvent.click(screen.getByText('Show second'));
+    });
+
+    // Toast.spec.md FR3: one dismissal reports once.
+    expect(onHide).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -3422,6 +3643,55 @@ describe('toast announcements via singleton live regions', () => {
     const rows = [...document.querySelectorAll('[data-toast-id]')];
     expect(rows).toHaveLength(1);
     expect(rows[0].textContent).toContain('Still offline');
+  });
+
+  it('reports nothing for a toast only a discarded render showed, when a repeat replaces and dismisses it', async () => {
+    // A transition that suspends for good: React renders it, then keeps the
+    // committed tree and never commits that render.
+    const forever = new Promise<never>(() => {});
+    function Forever(): null {
+      use(forever);
+      return null;
+    }
+    let toast: ReturnType<typeof useToast> | null = null;
+    function Capture(): null {
+      toast = useToast();
+      return null;
+    }
+    function Screen({isPending = false}: {isPending?: boolean}) {
+      return (
+        <ToastViewport isTopLayer={false}>
+          <Capture />
+          <Suspense fallback={null}>{isPending ? <Forever /> : null}</Suspense>
+        </ToastViewport>
+      );
+    }
+    const onHide = vi.fn();
+    let dismissFirst: (() => void) | null = null;
+    const {rerender} = render(<Screen />);
+    // Raised in a transition React renders and never commits.
+    await act(async () => {
+      startTransition(() => {
+        dismissFirst =
+          toast?.({
+            uniqueID: 'offline',
+            isAutoHide: false,
+            body: 'Offline',
+            onHide,
+          }) ?? null;
+        rerender(<Screen isPending />);
+      });
+    });
+    expect(screen.queryByText('Offline')).toBeNull();
+
+    act(() => {
+      toast?.({uniqueID: 'offline', isAutoHide: false, body: 'Still offline'});
+      dismissFirst?.();
+    });
+
+    // Toast.spec.md FR3: it never rendered, so its replacement reports no
+    // onHide for it.
+    expect(onHide).not.toHaveBeenCalled();
   });
 
   it('replaces a leaving namesake in place under overwrite and announces it again', () => {
