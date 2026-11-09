@@ -1891,6 +1891,70 @@ test.describe('frame evidence', () => {
     await first.remove();
   });
 
+  test('a busy proof given the control ahead judges a compositor animation through a blocked main thread, and a rAF one still freezes', async ({
+    page,
+  }, testInfo) => {
+    await busyFixture(page);
+    const box = page.locator('#box');
+    await markElement(box, {mode: 'outline'});
+    // Opted in: the control ahead dates the frames near the first one's turns.
+    const first = await startBusyControl(page);
+    const ahead = await startBusyControl(page, {ahead: true});
+    const run = async (driver: 'compositor' | 'raf') => {
+      const cast = await startScreencast(page);
+      await box.evaluate((el, how) => {
+        el.getAnimations().forEach(a => a.cancel());
+        el.style.transform = 'none';
+        if (how === 'compositor') {
+          el.animate(
+            [{transform: 'translateY(0px)'}, {transform: 'translateY(560px)'}],
+            {duration: 1100, easing: 'linear'},
+          );
+          return;
+        }
+        const start = performance.now();
+        const step = (now: number) => {
+          const progress = Math.min(1, (now - start) / 1100);
+          el.style.transform = `translateY(${560 * progress}px)`;
+          if (progress < 1) {
+            requestAnimationFrame(step);
+          }
+        };
+        requestAnimationFrame(step);
+      }, driver);
+      // A rendering update first, so the compositor drops the last run's
+      // animation before the block.
+      await page.evaluate(
+        () =>
+          new Promise<void>(resolve =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+      const window = await blockMainThread(
+        page,
+        700,
+        driver === 'compositor' ? {during: box} : {},
+      );
+      await page.waitForTimeout(200);
+      const castFrames = await cast.stop();
+      return busyWindowProof(await trackMarker(page, castFrames), window, {
+        axis: 'y',
+        control: await trackControl(page, castFrames),
+        ahead: await trackControl(page, castFrames, {ahead: true}),
+        controlStarts: [first.start, ahead.start],
+      });
+    };
+    const compositor = await run('compositor');
+    testInfo.annotations.push({
+      type: 'busy proof with the control ahead',
+      description: compositor.summary,
+    });
+    expect(compositor.verdict.failures, compositor.summary).toEqual([]);
+    const raf = await run('raf');
+    expect(raf.verdict.failures, raf.summary).not.toEqual([]);
+    await first.remove();
+  });
+
   test('a hold that starts before the block is judged from its first presented change inside it; a single change and then a freeze still fails', async ({
     page,
   }) => {
@@ -2082,8 +2146,7 @@ test.describe('frame evidence', () => {
     };
 
     const compositor = await runs('compositor');
-    // One run is too little to judge: its verdict says so, or, when the
-    // machine also starved its cast, the proof throws by name.
+    // One run is too little to judge, so the proof throws by name.
     const single = (() => {
       try {
         const proof = busyWindowProof(
@@ -2110,7 +2173,8 @@ test.describe('frame evidence', () => {
     expect(pooled.verdict.failures, pooled.summary).toEqual([]);
 
     // The same runs with the control taken out of the last blocks. A starved
-    // run is named and left out. With too few judged runs, the pool fails.
+    // run is named and left out. With too few judged runs, the pool throws by
+    // name.
     const starve = (count: number) =>
       pooledBusyProof(
         compositor.map((run, i) =>
@@ -2132,10 +2196,9 @@ test.describe('frame evidence', () => {
     expect(lastStarved.summary).toMatch(
       /; run 6: too little to judge, the control moved on 0 frames/,
     );
-    const oneLeft = starve(5);
-    expect(oneLeft.verdict.failures.join('\n'), oneLeft.summary).toMatch(
-      /[01] of 6 runs judged, under 3/,
-    );
+    const oneLeft = () => starve(5);
+    expect(oneLeft).toThrow(FrameStarvationError);
+    expect(oneLeft).toThrow(/[01] of 6 runs judged, under 3/);
 
     // The mutant: a main-thread animation freezes in every block.
     const raf = pooledBusyProof(await runs('raf'), {axis: 'y'});
@@ -4149,6 +4212,24 @@ test.describe('holding', () => {
     await releaseAnimations(page, {finish: true});
   });
 
+  test('a hold whose scope is not on the page fails by name within its wait, not at the test timeout', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // The scope's element is gone before either hold resolves it, as a
+    // viewer the page has closed is.
+    await box.evaluate(el => el.remove());
+    await expect(armHold(page, box, {judges: 'count-only'})).rejects.toThrow(
+      /armHold: the scope .*#box.* is not on the page after 5000 ms: it is gone, or it never came/,
+    );
+    await expect(
+      holdAnimations(page, box, {judges: 'count-only'}),
+    ).rejects.toThrow(
+      /holdAnimations: the scope .*#box.* is not on the page after 5000 ms/,
+    );
+  });
+
   test('an armed hold rejects when nothing under its scope starts', async ({
     page,
   }) => {
@@ -4949,7 +5030,7 @@ test.describe('holding', () => {
     await releaseAnimations(page);
   });
 
-  test('a held transition the page retargets is dropped, not revived', async ({
+  test('a held transition the page retargets fails a seek or a sample by name, and is dropped, not revived', async ({
     page,
   }) => {
     await fixture(page);
@@ -4983,8 +5064,15 @@ test.describe('holding', () => {
           held: w.__harnessHeld.length,
         };
       });
-    await seekAnimations(page, 150);
-    expect(await state()).toEqual({cancelled: 'idle', held: 0});
+    // The judged run is gone, so a read would show the run that replaced
+    // it: a seek and a sample fail by name.
+    await expect(seekAnimations(page, 150)).rejects.toThrow(
+      /seekAnimations: the page cancelled the held run of a judged motion \(transform on div#box\) since the hold/,
+    );
+    await expect(sampleCurve(box, [150])).rejects.toThrow(
+      /sampleCurve: the page cancelled the held run of a judged motion \(transform on div#box\) since the hold/,
+    );
+    expect((await state()).cancelled).toBe('idle');
     await releaseAnimations(page);
     await waitForRest(box);
     expect(await state()).toEqual({cancelled: 'idle', held: 0});

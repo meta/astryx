@@ -121,7 +121,11 @@ colour change) can meet that count before the motion a test judges starts,
 and a hold that took only them proves nothing about it. So every armed hold
 names the motion it judges, `{judges: {target, property}}` (a list for
 several; `pseudoElement` for a `::before` or `::after`), and `held()` rejects
-when the hold took no animation of it. `judges: 'count-only'` checks nothing:
+when the hold took no animation of it. A judged run that the page cancels after
+the hold (a later style change retargets a CSS transition) fails the next
+`seekAnimations` or `sampleCurve` by name: a read would show a run that the
+hold did not take. A hold whose scope is not on the page within 5 s fails by
+name too. `judges: 'count-only'` checks nothing:
 it marks a call site whose hold does not take its judged motion yet.
 A hold sent from the test (`holdAnimations`, and `animationStoryboard`
 without `held`) takes the same `judges` and rejects the same way: it takes
@@ -317,11 +321,15 @@ decodes each frame once. A proof reads frames up to
 decode only those. Pass either as `control`: the component passes when it moved on every frame the control
 moved and its longest stall is no longer than the control's. Both are read from
 the same screencast frames, so a compositor animation misses none. A window in
-which the control moved on fewer than four frames fails, since the machine
-presented too little to judge; the failure names the cast's frames in the
-window and its longest gap. When no frame came for longer than
-`FRAME_STARVATION_MS` there too, the machine starved the run, and
-`busyWindowProof` throws `FrameStarvationError` instead of returning a verdict.
+which the control moved on fewer than four frames is under the floor. Under the
+floor, a run with no component failure on the frames shown is too little to
+judge: `busyWindowProof` throws `FrameStarvationError` instead of returning a
+verdict. The error names the control's moves, the cast's frames in the window
+and its longest gap. A component that missed a frame the control moved on, or
+stalled longer than it, failed on frames the compositor presented, so the
+verdict keeps that red. A run the machine starved, with no frame for longer
+than `FRAME_STARVATION_MS`, throws either way. `maxMedianFrameMs` judges the
+cast's pace, not the component, so under the floor it keeps no red.
 A run of frames with no new position counts as
 moved when the change that ends it is a single cast step: the component moves
 under one step a frame there, as on an easing tail, which the cast cannot show
@@ -363,6 +371,36 @@ turn, the one ahead is mid-leg. Track it with `trackControl(page, frames,
 resolves with each control's `start` on the page clock, where its own time
 is zero. Keep the component's marker out of the top 28 px then.
 
+In WebKit, a busy proof with a control judges every frame on the controls'
+clock, not on the screencast's stamps. WebKit stamps the frame after a delivery
+gap about 60 ms late. So `busyWindowProof` and `pooledBusyProof` date each
+WebKit frame from the control's positions, the component's and the control's
+alike. A frame with no reading keeps its stamp's distance from the nearest frame
+whose stamp agrees with its reading. The dated frames keep the cast's order,
+since the cast delivers them in the order they were drawn. The proof's `judged`
+part stays on the cast's stamps, so a spec selects the judged part from its own
+cast; frames the display-rate keep left out fall inside it too. A spec that
+needs a frame's own time for another check reads it with `pageTimesOnControls`,
+the readings the proof dates from. Without the control ahead, a late frame near
+the first control's turn keeps its lateness. A proof that judges every frame
+near a turn starts the control ahead too
+(`startBusyControl(page, {ahead: true})`). It passes that control's frames as
+`ahead`, per run in a pool; `controlStarts` is optional. Chromium casts and
+casts with no control are judged on their stamps. Under load, Chromium's cast
+also stamps frames in bursts, which a proof on its stamps can misread. On
+WebKit's stamps, a late frame inside the judged part changes no verdict, since
+the proof reads a slow curve's held frames as motion. At the part's start, it
+shows a stall the control does not have: the false reds came from there.
+
+A WebKit proof keeps one dated frame per display interval. A frame under one
+interval after the last one kept is left out; the earlier one stays. WebKit's
+compositor can draw two frames 6 to 9 ms apart, and a curve then shows no new
+step between them. A frame with no reading always stays, since its time is a
+neighbour's. A WebKit cast rarely shows two frames one interval apart. So
+the proof judges motion on every kept frame the control moved, but no 30 Hz
+cadence. Its summary says so in a note, with the count of pairs one interval
+apart. Chromium's cast judges that cadence.
+
 An animation that lasts a fraction of a second, such as a 0.2 s fade, leaves a
 block only a few frames to judge: in WebKit, or on a loaded machine, the control
 can present fewer than four, and one run cannot decide. Play it several times
@@ -375,8 +413,13 @@ belongs to its run. A run whose control moved on fewer frames than
 and the pool leaves it out, so it never counts as a pass. A run whose block
 began too late for its motion is left out the same way: its `runs` entry
 is null, and `late` holds its `BusyWindowTooLateError`. The pool reads each
-run without the starvation throw. The pool fails with
-fewer than `minJudgedRuns` judged runs (half of all the runs, rounded up). In each judged run,
+run without the starvation throw. With fewer than `minJudgedRuns` judged runs
+(half of all the runs, rounded up), or a control that moved on fewer than four
+frames over them, the pool is under the floor. Under the floor, a pool with no
+component failure on the frames shown is too little to judge, and it throws
+`FrameStarvationError`. A pool left short of judged runs by a run that began
+too late fails instead, and so does a pool whose judged runs show a component
+red. In each judged run,
 the component must move on every frame its control moved on, so a freeze fails
 its run.
 
