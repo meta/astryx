@@ -945,7 +945,7 @@ describe('ChatLayout in a page that scrolls the document', () => {
     expect(layoutLift(dockOf(container))).toBe(190);
   });
 
-  it('lays out a followed pan at the first report after the pan stops moving', () => {
+  it('lays out a followed pan at the first report after the pan stops moving, once no finger is down', () => {
     const {container} = renderDocumentLayout();
     report(window.innerHeight - 290);
     wait(108);
@@ -953,14 +953,49 @@ describe('ChatLayout in a page that scrolls the document', () => {
     act(() => {
       document.dispatchEvent(touch('touchstart', [{x: 5, y: 300}]));
     });
+    pan(200);
+    act(() => {
+      document.dispatchEvent(touch('touchend', [{x: 5, y: 500}]));
+    });
+    expect(layoutLift(dockOf(container))).toBe(90);
+    // The fling's momentum moves the pan on, then stops.
     pan(150);
-    expect(layoutLift(dockOf(container))).toBe(0);
-    expect(dockOf(container).style.translate).toBe('0px -140px');
+    expect(layoutLift(dockOf(container))).toBe(90);
+    expect(dockOf(container).style.translate).toBe('0px -50px');
     // A report with the same pan and height, as a toolbar's resize raises.
     act(() => {
       viewport.dispatchEvent(new Event('resize'));
     });
     expect(layoutLift(dockOf(container))).toBe(140);
+    expect(dockOf(container).style.translate).toBe('');
+  });
+
+  it('lays out nothing during a slow drag, whatever the size of each step, until the finger lifts', () => {
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 290);
+    wait(108);
+    pan(290);
+    act(() => {
+      document.dispatchEvent(touch('touchstart', [{x: 5, y: 300}]));
+    });
+    const lifts: number[] = [];
+    for (let step = 1; step <= 10; step += 1) {
+      pan(290 - step * 0.3);
+      // A report with the pan where it was, while the finger is still down.
+      act(() => {
+        viewport.dispatchEvent(new Event('resize'));
+      });
+      lifts.push(layoutLift(dockOf(container)));
+    }
+    expect(lifts.every(lift => lift === 0)).toBe(true);
+    const translateY = Number(
+      /^0px (-?[\d.]+)px$/.exec(dockOf(container).style.translate)?.[1],
+    );
+    expect(translateY).toBeCloseTo(-3, 5);
+    act(() => {
+      document.dispatchEvent(touch('touchend', [{x: 5, y: 303}]));
+    });
+    expect(layoutLift(dockOf(container))).toBeCloseTo(3, 5);
     expect(dockOf(container).style.translate).toBe('');
   });
 

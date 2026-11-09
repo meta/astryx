@@ -234,6 +234,9 @@ export function useChatKeyboard({
   // Set while the dock's translate carries a change of the pan's cover that
   // the layout has not taken yet.
   const panPendingRef = useRef(false);
+  // Fingers on the screen: while one is down, the reader still moves the pan,
+  // however slowly.
+  const fingersRef = useRef(0);
   // Whether the transcript followed its newest message, and where it was
   // scrolled, just before the layout's last change.
   const atEndRef = useRef(false);
@@ -399,15 +402,18 @@ export function useChatKeyboard({
       }
       const changed = event.height !== reportedHeight;
       const pan = getKeyboardPan(win);
-      const panned =
-        pan == null || reportedPan == null
-          ? pan !== reportedPan
-          : Math.abs(pan - reportedPan) >= 0.5;
       reportedHeight = event.height;
+      const isPanStill = pan === reportedPan;
       reportedPan = pan;
       if (leavesReveal && event.height > 0 && followsDockDeficit(win)) {
-        // A report after the pan stopped moving: the pan is at rest.
-        if (!changed && !panned && panPendingRef.current) {
+        // A report that finds the pan where it was, with no finger down: the
+        // pan is at rest.
+        if (
+          !changed &&
+          isPanStill &&
+          fingersRef.current === 0 &&
+          panPendingRef.current
+        ) {
           commit();
         } else {
           followPan(event.height);
@@ -423,14 +429,18 @@ export function useChatKeyboard({
         commit();
       }
     };
+    const onTouchStart = (event: Event) => {
+      fingersRef.current = (event as Partial<TouchEvent>).touches?.length ?? 1;
+    };
     const onTouchEnd = (event: Event) => {
-      const touches = (event as Partial<TouchEvent>).touches;
-      if (!(touches != null && touches.length > 0)) {
+      fingersRef.current = (event as Partial<TouchEvent>).touches?.length ?? 0;
+      if (fingersRef.current === 0) {
         rest();
       }
     };
     const stopRest = leavesReveal
       ? [
+          subscribeInput(win, 'touchstart', onTouchStart),
           subscribeInput(win, 'touchend', onTouchEnd),
           subscribeInput(win, 'touchcancel', onTouchEnd),
           subscribeInput(win, 'scrollend', rest),
