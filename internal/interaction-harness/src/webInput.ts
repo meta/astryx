@@ -440,7 +440,24 @@ export async function installInputStart(
   page: Page,
   types: readonly string[],
 ): Promise<void> {
-  const script = (first: boolean) => `(() => {
+  await installInputStartBeforeLoad(page, types);
+  await page.evaluate(inputStartScript(types, false));
+}
+
+/**
+ * Adds the `installInputStart` mark to each page the tab loads next, before
+ * the page's scripts. The page loaded now gets no mark. A driver created after
+ * the next load then uses the mark.
+ */
+export async function installInputStartBeforeLoad(
+  page: Page,
+  types: readonly string[],
+): Promise<void> {
+  await page.addInitScript(inputStartScript(types, true));
+}
+
+function inputStartScript(types: readonly string[], first: boolean): string {
+  return `(() => {
   if (window.__harnessInputStart) return;
   const starts = new WeakMap();
   window.__harnessInputStart = {starts, first: ${first}};
@@ -450,8 +467,6 @@ export async function installInputStart(
     }, {capture: true, passive: true});
   }
 })()`;
-  await page.addInitScript(script(true));
-  await page.evaluate(script(false));
 }
 
 /**

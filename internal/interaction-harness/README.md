@@ -342,6 +342,12 @@ to show a new position on at least four of the control's frames. The cast step (
 is read from the value's changes in the judged part, so a position the page
 commits off the grid once the block ends does not shrink it.
 A main-thread animation still fails: the control moves and it does not.
+Each such run counts in the control read's `belowStep`. A proof that claims a
+new position on every frame the control moved passes `judgeEveryFrame`. A frame
+the cast's step explains is then too little to judge: `busyWindowProof` throws
+`BusyFrameUnjudgedError` with each such frame, the component's move per frame
+there and the cast's step. A verdict that fails anyway comes back as it is, so
+a frozen or main-thread component stays a red on the component.
 
 `controlClock(control)` reads the compositor's own time in each frame off the
 control's position, for a proof that judges motion against time, not against
