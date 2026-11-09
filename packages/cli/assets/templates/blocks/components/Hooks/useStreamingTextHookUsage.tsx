@@ -17,9 +17,13 @@ const CHUNKS = [
 ];
 
 // A fake stream: chunks land in bursts, the way a model streams tokens.
-function useFakeStream(onChunk: (chunk: string) => void) {
+// Starting again stops the stream in progress, and the last chunk ends it.
+function useFakeStream(onChunk: (chunk: string) => void, onEnd: () => void) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const start = useCallback(() => {
+    if (timer.current) {
+      clearTimeout(timer.current);
+    }
     let index = 0;
     const tick = () => {
       onChunk(CHUNKS[index]);
@@ -27,16 +31,17 @@ function useFakeStream(onChunk: (chunk: string) => void) {
       if (index < CHUNKS.length) {
         timer.current = setTimeout(tick, 350);
       } else {
-        timer.current = setTimeout(() => {
-          timer.current = null;
-        }, 350);
+        timer.current = null;
+        onEnd();
       }
     };
     timer.current = setTimeout(tick, 350);
-  }, [onChunk]);
+  }, [onChunk, onEnd]);
   useEffect(
     () => () => {
-      if (timer.current) clearTimeout(timer.current);
+      if (timer.current) {
+        clearTimeout(timer.current);
+      }
     },
     [],
   );
@@ -50,15 +55,15 @@ export default function UseStreamingTextHookUsage() {
   const appendChunk = useCallback((chunk: string) => {
     setTarget(previous => previous + chunk);
   }, []);
-  const startStream = useFakeStream(appendChunk);
+  // When the last chunk has landed, end the stream so the hook snaps to the
+  // full text.
+  const endStream = useCallback(() => setIsStreaming(false), []);
+  const startStream = useFakeStream(appendChunk, endStream);
 
   const regenerate = useCallback(() => {
     setTarget('');
     setIsStreaming(true);
     startStream();
-    // All chunks have landed after CHUNKS.length ticks: end the stream and
-    // let the hook snap to the full text.
-    setTimeout(() => setIsStreaming(false), 350 * CHUNKS.length + 100);
   }, [startStream]);
 
   const displayedText = useStreamingText(target, isStreaming, {speed: 'fast'});

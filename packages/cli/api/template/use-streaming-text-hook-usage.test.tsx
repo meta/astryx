@@ -3,7 +3,7 @@
 
 /**
  * The useStreamingText example shows the hook's reveal: clicking Regenerate
-// starts a bursty fake stream, the displayed text grows steadily while
+ * starts a bursty fake stream, the displayed text grows steadily while
  * streaming, and the full text is shown once the stream ends.
  */
 
@@ -49,34 +49,59 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const bodyText = () =>
-  Array.from(container.querySelectorAll('*'))
-    .map(el => el.textContent ?? '')
-    .join(' ');
+const FIRST_CHUNK = 'Astryx hooks keep behavior reusable ';
+
+// The reply is the text element right after the "Assistant response" heading.
+const replyText = () => {
+  const heading = Array.from(container.querySelectorAll('*')).find(
+    el => el.children.length === 0 && el.textContent === 'Assistant response',
+  );
+  return heading?.nextElementSibling?.textContent ?? '';
+};
+
+const pressRegenerate = () => {
+  const button = Array.from(container.querySelectorAll('button')).find(
+    b => b.textContent === 'Regenerate' || b.textContent === 'Streaming…',
+  );
+  act(() => button?.click());
+};
 
 describe('useStreamingTextHookUsage example', () => {
-  it('reveals text progressively while streaming and snaps to full when done', async () => {
+  it('reveals text progressively while streaming and snaps to full when done', () => {
     root = createRoot(container);
     act(() => root!.render(<UseStreamingTextHookUsage />));
-    // Before Regenerate: nothing has streamed, the card is empty of body text.
-    expect(bodyText()).not.toContain('Astryx hooks');
+    // Before Regenerate: nothing has streamed.
+    expect(replyText()).toBe('');
 
-    const regenerate = () => {
-      const button = Array.from(container.querySelectorAll('button')).find(
+    pressRegenerate();
+
+    // The first chunk lands at 350 ms. A few frames later the hook has revealed
+    // only part of it; without the hook the whole chunk would show at once.
+    act(() => vi.advanceTimersByTime(350));
+    act(() => vi.advanceTimersByTime(50));
+    const partial = replyText();
+    expect(partial.length).toBeGreaterThan(0);
+    expect(partial.length).toBeLessThan(FIRST_CHUNK.length);
+    expect(FIRST_CHUNK.startsWith(partial)).toBe(true);
+
+    // After the last chunk the stream ends and the full text shows at once.
+    act(() => vi.advanceTimersByTime(350 * 4 + 100));
+    expect(replyText()).toBe(FULL_TEXT);
+  });
+
+  it('restarts cleanly when Regenerate is pressed mid-stream', () => {
+    root = createRoot(container);
+    act(() => root!.render(<UseStreamingTextHookUsage />));
+    pressRegenerate();
+    act(() => vi.advanceTimersByTime(800));
+    pressRegenerate();
+    act(() => vi.advanceTimersByTime(350 * 4 + 100));
+    // One stream, in order: no repeated or interleaved chunks.
+    expect(replyText()).toBe(FULL_TEXT);
+    expect(
+      Array.from(container.querySelectorAll('button')).some(
         b => b.textContent === 'Regenerate',
-      );
-      act(() => button?.click());
-    };
-    regenerate();
-
-    // Early in the stream: some but not all of the text has been revealed.
-    act(() => vi.advanceTimersByTime(400));
-    const partial = bodyText();
-    expect(partial).toContain('A');
-    expect(partial).not.toContain(FULL_TEXT);
-
-    // After the stream ends: the full text is displayed at once.
-    act(() => vi.advanceTimersByTime(350 * 5 + 2000));
-    expect(bodyText()).toContain(FULL_TEXT);
+      ),
+    ).toBe(true);
   });
 });
