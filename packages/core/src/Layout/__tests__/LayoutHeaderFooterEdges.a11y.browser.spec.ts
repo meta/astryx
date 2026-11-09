@@ -75,7 +75,9 @@ function commonCases(automatic: Insets): Record<string, Expectation> {
     'content-width': {insets: automatic, hasDivider: true, contentEdge: 4},
     // The outer region has no divider, but the collapse stops at the nested
     // Layout: the nested content keeps its spacing beside its divided region.
-    nested: {hasDivider: true, contentEdge: 4},
+    // LayoutContent is not a padding container, so the nested region takes
+    // the step-4 default on every edge.
+    nested: {insets: EVEN(4), hasDivider: true, contentEdge: 4},
     // A caller's data-divider="false" does not replace the reflected value.
     'caller-attribute': {insets: automatic, hasDivider: false, contentEdge: 0},
   };
