@@ -34,7 +34,9 @@ test('a labelled card on a role-less trigger passes axe while open', async ({
   const card = page.getByRole('dialog', {name: 'Jane Doe profile'});
   await expect(card).toBeVisible();
   const cardId = await card.getAttribute('id');
-  const trigger = page.getByText('Jane Doe', {exact: true});
+  const trigger = page
+    .getByRole('paragraph')
+    .getByText('Jane Doe', {exact: true});
   await expect(trigger).toHaveAttribute('aria-controls', cardId ?? '');
   await expect(trigger).not.toHaveAttribute('aria-haspopup');
   await expect(trigger).not.toHaveAttribute('aria-expanded');
