@@ -12,15 +12,16 @@
  *   checks the motion itself (the interaction spec and its storyboards)
  */
 
-import {useState, type ReactNode} from 'react';
+import {Suspense, startTransition, use, useState, type ReactNode} from 'react';
 import {act, render, screen, waitFor} from '@testing-library/react';
 import {
   GestureRecognizer,
   PanGestureRecognizer,
-  type MotionAnimator,
   type MotionCurve,
+  type MotionEngine,
 } from '@astryxdesign/core/internal/touch';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import type * as MotionEngineModule from '../internal/useMotionEngine';
 import {revealProgress} from './refreshPull';
 import {
   useRefreshControl,
@@ -30,14 +31,14 @@ import {
 // Records the animators that the touch layer creates, the content's first,
 // so a test can watch the settle and the indicator's fade.
 const animators = vi.hoisted(() => ({list: [] as unknown[]}));
-vi.mock('./useMotionAnimator', async importOriginal => {
-  const real = await importOriginal<typeof import('./useMotionAnimator')>();
+vi.mock('../internal/useMotionEngine', async importOriginal => {
+  const real = await importOriginal<typeof MotionEngineModule>();
   return {
     ...real,
-    useMotionAnimator: (
-      ...args: Parameters<typeof real.useMotionAnimator>
-    ): ReturnType<typeof real.useMotionAnimator> => {
-      const result = real.useMotionAnimator(...args);
+    useMotionEngine: (
+      ...args: Parameters<typeof real.useMotionEngine>
+    ): ReturnType<typeof real.useMotionEngine> => {
+      const result = real.useMotionEngine(...args);
       if (!animators.list.includes(result.animator)) {
         animators.list.push(result.animator);
       }
@@ -54,7 +55,7 @@ vi.mock('./useMotionAnimator', async importOriginal => {
 function watchFade(settleCurve: () => MotionCurve | null) {
   const [contentAnimator, indicatorAnimator] = animators.list.slice(
     -2,
-  ) as MotionAnimator[];
+  ) as MotionEngine[];
   let finishSettle: (done: boolean) => void = () => {};
   const animate = contentAnimator.animate.bind(contentAnimator);
   vi.spyOn(contentAnimator, 'animate').mockImplementation(
@@ -504,14 +505,14 @@ describe('useRefreshControl', () => {
         <p>Inbox</p>
       </Refreshable>,
     );
-    const [, indicatorAnimator] = animators.list.slice(-2) as MotionAnimator[];
+    const [, indicatorAnimator] = animators.list.slice(-2) as MotionEngine[];
     const play = vi.spyOn(indicatorAnimator, 'play');
     // Released below the trigger: the settle back and the fade start.
     pull(content(), [20, 20, 20, 10]);
     const fadeAt = play.mock.calls.findIndex(([curves]) => 'opacity' in curves);
     expect(fadeAt).toBeGreaterThanOrEqual(0);
     const fade = play.mock.results[fadeAt].value as ReturnType<
-      MotionAnimator['play']
+      MotionEngine['play']
     >;
     const shown = Number(reveal());
     expect(shown).toBeGreaterThan(0);
@@ -861,6 +862,64 @@ describe('useRefreshControl', () => {
     expect(enabled.listScroll - disabled.listScroll).toBe(1);
     expect(enabled.resize - disabled.resize).toBe(0);
     render(<p data-testid="refresh">Gone</p>);
+  });
+
+  it('keeps the edge claimed when React discards a render that disables the pull', async () => {
+    // A transition that suspends for good: React renders the new props, then
+    // keeps the committed tree and never commits that render.
+    const pending = new Promise<never>(() => {});
+    function Pending(): null {
+      use(pending);
+      return null;
+    }
+    function List({isDisabled}: {isDisabled: boolean}) {
+      const control = useRefreshControl({
+        onRefresh: () => {},
+        announce: 'Refreshing',
+        isDisabled,
+      });
+      return (
+        <div data-testid="list" ref={measured} style={{overflowY: 'auto'}}>
+          <div data-testid="refresh" ref={control.contentRef}>
+            <div ref={control.indicatorRef} aria-hidden />
+            <p>Inbox</p>
+          </div>
+        </div>
+      );
+    }
+    function Screen({
+      isDisabled,
+      isPending,
+    }: {
+      isDisabled: boolean;
+      isPending: boolean;
+    }) {
+      return (
+        <Suspense fallback={null}>
+          <List isDisabled={isDisabled} />
+          {isPending ? <Pending /> : null}
+        </Suspense>
+      );
+    }
+    const {rerender} = render(<Screen isDisabled={false} isPending={false} />);
+    await act(async () => {
+      for (let frame = 0; frame < 3; frame += 1) {
+        await new Promise<void>(resolve => {
+          requestAnimationFrame(() => resolve());
+        });
+      }
+    });
+    const list = screen.getByTestId('list');
+    expect(list.style.overscrollBehaviorY).toBe('none');
+    await act(async () => {
+      startTransition(() => {
+        rerender(<Screen isDisabled isPending />);
+      });
+    });
+    act(() => {
+      list.dispatchEvent(new Event('scroll'));
+    });
+    expect(list.style.overscrollBehaviorY).toBe('none');
   });
 
   it('sets up the edge for content that mounts after the hook: its container is claimed near the top, given back when scrolled away, and given back when the content leaves', async () => {
@@ -1263,7 +1322,7 @@ describe('useRefreshControl', () => {
         );
         const [contentAnimator, indicatorAnimator] = animators.list.slice(
           -2,
-        ) as MotionAnimator[];
+        ) as MotionEngine[];
         const contentAnimate = vi.spyOn(contentAnimator, 'animate');
         const indicatorAnimate = vi.spyOn(indicatorAnimator, 'animate');
         scrollVelocity.mockClear();

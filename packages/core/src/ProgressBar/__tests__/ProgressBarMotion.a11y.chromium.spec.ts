@@ -705,7 +705,10 @@ test('a theme\u2019s tempo leaves the reduced-motion pulse unscaled', async ({
     `${storybook.origin}/iframe.html?id=${INDETERMINATE}&viewMode=story`,
   );
   await expect(page.getByRole('progressbar').first()).toBeVisible();
-  await page.addStyleTag({content: ':root { --_astryx-motion-tempo: 1.5; }'});
+  // On the bar itself: the story's theme root declares its own tempo.
+  await page.addStyleTag({
+    content: '[role="progressbar"] { --_astryx-motion-tempo: 1.5; }',
+  });
   const durations = await page.evaluate(() =>
     Array.from(document.querySelectorAll('[role="progressbar"]')).map(track =>
       Number(
@@ -1016,7 +1019,10 @@ test('storyboard: the fill moving from 20% to 80% @storyboard', async ({
   // frame interval at a time through its end. A screencast of the change
   // shows only the frames a loaded runner gets to capture, and one it misses
   // doubles the step between the two around it.
-  const hold = await armHold(page, page.getByRole('progressbar'));
+  const bar = page.getByRole('progressbar');
+  const hold = await armHold(page, bar, {
+    judges: {target: bar.locator(':scope > *').first(), property: 'transform'},
+  });
   await setValue(page, 80);
   const {storyboard} = await animationStoryboard(page, {
     name: 'progress-bar-fill-move',

@@ -44,8 +44,9 @@ import * as path from 'node:path';
 import {findInstalledPackage} from '../fs/paths.mjs';
 import {satisfiesRange} from '../env/semver.mjs';
 import {
-  NOTICE_FILE_RE,
   discoverIconSetDirectory,
+  hasLicenseNotice,
+  licenseNoticeFix,
   resolveIconModule,
   splitSpecifier,
 } from './icon-set-discovery.mjs';
@@ -57,6 +58,7 @@ import {
   otherNamesOf,
   generatedTypesText,
   readGeneratedStatements,
+  generatedTypesMatch,
 } from './icon-set-writer.mjs';
 import {
   exportValueKind,
@@ -67,6 +69,7 @@ import {
 } from './module-exports.mjs';
 import {astryxIconDefinitions} from './icon-definition-discovery.mjs';
 import {rankIcons} from './icon-ranking.mjs';
+import {shellArg} from '../text/shell-arg.mjs';
 import {
   issueError,
   issueWarning,
@@ -276,16 +279,17 @@ function checkContract(set, packageName, pkg, unchecked) {
       const actual = fs.existsSync(typesFile)
         ? fs.readFileSync(typesFile, 'utf-8')
         : null;
-      // The header comment is the writer's, and changes between releases;
-      // the declarations are what must match.
-      const code = (/** @type {string} */ text) =>
-        text
-          .split('\n')
-          .filter(line => !line.startsWith('//'))
-          .join('\n');
+      // The declarations must match, statement by statement, however a
+      // formatter left the file; the header comment is the writer's and
+      // changes between releases.
       if (
         expected != null &&
-        (actual == null || code(actual) !== code(expected))
+        (actual == null ||
+          !generatedTypesMatch(
+            actual,
+            expected,
+            /** @type {string} */ (typesRel),
+          ))
       ) {
         issues.push(
           issueError(
@@ -359,12 +363,12 @@ function checkDefinitions(set) {
     if (mapped.has(doc.name) || !doc.builtIn) continue;
     const suggestion = suggestIcon(set, doc);
     const hint = suggestion
-      ? ` Suggested: astryx experimental icon map ${doc.name} ${suggestion.icon}.`
+      ? ` Suggested: astryx experimental icon map ${doc.name} ${suggestion.icon} --set ${set.name}.`
       : '';
     issues.push(
       issueError(
         ICON_BUILTIN_DEFINITION_MISSING,
-        `${label} maps no icon to the built-in icon definition "${doc.name}" (${doc.description} Words: ${doc.words.join(', ')}.). Every set maps every built-in definition: run \`astryx experimental icon map ${doc.name} <icon id>\` with the icon that draws it${findHint(set, doc)}.${hint}`,
+        `${label} maps no icon to the built-in icon definition "${doc.name}" (${doc.description} Words: ${doc.words.join(', ')}.). Every set maps every built-in definition: run \`astryx experimental icon map ${doc.name} <icon id> --set ${set.name}\` with the icon that draws it${findHint(set, doc)}.${hint}`,
       ),
     );
   }
@@ -382,7 +386,7 @@ function checkDefinitions(set) {
       issues.push(
         issueWarning(
           ICON_DEFINITION_UNUSED,
-          `${label} declares the icon definition "${doc.name}", but "map" names no icon for it. Map it with \`astryx experimental icon map ${doc.name} <icon id>\`, or remove definitions/${doc.name}.doc.mjs.${suggestion ? ` Suggested: astryx experimental icon map ${doc.name} ${suggestion.icon}.` : ''}`,
+          `${label} declares the icon definition "${doc.name}", but "map" names no icon for it. Map it with \`astryx experimental icon map ${doc.name} <icon id> --set ${set.name}\`, or remove definitions/${doc.name}.doc.mjs.${suggestion ? ` Suggested: astryx experimental icon map ${doc.name} ${suggestion.icon} --set ${set.name}.` : ''}`,
         ),
       );
     }
@@ -538,13 +542,7 @@ export function suggestedIcons(set, doc) {
     ...nameWords,
     ...wordIds.flatMap(id => id.split('-')).map(stem),
   ]);
-  const icons = set.data.icons.map(icon => ({
-    id: icon.id,
-    words: icon.id.split('-').map(stem),
-    raw: icon.id.split('-'),
-    // The library's other names for it, the same ones `map` accepts.
-    other: otherNamesOf(icon),
-  }));
+  const icons = suggestionIndex(set.data.icons);
   /** How many of the definition's words an id has: more is a better fit. */
   const fit = (/** @type {string[]} */ words) =>
     words.filter(word => meaning.has(word)).length;
@@ -634,6 +632,29 @@ export function suggestedIcons(set, doc) {
     ).forEach(icon => add(icon.id, word));
   }
   return found.slice(0, SUGGESTIONS_PER_DEFINITION);
+}
+
+/**
+ * Each icon as the suggestion rules read it: its id's words as written and
+ * in singular form, and the library's other names for it (the same ones
+ * `map` accepts). Built once per list of icons, so suggesting for every
+ * definition of a large library reads each icon once.
+ * @type {WeakMap<object, Array<{id: string, words: string[], raw: string[], other: string[]}>>}
+ */
+const suggestionIndexes = new WeakMap();
+
+/** @param {Array<{id: string, words?: string[]}>} list */
+function suggestionIndex(list) {
+  const cached = suggestionIndexes.get(list);
+  if (cached) return cached;
+  const index = list.map(icon => ({
+    id: icon.id,
+    words: icon.id.split('-').map(stem),
+    raw: icon.id.split('-'),
+    other: otherNamesOf(icon),
+  }));
+  suggestionIndexes.set(list, index);
+  return index;
 }
 
 /**
@@ -934,10 +955,10 @@ function findHint(set, doc) {
       each => each.score >= FIND_FLOOR,
     );
     if (found.length > 0) {
-      return ` (icons matching "${query}": \`astryx experimental icon ${query} --set ${set.name}\`)`;
+      return ` (icons matching "${query}": \`astryx experimental icon ${shellArg(query)} --set ${set.name}\`)`;
     }
   }
-  return ' (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with `astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition <definition>`)';
+  return ` (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with \`astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition ${doc.name} --set ${set.name}\`)`;
 }
 
 /**
@@ -983,14 +1004,11 @@ function checkUpstream(set, packageDir, pkg) {
       ),
     );
   }
-  const rootNotices = safeList(packageDir).filter(name =>
-    NOTICE_FILE_RE.test(name),
-  );
-  if (set.notices.length === 0 && rootNotices.length === 0) {
+  if (!hasLicenseNotice(set.dir) && !hasLicenseNotice(packageDir)) {
     issues.push(
       issueWarning(
         ICON_LICENSE_NOTICE_MISSING,
-        `${label} is generated from ${source.package} but ships no license notice. Copy the library's LICENSE (and NOTICE, if any) into the set directory or the package root.`,
+        `${label} is generated from ${source.package}@${source.version} but ships no license notice. ${licenseNoticeFix(path.relative(packageDir, set.dir).split(path.sep).join('/'), `${source.package}@${source.version}`)} If the library ships a LICENSE or NOTICE file, copy that file there instead.`,
       ),
     );
   }
@@ -1004,14 +1022,5 @@ function safeSatisfies(version, range) {
   } catch {
     // A range this reader cannot judge is not reported.
     return true;
-  }
-}
-
-/** @param {string} dir */
-function safeList(dir) {
-  try {
-    return fs.readdirSync(dir);
-  } catch {
-    return [];
   }
 }

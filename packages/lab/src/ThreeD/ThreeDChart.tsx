@@ -323,7 +323,6 @@ export function ThreeDChart({
           onTouchMove={e => {
             const t = e.touches[0];
             if (t) {
-              e.preventDefault();
               handleMove(t.clientX, t.clientY);
             }
           }}

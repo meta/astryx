@@ -15,7 +15,8 @@
  * - /packages/core/src/hooks/index.ts
  */
 
-import {createContext, use, useCallback, useRef, type RefObject} from 'react';
+import {use, useCallback, useRef, type RefObject} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 
 /**
  * Announcement urgency:
@@ -358,9 +359,12 @@ export interface ModalAnnounceScope {
   parent: ModalAnnounceScope | null;
 }
 
-export const ModalAnnounceContext = createContext<ModalAnnounceScope | null>(
-  null,
-);
+export const ModalAnnounceContext =
+  createSharedContext<ModalAnnounceScope | null>(
+    'ModalAnnounceContext',
+    1,
+    null,
+  );
 ModalAnnounceContext.displayName = 'ModalAnnounceContext';
 
 /** The modal route `modalAnnounce.ts` installs when a provider loads it. */

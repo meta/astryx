@@ -4,7 +4,8 @@
 
 /**
  * @file ButtonGroup.tsx
- * @input Uses React, StyleX, Button/IconButton children
+ * @input Uses React, StyleX, Button/IconButton children, and the shared group
+ *   press tracking (hooks/useGroupPressTracking)
  * @output Exports ButtonGroup component, context, and types
  * @position Groups buttons with connected styling; consumed by index.ts
  *
@@ -21,13 +22,20 @@
  * - /packages/cli/assets/templates/blocks/components/ButtonGroup/ (showcase blocks)
  */
 
-import {useMemo, type ReactNode} from 'react';
+import {useMemo, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {ButtonSize} from '../Button';
 import {radiusVars, shadowVars} from '../theme/tokens.stylex';
 import type {Elevation} from '../utils/types';
 import {SizeProvider, useSize} from '../SizeContext/SizeContext';
-import {useListFocus} from '../hooks/useListFocus';
+import {oneTabStopAmong, useInternalListFocus} from '../hooks/useListFocus';
+import {PressGroupContext} from '../hooks/pressGroupContext';
+import {
+  GROUP_PRESS_POINTERS,
+  useGroupPressTracking,
+} from '../hooks/useGroupPressTracking';
+import {useTouchPresentation} from '../utils/touchPresentation';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {mergeProps, composeEventHandlers} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {ButtonGroupContext} from './ButtonGroupContext';
@@ -98,6 +106,11 @@ const styles = stylex.create({
   vertical: {
     flexDirection: 'column',
   },
+  // While the group tracks presses, its hit layer is the root's `::before`,
+  // below its buttons, so the root is the layer's containing block.
+  tracking: {
+    position: 'relative',
+  },
 });
 
 // Resting elevation for the whole group — the connected buttons share one
@@ -124,6 +137,16 @@ const elevationStyles = stylex.create({
 // Component
 // =============================================================================
 
+// Roving rewrites `tabindex` on every item, so the selector cannot key off
+// a value: `[tabindex="0"]` would drop each member the moment it is stamped
+// -1. `a[href]` catches a Button rendered with `href`.
+const MEMBER_SELECTOR = 'button, a[href], [tabindex]';
+
+const keepDisabledGroupStop = oneTabStopAmong(
+  MEMBER_SELECTOR,
+  '[role="group"], [popover]',
+);
+
 /**
  * Groups buttons with connected styling — shared borders, proper border-radius
  * handling (only on outer edges), and horizontal or vertical orientation.
@@ -132,8 +155,8 @@ const elevationStyles = stylex.create({
  * styles in pure CSS.
  *
  * The group is a single tab stop: arrow keys move between members along the
- * orientation, Home/End jump to the ends, focus wraps, and disabled members are
- * skipped (the APG roving tabindex technique, via `useListFocus`).
+ * orientation, Home/End jump to the ends, and focus wraps (the APG roving
+ * tabindex technique, via `useListFocus`).
  *
  * Members that render their own layer — a Button with a `tooltip`, or a
  * DropdownMenu — compose correctly, including as the trailing member.
@@ -176,37 +199,47 @@ export function ButtonGroup({
 }: ButtonGroupProps): ReactNode {
   const size = useSize(sizeProp, 'md');
 
-  const {listRef, handleKeyDown, handleFocus} = useListFocus<HTMLDivElement>({
-    // Roving rewrites `tabindex` on every item, so the selector cannot key off
-    // a value: `[tabindex="0"]` would drop each member the moment it is
-    // stamped -1. `a[href]` catches a Button rendered with `href`.
-    itemSelector: 'button, a[href], [tabindex]',
-    // A member's layer renders inline inside the group (useLayer does not
-    // portal it), so a key pressed in an open DropdownMenu bubbles here. The
-    // boundary is the group's own root or any layer, whichever is nearer to
-    // the target. Naming the group's own root is what keeps a group rendered
-    // inside a Popover or Toast working: bailing on any [popover] ancestor
-    // instead would swallow every arrow key it owns.
-    boundarySelector: '[role="group"], [popover]',
-    orientation,
-    hasRovingTabIndex: true,
-  });
+  const {listRef, handleKeyDown, handleFocus} =
+    useInternalListFocus<HTMLDivElement>({
+      itemSelector: MEMBER_SELECTOR,
+      // A member's layer renders inline inside the group (useLayer does not
+      // portal it), so a key pressed in an open DropdownMenu bubbles here. The
+      // boundary is the group's own root or any layer, whichever is nearer to
+      // the target. Naming the group's own root is what keeps a group rendered
+      // inside a Popover or Toast working: bailing on any [popover] ancestor
+      // instead would swallow every arrow key it owns.
+      boundarySelector: '[role="group"], [popover]',
+      orientation,
+      hasRovingTabIndex: true,
+      // A group of disabled buttons keeps its one Tab stop, so a keyboard user
+      // still reaches it. Its members are focusable while disabled.
+      tabStopOrder: keepDisabledGroupStop,
+    });
 
   const contextValue = useMemo(
     () => ({orientation, isDisabled}),
     [orientation, isDisabled],
   );
 
+  // Only under the touch presentation does a press slide across the buttons.
+  // A desktop press stays the native button's.
+  const {isTouch} = useTouchPresentation();
+  const tracksPress = !isDisabled && isTouch;
+  const groupRef = useRef<HTMLDivElement>(null);
+  const {hitAreaRef} = useGroupPressTracking(groupRef, tracksPress);
+
   return (
     <ButtonGroupContext value={contextValue}>
       <SizeProvider value={size}>
         <div
-          ref={useMergedRefs(ref, listRef)}
+          ref={useMergedRefs(ref, listRef, groupRef, hitAreaRef)}
           {...props}
           {...mergeProps(
             themeProps('button-group', {size, orientation, elevation}),
             stylex.props(
               styles.group,
+              tracksPress && styles.tracking,
+              tracksPress && touchHitAreaStyles.layerBelowChildren,
               orientation === 'vertical' && styles.vertical,
               elevationStyles[elevation],
               xstyle,
@@ -220,7 +253,9 @@ export function ButtonGroup({
           onFocus={composeEventHandlers(onFocus, handleFocus)}
           aria-disabled={isDisabled || undefined}
           data-testid={testId}>
-          {children}
+          <PressGroupContext value={tracksPress ? GROUP_PRESS_POINTERS : null}>
+            {children}
+          </PressGroupContext>
         </div>
       </SizeProvider>
     </ButtonGroupContext>
