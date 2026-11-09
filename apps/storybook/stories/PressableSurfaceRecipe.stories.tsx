@@ -7,14 +7,16 @@ import {
   useClickableContainer,
   usePressFeedback,
 } from '@astryxdesign/core/hooks';
-import {interactionOverlayStyles} from '@astryxdesign/core/utils';
+import {
+  focusOutlineStyles,
+  interactionOverlayStyles,
+} from '@astryxdesign/core/utils';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {Text} from '@astryxdesign/core/Text';
 import {VStack} from '@astryxdesign/core/Layout';
 import {
   borderVars,
   colorVars,
-  focusVars,
   radiusVars,
   spacingVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
@@ -29,8 +31,8 @@ import {
  *   the system's hover tint and the touch press on the surface.
  * - A visually hidden native `<button>` (or `<a>` for a destination) is the
  *   named control: it carries the role, the name and the Tab stop.
- * - The focus ring is the public `--focus-outline-*` tokens, shown on the
- *   surface while its control has keyboard focus.
+ * - `focusOutlineStyles.focusWithin` draws the shared focus ring, the one
+ *   ClickableCard draws, on the surface while its control has keyboard focus.
  */
 const meta: Meta = {
   title: 'Core/Hooks/useClickableContainer',
@@ -39,7 +41,7 @@ const meta: Meta = {
     docs: {
       description: {
         component:
-          'A pressable surface without Card chrome: `useClickableContainer` for the press rules, `usePressFeedback` with `interactionOverlayStyles.backgroundColor` for the hover tint and touch press, a visually hidden `<button>` (or `<a>` for a destination) as the named control, and a focus ring from the `--focus-outline-*` tokens. Use it when a surface owns its own box; use ClickableCard when the surface is a card.',
+          'A pressable surface without Card chrome: `useClickableContainer` for the press rules, `usePressFeedback` with `interactionOverlayStyles.backgroundColor` for the hover tint and touch press, a visually hidden `<button>` (or `<a>` for a destination) as the named control, and `focusOutlineStyles.focusWithin` for the shared focus ring, the one ClickableCard draws. Use it when a surface owns its own box; use ClickableCard when the surface is a card.',
       },
     },
   },
@@ -58,16 +60,6 @@ const styles = stylex.create({
     borderInlineStartWidth: borderVars['--border-width'],
     paddingBlock: spacingVars['--spacing-2'],
     paddingInline: spacingVars['--spacing-3'],
-    outlineStyle: 'solid',
-    outlineColor: {
-      default: 'transparent',
-      ':has(:focus-visible)': focusVars['--focus-outline-color'],
-    },
-    outlineWidth: {
-      default: '0',
-      ':has(:focus-visible)': focusVars['--focus-outline-width'],
-    },
-    outlineOffset: focusVars['--focus-outline-offset'],
   },
 });
 
@@ -102,6 +94,7 @@ function PressableQuote({label, href, onPress, children}: PressableQuoteProps) {
       {...stylex.props(
         styles.surface,
         interactionOverlayStyles.backgroundColor,
+        focusOutlineStyles.focusWithin,
       )}>
       <VisuallyHidden>
         {href != null ? (
@@ -137,13 +130,15 @@ export const PressableSurface: Story = {
         <PressableQuote
           label="Jump to the quoted message"
           onPress={() => setJumps(count => count + 1)}>
-          <Text type="supporting" color="secondary">
-            Replying to Alex
-          </Text>
-          <Text type="body">
-            Can we move the review to Thursday? The <a href="#agenda">agenda</a>{' '}
-            is in the doc.
-          </Text>
+          <VStack gap={1}>
+            <Text type="supporting" color="secondary">
+              Replying to Alex
+            </Text>
+            <Text type="body">
+              Can we move the review to Thursday? The{' '}
+              <a href="#agenda">agenda</a> is in the doc.
+            </Text>
+          </VStack>
         </PressableQuote>
         <Text type="supporting" color="secondary">
           {jumps === 0 ? 'Not jumped yet' : `Jumped ${jumps}×`}
@@ -157,10 +152,12 @@ export const PressableSurfaceLink: Story = {
   name: 'Pressable surface without Card chrome (link)',
   render: () => (
     <PressableQuote label="Open the quoted message" href="#message-42">
-      <Text type="supporting" color="secondary">
-        Replying to Alex
-      </Text>
-      <Text type="body">Can we move the review to Thursday?</Text>
+      <VStack gap={1}>
+        <Text type="supporting" color="secondary">
+          Replying to Alex
+        </Text>
+        <Text type="body">Can we move the review to Thursday?</Text>
+      </VStack>
     </PressableQuote>
   ),
 };
