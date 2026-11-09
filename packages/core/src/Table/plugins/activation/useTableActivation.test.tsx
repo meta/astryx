@@ -1149,6 +1149,41 @@ describe('row eligibility', () => {
     );
     expect(bodyRows()[0].getAttribute('tabindex')).toBe('-1');
   });
+
+  it('keeps an imperatively written tab stop across exclusion without a row update', () => {
+    // A later plugin's imperative roving update (written outside React, so
+    // no row re-render follows) must survive exclusion: the subscriber
+    // adopts observed writes before deciding, so the owned value is
+    // restored rather than removed.
+    const predicate = {eligible: true};
+    function Harness() {
+      const plugin = useTableActivation<Member>({
+        activeKey: '1',
+        onActivate: () => {},
+        getIsItemActivatable: () => predicate.eligible,
+      });
+      // Stable plugin identity: flipping `predicate` re-renders the table
+      // without re-rendering the row, so only the subscriber observes it.
+      const plugins = useMemo(() => ({activation: plugin}), [plugin]);
+      return (
+        <Table
+          data={members}
+          columns={memberColumns}
+          idKey="id"
+          plugins={plugins}
+        />
+      );
+    }
+    const {rerender} = render(<Harness />);
+    const row = bodyRows()[0];
+    expect(row.getAttribute('tabindex')).toBe('0');
+    // Imperative write outside React, as a roving plugin would: no record
+    // of ownership exists except the observed write itself.
+    row.setAttribute('tabindex', '-1');
+    predicate.eligible = false;
+    rerender(<Harness />);
+    expect(bodyRows()[0].getAttribute('tabindex')).toBe('-1');
+  });
 });
 
 // =============================================================================
