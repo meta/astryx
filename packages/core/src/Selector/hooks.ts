@@ -69,8 +69,6 @@ interface SelectedItemPlacement {
   anchorBottom: number;
   /** The listbox's layout height, px. */
   listboxHeight: number;
-  /** The layer's block-end viewport gutter, px, when the clamp counts it. */
-  blockEndGutter: number;
 }
 
 /**
@@ -123,9 +121,10 @@ function measureSelectedItem(
   // The layer keeps a gutter from the viewport's block end. A list that
   // reaches into it overflows the layer's room, and the browser then takes a
   // position fallback, which can flip the list off screen. The gutter is the
-  // layer's far-edge margin. Before the overlay margin applies, the browser
-  // can already have flipped the layer above its anchor, which moves the
-  // gutter to the block-start margin, so read the larger of the two.
+  // layer's far-edge margin. The browser can flip the layer above its anchor
+  // before the overlay margin applies. The flip moves the gutter to the
+  // block-start margin. So read the larger of the two margins. A software
+  // keyboard's own inset replaces the gutter.
   const layer = countsLayerGutter
     ? listbox.closest<HTMLElement>('[popover]')
     : null;
@@ -151,7 +150,6 @@ function measureSelectedItem(
     offset: clampedOffset,
     anchorBottom: anchorRect.bottom,
     listboxHeight,
-    blockEndGutter,
   };
 }
 
@@ -245,15 +243,11 @@ export function useSelectedItemOverlayMargin({
       : null;
     let margin: string | undefined;
     if (placement != null) {
-      const {offset, anchorBottom, listboxHeight, blockEndGutter} = placement;
+      const {offset, anchorBottom, listboxHeight} = placement;
       // The room below the anchor for the list, in the keyboard inset's
       // layout px. With no keyboard the inset falls back to the room itself.
       // The keyboard term is then 0, and the measured shift stands.
-      const room =
-        layoutViewportHeight(window) -
-        listboxHeight -
-        blockEndGutter -
-        anchorBottom;
+      const room = layoutViewportHeight(window) - listboxHeight - anchorBottom;
       margin = `min(${-offset}px, max(${-anchorBottom}px, calc(${room}px - var(${LAYER_KEYBOARD_INSET_PROPERTY}, ${room}px))))`;
     }
     // eslint-disable-next-line @eslint-react/set-state-in-effect -- selector popover position is derived from DOM layout
