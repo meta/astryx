@@ -242,7 +242,14 @@ const stickyStyles = stylex.create({
     '::before': {
       content: '""',
       position: 'absolute',
-      inset: 0,
+      top: 0,
+      bottom: 0,
+      // A row-state marker (the activation bar) reserves the inline-start
+      // edge through --table-row-overlay-inset: the overlay starts past it,
+      // so the marker reads through the freeze line instead of hiding under
+      // this layer. Unset everywhere else, so the overlay covers the cell.
+      insetInlineStart: 'var(--table-row-overlay-inset, 0px)',
+      insetInlineEnd: 0,
       zIndex: -1,
       pointerEvents: 'none',
       backgroundColor: 'var(--table-row-overlay, transparent)',

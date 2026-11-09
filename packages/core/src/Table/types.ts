@@ -502,6 +502,23 @@ export interface TablePlugin<
    */
   readonly rowModel?: TableRenderContext['rowModel'];
   /**
+   * Internal: this plugin reads the row's canonical identity from the row
+   * context. Declared explicitly instead of sniffing the transform's arity,
+   * so an unrelated four-parameter transform never opts a table in and a
+   * wrapped transform keeps working.
+   *
+   * @internal
+   */
+  readonly usesCanonicalRowKey?: boolean;
+  /**
+   * The whole-row interaction this plugin owns. At most one claim per
+   * table: two claims (including the same owner twice) neutralize the
+   * activation claimant with a development diagnostic, whatever the plugin
+   * order. A custom row callback that owns a whole-row action declares it;
+   * anything else stays a non-owning handler.
+   */
+  readonly wholeRowOwner?: 'activation' | 'expansion' | 'navigation';
+  /**
    * Transform the column definitions before rendering.
    * Runs before any element-level transforms. Use to filter, reorder,
    * or inject synthetic columns (e.g. a selection checkbox column).
