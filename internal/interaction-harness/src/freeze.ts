@@ -14,6 +14,7 @@
  */
 
 import type {Page} from '@playwright/test';
+import {defineThawScene} from './thaw-scene';
 
 const FREEZE_SCRIPT = `(() => {
   if (window.__harnessFreeze) return;
@@ -438,14 +439,9 @@ export async function advanceFrozenPage(page: Page, ms: number): Promise<void> {
  * order they came due.
  */
 export async function thawPage(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    const w = window as unknown as {
-      __harnessFreeze?: {thaw(): void};
-      __harnessTimerGate?: {thaw(): void};
-    };
-    w.__harnessFreeze?.thaw();
-    w.__harnessTimerGate?.thaw();
-  });
+  await page.evaluate(
+    `(${defineThawScene.toString()})();window.__harnessThawScene();`,
+  );
 }
 
 /**

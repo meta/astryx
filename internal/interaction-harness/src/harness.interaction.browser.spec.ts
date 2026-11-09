@@ -7907,6 +7907,53 @@ test.describe('page freeze', () => {
     await thawPage(page);
   });
 
+  test('a block that thaws the scene starts with the motion the freeze held, which runs on the compositor from its start through the block', async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    await freezePage(page);
+    // Started while frozen, the run is held at its start: 200 px/s.
+    await startRun(page);
+    const cast = await startScreencast(page);
+    const block = await blockMainThread(page, 500, {
+      thaw: true,
+      during: page.locator('#box'),
+    });
+    await page.waitForTimeout(100);
+    const frames = await cast.stop();
+    const tracked = await trackMarker(page, frames, {rgb: [0, 170, 119]});
+    const trace = JSON.stringify(
+      tracked.map(f => [Math.round(f.t - block.from), f.box?.x ?? null]),
+    );
+    // It names the run it thawed. The run starts at the thawed frame's time,
+    // and the block after that frame: about a frame apart, two at most.
+    expect(block.animation, trace).toBeDefined();
+    const startedMs = block.from - (block.animation?.from ?? Number.NaN);
+    expect(startedMs, trace).toBeGreaterThanOrEqual(0);
+    expect(startedMs, trace).toBeLessThan(2 * (1000 / 60));
+    // The run moves through the block on the compositor, from near its start.
+    const inBlock = tracked.filter(
+      f => f.box != null && f.t > block.from && f.t < block.to,
+    );
+    expect(inBlock.length, trace).toBeGreaterThanOrEqual(3);
+    const xs = inBlock.map(f => f.box?.x ?? 0);
+    expect(xs[0], trace).toBeLessThanOrEqual(12);
+    expect(xs[xs.length - 1] - xs[0], trace).toBeGreaterThan(40);
+  });
+
+  test('a block that thaws throws by name on a page the freeze does not hold', async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    await expect(blockMainThread(page, 50, {thaw: true})).rejects.toThrow(
+      '`thaw` starts a frozen scene, and this page is not frozen',
+    );
+  });
+
   test('a CSS animation the page resumes while frozen is held where it stands, not at its start', async ({
     page,
   }) => {

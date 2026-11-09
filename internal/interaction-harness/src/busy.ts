@@ -29,6 +29,7 @@
 import type {Locator, Page} from '@playwright/test';
 import {defineAnimatedProperties} from './animated-properties';
 import {defineCurveEnd} from './curve-end';
+import {defineThawScene} from './thaw-scene';
 import {
   FRAME_STARVATION_MS,
   FrameStarvationError,
@@ -710,6 +711,15 @@ export interface BlockedWindow extends BusyWindow {
  * A thumb's `translate` travel then starts the block, and its press `scale`
  * does not.
  *
+ * With `thaw`, the scene a freeze holds (`freezePageOn`, `freezePage`)
+ * starts, and the block starts with it. One page task thaws the scene, the
+ * same way `thawPage` does. The loop then runs from the first task after the
+ * next frame, once that frame has handed the held motion to the compositor.
+ * So a motion the freeze held at its start runs on the compositor as the block
+ * begins, however late the page's frames are. A page that is not frozen
+ * throws. With `thaw`, `during` only names the animation the block caught
+ * (`animation`): its wait does not apply, nor does `minProgressMs`.
+ *
  * An animation counts once it is no longer pending and has run at least one
  * frame (`minProgressMs` below 16 ms is raised to 16). One created in the
  * frame the page looks is still pending, not yet on the compositor
@@ -806,12 +816,14 @@ export async function blockMainThread(
     minProgressMs = 16,
     property,
     pseudoElement,
+    thaw = false,
     timeout = 5_000,
   }: {
     during?: Locator;
     minProgressMs?: number;
     property?: string;
     pseudoElement?: '::before' | '::after';
+    thaw?: boolean;
     timeout?: number;
   } = {},
 ): Promise<BlockedWindow> {
@@ -825,6 +837,9 @@ export async function blockMainThread(
     throw new TypeError(
       'blockMainThread: property picks an animation of `during`; pass `during` too',
     );
+  }
+  if (thaw) {
+    return blockFromThaw(page, ms, {during, property, pseudoElement});
   }
   if (during == null) {
     return page.evaluate(duration => {
@@ -860,16 +875,9 @@ export async function blockMainThread(
   // first. Both are sent before the wait and not awaited: the wait starts no
   // later than before.
   const defined = page.evaluate(
-    `(${defineCurveEnd.toString()})();(${defineAnimatedProperties.toString()})();`,
+    `(${defineCurveEnd.toString()})();(${defineAnimatedProperties.toString()})();(${defineCaughtAnimation.toString()})();`,
   );
-  // WebKit on Linux ignores `fill` on its compositor: a filled move that
-  // ends during a main-thread block snaps back (motion/animator.ts,
-  // END_HOLD_MS). Elsewhere a fill holds the end value. Node's platform is
-  // the browser's: no config connects to a remote browser.
-  const fillHolds = !(
-    page.context().browser()?.browserType().name() === 'webkit' &&
-    process.platform === 'linux'
-  );
+  const fillHolds = fillHoldsOn(page);
   const waited = during.evaluate(
     (element, {duration, minProgress, prop, pseudo, wait, fillHolds}) =>
       new Promise<BlockedWindow>((resolve, reject) => {
@@ -888,37 +896,11 @@ export async function blockMainThread(
         const later = gate?.timeout ?? window.setTimeout.bind(window);
         const realNow = gate?.now ?? (() => performance.now());
         const deadline = realNow() + wait;
-        // The busy-window control animates on its own, inside a dialog with
-        // `within`: it never stands for the animation under test.
-        const isControl = (a: Animation) => {
-          const target = (a.effect as KeyframeEffect | null)?.target ?? null;
-          return (
-            target instanceof Element &&
-            target.closest('[data-harness-control]') != null
-          );
-        };
-        // With a pseudo-element, only its own animations on the element; with
-        // a property, only animations that set it, matched as a hold's judged
-        // motion is.
-        const animates = (
-          window as unknown as {
-            __harnessAnimates: (a: Animation, property: string) => boolean;
-          }
-        ).__harnessAnimates;
-        const counts = (a: Animation) => {
-          if (isControl(a)) {
-            return false;
-          }
-          const effect = a.effect as KeyframeEffect | null;
-          if (
-            pseudo != null &&
-            (effect?.target !== element ||
-              (effect.pseudoElement ?? null) !== pseudo)
-          ) {
-            return false;
-          }
-          return prop == null || animates(a, prop);
-        };
+        const caughtAnimation = (
+          window as unknown as {__harnessCaught: CaughtAnimation}
+        ).__harnessCaught;
+        const counts = (a: Animation) =>
+          caughtAnimation.counts(element, a, prop, pseudo);
         // Where each animation's curve ends, its held tail excluded.
         const curveEnd =
           (
@@ -975,31 +957,7 @@ export async function blockMainThread(
           const timedOut = realNow() > deadline;
           const leftover = ran.length > 0 ? numbersOf(ran[0]) : heldSeen;
           if (caught != null) {
-            const startTime = caught.startTime;
-            // A start time is a page time. It trails the real clock, which the
-            // window reads, by every span a page freeze stood still.
-            const frozen =
-              (window as unknown as {__harnessFreeze?: {offset: number}})
-                .__harnessFreeze?.offset ?? 0;
-            const from = performance.timeOrigin + Number(startTime) + frozen;
-            // Whether the element keeps the curve's end value once it ends. A
-            // held tail past the curve keeps it, and so does a fill the
-            // compositor honors. An end delay shows nothing.
-            const timing = caught.effect?.getComputedTiming();
-            const keyframesEnd =
-              Number(timing?.delay ?? 0) + Number(timing?.activeDuration ?? 0);
-            const holds =
-              curveEnd(caught) < keyframesEnd ||
-              (fillHolds &&
-                (timing?.fill === 'forwards' || timing?.fill === 'both'));
-            const animation =
-              startTime != null && caught.playbackRate > 0
-                ? {
-                    from,
-                    to: from + curveEnd(caught) / caught.playbackRate,
-                    holds,
-                  }
-                : undefined;
+            const animation = caughtAnimation.windowOf(caught, fillHolds);
             // The same loop as above, from a task queued in the frame that saw
             // the animation: it runs once that frame's rendering update has
             // handed the animation to the compositor.
@@ -1068,6 +1026,205 @@ export async function blockMainThread(
       numbers,
     );
   }
+}
+
+/**
+ * WebKit on Linux ignores `fill` on its compositor: a filled move that ends
+ * during a main-thread block snaps back (motion/animator.ts, END_HOLD_MS).
+ * Elsewhere a fill holds the end value. Node's platform is the browser's: no
+ * config connects to a remote browser.
+ */
+function fillHoldsOn(page: Page): boolean {
+  return !(
+    page.context().browser()?.browserType().name() === 'webkit' &&
+    process.platform === 'linux'
+  );
+}
+
+/** Which animations of an element `blockMainThread` counts, in the page. */
+interface CaughtAnimation {
+  counts(
+    element: Element,
+    animation: Animation,
+    property: string | null,
+    pseudoElement: string | null,
+  ): boolean;
+  windowOf(
+    animation: Animation,
+    fillHolds: boolean,
+  ): BlockedWindow['animation'];
+}
+
+/**
+ * Installs `window.__harnessCaught` in the page: which animations of an
+ * element `blockMainThread` counts, and the window of the one it caught. It
+ * reads `window.__harnessAnimates` and `window.__harnessCurveEnd`, so the
+ * page defines those first. A page function: it closes over nothing.
+ */
+function defineCaughtAnimation(): void {
+  const w = window as unknown as {
+    __harnessCaught?: CaughtAnimation;
+    __harnessAnimates: (a: Animation, property: string) => boolean;
+    __harnessCurveEnd?: (a: Animation) => number;
+    __harnessFreeze?: {offset: number};
+  };
+  // Where an animation's curve ends, its held tail excluded.
+  const curveEnd = (a: Animation): number => {
+    if (w.__harnessCurveEnd != null) {
+      return w.__harnessCurveEnd(a);
+    }
+    const timing = a.effect?.getComputedTiming();
+    return Number(timing?.delay ?? 0) + Number(timing?.activeDuration ?? 0);
+  };
+  w.__harnessCaught = {
+    counts(element, a, prop, pseudo) {
+      // The busy-window control animates on its own, inside a dialog with
+      // `within`: it never stands for the animation under test.
+      const effect = a.effect as KeyframeEffect | null;
+      const target = effect?.target ?? null;
+      if (
+        target instanceof Element &&
+        target.closest('[data-harness-control]') != null
+      ) {
+        return false;
+      }
+      // With a pseudo-element, only its own animations on the element; with
+      // a property, only animations that set it, matched as a hold's judged
+      // motion is.
+      if (
+        pseudo != null &&
+        (effect?.target !== element ||
+          (effect.pseudoElement ?? null) !== pseudo)
+      ) {
+        return false;
+      }
+      return prop == null || w.__harnessAnimates(a, prop);
+    },
+    windowOf(a, fillHolds) {
+      const startTime = a.startTime;
+      if (startTime == null || a.playbackRate <= 0) {
+        return undefined;
+      }
+      // A start time is a page time. It trails the real clock, which the
+      // window reads, by every span a page freeze stood still.
+      const from =
+        performance.timeOrigin +
+        Number(startTime) +
+        (w.__harnessFreeze?.offset ?? 0);
+      // Whether the element keeps the curve's end value once it ends. A held
+      // tail past the curve keeps it, and so does a fill the compositor
+      // honors. An end delay shows nothing.
+      const timing = a.effect?.getComputedTiming();
+      const keyframesEnd =
+        Number(timing?.delay ?? 0) + Number(timing?.activeDuration ?? 0);
+      const holds =
+        curveEnd(a) < keyframesEnd ||
+        (fillHolds && (timing?.fill === 'forwards' || timing?.fill === 'both'));
+      return {from, to: from + curveEnd(a) / a.playbackRate, holds};
+    },
+  };
+}
+
+/**
+ * `blockMainThread` with `thaw`: thaws the frozen scene in one page task,
+ * and runs the loop from the first task after the next frame.
+ */
+async function blockFromThaw(
+  page: Page,
+  ms: number,
+  {
+    during,
+    property,
+    pseudoElement,
+  }: {during?: Locator; property?: string; pseudoElement?: string},
+): Promise<BlockedWindow> {
+  const defined = page.evaluate(
+    `(${defineCurveEnd.toString()})();(${defineAnimatedProperties.toString()})();(${defineCaughtAnimation.toString()})();(${defineThawScene.toString()})();`,
+  );
+  const blocked = (during ?? page.locator(':root')).evaluate(
+    (element, {duration, named, prop, pseudo, fillHolds}) =>
+      new Promise<BlockedWindow | 'not frozen' | 'pending'>(resolve => {
+        const w = window as unknown as {
+          __harnessFreeze?: {frozen: boolean};
+          __harnessTimerGate?: {
+            frame?: typeof requestAnimationFrame;
+            now?: () => number;
+            timeout?: typeof setTimeout;
+          };
+          __harnessThawScene: () => void;
+          __harnessCaught: CaughtAnimation;
+        };
+        if (w.__harnessFreeze?.frozen !== true) {
+          resolve('not frozen');
+          return;
+        }
+        w.__harnessThawScene();
+        // The harness's own waits run on the real timers.
+        const gate = w.__harnessTimerGate;
+        const frame = gate?.frame ?? window.requestAnimationFrame.bind(window);
+        const later = gate?.timeout ?? window.setTimeout.bind(window);
+        const read = gate?.now ?? (() => performance.now());
+        // The thawed motion reaches the compositor in the next frame's
+        // rendering update. A task queued in that frame runs after it.
+        frame(() => {
+          later(() => {
+            // The animation `during` names starts in that frame, at the time
+            // the compositor takes. A run resumed by play() has no start time
+            // before it.
+            const caught = named
+              ? element
+                  .getAnimations({subtree: true})
+                  .find(
+                    a =>
+                      a.playState === 'running' &&
+                      w.__harnessCaught.counts(element, a, prop, pseudo),
+                  )
+              : undefined;
+            if (
+              caught != null &&
+              (caught.pending || caught.startTime == null)
+            ) {
+              resolve('pending');
+              return;
+            }
+            const animation =
+              caught == null
+                ? undefined
+                : w.__harnessCaught.windowOf(caught, fillHolds);
+            const start = read();
+            let now = start;
+            while (now - start < duration) {
+              now = read();
+            }
+            resolve({
+              from: performance.timeOrigin + start,
+              to: performance.timeOrigin + now,
+              spanMs: now - start,
+              ...(animation == null ? {} : {animation}),
+            });
+          }, 0);
+        });
+      }),
+    {
+      duration: ms,
+      named: during != null,
+      prop: property ?? null,
+      pseudo: pseudoElement ?? null,
+      fillHolds: fillHoldsOn(page),
+    },
+  );
+  const [, held] = await Promise.all([defined, blocked]);
+  if (held === 'not frozen') {
+    throw new TypeError(
+      'blockMainThread: `thaw` starts a frozen scene, and this page is not frozen. Freeze it first (freezePageOn, freezePage)',
+    );
+  }
+  if (held === 'pending') {
+    throw new Error(
+      'blockMainThread: the animation `during` names was still pending in the first task after the thawed frame, so the window cannot name its start',
+    );
+  }
+  return held;
 }
 
 export interface BusyVerdict {

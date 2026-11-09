@@ -1148,6 +1148,19 @@ function blockDuringPush(page: Page, ms: number) {
   });
 }
 
+/**
+ * Freezes the scene on the release that pushes, before any page listener for
+ * it runs. A row pushes on its click, which comes after the pointerup under a
+ * mouse and a finger alike. So the push starts held at its start, and
+ * `blockMainThread` with `thaw` starts it and the block together. The
+ * covered title is gone 25 to 40 ms into the push. A block that waits for the
+ * page to see the push begin can start later than that on a busy machine. The
+ * page needs `installPageFreeze` before it loads and `installTimerGate` after.
+ */
+async function freezeOnPushRelease(page: Page) {
+  await freezePageOn(page, 'pointerup');
+}
+
 test('a push keeps advancing every frame while the main thread is blocked', async ({
   page,
   browserName,
@@ -1222,7 +1235,10 @@ test('with a mouse, the incoming bar covers the old title while the main thread 
   );
   const {context, page} = await newFinePage(browser);
   try {
+    // The page clock a freeze needs, installed before the story loads.
+    await installPageFreeze(page);
     await openStack(page, 'settings', {pointer: 'mouse'});
+    await installTimerGate(page);
     expect(
       await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
     ).toBe(false);
@@ -1239,10 +1255,10 @@ test('with a mouse, the incoming bar covers the old title while the main thread 
     });
     const cast = await startScreencast(page);
     const row = await rowCenter(page, 'General');
-    // The block outlasts the push, whose spring is at rest by about 0.45 s.
-    const blocked = blockDuringPush(page, 900);
+    await freezeOnPushRelease(page);
     await page.mouse.click(row.x, row.y);
-    const block = await blocked;
+    // The block outlasts the push, whose spring is at rest by about 0.45 s.
+    const block = await blockMainThread(page, 900, {thaw: true});
     await page.waitForTimeout(150);
     const frames = await cast.stop();
     const tracked = await trackMarker(page, frames);
@@ -1341,7 +1357,10 @@ test('under a finger, the incoming screen cuts the old title while the main thre
     browserName !== 'chromium',
     'screencast frame evidence is Chromium-only in Playwright (WebKit: the iOS simulator)',
   );
+  // The page clock a freeze needs, installed before the story loads.
+  await installPageFreeze(page);
   const {driver} = await openStack(page, 'settings');
+  await installTimerGate(page);
   expect(
     await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
   ).toBe(true);
@@ -1356,10 +1375,10 @@ test('under a finger, the incoming screen cuts the old title while the main thre
   });
   const cast = await startScreencast(page);
   const row = await rowCenter(page, 'General');
-  // The block outlasts the push, whose spring is at rest by about 0.45 s.
-  const blocked = blockDuringPush(page, 900);
+  await freezeOnPushRelease(page);
   await driver.tap(row);
-  const block = await blocked;
+  // The block outlasts the push, whose spring is at rest by about 0.45 s.
+  const block = await blockMainThread(page, 900, {thaw: true});
   await page.waitForTimeout(150);
   const frames = await cast.stop();
   const tracked = await trackMarker(page, frames);
