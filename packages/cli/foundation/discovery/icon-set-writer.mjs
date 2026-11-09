@@ -1423,10 +1423,39 @@ function terminated(statement) {
     : `${statement};`;
 }
 
+/** Syntax-tree fields that only say how a file is laid out. */
+const LAYOUT_KEYS = new Set([
+  'start',
+  'end',
+  'loc',
+  'range',
+  'extra',
+  'leadingComments',
+  'trailingComments',
+  'innerComments',
+]);
+
+/**
+ * The top-level statements of a module as syntax trees without positions,
+ * comments, or raw text, one string each. A formatter changes line breaks,
+ * quotes, semicolons, trailing commas, and the wrapping of long type
+ * arguments; none of these change the tree.
+ * @param {string} text
+ * @returns {string[]}
+ */
+function statementTrees(text) {
+  const ast = parse(text, {sourceType: 'module', plugins: ['typescript']});
+  return ast.program.body.map(node =>
+    JSON.stringify(node, (key, value) =>
+      LAYOUT_KEYS.has(key) ? undefined : value,
+    ),
+  );
+}
+
 /**
  * Whether a generated declaration file declares what its generated module
  * gives, statement by statement however a formatter left either file
- * ({@link generatedStatements}); the header comment is ignored.
+ * ({@link statementTrees}); the header comment is ignored.
  * @param {string} actual the declaration file as it is
  * @param {string} expected {@link generatedTypesText} for the module
  * @param {string} label the declaration file's path, for a parse error
@@ -1434,11 +1463,19 @@ function terminated(statement) {
 export function generatedTypesMatch(actual, expected, label) {
   let have;
   try {
-    have = generatedStatements(actual, label);
+    have = statementTrees(actual);
   } catch {
     return false;
   }
-  const want = generatedStatements(expected, label);
+  let want;
+  try {
+    want = statementTrees(expected);
+  } catch (error) {
+    throw new IconSetAuthoringError(
+      `The declarations written for ${label} do not parse (${error instanceof Error ? error.message : String(error)}).`,
+      'ERR_INVALID_ARGUMENT',
+    );
+  }
   return have.length === want.length && have.every((s, i) => s === want[i]);
 }
 
