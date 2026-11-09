@@ -1392,6 +1392,32 @@ describe('useSheetGestures', () => {
       expect(hook.result.current.isDragging).toBe(true);
     });
 
+    it('cancels the native pan of a top pull-down whose first move is exactly the wobble distance', () => {
+      const {hook} = setup({snapHeights: () => [200]});
+      const el = makeScroller({
+        scrollTop: 0,
+        clientHeight: 200,
+        scrollHeight: 800,
+      });
+      act(() => hook.result.current.sheetRef(el));
+      act(() => hook.result.current.bodyProps.ref(el));
+      let under!: Event;
+      act(() => {
+        touch(el, 'touchstart', 0);
+        under = touch(el, 'touchmove', 4);
+      });
+      expect(under.defaultPrevented).toBe(false);
+      let first!: Event;
+      act(() => {
+        touch(el, 'touchend', 4);
+        touch(el, 'touchstart', 0, 2);
+        // iOS Safari commits a kept first move of 5 px to the rows' pan.
+        first = touch(el, 'touchmove', 5, 2);
+      });
+      expect(first.defaultPrevented).toBe(true);
+      expect(hook.result.current.isDragging).toBe(false);
+    });
+
     it('leaves a mostly sideways move at the top to a horizontal scroll, cancelling nothing', () => {
       const {hook} = setup({snapHeights: () => [200]});
       const el = makeScroller({

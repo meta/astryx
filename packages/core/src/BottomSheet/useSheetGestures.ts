@@ -140,7 +140,8 @@ const CONTENT_END_HANDOFF_SLOP = 4;
 const DRAG_PROMOTION_SLOP = 8;
 // A cancelled touchmove ends the touch's click in WebKit. A tap's wobble stays
 // under this distance, so the tap keeps its click. A kept first touchmove of
-// 7 px commits iOS Safari to the scroller's pan.
+// this distance already commits iOS Safari to the scroller's pan, so the
+// cancel starts at it.
 const PAN_CANCEL_SLOP = 5;
 
 // Short haptic tick on detent settle where supported. iOS Safari doesn't
@@ -1749,13 +1750,14 @@ export function useSheetGestures({
       // edge. Its native pan is cancelled before the promotion slop, once the
       // pull passes a tap's wobble, because a later cancel no longer stops a
       // pan iOS Safari has committed. Before the sheet's drag begins, a mostly
-      // sideways move is a horizontal row's scroll, so it is not cancelled.
+      // sideways move is a horizontal row's scroll, so it is not cancelled. A
+      // move past the drag's 8 px slop starts the drag in any direction.
       const opposesTop = armed.top && delta > 0 && chainAtTop(armed.scrollers);
       const opposesBottom =
         armed.bottom && delta < 0 && chainAtBottom(armed.scrollers);
       if (
         (opposesTop || opposesBottom) &&
-        Math.abs(delta) > PAN_CANCEL_SLOP &&
+        Math.abs(delta) >= PAN_CANCEL_SLOP &&
         Math.abs(delta) > Math.abs(t.clientX - armed.startX) &&
         event.cancelable
       ) {

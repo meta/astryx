@@ -1492,13 +1492,15 @@ rule).
 **Reference:** `spec:AST-094/DEC-29`
 **Decider:** Specs consistency ruling, `2026-11-09`, applying DEC-18
 
-Mobile Safari 27.0 (simulator) commits a kept first move of 7 px to the native
-pan, so BottomSheet cancels from the first move past a tap's 5 px wobble. Once
-the native pan is committed, no later cancel stops it, and the sheet's content
-rubber-bands under the finger while the sheet moves beside it. WebKit ends a
-touch's click when one of its moves is cancelled, so waiting out the wobble
-keeps a tap's click on a control in the sheet. The trade-off: a tap that
-wobbles 5 to 8 px toward the edge loses its click.
+Mobile Safari commits a kept first move of 5 px to the native pan (iOS 26.2
+Simulator; a kept move of 4 px commits nothing; the author's earlier Mobile
+Safari 27.0 run committed at 7 px), so BottomSheet cancels from a first move
+that reaches a tap's 5 px wobble. Once the native pan is committed, no later
+cancel stops it, and the sheet's content rubber-bands under the finger while
+the sheet moves beside it. WebKit ends a touch's click when one of its moves is
+cancelled, so waiting out the wobble keeps a tap's click on a control in the
+sheet. The trade-off: a tap that wobbles 5 to 8 px toward the edge loses its
+click.
 
 ## Open questions
 
