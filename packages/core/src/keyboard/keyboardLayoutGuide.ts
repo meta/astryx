@@ -15,6 +15,7 @@
 
 import {
   getKeyboardHeight,
+  hasVirtualKeyboard,
   isTextEntryControl,
   subscribeKeyboardHeight,
   type KeyboardHeightEvent,
@@ -34,7 +35,7 @@ import {
  * measured timing.
  */
 export function keyboardProfileOf(win: Window): KeyboardProfile | null {
-  return 'virtualKeyboard' in win.navigator ? 'chromium' : null;
+  return hasVirtualKeyboard(win) ? 'chromium' : null;
 }
 
 /** A window's keyboard layout guide. */
@@ -96,6 +97,22 @@ function opensPickerOverPage(target: EventTarget | null): boolean {
   );
 }
 
+/**
+ * Whether `target` can hold a field the page cannot see: a frame, an open
+ * shadow host or a custom element. Focus on a field inside one leaves
+ * `document.activeElement` on it.
+ */
+export function hidesField(target: Element): boolean {
+  return (
+    target.tagName === 'IFRAME' ||
+    target.tagName === 'FRAME' ||
+    target.tagName === 'OBJECT' ||
+    target.tagName === 'EMBED' ||
+    target.shadowRoot != null ||
+    target.tagName.includes('-')
+  );
+}
+
 const guides = new WeakMap<Window, KeyboardLayoutGuide>();
 
 /**
@@ -116,6 +133,14 @@ const guides = new WeakMap<Window, KeyboardLayoutGuide>();
  * then reports the keyboard gone for a moment and then back. So a hide
  * reported while a field that just got focus still has it waits until the
  * move settles.
+ *
+ * A busy page reads Chrome's reports late, after Gboard's slide. So once a
+ * hide predicted from a blur is under way, a report of the keyboard partway
+ * down, or still up, starts nothing. Only the report of the keyboard gone
+ * confirms the hide. Focus that comes back still turns it around. Focus in a
+ * frame, an open shadow host or a custom element can keep up a keyboard the
+ * guide cannot see. There the viewport decides, as before. A closed shadow
+ * root on a built-in element reads as nothing focused.
  *
  * @example
  * ```
@@ -140,6 +165,25 @@ function createGuide(win: Window): KeyboardLayoutGuide {
   let model: KeyboardModel = createKeyboardModel(getKeyboardHeight(win));
   let verifyTimer: ReturnType<typeof setTimeout> | null = null;
   let detach: (() => void) | null = null;
+  // Whether focusing `target` keeps an input view where the keyboard is. On
+  // iOS, a select's picker or a date or time field's picker takes the
+  // keyboard's place. Chrome on Android opens it over the page, and the
+  // keyboard goes away.
+  const keepsInputView = (target: EventTarget | null): boolean =>
+    bringsUpKeyboard(target) &&
+    !(profile === 'chromium' && opensPickerOverPage(target));
+  // Whether a hide predicted from a blur is under way with nothing focused
+  // that can keep a keyboard up. Then only Chrome's report of the keyboard
+  // gone counts.
+  const awaitsHide = (): boolean => {
+    const active = win.document.activeElement;
+    return (
+      model.transition.kind === 'hide' &&
+      model.transition.predicted &&
+      !keepsInputView(active) &&
+      !(active != null && hidesField(active))
+    );
+  };
 
   const publish = (transition: KeyboardTransition | null) => {
     if (transition == null) {
@@ -161,7 +205,11 @@ function createGuide(win: Window): KeyboardLayoutGuide {
     verifyTimer = setTimeout(
       () => {
         verifyTimer = null;
-        publish(model.verify(getKeyboardHeight(win), win.performance.now()));
+        const inset = getKeyboardHeight(win);
+        if (inset != null && inset > 0.5 && awaitsHide()) {
+          return;
+        }
+        publish(model.verify(inset, win.performance.now()));
       },
       Math.max(0, due - win.performance.now()),
     );
@@ -170,13 +218,6 @@ function createGuide(win: Window): KeyboardLayoutGuide {
   const attach = () => {
     profile = keyboardProfileOf(win);
     model = createKeyboardModel(getKeyboardHeight(win));
-    // Whether focusing `target` keeps an input view where the keyboard is. On
-    // iOS, a select's picker or a date or time field's picker takes the
-    // keyboard's place. Chrome on Android opens it over the page, and the
-    // keyboard goes away.
-    const keepsInputView = (target: EventTarget | null): boolean =>
-      bringsUpKeyboard(target) &&
-      !(profile === 'chromium' && opensPickerOverPage(target));
     // When a field that brings up a keyboard last gained focus.
     let keyboardFocusAt = -Infinity;
     let handoffTimer: ReturnType<typeof setTimeout> | null = null;
@@ -203,6 +244,9 @@ function createGuide(win: Window): KeyboardLayoutGuide {
           handoffTimer = null;
           publish(model.report(getKeyboardHeight(win), settled));
         }, settled - time);
+        return null;
+      }
+      if (height > 0.5 && awaitsHide()) {
         return null;
       }
       return model.report(height, time);

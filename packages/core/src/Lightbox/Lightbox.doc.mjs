@@ -68,7 +68,8 @@ export const docs = {
     {
       name: 'onOpenChange',
       type: '(isOpen: boolean) => void',
-      description: 'Callback when the lightbox open state changes.',
+      description:
+        'Callback when the lightbox open state changes: the Close button, Escape, a tap beside the media, or, on a phone or tablet, dragging a photo down from its fitted size.',
       required: true,
     },
     {
@@ -80,7 +81,7 @@ export const docs = {
       // the description instead (#1645).
       type: 'LightboxMedia | LightboxMedia[]',
       description:
-        "Media to display. Pass a single object for one item, or an array for gallery mode with prev/next navigation. Each item is {src: string, alt: string, caption?: ReactNode, type?: 'image' | 'video'}; type defaults to 'image', and zoom/pan is disabled for 'video'.",
+        "Media to display. Pass a single object for one item, or an array for gallery mode with prev/next navigation (on a phone or tablet, a swipe moves between items too). Each item is {src: string, alt: string, caption?: ReactNode, type?: 'image' | 'video'}; type defaults to 'image', and zoom/pan is disabled for 'video'.",
       required: true,
     },
     {
@@ -92,13 +93,13 @@ export const docs = {
       name: 'onIndexChange',
       type: '(index: number) => void',
       description:
-        'Callback when the gallery index changes via prev/next navigation.',
+        'Callback when the gallery index changes: prev/next, the arrow keys, or a swipe.',
     },
     {
       name: 'hasZoom',
       type: 'boolean',
       description:
-        'Enable zoom (images only): pinch (or ctrl-wheel), or double-tap or double-click to zoom in at that point and back; Enter/Space/+/- zoom 2× about the centre and back. When zoomed, drag or scroll a trackpad to pan, or use arrow keys; on a phone or a tablet, the pan has momentum.',
+        'Enable zoom (images only): pinch (or ctrl-wheel), or double-tap or double-click to zoom in at that point and back; Enter/Space/+/- zoom 2× about the centre and back, and 0 returns to the fitted size. When zoomed, drag or scroll a trackpad to pan, or use arrow keys; on a phone or a tablet, the pan has momentum.',
       default: 'false',
     },
     {
@@ -128,7 +129,7 @@ export const docs = {
   usage: {
     anatomy,
     description:
-      'A fullscreen overlay for viewing images and videos at full resolution. Supports single-item and gallery modes with prev/next navigation, optional zoom and pan for images, and native video controls.',
+      'A fullscreen overlay for viewing images and videos at full resolution. Supports single-item and gallery modes with prev/next navigation and swiping, optional zoom and pan for images, and native video controls.',
     bestPractices: [
       {
         guidance: true,
@@ -148,7 +149,7 @@ export const docs = {
       {
         guidance: false,
         description:
-          'Use the lightbox for non-image content; it is specialized for images.',
+          'Use the lightbox for content other than images and videos; it shows one media item at a time.',
       },
       {
         guidance: false,
@@ -188,14 +189,15 @@ export const docsZh = {
     {
       name: 'onOpenChange',
       type: '(isOpen: boolean) => void',
-      description: '灯箱打开状态变化时的回调。',
+      description:
+        '灯箱打开状态变化时的回调：关闭按钮、Esc 键、点按媒体旁空白处，或在手机或平板上从适合大小向下拖动照片。',
       required: true,
     },
     {
       name: 'media',
       type: 'LightboxMedia | LightboxMedia[]',
       description:
-        "要显示的媒体。传入单个对象或数组（用于画廊模式的上一张/下一张导航）。每项为 {src, alt, caption?, type?: 'image' | 'video'}；type 默认为 'image'，'video' 禁用缩放/平移。",
+        "要显示的媒体。传入单个对象或数组（用于画廊模式的上一张/下一张导航；在手机或平板上，滑动也可在各项之间切换）。每项为 {src, alt, caption?, type?: 'image' | 'video'}；type 默认为 'image'，'video' 禁用缩放/平移。",
       required: true,
     },
     {
@@ -212,7 +214,7 @@ export const docsZh = {
       name: 'hasZoom',
       type: 'boolean',
       description:
-        '启用缩放（仅图片）：双指捏合（或按住 Ctrl 滚动滚轮），或双点按、双击在该处放大并还原；Enter/Space/+/- 键以中心放大 2 倍并还原。缩放后可拖动或在触控板上滚动平移，或用方向键平移；在手机或平板上，平移带惯性。',
+        '启用缩放（仅图片）：双指捏合（或按住 Ctrl 滚动滚轮），或双点按、双击在该处放大并还原；Enter/Space/+/- 键以中心放大 2 倍并还原，0 键恢复到适合大小。缩放后可拖动或在触控板上滚动平移，或用方向键平移；在手机或平板上，平移带惯性。',
       default: 'false',
     },
     {
@@ -228,7 +230,7 @@ export const docsZh = {
   usage: {
     anatomy,
     description:
-      'A fullscreen overlay for viewing images and videos at full resolution. Supports single-item and gallery modes with prev/next navigation, optional zoom and pan for images, and native video controls.',
+      'A fullscreen overlay for viewing images and videos at full resolution. Supports single-item and gallery modes with prev/next navigation and swiping, optional zoom and pan for images, and native video controls.',
     bestPractices: [
       {
         guidance: true,
@@ -248,7 +250,7 @@ export const docsZh = {
       {
         guidance: false,
         description:
-          'Use the lightbox for non-image content; it is specialized for images.',
+          'Use the lightbox for content other than images and videos; it shows one media item at a time.',
       },
       {
         guidance: false,
@@ -266,7 +268,7 @@ export const docsDense = {
   usage: {
     anatomy,
     description:
-      'A fullscreen overlay for viewing images and videos at full resolution. Supports single-item and gallery modes with prev/next navigation, optional zoom and pan for images, and native video controls.',
+      'A fullscreen overlay for viewing images and videos at full resolution. Supports single-item and gallery modes with prev/next navigation and swiping, optional zoom and pan for images, and native video controls.',
     bestPractices: [
       {guidance: true, description: 'Always provide alt text for every image.'},
       {
@@ -281,7 +283,8 @@ export const docsDense = {
       },
       {
         guidance: false,
-        description: 'Use for non-image content; specialized for images.',
+        description:
+          'Use for content other than images and videos; one media item at a time.',
       },
       {
         guidance: false,
@@ -292,12 +295,14 @@ export const docsDense = {
   },
   propDescriptions: {
     isOpen: 'Whether the lightbox is open.',
-    onOpenChange: 'Callback when open state changes.',
+    onOpenChange:
+      'Callback when open state changes (including a photo dragged down).',
     media: 'Single media object or array for gallery mode.',
     index: 'Current index in gallery mode.',
-    onIndexChange: 'Callback when gallery index changes.',
+    onIndexChange:
+      'Callback when gallery index changes (buttons, keys or a swipe).',
     hasZoom:
-      'Enable zoom (pinch or ctrl-wheel, double-tap or double-click, Enter/Space, or +/-) and pan (drag, trackpad scroll, or arrow keys) for images.',
+      'Enable zoom (pinch or ctrl-wheel, double-tap or double-click, Enter/Space, or +/-; 0 resets) and pan (drag, trackpad scroll, or arrow keys) for images.',
     xstyle: 'StyleX styles for layout customization.',
   },
 };

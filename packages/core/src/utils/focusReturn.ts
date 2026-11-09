@@ -14,6 +14,7 @@
  *   which exports only it, does not reach this module.
  */
 
+import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
 import {
   getInteractionModality,
   type InteractionModality,
@@ -69,6 +70,7 @@ export function moveFocusLeftBehind(
   note: FocusWithin | null,
   target: HTMLElement | null | undefined,
   hidden: Element | null = null,
+  options?: FocusOptions,
 ): boolean {
   if (
     note == null ||
@@ -77,8 +79,53 @@ export function moveFocusLeftBehind(
   ) {
     return false;
   }
-  focusForLastInput(target);
-  return true;
+  focusForLastInputTemporarily(target, options);
+  return target.ownerDocument.activeElement === target;
+}
+
+const temporaryFocus = new WeakMap<HTMLElement, () => void>();
+
+/** Release only a temporary tab stop owned by this module. Internal. */
+export function releaseTemporaryFocus(element: HTMLElement): void {
+  temporaryFocus.get(element)?.();
+}
+
+/** Focuses the element. A nonfocusable element gets a tab stop until blur or disposal. Internal. */
+export function focusForLastInputTemporarily(
+  element: HTMLElement,
+  options?: FocusOptions,
+  modality: InteractionModality = getInteractionModality(element),
+): () => void {
+  releaseTemporaryFocus(element);
+  const needsTabIndex =
+    !element.hasAttribute('tabindex') &&
+    element.tabIndex < 0 &&
+    !element.isContentEditable &&
+    !element.matches(FOCUSABLE_SELECTOR);
+  if (!needsTabIndex) {
+    focusForLastInput(element, options, modality);
+    return () => {};
+  }
+  element.setAttribute('tabindex', '-1');
+  const dispose = () => {
+    if (temporaryFocus.get(element) !== dispose) {
+      return;
+    }
+    temporaryFocus.delete(element);
+    element.removeEventListener('blur', dispose);
+    if (element.getAttribute('tabindex') === '-1') {
+      element.removeAttribute('tabindex');
+    }
+  };
+  temporaryFocus.set(element, dispose);
+  focusForLastInput(element, options, modality);
+  // Pointer-modality refocus can blur first; acquire cleanup after that move.
+  if (element.ownerDocument.activeElement === element) {
+    element.addEventListener('blur', dispose, {once: true});
+  } else {
+    dispose();
+  }
+  return dispose;
 }
 
 /**

@@ -5,7 +5,9 @@
  * self-contained HTML file and back, each refusal, and the warnings.
  */
 
+import {spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
+import {createRequire} from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -68,7 +70,7 @@ export default function Page() {
 `;
 
 beforeAll(async () => {
-  dir = makeLinkedFixture('astryx-render-test-', ['@astryxdesign', '@stylexjs', 'react', 'react-dom']);
+  dir = makeLinkedFixture('astryx-render-test-', ['@astryxdesign', '@stylexjs', 'react', 'react-dom', 'recharts']);
   put('dot.png', PNG);
   put('page.tsx', PAGE);
   put('plain.html', '<!doctype html><html><body><h1>Hello</h1><p class="lead">Hi</p></body></html>');
@@ -702,6 +704,283 @@ describe('render(): every write stays inside the current folder', () => {
     }
   }, 90_000);
 
+  it('resolves tsconfig paths by TypeScript rules: exact keys, a star anywhere, targets in order', async () => {
+    put(
+      'tsp/tsconfig.json',
+      JSON.stringify({
+        compilerOptions: {
+          baseUrl: '.',
+          paths: {
+            '@lib': ['./libsrc/index.ts'],
+            '@lib/*': ['./libsrc/*'],
+            '~*': ['./missing/*', './other/*'],
+            'theme-*-x': ['./themes/*.ts'],
+          },
+        },
+      }),
+    );
+    put('tsp/package.json', '{"name":"tsp","private":true}');
+    put('tsp/libsrc/index.ts', "export const Lib = 'lib-index';\n");
+    put('tsp/libsrc/button.tsx', "export const Button = () => <b>lib-button</b>;\n");
+    put('tsp/other/util.ts', "export const util = 'second-target';\n");
+    put('tsp/themes/blue.ts', "export const theme = 'mid-star';\n");
+    put(
+      'tsp/page.tsx',
+      [
+        "import {Lib} from '@lib';",
+        "import {Button} from '@lib/button';",
+        "import {util} from '~util';",
+        "import {theme} from 'theme-blue-x';",
+        'export default function Page() { return <p>{Lib} {util} {theme} <Button /></p>; }',
+        '',
+      ].join('\n'),
+    );
+    await render('tsp/page.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'tsp/page.html'), 'utf8');
+    for (const text of ['lib-index', 'lib-button', 'second-target', 'mid-star']) expect(html).toContain(text);
+  }, 60_000);
+
+  it('loads a JSON file through any key shape, from the first target that has it, and gives it back', async () => {
+    put('jsonp/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'~*': ['./lib/data/*'], 'cfg-*': ['./lib/missing/*', './lib/more/*']}}}));
+    put('jsonp/package.json', '{"name":"jsonp","private":true}');
+    put('jsonp/lib/data/cfg.json', '{"label":"first-target-json"}\n');
+    put('jsonp/lib/more/extra.json', '{"label":"later-target-json"}\n');
+    put(
+      'jsonp/page.tsx',
+      "import cfg from '~cfg.json';\nimport extra from 'cfg-extra.json';\nexport default function Page() { return <p>{cfg.label} {extra.label}</p>; }\n",
+    );
+    const r = /** @type {any} */ (await render('jsonp/page.tsx', {cwd: dir}));
+    expect(r.data.files).toEqual(expect.arrayContaining(['page.tsx', 'lib/data/cfg.json', 'lib/more/extra.json']));
+    const html = fs.readFileSync(path.join(dir, 'jsonp/page.html'), 'utf8');
+    expect(html).toContain('first-target-json');
+    expect(html).toContain('later-target-json');
+    // Back into a project with the same paths: each file goes where its alias points.
+    fs.mkdirSync(path.join(dir, 'jsonp-to'), {recursive: true});
+    put('jsonp-to/tsconfig.json', fs.readFileSync(path.join(dir, 'jsonp/tsconfig.json'), 'utf8'));
+    put('jsonp-to/package.json', '{"name":"jsonp-to","private":true}');
+    fs.copyFileSync(path.join(dir, 'jsonp/page.html'), path.join(dir, 'jsonp-to/page.html'));
+    const back = /** @type {any} */ (await render('page.html', {cwd: path.join(dir, 'jsonp-to'), reverse: true, out: 'lib/app/page.tsx'}));
+    // The file sent from the later target goes back under that target.
+    expect(back.data.files).toEqual(expect.arrayContaining(['lib/data/cfg.json', 'lib/more/extra.json']));
+  }, 60_000);
+
+  it.each([
+    ['folder names that end alike', ['./lib/app/*', './lib/webapp/*'], 'lib/webapp/Top.tsx', 'lib/webapp/Top.tsx'],
+    ['targets that share their last folder', ['./lib/ui/src/*', './lib/icons/src/*'], 'lib/icons/src/Top.tsx', 'lib/icons/src/Top.tsx'],
+    // Every embedded path is relative to the folder that holds them all, so
+    // a page inside the later target names no target folder: the first wins.
+    ['a page inside the later target', ['./lib/missing/*', './lib/src/*'], 'lib/src/Top.tsx', 'lib/missing/Top.tsx', 'lib/src/pages/page.tsx'],
+  ])('gives back an aliased module by whole folder names: %s', async (name, targets, sentFrom, comesBack, pageAt = 'page.tsx') => {
+    const base = `segments-${String(name).replace(/\W+/g, '-')}`;
+    const paths = {compilerOptions: {baseUrl: '.', paths: {'@/*': targets}}};
+    put(`${base}/tsconfig.json`, JSON.stringify(paths));
+    put(`${base}/package.json`, '{"name":"segments","private":true}');
+    put(`${base}/${sentFrom}`, "export const Top = () => <i>segment-top</i>;\n");
+    put(`${base}/${pageAt}`, "import {Top} from '@/Top';\nexport default function Page() { return <p><Top /></p>; }\n");
+    await render(`${base}/${pageAt}`, {cwd: dir});
+    const html = `${base}/${pageAt.replace(/\.tsx$/, '.html')}`;
+    fs.mkdirSync(path.join(dir, `${base}-to`), {recursive: true});
+    put(`${base}-to/tsconfig.json`, JSON.stringify(paths));
+    put(`${base}-to/package.json`, '{"name":"segments-to","private":true}');
+    fs.copyFileSync(path.join(dir, html), path.join(dir, `${base}-to/page.html`));
+    const back = /** @type {any} */ (await render('page.html', {cwd: path.join(dir, `${base}-to`), reverse: true, out: 'lib/zz/page.tsx'}));
+    expect(back.data.files).toContain(comesBack);
+  }, 60_000);
+
+  it('gives back a folder an exact key names under the target it was sent from', async () => {
+    const paths = {compilerOptions: {baseUrl: '.', paths: {'@cfg': ['./lib/a/settings', './lib/b/settings']}}};
+    put('exactdir/tsconfig.json', JSON.stringify(paths));
+    put('exactdir/package.json', '{"name":"exactdir","private":true}');
+    put('exactdir/lib/b/settings/index.ts', "export const setting = 'from-b';\n");
+    put('exactdir/page.tsx', "import {setting} from '@cfg';\nexport default function Page() { return <p>{setting}</p>; }\n");
+    await render('exactdir/page.tsx', {cwd: dir});
+    expect(fs.readFileSync(path.join(dir, 'exactdir/page.html'), 'utf8')).toContain('from-b');
+    fs.mkdirSync(path.join(dir, 'exactdir-to'), {recursive: true});
+    put('exactdir-to/tsconfig.json', JSON.stringify(paths));
+    put('exactdir-to/package.json', '{"name":"exactdir-to","private":true}');
+    fs.copyFileSync(path.join(dir, 'exactdir/page.html'), path.join(dir, 'exactdir-to/page.html'));
+    const back = /** @type {any} */ (await render('page.html', {cwd: path.join(dir, 'exactdir-to'), reverse: true, out: 'lib/zz/page.tsx'}));
+    expect(back.data.files).toContain('lib/b/settings/index.ts');
+    expect(back.data.files).not.toContain('lib/a/settings/index.ts');
+  }, 60_000);
+
+  it('resolves path aliases in modules outside the project folder, through every key and target', async () => {
+    put(
+      'sib/app/tsconfig.json',
+      JSON.stringify({
+        compilerOptions: {
+          baseUrl: '.',
+          paths: {
+            '@scope/ui': ['../ui/src/index.tsx'],
+            '@scope/tokens': ['../tokens/src/index.ts'],
+            '@lib/*': ['../missing/*', '../lib/*'],
+          },
+        },
+      }),
+    );
+    put('sib/app/package.json', '{"name":"sib-app","private":true}');
+    put('sib/tokens/src/index.ts', "export const accent = 'token-accent';\n");
+    put('sib/lib/util.ts', "export const util = 'later-target-util';\n");
+    put(
+      'sib/ui/src/index.tsx',
+      "import {accent} from '@scope/tokens';\nimport {util} from '@lib/util';\nexport const Badge = () => <b>{accent} {util}</b>;\n",
+    );
+    put('sib/app/page.tsx', "import {Badge} from '@scope/ui';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    await render('sib/app/page.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'sib/app/page.html'), 'utf8');
+    expect(html).toContain('token-accent');
+    expect(html).toContain('later-target-util');
+  }, 60_000);
+
+  it('gives the page and a sibling package one copy of a package the aliases place, even when a built copy is linked', async () => {
+    const paths = {compilerOptions: {baseUrl: '.', paths: {'@scope/ui': ['../ui/src/index.tsx'], '@scope/tokens': ['../tokens/src/index.ts']}}};
+    put('mono/app/tsconfig.json', JSON.stringify(paths));
+    put('mono/app/package.json', '{"name":"mono-app","private":true}');
+    put('mono/tokens/package.json', '{"name":"@scope/tokens","main":"dist/index.js"}');
+    put('mono/tokens/src/index.ts', "import {createContext} from 'react';\nexport const Theme = createContext('default-theme');\n");
+    put('mono/tokens/dist/index.js', "const {createContext} = require('react');\nexports.Theme = createContext('built-copy');\n");
+    // The built package, linked into the sibling's node_modules as a workspace would.
+    fs.mkdirSync(path.join(dir, 'mono/ui/node_modules/@scope'), {recursive: true});
+    fs.symlinkSync(path.join(dir, 'mono/tokens'), path.join(dir, 'mono/ui/node_modules/@scope/tokens'), 'dir');
+    put('mono/ui/src/index.tsx', "import {useContext} from 'react';\nimport {Theme} from '@scope/tokens';\nexport const Badge = () => <b>{useContext(Theme)}</b>;\n");
+    put(
+      'mono/app/page.tsx',
+      "import {Theme} from '@scope/tokens';\nimport {Badge} from '@scope/ui';\nexport default function Page() { return <Theme.Provider value=\"page-theme\"><Badge /></Theme.Provider>; }\n",
+    );
+    await render('mono/app/page.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'mono/app/page.html'), 'utf8');
+    expect(html).toContain('page-theme');
+  }, 60_000);
+
+  it('places an aliased subpath that a linked package does not export', async () => {
+    put('expo/app/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'@scope/ui': ['../ui/src/index.tsx'], '@scope/tokens/*': ['../tokens/src/*']}}}));
+    put('expo/app/package.json', '{"name":"expo-app","private":true}');
+    put('expo/tokens/package.json', '{"name":"@scope/tokens","exports":{".":"./dist/index.js"}}');
+    put('expo/tokens/dist/index.js', "exports.red = 'built-red';\n");
+    put('expo/tokens/src/colors.ts', "export const red = 'source-red';\n");
+    fs.mkdirSync(path.join(dir, 'expo/ui/node_modules/@scope'), {recursive: true});
+    fs.symlinkSync(path.join(dir, 'expo/tokens'), path.join(dir, 'expo/ui/node_modules/@scope/tokens'), 'dir');
+    put('expo/ui/src/index.tsx', "import {red} from '@scope/tokens/colors';\nexport const Swatch = () => <i>{red}</i>;\n");
+    put('expo/app/page.tsx', "import {Swatch} from '@scope/ui';\nexport default function Page() { return <p><Swatch /></p>; }\n");
+    await render('expo/app/page.tsx', {cwd: dir});
+    expect(fs.readFileSync(path.join(dir, 'expo/app/page.html'), 'utf8')).toContain('source-red');
+  }, 60_000);
+
+  it('compiles a sibling module with the TypeScript it can hold: type assertions and decorators', async () => {
+    put('tsx-sib/app/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', experimentalDecorators: true, paths: {'@scope/store': ['../store/src/index.ts']}}}));
+    put('tsx-sib/app/package.json', '{"name":"tsx-sib-app","private":true}');
+    put(
+      'tsx-sib/store/src/index.ts',
+      "const raw: unknown = 'asserted-label';\nexport const label = <string>raw;\nfunction tag(target: any) { target.tagged = 'decorated-store'; }\n@tag\nexport class Store { static tagged: string; }\n",
+    );
+    put('tsx-sib/store/src/other.ts', "const raw: unknown = 'relative-label';\nexport const other = <string>raw;\n");
+    put(
+      'tsx-sib/app/page.tsx',
+      "import {label, Store} from '@scope/store';\nimport {other} from '../store/src/other';\nexport default function Page() { return <p>{label} {(Store as any).tagged} {other}</p>; }\n",
+    );
+    await render('tsx-sib/app/page.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'tsx-sib/app/page.html'), 'utf8');
+    expect(html).toContain('asserted-label');
+    expect(html).toContain('decorated-store');
+    expect(html).toContain('relative-label');
+  }, 60_000);
+
+  it('loads an installed package a prefix key names when the key places no file', async () => {
+    put('pkgpre/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'@scope/*': ['./src/*']}}}));
+    put('pkgpre/package.json', '{"name":"pkgpre","private":true}');
+    put('pkgpre/node_modules/@scope/realpkg/package.json', '{"name":"@scope/realpkg","main":"index.js"}');
+    put('pkgpre/node_modules/@scope/realpkg/index.js', "exports.real = 'installed-package';\n");
+    put('pkgpre/src/local.ts', "export {real} from '@scope/realpkg';\n");
+    put('pkgpre/page.tsx', "import {real} from '@scope/realpkg';\nimport {real as again} from './src/local';\nexport default function Page() { return <p>{real} {again}</p>; }\n");
+    await render('pkgpre/page.tsx', {cwd: dir});
+    expect(fs.readFileSync(path.join(dir, 'pkgpre/page.html'), 'utf8')).toContain('installed-package installed-package');
+  }, 60_000);
+
+  it('gives back a nested aliased module under the target it was sent from', async () => {
+    const paths = {compilerOptions: {baseUrl: '.', paths: {'@/*': ['./lib/missing/*', './lib/src/*']}}};
+    put('nested/tsconfig.json', JSON.stringify(paths));
+    put('nested/package.json', '{"name":"nested","private":true}');
+    put('nested/lib/src/c/Header.tsx', "export const Header = () => <b>nested-header</b>;\n");
+    put('nested/lib/src/Top.tsx', "export const Top = () => <i>top-level</i>;\n");
+    put('nested/page.tsx', "import {Header} from '@/c/Header';\nimport {Top} from '@/Top';\nexport default function Page() { return <p><Header /><Top /></p>; }\n");
+    await render('nested/page.tsx', {cwd: dir});
+    expect(fs.readFileSync(path.join(dir, 'nested/page.html'), 'utf8')).toContain('nested-header');
+    fs.mkdirSync(path.join(dir, 'nested-to'), {recursive: true});
+    put('nested-to/tsconfig.json', JSON.stringify(paths));
+    put('nested-to/package.json', '{"name":"nested-to","private":true}');
+    fs.copyFileSync(path.join(dir, 'nested/page.html'), path.join(dir, 'nested-to/page.html'));
+    const back = /** @type {any} */ (await render('page.html', {cwd: path.join(dir, 'nested-to'), reverse: true, out: 'lib/app/page.tsx'}));
+    expect(back.data.files).toEqual(expect.arrayContaining(['lib/src/c/Header.tsx', 'lib/src/Top.tsx']));
+    expect(back.data.files).not.toEqual(expect.arrayContaining(['lib/missing/c/Header.tsx']));
+  }, 60_000);
+
+  it('names a package a catch-all key cannot place as not installed, and renders a page whose package stylesheet is missing with a warning', async () => {
+    put('catchall2/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'*': ['./types/*']}}}));
+    put('catchall2/package.json', '{"name":"catchall2","private":true}');
+    put('catchall2/dep.tsx', "import x from 'not-a-real-package-xyz';\nexport default () => <p>{String(x)}</p>;\n");
+    expect(await codeOf(() => render('catchall2/dep.tsx', {cwd: dir}))).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    put('catchall2/sheet.tsx', "import 'not-a-real-package-xyz/style.css';\nexport default () => <p>styled</p>;\n");
+    const r = /** @type {any} */ (await render('catchall2/sheet.tsx', {cwd: dir}));
+    expect(r.data.warnings.map((/** @type {any} */ w) => w.code)).toContain('missing-asset');
+  }, 60_000);
+
+  it('leaves relative and package imports alone under a catch-all paths key', async () => {
+    put('catchall/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'*': ['./types/*']}}}));
+    put('catchall/package.json', '{"name":"catchall","private":true}');
+    // A decoy at baseUrl that `./Header` must not load.
+    put('catchall/Header.tsx', "export const Header = () => <b>decoy</b>;\n");
+    put('catchall/src/Header.tsx', "export const Header = () => <b>local-header</b>;\n");
+    put('catchall/src/styles.css', '.c { color: red; }\n');
+    put('catchall/src/logo.png', PNG);
+    put(
+      'catchall/src/page.tsx',
+      [
+        "import './styles.css';",
+        "import '@astryxdesign/core/astryx.css';",
+        "import logo from './logo.png';",
+        "import {Header} from './Header';",
+        'export default function Page() { return <p className="c"><img src={logo} alt="" /><Header /></p>; }',
+        '',
+      ].join('\n'),
+    );
+    const r = /** @type {any} */ (await render('catchall/src/page.tsx', {cwd: dir}));
+    const html = fs.readFileSync(path.join(dir, 'catchall/src/page.html'), 'utf8');
+    expect(html).toContain('local-header');
+    expect(html).not.toContain('decoy');
+    expect(html).toContain('color: red');
+    expect(html).toContain('data:image/png;base64,');
+    expect(r.data.stylesheets).toEqual(expect.arrayContaining(['@astryxdesign/core/astryx.css']));
+  }, 60_000);
+
+  it('gives back a file reached through a target with text before its star', async () => {
+    put('starseg/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'@icon/*': ['./icons/icon-*']}}}));
+    put('starseg/package.json', '{"name":"starseg","private":true}');
+    put('starseg/icons/icon-home.tsx', "export const Home = () => <i>home-icon</i>;\n");
+    put('starseg/page.tsx', "import {Home} from '@icon/home';\nexport default function Page() { return <p><Home /></p>; }\n");
+    await render('starseg/page.tsx', {cwd: dir});
+    fs.mkdirSync(path.join(dir, 'starseg-to'), {recursive: true});
+    put('starseg-to/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'@icon/*': ['./icons/icon-*']}}}));
+    put('starseg-to/package.json', '{"name":"starseg-to","private":true}');
+    fs.copyFileSync(path.join(dir, 'starseg/page.html'), path.join(dir, 'starseg-to/page.html'));
+    const cwd = path.join(dir, 'starseg-to');
+    const back = /** @type {any} */ (await render('page.html', {cwd, reverse: true, out: 'icons/app/page.tsx'}));
+    expect(back.data.files).toEqual(expect.arrayContaining(['icons/icon-home.tsx']));
+  }, 60_000);
+
+  it('refuses a rendered file whose source block was stripped, in its own words', async () => {
+    put('stripped-own.html', '<!doctype html><html><head><meta name="generator" content="Astryx 0.7.5"></head><body><p>Hello</p></body></html>');
+    /** @type {any} */
+    let error;
+    try {
+      await render('stripped-own.html', {cwd: dir, reverse: true});
+    } catch (e) {
+      error = e;
+    }
+    expect(error?.code).toBe('ERR_RENDER_SOURCE_DAMAGED');
+    expect(error.message).toContain('rendered by Astryx');
+    expect(error.message).not.toContain('not an Astryx page');
+  });
+
   it('refuses a carried "image" whose bytes are not one', async () => {
     const {sourceBlock} = await import('../../foundation/render/source-block.mjs');
     put('fake-img.html', `<body><p class="astryx-text">x</p>${sourceBlock('page.tsx', [{path: 'page.tsx', bytes: Buffer.from('export default () => null;\n')}, {path: 'hook.png', bytes: Buffer.from('process.exit(1)\n')}])}</body>`);
@@ -1154,4 +1433,573 @@ describe('render(): refusals', () => {
     put('big.tsx', "import big from './big.png';\nexport default () => <img src={big} alt='' />;");
     expect(await codeOf(() => render('big.tsx', {cwd: dir}))).toBe('ERR_RENDER_ASSET_TOO_LARGE');
   }, 30_000);
+});
+
+describe('render(): a page outside a project', () => {
+  /** @type {string} */
+  let away;
+  const BIN = path.join(CLI_DIR, 'clients', 'cli', 'bin', 'astryx.mjs');
+
+  /** @param {string} cwd @param {string[]} args */
+  const runBin = (cwd, args) => {
+    // A test runner's NODE_PATH would reach this repository's packages.
+    const {NODE_PATH: _, ...env} = process.env;
+    const run = spawnSync(process.execPath, [BIN, '--json', ...args], {cwd, env, encoding: 'utf8', timeout: 60_000});
+    return {status: run.status, json: JSON.parse(run.stdout)};
+  };
+
+  beforeAll(() => {
+    away = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-render-away-')));
+  });
+
+  afterAll(() => {
+    fs.rmSync(away, {recursive: true, force: true});
+  });
+
+  it('takes Astryx, React and StyleX from the copy the CLI runs with', () => {
+    fs.writeFileSync(path.join(away, 'page.tsx'), PAGE);
+    fs.writeFileSync(path.join(away, 'dot.png'), PNG);
+    const run = runBin(away, ['experimental', 'render', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.stylesheets).toContain('@astryxdesign/core/astryx.css');
+    expect(run.json.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('no-astryx-styles');
+    const html = fs.readFileSync(path.join(away, 'page.html'), 'utf8');
+    expect(html).toContain('Café ✓ report');
+    expect(html).toContain('astryx-button');
+    const back = runBin(away, ['experimental', 'render', '--reverse', 'page.html']);
+    expect(back.json.data.exact).toBe(true);
+    expect(fs.readFileSync(path.join(away, 'page-restored', 'page.tsx'), 'utf8')).toBe(PAGE);
+  }, 60_000);
+
+  it('loads one React outside a project, even when the folder holds its own copy', () => {
+    const sub = path.join(away, 'own-react');
+    for (const name of ['react', 'react-dom']) {
+      const target = path.dirname(createRequire(path.join(CLI_DIR, '../core/package.json')).resolve(`${name}/package.json`));
+      fs.mkdirSync(path.join(sub, 'node_modules'), {recursive: true});
+      fs.cpSync(target, path.join(sub, 'node_modules', name), {recursive: true, dereference: true});
+    }
+    fs.writeFileSync(
+      path.join(sub, 'page.jsx'),
+      "import {useState} from 'react';\nimport {TextInput} from '@astryxdesign/core';\nexport default function Page() {\n  const [v] = useState('typed');\n  return <TextInput label=\"Name\" value={v} onChange={() => {}} />;\n}\n",
+    );
+    const run = runBin(sub, ['experimental', 'render', 'page.jsx']);
+    expect(run.status).toBe(0);
+    expect(fs.readFileSync(path.join(sub, 'page.html'), 'utf8')).toContain('typed');
+  }, 60_000);
+
+  it('gives a library in the folder the same React, as CommonJS and as an ES module', () => {
+    const sub = path.join(away, 'react-app');
+    const nm = path.join(sub, 'node_modules');
+    for (const name of ['react', 'react-dom']) {
+      const target = path.dirname(createRequire(path.join(CLI_DIR, '../core/package.json')).resolve(`${name}/package.json`));
+      fs.mkdirSync(nm, {recursive: true});
+      fs.cpSync(target, path.join(nm, name), {recursive: true, dereference: true});
+    }
+    fs.mkdirSync(path.join(nm, 'hook-cjs'), {recursive: true});
+    fs.writeFileSync(path.join(nm, 'hook-cjs', 'package.json'), '{"name":"hook-cjs","main":"index.js"}');
+    fs.writeFileSync(path.join(nm, 'hook-cjs', 'index.js'), "const {useState} = require('react');\nexports.useCjs = () => useState('cjs-hook')[0];\n");
+    fs.mkdirSync(path.join(nm, 'hook-esm'), {recursive: true});
+    fs.writeFileSync(path.join(nm, 'hook-esm', 'package.json'), '{"name":"hook-esm","type":"module","exports":"./index.js"}');
+    fs.writeFileSync(path.join(nm, 'hook-esm', 'index.js'), "import {useState} from 'react';\nexport const useEsm = () => useState('esm-hook')[0];\n");
+    const body = "  const a = useCjs();\n  const b = useEsm();\n";
+    fs.writeFileSync(
+      path.join(sub, 'plain.jsx'),
+      `import {useCjs} from 'hook-cjs';\nimport {useEsm} from 'hook-esm';\nexport default function Page() {\n${body}  return <p>{a} {b}</p>;\n}\n`,
+    );
+    fs.writeFileSync(
+      path.join(sub, 'core.jsx'),
+      `import {useCjs} from 'hook-cjs';\nimport {useEsm} from 'hook-esm';\nimport {Button} from '@astryxdesign/core';\nexport default function Page() {\n${body}  return <Button label={a + ' ' + b} />;\n}\n`,
+    );
+    for (const page of ['plain', 'core']) {
+      const run = runBin(sub, ['experimental', 'render', `${page}.jsx`]);
+      expect(run.status).toBe(0);
+      const html = fs.readFileSync(path.join(sub, `${page}.html`), 'utf8');
+      expect(html).toContain('cjs-hook');
+      expect(html).toContain('esm-hook');
+    }
+  }, 90_000);
+
+  it('says the CLI runs without Core only for a render outside a project', async () => {
+    const sub = path.join(away, 'no-core');
+    for (const name of ['react', 'react-dom']) {
+      const target = path.dirname(createRequire(path.join(CLI_DIR, '../core/package.json')).resolve(`${name}/package.json`));
+      fs.mkdirSync(path.join(sub, 'node_modules'), {recursive: true});
+      fs.cpSync(target, path.join(sub, 'node_modules', name), {recursive: true, dereference: true});
+    }
+    fs.writeFileSync(path.join(sub, 'page.jsx'), 'export default () => <p>no core</p>;\n');
+    // In a fresh process without the test runner's NODE_PATH, which would reach this repository's Core.
+    const script = `
+const {renderPage} = await import(${JSON.stringify(path.join(CLI_DIR, 'foundation/render/render-page.mjs'))});
+const entry = ${JSON.stringify(path.join(sub, 'page.jsx'))};
+const textOf = page => page.warnings.find(w => w.code === 'no-astryx-styles')?.message;
+const inside = textOf(await renderPage(entry, {served: null}));
+const outside = textOf(await renderPage(entry, {served: {dir: ${JSON.stringify(path.join(sub, 'no-such-core'))}, integrations: []}}));
+console.log(JSON.stringify({inside, outside}));
+`;
+    const {NODE_PATH: _, ...env} = process.env;
+    const run = spawnSync(process.execPath, ['--input-type=module', '-e', script], {cwd: sub, env, encoding: 'utf8', timeout: 60_000});
+    const {inside, outside} = JSON.parse(run.stdout.trim().split('\n').pop() ?? '{}');
+    expect(inside).toBe('@astryxdesign/core is not installed where the page is, so the page has no Astryx styles; install it, or render from inside the project.');
+    expect(outside).toContain('and the CLI runs without one');
+  }, 60_000);
+
+  it('still names a package the CLI does not carry as not installed', () => {
+    fs.writeFileSync(path.join(away, 'dep.jsx'), "import x from 'not-a-real-package-xyz';\nexport default () => <p>{String(x)}</p>;\n");
+    const run = runBin(away, ['experimental', 'render', 'dep.jsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+  }, 60_000);
+
+  it("uses only the project's own packages inside a project", async () => {
+    const {renderPage} = await import('../../foundation/render/render-page.mjs');
+    const page = await renderPage(path.join(dir, 'page.tsx'), {
+      served: {dir: path.join(away, 'no-such-core'), integrations: []},
+    });
+    expect(page.fromSet).toEqual([]);
+    expect(page.stylesheets).toContain('@astryxdesign/core/astryx.css');
+  }, 60_000);
+});
+
+describe('render(): charts', () => {
+  const DATA = "const data = [{d: 'a', v: 1}, {d: 'b', v: 3}, {d: 'c', v: 2}];";
+
+  it('draws a chart sized by its container and a chart of fixed size, and lets the first fit the width', async () => {
+    put(
+      'charts.tsx',
+      `import {ResponsiveContainer, LineChart, Line, XAxis, BarChart, Bar} from 'recharts';
+${DATA}
+export default function Page() {
+  return (
+    <div>
+      <ResponsiveContainer width="100%" height={200}>
+        <LineChart data={data}><XAxis dataKey="d" /><Line dataKey="v" /></LineChart>
+      </ResponsiveContainer>
+      <BarChart width={300} height={120} data={data}><Bar dataKey="v" /></BarChart>
+    </div>
+  );
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('charts.tsx', {cwd: dir}));
+    expect(result.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('chart-size');
+    const html = fs.readFileSync(path.join(dir, 'charts.html'), 'utf8');
+    expect(html.match(/<svg[^>]*class="recharts-surface"/g)).toHaveLength(2);
+    expect(html).toContain('recharts-line-curve');
+    expect(html).toContain('recharts-bar-rectangle');
+    // A container 200 pixels high starts two and a half times as wide.
+    expect(html).toContain('viewBox="0 0 500 200"');
+    expect(html).toContain('.recharts-responsive-container>.recharts-wrapper>svg.recharts-surface{width:100%!important');
+    expect(html).not.toContain('<astryx-chart');
+  }, 60_000);
+
+  it('keeps room for a fixed chart\'s legend where its props place it, and gives a container chart\'s legend its own row', async () => {
+    put(
+      'charts-legend.tsx',
+      `import {ResponsiveContainer, LineChart, Line, XAxis, Legend} from 'recharts';
+${DATA}
+export default function Page() {
+  return (
+    <div>
+      <ResponsiveContainer width="100%" height={200}>
+        <LineChart data={data}><XAxis dataKey="d" /><Line dataKey="v" /><Legend /></LineChart>
+      </ResponsiveContainer>
+      <LineChart width={400} height={200} data={data}><XAxis dataKey="d" /><Line dataKey="v" /><Legend /></LineChart>
+      <LineChart width={550} height={220} data={data}><XAxis dataKey="d" /><Line dataKey="v" name="Visits" /><Legend layout="vertical" align="right" verticalAlign="middle" /></LineChart>
+      <ResponsiveContainer width="100%" height={220}>
+        <LineChart data={data}><XAxis dataKey="d" /><Line dataKey="v" name="Visits" /><Legend layout="vertical" align="right" verticalAlign="middle" /></LineChart>
+      </ResponsiveContainer>
+      <ResponsiveContainer width="100%" height={220}>
+        <LineChart data={data}><XAxis dataKey="d" /><Line dataKey="v" name="Wins" /><Legend layout="vertical" align="left" verticalAlign="bottom" /></LineChart>
+      </ResponsiveContainer>
+      <ResponsiveContainer width="100%" height={220}>
+        <LineChart data={data}><XAxis dataKey="d" /><Line dataKey="v" name="Ties" /><Legend layout="vertical" align="center" verticalAlign="bottom" /></LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('charts-legend.tsx', {cwd: dir}));
+    expect(result.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('chart-size');
+    const html = fs.readFileSync(path.join(dir, 'charts-legend.html'), 'utf8');
+    const axes = [...html.matchAll(/<line\b[^>]*class="recharts-cartesian-axis-line"[^>]*>/g)].map(m => ({
+      y: Number(/\by1="([\d.]+)"/.exec(m[0])?.[1]),
+      x2: Number(/\bx2="([\d.]+)"/.exec(m[0])?.[1]),
+    }));
+    // A container chart keeps no room in its picture: its legend takes its
+    // own row under it, so the x-axis sits at 200 - 5 - 30 = 165.
+    expect(axes[0].y).toBe(165);
+    // A fixed chart keeps a row for a bottom legend: 200 - 5 - 24 - 30 = 141.
+    expect(axes[1].y).toBe(141);
+    // A legend at the side keeps room on the right: the plot ends before it.
+    expect(axes[2].x2).toBeLessThan(550 - 40);
+    expect(html).toContain('.recharts-responsive-container>.recharts-wrapper>.recharts-legend-wrapper{position:static!important;width:auto!important');
+    expect(html).toContain('.recharts-legend-wrapper[style*="bottom"]{order:1}');
+    // A vertical legend in a container chart sits beside the picture, centered.
+    const sided = [...html.matchAll(/<div\b[^>]*class="recharts-wrapper"[^>]*>/g)].map(m => m[0]).filter(tag => tag.includes('data-legend-side'));
+    // Right and middle, then left and bottom; a vertical legend centered
+    // across takes its own row, unmarked.
+    expect(sided).toHaveLength(2);
+    expect(sided[0]).toContain('data-legend-side="right"');
+    expect(sided[0]).toContain('data-legend-middle=""');
+    expect(sided[1]).toContain('data-legend-side="left"');
+    expect(sided[1]).not.toContain('data-legend-middle');
+    expect(sided[1]).toContain('data-legend-bottom=""');
+    // A bottom legend goes under the picture only when it is not beside it.
+    expect(html).toContain('.recharts-wrapper:not([data-legend-side])>.recharts-legend-wrapper[style*="bottom"]{order:1}');
+    expect(html).toContain('[data-legend-side]{flex-direction:row');
+    // A side is physical: a right-to-left page reverses the row.
+    expect(html).toContain('[data-legend-side]:dir(rtl){flex-direction:row-reverse}');
+    expect(html).toContain('[data-legend-side="right"]>.recharts-legend-wrapper{order:1}');
+    // Only the chart's own picture scales; a legend's icons keep their size.
+    expect(html).toContain('.recharts-responsive-container>.recharts-wrapper>svg.recharts-surface{');
+    expect(html).not.toContain('.recharts-responsive-container .recharts-surface');
+  }, 60_000);
+
+  it("draws a chart's parts in the React context the page gives them", async () => {
+    put(
+      'charts-context.tsx',
+      `import {createContext, useContext} from 'react';
+import {BarChart, Bar, XAxis} from 'recharts';
+${DATA}
+const Units = createContext('items');
+function Tick(props: any) {
+  const units = useContext(Units);
+  return <text x={props.x} y={props.y + 12}>{props.payload.value} {units}</text>;
+}
+export default function Page() {
+  return (
+    <Units.Provider value="km">
+      <BarChart width={300} height={150} data={data}><XAxis dataKey="d" tick={<Tick />} /><Bar dataKey="v" /></BarChart>
+    </Units.Provider>
+  );
+}
+`,
+    );
+    await render('charts-context.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'charts-context.html'), 'utf8');
+    expect(html).toContain('a km');
+    expect(html).not.toContain('a items');
+  }, 60_000);
+
+  it('draws inside a page that uses Core scrolling components, so context still reaches the chart', async () => {
+    put(
+      'charts-core.tsx',
+      `import {createContext, useContext} from 'react';
+import {ScrollableArea} from '@astryxdesign/core/ScrollableArea';
+import {BarChart, Bar, XAxis} from 'recharts';
+${DATA}
+const Units = createContext('items');
+function Tick(props: any) {
+  return <text x={props.x} y={props.y + 12}>{props.payload.value} {useContext(Units)}</text>;
+}
+export default function Page() {
+  console.log('rendered once');
+  return (
+    <Units.Provider value="km">
+      <ScrollableArea>
+        <BarChart width={300} height={150} data={data}><XAxis dataKey="d" tick={<Tick />} /><Bar dataKey="v" /></BarChart>
+      </ScrollableArea>
+    </Units.Provider>
+  );
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('charts-core.tsx', {cwd: dir}));
+    const html = fs.readFileSync(path.join(dir, 'charts-core.html'), 'utf8');
+    expect(html).toContain('a km');
+    expect(result.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('chart-size');
+    // What the page prints is reported once, from the server render.
+    const printed = result.data.warnings.filter((/** @type {any} */ w) => w.code === 'page-output');
+    expect(printed.filter((/** @type {any} */ w) => w.message.includes('rendered once'))).toHaveLength(1);
+  }, 60_000);
+
+  it('says so when it draws each chart by itself', async () => {
+    put(
+      'charts-alone.tsx',
+      `import {BarChart, Bar} from 'recharts';
+${DATA}
+function OnlyOnServer() {
+  // Throws only once a document exists, so the page draws on the server but not again.
+  if (typeof document !== 'undefined') throw new Error('no second draw');
+  return null;
+}
+export default function Page() {
+  return <div><OnlyOnServer /><BarChart width={300} height={150} data={data}><Bar dataKey="v" /></BarChart></div>;
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('charts-alone.tsx', {cwd: dir}));
+    const html = fs.readFileSync(path.join(dir, 'charts-alone.html'), 'utf8');
+    expect(html).toContain('recharts-bar-rectangle');
+    const warning = result.data.warnings.find((/** @type {any} */ w) => w.code === 'chart-size');
+    expect(warning?.message).toContain('each chart was drawn by itself');
+  }, 60_000);
+
+  it('draws charts as the first render gives them, not as the page\'s effects change it', async () => {
+    put(
+      'charts-effects.tsx',
+      `import {useEffect, useState} from 'react';
+import {BarChart, Bar, XAxis} from 'recharts';
+${DATA}
+export default function Page() {
+  const [rows, setRows] = useState<string[]>([]);
+  useEffect(() => setRows(['order one']), []);
+  return (
+    <div>
+      <p>{rows.length === 0 ? 'No orders yet' : rows.join(', ')}</p>
+      {rows.length === 0 ? null : <BarChart width={300} height={150} data={data}><XAxis dataKey="d" /><Bar dataKey="v" /></BarChart>}
+      <BarChart width={300} height={150} data={data}><XAxis dataKey="d" /><Bar dataKey="v" /></BarChart>
+    </div>
+  );
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('charts-effects.tsx', {cwd: dir}));
+    const html = fs.readFileSync(path.join(dir, 'charts-effects.html'), 'utf8');
+    expect(html).toContain('No orders yet');
+    expect(html.match(/<svg[^>]*class="recharts-surface"/g)).toHaveLength(1);
+    const warning = result.data.warnings.find((/** @type {any} */ w) => w.code === 'chart-size');
+    expect(warning?.message).toContain('once its effects ran');
+  }, 60_000);
+
+  it('draws a chart as the first render gave it when an effect changes state a closure in it reads', async () => {
+    put(
+      'charts-effect-closure.tsx',
+      `import {useEffect, useState} from 'react';
+import {BarChart, Bar, XAxis} from 'recharts';
+const data = [{d: 'Mon', v: 1}, {d: 'Tue', v: 2}];
+export default function Page() {
+  const [unit, setUnit] = useState('items');
+  useEffect(() => setUnit('km'), []);
+  return (
+    <div>
+      <p>Unit: {unit}</p>
+      <BarChart width={300} height={150} data={data}><XAxis dataKey="d" tickFormatter={(v: string) => v + ' ' + unit} /><Bar dataKey="v" /></BarChart>
+    </div>
+  );
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('charts-effect-closure.tsx', {cwd: dir}));
+    const html = fs.readFileSync(path.join(dir, 'charts-effect-closure.html'), 'utf8');
+    expect(html).toContain('Unit: items');
+    expect(html).toContain('Mon items');
+    expect(html).not.toContain('Mon km');
+    expect(result.data.warnings.find((/** @type {any} */ w) => w.code === 'chart-size')?.message).toContain('A component that makes a chart rendered again');
+  }, 60_000);
+
+  it('names a re-render as the cause when a chart\'s maker only re-renders in an effect', async () => {
+    put(
+      'charts-effect-mounted.tsx',
+      `import {useEffect, useState} from 'react';
+import {BarChart, Bar} from 'recharts';
+const data = [{v: 1}, {v: 2}];
+export default function Page() {
+  const [, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return <BarChart width={300} height={150} data={data}><Bar dataKey="v" /></BarChart>;
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('charts-effect-mounted.tsx', {cwd: dir}));
+    const message = result.data.warnings.find((/** @type {any} */ w) => w.code === 'chart-size')?.message ?? '';
+    expect(message).toContain('A component that makes a chart rendered again');
+    expect(message).not.toContain('changed its charts');
+  }, 60_000);
+
+  it('keeps first-render data and props, and lets a context an effect changes reach the chart', async () => {
+    // The guide promises a chart's data and props from the first render; a
+    // value its parts read from a context that an effect changes may show its
+    // later value.
+    put(
+      'charts-effect-provider.tsx',
+      `import {createContext, useContext, useEffect, useState} from 'react';
+import {BarChart, Bar, XAxis} from 'recharts';
+const data = [{d: 'a', v: 1}, {d: 'b', v: 2}];
+const Units = createContext('items');
+function UnitsProvider({children}: {children: any}) {
+  const [unit, setUnit] = useState('items');
+  useEffect(() => setUnit('km'), []);
+  return <Units.Provider value={unit}><p>Unit: {unit}</p>{children}</Units.Provider>;
+}
+function Tick(props: any) {
+  return <text x={props.x} y={props.y + 12}>{props.payload.value} {useContext(Units)}</text>;
+}
+export default function Page() {
+  return (
+    <UnitsProvider>
+      <BarChart width={300} height={150} data={data}><XAxis dataKey="d" tick={<Tick />} /><Bar dataKey="v" /></BarChart>
+    </UnitsProvider>
+  );
+}
+`,
+    );
+    await render('charts-effect-provider.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'charts-effect-provider.html'), 'utf8');
+    expect(html).toContain('Unit: items');
+    expect(html.match(/\brecharts-bar-rectangle\b(?!s)/g)).toHaveLength(2);
+    expect(html).toMatch(/a (items|km)/);
+  }, 60_000);
+
+  it('draws a chart with the data of the first render when an effect replaces it', async () => {
+    put(
+      'charts-effect-data.tsx',
+      `import {useEffect, useState} from 'react';
+import {BarChart, Bar, XAxis} from 'recharts';
+export default function Page() {
+  const [data, setData] = useState([{d: 'first', v: 1}]);
+  useEffect(() => setData([{d: 'later', v: 2}]), []);
+  return <BarChart width={300} height={150} data={data}><XAxis dataKey="d" /><Bar dataKey="v" /></BarChart>;
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('charts-effect-data.tsx', {cwd: dir}));
+    const html = fs.readFileSync(path.join(dir, 'charts-effect-data.html'), 'utf8');
+    expect(html).toContain('>first<');
+    expect(html).not.toContain('>later<');
+    expect(result.data.warnings.find((/** @type {any} */ w) => w.code === 'chart-size')?.message).toContain('once its effects ran');
+  }, 60_000);
+
+  it('keeps room for a legend that wraps onto more rows', async () => {
+    put(
+      'charts-wrap.tsx',
+      `import {LineChart, Line, XAxis, Legend} from 'recharts';
+const data = [{d: 'Mon', a: 1, b: 2, c: 3, e: 4, f: 5}, {d: 'Tue', a: 2, b: 3, c: 1, e: 2, f: 3}];
+export default function Page() {
+  return (
+    <LineChart width={480} height={240} data={data}>
+      <XAxis dataKey="d" />
+      <Line dataKey="a" name="Northern region" /><Line dataKey="b" name="Southern region" />
+      <Line dataKey="c" name="Eastern region" /><Line dataKey="e" name="Western region" />
+      <Line dataKey="f" name="Central region" />
+      <Legend />
+    </LineChart>
+  );
+}
+`,
+    );
+    await render('charts-wrap.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'charts-wrap.html'), 'utf8');
+    const axis = /<line\b[^>]*class="recharts-cartesian-axis-line"[^>]*>/.exec(html)?.[0] ?? '';
+    // Five names of about 120 px each wrap into two rows in 470 px, so the
+    // axis sits two legend rows up: 240 - 5 - 48 - 30 = 157.
+    expect(Number(/\by1="([\d.]+)"/.exec(axis)?.[1])).toBe(157);
+    // In a container chart the same legend takes its own row under the
+    // picture, which keeps no room for it, so it cannot cover the axis.
+    put('charts-wrap-rc.tsx', fs.readFileSync(path.join(dir, 'charts-wrap.tsx'), 'utf8')
+      .replace("import {LineChart,", "import {ResponsiveContainer, LineChart,")
+      .replace('<LineChart width={480} height={240} data={data}>', '<ResponsiveContainer width="100%" height={240}><LineChart data={data}>')
+      .replace('</LineChart>', '</LineChart></ResponsiveContainer>'));
+    await render('charts-wrap-rc.tsx', {cwd: dir});
+    const rc = fs.readFileSync(path.join(dir, 'charts-wrap-rc.html'), 'utf8');
+    const rcAxis = /<line\b[^>]*class="recharts-cartesian-axis-line"[^>]*>/.exec(rc)?.[0] ?? '';
+    expect(Number(/\by1="([\d.]+)"/.exec(rcAxis)?.[1])).toBe(240 - 5 - 30);
+    expect(rc).toContain('recharts-legend-wrapper');
+  }, 60_000);
+
+  it('lays out axis labels as a browser does: the last label stays inside, and crowded labels thin out', async () => {
+    const times = Array.from({length: 25}, (_, i) => `Apr ${1 + Math.floor((14 + i) / 24)} ${String((14 + i) % 24).padStart(2, '0')}:00`);
+    const cats = Array.from({length: 24}, (_, i) => `Category ${String(i + 1).padStart(2, '0')}`);
+    put(
+      'charts-axis.tsx',
+      `import {ResponsiveContainer, LineChart, Line, XAxis, BarChart, Bar} from 'recharts';
+const times = ${JSON.stringify(times)}.map((t, i) => ({t, v: i}));
+const cats = ${JSON.stringify(cats)}.map((c, i) => ({c, v: i}));
+export default function Page() {
+  return (
+    <div>
+      <ResponsiveContainer width="100%" height={300}>
+        <LineChart data={times}><XAxis dataKey="t" /><Line dataKey="v" /></LineChart>
+      </ResponsiveContainer>
+      <BarChart width={400} height={200} data={cats}><XAxis dataKey="c" /><Bar dataKey="v" /></BarChart>
+    </div>
+  );
+}
+`,
+    );
+    await render('charts-axis.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'charts-axis.html'), 'utf8');
+    const ticks = [...html.matchAll(/<text\b([^>]*class="recharts-text recharts-cartesian-axis-tick-value"[^>]*)>\s*<tspan[^>]*>([^<]*)/g)].map(m => ({
+      x: Number(/\bx="([\d.]+)"/.exec(m[1])?.[1]),
+      anchor: /text-anchor="(\w+)"/.exec(m[1])?.[1],
+      text: m[2],
+    }));
+    const timeTicks = ticks.filter(t => t.text.startsWith('Apr'));
+    const last = timeTicks[timeTicks.length - 1];
+    // The drawing is 750 wide; an 11-character label at 14 px is about 92 wide.
+    expect(last.anchor).toBe('middle');
+    expect(last.x + Math.round(last.text.length * 14 * 0.6) / 2).toBeLessThanOrEqual(750);
+    expect(timeTicks.length).toBeLessThan(25);
+    const catTicks = ticks.filter(t => t.text.startsWith('Category'));
+    expect(catTicks.length).toBeGreaterThan(1);
+    expect(catTicks.length).toBeLessThan(24);
+  }, 60_000);
+
+  it("keeps a StrictMode page's context in its charts", async () => {
+    put(
+      'charts-strict.tsx',
+      `import {StrictMode, createContext, useContext} from 'react';
+import {BarChart, Bar, XAxis} from 'recharts';
+${DATA}
+const Units = createContext('items');
+function Tick(props: any) {
+  return <text x={props.x} y={props.y + 12}>{props.payload.value} {useContext(Units)}</text>;
+}
+export default function Page() {
+  return (
+    <StrictMode>
+      <Units.Provider value="km">
+        <BarChart width={300} height={150} data={data}><XAxis dataKey="d" tick={<Tick />} /><Bar dataKey="v" /></BarChart>
+      </Units.Provider>
+    </StrictMode>
+  );
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('charts-strict.tsx', {cwd: dir}));
+    const html = fs.readFileSync(path.join(dir, 'charts-strict.html'), 'utf8');
+    expect(html).toContain('a km');
+    expect(result.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('chart-size');
+  }, 60_000);
+
+  it('names a chart of fixed size it cannot draw', async () => {
+    put(
+      'charts-ns-fixed.tsx',
+      `import * as R from 'recharts';
+${DATA}
+export default function Page() {
+  return <R.BarChart width={300} height={120} data={data}><R.Bar dataKey="v" /></R.BarChart>;
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('charts-ns-fixed.tsx', {cwd: dir}));
+    const warning = result.data.warnings.find((/** @type {any} */ w) => w.code === 'chart-size');
+    expect(warning?.message).toContain("from recharts by name");
+    expect(warning?.message).not.toContain('fixed width');
+  }, 60_000);
+
+  it('warns about a chart it cannot draw', async () => {
+    put(
+      'charts-ns.tsx',
+      `import * as R from 'recharts';
+${DATA}
+export default function Page() {
+  return (
+    <R.ResponsiveContainer width="100%" height={200}>
+      <R.LineChart data={data}><R.Line dataKey="v" /></R.LineChart>
+    </R.ResponsiveContainer>
+  );
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('charts-ns.tsx', {cwd: dir}));
+    expect(result.data.warnings.map((/** @type {any} */ w) => w.code)).toContain('chart-size');
+  }, 60_000);
+
+  it('gives back a page with charts byte for byte', async () => {
+    const source = fs.readFileSync(path.join(dir, 'charts.tsx'), 'utf8');
+    const back = /** @type {any} */ (await render('charts.html', {cwd: dir, reverse: true, out: 'charts-back/charts.tsx'}));
+    expect(back.data.exact).toBe(true);
+    expect(fs.readFileSync(path.join(dir, 'charts-back', 'charts.tsx'), 'utf8')).toBe(source);
+  }, 60_000);
 });

@@ -43,7 +43,6 @@
  * SideNavRailMotion.test.tsx.
  */
 
-import {createContext} from 'react';
 import {
   createAnimatedLayout,
   holdLayoutEdge,
@@ -52,6 +51,7 @@ import {
   type LayoutEdgeHold,
   type LayoutSwap,
 } from '../motion/animatedLayout';
+import {createSharedContext} from '../utils/sharedContext';
 
 /** What AppShell lends its SideNav; outside AppShell, nothing. */
 export interface SideNavShell {
@@ -69,7 +69,11 @@ export interface SideNavShell {
   landContent(): void;
 }
 
-export const SideNavShellContext = createContext<SideNavShell | null>(null);
+export const SideNavShellContext = createSharedContext<SideNavShell | null>(
+  'SideNavShellContext',
+  1,
+  null,
+);
 SideNavShellContext.displayName = 'SideNavShellContext';
 
 /** A SideNav outside AppShell holds its own handle over its parent. */

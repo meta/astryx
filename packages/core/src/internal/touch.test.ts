@@ -142,7 +142,7 @@ describe('internal/touch', () => {
     const animator = await import('../motion/animator');
     const reduced = await import('../motion/reducedMotion');
     const hitArea = await import('../utils/touchHitArea');
-    const hitAreaStyles = await import('../utils/touchHitArea.stylex');
+    const hitAreaStyles = await import('./touchHitArea.stylex');
     expect(entry.animatorFor).toBe(animator.animatorFor);
     expect(entry.reducedMotionFade).toBe(reduced.reducedMotionFade);
     expect(entry.useTouchHitArea).toBe(hitArea.useTouchHitArea);
@@ -173,6 +173,18 @@ describe('internal/touch', () => {
       'useFingerScroll',
     ]) {
       expect(typeof entry[name], name).toBe('function');
+    }
+  });
+
+  it('re-exports the action-group tracking hook by name', async () => {
+    const entry: Record<string, unknown> = await import('./touch');
+    // Identity alone passes when both sides are undefined.
+    expect(typeof entry.useActionGroupTracking).toBe('function');
+    const modules: Record<string, Record<string, unknown>> = {
+      useActionGroupTracking: await import('../hooks/useActionGroupTracking'),
+    };
+    for (const [name, module] of Object.entries(modules)) {
+      expect(entry[name], name).toBe(module[name]);
     }
   });
 

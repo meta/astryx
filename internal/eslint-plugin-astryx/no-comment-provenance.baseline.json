@@ -126,10 +126,6 @@
     "FR5",
     "FR6",
     "INV10",
-    "INV11",
-    "INV11",
-    "architecture:theme-tokens",
-    "architecture:theme-tokens",
     "spec:AST-086"
   ],
   "packages/core/src/Chat/ChatComposerDrawer.tsx": ["#1182", "#2072"],
@@ -469,7 +465,7 @@
     "spec:AST-085",
     "spec:AST-086"
   ],
-  "packages/core/src/HoverCard/HoverCard.tsx": ["#5049", "#5049"],
+  "packages/core/src/HoverCard/HoverCard.tsx": ["#5049"],
   "packages/core/src/HoverCard/useHoverCard.tsx": ["FR11"],
   "packages/core/src/Icon/Icon.tsx": ["ORD1", "spec quote"],
   "packages/core/src/Indicator/CheckIndicator.tsx": ["#4838", "#4893"],
@@ -543,8 +539,6 @@
     "FR1",
     "FR1",
     "FR3",
-    "FR3",
-    "FR4",
     "FR4",
     "FR4",
     "FR4",
@@ -557,12 +551,9 @@
     "FR5",
     "FR6",
     "FR6",
-    "FR8",
     "FR8",
     "FR8",
     "INV12",
-    "INV6",
-    "spec quote",
     "spec quote",
     "spec quote",
     "spec quote",
@@ -600,9 +591,7 @@
     "spec:AST-085",
     "spec:AST-085"
   ],
-  "packages/core/src/List/List.tsx": ["FR29", "spec:AST-017"],
   "packages/core/src/List/ListContext.tsx": ["DEC-6", "spec:AST-061"],
-  "packages/core/src/List/ListItem.tsx": ["FR11", "spec:AST-061"],
   "packages/core/src/Markdown/Markdown.fr23.bench.ts": [
     "AST-036",
     "FR23",
@@ -736,10 +725,8 @@
     "family:action-groups"
   ],
   "packages/core/src/NavMenu/NavHeadingMenuItem.tsx": [
-    "FR1",
     "FR2",
     "FR4",
-    "spec:AST-085",
     "spec:AST-085",
     "spec:AST-085"
   ],
@@ -938,7 +925,6 @@
     "DR2",
     "DR3",
     "FR17",
-    "FR4",
     "FR6",
     "FR9",
     "INV12",
@@ -946,8 +932,7 @@
     "component:AppShell",
     "component:SideNav",
     "design:reduced-motion",
-    "spec quote",
-    "spec:AST-105"
+    "spec quote"
   ],
   "packages/core/src/Skeleton/Skeleton.tsx": ["FR4", "spec:AST-108"],
   "packages/core/src/Slider/Slider.tsx": [
@@ -1098,13 +1083,6 @@
     "FR2",
     "FR8",
     "spec:AST-086"
-  ],
-  "packages/core/src/Timestamp/Timestamp.tsx": [
-    "FR5",
-    "FR9",
-    "component:Timestamp",
-    "component:Timestamp",
-    "spec quote"
   ],
   "packages/core/src/Toast/Toast.tsx": ["FR3"],
   "packages/core/src/Toast/ToastViewport.tsx": [
@@ -1884,7 +1862,6 @@
     "spec:AST-105"
   ],
   "packages/core/src/motion/animatedLayout.ts": [
-    "DEC-11",
     "DR1",
     "DR2",
     "DR2",
@@ -1893,9 +1870,7 @@
     "DR3",
     "DR3",
     "DR3",
-    "FR1",
     "FR2",
-    "FR4",
     "FR4",
     "FR4",
     "FR4",
@@ -1939,9 +1914,6 @@
     "spec quote",
     "spec quote",
     "spec quote",
-    "spec:AST-094",
-    "spec:AST-105",
-    "spec:AST-105",
     "spec:AST-105",
     "spec:AST-105",
     "spec:AST-105",
@@ -2599,12 +2571,10 @@
     "FR4",
     "FR4",
     "FR5",
-    "FR6",
     "FR9",
     "spec quote",
     "spec quote",
     "spec quote",
-    "spec:AST-061",
     "spec:AST-061",
     "spec:AST-061",
     "spec:AST-061",

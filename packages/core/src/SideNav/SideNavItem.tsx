@@ -35,7 +35,6 @@
  */
 
 import {
-  createContext,
   use,
   useCallback,
   useId,
@@ -87,6 +86,7 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/SideNav/SideNavItem.generated';
 import {isRenderable} from '../utils/isRenderable';
+import {createSharedContext} from '../utils/sharedContext';
 
 registerEnglishFallback(english);
 // =============================================================================
@@ -99,13 +99,21 @@ const styles = stylex.create({
     flexDirection: 'column',
     width: '100%',
   },
+  // A collapsed rail row holds only its icon, so it keeps a fixed square.
   itemCollapsed: {
     justifyContent: 'center',
     width: sizeVars['--size-element-md'],
+    height: sizeVars['--size-element-md'],
     paddingInline: 0,
   },
-  itemCollapsedSm: {width: sizeVars['--size-element-sm']},
-  itemCollapsedLg: {width: sizeVars['--size-element-lg']},
+  itemCollapsedSm: {
+    width: sizeVars['--size-element-sm'],
+    height: sizeVars['--size-element-sm'],
+  },
+  itemCollapsedLg: {
+    width: sizeVars['--size-element-lg'],
+    height: sizeVars['--size-element-lg'],
+  },
   label: {
     flex: 1,
     minWidth: 0,
@@ -188,6 +196,11 @@ const styles = stylex.create({
     },
     transitionTimingFunction: easeVars['--ease-standard'],
     flexShrink: 0,
+  },
+  // Inside a whole-row toggle the chevron takes its 1em glyph's height, so
+  // the row's height comes from its label, not from the chevron's box.
+  expandChevronInRow: {
+    height: 'auto',
   },
   expandChevronExpanded: {
     transform: 'rotate(180deg)',
@@ -299,7 +312,11 @@ const indentStyles = stylex.create({
  * 1 inside one parent, and so on. A collapsed rail's flyout resets it to 0,
  * since the flyout lists a parent's children as its own top level.
  */
-const SideNavItemDepthContext = createContext(0);
+const SideNavItemDepthContext = createSharedContext(
+  'SideNavItemDepthContext',
+  1,
+  0,
+);
 SideNavItemDepthContext.displayName = 'SideNavItemDepthContext';
 
 /**
@@ -797,6 +814,7 @@ export function SideNavItem({
           color="inherit"
           xstyle={[
             styles.expandChevron,
+            styles.expandChevronInRow,
             !isItemCollapsed && styles.expandChevronExpanded,
           ]}
         />
