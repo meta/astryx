@@ -7,6 +7,7 @@ import {
   useTableRowsVirtualization,
   type TableColumn,
 } from '@astryxdesign/core/Table';
+import {VStack} from '@astryxdesign/core/Layout';
 
 interface Product extends Record<string, unknown> {
   id: string;
@@ -24,12 +25,16 @@ export default function RowsVirtualizationHookUsage() {
     rowHeight: 56,
     initialViewportHeight: 320,
   });
+  // The Table scrolls inside the height its parent gives it;
+  // initialViewportHeight only sizes the first window.
   return (
-    <Table
-      data={products}
-      columns={columns}
-      idKey="id"
-      virtualization={virtualization}
-    />
+    <VStack height={320}>
+      <Table
+        data={products}
+        columns={columns}
+        idKey="id"
+        virtualization={virtualization}
+      />
+    </VStack>
   );
 }

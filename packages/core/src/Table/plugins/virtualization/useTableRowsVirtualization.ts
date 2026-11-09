@@ -20,9 +20,10 @@ export interface UseTableRowsVirtualizationConfig {
   /** Total body-row pitch, including padding and collapsed borders, in CSS pixels. */
   rowHeight: number;
   /**
-   * Optional: the Table viewport's height in CSS pixels for the first frame,
-   * on the server and before the viewport is measured. After mount, the
-   * measured viewport wins.
+   * Optional: the viewport height in CSS pixels that the first window plans
+   * for, on the server and before the viewport is measured. It does not size
+   * the viewport: the Table scrolls inside the height its parent gives it,
+   * and after mount the measured viewport sets the window.
    */
   initialViewportHeight?: number;
 }

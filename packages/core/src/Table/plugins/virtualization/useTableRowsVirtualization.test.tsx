@@ -7,7 +7,7 @@
  * @position Colocated Table virtualization runtime coverage
  */
 import {describe, it, expect, vi} from 'vitest';
-import {cleanup, render, renderHook, screen} from '@testing-library/react';
+import {act, cleanup, render, renderHook, screen} from '@testing-library/react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import * as TableApi from '@astryxdesign/core/Table';
 import {Table} from '../../Table';
@@ -127,19 +127,21 @@ describe('actual Table virtualization', () => {
     );
     cleanup();
   });
-  it('seeds the first frame from initialViewportHeight, which bounds the viewport', () => {
+  it('seeds the first frame from initialViewportHeight, which sizes nothing', () => {
     const {container} = render(<Fixture initialViewportHeight={240} />);
     const bodyRows = Array.from(
       container.querySelectorAll('tbody > tr'),
     ).filter(row => row.getAttribute('aria-hidden') !== 'true');
     // ceil(240 / 48) rows plus four of overscan.
     expect(bodyRows).toHaveLength(9);
+    // The scroll area takes its height from its parent, not from the prop.
     const viewport = screen.getByRole('table').closest('[role="group"]');
     expect(viewport).not.toBeNull();
-    expect(viewport?.getAttribute('style')).toContain('--x-maxHeight: 240px');
+    expect(viewport?.getAttribute('style') ?? '').not.toContain('240px');
+    expect(getComputedStyle(viewport as Element).height).toBe('100%');
     cleanup();
   });
-  it('windows without initialViewportHeight: the first frame seeds one row plus overscan, and the viewport fills its parent', () => {
+  it('windows without initialViewportHeight: the first frame seeds one row plus overscan', () => {
     function NoInitialHeight() {
       const virtualization = useTableRowsVirtualization({rowHeight: 48});
       return (
@@ -167,6 +169,84 @@ describe('actual Table virtualization', () => {
     const viewport = screen.getByRole('table').closest('[role="group"]');
     expect(getComputedStyle(viewport as Element).height).toBe('100%');
     cleanup();
+  });
+  describe('the scroll area takes its height from its parent', () => {
+    /** Gives the scroll area and its content element measured sizes. */
+    function measure(viewport: number, content: number) {
+      const box = (el: Element): number | null => {
+        if (el.matches('[role="group"]')) {
+          return viewport;
+        }
+        if (el.parentElement?.matches('[role="group"]')) {
+          return content;
+        }
+        return null;
+      };
+      const client = vi
+        .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+        .mockImplementation(function (this: HTMLElement) {
+          return box(this) ?? 0;
+        });
+      const scroll = vi
+        .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+        .mockImplementation(function (this: HTMLElement) {
+          return this.matches('[role="group"]')
+            ? Math.max(viewport, content)
+            : 0;
+        });
+      const offset = vi
+        .spyOn(HTMLElement.prototype, 'offsetHeight', 'get')
+        .mockImplementation(function (this: HTMLElement) {
+          return box(this) ?? 0;
+        });
+      return () => {
+        client.mockRestore();
+        scroll.mockRestore();
+        offset.mockRestore();
+      };
+    }
+    function mountedRows(container: HTMLElement): number {
+      return Array.from(container.querySelectorAll('tbody > tr')).filter(
+        row => row.getAttribute('aria-hidden') !== 'true',
+      ).length;
+    }
+    it('windows inside a bounded parent with no warning', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const restore = measure(240, 100 * 48 + 48);
+      const {container} = render(<Fixture />);
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+      expect(mountedRows(container)).toBeLessThan(data.length);
+      expect(
+        warn.mock.calls.some(call =>
+          call.join(' ').includes('no height limit'),
+        ),
+      ).toBe(false);
+      restore();
+      warn.mockRestore();
+      cleanup();
+    });
+    it('warns once and renders every row when the parent sets no height', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      // As tall as its content: the parent sets no height.
+      const restore = measure(100 * 48 + 48, 100 * 48 + 48);
+      const {container} = render(<Fixture />);
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+      expect(mountedRows(container)).toBe(data.length);
+      const unbounded = warn.mock.calls.filter(call =>
+        call.join(' ').includes('no height limit'),
+      );
+      expect(unbounded).toHaveLength(1);
+      expect(unbounded[0].join(' ')).toContain(
+        "Give the Table's parent a height",
+      );
+      restore();
+      warn.mockRestore();
+      cleanup();
+    });
   });
   it('falls back for an initialViewportHeight that is not a positive finite size', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
