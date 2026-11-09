@@ -121,7 +121,7 @@ function isTextEntryKey(event: KeyboardEvent): boolean {
   const key = typeof event.key === 'string' ? event.key : '';
   return (
     event.isComposing === true ||
-    key.length === 1 ||
+    [...key].length === 1 ||
     TEXT_ENTRY_NAMED_KEYS.has(key)
   );
 }

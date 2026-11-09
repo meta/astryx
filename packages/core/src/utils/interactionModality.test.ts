@@ -432,6 +432,28 @@ describe('interactionModality', () => {
       },
     );
 
+    it('stays true while an emoji, one character of two code units, types into a text field', async () => {
+      const {tracker, field, press} = await trackIn(
+        document.implementation.createHTMLDocument(),
+      );
+      field.ownerDocument.dispatchEvent(new Event('pointerdown'));
+
+      press(field, '\u{1F600}');
+
+      expect(tracker.isTextEntrySincePointer()).toBe(true);
+    });
+
+    it('turns false for a key of more than one character that is not a text-entry key', async () => {
+      const {tracker, field, press} = await trackIn(
+        document.implementation.createHTMLDocument(),
+      );
+      field.ownerDocument.dispatchEvent(new Event('pointerdown'));
+
+      press(field, 'ab');
+
+      expect(tracker.isTextEntrySincePointer()).toBe(false);
+    });
+
     it.each(['Tab', 'Escape', 'ArrowLeft', 'ArrowDown', 'Home'])(
       'turns false when %s navigates from a text field',
       async key => {
