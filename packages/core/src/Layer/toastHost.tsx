@@ -16,6 +16,7 @@
  */
 
 import {
+  createContext,
   use,
   useEffect,
   useState,
@@ -79,15 +80,27 @@ export interface ToastHostProps {
   children?: ReactNode;
 }
 
-/**
- * The registered viewport and the outlets that wait for one. Registered, so a
- * swizzled LayerProvider renders the viewport the package's Toast registers,
- * and the package renders a copy's.
- */
-const hostRegistry = realmValue(sharedKey('layer/toast-host', 1), () => ({
-  host: null as ComponentType<ToastHostProps> | null,
-  listeners: new Set<() => void>(),
-}));
+interface ToastHostRegistry {
+  host: ComponentType<ToastHostProps> | null;
+  readonly listeners: Set<() => void>;
+}
+
+// Every copy of Core on this React uses one registry, so a swizzled
+// LayerProvider renders the viewport the package's Toast registers. The
+// registry holds a component, so a copy on another React keeps its own.
+const hostRegistry = (() => {
+  const byReact = realmValue(
+    sharedKey('layer/toast-host', 1),
+    () => new WeakMap<typeof createContext, ToastHostRegistry>(),
+    value => value instanceof WeakMap,
+  );
+  let registry = byReact.get(createContext);
+  if (registry == null) {
+    registry = {host: null, listeners: new Set()};
+    byReact.set(createContext, registry);
+  }
+  return registry;
+})();
 
 /**
  * Registers the toast viewport, which every LayerProvider renders from then
