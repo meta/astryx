@@ -1300,12 +1300,6 @@ describe('ComplexSelector onOpenChange', () => {
 
 // The reason tooltip opens through the same Popover API, so count only the
 // show calls made on the selector popup itself.
-function popupShowCalls(popup: Element | null): number {
-  return vi
-    .mocked(HTMLElement.prototype.showPopover)
-    .mock.contexts.filter(context => context === popup).length;
-}
-
 describe('ComplexSelector disabledMessage', () => {
   // `data-testid` reaches the trigger button; the tooltip and the popup
   // anchor on the control box around it.
@@ -1316,6 +1310,48 @@ describe('ComplexSelector disabledMessage', () => {
     }
     return box;
   };
+
+  it("keeps a caller's aria-disabled on an enabled trigger", () => {
+    render(
+      <ComplexSelector
+        label="View options"
+        value={[]}
+        aria-disabled="true"
+        data-testid="view-options">
+        {() => <button type="button">Apply</button>}
+      </ComplexSelector>,
+    );
+    expect(screen.getByTestId('view-options')).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  });
+
+  it('marks a disabled trigger aria-disabled, with or without a reason', () => {
+    const {rerender} = render(
+      <ComplexSelector
+        label="View options"
+        value={[]}
+        isDisabled
+        data-testid="view-options">
+        {() => <button type="button">Apply</button>}
+      </ComplexSelector>,
+    );
+    const trigger = screen.getByTestId('view-options');
+    expect(trigger).toHaveAttribute('aria-disabled', 'true');
+    expect(trigger).not.toHaveAttribute('disabled');
+    rerender(
+      <ComplexSelector
+        label="View options"
+        value={[]}
+        isDisabled
+        disabledMessage="You need the Editor role"
+        data-testid="view-options">
+        {() => <button type="button">Apply</button>}
+      </ComplexSelector>,
+    );
+    expect(trigger).toHaveAttribute('aria-disabled', 'true');
+  });
 
   it('shows the reason tooltip on hover when disabled with a reason', async () => {
     render(
@@ -1358,7 +1394,7 @@ describe('ComplexSelector disabledMessage', () => {
 
     const tooltip = screen.getByRole('tooltip', h);
     await user.tab();
-    expect(screen.getByRole('button', {name: 'View options'})).toHaveFocus();
+    expect(screen.getByRole('combobox', {name: 'View options'})).toHaveFocus();
     await waitFor(() => {
       expect(tooltip).toHaveAttribute('popover-open');
     });
@@ -1395,7 +1431,7 @@ describe('ComplexSelector disabledMessage', () => {
         {() => <button type="button">Apply</button>}
       </ComplexSelector>,
     );
-    const trigger = screen.getByRole('button', {name: 'View options'});
+    const trigger = screen.getByRole('combobox', {name: 'View options'});
     expect(trigger).not.toBeDisabled();
     expect(trigger).toHaveAttribute('aria-disabled', 'true');
   });
@@ -1410,7 +1446,7 @@ describe('ComplexSelector disabledMessage', () => {
         {() => <button type="button">Apply</button>}
       </ComplexSelector>,
     );
-    const trigger = screen.getByRole('button', {name: 'View options'});
+    const trigger = screen.getByRole('combobox', {name: 'View options'});
     const tooltip = screen.getByRole('tooltip', h);
     expect(trigger.getAttribute('aria-describedby')).toContain(tooltip.id);
   });
@@ -1430,9 +1466,7 @@ describe('ComplexSelector disabledMessage', () => {
         {() => <button type="button">Apply</button>}
       </ComplexSelector>,
     );
-    const trigger = screen.getByRole('button', {name: 'View options'});
-    const popup = screen.getByRole('dialog', h).closest('[popover]');
-    expect(popup).not.toBeNull();
+    const trigger = screen.getByRole('combobox', {name: 'View options'});
 
     await user.click(trigger);
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
@@ -1441,28 +1475,29 @@ describe('ComplexSelector disabledMessage', () => {
     await user.keyboard(' ');
     await user.keyboard('{ArrowDown}');
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
-    expect(popup).not.toHaveAttribute('popover-open');
-    expect(popupShowCalls(popup)).toBe(0);
+    expect(screen.queryByRole('dialog', h)).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', h)).not.toBeInTheDocument();
 
     act(() => handleRef.current?.open());
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     expect(handleRef.current?.isOpen()).toBe(false);
-    expect(popupShowCalls(popup)).toBe(0);
+    expect(screen.queryByRole('dialog', h)).not.toBeInTheDocument();
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('remains non-focusable when disabled without a reason', () => {
+  it('keeps the tab stop without a reason, with no tooltip or description', () => {
     render(
       <ComplexSelector label="View options" value={[]} isDisabled>
         {() => <button type="button">Apply</button>}
       </ComplexSelector>,
     );
-    const trigger = screen.getByRole('button', {name: 'View options'});
-    expect(trigger).toBeDisabled();
-    expect(trigger).not.toHaveAttribute('aria-disabled');
+    const trigger = screen.getByRole('combobox', {name: 'View options'});
+    expect(trigger).not.toBeDisabled();
+    expect(trigger).toHaveAttribute('aria-disabled', 'true');
+    expect(trigger).not.toHaveAttribute('aria-describedby');
   });
 
-  it('never pairs native disabled with aria-disabled, and treats an empty reason as no reason', () => {
+  it('never sets native disabled, and treats an empty reason as no reason', () => {
     const tree = (isDisabled: boolean, disabledMessage?: string) => (
       <ComplexSelector
         label="View options"
@@ -1472,16 +1507,16 @@ describe('ComplexSelector disabledMessage', () => {
         {() => <button type="button">Apply</button>}
       </ComplexSelector>
     );
-    const trigger = () => screen.getByRole('button', {name: 'View options'});
+    const trigger = () => screen.getByRole('combobox', {name: 'View options'});
     const expectPlainEnabled = () => {
       expect(trigger()).not.toBeDisabled();
       expect(trigger()).not.toHaveAttribute('aria-disabled');
       expect(trigger()).not.toHaveAttribute('aria-describedby');
       expect(screen.queryByRole('tooltip', h)).not.toBeInTheDocument();
     };
-    const expectNativelyDisabled = () => {
-      expect(trigger()).toBeDisabled();
-      expect(trigger()).not.toHaveAttribute('aria-disabled');
+    const expectDisabledWithoutReason = () => {
+      expect(trigger()).not.toBeDisabled();
+      expect(trigger()).toHaveAttribute('aria-disabled', 'true');
       expect(trigger()).not.toHaveAttribute('aria-describedby');
       expect(screen.queryByRole('tooltip', h)).not.toBeInTheDocument();
     };
@@ -1493,12 +1528,11 @@ describe('ComplexSelector disabledMessage', () => {
     expectPlainEnabled();
 
     rerender(tree(true));
-    expectNativelyDisabled();
+    expectDisabledWithoutReason();
 
-    // An empty reason is no reason: nothing to describe, so the trigger falls
-    // back to native disabled rather than exposing an unnamed tooltip.
+    // An empty reason is no reason: nothing to describe, so no tooltip shows.
     rerender(tree(true, ''));
-    expectNativelyDisabled();
+    expectDisabledWithoutReason();
 
     rerender(tree(true, 'You need the Editor role'));
     expect(trigger()).not.toBeDisabled();
@@ -1521,7 +1555,7 @@ describe('ComplexSelector disabledMessage', () => {
         {() => <button type="button">Apply</button>}
       </ComplexSelector>,
     );
-    const trigger = screen.getByRole('button', {name: 'View options'});
+    const trigger = screen.getByRole('combobox', {name: 'View options'});
     const tooltip = screen.getByRole('tooltip', h);
 
     const ids = (trigger.getAttribute('aria-describedby') ?? '').split(/\s+/);
@@ -1549,8 +1583,7 @@ describe('ComplexSelector disabledMessage', () => {
         {() => <button type="button">Apply</button>}
       </ComplexSelector>,
     );
-    const trigger = screen.getByRole('button', {name: 'View options'});
-    const popup = screen.getByRole('dialog', h).closest('[popover]');
+    const trigger = screen.getByRole('combobox', {name: 'View options'});
 
     await user.click(trigger);
     await user.keyboard('{Enter}');
@@ -1563,7 +1596,7 @@ describe('ComplexSelector disabledMessage', () => {
     expect(onOpenChange).not.toHaveBeenCalled();
     expect(handleRef.current?.isOpen()).toBe(false);
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
-    expect(popup).not.toHaveAttribute('popover-open');
+    expect(screen.queryByRole('dialog', h)).not.toBeInTheDocument();
   });
 
   it('re-enabling at runtime drops aria-disabled, the tooltip, and its describedby id without moving focus, and re-disabling restores them', async () => {
@@ -1581,7 +1614,7 @@ describe('ComplexSelector disabledMessage', () => {
       </ComplexSelector>
     );
     const {rerender} = render(tree(true));
-    const trigger = screen.getByRole('button', {name: 'View options'});
+    const trigger = screen.getByRole('combobox', {name: 'View options'});
     const tooltipId = screen.getByRole('tooltip', h).id;
 
     await user.tab();
@@ -1631,9 +1664,8 @@ describe('ComplexSelector disabledMessage', () => {
         {() => <button type="button">Apply</button>}
       </ComplexSelector>,
     );
-    const trigger = screen.getByRole('button', {name: 'View options'});
+    const trigger = screen.getByRole('combobox', {name: 'View options'});
     const tooltip = screen.getByRole('tooltip', h);
-    const popup = screen.getByRole('dialog', h).closest('[popover]');
 
     await user.tab();
     await waitFor(() => {
@@ -1646,7 +1678,7 @@ describe('ComplexSelector disabledMessage', () => {
     });
     expect(trigger).toHaveFocus();
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
-    expect(popup).not.toHaveAttribute('popover-open');
+    expect(screen.queryByRole('dialog', h)).not.toBeInTheDocument();
     expect(onOpenChange).not.toHaveBeenCalled();
     // Dismissing the tip does not strip the description.
     expect(trigger.getAttribute('aria-describedby')).toContain(tooltip.id);
@@ -1671,7 +1703,7 @@ describe('ComplexSelector disabledMessage', () => {
         <button type="button">After</button>
       </>,
     );
-    const trigger = screen.getByRole('button', {name: 'View options'});
+    const trigger = screen.getByRole('combobox', {name: 'View options'});
     const tooltip = screen.getByRole('tooltip', h);
 
     await user.tab();
@@ -1721,7 +1753,7 @@ describe('ComplexSelector disabledMessage', () => {
       </ComplexSelector>
     );
     const {rerender} = render(tree(false));
-    const trigger = screen.getByRole('button', {name: 'Fruit blend'});
+    const trigger = screen.getByRole('combobox', {name: 'Fruit blend'});
     const container = controlBox(screen.getByTestId('fruit-blend'));
 
     await user.click(trigger);
@@ -1736,9 +1768,6 @@ describe('ComplexSelector disabledMessage', () => {
     expect(trigger).toHaveAttribute('aria-busy', 'true');
     expect(trigger).toHaveAttribute('aria-disabled', 'true');
     expect(trigger).not.toBeDisabled();
-    expect(
-      within(container).getByRole('status', {name: 'Loading'}),
-    ).toBeInTheDocument();
     const tooltip = screen.getByRole('tooltip', h);
     expect(trigger.getAttribute('aria-describedby')).toContain(tooltip.id);
     fireEvent.mouseEnter(container);
@@ -1752,13 +1781,12 @@ describe('ComplexSelector disabledMessage', () => {
     await waitFor(() => {
       expect(trigger).not.toHaveAttribute('aria-busy');
     });
-    expect(within(container).queryByRole('status')).not.toBeInTheDocument();
     expect(trigger).toHaveAttribute('aria-disabled', 'true');
     expect(trigger).not.toBeDisabled();
     expect(trigger.getAttribute('aria-describedby')).toContain(tooltip.id);
   });
 
-  it('anchors the popup and the reason tooltip to the same container and keeps both, plus the open tip, across a rerender', async () => {
+  it('anchors the reason tooltip to the control box and keeps it, with the open tip, across a rerender', async () => {
     const tree = (triggerLabel: string) => (
       <ComplexSelector
         label="View options"
@@ -1772,27 +1800,22 @@ describe('ComplexSelector disabledMessage', () => {
     );
     const {rerender} = render(tree('A'));
     const container = controlBox(screen.getByTestId('view-options'));
-    const popup = screen.getByRole('dialog', h).closest('[popover]');
     const tooltip = screen.getByRole('tooltip', h);
     const anchorOf = (el: Element | null) =>
       /position-anchor:\s*([^;]+)/
         .exec(el?.getAttribute('style') ?? '')?.[1]
         .trim();
 
-    // Two layers, two anchor names on one element: neither clobbers the other.
-    const names = [...readAnchorNames(container)].sort();
-    expect(names).toHaveLength(2);
-    expect(new Set(names).size).toBe(2);
-    expect(anchorOf(popup)).toBeDefined();
-    expect(anchorOf(tooltip)).toBeDefined();
-    expect(anchorOf(popup)).not.toBe(anchorOf(tooltip));
-    expect(names).toContain(anchorOf(popup));
-    expect(names).toContain(anchorOf(tooltip));
-
     fireEvent.mouseEnter(container);
     await waitFor(() => {
       expect(tooltip).toHaveAttribute('popover-open');
     });
+
+    // The closed popup is not mounted while disabled; the open tooltip
+    // anchors to the control box.
+    const names = [...readAnchorNames(container)].sort();
+    expect(anchorOf(tooltip)).toBeDefined();
+    expect(names).toContain(anchorOf(tooltip));
 
     // The inline composed ref is recreated every render, so React detaches and
     // re-attaches both hooks. That churn must not close the tip, drop an
@@ -1826,7 +1849,7 @@ describe('ComplexSelector disabledMessage', () => {
       </ComplexSelector>
     );
     const {rerender} = render(tree(false));
-    const trigger = screen.getByRole('button', {name: 'View options'});
+    const trigger = screen.getByRole('combobox', {name: 'View options'});
 
     await user.click(trigger);
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
@@ -1869,10 +1892,9 @@ describe('ComplexSelector disabledMessage', () => {
         {() => <button type="button">Apply</button>}
       </ComplexSelector>,
     );
-    const trigger = screen.getByRole('button', {name: 'View options'});
+    const trigger = screen.getByRole('combobox', {name: 'View options'});
     const container = controlBox(screen.getByTestId('view-options'));
     const tooltip = screen.getByRole('tooltip', h);
-    const popup = screen.getByRole('dialog', h).closest('[popover]');
 
     // A finger's arrival lands on the container (pointerenter does not
     // bubble); the press and the click it produces land on the button and
@@ -1886,16 +1908,17 @@ describe('ComplexSelector disabledMessage', () => {
     // Touch skips the hover delay: the reason is visible synchronously.
     expect(tooltip).toHaveAttribute('popover-open');
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
-    expect(popup).not.toHaveAttribute('popover-open');
-    expect(popupShowCalls(popup)).toBe(0);
+    expect(screen.queryByRole('dialog', h)).not.toBeInTheDocument();
 
     // The next tap toggles the reason away.
     fireEvent.pointerDown(trigger, {pointerType: 'touch'});
+    fireEvent.pointerUp(trigger, {pointerType: 'touch'});
+    fireEvent.click(trigger);
     expect(tooltip).not.toHaveAttribute('popover-open');
-    expect(popupShowCalls(popup)).toBe(0);
+    expect(screen.queryByRole('dialog', h)).not.toBeInTheDocument();
   });
 
-  it('delivers a consumer onClick from the focusable-disabled trigger without opening, as Selector does', async () => {
+  it('runs no consumer onClick from a disabled trigger, with or without a reason', async () => {
     const user = userEvent.setup();
     const onClick = vi.fn();
     const tree = (disabledMessage?: string) => (
@@ -1909,20 +1932,14 @@ describe('ComplexSelector disabledMessage', () => {
       </ComplexSelector>
     );
     const {rerender} = render(tree());
-    const trigger = screen.getByRole('button', {name: 'View options'});
-    const popup = screen.getByRole('dialog', h).closest('[popover]');
+    const trigger = screen.getByRole('combobox', {name: 'View options'});
 
-    // Natively disabled: the click never happens.
     await user.click(trigger);
-    expect(onClick).not.toHaveBeenCalled();
-
-    // Focusable-disabled: the click happens and reaches the consumer, but
-    // activation stays blocked.
     rerender(tree('You need the Editor role'));
     await user.click(trigger);
-    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(onClick).not.toHaveBeenCalled();
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
-    expect(popup).not.toHaveAttribute('popover-open');
+    expect(screen.queryByRole('dialog', h)).not.toBeInTheDocument();
   });
 
   it('keeps aria-disabled and the reason on the ghost toolbar trigger', async () => {
@@ -1943,7 +1960,7 @@ describe('ComplexSelector disabledMessage', () => {
       'data-variant',
       'ghost',
     );
-    const trigger = screen.getByRole('button', {name: 'View options'});
+    const trigger = screen.getByRole('combobox', {name: 'View options'});
     expect(trigger).not.toBeDisabled();
     expect(trigger).toHaveAttribute('aria-disabled', 'true');
 

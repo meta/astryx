@@ -41,7 +41,7 @@ import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {Field, inputWrapperStyles} from '../Field';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {Spinner} from '../Spinner';
-import {useTooltip} from '../Tooltip';
+import {useTooltip} from '../Tooltip/useTooltip';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import type {LayerAlignment, LayerPlacement} from '../Layer/useLayer';
 import {usePopover} from '../Popover/usePopover';
@@ -384,8 +384,6 @@ export interface ComplexSelectorProps<Value> extends Omit<
    * Click handler on the trigger. It runs before the popup opens; call
    * `preventDefault()` to keep the popup closed. A press elsewhere in the
    * control box goes through the trigger, so it reaches this handler too.
-   * While disabled with a `disabledMessage`, the trigger stays focusable, so
-   * this handler still runs on a press; opening stays blocked.
    * With `renderTrigger` it lands on the caller's control and runs after the
    * built-in toggle, which it cannot cancel.
    */
@@ -425,16 +423,14 @@ export interface ComplexSelectorProps<Value> extends Omit<
   /** Blocks opening and value commits, including from an already-open popup. */
   isDisabled?: boolean;
   /**
-   * Explains why the selector is disabled. When set together with
-   * `isDisabled`, the selector shows a tooltip with this text on hover and
-   * keyboard focus, and the trigger stays focusable (via `aria-disabled`)
-   * so the reason is discoverable by keyboard and assistive technology.
-   * Activation stays blocked, but a caller `onClick` still runs on a press.
-   * Has no effect with `renderTrigger`, where the caller owns the control; a
-   * development warning says so.
+   * Explains why the selector is disabled. With `isDisabled`, a tooltip shows
+   * this text on hover and keyboard focus, and the text describes the trigger
+   * through `aria-describedby`. The disabled trigger keeps its tab stop and
+   * still cannot open. Has no effect with `renderTrigger`, where the caller
+   * owns the control; a development warning says so.
    *
-   * Use this instead of wrapping a disabled selector in `Tooltip` — disabled
-   * controls don't emit the pointer events an external tooltip needs.
+   * Use this instead of wrapping a disabled selector in `Tooltip`, whose text
+   * would not describe the trigger.
    *
    * @example
    * ```

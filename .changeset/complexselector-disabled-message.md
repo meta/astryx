@@ -2,8 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[feat] ComplexSelector: disabledMessage keeps a disabled trigger reachable and explains why it is disabled (#5941)
-
-A disabled ComplexSelector could not say why. `disabledMessage` adopts the input-field family's disabled-reason contract: with `isDisabled`, the trigger stays focusable via `aria-disabled`, a tooltip shows the reason on hover and keyboard focus and is linked through `aria-describedby`, and opening the popup stays blocked by pointer, keyboard, and the imperative handle. Without a reason the trigger is natively disabled exactly as before. Same recipe as Selector and MultiSelector.
+[feat] ComplexSelector: `disabledMessage` explains why a disabled selector is disabled. With `isDisabled`, a tooltip shows the reason on hover and keyboard focus, and the reason describes the trigger through `aria-describedby`. The disabled trigger keeps its tab stop, and pointer, keyboard and the imperative handle still cannot open the popup. With `renderTrigger`, the caller owns the control, so `disabledMessage` has no effect and warns in development.
 
 @AKnassa
