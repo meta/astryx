@@ -2289,7 +2289,11 @@ function ListReorderModeHint({
   // The latest layer handle, for the effect below, which re-runs only when
   // the mode's row changes.
   const layerRef = useRef(layer);
-  layerRef.current = layer;
+  // Syncs the hint effect's layer handle with the committed one, before that
+  // effect reads it.
+  useIsomorphicLayoutEffect(() => {
+    layerRef.current = layer;
+  });
   const hintRef = useRef<HTMLElement | null>(null);
   // External system: the hint's popover in the top layer (useLayer),
   // anchored to the handle of the row in reorder mode. Shown while that row
