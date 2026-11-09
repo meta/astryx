@@ -3362,6 +3362,18 @@ jobs:
           if [ "$SCOPED" = true ]; then VISUAL_ARGS=(--scoped); fi
           node .github/scripts/visual-scope.mjs --github-output "$GITHUB_OUTPUT" "${VISUAL_ARGS[@]}" < "$FILES_PATH"
 
+      # The baseline is read from the head, which built the Storybook this job
+      # compares: a branch behind a main baseline refresh would otherwise show
+      # main's accepted pixel changes as its own.
+      - name: Check out the head's visual baseline
+        if: steps.visual-scope.outputs.has_stable_visual == 'true' && steps.visual-scope.outputs.broad_stable_visual == 'true'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: .head-visual-baseline
+          sparse-checkout: .github/visual-baseline
+          persist-credentials: false
+
       - name: Setup Node and pnpm
         if: steps.visual-scope.outputs.has_stable_visual == 'true' && steps.visual-scope.outputs.broad_stable_visual == 'true'
         uses: ./.github/actions/setup
@@ -3394,7 +3406,7 @@ jobs:
         run: |
           node .github/scripts/visual-gate/gate.mjs scout \
             --storybook-dir apps/storybook/dist \
-            --baseline .github/visual-baseline \
+            --baseline .head-visual-baseline/.github/visual-baseline \
             --shard "${{ matrix.shard }}/${{ strategy.job-total }}" \
             --concurrency 4 \
             --observations-out ".visual-scout/observations-${{ matrix.shard }}.json"
@@ -3481,6 +3493,18 @@ jobs:
           if [ "$SCOPED" = true ]; then VISUAL_ARGS=(--scoped); fi
           node .github/scripts/visual-scope.mjs --github-output "$GITHUB_OUTPUT" "${VISUAL_ARGS[@]}" < "$FILES_PATH"
 
+      # The baseline is read from the head, which built the Storybook this job
+      # compares: a branch behind a main baseline refresh would otherwise show
+      # main's accepted pixel changes as its own.
+      - name: Check out the head's visual baseline
+        if: github.event_name == 'pull_request' && steps.visual-scope.outputs.has_stable_visual == 'true'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: .head-visual-baseline
+          sparse-checkout: .github/visual-baseline
+          persist-credentials: false
+
       - name: Setup Node and pnpm
         if: github.event_name != 'pull_request' || steps.visual-scope.outputs.has_stable_visual == 'true'
         uses: ./.github/actions/setup
@@ -3510,7 +3534,7 @@ jobs:
           node .github/scripts/touched-components.mjs scope \
             --analysis analysis.json \
             --files "$FILES_PATH" \
-            --baseline-manifest .github/visual-baseline/manifest.json \
+            --baseline-manifest .head-visual-baseline/.github/visual-baseline/manifest.json \
             --out touched-scope.json \
             --wide-verdict .visual-run/verdict.json
 
@@ -3598,7 +3622,7 @@ jobs:
           run_gate() {
             node .github/scripts/visual-gate/gate.mjs "$COMMAND" \
               --storybook-dir apps/storybook/dist \
-              --baseline .github/visual-baseline \
+              --baseline .head-visual-baseline/.github/visual-baseline \
               --out .visual-run \
               ${SCOPE_ARGS[@]+"${SCOPE_ARGS[@]}"} \
               ${OBS_ARGS[@]+"${OBS_ARGS[@]}"} \
@@ -3627,7 +3651,7 @@ jobs:
             set +e
             node .github/scripts/visual-gate/gate.mjs release \
               --storybook-dir apps/storybook/dist \
-              --baseline .github/visual-baseline \
+              --baseline .head-visual-baseline/.github/visual-baseline \
               --out .visual-run \
               ${OBS_ARGS[@]+"${OBS_ARGS[@]}"} \
               --summary-output visual-summary.md
@@ -3658,7 +3682,7 @@ jobs:
           set +e
           node .github/scripts/visual-gate/gate.mjs check \
             --storybook-dir apps/storybook/dist \
-            --baseline .github/visual-baseline \
+            --baseline .head-visual-baseline/.github/visual-baseline \
             --out .visual-run \
             --tiers component \
             --components "$COMPONENTS" \
@@ -4216,15 +4240,17 @@ jobs:
         with:
           persist-credentials: false
 
-      # The accessibility baseline is read from the head, which built the
-      # Storybook this job audits: a branch behind a main fix that dropped a
-      # baseline entry would otherwise report that entry as new.
+      # The accessibility and visual baselines are read from the head, which
+      # built the Storybook this job audits: a branch behind a main fix that
+      # dropped a baseline entry would otherwise report that entry as new.
       - name: Check out the head's accessibility baseline
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           path: .head-baseline
-          sparse-checkout: .github/a11y-baseline.json
+          sparse-checkout: |
+            .github/a11y-baseline.json
+            .github/visual-baseline/manifest.json
           sparse-checkout-cone-mode: false
           persist-credentials: false
 
@@ -4248,7 +4274,7 @@ jobs:
           node .github/scripts/touched-components.mjs scope \
             --analysis analysis.json \
             --files "$FILES_PATH" \
-            --baseline-manifest .github/visual-baseline/manifest.json \
+            --baseline-manifest .head-baseline/.github/visual-baseline/manifest.json \
             --head-sha "$HEAD_SHA" \
             --out touched-components.json
 
@@ -4377,7 +4403,7 @@ jobs:
             --visual .visual-run/verdict.json \
             --visual-manifest .visual-run/manifest.json \
             --visual-job "$VISUAL_JOB" \
-            --baseline-manifest .github/visual-baseline/manifest.json \
+            --baseline-manifest .head-baseline/.github/visual-baseline/manifest.json \
             --a11y a11y-report.json \
             --a11y-baseline .head-baseline/.github/a11y-baseline.json \
             --a11y-step "$A11Y_STEP" \
