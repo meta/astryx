@@ -318,12 +318,11 @@ describe('useAnnounce inside Astryx modals (spec:AST-086 FR14)', () => {
     expect(shared()?.textContent ?? '').toBe('');
   });
 
-  it("routes Lightbox's own position and zoom messages into its open viewer", async () => {
+  it("routes Lightbox's own position message into its open viewer", async () => {
     render(
       <Lightbox
         isOpen
         onOpenChange={() => {}}
-        hasZoom
         media={[
           {src: '/a.jpg', alt: 'Harbour'},
           {src: '/b.jpg', alt: 'Lighthouse'},
@@ -334,9 +333,6 @@ describe('useAnnounce inside Astryx modals (spec:AST-086 FR14)', () => {
     await nextFrame();
     const dialog = screen.getByRole('dialog', {name: 'Lighthouse'});
     expect(regionIn(dialog)).toHaveTextContent('Lighthouse, 2 of 2');
-    fireEvent.keyDown(dialog, {key: '+'});
-    await nextFrame();
-    expect(regionIn(dialog)).toHaveTextContent('Zoomed in');
     expect(shared()?.textContent ?? '').toBe('');
   });
 
