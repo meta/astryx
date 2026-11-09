@@ -1484,8 +1484,9 @@ export class ListReorderController implements ListReorderSession {
     if (element === (doc.scrollingElement ?? doc.documentElement)) {
       return;
     }
-    // A scroll around the scroller moves it on screen by what it measures,
-    // nothing when it is fixed or stuck. The list moves with it.
+    // An outer scroll moves the scroller on screen by the change in its
+    // measured top. A fixed or stuck scroller does not move. The list moves
+    // with its scroller.
     const top = element.getBoundingClientRect().top + element.clientTop;
     const moved = scroller.top - top;
     session.scrolled += moved;
