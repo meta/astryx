@@ -1174,6 +1174,57 @@ describe('Lightbox', () => {
       expect(zoomTarget()).toHaveAttribute('aria-pressed', 'false');
     });
 
+    it('leaves Ctrl+0 and Cmd+0 to the browser', () => {
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={{src: '/photo.jpg', alt: 'Photo'}}
+          hasZoom
+        />,
+      );
+      const dialog = document.querySelector('dialog')!;
+      fireEvent.keyDown(dialog, {key: '+'});
+      expect(fireEvent.keyDown(dialog, {key: '0', ctrlKey: true})).toBe(true);
+      expect(fireEvent.keyDown(dialog, {key: '0', metaKey: true})).toBe(true);
+      expect(zoomTarget()).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('announces a zoom inside the open modal viewer', async () => {
+      // jsdom has no :modal; treat an open dialog as modal, as showModal()
+      // makes it in a browser.
+      const matches = Element.prototype.matches;
+      const spy = vi
+        .spyOn(Element.prototype, 'matches')
+        .mockImplementation(function (this: Element, selector: string) {
+          return selector === ':modal'
+            ? this instanceof HTMLDialogElement && this.open
+            : matches.call(this, selector);
+        });
+      try {
+        render(
+          <Lightbox
+            isOpen={true}
+            onOpenChange={() => {}}
+            media={{src: '/photo.jpg', alt: 'Photo'}}
+            hasZoom
+          />,
+        );
+        const dialog = document.querySelector('dialog')!;
+        fireEvent.keyDown(dialog, {key: '+'});
+        await waitFor(() => {
+          expect(
+            dialog.querySelector(
+              ':scope > [data-astryx-modal-live-region="polite"]',
+            ),
+          ).toHaveTextContent('Zoomed in');
+        });
+        expect(politeRegion()?.textContent ?? '').toBe('');
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
     it('pans with arrow keys while zoomed instead of navigating the gallery', () => {
       const onIndexChange = vi.fn();
       render(

@@ -337,6 +337,8 @@ export const WithHook: Story = {
  */
 export const OpenViewer: Story = {
   name: 'Open Viewer',
+  // Kept off the docs page because the viewer opens on load.
+  tags: ['!autodocs'],
   render: () => {
     const [isOpen, setIsOpen] = useState(true);
     const [index, setIndex] = useState(0);

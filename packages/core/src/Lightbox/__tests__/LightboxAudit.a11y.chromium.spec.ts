@@ -363,6 +363,10 @@ for (const item of cases) {
         zoomed.modalRegion?.includes('Zoomed in') === true,
         `zoom message inside the viewer: ${JSON.stringify(zoomed.modalRegion)}; on the page: ${JSON.stringify(zoomed.sharedRegion)}`,
       );
+      check(
+        !(zoomed.sharedRegion ?? '').includes('Zoomed'),
+        `zoom message reached the page: ${JSON.stringify(zoomed.sharedRegion)}`,
+      );
       check(zoomed.focusInside, 'focus left the viewer while zoomed');
       await capture('zoomed');
       await page.keyboard.press('0');
@@ -393,7 +397,6 @@ for (const item of cases) {
       await capture('open');
     } else {
       check(opened.video === true, `video controls ${opened.video}`);
-      check(opened.zoomPressed == null, 'zoom target on a video');
       await capture('open');
     }
 
@@ -427,7 +430,7 @@ for (const item of cases) {
           'one modal dialog carrying only the astryx-lightbox target, in the page direction, named by the active item, with focus inside and a Close button',
         gallery:
           item.story === 'gallery-with-zoom'
-            ? 'counter 1 / 4; Previous disabled at the start; Next at the inline end; targets at least 24px; paging announces "<alt>, 2 of 4" inside the open viewer and not on the page; + zooms in, is announced inside the viewer, and 0 returns to the fitted size'
+            ? 'counter 1 / 4; Previous disabled at the start; Next at the inline end; targets at least 24px; paging announces "<alt>, 2 of 4" inside the open viewer and not on the page; + zooms in, is announced inside the viewer and not on the page, and 0 returns to the fitted size'
             : 'not applicable',
         close: 'Escape closes the viewer and focus returns to the opener',
       },

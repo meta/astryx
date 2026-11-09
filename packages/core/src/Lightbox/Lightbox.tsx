@@ -473,8 +473,8 @@ const KEYBOARD_PAN_OFFSETS: Record<string, [number, number]> = {
 const VIDEO_CONTROLS_BAND = 48;
 
 /**
- * Lends the viewer an announcer from inside its own dialog. A screen reader
- * hears the viewer's messages only from inside the open modal viewer.
+ * Gives Lightbox an announce function inside its dialog. While the modal
+ * viewer is open, a screen reader reads only messages inside it.
  */
 function ViewerAnnouncer({ref}: {ref: Ref<AnnounceFn>}) {
   const announce = useAnnounce();
@@ -483,7 +483,7 @@ function ViewerAnnouncer({ref}: {ref: Ref<AnnounceFn>}) {
 }
 
 /**
- * A fullscreen overlay for viewing images at full resolution.
+ * A fullscreen overlay for viewing images and videos at full resolution.
  *
  * Supports single image and gallery modes. In gallery mode, it provides
  * prev/next navigation via buttons and arrow keys. The arrow keys follow the
@@ -1244,7 +1244,13 @@ export function Lightbox({
           stage.zoomIn();
           return;
         }
-        if (e.key === '-' || e.key === '0') {
+        if (e.key === '-') {
+          e.preventDefault();
+          stage.zoomOut();
+          return;
+        }
+        // Ctrl or Cmd with 0 resets the browser's page zoom; leave it.
+        if (e.key === '0' && !e.ctrlKey && !e.metaKey && !e.altKey) {
           e.preventDefault();
           stage.zoomOut();
           return;
