@@ -22,7 +22,7 @@ const columns: TableColumn<Product>[] = [{key: 'name', header: 'Product'}];
 export default function RowsVirtualizationHookUsage() {
   const virtualization = useTableRowsVirtualization({
     rowHeight: 56,
-    viewportHeight: 320,
+    initialViewportHeight: 320,
   });
   return (
     <Table

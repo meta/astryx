@@ -29,17 +29,17 @@ const data: Item[] = Array.from({length: 100}, (_, i) => ({
 function Fixture({
   items = data,
   rowHeight = 48,
-  viewportHeight = 240,
+  initialViewportHeight = 240,
   tableColumns = columns,
 }: {
   items?: Item[];
   rowHeight?: number;
-  viewportHeight?: number;
+  initialViewportHeight?: number;
   tableColumns?: TableColumn<Item>[];
 }) {
   const virtualization = useTableRowsVirtualization({
     rowHeight,
-    viewportHeight,
+    initialViewportHeight,
   });
   return (
     <Table
@@ -60,9 +60,9 @@ describe('Table virtualization capability', () => {
   });
   it('is immutable geometry intent with stable identity and no public payload or knobs', () => {
     const {result, rerender} = renderHook(
-      ({rowHeight, viewportHeight}) =>
-        useTableRowsVirtualization({rowHeight, viewportHeight}),
-      {initialProps: {rowHeight: 48, viewportHeight: 240}},
+      ({rowHeight, initialViewportHeight}) =>
+        useTableRowsVirtualization({rowHeight, initialViewportHeight}),
+      {initialProps: {rowHeight: 48, initialViewportHeight: 240}},
     );
     const original = result.current;
     expect(Object.keys(original)).toEqual([]);
@@ -70,14 +70,14 @@ describe('Table virtualization capability', () => {
     expect(Object.isFrozen(getTableVirtualizationConfig(original))).toBe(true);
     expect(getTableVirtualizationConfig(original)).toEqual({
       rowHeight: 48,
-      viewportHeight: 240,
+      initialViewportHeight: 240,
     });
     expect(
-      getTableVirtualizationConfig({rowHeight: 48, viewportHeight: 240}),
+      getTableVirtualizationConfig({rowHeight: 48, initialViewportHeight: 240}),
     ).toBeUndefined();
-    rerender({rowHeight: 48, viewportHeight: 240});
+    rerender({rowHeight: 48, initialViewportHeight: 240});
     expect(result.current).toBe(original);
-    rerender({rowHeight: 50, viewportHeight: 240});
+    rerender({rowHeight: 50, initialViewportHeight: 240});
     expect(result.current).not.toBe(original);
   });
 });
@@ -127,6 +127,57 @@ describe('actual Table virtualization', () => {
     );
     cleanup();
   });
+  it('seeds the first frame from initialViewportHeight, which bounds the viewport', () => {
+    const {container} = render(<Fixture initialViewportHeight={240} />);
+    const bodyRows = Array.from(
+      container.querySelectorAll('tbody > tr'),
+    ).filter(row => row.getAttribute('aria-hidden') !== 'true');
+    // ceil(240 / 48) rows plus four of overscan.
+    expect(bodyRows).toHaveLength(9);
+    const viewport = screen.getByRole('table').closest('[role="group"]');
+    expect(viewport).not.toBeNull();
+    expect(viewport?.getAttribute('style')).toContain('--x-maxHeight: 240px');
+    cleanup();
+  });
+  it('windows without initialViewportHeight: the first frame seeds one row plus overscan, and the viewport fills its parent', () => {
+    function NoInitialHeight() {
+      const virtualization = useTableRowsVirtualization({rowHeight: 48});
+      return (
+        <Table
+          data={data}
+          columns={columns}
+          idKey="id"
+          virtualization={virtualization}
+        />
+      );
+    }
+    const html = renderToStaticMarkup(<NoInitialHeight />);
+    const server = document.createElement('div');
+    server.innerHTML = html;
+    const serverRows = Array.from(server.querySelectorAll('tbody > tr')).filter(
+      row => row.getAttribute('aria-hidden') !== 'true',
+    );
+    expect(serverRows).toHaveLength(5);
+    const {container} = render(<NoInitialHeight />);
+    const bodyRows = Array.from(
+      container.querySelectorAll('tbody > tr'),
+    ).filter(row => row.getAttribute('aria-hidden') !== 'true');
+    expect(bodyRows).toHaveLength(5);
+    expect(screen.getByRole('table')).toHaveAttribute('aria-rowcount', '101');
+    const viewport = screen.getByRole('table').closest('[role="group"]');
+    expect(getComputedStyle(viewport as Element).height).toBe('100%');
+    cleanup();
+  });
+  it('falls back for an initialViewportHeight that is not a positive finite size', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const {container} = render(<Fixture initialViewportHeight={0} />);
+    const bodyRows = Array.from(
+      container.querySelectorAll('tbody > tr'),
+    ).filter(row => row.getAttribute('aria-hidden') !== 'true');
+    expect(bodyRows).toHaveLength(data.length);
+    warn.mockRestore();
+    cleanup();
+  });
   it('falls back before rendering unsupported custom content or duplicate identity', () => {
     const renderCell = vi.fn((item: Item) => <span>{item.label}</span>);
     const {container} = render(
@@ -162,7 +213,7 @@ describe('actual Table virtualization', () => {
     }) {
       const virtualization = useTableRowsVirtualization({
         rowHeight: 48,
-        viewportHeight: 240,
+        initialViewportHeight: 240,
       });
       return (
         <Table

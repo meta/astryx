@@ -6,7 +6,7 @@ export const docs = {
   subComponentOf: 'Table',
   displayName: 'useTableRowsVirtualization',
   description:
-    'Returns an opaque capability for fixed-height flat-row Table windowing. Pass the capability to Table.virtualization and keep the complete data, columns, explicit stable idKey and plugins on Table. Sizes are positive finite CSS pixels. Supported rows use single-line content; explicit wrapping, arbitrary custom renderers, non-flat rows or invalid identity use ordinary full rendering. Windowing uses the Table-owned scroll wrapper; a caller-provided scrollWrapper takes diagnostic full-render fallback. Mounted rows retain native table semantics and full-table positions; unmounted rows are not promised screen-reader discovery.',
+    'Returns an opaque capability for fixed-height flat-row Table windowing. Pass the capability to Table.virtualization and keep the complete data, columns, explicit stable idKey and plugins on Table. Sizes are positive finite CSS pixels. Give the viewport a bounded height: initialViewportHeight, or a block-sized parent. Supported rows use single-line content; explicit wrapping, arbitrary custom renderers, non-flat rows or invalid identity use ordinary full rendering. Windowing uses the Table-owned scroll wrapper; a caller-provided scrollWrapper takes diagnostic full-render fallback. Mounted rows retain native table semantics and full-table positions; unmounted rows are not promised screen-reader discovery.',
   props: [
     {
       name: 'rowHeight',
@@ -16,11 +16,10 @@ export const docs = {
         'Total body-row pitch in CSS pixels, including existing density padding and collapsed borders. Must fit text and supported controls without reducing their size.',
     },
     {
-      name: 'viewportHeight',
+      name: 'initialViewportHeight',
       type: 'number',
-      required: true,
       description:
-        'Bounded Table-owned viewport height in CSS pixels. Table accounts for its headers and chrome.',
+        "Optional: the Table viewport's height in CSS pixels for the first frame, on the server and before the viewport is measured; it also bounds the viewport. After mount, the measured viewport sets the window. Without it, the viewport fills its block-sized parent, so give that parent a height, and the first frame renders one row plus overscan. Table accounts for its headers and chrome.",
     },
   ],
 };
@@ -32,7 +31,7 @@ export const docsDense = {
   propDescriptions: {
     rowHeight:
       'Total body-row pitch including density padding and borders; text and supported controls must fit.',
-    viewportHeight:
-      'Bounded Table-owned viewport height; headers and chrome are accounted for by Table.',
+    initialViewportHeight:
+      'Optional first-frame viewport height that also bounds the viewport; measured viewport wins after mount; without it the viewport fills its sized parent.',
   },
 };

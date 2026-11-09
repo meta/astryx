@@ -132,6 +132,10 @@ const tableStyles = stylex.create({
 
 const scrollWrapperStyles = stylex.create({
   viewport: (height: number) => ({height, maxHeight: height}),
+  fillViewport: {
+    height: '100%',
+    minHeight: 0,
+  },
   base: {
     overflowX: 'auto',
     WebkitOverflowScrolling: 'touch',
@@ -259,7 +263,9 @@ function TableScrollWrapper({
         // theme restyles through the focus-outline tokens.
         focusOutlineStyles.focusVisible,
         scrollWrapperStyles.focusRingInset,
-        hasBlockViewport && scrollWrapperStyles.viewport(viewportHeight),
+        typeof viewportHeight === 'number'
+          ? scrollWrapperStyles.viewport(viewportHeight)
+          : viewportHeight === 'fill' && scrollWrapperStyles.fillViewport,
         ...(pluginStyles ?? []),
       ),
       pluginClassName,
