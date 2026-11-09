@@ -7,7 +7,8 @@
  * @input React, StyleX, Core's theme tokens and hooks, TabBar's touch layer
  *   (TabBarTouch.ts), its geometry (tabBarModel.ts), its UIKit values
  *   (uikitTabBar.ts) and its panel scroll (panelScroll.ts)
- * @output TabBar (iOS 26's floating tab bar) and TabBarItem
+ * @output TabBar (iOS 26's floating tab bar), TabBarItem, and the tab reading
+ *   TabBarMoreList shares (overflowItems, badgedName)
  * @position Lab component: the phone presentation of an app's top-level
  *   sections, UITabBarController's counterpart
  *
@@ -39,6 +40,7 @@ import {
   typographyVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
 import {useTranslator} from '@astryxdesign/core/i18n';
+import {Icon} from '@astryxdesign/core/Icon';
 import {mergeProps, themeProps} from '@astryxdesign/core/utils';
 import {tabBarItemMarker} from './tabBar.stylex';
 import {tabBar} from './uikitTabBar';
@@ -110,6 +112,13 @@ export interface TabBarProps extends Omit<
   'aria-label'?: string;
   /** Names the tab list after another element; it wins over both. */
   'aria-labelledby'?: string;
+  /**
+   * The More tab's value, when there are more than five tabs. The bar shows the
+   * first four and a More tab, which `value` selects as this or as any tab past
+   * the fourth (UIKit's `moreNavigationController`).
+   * @default 'more'
+   */
+  moreValue?: string;
   /** The tabs: `TabBarItem` elements, in order. */
   children: ReactNode;
 }
@@ -130,13 +139,42 @@ function readItems(children: ReactNode): TabBarItemProps[] {
   );
 }
 
-function isDisabledItem(item: TabBarItemProps | undefined): boolean {
+/** Whether a tab is disabled, read as Core's Tab reads `aria-disabled`. */
+export function isDisabledItem(item: TabBarItemProps | undefined): boolean {
   const disabled = item?.['aria-disabled'];
   return disabled === true || disabled === 'true';
 }
 
-function hasBadge(badge: string | number | undefined): boolean {
+/** More than this many tabs and the bar shows the first four and More. */
+const MAX_TABS = 5;
+
+/**
+ * The tabs past the fourth when there are more than five: the ones a More
+ * tab holds.
+ */
+export function overflowItems(children: ReactNode): TabBarItemProps[] {
+  const items = readItems(children);
+  return items.length > MAX_TABS ? items.slice(MAX_TABS - 1) : [];
+}
+
+export function hasBadge(badge: string | number | undefined): boolean {
   return badge != null && badge !== '';
+}
+
+/**
+ * A badged item's accessible name: one message with its label and badge, so
+ * a tab and its More row read the same. Undefined without a badge.
+ */
+export function badgedName(
+  item: TabBarItemProps,
+  t: ReturnType<typeof useTranslator>,
+): string | undefined {
+  return hasBadge(item.badge)
+    ? t('@astryx.tabBar.badgedItem', {
+        label: item.label,
+        badge: item.badgeLabel ?? String(item.badge),
+      })
+    : undefined;
 }
 
 // =============================================================================
@@ -510,6 +548,9 @@ function ItemFace({
  * Each button spans to halfway to its neighbours, so a press goes to the
  * nearest item. While the lens moves under a finger, a copy of the items rides
  * in it, so an item half under the lens is half tinted.
+ *
+ * Past five tabs, More takes the fifth slot at the five-tab layout, as
+ * UITabBarController does.
  */
 /**
  * The iOS 26 tab bar: the app's top-level sections as a floating capsule at
@@ -530,6 +571,7 @@ export function TabBar({
   label,
   'aria-label': ariaLabel,
   'aria-labelledby': ariaLabelledBy,
+  moreValue = 'more',
   children,
   xstyle,
   className,
@@ -544,9 +586,28 @@ export function TabBar({
     ariaLabelledBy != null
       ? undefined
       : (ariaLabel ?? label ?? t('@astryx.tabList.label'));
-  const items = readItems(children);
+  const allItems = readItems(children);
+  const overflow = overflowItems(children);
+  const hasMore = overflow.length > 0;
+  // UITabBarController shows four tabs and More past five.
+  const items: TabBarItemProps[] = hasMore
+    ? [
+        ...allItems.slice(0, MAX_TABS - 1),
+        {
+          value: moreValue,
+          label: t('@astryx.tabBar.more'),
+          icon: <Icon icon="moreHorizontal" size="lg" />,
+        },
+      ]
+    : allItems;
   const count = items.length;
-  const selectedIndex = items.findIndex(item => item.value === value);
+  // iOS keeps More selected while it shows a tab it holds.
+  const isMoreSelected =
+    hasMore &&
+    (value === moreValue || overflow.some(item => item.value === value));
+  const selectedIndex = isMoreSelected
+    ? MAX_TABS - 1
+    : items.findIndex(item => item.value === value);
   const baseId = useId();
 
   // UIKit's motion belongs to a finger (a coarse primary pointer, iOS and
@@ -565,9 +626,14 @@ export function TabBar({
       if (isDisabledItem(item)) {
         return;
       }
-      if (item.value === value) {
+      // More again while it holds a tab returns its list, as iOS pops More's
+      // navigation stack: a reselect. Only the selected tab scrolls its panel.
+      if (
+        item.value === value ||
+        (item.value === moreValue && isMoreSelected)
+      ) {
         const document = capsuleRef.current?.ownerDocument;
-        if (document != null) {
+        if (item.value === value && document != null) {
           scrollPanelToTop(document, item.panelId);
         }
         onReselect?.(item.value);
@@ -575,7 +641,7 @@ export function TabBar({
         onChange(item.value);
       }
     },
-    [value, onChange, onReselect],
+    [value, onChange, onReselect, moreValue, isMoreSelected],
   );
   const lens = useTabBarLens({
     capsuleRef,
@@ -634,14 +700,7 @@ export function TabBar({
                 isSelected || (selectedIndex < 0 && index === 0) ? 0 : -1
               }
               // A badge is part of the name: one message with both.
-              aria-label={
-                hasBadge(item.badge)
-                  ? t('@astryx.tabBar.badgedItem', {
-                      label: item.label,
-                      badge: item.badgeLabel ?? String(item.badge),
-                    })
-                  : undefined
-              }
+              aria-label={badgedName(item, t)}
               data-tab-bar-value={item.value}
               onClick={() => choose(item)}
               {...mergeProps(
