@@ -28,9 +28,12 @@ import type {Locator, Page} from '@playwright/test';
 import {defineAnimatedProperties} from './animated-properties';
 import {defineCurveEnd} from './curve-end';
 import {
+  FRAME_STARVATION_MS,
+  FrameStarvationError,
   frameStats,
   trackMarker,
   type CastFrame,
+  type FrameShortfall,
   type FrameStats,
   type TrackedFrame,
 } from './frames';
@@ -973,7 +976,25 @@ function motionStepPx(values: readonly number[]): number {
  * A main-thread animation still fails: the control moves and it does not.
  * `maxMedianFrameMs`, when given, still applies; `minMovedFraction` and the
  * absolute stall, frame and motion limits do not.
+ *
+ * With a control, a run the machine starved of frames proves nothing. So it
+ * throws `FrameStarvationError` with its numbers and returns no verdict. A
+ * starved run has two marks. Its control moved on fewer than
+ * `minJudgedFrames` frames, and the cast showed no frame for longer than
+ * `FRAME_STARVATION_MS` in the block. Without a control, a block with no
+ * frame is a frozen animation's, and it fails the verdict. `pooledBusyProof`
+ * reads each run without the throw and judges the runs together.
  */
+export function busyWindowProof(
+  ...args: Parameters<typeof readBusyWindow>
+): BusyProof {
+  const {proof, starvation} = readBusyWindow(...args);
+  if (starvation != null) {
+    throw new FrameStarvationError(starvation);
+  }
+  return proof;
+}
+
 /**
  * How far around its judged part a busy proof reads frames, ms: the rest
  * before it and the frame cadence on both sides. A proof that decodes only
@@ -981,7 +1002,8 @@ function motionStepPx(values: readonly number[]): number {
  */
 export const BUSY_PROOF_LOOKAROUND_MS = 250;
 
-export function busyWindowProof(
+/** The proof `busyWindowProof` returns, and the starvation it throws. */
+function readBusyWindow(
   tracked: readonly TrackedFrame[],
   window: BusyWindow,
   {
@@ -1065,7 +1087,7 @@ export function busyWindowProof(
      */
     control?: readonly TrackedFrame[];
   } = {},
-): BusyProof {
+): {proof: BusyProof; starvation: FrameShortfall | null} {
   let end = window.to - marginMs;
   if (settledWithin != null && settledWithinSteps != null) {
     throw new Error(
@@ -1565,6 +1587,7 @@ export function busyWindowProof(
     };
   }
   const failures: string[] = [];
+  let starvation: FrameShortfall | null = null;
   if (stats.frames === 0 && controlRead == null) {
     failures.push('no frame presented in the judged part');
   } else if (stats.medianFrameMs > maxMedianFrameMs) {
@@ -1575,14 +1598,26 @@ export function busyWindowProof(
   if (controlRead != null) {
     if (controlRead.moved < minJudgedFrames) {
       // How starved the cast was over the whole block, as the pacing and
-      // frame errors say it.
+      // frame errors say it. Every frame the cast delivered counts, with the
+      // component on screen or not.
       const blockFrames = tracked
-        .filter(f => f.box != null && f.t > window.from && f.t < window.to)
+        .filter(f => f.t > window.from && f.t < window.to)
         .map(f => f.t);
       const castEdges = [window.from, ...blockFrames, window.to];
       const castGapMs = Math.max(
         ...castEdges.slice(1).map((t, k) => t - castEdges[k]),
       );
+      // The control is a compositor animation: when it moved too little and
+      // no frame came for that long, the machine starved the run.
+      if (castGapMs > FRAME_STARVATION_MS) {
+        starvation = {
+          by: 'busyWindowProof',
+          during: `a ${Math.round(window.to - window.from)} ms block held the main thread, and the control moved on ${controlRead.moved} of them`,
+          frames: blockFrames.length,
+          min: minJudgedFrames,
+          longestGapMs: castGapMs,
+        };
+      }
       failures.push(
         `the control moved on ${controlRead.moved} frames in the judged part, under ${minJudgedFrames}: the compositor presented too little in this window to judge (the cast delivered ${blockFrames.length} frame${blockFrames.length === 1 ? '' : 's'} in the ${Math.round(window.to - window.from)} ms block, none for ${Math.round(castGapMs)} ms)`,
       );
@@ -1644,7 +1679,7 @@ export function busyWindowProof(
       ? ''
       : `; against the control: moved on ${controlRead.movedWith} of its ${controlRead.moved} frames${controlRead.belowStep > 0 ? ` (${controlRead.belowStep} where the cast could not show the step)` : ''}, its longest stall ${controlRead.longestStallMs.toFixed(1)} ms`) +
     notes.map(note => `; note: ${note}`).join('');
-  return {
+  const proof = {
     ...stats,
     window,
     judged,
@@ -1666,6 +1701,7 @@ export function busyWindowProof(
     verdict: {pass: failures.length === 0, failures},
     summary,
   };
+  return {proof, starvation};
 }
 
 /** One run of a pooled busy proof (see `pooledBusyProof`). */
@@ -1759,7 +1795,7 @@ export function pooledBusyProof(
   const late: (BusyWindowTooLateError | null)[] = [];
   const proofs = runs.map(run => {
     try {
-      const proof = busyWindowProof(run.tracked, run.window, {
+      const {proof} = readBusyWindow(run.tracked, run.window, {
         ...windowOptions,
         control: run.control,
       });

@@ -35,7 +35,10 @@ import {useLocale} from '../i18n/useLocale';
 import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
-import {mergeIds} from '../HoverCard/mergeIds';
+import {
+  ROLELESS_TRIGGER,
+  labelledTriggerAttributes,
+} from '../HoverCard/popupTrigger';
 import {formatInstant, formatZoneName} from './formatInstant';
 import {formatRelativeTime} from './formatRelativeTime';
 import {formatTooltipLines, resolveTimezoneID} from './tooltipEntries';
@@ -493,11 +496,15 @@ export function Timestamp({
       // A bare <time> cannot take focus. Add the tab stop only while a card
       // is attached, so keyboard users can open it. A caller's tabIndex wins.
       {...(showTooltip && rest.tabIndex == null ? {tabIndex: 0} : {})}
-      // The time names the open card; a caller's own ids stay first. The time
-      // role supports neither aria-haspopup nor aria-expanded.
-      {...(showTooltip && openCardId != null
-        ? {'aria-controls': mergeIds(rest['aria-controls'], openCardId)}
-        : {})}>
+      // The time names the open card after a caller's own ids. The time role
+      // supports neither aria-haspopup nor aria-expanded.
+      {...(showTooltip
+        ? labelledTriggerAttributes(
+            ROLELESS_TRIGGER,
+            {controls: rest['aria-controls']},
+            {id: openCardId, isOpen: openCardId != null},
+          )
+        : null)}>
       {displayText}
     </time>
   );

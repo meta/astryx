@@ -640,7 +640,7 @@ describe('HoverCard', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('omits aria-expanded on a trigger whose role does not support it', () => {
+  it('gives a role-less trigger neither aria-haspopup nor aria-expanded', () => {
     render(
       <HoverCard content={<span>Card content</span>} label="Timestamp details">
         <time dateTime="2026-08-25" tabIndex={0}>
@@ -650,11 +650,26 @@ describe('HoverCard', () => {
     );
     const trigger = screen.getByText('2 hours ago');
     expect(trigger.tagName).toBe('TIME');
-    // Global attributes are valid on any element, so the popup relationship is
-    // still advertised.
-    expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
-    // aria-expanded is not: <time> has no role that supports it, and emitting
-    // it is a critical axe aria-allowed-attr violation.
+    // ARIA 1.2 supports neither attribute on the time role.
+    expect(trigger).not.toHaveAttribute('aria-haspopup');
+    expect(trigger).not.toHaveAttribute('aria-expanded');
+  });
+
+  it('names the open card from a role-less trigger through aria-controls only', () => {
+    render(
+      <HoverCard
+        content={<span>Card content</span>}
+        label="Profile actions"
+        isOpen>
+        <span tabIndex={0} aria-controls="own-region">
+          Trigger
+        </span>
+      </HoverCard>,
+    );
+    const trigger = screen.getByText('Trigger');
+    const card = screen.getByRole('dialog', {hidden: true});
+    expect(trigger).toHaveAttribute('aria-controls', `own-region ${card.id}`);
+    expect(trigger).not.toHaveAttribute('aria-haspopup');
     expect(trigger).not.toHaveAttribute('aria-expanded');
   });
 
@@ -791,11 +806,12 @@ describe('HoverCard', () => {
     );
     // Text should be rendered
     expect(screen.getByText('Just text, no element')).toBeInTheDocument();
-    // When labelled, the wrapper advertises a dialog popup.
+    // The wrapper is a role-less <span>, so it carries neither
+    // aria-haspopup nor aria-expanded.
     const wrapper = screen.getByText('Just text, no element');
     expect(wrapper.tagName).toBe('SPAN');
-    expect(wrapper).toHaveAttribute('aria-haspopup', 'dialog');
-    // The wrapper is a role-less <span>; aria-expanded is invalid there.
+    expect(wrapper).toHaveAttribute('tabindex', '0');
+    expect(wrapper).not.toHaveAttribute('aria-haspopup');
     expect(wrapper).not.toHaveAttribute('aria-expanded');
     // While closed, the layer is not in the DOM, so aria-controls is unset.
     expect(wrapper).not.toHaveAttribute('aria-controls');
@@ -908,10 +924,8 @@ describe('HoverCard', () => {
           Edited {isDraft && 'draft'} {null}today
         </HoverCard>,
       );
-      expect(screen.getByText(/Edited/)).toHaveAttribute(
-        'aria-haspopup',
-        'dialog',
-      );
+      // The text wrapper is the trigger: it is the tab stop.
+      expect(screen.getByText(/Edited/)).toHaveAttribute('tabindex', '0');
     });
 
     // The auto hover cue (FR8) is a class on the text trigger; a single
@@ -955,13 +969,14 @@ describe('HoverCard', () => {
 
     it('still attaches to the first element when one is present', () => {
       render(
-        <HoverCard label="History" content={<span>Card</span>}>
+        <HoverCard label="History" content={<span>Card</span>} isOpen>
           Edited <time dateTime="2026-11-02">today</time>
         </HoverCard>,
       );
+      const card = screen.getByRole('dialog', {hidden: true});
       expect(screen.getByText('today')).toHaveAttribute(
-        'aria-haspopup',
-        'dialog',
+        'aria-controls',
+        card.id,
       );
     });
   });

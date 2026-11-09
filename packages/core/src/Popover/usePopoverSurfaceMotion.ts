@@ -16,8 +16,11 @@
  * coarse primary pointer, on any touch device) the popover grows out of its
  * source. When the layer runtime reports that it starts to close, it shrinks
  * back into it. A fine primary pointer keeps the layer's own entrance. The
- * motion is created for the popover element the first time it opens and
- * follows it if the element is replaced.
+ * growth plays on the surface, the box that paints the popover, and not on
+ * the layer. The layer is anchored, and Chromium lays an anchored element out
+ * again each time it restyles it, as when an animation on it starts. The
+ * motion is created for the surface the first time the popover opens and
+ * follows it if the surface is replaced.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Popover/Popover.tsx
@@ -49,7 +52,8 @@ export interface PopoverSurfaceMotionCalls {
   /**
    * Call as the popover opens, right after the browser shows it and before
    * it paints. `entrance` is the surface that carries the pointer
-   * presentation's CSS entrance; the touch presentation turns it off there.
+   * presentation's CSS entrance; the touch presentation turns it off there
+   * and plays its growth on it.
    */
   present: (
     layer: HTMLElement | null,
@@ -113,8 +117,9 @@ export function usePopoverSurfaceMotion(): PopoverSurfaceMotionCalls {
         release();
         return;
       }
-      motionFor(layer, entrance).enter(() => ({
-        surface: boxOf(layer),
+      const surface = entrance ?? layer;
+      motionFor(surface, entrance).enter(() => ({
+        surface: boxOf(surface),
         source: boxOf(source),
       }));
     },

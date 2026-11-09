@@ -325,9 +325,8 @@ function useRootThemeSync(
 
 /**
  * Hook to keep the page's text size scales on the reader's text size (iOS
- * Dynamic Type) for the root provider; see dynamicType.ts. Skipped for nested
- * Theme instances, and a no-op where the engine has no
- * `font: -apple-system-body`.
+ * Dynamic Type, or `env(preferred-text-scale)` elsewhere) for the root
+ * provider; see dynamicType.ts. Skipped for nested Theme instances.
  */
 function useRootTextSizeSync(isNested: boolean): void {
   useIsomorphicLayoutEffect(() => {

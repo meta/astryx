@@ -106,6 +106,12 @@ export const categories: SandboxCategory[] = [
           'An alert over a toast and a dialog closed after a save, on a page that scrolls with the document, to check on a phone',
       },
       {
+        name: 'List Reorder Cases',
+        href: '/pages/list-reorder-cases/',
+        description:
+          'A reorderable List, a TransferList and a reorderable List in a Card, on a page that scrolls with the document, to check on a phone',
+      },
+      {
         name: 'TextArea Counter',
         href: '/pages/textarea-counter/',
         description:
