@@ -202,10 +202,9 @@ const styles = stylex.create({
     fontWeight: fontWeightVars['--font-weight-medium'],
     textTransform: 'uppercase',
   },
-  // The initials are drawn as generated content with empty alternative text,
-  // so they are part of the picture and not text of the control. The
-  // control's name is the person's name, and a visible text label that the
-  // name does not contain would fail Label in Name for an interactive avatar.
+  // Generated content with empty alternative text draws the initials. They are
+  // part of the picture, not text of the control. On a link or button, visible
+  // text that the name does not contain fails Label in Name.
   initials: {
     '::before': {
       content: stylex.firstThatWorks(

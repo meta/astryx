@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] Avatar: an interactive avatar that shows initials no longer fails Label in Name. The initials are drawn as part of the picture, like the photo, so the link or button is named only by the person's name, and the name tooltip shows that name on hover and focus. The initials look the same.
+[fix] Avatar: initials are drawn as generated content with empty alternative text instead of text, so axe's Label in Name check (`label-content-name-mismatch`) no longer flags a link or button avatar that shows initials. The accessible name, the name tooltip and the initials' appearance are unchanged. Tests that find initials by text read the `data-initials` attribute instead.
 
 @cixzhang
