@@ -19,7 +19,7 @@ function Host({children}: {children?: ReactNode}) {
 
 afterEach(async () => {
   const toastHost = await import('./toastHost');
-  toastHost.__resetToastHostForTest?.();
+  toastHost.__resetToastHostForTest();
   vi.resetModules();
 });
 
