@@ -301,22 +301,24 @@ test('a mouse close under reduced motion moves the sheet no further', async ({
   await page.evaluate(() => {
     const frames = {
       samples: [] as [number, number][],
-      moveAt: Number.NEGATIVE_INFINITY,
+      moveStamp: Number.NEGATIVE_INFINITY,
+      upStamp: Number.POSITIVE_INFINITY,
       upAt: Number.POSITIVE_INFINITY,
       done: false,
     };
     (window as unknown as {sheetFrames: typeof frames}).sheetFrames = frames;
     window.addEventListener(
       'pointermove',
-      () => {
-        frames.moveAt = performance.now();
+      event => {
+        frames.moveStamp = event.timeStamp;
       },
       {capture: true},
     );
     window.addEventListener(
       'pointerup',
-      () => {
+      event => {
         frames.upAt = performance.now();
+        frames.upStamp = event.timeStamp;
       },
       {capture: true},
     );
@@ -334,7 +336,7 @@ test('a mouse close under reduced motion moves the sheet no further', async ({
   const cdp = await page.context().newCDPSession(page);
   // 150 px in 50 ms is 3,000 px/s, so the mouse release projects past the
   // dismiss line even when event delivery is slow.
-  await mouseDrag(cdp, sheet, 150, 50, 400);
+  await mouseDrag(cdp, sheet, 150, 50);
   // While the dialog closes, no drag exit plays: no inline transition and no
   // animation moves the sheet.
   const exitPlayed = await page.evaluate(async () => {
@@ -367,7 +369,8 @@ test('a mouse close under reduced motion moves the sheet no further', async ({
           window as unknown as {
             sheetFrames: {
               samples: [number, number][];
-              moveAt: number;
+              moveStamp: number;
+              upStamp: number;
               upAt: number;
               done: boolean;
             };
@@ -375,9 +378,10 @@ test('a mouse close under reduced motion moves the sheet no further', async ({
         ).sheetFrames,
     );
   // The sheet drops aria-modal when the release asks it to close. A release
-  // read as still projects short of the dismiss line and keeps it.
+  // read as still projects short of the dismiss line and keeps it. The gap
+  // uses the events' own times: CDP delivers them back to back.
   const lift = await read();
-  const gap = Math.round(lift.upAt - lift.moveAt);
+  const gap = Math.round(lift.upStamp - lift.moveStamp);
   await expect(
     dialog,
     `the release did not ask the sheet to close: the drag read as a still release (${gap} ms from the last move to the lift), so its projection stayed short of the dismiss line`,
@@ -405,7 +409,6 @@ async function mouseDrag(
   sheet: Locator,
   distance: number,
   ms: number,
-  holdMs = 1,
 ) {
   const box = await sheet.boundingBox();
   if (box == null) {
@@ -441,7 +444,7 @@ async function mouseDrag(
     button: 'left',
     buttons: 0,
     clickCount: 1,
-    timestamp: base + (ms + holdMs) / 1000,
+    timestamp: base + (ms + 1) / 1000,
   });
 }
 
