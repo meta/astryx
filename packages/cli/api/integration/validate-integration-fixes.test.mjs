@@ -14,12 +14,13 @@ import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {validateLocalIntegration} from './validate-integration.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 let copies = 0;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-validate-fix-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-validate-fix-'));
 });
 
 afterEach(() => {

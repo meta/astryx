@@ -17,6 +17,7 @@ verified_by:
     packages/core/src/Popover/usePopover.doc.mjs,
     packages/core/src/hooks/useFocusTrap.test.tsx,
     packages/core/src/Popover/PopoverPresentation.test.tsx,
+    packages/core/src/Popover/__tests__/PopoverTouchMotion.interaction.browser.spec.ts,
     packages/cli/foundation/discovery/theming-targets.mjs,
     packages/cli/foundation/discovery/theming-targets.test.mjs,
     scripts/check-knowledge.mjs,
@@ -77,6 +78,12 @@ rung, so a caller whose content owns its own edges can ask for a flush surface.
 
 - The input hold starts on the first frame after the open; a touch landing
   within that frame reaches the page.
+- Popover has no viewport-rectangle anchor: it anchors to its trigger or to
+  a button through `anchorRef`. A panel whose control moved into a More menu
+  anchors to the More trigger through a `usePopover` composition whose
+  `triggerRef` receives that trigger, so the trigger keeps its menu-button
+  attributes (`component:MoreMenu` AR1). This is revisited once the headless
+  context menu's `open(at)` (`spec:AST-107` FR8) ships.
 
 ## Ownership boundary
 
@@ -193,7 +200,7 @@ table owns their semantic effect.
 | FR6 | Component anatomy contains the caller trigger and content, one painted Popover surface, and the optional fallback close control. Popover owns no Header, Body, or separate shared-hook surface part.                                                                                                                         | Current source, docs target inventory, and tests                                                      | Accepted anatomy; stale consumer anatomy corrected by this contract                         |
 | FR7 | The painted surface has one broad canonical target, `popover`; composed components may add one authoritative component-specific refinement target.                                                                                                                                                                           | Owner direction on 2026-08-31 plus current target inventory                                           | Accepted canonical contract; covered by focused target tests                                |
 | FR8 | The surface padding is one spacing-scale rung applied on the painted surface. Popover defaults to step 3 (the released inset); `0` paints a flush surface; a direct `usePopover` composition paints none unless it asks for a rung. The rung sits where a theme's `padding` on the `popover` target replaces it.             | PR #6683 and its Popover tests; `architecture:container-padding/INV8` (padding alone does not enroll) | Pending owner review (DEC-4); implemented and covered by the Popover surface-padding suite  |
-| FR9 | Under a finger, Popover grows from its trigger on `--duration-medium-min`, the Storybook step nearest iOS's 206 ms growth, with `--ease-entrance` (`spec:AST-094` FR45), and shrinks back on the theme's exit duration and easing. A touch while it grows is ignored (FR35). Dismissal and a mouse's entrance are unchanged. | `spec:AST-094` FR31, FR35                                                                             | Implemented; gap: the open-to-close latch waits for the shared presentation hold            |
+| FR9 | Under a finger, Popover grows from its trigger on `--duration-medium-min`, the Storybook step nearest iOS's 206 ms growth, with `--ease-entrance` (`spec:AST-094` FR45), and shrinks back on the theme's exit duration and easing. A touch while it grows is ignored (FR35). Dismissal and a mouse's entrance are unchanged. | `spec:AST-094` FR31, FR35                                                                             | Implemented                                                                                 |
 
 ### Allowed variation
 
@@ -261,6 +268,10 @@ table owns their semantic effect.
   touch growth and shrink do no Layout or Paint per frame. Known platform cost:
   in Chromium, a page with its own `requestAnimationFrame` loop makes an
   anchored, animating layer lay out and paint every frame.
+- **PR5 — The touch growth's first frames.** Under a finger, the growth starts
+  at opacity 0.001 rather than 0, since Chromium skips drawing a layer at
+  exactly 0. The first frame then shows its content, and no 8-bit pixel differs
+  from transparent.
 
 ## Accessibility contract
 
@@ -367,6 +378,7 @@ consumers that need distinct theme reachability provide and document an owned
 | FR8                          | `Popover.test.tsx` surface-padding suite                                                                                                                                                  | Default rung, `0`, an explicit rung, a direct hook composition with and without a rung                                                                                                                                                  | A default other than step 3, a rung landing on a box inside the surface, or the hook painting a rung it was not given fails the suite.              | `audit:Popover/theming`       |
 | FR9                          | `spec:AST-094` verification for FR31 and FR35                                                                                                                                             | Under a finger: open, close, a touch during growth; a mouse                                                                                                                                                                             | A Popover that does not grow from and shrink into its trigger, a changed dismissal, or a changed mouse path fails.                                  | `audit:Popover/behavior`      |
 | PR4                          | `spec:AST-094` verification for FR5                                                                                                                                                       | The touch growth and shrink in a Chromium trace, on a page with no other frame work                                                                                                                                                     | A Layout or a Paint during either motion on such a page                                                                                             | `audit:Popover/resources`     |
+| PR5                          | `PopoverTouchMotion.interaction.browser.spec.ts` "the growth shows its content from its first frames", from the compositor's record of each frame it presents (Chromium)                  | A tap that opens the popover; a tap outside while it grows                                                                                                                                                                              | A growth whose first opacity keyframe is 0 presents a frame without the popover's content among its first five                                      | `audit:Popover/resources`     |
 | FR5                          | `Popover.test.tsx` scheduling and observer-lifecycle suites                                                                                                                               | Closed, opened, repeated signals, cleanup                                                                                                                                                                                               | Constructing observers while closed or measuring more than once per pending frame fails lifecycle assertions.                                       | `audit:Popover/resources`     |
 | FR6, FR7 and theming anatomy | `Popover.test.tsx`, `Popover.doc.mjs`, `usePopover.doc.mjs`, `astryx theme targets Popover --json`, and `scripts/check-knowledge.mjs`                                                     | One real surface with canonical `popover` plus composed-component refinements                                                                                                                                                           | A fake anatomy part, missing canonical output, or an active target without a real owner fails review or validation.                                 | `audit:Popover/theming`       |
 | AR5                          | `Popover.stories.tsx` manual-AT fixture and PR #5373 test record                                                                                                                          | Read-only dialog manual-AT fixture; no recorded NVDA/VoiceOver announcement result                                                                                                                                                      | A fixture without recorded AT/browser observations cannot be cited as announcement proof.                                                           | `audit:Popover/at-evidence`   |
@@ -456,7 +468,8 @@ light-dismisses: a tap outside it or a swipe down closes it, whatever
 `hasLightDismiss` says, so a finger always has a way out. Its fallback close
 stays hidden, as in an anchored popover. Everything else follows Popover's
 existing props. The sheet of DEC-6 is a modal BottomSheet at the sheet's tall
-height and inset by Popover's `padding`; `xstyle`, `className` and `style`
+height and inset by Popover's `padding`, below the grab bar's band at the top
+(`component:BottomSheet`, Content area inset); `xstyle`, `className` and `style`
 style its panel, and `placement`, `alignment` and `width` do not apply. The
 surface is chosen when the popover opens and stays until it closes, and the
 trigger's expanded state and controlled element follow whichever surface is

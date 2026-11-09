@@ -5,6 +5,7 @@ import {act, render, screen, fireEvent, waitFor} from '@testing-library/react';
 import {Profiler, StrictMode, useState} from 'react';
 import {Lightbox} from './Lightbox';
 import {getFocusableElements} from '../hooks/useFocusTrap';
+import {getGestureHost} from '../gestures/GestureHost';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {InternationalizationProvider} from '../i18n';
 
@@ -58,7 +59,9 @@ function stubStageLayout(): () => void {
     });
   };
   const isPhoto = (element: Element) => element instanceof HTMLImageElement;
+  // The zoom stage: a single item's photo box, or a gallery page's.
   const isStage = (element: Element) =>
+    element.hasAttribute('data-lightbox-page-media') ||
     element.querySelector(':scope > img') != null;
   define(HTMLElement.prototype, 'offsetWidth', element =>
     isPhoto(element) ? 400 : 0,
@@ -108,6 +111,115 @@ const POSITION_MESSAGES = {
       'Photo {index, number} sur {total, number}',
   },
 };
+
+/** A mouse press on `target` from `from` to `to`, as a browser sends it. */
+/** A client rectangle at a place, for a test that sets an element's box. */
+function rectAt(left: number, top: number, width: number, height: number) {
+  return {
+    x: left,
+    y: top,
+    left,
+    top,
+    right: left + width,
+    bottom: top + height,
+    width,
+    height,
+    toJSON: () => ({}),
+  };
+}
+
+/**
+ * Lays out a gallery's current page for a mouse's click: its photo's box,
+ * natural width and caption, and the viewer's width. jsdom lays out nothing.
+ */
+function layOutPage(
+  page: Element,
+  {
+    photo,
+    natural,
+    caption,
+    viewer,
+  }: {
+    photo: ReturnType<typeof rectAt>;
+    natural: number;
+    caption?: ReturnType<typeof rectAt>;
+    viewer: number;
+  },
+): void {
+  const define = (element: Element, values: Record<string, unknown>) => {
+    for (const [key, value] of Object.entries(values)) {
+      Object.defineProperty(element, key, {configurable: true, value});
+    }
+  };
+  const img = page.querySelector('img')!;
+  define(img, {
+    getBoundingClientRect: () => photo,
+    offsetHeight: photo.height,
+    naturalWidth: natural,
+  });
+  // The photo's own box hugs it without zoom.
+  define(img.parentElement!, {
+    getBoundingClientRect: () => photo,
+    clientHeight: photo.height,
+    clientWidth: photo.width,
+  });
+  const text = page.querySelector('[data-lightbox-caption]');
+  if (caption != null && text != null) {
+    define(text, {
+      getBoundingClientRect: () => caption,
+      offsetWidth: caption.width,
+    });
+  }
+  define(page.closest('[data-lightbox-page]')!.parentElement!.parentElement!, {
+    clientWidth: viewer,
+  });
+}
+
+function mousePress(
+  target: Element,
+  from: {x: number; y: number},
+  to: {x: number; y: number} = from,
+): void {
+  const send = (
+    type: string,
+    {x, y}: {x: number; y: number},
+    buttons: number,
+  ) => {
+    const event = new Event(type, {bubbles: true, cancelable: true});
+    for (const [key, value] of Object.entries({
+      pointerType: 'mouse',
+      pointerId: 1,
+      isPrimary: true,
+      button: 0,
+      buttons,
+      clientX: x,
+      clientY: y,
+      timeStamp: performance.now(),
+    })) {
+      Object.defineProperty(event, key, {value});
+    }
+    act(() => {
+      target.dispatchEvent(event);
+    });
+  };
+  send('pointerdown', from, 1);
+  if (to.x !== from.x || to.y !== from.y) {
+    send('pointermove', to, 1);
+  }
+  send('pointerup', to, 0);
+  // Then the click a mouse's press and release make.
+  act(() => {
+    target.dispatchEvent(
+      new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+        detail: 1,
+        clientX: to.x,
+        clientY: to.y,
+      }),
+    );
+  });
+}
 
 describe('Lightbox', () => {
   it('renders as a dialog element', () => {
@@ -278,6 +390,373 @@ describe('Lightbox', () => {
       expect(screen.getByAltText('Image B')).toBeInTheDocument();
     });
 
+    it('renders the current item and its neighbours as pages, each with its own caption', () => {
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={media}
+          index={1}
+        />,
+      );
+      const pages = [
+        ...document.querySelectorAll<HTMLElement>('[data-lightbox-page]'),
+      ];
+      expect(pages).toHaveLength(3);
+      const current = pages.filter(page => page.hasAttribute('data-current'));
+      expect(current).toHaveLength(1);
+      expect(current[0]).toContainElement(screen.getByAltText('Image B'));
+      expect(current[0]).toHaveTextContent('Second');
+      // The neighbours are off screen: hidden from assistive technology.
+      for (const page of pages.filter(p => p !== current[0])) {
+        const img = page.querySelector('img');
+        expect(img).toHaveAttribute('aria-hidden', 'true');
+        expect(img).toHaveAttribute('alt', '');
+      }
+      expect(pages[0]).toHaveTextContent('First');
+    });
+
+    it('closes on a click beside the photo on a page', () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={onOpenChange}
+          media={media}
+          index={0}
+        />,
+      );
+      const current = document.querySelector('[data-current]')!;
+      mousePress(current.querySelector('[data-lightbox-page-media]')!, {
+        x: 20,
+        y: 20,
+      });
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+
+    it('closes on a mouse press beside the photo that moved past the tap limit', () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={onOpenChange}
+          media={media}
+          index={0}
+        />,
+      );
+      const pageMedia = document.querySelector(
+        '[data-current] [data-lightbox-page-media]',
+      )!;
+      // 60 px straight down: past the tap's 45 px limit. A mouse's click
+      // closes it, as on the backdrop, however far the press moved.
+      mousePress(pageMedia, {x: 100, y: 100}, {x: 100, y: 160});
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+
+    it('leaves the viewer open when the keyboard activates a caption link after a mouse press', () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={onOpenChange}
+          media={[
+            {src: '/a.jpg', alt: 'A', caption: <a href="#more">More</a>},
+            {src: '/b.jpg', alt: 'B'},
+          ]}
+          index={0}
+        />,
+      );
+      const link = screen.getByRole('link', {name: 'More'});
+      // A mouse press on the stage, then Enter on the caption's link: the
+      // browser clicks the link with no pointer (detail 0, at 0, 0).
+      const down = new Event('pointerdown', {bubbles: true, cancelable: true});
+      Object.defineProperty(down, 'pointerType', {value: 'mouse'});
+      act(() => {
+        link.dispatchEvent(down);
+      });
+      act(() => {
+        link.dispatchEvent(
+          new MouseEvent('click', {bubbles: true, cancelable: true, detail: 0}),
+        );
+      });
+      expect(onOpenChange).not.toHaveBeenCalled();
+    });
+
+    it('plays a video again when paging back to it, with hasAutoPlay', () => {
+      const play = vi
+        .spyOn(HTMLMediaElement.prototype, 'play')
+        .mockImplementation(async () => {});
+      try {
+        const withVideo = [
+          {src: '/a.jpg', alt: 'Image A'},
+          {src: '/clip.webm', alt: 'Clip', type: 'video' as const},
+        ];
+        const {rerender} = render(
+          <Lightbox
+            isOpen={true}
+            onOpenChange={() => {}}
+            media={withVideo}
+            index={0}
+            hasAutoPlay
+          />,
+        );
+        expect(play).not.toHaveBeenCalled();
+        rerender(
+          <Lightbox
+            isOpen={true}
+            onOpenChange={() => {}}
+            media={withVideo}
+            index={1}
+            hasAutoPlay
+          />,
+        );
+        expect(play).toHaveBeenCalledTimes(1);
+        expect(play.mock.contexts[0]).toBe(
+          document.querySelector('[data-current] video'),
+        );
+      } finally {
+        play.mockRestore();
+      }
+    });
+
+    it('shows the last item as the current one for an index past the end', () => {
+      for (const props of [
+        {index: media.length + 2},
+        {defaultIndex: media.length + 2},
+      ]) {
+        const {unmount} = render(
+          <Lightbox
+            isOpen={true}
+            onOpenChange={() => {}}
+            media={media}
+            {...props}
+          />,
+        );
+        const photo = screen.getByAltText('Image C');
+        expect(photo).not.toHaveAttribute('aria-hidden');
+        const page = photo.closest('[data-lightbox-page]')!;
+        expect(page).toHaveAttribute('data-current');
+        expect(page).not.toHaveAttribute('inert');
+        expect(
+          screen.getByText(`${media.length} / ${media.length}`),
+        ).toBeTruthy();
+        unmount();
+      }
+    });
+
+    it('shows the first item as the current one for an index below 0', () => {
+      for (const props of [{index: -1}, {defaultIndex: -3}]) {
+        const {unmount} = render(
+          <Lightbox
+            isOpen={true}
+            onOpenChange={() => {}}
+            media={media}
+            {...props}
+          />,
+        );
+        const photo = screen.getByAltText('Image A');
+        expect(photo).not.toHaveAttribute('aria-hidden');
+        const page = photo.closest('[data-lightbox-page]')!;
+        expect(page).toHaveAttribute('data-current');
+        expect(page).not.toHaveAttribute('inert');
+        expect(screen.getByText(`1 / ${media.length}`)).toBeTruthy();
+        unmount();
+      }
+    });
+
+    // An index that is not a whole number opens the nearest item, as an
+    // index past either end does.
+    it.each([
+      ['a controlled NaN index', {index: Number.NaN}, 'Image A', 1],
+      ['a default NaN index', {defaultIndex: Number.NaN}, 'Image A', 1],
+      ['a controlled index of 1.5', {index: 1.5}, 'Image C', 3],
+      ['a controlled index of 0.4', {index: 0.4}, 'Image A', 1],
+      ['a default index of 1.2', {defaultIndex: 1.2}, 'Image B', 2],
+    ])('opens the nearest item for %s', (_, indexProps, alt, position) => {
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={media}
+          {...indexProps}
+        />,
+      );
+      const page = screen.getByAltText(alt).closest('[data-lightbox-page]')!;
+      expect(page).toHaveAttribute('data-current');
+      expect(screen.getByText(`${position} / ${media.length}`)).toBeTruthy();
+    });
+
+    it('pauses a playing video once the viewer moves to another item', () => {
+      const items = [
+        {src: '/clip.mp4', alt: 'A clip', type: 'video' as const},
+        {src: '/b.jpg', alt: 'Image B'},
+      ];
+      const {rerender} = render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={items}
+          index={0}
+        />,
+      );
+      const video = document.querySelector('video')!;
+      // Started by someone: playing, with its sound.
+      const pause = vi.fn();
+      video.pause = pause;
+      Object.defineProperty(video, 'paused', {
+        configurable: true,
+        get: () => pause.mock.calls.length > 0,
+      });
+      rerender(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={items}
+          index={1}
+        />,
+      );
+      // Still mounted as the pager's neighbour, and stopped.
+      expect(document.querySelector('video')).toBe(video);
+      expect(pause).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps a paged-away video's element and time once the viewer pages back", () => {
+      const items = [
+        {src: '/clip.mp4', alt: 'A clip', type: 'video' as const},
+        {src: '/b.jpg', alt: 'Image B'},
+      ];
+      const view = (index: number) => (
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={items}
+          index={index}
+        />
+      );
+      const {rerender} = render(view(0));
+      const video = document.querySelector('video')!;
+      // Played for 12 s, then paged away from.
+      let time = 12;
+      Object.defineProperty(video, 'currentTime', {
+        configurable: true,
+        get: () => time,
+        set: (value: number) => {
+          time = value;
+        },
+      });
+      const load = vi.fn();
+      video.load = load;
+      video.pause = vi.fn();
+      rerender(view(1));
+      rerender(view(0));
+      // The same element, at the same time: nothing reloads or rewinds it.
+      expect(document.querySelector('video')).toBe(video);
+      expect(time).toBe(12);
+      expect(load).not.toHaveBeenCalled();
+    });
+
+    it('stays open on a click on the photo, with zoom off', () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={onOpenChange}
+          media={media}
+          index={0}
+        />,
+      );
+      const current = document.querySelector('[data-current]')!;
+      const box = current.querySelector<HTMLElement>(
+        '[data-lightbox-page-media]',
+      )!;
+      // The photo takes no pointer events: a press on it lands on its box.
+      layOutPage(current, {
+        photo: rectAt(100, 100, 400, 200),
+        natural: 400,
+        viewer: 1000,
+      });
+      mousePress(box, {x: 300, y: 200});
+      expect(onOpenChange).not.toHaveBeenCalled();
+      // Beside the photo, past its natural width, the click is the backdrop's.
+      mousePress(box, {x: 20, y: 200});
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+
+    it('closes on a mouse press beside the photo that is released on it', () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={onOpenChange}
+          media={media}
+          index={0}
+        />,
+      );
+      const current = document.querySelector('[data-current]')!;
+      layOutPage(current, {
+        photo: rectAt(100, 100, 400, 200),
+        natural: 400,
+        viewer: 1000,
+      });
+      // A press that starts on the backdrop closes, wherever it ends.
+      mousePress(
+        current.querySelector('[data-lightbox-page-media]')!,
+        {x: 20, y: 200},
+        {x: 300, y: 200},
+      );
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+
+    it("stays open on a mouse click beside a narrow photo, within its caption's width", () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={onOpenChange}
+          media={media}
+          index={0}
+        />,
+      );
+      const current = document.querySelector('[data-current]')!;
+      const box = current.querySelector('[data-lightbox-page-media]')!;
+      layOutPage(current, {
+        photo: rectAt(250, 100, 100, 300),
+        natural: 100,
+        caption: rectAt(100, 410, 400, 30),
+        viewer: 1000,
+      });
+      // The media is as wide as the caption here, so this point is on it.
+      mousePress(box, {x: 150, y: 250});
+      expect(onOpenChange).not.toHaveBeenCalled();
+      // Past the caption's width, the click is the backdrop's.
+      mousePress(box, {x: 50, y: 250});
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+
+    it('stays open on a mouse click beside a large photo, level with it, since its media spans the viewer', () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={onOpenChange}
+          media={media}
+          index={0}
+        />,
+      );
+      const current = document.querySelector('[data-current]')!;
+      // A photo wider than the viewer, shown at 400 px.
+      layOutPage(current, {
+        photo: rectAt(300, 100, 400, 200),
+        natural: 3000,
+        viewer: 1000,
+      });
+      mousePress(current.querySelector('[data-lightbox-page-media]')!, {
+        x: 990,
+        y: 200,
+      });
+      expect(onOpenChange).not.toHaveBeenCalled();
+    });
+
     it('shows gallery counter', () => {
       render(
         <Lightbox
@@ -317,8 +796,10 @@ describe('Lightbox', () => {
       // focused control and drops focus to <body>.
       const prev = screen.getByLabelText('Previous');
       expect(prev).toBeInTheDocument();
-      expect(prev).toBeDisabled();
-      expect(screen.getByLabelText('Next')).not.toBeDisabled();
+      expect(prev).toHaveAttribute('aria-disabled', 'true');
+      expect(screen.getByLabelText('Next')).not.toHaveAttribute(
+        'aria-disabled',
+      );
     });
 
     it('keeps next mounted and disabled on last item', () => {
@@ -332,8 +813,10 @@ describe('Lightbox', () => {
       );
       const next = screen.getByLabelText('Next');
       expect(next).toBeInTheDocument();
-      expect(next).toBeDisabled();
-      expect(screen.getByLabelText('Previous')).not.toBeDisabled();
+      expect(next).toHaveAttribute('aria-disabled', 'true');
+      expect(screen.getByLabelText('Previous')).not.toHaveAttribute(
+        'aria-disabled',
+      );
     });
 
     it('does not drop focus to <body> when navigating to the last item', () => {
@@ -1085,6 +1568,24 @@ describe('Lightbox gestures for a mouse and a pen (spec:AST-094 FR43)', () => {
     expect(stage).not.toHaveAttribute('data-zoom-dragging');
   });
 
+  it('takes the zoom pan\u2019s begin threshold from the shared pan, with no pointerdown listener of its own on the stage', () => {
+    const added = vi.spyOn(EventTarget.prototype, 'addEventListener');
+    try {
+      const {stage} = renderPhoto();
+      // The gesture host's own press listener is passive. Any other press
+      // listener on the stage would be Lightbox's own.
+      const ownPress = added.mock.calls.filter(
+        ([type, , options], index) =>
+          added.mock.contexts[index] === stage &&
+          type === 'pointerdown' &&
+          !(typeof options === 'object' && options.passive === true),
+      );
+      expect(ownPress).toHaveLength(0);
+    } finally {
+      added.mockRestore();
+    }
+  });
+
   it('leaves the viewer open on a caption click after a zoomed drag from above the photo', async () => {
     const onOpenChange = vi.fn();
     render(
@@ -1255,6 +1756,64 @@ describe('Lightbox double-click under the touch layer', () => {
   });
 });
 
+describe('Lightbox recognizers attach for every pointer (spec:AST-094 FR43)', () => {
+  /** Names of the Lightbox recognizers attached while `body` runs. */
+  function lightboxRecognizersAttached(body: () => void): string[] {
+    const attach = vi.spyOn(getGestureHost(document), 'attach');
+    try {
+      body();
+      return attach.mock.calls
+        .map(([, recognizer]) => recognizer.name)
+        .filter(name => /lightbox/i.test(name));
+    } finally {
+      attach.mockRestore();
+    }
+  }
+
+  it('attaches no drag to dismiss where the primary pointer is fine', () => {
+    expect(
+      lightboxRecognizersAttached(() => {
+        render(
+          <Lightbox
+            isOpen={true}
+            onOpenChange={() => {}}
+            media={{src: '/photo.jpg', alt: 'Photo'}}
+          />,
+        );
+      }),
+    ).toEqual([]);
+  });
+
+  it('attaches the drag to dismiss under the touch layer', () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = (query: string) => ({
+      matches: query === '(pointer: coarse)',
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    });
+    try {
+      expect(
+        lightboxRecognizersAttached(() => {
+          render(
+            <Lightbox
+              isOpen={true}
+              onOpenChange={() => {}}
+              media={{src: '/photo.jpg', alt: 'Photo'}}
+            />,
+          );
+        }),
+      ).toContain('Lightbox.dismissPan');
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+});
+
 describe('Lightbox touch zoom (synthetic touches)', () => {
   let restoreLayout: () => void = () => {};
   const originalMatchMedia = window.matchMedia;
@@ -1351,7 +1910,7 @@ describe('Lightbox touch zoom (synthetic touches)', () => {
     ['a fitted photo', false],
     ['a zoomed photo', true],
   ])(
-    'ignores a finger’s first tap on the strip after a finger drag on %s, as before',
+    'closes on a finger’s tap on the strip after a finger drag on %s, once the drag’s flag is clear',
     async (_, isZoomedFirst) => {
       const onOpenChange = vi.fn();
       render(
@@ -1382,9 +1941,10 @@ describe('Lightbox touch zoom (synthetic touches)', () => {
         fingerDown(group, 200, 590);
         fireEvent.click(group, {clientX: 200, clientY: 590, detail: 1});
       };
-      // The first tap on the strip below the stage only clears the flag.
+      // A zoomed drag's flag takes the first tap. A fitted photo's drag starts
+      // no zoom pan, since paging owns it, so it leaves no flag.
       tapStrip();
-      expect(onOpenChange).not.toHaveBeenCalled();
+      expect(onOpenChange).toHaveBeenCalledTimes(isZoomedFirst ? 0 : 1);
       tapStrip();
       expect(onOpenChange).toHaveBeenCalledWith(false);
     },
@@ -1508,6 +2068,106 @@ describe('Lightbox touch zoom (synthetic touches)', () => {
     expect(x()).toBeLessThan(before - 20);
     touch('touchend', stage, [], [finger], 900 + 9 * 16);
   });
+
+  // Times on the arena's clock: velocities read the gap since the last sample.
+  let clock = 0;
+
+  /** A one-finger drag down by `dy` in 10 px steps. */
+  function dragDown(
+    stage: Element,
+    dy: number,
+  ): {x: number; y: number; id: number} {
+    clock = performance.now();
+    let finger = {id: 1, x: 200, y: 300};
+    touch('touchstart', stage, [finger], [finger], clock);
+    for (let i = 1; i <= dy / 10; i++) {
+      finger = {...finger, y: 300 + 10 * i};
+      touch('touchmove', stage, [finger], [finger], clock + i * 16);
+    }
+    clock += (dy / 10) * 16;
+    return finger;
+  }
+
+  it('carries a photo dragged down, shrinking it, and the release dismisses', async () => {
+    const onOpenChange = vi.fn();
+    render(
+      <Lightbox
+        isOpen={true}
+        onOpenChange={onOpenChange}
+        media={{src: '/photo.jpg', alt: 'Photo'}}
+      />,
+    );
+    const img = screen.getByAltText('Photo');
+    const stage = img.parentElement!;
+    const finger = dragDown(stage, 100);
+    // The travel past the pan's 10 px threshold is 90 px: the photo's centre
+    // moved 90 px down, and it shrank to 1 − 4.91e-6 × 90².
+    const scale = 1 - 4.91e-6 * 90 * 90;
+    expect(parseFloat(photoTransform(img).scale)).toBeCloseTo(scale, 4);
+    const [tx, ty] = photoTransform(img).translate.split(' ').map(parseFloat);
+    expect(tx).toBeCloseTo(((1 - scale) * 400) / 2, 2);
+    expect(ty).toBeCloseTo(90 + ((1 - scale) * 200) / 2, 2);
+    expect(onOpenChange).not.toHaveBeenCalled();
+    touch('touchend', stage, [], [finger], clock + 16);
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+  });
+
+  it('springs back when the finger lifts moving up', async () => {
+    const onOpenChange = vi.fn();
+    render(
+      <Lightbox
+        isOpen={true}
+        onOpenChange={onOpenChange}
+        media={{src: '/photo.jpg', alt: 'Photo'}}
+        hasZoom
+      />,
+    );
+    const img = screen.getByAltText('Photo');
+    const stage = img.parentElement!;
+    let finger = dragDown(stage, 100);
+    for (let i = 1; i <= 6; i++) {
+      finger = {...finger, y: finger.y - 10};
+      touch('touchmove', stage, [finger], [finger], clock + i * 16);
+    }
+    touch('touchend', stage, [], [finger], clock + 7 * 16);
+    // The return's end state is in place at once (it springs there on the
+    // compositor); at rest the photo keeps no inline transform.
+    expect(photoTransform(img)).toEqual({translate: '', scale: ''});
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it('ignores the first tap on the strip after a drag to close springs back, as before', async () => {
+    const onOpenChange = vi.fn();
+    render(
+      <Lightbox
+        isOpen={true}
+        onOpenChange={onOpenChange}
+        media={{src: '/photo.jpg', alt: 'Photo', caption: 'A caption'}}
+        hasZoom
+      />,
+    );
+    const img = screen.getByAltText('Photo');
+    const stage = img.parentElement!;
+    let finger = dragDown(stage, 100);
+    for (let i = 1; i <= 6; i++) {
+      finger = {...finger, y: finger.y - 10};
+      touch('touchmove', stage, [finger], [finger], clock + i * 16);
+    }
+    touch('touchend', stage, [], [finger], clock + 7 * 16);
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(onOpenChange).not.toHaveBeenCalled();
+    const group = screen.getByText('A caption').parentElement!;
+    const tapStrip = () => {
+      fingerDown(group, 200, 590);
+      fireEvent.click(group, {clientX: 200, clientY: 590, detail: 1});
+    };
+    // The first tap on the strip below the stage only clears the drag's flag.
+    tapStrip();
+    expect(onOpenChange).not.toHaveBeenCalled();
+    tapStrip();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
 });
 
 describe('Lightbox zoom reset timing', () => {
@@ -1560,6 +2220,40 @@ describe('Lightbox zoom reset timing', () => {
       translate: '',
       scale: '',
     });
+  });
+});
+
+describe('Lightbox restore after a dismissal', () => {
+  const media = [
+    {src: '/a.jpg', alt: 'Image A'},
+    {src: '/b.jpg', alt: 'Image B'},
+  ];
+  // The backdrop's blur is off while the backdrop moves, as during a
+  // cancelled drag's return, and the restore brings it back.
+  const BLUR_OFF = '--_lightbox-backdrop-filter';
+
+  it('brings the backdrop back to rest as the viewer opens', () => {
+    const {rerender} = render(
+      <Lightbox isOpen={false} onOpenChange={() => {}} media={media} hasZoom />,
+    );
+    const dialog = document.querySelector('dialog');
+    expect(dialog).not.toBeNull();
+    dialog?.style.setProperty(BLUR_OFF, 'none');
+    rerender(
+      <Lightbox isOpen={true} onOpenChange={() => {}} media={media} hasZoom />,
+    );
+    expect(dialog?.style.getPropertyValue(BLUR_OFF)).toBe('');
+  });
+
+  it('leaves a moving backdrop alone on a page change while the viewer is open', () => {
+    render(
+      <Lightbox isOpen={true} onOpenChange={() => {}} media={media} hasZoom />,
+    );
+    const dialog = screen.getByRole('dialog');
+    dialog.style.setProperty(BLUR_OFF, 'none');
+    fireEvent.click(screen.getByRole('button', {name: /next/i}));
+    expect(dialog).toHaveTextContent('2 / 2');
+    expect(dialog.style.getPropertyValue(BLUR_OFF)).toBe('none');
   });
 });
 
