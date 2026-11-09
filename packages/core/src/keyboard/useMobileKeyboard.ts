@@ -13,7 +13,14 @@
  * SYNC: When modified, update /packages/core/src/keyboard/README.md
  */
 
-import {useCallback, useEffect, useRef, useState, type RefObject} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useInsertionEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react';
 import {flushSync} from 'react-dom';
 import {useAttachment} from '../hooks/useAttachment';
 import {useMediaQuery} from '../hooks/useMediaQuery';
@@ -182,9 +189,13 @@ export function useMobileKeyboard(
   const isEnabledRef = useRef(isEnabled);
   const isExpandedRef = useRef(isExpanded);
   const isOpenRef = useRef(isOpen);
-  isEnabledRef.current = isEnabled;
-  isExpandedRef.current = isExpanded;
-  isOpenRef.current = isOpen;
+  // Syncs the listeners' and dismissal's flags with the committed options. It
+  // runs before any layout effect, where an earlier sibling can move focus.
+  useInsertionEffect(() => {
+    isEnabledRef.current = isEnabled;
+    isExpandedRef.current = isExpanded;
+    isOpenRef.current = isOpen;
+  });
   // Touch-only work, the ride and the reveal-pan watch, attaches only under a
   // coarse primary pointer (the touch query). Under a fine one, the hook
   // registers no touch listener.
