@@ -59,6 +59,7 @@
     "palette.config.json",
     "fonts.css",
     "fonts.css.d.ts",
+    "theme.css.d.ts",
     "!**/*.test.*",
     "!**/*.spec.js",
     "!**/*.spec.jsx",
