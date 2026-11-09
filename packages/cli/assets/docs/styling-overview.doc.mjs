@@ -113,7 +113,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'This `globals.css` is for a new app. An app that already uses Tailwind keeps its own file: see "Add Astryx to an app that already uses Tailwind" in `astryx docs styling-libraries/tailwind`. For Tailwind v3, see the layer workaround in {@link generic:migration-setup}.',
+          text: 'A project with Tailwind already set up needs a smaller change, which {@link generic:tailwind} shows. For Tailwind v3, see the layer workaround in {@link generic:migration-setup}.',
         },
       ],
     },
