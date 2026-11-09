@@ -1408,9 +1408,9 @@ paths exist. Its theme-target block has no core theming contract to check
 against. The spec-owner gate and `pnpm specs:for` treat a platform record like
 the core record beside it.
 
-Current enforcement gap: no checked-in gate yet proves the open-pull-request
-search. Until one exists, the pull-request summary records the search terms,
-canonical owner/path, and overlapping open work inspected.
+Current enforcement gap: no checked-in gate proves the open-pull-request
+search. The pull-request summary records the search terms, canonical
+owner/path, and overlapping open work inspected.
 
 Current enforcement gap: the example-coverage report lists each public hook
 that has no hook doc or no example block naming it, but it cannot see whether
