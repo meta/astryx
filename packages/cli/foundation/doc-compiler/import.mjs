@@ -25,7 +25,11 @@
 import {pathToFileURL} from 'node:url';
 import {createJiti} from 'jiti';
 import {importUrl} from '../fs/import-url.mjs';
-import {importUserModule} from '../fs/module-loader.mjs';
+import {
+  importUserModule,
+  readFreshInTurn,
+  readInTurn,
+} from '../fs/module-loader.mjs';
 import {fileStamp, recordContentRead} from '../fs/read-record.mjs';
 
 /** @type {ReturnType<typeof createJiti> | undefined} */
@@ -80,6 +84,28 @@ function freshUrl(file) {
 }
 
 /**
+ * Import `file` from `url`, in its turn with every other read of the file in
+ * this process (`readInTurn`, ../fs/module-loader.mjs).
+ * @param {string} file
+ * @param {string} url
+ * @returns {Promise<any>}
+ */
+function importInTurn(file, url) {
+  return readInTurn(file, () => importUrl(url));
+}
+
+/**
+ * Import `file` again, for a change, as a new module. Node chooses its format
+ * as for the first import. The read takes its turn without the file's
+ * CommonJS cache entry (`readFreshInTurn`, ../fs/module-loader.mjs).
+ * @param {string} file
+ * @returns {Promise<any>}
+ */
+function importFresh(file) {
+  return readFreshInTurn(file, () => importUrl(freshUrl(file)));
+}
+
+/**
  * Import a component, hook, topic, or self-doc module: `.ts` through jiti,
  * anything else natively.
  * @param {string} file
@@ -106,14 +132,14 @@ export function importTemplateModule(file) {
         jsxJiti ??= createJiti(import.meta.url, {jsx: true});
         return jsxJiti.import(first);
       }
-      return importUrl(`file://${first}`);
+      return importInTurn(first, `file://${first}`);
     },
     changed =>
       changed.endsWith('.ts')
         ? createJiti(import.meta.url, {jsx: true, moduleCache: false}).import(
             changed,
           )
-        : importUrl(freshUrl(changed)),
+        : importFresh(changed),
   );
 }
 
@@ -127,7 +153,7 @@ export function importNativeModule(file) {
   return importCurrent(
     file,
     'native',
-    first => importUrl(pathToFileURL(first).href),
-    changed => importUrl(freshUrl(changed)),
+    first => importInTurn(first, pathToFileURL(first).href),
+    changed => importFresh(changed),
   );
 }
