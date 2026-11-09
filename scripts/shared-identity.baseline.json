@@ -157,14 +157,6 @@
       "status": "open",
       "group": "F4 Layers and popovers"
     },
-    "packages/core/src/Layer/toastHost.tsx:hostListeners": {
-      "status": "open",
-      "group": "F2 Toast host"
-    },
-    "packages/core/src/Layer/toastHost.tsx:registeredHost": {
-      "status": "open",
-      "group": "F2 Toast host"
-    },
     "packages/core/src/List/listLayoutUpdates.ts:keptStyles": {
       "status": "open",
       "group": "triage"
