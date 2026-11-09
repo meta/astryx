@@ -235,7 +235,9 @@ runs:
                 '.github/scripts/change-scope.cjs',
                 '.github/scripts/knowledge-paths.cjs',
                 'scripts/component-packages.cjs',
-                'scripts/release/release-paths.mjs',
+                ...(pr.base.ref.startsWith('release/v')
+                  ? ['scripts/release/release-paths.mjs']
+                  : []),
                 ...(audit ? ['.github/scripts/component-audit-scope.cjs'] : []),
                 // Data, not code: the Lab entry check reads the base's copy.
                 'packages/cli/assets/discover/official-packages.json',

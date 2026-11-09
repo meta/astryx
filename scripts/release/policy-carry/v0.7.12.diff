@@ -1,5 +1,5 @@
 diff --git a/.github/actions/test-scope/action.yml b/.github/actions/test-scope/action.yml
-index eb8aa34cfb0..dc9f8e45a8d 100644
+index eb8aa34cfb0..a869c376ada 100644
 --- a/.github/actions/test-scope/action.yml
 +++ b/.github/actions/test-scope/action.yml
 @@ -89,0 +90,5 @@ outputs:
@@ -41,9 +41,11 @@ index eb8aa34cfb0..dc9f8e45a8d 100644
 -            return;
 -          }
 -
-@@ -214,0 +222 @@ runs:
-+                'scripts/release/release-paths.mjs',
-@@ -238 +246,6 @@ runs:
+@@ -214,0 +222,3 @@ runs:
++                ...(pr.base.ref.startsWith('release/v')
++                  ? ['scripts/release/release-paths.mjs']
++                  : []),
+@@ -238 +248,6 @@ runs:
 -              report({...everything, decided: 'false'});
 +              report({
 +                ...everything,
@@ -51,7 +53,7 @@ index eb8aa34cfb0..dc9f8e45a8d 100644
 +                decided: 'false',
 +                truncated: String(/truncated the file list/.test(error.message)),
 +              });
-@@ -247,0 +261,34 @@ runs:
+@@ -247,0 +263,34 @@ runs:
 +
 +            if (pr.base.ref.startsWith('release/v')) {
 +              const releaseKind = execFileSync(
@@ -87,17 +89,19 @@ index eb8aa34cfb0..dc9f8e45a8d 100644
 +              return;
 +            }
 diff --git a/.github/scripts/test-scope-action.test.mjs b/.github/scripts/test-scope-action.test.mjs
-index caa564da490..9cec353c355 100644
+index caa564da490..e65114eaa3e 100644
 --- a/.github/scripts/test-scope-action.test.mjs
 +++ b/.github/scripts/test-scope-action.test.mjs
-@@ -41,0 +42 @@ const CLASSIFIER_FILES = new Set([
-+  'scripts/release/release-paths.mjs',
-@@ -183,0 +185 @@ describe('per-job scope step', () => {
+@@ -42,0 +43 @@ const CLASSIFIER_FILES = new Set([
++const RELEASE_PATHS_FILE = 'scripts/release/release-paths.mjs';
+@@ -106,0 +108 @@ async function decide({
++          file === RELEASE_PATHS_FILE ||
+@@ -183,0 +186 @@ describe('per-job scope step', () => {
 +        'truncated',
-@@ -206 +208 @@ describe('per-job scope step', () => {
+@@ -206 +209 @@ describe('per-job scope step', () => {
 -  it('marks a release-branch pull request as the generated version bump', async () => {
 +  it('keeps a generated release-branch pull request on the narrow bump lane', async () => {
-@@ -208,0 +211,7 @@ describe('per-job scope step', () => {
+@@ -208,0 +212,7 @@ describe('per-job scope step', () => {
 +      files: changed(
 +        '.changeset/frozen.md',
 +        'packages/core/CHANGELOG.md',
@@ -105,7 +109,7 @@ index caa564da490..9cec353c355 100644
 +        'packages/cli/assets/codemods/__tests__/registry.test.mjs',
 +        'packages/cli/assets/codemods/transforms/v1.2.3/__tests__/upgrade.test.mjs',
 +      ),
-@@ -217,0 +227,49 @@ describe('per-job scope step', () => {
+@@ -217,0 +228,49 @@ describe('per-job scope step', () => {
 +  it('runs every lane for a release-branch test-repair candidate', async () => {
 +    const {outputs} = await decide({
 +      context: pullRequestContext('release/v1.2.3'),
@@ -155,12 +159,6 @@ index caa564da490..9cec353c355 100644
 +    });
 +  });
 +
-@@ -248,2 +306,3 @@ describe('per-job scope step', () => {
--      f3: `${BASE_SHA}:${AUDIT_FILE}`,
--      f4: `${BASE_SHA}:${OFFICIAL_PACKAGES}`,
-+      f3: `${BASE_SHA}:scripts/release/release-paths.mjs`,
-+      f4: `${BASE_SHA}:${AUDIT_FILE}`,
-+      f5: `${BASE_SHA}:${OFFICIAL_PACKAGES}`,
 @@ -382 +441 @@ describe('per-job scope step', () => {
 -  ])('puts everything in scope when %s', async (_, options) => {
 +  ])('puts everything in scope when %s', async (name, options) => {
@@ -268,7 +266,7 @@ index 06d9db55411..f824d6ca219 100644
 -          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
 +          FILES_PATH: ${{ steps.scope.outputs.changed_files_path || steps.everything.outputs.path }}
 diff --git a/scripts/release/active-release.mjs b/scripts/release/active-release.mjs
-index 7eae88e71bd..d408ba6500a 100644
+index 7eae88e71bd..e3868831682 100644
 --- a/scripts/release/active-release.mjs
 +++ b/scripts/release/active-release.mjs
 @@ -14,2 +14,2 @@
@@ -293,7 +291,7 @@ index 7eae88e71bd..d408ba6500a 100644
 @@ -364 +375 @@ function git(root, args) {
 -  return execFileSync('git', args, {cwd: root, encoding: 'utf8'}).trim();
 +  return gitRaw(root, args).trim();
-@@ -709,7 +720,325 @@ function listActiveBranches(root) {
+@@ -709,7 +720,338 @@ function listActiveBranches(root) {
 -const RELEASE_OUTPUT_PATTERNS = [
 -  /^packages\/(?:[^/]+|themes\/[^/]+)\/package\.json$/,
 -  /^packages\/(?:[^/]+|themes\/[^/]+)\/CHANGELOG\.md$/,
@@ -302,7 +300,7 @@ index 7eae88e71bd..d408ba6500a 100644
 -  /^packages\/cli\/assets\/codemods\/transforms\/(?:next|v\d+\.\d+\.\d+)\//,
 -  /^pnpm-lock\.yaml$/,
 +const RELEASE_TEST_REPAIR_FORBIDDEN_STATEMENT =
-+  /(?:\b(?:expect|assert)\s*[.(]|\b(?:expect|assert)[A-Z]\w*\s*\(|\.(?:not\.)?to[A-Z]\w*\s*\(|\b(?:test|it|describe)(?:\.[A-Za-z]+)*\.(?:skip|fixme|fail|slow|skipIf|runIf)\b|\b(?:skip|fixme)\s*:\s*true\b|\breturn\b|timeout|retr(?:y|ies)|\b(?:disableRules|disabledRules|excludeRules)\b|\btoMatch(?:Inline)?Snapshot\b)/i;
++  /(?:unbounded changed statement|\b(?:expect|assert)\s*[.(]|\b(?:expect|assert)[A-Z]\w*\s*\(|\.(?:not\.)?to[A-Z]\w*\s*\(|\b(?:test|it|describe)(?:\.[A-Za-z]+)*\.(?:skip|fixme|fail|slow|skipIf|runIf)\b|\b(?:skip|fixme)\s*:\s*true\b|\breturn\b|timeout|retr(?:y|ies)|\b(?:disableRules|disabledRules|excludeRules)\b|\btoMatch(?:Inline)?Snapshot\b)/i;
 +
 +function changedStatementsFromDiff(diff) {
 +  const statements = [];
@@ -400,12 +398,25 @@ index 7eae88e71bd..d408ba6500a 100644
 +            pair.close >= range.end,
 +        )
 +        .sort((a, b) => a.close - a.open - (b.close - b.open))[0];
-+      const anchorStart = enclosingCall?.open ?? range.start;
-+      const anchorEnd = enclosingCall?.close ?? range.end;
-+      const start = masked.lastIndexOf(';', anchorStart - 1) + 1;
-+      const semicolon = masked.indexOf(';', anchorEnd);
-+      const end = semicolon === -1 ? text.length : semicolon + 1;
-+      statements.push(text.slice(start, end).trim());
++      if (!enclosingCall) {
++        const changedCode = masked.slice(range.start, range.end);
++        const semicolon = changedCode.indexOf(';');
++        if (semicolon === -1) {
++          statements.push('<unbounded changed statement>');
++          continue;
++        }
++        statements.push(
++          text.slice(range.start, range.start + semicolon + 1).trim(),
++        );
++        continue;
++      }
++      const start = masked.lastIndexOf(';', enclosingCall.open - 1) + 1;
++      const semicolon = masked.indexOf(';', enclosingCall.close);
++      if (semicolon === -1) {
++        statements.push('<unbounded changed statement>');
++        continue;
++      }
++      statements.push(text.slice(start, semicolon + 1).trim());
 +    }
 +  };
 +  const flush = () => {
@@ -626,7 +637,7 @@ index 7eae88e71bd..d408ba6500a 100644
 +  /^\.github\/workflows\/ci\.yml$/,
 +  /^docs\/release\.md$/,
 +  /^docs\/specs\/AST-(?:017|030)\/spec\.md$/,
-@@ -718,2 +1047,157 @@ const RELEASE_OUTPUT_PATTERNS = [
+@@ -718,2 +1060,157 @@ const RELEASE_OUTPUT_PATTERNS = [
 -function isReleaseOutputPath(file) {
 -  return RELEASE_OUTPUT_PATTERNS.some(pattern => pattern.test(file));
 +function isAncestor(root, ancestor, descendant) {
@@ -786,7 +797,19 @@ index 7eae88e71bd..d408ba6500a 100644
 +    files: candidateEntries.length,
 +    bundleDigest: manifest ? sha256(canonicalJson(manifest)) : null,
 +  };
-@@ -1265,0 +1750,29 @@ async function main() {
+@@ -729,8 +1226,3 @@ function validateReleaseDiff(entries, {plan, baseChangesets} = {}) {
+-    const [status, ...files] = entry.split('\t');
+-    const isMove = status?.startsWith('R') || status?.startsWith('C');
+-    const expectedPaths = isMove ? 2 : 1;
+-    if (
+-      !status ||
+-      files.length !== expectedPaths ||
+-      files.some(file => !file)
+-    ) {
++    const [status] = entry.split('\t');
++    const files = diffEntryFiles(entry);
++    if (files === null) {
+@@ -1265,0 +1758,29 @@ async function main() {
 +  if (command === 'validate-policy-carry') {
 +    const base = required(values, 'base');
 +    const head = required(values, 'head');
@@ -816,7 +839,7 @@ index 7eae88e71bd..d408ba6500a 100644
 +    );
 +    return;
 +  }
-@@ -1274,7 +1787,25 @@ async function main() {
+@@ -1274,7 +1795,25 @@ async function main() {
 -    const errors = [
 -      ...validateIdentity(marker, plan),
 -      ...validateReleaseDiff(raw ? raw.split('\n') : [], {
@@ -849,17 +872,17 @@ index 7eae88e71bd..d408ba6500a 100644
 +      ];
 +    }
 +    const errors = [...validateIdentity(marker, plan), ...diffErrors];
-@@ -1285,0 +1817 @@ async function main() {
+@@ -1285,0 +1825 @@ async function main() {
 +        kind,
-@@ -1287 +1819,2 @@ async function main() {
+@@ -1287 +1827,2 @@ async function main() {
 -        files: raw ? raw.split('\n').length : 0,
 +        files: entries.length,
 +        ...(sourceCommit ? {sourceCommit, patchId} : {}),
-@@ -1399,0 +1933 @@ export {
+@@ -1399,0 +1941 @@ export {
 +  changedStatementsFromDiff,
-@@ -1404,0 +1939 @@ export {
+@@ -1404,0 +1947 @@ export {
 +  isReleaseTestRepairPath,
-@@ -1411,0 +1947 @@ export {
+@@ -1411,0 +1955 @@ export {
 +  validateReleaseTestRepair,
 diff --git a/scripts/release/release-paths.mjs b/scripts/release/release-paths.mjs
 new file mode 100644

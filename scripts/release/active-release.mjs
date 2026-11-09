@@ -718,7 +718,7 @@ function listActiveBranches(root) {
 }
 
 const RELEASE_TEST_REPAIR_FORBIDDEN_STATEMENT =
-  /(?:\b(?:expect|assert)\s*[.(]|\b(?:expect|assert)[A-Z]\w*\s*\(|\.(?:not\.)?to[A-Z]\w*\s*\(|\b(?:test|it|describe)(?:\.[A-Za-z]+)*\.(?:skip|fixme|fail|slow|skipIf|runIf)\b|\b(?:skip|fixme)\s*:\s*true\b|\breturn\b|timeout|retr(?:y|ies)|\b(?:disableRules|disabledRules|excludeRules)\b|\btoMatch(?:Inline)?Snapshot\b)/i;
+  /(?:unbounded changed statement|\b(?:expect|assert)\s*[.(]|\b(?:expect|assert)[A-Z]\w*\s*\(|\.(?:not\.)?to[A-Z]\w*\s*\(|\b(?:test|it|describe)(?:\.[A-Za-z]+)*\.(?:skip|fixme|fail|slow|skipIf|runIf)\b|\b(?:skip|fixme)\s*:\s*true\b|\breturn\b|timeout|retr(?:y|ies)|\b(?:disableRules|disabledRules|excludeRules)\b|\btoMatch(?:Inline)?Snapshot\b)/i;
 
 function changedStatementsFromDiff(diff) {
   const statements = [];
@@ -816,12 +816,25 @@ function changedStatementsFromDiff(diff) {
             pair.close >= range.end,
         )
         .sort((a, b) => a.close - a.open - (b.close - b.open))[0];
-      const anchorStart = enclosingCall?.open ?? range.start;
-      const anchorEnd = enclosingCall?.close ?? range.end;
-      const start = masked.lastIndexOf(';', anchorStart - 1) + 1;
-      const semicolon = masked.indexOf(';', anchorEnd);
-      const end = semicolon === -1 ? text.length : semicolon + 1;
-      statements.push(text.slice(start, end).trim());
+      if (!enclosingCall) {
+        const changedCode = masked.slice(range.start, range.end);
+        const semicolon = changedCode.indexOf(';');
+        if (semicolon === -1) {
+          statements.push('<unbounded changed statement>');
+          continue;
+        }
+        statements.push(
+          text.slice(range.start, range.start + semicolon + 1).trim(),
+        );
+        continue;
+      }
+      const start = masked.lastIndexOf(';', enclosingCall.open - 1) + 1;
+      const semicolon = masked.indexOf(';', enclosingCall.close);
+      if (semicolon === -1) {
+        statements.push('<unbounded changed statement>');
+        continue;
+      }
+      statements.push(text.slice(start, semicolon + 1).trim());
     }
   };
   const flush = () => {
@@ -1210,14 +1223,9 @@ function validateReleaseDiff(entries, {plan, baseChangesets} = {}) {
     : null;
   const deletedChangesets = new Set();
   for (const entry of entries) {
-    const [status, ...files] = entry.split('\t');
-    const isMove = status?.startsWith('R') || status?.startsWith('C');
-    const expectedPaths = isMove ? 2 : 1;
-    if (
-      !status ||
-      files.length !== expectedPaths ||
-      files.some(file => !file)
-    ) {
+    const [status] = entry.split('\t');
+    const files = diffEntryFiles(entry);
+    if (files === null) {
       errors.push(`invalid diff entry: ${entry}`);
       continue;
     }

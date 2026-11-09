@@ -39,8 +39,8 @@ const CLASSIFIER_FILES = new Set([
   '.github/scripts/change-scope.cjs',
   '.github/scripts/knowledge-paths.cjs',
   'scripts/component-packages.cjs',
-  'scripts/release/release-paths.mjs',
 ]);
+const RELEASE_PATHS_FILE = 'scripts/release/release-paths.mjs';
 const AUDIT_FILE = '.github/scripts/component-audit-scope.cjs';
 const OFFICIAL_PACKAGES = 'packages/cli/assets/discover/official-packages.json';
 
@@ -105,6 +105,7 @@ async function decide({
         contentCalls.push({file, ref});
         const known =
           CLASSIFIER_FILES.has(file) ||
+          file === RELEASE_PATHS_FILE ||
           file === AUDIT_FILE ||
           file === OFFICIAL_PACKAGES;
         const text = ref === BASE_SHA && known ? policyText(file) : null;
@@ -305,9 +306,8 @@ describe('per-job scope step', () => {
       f0: `${BASE_SHA}:.github/scripts/change-scope.cjs`,
       f1: `${BASE_SHA}:.github/scripts/knowledge-paths.cjs`,
       f2: `${BASE_SHA}:scripts/component-packages.cjs`,
-      f3: `${BASE_SHA}:scripts/release/release-paths.mjs`,
-      f4: `${BASE_SHA}:${AUDIT_FILE}`,
-      f5: `${BASE_SHA}:${OFFICIAL_PACKAGES}`,
+      f3: `${BASE_SHA}:${AUDIT_FILE}`,
+      f4: `${BASE_SHA}:${OFFICIAL_PACKAGES}`,
     });
     expect(contentCalls.filter(call => call.rest)).toEqual([]);
   });

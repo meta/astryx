@@ -597,6 +597,19 @@ describe('active release branch authority', () => {
         expected:
           'await expect.poll(() => {\n  return settled;\n}).toBe(true);',
       },
+      {
+        diff: `diff --git a/test.mjs b/test.mjs
+--- a/test.mjs
++++ b/test.mjs
+@@ -84,5 +84,5 @@
+       children: [
+         {type: 'paragraph'},
+       ],
+-      ordered: false,
++      ordered: true,
+     });`,
+        expected: '<unbounded changed statement>',
+      },
     ];
     for (const {diff, expected} of statementCases) {
       const changedStatements = changedStatementsFromDiff(diff);
