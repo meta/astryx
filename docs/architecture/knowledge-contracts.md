@@ -1347,6 +1347,15 @@ make the decision. Only `cixzhang`'s own pull request counts as approval of her
 own lines; every other decider approves the exact head. New decisions and added
 approvers follow the normal gates.
 
+### DEC-19 — A Lab-only pull request needs no owner decision
+
+**Reference:** `architecture:knowledge-contracts/DEC-19`
+**Decider:** `cixzhang`, `2026-11-04`
+
+The owner said: "Anything lab only gets an ok". A Lab-only pull request, as `spec:AST-030` FR26 defines it, needs no owner decision (INV4) for its Lab behavior or Lab API. A Lab record it changes still takes an engineering owner's `/approve-spec` at the pull request's head (DEC-14). A pull request that is not Lab-only under FR26 follows the normal owner rules for every part it changes; splitting out the non-Lab part makes the rest Lab-only.
+
+Rejected: treating a pull request that also changes Core or another package as Lab-only.
+
 ## Verification
 
 | Invariant                         | Evidence                                                                                                                                                                                                                 | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |

@@ -1024,6 +1024,44 @@ describe('approval line history', () => {
     });
   });
 
+  it('reads each labelled decider of a decision, and no proposed one', () => {
+    const doc = lines => ({
+      path: 'packages/themes/example/example.spec.md',
+      content: [
+        '---',
+        'id: theme:example',
+        'authority: current',
+        'approved_by: owner-a',
+        '---',
+        '',
+        '### DEC-1 — Two deciders',
+        '',
+        ...lines,
+      ].join('\n'),
+    });
+    const base = [
+      '**System-boundary decider:** `owner-a`, `2026-08-31`',
+      '**Final adoption decider:** `owner-c`, `2026-10-17`',
+      '**Proposed decider:** `owner-d`',
+    ];
+    const adoption = base.map(line => line.replace('owner-c', 'owner-b'));
+    expect(findApprovalLineRewrites([doc(base)], [doc(adoption)])).toEqual([
+      expect.objectContaining({
+        claim: 'DEC-1 (Final adoption decider)',
+        decider: 'owner-c',
+      }),
+    ]);
+    const boundary = base.map(line => line.replace('owner-a', 'owner-b'));
+    expect(findApprovalLineRewrites([doc(base)], [doc(boundary)])).toEqual([
+      expect.objectContaining({
+        claim: 'DEC-1 (System-boundary decider)',
+        decider: 'owner-a',
+      }),
+    ]);
+    const proposal = base.map(line => line.replace('owner-d', 'owner-e'));
+    expect(findApprovalLineRewrites([doc(base)], [doc(proposal)])).toEqual([]);
+  });
+
   it('warns for a platform component record too', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'approval-lines-'));
     try {

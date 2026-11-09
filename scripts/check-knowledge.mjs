@@ -893,7 +893,11 @@ const DECISION_HEADING = /^#{2,4} (DEC-[0-9]+[a-z]?)\b/;
 const AMENDMENT_HEADING = /^#{2,4} (Amendment\b.*?)\s*$/;
 const DECISION_ITEM = /^\s*[-*] \*\*(DEC-[0-9]+[a-z]?)\b/;
 const ANY_HEADING = /^#{1,4} /;
-const DECIDER_LINE = /\*\*Deciders?:?\*\*:?\s*(.*)$/;
+// Any bold label that ends in "decider" or "deciders" (a decision may name
+// several, such as a system-boundary and an adoption decider), except a
+// proposed one, which approves nothing.
+const DECIDER_LINE = /\*\*((?:[^*]*?\s)?[Dd]eciders?):?\*\*:?\s*(.*)$/;
+const PROPOSED_DECIDER = /^proposed\b/i;
 const PLACEHOLDER_DECIDER = /pending|<[^>]*>/i;
 
 function deciderLines(content) {
@@ -906,8 +910,13 @@ function deciderLines(content) {
     const item = line.match(DECISION_ITEM);
     if (item) decision = item[1];
     const decider = decision && line.match(DECIDER_LINE);
-    if (decider && !deciders.has(decision)) {
-      deciders.set(decision, decider[1].replace(/\s+/g, ' ').trim());
+    if (!decider || PROPOSED_DECIDER.test(decider[1])) continue;
+    const label = decider[1].trim();
+    const key = /^deciders?$/i.test(label)
+      ? decision
+      : `${decision} (${label})`;
+    if (!deciders.has(key)) {
+      deciders.set(key, decider[2].replace(/\s+/g, ' ').trim());
     }
   }
   return deciders;
