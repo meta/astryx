@@ -2,12 +2,14 @@
 'use client';
 
 /**
- * @file Parent-owned Table viewport and window geometry.
- * @input Canonical viewport/body refs, owned wrapper identity and shared scroll invalidations.
- * @output Stable geometry snapshots and private wrapper ownership.
- * @position Private parent runtime; modules never discover another scroll owner.
+ * @file Parent-owned Table viewport and element refs.
+ * @input Canonical viewport/body/table refs, owned wrapper identity and an
+ *   optional geometry driver
+ * @output The runtime refs, geometry snapshots when a driver measures them,
+ *   and private wrapper ownership
+ * @position Private parent runtime; modules never discover another scroll
+ *   owner. Only a windowed Table passes a geometry driver.
  */
-import {subscribeScrollGeometry} from '../hooks/scrollGeometrySubscriptions';
 import {releaseTemporaryFocus} from '../utils/focusReturn';
 import {createSharedContext} from '../utils/sharedContext';
 
@@ -30,7 +32,7 @@ export interface TableGeometrySnapshot {
   /** Increments on each size, font, or outer class or style change. */
   readonly layoutRevision: number;
 }
-const EMPTY_GEOMETRY: TableGeometrySnapshot = {
+export const EMPTY_TABLE_GEOMETRY: TableGeometrySnapshot = {
   viewportHeight: 0,
   scrollTop: 0,
   scrollHeight: 0,
@@ -40,111 +42,50 @@ const EMPTY_GEOMETRY: TableGeometrySnapshot = {
   layoutRevision: 0,
 };
 
-export function createTableRuntime() {
+/** The runtime's element refs, read by an optional geometry driver. */
+export interface TableRuntimeRefs {
+  readonly viewport: {current: HTMLDivElement | null};
+  readonly body: {current: HTMLTableSectionElement | null};
+  readonly table: {current: HTMLTableElement | null};
+}
+export interface TableGeometrySource {
+  subscribe: (onChange: () => void) => () => void;
+  getSnapshot: () => TableGeometrySnapshot;
+  getServerSnapshot: () => TableGeometrySnapshot;
+}
+/** Measures the viewport for the list window; only a windowed Table has one. */
+export interface TableGeometryDriver {
+  readonly geometry: TableGeometrySource;
+  refresh: (
+    hasContentInvalidation?: boolean,
+    hasLayoutInvalidation?: boolean,
+  ) => void;
+  connect: () => void;
+  disconnect: () => void;
+}
+const INERT_GEOMETRY: TableGeometrySource = {
+  subscribe: () => () => {},
+  getSnapshot: () => EMPTY_TABLE_GEOMETRY,
+  getServerSnapshot: () => EMPTY_TABLE_GEOMETRY,
+};
+
+export function createTableRuntime(
+  createDriver?: (refs: TableRuntimeRefs) => TableGeometryDriver,
+) {
   const viewport = {current: null as HTMLDivElement | null};
   const body = {current: null as HTMLTableSectionElement | null};
   const table = {current: null as HTMLTableElement | null};
-  const listeners = new Set<() => void>();
-  let snapshot = EMPTY_GEOMETRY;
-  let stopGeometry: (() => void) | undefined;
-  let measuredViewport: HTMLDivElement | null = null;
-  function publish(next: TableGeometrySnapshot) {
-    snapshot = next;
-    for (const listener of listeners) {
-      listener();
-    }
-  }
-  function refresh(
-    hasContentInvalidation = false,
-    hasLayoutInvalidation = false,
-  ) {
-    if (listeners.size === 0) {
-      return;
-    }
-    const el = viewport.current;
-    const section = body.current;
-    if (el == null || section == null || !el.isConnected) {
-      return;
-    }
-    // A plain scroll changes only scrollTop. Sizes and the body origin change
-    // with the content and layout invalidations the scroll owner reports, so
-    // a scroll reads nothing else.
-    if (
-      !hasContentInvalidation &&
-      !hasLayoutInvalidation &&
-      snapshot.isMeasured &&
-      measuredViewport === el
-    ) {
-      const scrollTop = el.scrollTop;
-      if (scrollTop !== snapshot.scrollTop) {
-        publish({...snapshot, scrollTop});
-      }
-      return;
-    }
-    const viewportHeight = el.clientHeight;
-    if (viewportHeight <= 0) {
-      return;
-    }
-    const scrollTop = el.scrollTop;
-    const next: TableGeometrySnapshot = {
-      viewportHeight,
-      scrollTop,
-      scrollHeight: el.scrollHeight,
-      startOffset:
-        section.getBoundingClientRect().top -
-        el.getBoundingClientRect().top +
-        scrollTop -
-        el.clientTop,
-      isMeasured: true,
-      revision:
-        snapshot.revision +
-        (hasContentInvalidation || hasLayoutInvalidation ? 1 : 0),
-      layoutRevision: snapshot.layoutRevision + (hasLayoutInvalidation ? 1 : 0),
-    };
-    measuredViewport = el;
-    if (
-      !hasContentInvalidation &&
-      !hasLayoutInvalidation &&
-      snapshot.viewportHeight === next.viewportHeight &&
-      snapshot.scrollTop === next.scrollTop &&
-      snapshot.scrollHeight === next.scrollHeight &&
-      snapshot.startOffset === next.startOffset &&
-      snapshot.isMeasured
-    ) {
-      return;
-    }
-    publish(next);
-  }
-  function connectGeometry() {
-    const node = viewport.current;
-    if (node == null || listeners.size === 0 || stopGeometry != null) {
-      return;
-    }
-    stopGeometry = subscribeScrollGeometry(node, refresh);
-    refresh(true, true);
-  }
-  const geometry = {
-    subscribe(fn: () => void) {
-      listeners.add(fn);
-      connectGeometry();
-      return () => {
-        listeners.delete(fn);
-        if (listeners.size === 0) {
-          stopGeometry?.();
-          stopGeometry = undefined;
-        }
-      };
-    },
-    getSnapshot: () => snapshot,
-    getServerSnapshot: () => EMPTY_GEOMETRY,
-  };
+  const driver = createDriver?.({viewport, body, table});
+  const refresh = (
+    hasContentInvalidation?: boolean,
+    hasLayoutInvalidation?: boolean,
+  ) => driver?.refresh(hasContentInvalidation, hasLayoutInvalidation);
   function setViewport(node: HTMLDivElement | null) {
     if (viewport.current === node) {
       return;
     }
     const previous = viewport.current;
-    stopGeometry?.();
-    stopGeometry = undefined;
+    driver?.disconnect();
     viewport.current = node;
     if (previous != null) {
       // Ref cleanup can precede removal or a same-commit successor ref.
@@ -159,7 +100,7 @@ export function createTableRuntime() {
       // Retain its last measurement so ref churn cannot create a reset/re-render loop.
       return;
     }
-    connectGeometry();
+    driver?.connect();
     return () => {
       if (viewport.current === node) {
         setViewport(null);
@@ -178,7 +119,7 @@ export function createTableRuntime() {
     viewport,
     body,
     table,
-    geometry,
+    geometry: driver?.geometry ?? INERT_GEOMETRY,
     setViewport,
     setBody,
     setTable,

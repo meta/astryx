@@ -6,9 +6,13 @@
  * @file useTableRowsVirtualization.ts
  * @input Positive finite CSS-pixel row pitch and viewport height
  * @output Stable opaque TableVirtualizationCapability and public config type
- * @position Geometry-only opt-in; Table owns data, admission and rendering
+ * @position Geometry-only opt-in; Table owns data, admission and rendering.
+ *   The hook registers Table's windowing implementation, so a Table in an app
+ *   that never calls it carries no windowing code.
  */
 import {useMemo} from 'react';
+import {registerTableWindowing} from '../../tableWindowing';
+import {tableWindowing} from './tableWindowingImpl';
 
 const capabilityBrand: unique symbol = Symbol('TableVirtualizationCapability');
 
@@ -52,6 +56,7 @@ export function useTableRowsVirtualization({
   rowHeight,
   viewportHeight,
 }: UseTableRowsVirtualizationConfig): TableVirtualizationCapability {
+  registerTableWindowing(tableWindowing);
   return useMemo(
     () =>
       Object.freeze({

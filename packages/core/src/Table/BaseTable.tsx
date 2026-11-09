@@ -19,26 +19,26 @@ import {
   useId,
   useMemo,
   useRef,
+  useState,
   type ReactElement,
   type ReactNode,
   type Ref,
 } from 'react';
+import {TableRuntimeContext, type TableRuntime} from './tableRuntime';
 import {
-  createTableRuntime,
-  TableRuntimeContext,
-  isTableScrollWrapperOwned,
-} from './tableRuntime';
-import {resolveTableIdentity, resolveTableAdmission} from './tableIdentity';
-import {useTableWindow} from './plugins/virtualization/useTableWindow';
-import {getTableVirtualizationConfig} from './plugins/virtualization/useTableRowsVirtualization';
+  resolveTableIdentity,
+  resolveTableAdmission,
+  type RowIdentity,
+} from './tableIdentity';
+import {
+  FULL_RENDER,
+  readTableWindowing,
+  type TableWindow,
+  type TableWindowing,
+} from './tableWindowing';
 import {TableContext} from './TableContext';
 import {use} from 'react';
-import {
-  isFixedHeightColumn,
-  getLogicalPositionExtraVar,
-  getLogicalPositionRenderer,
-  withLogicalPositionWidths,
-} from './tableColumnAdmission';
+import {getLogicalPositionRenderer} from './tableColumnAdmission';
 import {isRenderable} from '../utils/isRenderable';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
@@ -61,7 +61,6 @@ import type {
 import {
   generateColumns,
   defaultCellRenderer,
-  resolveColumnFloorWidths,
   resolveColumnWidths,
   resolveTableMinWidth,
 } from './columnUtils';
@@ -532,6 +531,7 @@ const MemoizedTableRow = memo(TableRowInner, areRowPropsEqual) as <
  * Inner BaseTable implementation (generic-preserving).
  */
 function BaseTableInner<T extends Record<string, unknown>>({
+  windowing,
   data,
   columns: columnsProp,
   idKey,
@@ -548,13 +548,15 @@ function BaseTableInner<T extends Record<string, unknown>>({
   style,
   ref,
   ...rest
-}: BaseTableProps<T> & {ref?: Ref<HTMLTableElement>}): ReactElement {
-  const t = useComponentTranslator();
+}: BaseTableProps<T> & {
+  ref?: Ref<HTMLTableElement>;
+  windowing: TableWindowing;
+}): ReactElement {
   // Use stable empty array when no plugins provided
   const plugins = pluginsProp ?? (EMPTY_PLUGINS as TablePlugin<T>[]);
 
   // Admission is resolved before any section renders.
-  const runtime = useMemo(() => createTableRuntime(), []);
+  const runtime = useMemo(() => windowing.createRuntime(), [windowing]);
   const admission = useMemo(() => resolveTableAdmission(plugins), [plugins]);
   const mode = children ? 'children' : 'data';
   const usesCanonicalIdentity = virtualization != null;
@@ -614,79 +616,141 @@ function BaseTableInner<T extends Record<string, unknown>>({
   }
   const resolvedColumns = resolvedColumnsRef.current;
   const headerRowCount = mode === 'data' && resolvedColumns.length > 0 ? 1 : 0;
-  const config = getTableVirtualizationConfig(virtualization);
-  const windowFallbackReason = useMemo(() => {
-    if (mode !== 'data') {
-      return 'windowing requires data mode';
-    }
-    if (ScrollWrapper == null) {
-      return 'windowing requires the Table scroll wrapper';
-    }
-    if (!isTableScrollWrapperOwned(ScrollWrapper)) {
-      return 'windowing requires the Table-owned scroll wrapper';
-    }
-    if (admission.rowModel !== 'flat') {
-      return "structural body modifiers must declare rowModel: 'flat' to admit windowing";
-    }
-    if (!identity.every(row => row.identityStatus === 'valid')) {
-      return 'explicit unique valid row identity is required';
-    }
-    if (textOverflowProp === 'wrap') {
-      return 'explicit wrapped content is not fixed-height';
-    }
-    if (rowIndexStart != null || rowCount != null) {
-      return 'legacy row offsets or counts conflict with windowed metadata';
-    }
-    if (!resolvedColumns.every(isFixedHeightColumn)) {
-      return 'a custom cell renderer has no fixed-height admission';
-    }
-    if (
-      config == null ||
-      !Number.isFinite(config.rowHeight) ||
-      config.rowHeight <= 0 ||
-      !Number.isFinite(config.viewportHeight) ||
-      config.viewportHeight <= 0
-    ) {
-      return 'row and viewport geometry must be positive finite CSS pixels';
-    }
-    return undefined;
-  }, [
-    mode,
+  const Window = windowing.Window;
+  const view: BaseTableViewState<T> = {
+    CellComponent,
+    HeaderCellComponent,
+    RowComponent,
     ScrollWrapper,
-    admission.rowModel,
+    admission,
+    ariaRowCount,
+    ariaRowIndexingEnabled,
+    children,
+    className,
+    data,
+    emptyState,
+    firstRowAriaIndex,
+    headerRowCount,
     identity,
-    textOverflowProp,
-    rowIndexStart,
-    rowCount,
+    mode,
+    plugins,
+    ref,
     resolvedColumns,
-    config,
-  ]);
-  const windowAdmitted = windowFallbackReason === undefined;
+    rest,
+    runtime,
+    style,
+    textOverflowProp,
+    xstyle,
+  };
+  return (
+    <Window
+      input={{
+        virtualization,
+        mode,
+        scrollWrapper: ScrollWrapper,
+        rowModel: admission.rowModel,
+        data: data ?? [],
+        identity,
+        keys,
+        textOverflow: textOverflowProp,
+        hasLegacyRowMetadata: rowIndexStart != null || rowCount != null,
+        columns: resolvedColumns,
+        runtime,
+      }}
+      render={windowPlan => (
+        <BaseTableView view={view} windowPlan={windowPlan} />
+      )}
+    />
+  );
+}
+
+interface BaseTableViewState<T extends Record<string, unknown>> {
+  CellComponent: React.ComponentType<TableCellComponentProps>;
+  HeaderCellComponent: React.ComponentType<TableHeaderCellComponentProps>;
+  RowComponent: React.ComponentType<TableRowComponentProps>;
+  ScrollWrapper: BaseTableProps<T>['scrollWrapper'];
+  admission: ReturnType<typeof resolveTableAdmission>;
+  ariaRowCount: number | undefined;
+  ariaRowIndexingEnabled: boolean;
+  children: BaseTableProps<T>['children'];
+  className: BaseTableProps<T>['className'];
+  data: BaseTableProps<T>['data'];
+  emptyState: BaseTableProps<T>['emptyState'];
+  firstRowAriaIndex: number;
+  headerRowCount: number;
+  identity: RowIdentity[];
+  mode: 'data' | 'children';
+  plugins: TablePlugin<T>[];
+  ref: Ref<HTMLTableElement> | undefined;
+  resolvedColumns: TableColumn<T>[];
+  rest: BaseTableRest<T>;
+  runtime: TableRuntime;
+  style: BaseTableProps<T>['style'];
+  textOverflowProp: BaseTableProps<T>['textOverflow'];
+  xstyle: BaseTableProps<T>['xstyle'];
+}
+
+type BaseTableRest<T extends Record<string, unknown>> = Omit<
+  BaseTableProps<T>,
+  | 'data'
+  | 'columns'
+  | 'idKey'
+  | 'plugins'
+  | 'children'
+  | 'textOverflow'
+  | 'virtualization'
+  | 'scrollWrapper'
+  | 'emptyState'
+  | 'rowIndexStart'
+  | 'rowCount'
+  | 'xstyle'
+  | 'className'
+  | 'style'
+  | 'ref'
+>;
+
+/**
+ * The table's markup for one window plan. The windowing implementation's
+ * component renders it, so a full-render Table runs no windowing hook.
+ */
+function BaseTableView<T extends Record<string, unknown>>({
+  view,
+  windowPlan,
+}: {
+  view: BaseTableViewState<T>;
+  windowPlan: TableWindow<T>;
+}): ReactElement {
+  const {
+    CellComponent,
+    HeaderCellComponent,
+    RowComponent,
+    ScrollWrapper,
+    admission,
+    ariaRowCount,
+    ariaRowIndexingEnabled,
+    children,
+    className,
+    data,
+    emptyState,
+    firstRowAriaIndex,
+    headerRowCount,
+    identity,
+    mode,
+    plugins,
+    ref,
+    resolvedColumns,
+    rest,
+    runtime,
+    style,
+    textOverflowProp,
+    xstyle,
+  } = view;
+  const t = useComponentTranslator();
   useDevWarningPerMessage(
     'Table',
-    `Windowing disabled: ${windowFallbackReason}. Rendering all rows.`,
-    virtualization != null && windowFallbackReason != null,
+    `Windowing disabled: ${windowPlan.fallbackReason}. Rendering all rows.`,
+    windowPlan.fallbackReason != null,
   );
-  const logicalPositionColumns = useMemo(
-    () =>
-      new Set(
-        resolvedColumns.flatMap((column, index) =>
-          getLogicalPositionRenderer(column) == null ? [] : [index],
-        ),
-      ),
-    [resolvedColumns],
-  );
-  const windowPlan = useTableWindow({
-    capability: virtualization,
-    data: data ?? [],
-    keys,
-    isAdmitted: windowAdmitted,
-    logicalPositionColumns,
-    viewport: runtime.viewport,
-    body: runtime.body,
-    table: runtime.table,
-    geometry: runtime.geometry,
-  });
   const renderContext = useMemo<TableRenderContext>(
     () =>
       Object.freeze({
@@ -705,25 +769,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
   // inline styles and the aggregate table min-width.
   // A windowed table widens its row-number columns to the width measured for
   // the last logical row, before that row mounts, so a number never clips.
-  // Fixed layout sizes columns from the header, so rows keep their columns;
-  // pinned offsets read the extra width from a table variable.
-  const sizedColumns = withLogicalPositionWidths(
-    resolvedColumns,
-    windowPlan.logicalPositionWidths,
-  );
-  const resolvedWidths = resolveColumnWidths(sizedColumns);
-  const logicalExtraStyle: Record<string, string> = {};
-  if (sizedColumns !== resolvedColumns) {
-    const floors = resolveColumnFloorWidths(resolvedColumns);
-    const sizedFloors = resolveColumnFloorWidths(sizedColumns);
-    sizedColumns.forEach((column, index) => {
-      const extra =
-        (sizedFloors.get(column.key) ?? 0) - (floors.get(column.key) ?? 0);
-      if (extra > 0) {
-        logicalExtraStyle[getLogicalPositionExtraVar(index)] = `${extra}px`;
-      }
-    });
-  }
+  const resolvedWidths = resolveColumnWidths(windowPlan.columns);
 
   // --- Plugin pipeline: table ---
   const tableRenderProps = applyPlugins(plugins, p => p.transformTable, {
@@ -875,7 +921,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
           ),
         }
       : mergedStyle),
-    ...logicalExtraStyle,
+    ...windowPlan.extraStyle,
   };
 
   let tableElement: ReactNode = (
@@ -951,19 +997,9 @@ function BaseTableInner<T extends Record<string, unknown>>({
                         textOverflow={textOverflow}
                         RowComponent={RowComponent}
                         CellComponent={CellComponent}
-                        rowHeight={
-                          windowPlan.isWindowed ? config?.rowHeight : undefined
-                        }
-                        onRowFocus={
-                          windowPlan.isWindowed
-                            ? windowPlan.onRowFocus
-                            : undefined
-                        }
-                        onRowBlur={
-                          windowPlan.isWindowed
-                            ? windowPlan.onRowBlur
-                            : undefined
-                        }
+                        rowHeight={windowPlan.rowHeight}
+                        onRowFocus={windowPlan.onRowFocus}
+                        onRowBlur={windowPlan.onRowBlur}
                         ariaRowIndex={
                           windowPlan.isWindowed
                             ? headerRowCount + rowIndex + 1
@@ -1057,11 +1093,9 @@ function BaseTableInner<T extends Record<string, unknown>>({
   const runtimeValue = useMemo(
     () => ({
       ...runtime,
-      viewportHeight: windowPlan.isWindowed
-        ? config?.viewportHeight
-        : undefined,
+      viewportHeight: windowPlan.viewportHeight,
     }),
-    [runtime, windowPlan.isWindowed, config?.viewportHeight],
+    [runtime, windowPlan.viewportHeight],
   );
   return (
     <TableRuntimeContext value={runtimeValue}>
@@ -1092,7 +1126,31 @@ function BaseTableInner<T extends Record<string, unknown>>({
  * />
  * ```
  */
-export const BaseTable = BaseTableInner as <T extends Record<string, unknown>>(
+function BaseTableWithWindowing<T extends Record<string, unknown>>(
+  props: BaseTableProps<T> & {ref?: Ref<HTMLTableElement>},
+): ReactElement {
+  // The windowing implementation is chosen once per mount, so its hooks stay
+  // the same while `virtualization` turns on and off. A Table that mounted
+  // before any capability existed switches once, on the first capability.
+  const [windowing, setWindowing] = useState(readTableWindowing);
+  if (props.virtualization != null) {
+    const registered = readTableWindowing();
+    if (registered !== windowing) {
+      setWindowing(() => registered);
+    }
+  }
+  return (
+    <BaseTableInner
+      key={windowing === FULL_RENDER ? 0 : 1}
+      {...props}
+      windowing={windowing}
+    />
+  );
+}
+
+export const BaseTable = BaseTableWithWindowing as <
+  T extends Record<string, unknown>,
+>(
   props: BaseTableProps<T> & {ref?: Ref<HTMLTableElement>},
 ) => ReactElement;
 

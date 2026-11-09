@@ -1,6 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 import {afterEach, describe, expect, it, vi} from 'vitest';
-import {createTableRuntime} from './tableRuntime';
+import {createTableRuntime as createLeanRuntime} from './tableRuntime';
+import {createTableGeometryDriver} from './plugins/virtualization/tableGeometry';
+
+const createTableRuntime = () => createLeanRuntime(createTableGeometryDriver);
 import {publishScrollGeometry} from '../hooks/scrollGeometrySubscriptions';
 import {focusForLastInputTemporarily} from '../utils/focusReturn';
 
