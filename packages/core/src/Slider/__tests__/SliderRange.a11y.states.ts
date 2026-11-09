@@ -160,9 +160,10 @@ export const SLIDER_RANGE_EXCLUSIONS = [
   },
   {
     id: 'disabled-range',
-    owner: 'Slider.test.tsx disabled suites and the single-thumb binding',
+    owner:
+      'Slider.test.tsx "keeps both thumbs of a disabled range as Tab stops that hold their values"',
     reason:
-      'A disabled range is not a state here yet. Its story trips the axe color-contrast rule on the group label: the thumbs carry aria-disabled, but the group does not, so axe cannot see that the label belongs to an inactive control. That is a component question for its own change; until then the single-thumb binding proves an unavailable thumb.',
+      'A disabled range is not a story state yet: its story trips the axe color-contrast rule on the group label, because the thumbs carry aria-disabled and the group does not. The multi-thumb outcomes a disabled range can still change are its Tab order and its held values, and that local test proves both thumbs stay Tab stops in order, carry aria-disabled, and keep their values under End and Home.',
   },
   {
     id: 'pointer-drag-model',

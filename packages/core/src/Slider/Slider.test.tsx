@@ -449,6 +449,39 @@ describe('Slider', () => {
     expect(handleChange).not.toHaveBeenCalled();
   });
 
+  it('keeps both thumbs of a disabled range as Tab stops that hold their values', async () => {
+    const user = userEvent.setup();
+    const handleChange = vi.fn();
+    render(
+      <>
+        <button type="button">Before</button>
+        <Slider
+          label="Price"
+          value={[20, 80] as [number, number]}
+          onChange={handleChange}
+          isDisabled
+        />
+      </>,
+    );
+    const [lower, upper] = screen.getAllByRole('slider');
+    for (const thumb of [lower, upper]) {
+      expect(thumb).toHaveAttribute('aria-disabled', 'true');
+      expect(thumb).toHaveAttribute('tabindex', '0');
+    }
+    act(() => {
+      screen.getByRole('button', {name: 'Before'}).focus();
+    });
+    await user.tab();
+    expect(lower).toHaveFocus();
+    await user.keyboard('{End}');
+    await user.tab();
+    expect(upper).toHaveFocus();
+    await user.keyboard('{Home}');
+    expect(lower).toHaveAttribute('aria-valuenow', '20');
+    expect(upper).toHaveAttribute('aria-valuenow', '80');
+    expect(handleChange).not.toHaveBeenCalled();
+  });
+
   describe('caller handlers while disabled (spec:AST-085 FR2)', () => {
     // A disabled slider stays focusable (aria-disabled, not native disabled),
     // so the browser no longer blocks its events: the component withholds
