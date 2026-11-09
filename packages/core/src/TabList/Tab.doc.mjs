@@ -16,6 +16,37 @@ export const docs = {
   },
   examples: [
     {
+      label: 'Underline the whole tab in one strip',
+      code: `import {Tab, TabList} from '@astryxdesign/core/TabList';
+import {Theme, defineTheme} from '@astryxdesign/core/theme';
+import {appTheme} from './theme';
+
+// The selected indicator spans the label by default. An editor-style strip
+// can underline the whole tab, icon and end content included, by restyling
+// the tab-indicator target in a nested Theme. Only this strip changes: every
+// other TabList keeps the app theme's indicator.
+const fullWidthIndicatorTheme = defineTheme({
+  name: 'full-width-tab-indicator',
+  extends: appTheme,
+  components: {
+    'tab-indicator': {
+      base: {insetInline: 0},
+    },
+  },
+});
+
+function EditorTabs() {
+  return (
+    <Theme theme={fullWidthIndicatorTheme}>
+      <TabList value="app" onChange={() => {}} role="tablist" aria-label="Open files" size="sm" hasDivider>
+        <Tab value="app" label="App.tsx" />
+        <Tab value="styles" label="styles.css" />
+      </TabList>
+    </Theme>
+  );
+}`,
+    },
+    {
       label: 'Describe a tab with help text',
       code: `import {useRef, useState} from 'react';
 import {Icon} from '@astryxdesign/core/Icon';

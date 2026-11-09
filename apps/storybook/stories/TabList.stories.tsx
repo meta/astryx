@@ -13,6 +13,8 @@ import {
 import {Heading} from '@astryxdesign/core/Text';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Tooltip} from '@astryxdesign/core/Tooltip';
+import {Theme, defineTheme} from '@astryxdesign/core/theme';
+import {neutralTheme} from '@astryxdesign/theme-neutral';
 import {
   PlusIcon,
   FunnelIcon,
@@ -1113,6 +1115,54 @@ export const DescribedTabs: Story = {
           </div>
         ))}
       </div>
+    );
+  },
+};
+
+/**
+ * An editor-style strip that underlines the whole selected tab. A nested Theme
+ * restyles the `tab-indicator` target, so only this strip changes.
+ */
+const fullWidthIndicatorTheme = defineTheme({
+  name: 'full-width-tab-indicator',
+  extends: neutralTheme,
+  components: {
+    'tab-indicator': {
+      base: {insetInline: 0},
+    },
+  },
+});
+
+export const FullWidthIndicator: Story = {
+  name: 'Full-Width Indicator (Nested Theme)',
+  render: () => {
+    const [value, setValue] = useState('app');
+    return (
+      <VStack gap={4}>
+        <Theme theme={fullWidthIndicatorTheme}>
+          <TabList
+            value={value}
+            onChange={setValue}
+            role="tablist"
+            aria-label="Open files"
+            size="sm"
+            hasDivider>
+            <Tab value="app" label="App.tsx" />
+            <Tab value="styles" label="styles.css" />
+            <Tab value="readme" label="README.md" />
+          </TabList>
+        </Theme>
+        <TabList
+          value={value}
+          onChange={setValue}
+          aria-label="Default indicator, for comparison"
+          size="sm"
+          hasDivider>
+          <Tab value="app" label="App.tsx" />
+          <Tab value="styles" label="styles.css" />
+          <Tab value="readme" label="README.md" />
+        </TabList>
+      </VStack>
     );
   },
 };
