@@ -21,6 +21,7 @@ import {
   mergeTopic,
   problemsInTopic,
 } from './docs-discovery.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
@@ -54,7 +55,7 @@ function integration(name, topics, {docsDir = 'docs'} = {}) {
 }
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-docs-test-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-docs-test-'));
 });
 
 afterEach(() => {

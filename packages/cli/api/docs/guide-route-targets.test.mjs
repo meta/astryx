@@ -23,6 +23,7 @@ import {
   DocsCatalog,
   mergeTopic,
 } from '../../foundation/discovery/docs-discovery.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const SLOW = 60_000;
 const CLI = '@astryxdesign/cli';
@@ -115,7 +116,7 @@ async function cliJson(args) {
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-guide-route-targets-'),
+    path.join(REPO_ROOT, '.astryx-guide-route-targets-'),
   );
 });
 

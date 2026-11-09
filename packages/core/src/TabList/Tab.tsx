@@ -235,17 +235,20 @@ const styles = stylex.create({
   },
 });
 
+// A minimum, not a fixed height: a tab grows with a larger text size, so its
+// label is never clipped.
 const sizeStyles = stylex.create({
-  sm: {height: sizeVars['--size-element-sm']},
-  md: {height: sizeVars['--size-element-md']},
-  lg: {height: sizeVars['--size-element-lg']},
+  sm: {minHeight: sizeVars['--size-element-sm']},
+  md: {minHeight: sizeVars['--size-element-md']},
+  lg: {minHeight: sizeVars['--size-element-lg']},
 });
 
-// Hover bg uses the standard element size (one step smaller than tab)
+// The hover background fills the tab (inset 0) and is never shorter than the
+// element size.
 const hoverSizeStyles = stylex.create({
-  sm: {height: sizeVars['--size-element-sm']},
-  md: {height: sizeVars['--size-element-md']},
-  lg: {height: sizeVars['--size-element-lg']},
+  sm: {minHeight: sizeVars['--size-element-sm']},
+  md: {minHeight: sizeVars['--size-element-md']},
+  lg: {minHeight: sizeVars['--size-element-lg']},
 });
 
 const layoutStyles = stylex.create({

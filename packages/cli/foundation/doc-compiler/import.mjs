@@ -24,6 +24,7 @@
 
 import {pathToFileURL} from 'node:url';
 import {createJiti} from 'jiti';
+import {importUrl} from '../fs/import-url.mjs';
 import {importUserModule} from '../fs/module-loader.mjs';
 import {fileStamp, recordContentRead} from '../fs/read-record.mjs';
 
@@ -105,14 +106,14 @@ export function importTemplateModule(file) {
         jsxJiti ??= createJiti(import.meta.url, {jsx: true});
         return jsxJiti.import(first);
       }
-      return import(`file://${first}`);
+      return importUrl(`file://${first}`);
     },
     changed =>
       changed.endsWith('.ts')
         ? createJiti(import.meta.url, {jsx: true, moduleCache: false}).import(
             changed,
           )
-        : import(freshUrl(changed)),
+        : importUrl(freshUrl(changed)),
   );
 }
 
@@ -126,7 +127,7 @@ export function importNativeModule(file) {
   return importCurrent(
     file,
     'native',
-    first => import(pathToFileURL(first).href),
-    changed => import(freshUrl(changed)),
+    first => importUrl(pathToFileURL(first).href),
+    changed => importUrl(freshUrl(changed)),
   );
 }

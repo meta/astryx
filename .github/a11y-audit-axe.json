@@ -35,5 +35,25 @@
     "stories": ["core-hovercard--open-states"],
     "readySelector": "[role=\"dialog\"]"
   },
-  "InputGroupText": {"components": ["InputGroupText", "InputGroup"]}
+  "InputGroupText": {"components": ["InputGroupText", "InputGroup"]},
+  "LayoutFooter": {
+    "components": ["Layout"],
+    "stories": [
+      "core-layout--footer-states",
+      "core-layout--basic-card",
+      "core-layout--with-sidebar",
+      "core-layout--no-dividers",
+      "core-layout--full-bleed-content"
+    ]
+  },
+  "LayoutHeader": {
+    "components": ["Layout"],
+    "stories": [
+      "core-layout--header-states",
+      "core-layout--basic-card",
+      "core-layout--with-sidebar",
+      "core-layout--no-dividers",
+      "core-layout--full-bleed-content"
+    ]
+  }
 }
