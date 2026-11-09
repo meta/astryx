@@ -27,7 +27,10 @@ import {
   armHold,
   blockMainThread,
   BusyWindowTooLateError,
+  BusyFrameUnjudgedError,
   busyWindowProof,
+  type BusyProof,
+  type UnjudgedFrame,
   castStoryboard,
   compareCurve,
   countBetween,
@@ -1081,44 +1084,64 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   const castFrames = await cast.stop();
   const tracked = await trackMarker(page, castFrames);
   const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
-  const proof = busyWindowProof(tracked, block, {
-    axis: ZOOM_AXIS,
-    settledWithin: ZOOM_SETTLED_PX,
-    control,
-  });
-  await writeEvidence(
-    'busy-main-thread/lightbox-double-tap-zoom',
-    {
-      [`${testInfo.project.name}.json`]: JSON.stringify(
-        {
-          block,
-          proof,
-          frames: tracked.map(f => ({
-            t: +(f.t - block.from).toFixed(1),
-            y: f.box?.y ?? null,
-            h: f.box?.height ?? null,
-          })),
-          control: control.map(f => ({
-            t: +(f.t - block.from).toFixed(1),
-            x: f.box?.x ?? null,
-          })),
-        },
-        null,
-        1,
-      ),
-    },
-    testInfo,
-  );
-  const film = await castStoryboard(page, castFrames, {
-    name: 'lightbox-double-tap-zoom-busy-main-thread',
-    zero: block.from,
-    from: block.from - 40,
-    to: proof.judged.to + 40,
-    columns: 8,
-    cellScale: 0.35,
-    data: t => ({h: tracked.find(f => f.t === t)?.box?.height ?? -1}),
-  });
-  await film.write(testInfo, {block, judged: proof.judged});
+  // The run's frames and storyboard, kept whatever the proof concludes.
+  const record = async (
+    result: {proof: BusyProof} | {unjudged: ReadonlyArray<UnjudgedFrame>},
+    judged: {from: number; to: number},
+  ) => {
+    await writeEvidence(
+      'busy-main-thread/lightbox-double-tap-zoom',
+      {
+        [`${testInfo.project.name}.json`]: JSON.stringify(
+          {
+            block,
+            ...result,
+            frames: tracked.map(f => ({
+              t: +(f.t - block.from).toFixed(1),
+              y: f.box?.y ?? null,
+              h: f.box?.height ?? null,
+            })),
+            control: control.map(f => ({
+              t: +(f.t - block.from).toFixed(1),
+              x: f.box?.x ?? null,
+            })),
+          },
+          null,
+          1,
+        ),
+      },
+      testInfo,
+    );
+    const film = await castStoryboard(page, castFrames, {
+      name: 'lightbox-double-tap-zoom-busy-main-thread',
+      zero: block.from,
+      from: block.from - 40,
+      to: judged.to + 40,
+      columns: 8,
+      cellScale: 0.35,
+      data: t => ({h: tracked.find(f => f.t === t)?.box?.height ?? -1}),
+    });
+    await film.write(testInfo, {block, judged});
+  };
+  // Every frame the control moves on is judged by the edge's own step. A
+  // frame the cast's 1 px step cannot show the edge's move on is too little
+  // to judge, and fails by name (`BusyFrameUnjudgedError`). That run keeps its
+  // frames and storyboard too.
+  let proof: BusyProof;
+  try {
+    proof = busyWindowProof(tracked, block, {
+      axis: ZOOM_AXIS,
+      settledWithin: ZOOM_SETTLED_PX,
+      control,
+      judgeEveryFrame: true,
+    });
+  } catch (error) {
+    if (error instanceof BusyFrameUnjudgedError) {
+      await record({unjudged: error.frames}, block);
+    }
+    throw error;
+  }
+  await record({proof}, proof.judged);
   // Judged against the control. A two-core runner's software compositor and
   // the screencast share the core the block spins on. So every compositor
   // animation presents fewer frames there, the control's too. The photo keeps
@@ -1126,7 +1149,9 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   expect(proof.verdict.failures).toEqual([]);
   // The verdict, spelled out. The top edge takes a new position on every
   // frame the control moves, with none excused as under a cast step. The
-  // control moves on at least the verdict's floor of four frames.
+  // control moves on at least the verdict's floor of four frames. With
+  // `judgeEveryFrame`, an excused frame throws first, so `belowStep` stays a
+  // guard on that option.
   expect(proof.control?.movedWith).toBe(proof.control?.moved);
   expect(proof.control?.belowStep).toBe(0);
   expect(proof.control?.moved).toBeGreaterThanOrEqual(4);

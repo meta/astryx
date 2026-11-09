@@ -621,6 +621,102 @@ describe('useTableColumnResize', () => {
       render(<ResizeTable maxWidth={500} />);
       const handle = getResizeHandles()[0];
       expect(handle).toHaveAttribute('aria-valuemax', '500');
+      // A real maximum needs no stand-in, so no value text either.
+      expect(handle).not.toHaveAttribute('aria-valuetext');
+    });
+
+    it("announces its column's rendered width before any resize, not the minimum", () => {
+      const original = HTMLElement.prototype.getBoundingClientRect;
+      HTMLElement.prototype.getBoundingClientRect = function (
+        this: HTMLElement,
+      ) {
+        if (this.tagName !== 'TH') {
+          return original.call(this);
+        }
+        const width = 180.4;
+        const height = 32;
+        return {
+          x: 0,
+          y: 0,
+          top: 0,
+          left: 0,
+          width,
+          height,
+          right: width,
+          bottom: height,
+          toJSON: () => ({}),
+        };
+      };
+      try {
+        render(<ResizeTable minWidth={60} />);
+        for (const handle of getResizeHandles()) {
+          expect(handle).toHaveAttribute('aria-valuenow', '180');
+          expect(handle).toHaveAttribute('aria-valuetext', '180 pixels');
+        }
+      } finally {
+        HTMLElement.prototype.getBoundingClientRect = original;
+      }
+    });
+
+    it('keeps the announced range holding a column rendered past its limits', () => {
+      const original = HTMLElement.prototype.getBoundingClientRect;
+      HTMLElement.prototype.getBoundingClientRect = function (
+        this: HTMLElement,
+      ) {
+        if (this.tagName !== 'TH') {
+          return original.call(this);
+        }
+        const width = 180.4;
+        const height = 32;
+        return {
+          x: 0,
+          y: 0,
+          top: 0,
+          left: 0,
+          width,
+          height,
+          right: width,
+          bottom: height,
+          toJSON: () => ({}),
+        };
+      };
+      try {
+        render(<ResizeTable minWidth={60} maxWidth={150} />);
+        for (const handle of getResizeHandles()) {
+          // The layout made the column 180 px, past its 150 px maximum.
+          expect(handle).toHaveAttribute('aria-valuenow', '180');
+          expect(
+            Number(handle.getAttribute('aria-valuemax')),
+          ).toBeGreaterThanOrEqual(180);
+          expect(
+            Number(handle.getAttribute('aria-valuemin')),
+          ).toBeLessThanOrEqual(180);
+        }
+      } finally {
+        HTMLElement.prototype.getBoundingClientRect = original;
+      }
+    });
+
+    it('an unbounded column announces a finite maximum, never below its value, and its width in words', () => {
+      render(<ResizeTable />);
+      for (const handle of getResizeHandles()) {
+        const now = Number(handle.getAttribute('aria-valuenow'));
+        const min = Number(handle.getAttribute('aria-valuemin'));
+        // ARIA's default maximum is 100, which a column wider than 100px
+        // would read past.
+        expect(handle).toHaveAttribute('aria-valuemax');
+        const max = Number(handle.getAttribute('aria-valuemax'));
+        expect(Number.isFinite(max)).toBe(true);
+        expect(max).toBeGreaterThanOrEqual(now);
+        expect(max).toBeGreaterThanOrEqual(min);
+        expect(handle).toHaveAttribute('aria-valuetext', `${now} pixels`);
+      }
+    });
+
+    it('says a fractional width as a whole number of pixels', () => {
+      render(<ResizeTable columnWidths={{name: 202.656}} />);
+      const handle = getResizeHandles()[0];
+      expect(handle).toHaveAttribute('aria-valuetext', '203 pixels');
     });
   });
 

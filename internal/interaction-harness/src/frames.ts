@@ -39,6 +39,8 @@ export interface CastFrame {
   /** CSS px of the viewport the frame shows. */
   readonly viewportWidth: number;
   readonly viewportHeight: number;
+  /** The engine whose screencast made the frame (`startScreencast`). */
+  readonly engine?: 'chromium' | 'webkit';
 }
 
 export interface Screencast {
@@ -115,6 +117,7 @@ async function chromiumScreencast(
       format,
       viewportWidth: frame.metadata.deviceWidth || viewport.width,
       viewportHeight: frame.metadata.deviceHeight || viewport.height,
+      engine: 'chromium',
     });
     cdp
       .send('Page.screencastFrameAck', {sessionId: frame.sessionId})
@@ -167,6 +170,7 @@ async function webkitScreencast(
       format: 'jpeg',
       viewportWidth: viewport.width,
       viewportHeight: viewport.height,
+      engine: 'webkit',
     });
     session.send('Screencast.screencastFrameAck', {generation}).catch(() => {});
   };
@@ -386,6 +390,8 @@ export interface TrackedFrame {
    * `SUBPIXEL_STEP_PX`, whatever the color.
    */
   readonly step?: {readonly x: number; readonly y: number};
+  /** The engine of the cast frame it was read from (`CastFrame.engine`). */
+  readonly engine?: 'chromium' | 'webkit';
 }
 
 /**
@@ -699,9 +705,10 @@ export async function trackMarkers(
         const block = isDefaultMarker.some(Boolean)
           ? colorBlockPx(batch[k].data, batch[k].format)
           : null;
+        const {engine} = batch[k];
         colors.forEach((_, c) => {
-          out[c].push(
-            subpixel
+          out[c].push({
+            ...(subpixel
               ? {
                   t: batch[k].t,
                   box: result.boxes[c],
@@ -722,8 +729,9 @@ export async function trackMarkers(
                     t: batch[k].t,
                     box: result.boxes[c],
                     pixels: result.pixels[c],
-                  },
-          );
+                  }),
+            ...(engine == null ? {} : {engine}),
+          });
         });
       });
     }

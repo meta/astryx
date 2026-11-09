@@ -903,6 +903,98 @@ test('the task that opens it lays out no more than a mouse opening does: the pre
   }
 });
 
+/**
+ * The frames the compositor presents while `body` runs and for `ms` after it,
+ * in order. Each says whether the frame was presented with content missing: a
+ * tile not yet rasterized. It reads the compositor's own record of each frame
+ * (`PipelineReporter`), so it is Chromium-only.
+ */
+async function presentedFrames(
+  page: Page,
+  body: () => Promise<unknown>,
+  ms: number,
+): Promise<{sequence: number; missingContent: boolean}[]> {
+  const cdp = await page.context().newCDPSession(page);
+  const events: {name: string; ph?: string; args?: Record<string, unknown>}[] =
+    [];
+  cdp.on('Tracing.dataCollected', ({value}) => {
+    events.push(...(value as unknown as typeof events));
+  });
+  const complete = new Promise<void>(resolve =>
+    cdp.once('Tracing.tracingComplete', () => resolve()),
+  );
+  await cdp.send('Tracing.start', {
+    transferMode: 'ReportEvents',
+    traceConfig: {
+      includedCategories: [
+        'cc',
+        'benchmark',
+        'viz',
+        'disabled-by-default-devtools.timeline.frame',
+      ],
+      excludedCategories: ['*'],
+    },
+  });
+  await body();
+  await page.waitForTimeout(ms);
+  await cdp.send('Tracing.end');
+  await complete;
+  await cdp.detach();
+  const frames = new Map<number, boolean>();
+  for (const event of events) {
+    const report = (
+      event.args as {frame_reporter?: Record<string, unknown>} | undefined
+    )?.frame_reporter;
+    if (
+      event.name !== 'PipelineReporter' ||
+      event.ph === 'e' ||
+      report == null ||
+      !String(report.state).includes('PRESENTED')
+    ) {
+      continue;
+    }
+    frames.set(
+      Number(report.frame_sequence),
+      report.has_missing_content === true,
+    );
+  }
+  return [...frames.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([sequence, missingContent]) => ({sequence, missingContent}));
+}
+
+for (const tapOutside of [false, true]) {
+  test(`the growth shows its content from its first frames${
+    tapOutside ? ', with a tap outside while it grows' : ''
+  }`, async ({page, browserName}) => {
+    test.skip(
+      browserName !== 'chromium',
+      'the compositor frame record is Chromium-only',
+    );
+    const story = await openDefault(page);
+    const outside = outsidePoint(page);
+    const frames = await presentedFrames(
+      page,
+      async () => {
+        await story.driver.tap(story.center);
+        if (tapOutside) {
+          await story.driver.tap(outside);
+        }
+      },
+      700,
+    );
+    // Chromium does not draw a layer at opacity 0. A growth that started
+    // there showed its first frames without its content.
+    const first = frames.slice(0, 5);
+    expect(first, 'frames presented').toHaveLength(5);
+    expect(
+      first.filter(frame => frame.missingContent).map(frame => frame.sequence),
+      'first frames presented with content missing',
+    ).toEqual([]);
+    await expect(story.trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+}
+
 test('a style read after the opening tap finds no CSS entrance running on the layer', async ({
   page,
 }) => {

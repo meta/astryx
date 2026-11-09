@@ -14,7 +14,11 @@
  *   flush row's handle stays inside the list. A finger held on a handle
  *   refuses text selection on the list until it lifts. A drag that crosses
  *   rows forces no style or layout pass, and neither does the pick-up. A
- *   drop measures the rows in one pass, before their glides start
+ *   drop measures the rows in one pass, before their glides start. The
+ *   preview follows the finger one to one and stops at the list's top. The
+ *   drop's glides keep moving while the main thread is blocked. A focused
+ *   handle shows one whole ring. Its finger target grows toward 44 pt and
+ *   stops halfway to the next one's, and its row is no taller for it
  * @position Interaction evidence for List's reorder (List/listReorderEngine.tsx,
  *   List/ListReorderTouch.ts, List/ListReorderHandle.tsx) in the touch phone
  *   context
@@ -24,15 +28,25 @@ import {
   expect,
   test,
   type CDPSession,
+  type Locator,
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  blockMainThread,
+  busyWindowProof,
+  castStep,
+  drag,
   flick,
   holdThenDrag,
+  markElement,
   openStory,
+  startScreencast,
   toTouchEvents,
   touchDriver,
+  trackMarker,
   withStorybook,
+  writeEvidence,
+  type TouchEventStep,
 } from '@astryxdesign/interaction-harness';
 import {solveSpring, toSpring} from '../../motion/spring';
 import {reorder} from '../../motion/uikit/reorder';
@@ -684,4 +698,315 @@ test('a flush row keeps its handle inside the list', async ({page}) => {
   expect(handleBox.x + handleBox.width).toBeLessThanOrEqual(
     listBox.x + listBox.width + 0.5,
   );
+});
+
+/** The dragged row's preview, which follows the finger. */
+const PREVIEW = '[data-astryx-reorder-preview]';
+
+const rowOf = (page: Page, label: string) =>
+  page
+    .locator('#storybook-root li:not([data-astryx-leaving])')
+    .filter({hasText: label})
+    .first();
+
+const topOf = async (element: Locator) =>
+  element.evaluate(el => el.getBoundingClientRect().top);
+
+/** The distance from one row's top to the next row's. */
+async function pitchOf(page: Page): Promise<number> {
+  return rowOf(page, 'Inbox').evaluate(el => {
+    const row = el as HTMLElement;
+    const next = row.nextElementSibling as HTMLElement | null;
+    return next == null ? row.offsetHeight : next.offsetTop - row.offsetTop;
+  });
+}
+
+/**
+ * Films `marked` while a drag of `travel` rows runs, released at once. The
+ * page blocks its own main thread for `blockMs` once the row's glide has run
+ * 50 ms on its clock. A block in its first frames would hold the start, by
+ * design.
+ */
+async function busyProof(
+  page: Page,
+  marked: Locator,
+  travel: number,
+  {blockMs, durationMs = 160}: {blockMs: number; durationMs?: number},
+) {
+  const pitch = await pitchOf(page);
+  const {at: from} = await handleOf(page, 'Inbox');
+  const unmark = await markElement(marked);
+  const cast = await startScreencast(page);
+  const driver = await touchDriver(page);
+  const blocking = blockMainThread(page, blockMs, {
+    during: marked,
+    minProgressMs: 50,
+    property: 'translate',
+  });
+  await driver.play(
+    drag(
+      from,
+      {x: from.x, y: from.y + travel * pitch},
+      {holdMs: HOLD_MS, durationMs, restMs: 150},
+    ),
+  );
+  const block = await blocking;
+  // The frames after the lift, which the proof judges.
+  await page.waitForTimeout(300);
+  const frames = await cast.stop();
+  await unmark();
+  const tracked = await trackMarker(page, frames);
+  return busyWindowProof(tracked, block, {
+    axis: 'y',
+    settledWithin: 2 * castStep(tracked, 'y'),
+  });
+}
+
+test.describe('the preview, the drop and the handle under a finger', () => {
+  test.beforeEach(async ({page}) => {
+    await openStory(page, storybook(), 'core-list--reorderable');
+    test.skip(
+      !(await isTouch(page)),
+      'this engine reports a fine primary pointer; the touch hold applies under (pointer: coarse)',
+    );
+  });
+
+  test('after the hold the preview follows the finger one to one and stops with its top at the list top, while the row stays in place', async ({
+    page,
+  }) => {
+    const archive = rowOf(page, 'Archive');
+    const {at: from} = await handleOf(page, 'Archive');
+    const start = await topOf(archive);
+    const listTop = await topOf(page.locator('#storybook-root ul').first());
+    const height = await archive.evaluate(
+      el => (el as HTMLElement).offsetHeight,
+    );
+    const driver = await touchDriver(page);
+    const errors: number[] = [];
+    const stayed: number[] = [];
+    const last: {top: number | null} = {top: null};
+    // Down 80 px, then far up past the list's top, without a lift between.
+    const down = drag(
+      from,
+      {x: from.x, y: from.y + 80},
+      {holdMs: HOLD_MS, durationMs: 300},
+    ).slice(0, -1);
+    const up = drag(
+      {x: from.x, y: from.y + 80},
+      {x: from.x, y: 0},
+      {durationMs: 300, restMs: 100},
+    );
+    const offset = down[down.length - 1].t;
+    await driver.play(
+      [...down, ...up.slice(1).map(frame => ({...frame, t: frame.t + offset}))],
+      {
+        onEvent: async (step: TouchEventStep) => {
+          if (step.type !== 'touchMove' || step.t < HOLD_MS + 20) {
+            return;
+          }
+          const top = await page.evaluate(
+            selector =>
+              document.querySelector(selector)?.getBoundingClientRect().top ??
+              null,
+            PREVIEW,
+          );
+          if (top == null) {
+            return;
+          }
+          stayed.push((await topOf(archive)) - start);
+          last.top = top;
+          const finger = step.fingers[0].y;
+          if (finger > from.y - 40) {
+            errors.push(top - start - (finger - from.y));
+          }
+        },
+      },
+    );
+    expect(errors.length).toBeGreaterThan(5);
+    for (const error of errors) {
+      expect(Math.abs(error)).toBeLessThan(1);
+    }
+    // The row itself never leaves its place.
+    for (const moved of stayed) {
+      expect(Math.abs(moved)).toBeLessThan(0.5);
+    }
+    // The preview stops with its top on the list's top, never over what is
+    // above the list. At the visible edge itself its centre stops there.
+    expect(last.top).toBeCloseTo(Math.max(listTop, -height / 2), 0);
+  });
+
+  test('the rows the drop moves keep gliding while the main thread is blocked', async ({
+    page,
+  }, testInfo) => {
+    // Inbox passes Sent, Drafts and Archive in one move, and the finger lifts
+    // below them. On the drop, Sent glides up a row while script cannot run.
+    const proof = await busyProof(page, rowOf(page, 'Sent'), 3.2, {
+      blockMs: 200,
+      durationMs: 16,
+    });
+    await writeEvidence(
+      'busy-main-thread/list-reorder-slide',
+      {[`${testInfo.project.name}.json`]: JSON.stringify(proof, null, 1)},
+      testInfo,
+    );
+    expect(proof.changed, JSON.stringify(proof)).toBeGreaterThanOrEqual(3);
+    expect(proof.monotonic, JSON.stringify(proof)).toBe(true);
+  });
+
+  test('the dropped row keeps gliding while the main thread is blocked', async ({
+    page,
+  }, testInfo) => {
+    // Released a row and a half down, Inbox glides from where its preview was
+    // into its new place.
+    const proof = await busyProof(page, rowOf(page, 'Inbox'), 1.49, {
+      blockMs: 150,
+    });
+    await writeEvidence(
+      'busy-main-thread/list-reorder-drop',
+      {[`${testInfo.project.name}.json`]: JSON.stringify(proof, null, 1)},
+      testInfo,
+    );
+    expect(proof.changed, JSON.stringify(proof)).toBeGreaterThanOrEqual(3);
+    expect(proof.monotonic, JSON.stringify(proof)).toBe(true);
+  });
+
+  test('a focused handle shows its own ring, whole, and its row shows none', async ({
+    page,
+  }) => {
+    const handle = page.getByRole('button', {name: 'Reorder Inbox'});
+    // Keyboard modality, so the next focus is focus-visible.
+    await page.keyboard.press('Shift');
+    await handle.focus();
+    const ring = await handle.evaluate(element => {
+      const row = element.closest('li') as HTMLElement;
+      const list = element.closest('ul') as HTMLElement;
+      const style = getComputedStyle(element);
+      const reach =
+        parseFloat(style.outlineOffset) + parseFloat(style.outlineWidth);
+      const box = element.getBoundingClientRect();
+      const bounds = list.getBoundingClientRect();
+      return {
+        handle: style.outlineStyle,
+        row: getComputedStyle(row).outlineStyle,
+        left: box.left - reach - bounds.left,
+        right: bounds.right - (box.right + reach),
+      };
+    });
+    expect(ring.handle).not.toBe('none');
+    // One ring: the row's own focus-within ring stays off for the handle.
+    expect(ring.row).toBe('none');
+    // Whole: inside the list, which clips its inline overflow.
+    expect(ring.left).toBeGreaterThanOrEqual(-0.5);
+    expect(ring.right).toBeGreaterThanOrEqual(-0.5);
+  });
+
+  test("the handle keeps a small control's size; a finger's target grows toward 44 pt and meets the next handle's halfway, its ring clears its lines, and its row is no taller for it", async ({
+    page,
+  }) => {
+    const handle = page.getByRole('button', {name: 'Reorder Inbox'});
+    await page.keyboard.press('Shift');
+    await handle.focus();
+    // The handle's hit layer takes the insets the shared hit area writes, a
+    // frame after layout.
+    await expect
+      .poll(
+        async () =>
+          handle.evaluate(element =>
+            getComputedStyle(element)
+              .getPropertyValue('--astryx-hit-inset-top')
+              .trim(),
+          ),
+        {message: 'the hit area writes its insets', timeout: 5000},
+      )
+      .not.toBe('');
+    const geometry = await handle.evaluate(element => {
+      const row = element.closest('li') as HTMLElement;
+      const style = getComputedStyle(element);
+      const inset =
+        -parseFloat(style.outlineOffset) || parseFloat(style.outlineWidth);
+      const box = element.getBoundingClientRect();
+      const hitInset = (target: Element, side: string) =>
+        parseFloat(
+          getComputedStyle(target).getPropertyValue(
+            `--astryx-hit-inset-${side}`,
+          ),
+        ) || 0;
+      const hit = {
+        top: box.top - hitInset(element, 'top'),
+        bottom: box.bottom + hitInset(element, 'bottom'),
+        left: box.left - hitInset(element, 'left'),
+        right: box.right + hitInset(element, 'right'),
+      };
+      // The next row's handle, and the top of its target.
+      const next = row.nextElementSibling?.querySelector<HTMLElement>(
+        '[data-astryx-list-reorder]',
+      );
+      const nextTop =
+        next == null
+          ? Number.POSITIVE_INFINITY
+          : next.getBoundingClientRect().top - hitInset(next, 'top');
+      const pitch =
+        next == null
+          ? Number.POSITIVE_INFINITY
+          : next.getBoundingClientRect().top - box.top;
+      // A point in the hit layer outside the visible handle, above it.
+      const probe = document.elementFromPoint(
+        box.left + box.width / 2,
+        box.top - (box.top - hit.top) / 2,
+      );
+      // The lines are the handle's ::before: one bar centred in it, and a
+      // shadow of it on each side.
+      const lines = getComputedStyle(element, '::before');
+      const bar = parseFloat(lines.height);
+      const shadows = Array.from(
+        lines.boxShadow.matchAll(/(-?[\d.]+)px\s+(-?[\d.]+)px/g),
+        ([, , y]) => Math.abs(parseFloat(y)),
+      );
+      const reach = Math.max(0, ...shadows) + bar / 2;
+      const centre = box.top + box.height / 2;
+      const glyph = {top: centre - reach, bottom: centre + reach};
+      const withHandle = row.getBoundingClientRect().height;
+      // The same row without its handle.
+      element.style.display = 'none';
+      const withoutHandle = row.getBoundingClientRect().height;
+      element.style.display = '';
+      return {
+        ring: style.outlineStyle,
+        width: box.width,
+        height: box.height,
+        hitHeight: hit.bottom - hit.top,
+        hitWidth: hit.right - hit.left,
+        gapToNext: nextTop - hit.bottom,
+        pitch,
+        probeHits: probe === element,
+        above: glyph.top - (box.top + inset),
+        below: box.bottom - inset - glyph.bottom,
+        withHandle,
+        withoutHandle,
+      };
+    });
+    // A small control for every pointer, as on a desktop.
+    expect(geometry.width).toBeLessThan(44);
+    expect(geometry.height).toBeLessThan(44);
+    // A finger's target grows toward 44 pt through the invisible hit layer.
+    // Where the next handle sits closer, the target stops halfway, where it
+    // meets the next handle's.
+    expect(geometry.hitHeight).toBeLessThanOrEqual(44.5);
+    expect(geometry.hitHeight).toBeGreaterThanOrEqual(
+      Math.min(44, geometry.pitch) - 0.5,
+    );
+    expect(geometry.hitWidth).toBeCloseTo(44, 0);
+    expect(geometry.gapToNext).toBeGreaterThanOrEqual(-0.5);
+    if (geometry.pitch < 44) {
+      expect(geometry.gapToNext).toBeLessThanOrEqual(0.5);
+    }
+    expect(geometry.probeHits).toBe(true);
+    // The ring clears the lines above and below. It shows, so the band
+    // judged is the ring's.
+    expect(geometry.ring).not.toBe('none');
+    expect(geometry.above).toBeGreaterThan(0);
+    expect(geometry.below).toBeGreaterThan(0);
+    // The handle takes only its lines' height in the row's layout.
+    expect(geometry.withHandle).toBeCloseTo(geometry.withoutHandle, 1);
+  });
 });

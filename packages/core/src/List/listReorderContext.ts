@@ -4,7 +4,7 @@
 
 /**
  * @file listReorderContext.ts
- * @input React's hooks and a symbol
+ * @input React's hooks and a registered key (utils/sharedRealm.ts)
  * @output `REORDER_ENGINE`, the key a reorderable object carries its
  *   machinery under. Also the internal types between List, ListItem and that
  *   machinery: what a List hands its rows through ListContext's `reorder`.
@@ -31,15 +31,17 @@ import {
   type RefObject,
 } from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {sharedKey} from '../utils/sharedRealm';
 import type {Reorderable} from '../reorderable/createReorderable';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import type {reorderListStyle} from './ListReorderHandle';
 
 /**
- * The key a reorderable object carries its machinery under. No description:
- * it would ship in every List.
+ * The key a reorderable object carries its machinery under. `sharedKey`
+ * registers it, so a swizzled List reads a package object, and the package
+ * List reads an object a copy adapted.
  */
-export const REORDER_ENGINE: unique symbol = Symbol();
+export const REORDER_ENGINE = sharedKey('list/reorder-engine', 1);
 
 /** What a List's reorder reports and asks, as createReorderable took them. */
 export interface ListReorderOptions {
