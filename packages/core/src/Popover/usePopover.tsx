@@ -368,12 +368,17 @@ export interface UsePopoverReturn {
  * Options a core component may pass through `usePopoverInternal`; not part
  * of the public `usePopover` options.
  */
-interface InternalPopoverOptions extends UsePopoverOptions {
+export interface InternalPopoverOptions extends UsePopoverOptions {
   /**
    * Runs as the popover starts to close, while the browser still shows it.
    * A close that plays out after the popover is hidden starts here.
    */
   onCloseStart?: () => void;
+  /**
+   * The component writes the entrance's side itself, after the commit that
+   * moves the popover (`useLayerInternal`'s `writesEntranceSide`).
+   */
+  writesEntranceSide?: boolean;
 }
 
 /**
@@ -423,6 +428,7 @@ function usePopoverImplementation(
     onShow,
     onHide,
     onCloseStart,
+    writesEntranceSide,
     xstyle,
     className,
     style,
@@ -466,6 +472,7 @@ function usePopoverImplementation(
     onShow: handleLayerShow,
     onHide,
     onCloseStart,
+    writesEntranceSide,
   });
 
   // Focus trap for the popover content. Escape stays registered while light
