@@ -8,22 +8,24 @@
  * @position Shared animation primitives; consumed by DropdownMenu, Popover,
  *   HoverCard, Tooltip, Selector, and any component using useLayer
  *
- * Provides opt-in entry animations for popover/layer components.
- * Components apply these via the `xstyle` prop on `layer.render()`.
+ * Provides opt-in entry animations for popover/layer components. Apply one
+ * to the element that fills the layer (its surface), not to the layer.
+ * Chromium lays an anchored layer out again on each frame that its own
+ * style animates. On the layer the entrance still plays, at that cost.
  *
  * @example
  * ```
  * import {layerAnimations} from '../Layer/layerAnimations.stylex';
  *
  * // Direction-aware (for components that know placement):
- * layer.render(<Content />, {
- *   xstyle: layerAnimations[placement],
- * });
+ * layer.render(
+ *   <div {...stylex.props(styles.surface, layerAnimations[placement])}>
+ *     <Content />
+ *   </div>,
+ * );
  *
- * // Fixed direction:
- * layer.render(<Content />, {
- *   xstyle: layerAnimations.below,
- * });
+ * // usePopover's surface takes the hook's `xstyle`:
+ * const popover = usePopover({xstyle: layerAnimations.below});
  * ```
  */
 

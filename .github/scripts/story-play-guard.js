@@ -45,6 +45,28 @@ const TARGETS = [
       'under align="first-line" every start and end slot centers on the label\'s first line (wrapped, clamped, dense, spacious, avatar, interactive, RTL, ListItem, RadioListItem) and never rises into the row padding',
   },
   {
+    component: 'Tooltip',
+    story: 'core-tooltip--decorator-unmount',
+    guards:
+      'decorator tooltip survives reconciliation and cleans up on deselection',
+  },
+  {
+    component: 'Tooltip',
+    story: 'core-tooltip--decorator-read-only-unmount',
+    guards:
+      'read-only decorator tooltip survives reconciliation and editor unmount',
+  },
+  {
+    component: 'Layer',
+    story: 'core-layer--boundary-nested-focus-guard',
+    guards: 'nested decorator popup remains inside its parent focus owner',
+  },
+  {
+    component: 'Layer',
+    story: 'core-layer--boundary-live-direction-guard',
+    guards: 'editor overlay direction follows live prop changes',
+  },
+  {
     component: 'Selector',
     story: 'core-selector--size-variants',
     guards:
@@ -346,6 +368,20 @@ const TARGETS = [
     viewport: {width: 800, height: 900},
     guards:
       'the rendered RTL wrapper mirrors fixed-track item order while responsive and span geometry remain bounded',
+  },
+  {
+    component: 'DialogHeroHeader',
+    story: 'lab-dialogheroheader--media-bleed-geometry',
+    guards:
+      'media reaches the dialog edges at theme-default, 0/2/8 padding, a ' +
+      'theme override, and RTL while the title keeps the cancelled inset',
+  },
+  {
+    component: 'DialogHeroHeader',
+    story: 'lab-dialogheroheader--custom-heading-focus-after-rerender',
+    guards:
+      'a custom heading keeps focus and keeps naming the open modal while ' +
+      'the header re-renders with a new title element',
   },
   {
     component: 'TabList',
