@@ -1,5 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope ^(packages/lab/src/(reorderStyles\.ts|ListInput/|TransferList/)|packages/core/src/(List/|internal/reorder|reorderable/|gestures/(GestureHost|LongPressGestureRecognizer)\.ts|motion/uikit/reorder\.ts)|apps/storybook/stories/(ListInput|TransferList[A-Za-z0-9]*)\.stories)
+// @pr-a11y scope ^(packages/lab/src/(ListInput/|TransferList/)|packages/core/src/(List/|internal/reorder|reorderable/|gestures/(GestureHost|LongPressGestureRecognizer)\.ts|motion/uikit/reorder\.ts)|apps/storybook/stories/(ListInput|TransferList[A-Za-z0-9]*)\.stories)
 
 /**
  * @file ReorderGripPinchZoom.a11y.chromium.spec.ts
