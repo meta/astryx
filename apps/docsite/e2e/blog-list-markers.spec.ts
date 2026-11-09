@@ -10,21 +10,20 @@
 
 import {expect, test} from '@playwright/test';
 
-for (const {width, dir, colorScheme} of [
-  {width: 1280, dir: 'ltr', colorScheme: 'light'},
-  {width: 390, dir: 'ltr', colorScheme: 'light'},
-  {width: 1280, dir: 'rtl', colorScheme: 'dark'},
-  {width: 390, dir: 'rtl', colorScheme: 'dark'},
+// The docsite has no right-to-left mode, so the cases cover width and color
+// scheme only.
+for (const {width, colorScheme} of [
+  {width: 1280, colorScheme: 'light'},
+  {width: 390, colorScheme: 'light'},
+  {width: 1280, colorScheme: 'dark'},
+  {width: 390, colorScheme: 'dark'},
 ] as const) {
-  test(`release list markers stay intact (${width}px, ${dir}, ${colorScheme})`, async ({
+  test(`release list markers stay intact (${width}px, ${colorScheme})`, async ({
     page,
   }, testInfo) => {
     await page.setViewportSize({width, height: 900});
     await page.emulateMedia({colorScheme, reducedMotion: 'reduce'});
     await page.goto('/blog/astryx-v0-7-0');
-    await page.evaluate(direction => {
-      document.documentElement.dir = direction;
-    }, dir);
     await page.evaluate(async () => document.fonts.ready);
 
     const migrations = page.locator('ol').filter({
@@ -42,16 +41,12 @@ for (const {width, dir, colorScheme} of [
           }
           const markerBox = marker.getBoundingClientRect();
           const contentBox = content.getBoundingClientRect();
-          const direction = getComputedStyle(item).direction;
-          const rtl = direction === 'rtl';
           return {
-            direction,
+            direction: getComputedStyle(item).direction,
             markerHeight: markerBox.height,
             lineHeight: Number.parseFloat(getComputedStyle(marker).lineHeight),
-            textStart: rtl ? contentBox.right : contentBox.left,
-            gap: rtl
-              ? markerBox.left - contentBox.right
-              : contentBox.left - markerBox.right,
+            textStart: contentBox.left,
+            gap: contentBox.left - markerBox.right,
             markerWidth: markerBox.width,
             markerScrollWidth: marker.scrollWidth,
           };
@@ -59,11 +54,6 @@ for (const {width, dir, colorScheme} of [
       );
     const starts = geometry.map(item => item.textStart);
     expect(Math.max(...starts) - Math.min(...starts)).toBeLessThanOrEqual(1);
-    // The list follows the page direction, but Markdown gives each item the
-    // direction of its own text, so these English rows stay left-to-right.
-    expect(
-      await migrations.evaluate(list => getComputedStyle(list).direction),
-    ).toBe(dir);
     for (const item of geometry) {
       expect(item.direction).toBe('ltr');
       expect(item.markerHeight).toBeLessThanOrEqual(item.lineHeight + 1);
@@ -91,15 +81,12 @@ for (const {width, dir, colorScheme} of [
           }
           const dotBox = dot.getBoundingClientRect();
           const contentBox = content.getBoundingClientRect();
-          const rtl = getComputedStyle(item).direction === 'rtl';
           return {
             text: (marker.textContent ?? '').trim(),
             color: getComputedStyle(dot).backgroundColor,
             width: dotBox.width,
             height: dotBox.height,
-            isBeforeContent: rtl
-              ? dotBox.left >= contentBox.right
-              : dotBox.right <= contentBox.left,
+            isBeforeContent: dotBox.right <= contentBox.left,
           };
         }),
       );
@@ -117,7 +104,7 @@ for (const {width, dir, colorScheme} of [
     await migrations.locator(':scope > li').nth(20).scrollIntoViewIfNeeded();
     await page.screenshot({
       path: testInfo.outputPath(
-        `migration-markers-${width}-${dir}-${colorScheme}.png`,
+        `migration-markers-${width}-${colorScheme}.png`,
       ),
     });
   });
