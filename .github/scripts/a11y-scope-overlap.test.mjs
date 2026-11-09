@@ -247,7 +247,10 @@ describe('overlappingSpecs', () => {
     expect(
       listed(
         head
-          .replace("test('opens'", "// Opens the page.\ntest(\n  'opens'")
+          .replace(
+            "test('opens'",
+            "/**\n * Opens the page, reworded.\n * @see the story\n */\n// Opens the page.\ntest(\n  'opens'",
+          )
           .replace('});\n', '}); /* done */\n'),
       ),
     ).toEqual([]);
@@ -278,6 +281,16 @@ describe('overlappingSpecs', () => {
         {...GRAPH, sameCode},
       ),
     ).toHaveLength(1);
+  });
+
+  it('keeps a line break that changes the program', () => {
+    const value = 'function f() {\n  return x;\n}\n';
+    expect(codeKey(ts, value.replace('return x', 'return\n  x'))).not.toBe(
+      codeKey(ts, value),
+    );
+    expect(codeKey(ts, `/** Says what f does. */\n${value}`)).toBe(
+      codeKey(ts, `/** Says it better. */\n${value}`),
+    );
   });
 
   it('keys a spec by its tokens and routing lines', () => {

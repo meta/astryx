@@ -117,10 +117,14 @@ export function codeKey(ts, source) {
   );
   const tokens = [];
   const visit = node => {
+    // A doc comment attached to a statement is a child node, not code.
+    if (node.kind === ts.SyntaxKind.JSDoc) return;
     const children = node.getChildren(file);
     if (children.length === 0) {
+      // The parent's kind keeps a line break that changes the program
+      // (`return` then a value on the next line) from reading as formatting.
       if (node.kind !== ts.SyntaxKind.EndOfFileToken)
-        tokens.push(node.getText(file));
+        tokens.push(`${node.parent.kind}:${node.getText(file)}`);
       return;
     }
     for (const child of children) visit(child);

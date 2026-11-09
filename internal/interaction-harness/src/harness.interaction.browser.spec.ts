@@ -127,6 +127,7 @@ import {
   trackControl,
   trackMarker,
   waitForAnimation,
+  waitForCastFrame,
   releaseAnimationLog,
   waitForRest,
   watchAnimations,
@@ -1003,6 +1004,51 @@ test.describe('touch input', () => {
 });
 
 test.describe('frame evidence', () => {
+  test('a cast reads when its latest frame was presented before it stops, on the page clock, and a wait for a frame on a screen held still fails by name', async ({
+    page,
+  }) => {
+    await busyFixture(page);
+    const box = page.locator('#box');
+    await markElement(box, {mode: 'outline'});
+    const cast = await startScreencast(page);
+    await box.evaluate(el =>
+      el.animate(
+        [{transform: 'translateY(0px)'}, {transform: 'translateY(560px)'}],
+        {duration: 500},
+      ),
+    );
+    const pageNow = () =>
+      page.evaluate(() => performance.timeOrigin + performance.now());
+    const after = await pageNow();
+    const at = await waitForCastFrame(cast, {after, during: 'the box moved'});
+    expect(at).toBeGreaterThan(after);
+    // Once the box rests, nothing on screen changes, so the cast sends no
+    // frame, and the wait fails at its cap as the cast's starvation. The
+    // frame that shows the box at rest can come after the animation ends. The
+    // screen is still once the cast has sent nothing for 100 ms.
+    await box.evaluate(el =>
+      Promise.all(el.getAnimations().map(a => a.finished)),
+    );
+    await expect
+      .poll(async () => (await pageNow()) - (cast.lastFrameAt() ?? 0), {
+        message: 'the cast goes quiet once the box rests',
+        timeout: 2_000,
+      })
+      .toBeGreaterThan(100);
+    const still = await waitForCastFrame(cast, {
+      after: await pageNow(),
+      during: 'the screen held still',
+      timeoutMs: 300,
+    }).catch((error: unknown) => error);
+    expect(still).toBeInstanceOf(FrameStarvationError);
+    expect(String(still)).toMatch(
+      /waitForCastFrame: the page drew 0 frames while the screen held still \(\d+ ms\).*: the screen did not change after \d+\.\d, or the page was starved of frames/,
+    );
+    // stop() stamps the frame the first wait read with the same time.
+    const frames = await cast.stop();
+    expect(frames.some(f => f.t === at)).toBe(true);
+  });
+
   test('a compositor animation advances every frame through a blocked main thread; a rAF one freezes, whatever the screencast rate', async ({
     page,
   }, testInfo) => {
