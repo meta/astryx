@@ -2588,7 +2588,7 @@ test.describe('frame evidence', () => {
       FrameStarvationError,
     );
     const [, from, to] =
-      /the element still moved at its last frame \((.+) → (.+)\)/.exec(
+      /the element still moved at its last frame \((.+?) → (.+?)\), where/.exec(
         (outcome as Error).message,
       ) ?? [];
     expect(from).toBeDefined();
