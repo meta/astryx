@@ -170,7 +170,7 @@ export function resetSharedStateForTest(prefix = ''): void {
   const start = `@astryxdesign/core/${prefix}`;
   for (const key of Object.getOwnPropertySymbols(realm)) {
     if (key.description?.startsWith(start)) {
-      delete realm[key];
+      Reflect.deleteProperty(realm, key);
     }
   }
 }

@@ -10,8 +10,9 @@
  */
 
 import {afterEach, describe, expect, it, vi} from 'vitest';
+import type * as RealmModule from './sharedRealm';
 
-type Realm = typeof import('./sharedRealm');
+type Realm = typeof RealmModule;
 
 /** Two loads of the module: the package's and a copy's. */
 async function twoCopies(): Promise<[Realm, Realm]> {
