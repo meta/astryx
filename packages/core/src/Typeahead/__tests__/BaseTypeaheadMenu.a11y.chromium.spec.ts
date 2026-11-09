@@ -90,6 +90,9 @@ test('Escape returns focus to the filter button that opened the dialog', async (
 }) => {
   const input = await openStory(page);
   await input.click();
+  // Enter picks the active option, so wait for the list to mark one.
+  await expect(page.getByRole('option', {name: /Status/})).toBeVisible();
+  await expect(input).toHaveAttribute('aria-activedescendant', /.+/);
   await input.press('Enter');
   await page
     .getByRole('dialog', {name: 'Status filter'})
