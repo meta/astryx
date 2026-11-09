@@ -647,8 +647,17 @@ async function addVariantForAll({cwd, from, selector, variant}) {
   );
   // Only icons from the same package as the variant module can have a
   // variant there: an icon from your own `./` file, or from another library,
-  // is left as it is and never listed as missing.
+  // is left as it is and never listed as missing. Some libraries ship each
+  // look as its own package (Font Awesome's solid and regular packages): an
+  // icon from another package meets its variant only under the same export
+  // name and of the same kind, a component or data for the adapter.
   const variantPackage = iconModulePackage(source.module);
+  /** @param {{module: string, source: string, adapt: boolean}} origin */
+  const otherPackageTwin = origin => {
+    if (origin.module.startsWith('.')) return false;
+    const twin = byLibraryExport.get(origin.source);
+    return twin != null && twin.adapt === origin.adapt;
+  };
   const generated = generatedModulePath(set, packageDir);
   /** @type {import('../../../foundation/discovery/icon-set-writer.mjs').GeneratedIcon[]} */
   const toWrite = [];
@@ -662,7 +671,11 @@ async function addVariantForAll({cwd, from, selector, variant}) {
   const own = [];
   const icons = set.data.icons.map(icon => {
     const origin = origins.get(icon.export);
-    if (origin && iconModulePackage(origin.module) !== variantPackage) {
+    if (
+      origin &&
+      iconModulePackage(origin.module) !== variantPackage &&
+      !otherPackageTwin(origin)
+    ) {
       return icon;
     }
     const librarySource =

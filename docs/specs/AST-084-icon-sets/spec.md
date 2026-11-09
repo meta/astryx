@@ -375,8 +375,11 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     listing adds the command that adds it as that icon's variant. With
     `--variant <name> --all` and no export, it adds that variant for every
     icon from that module's package whose `id` an export of the module has
-    (in a library of looks, the glyph's look of that name), in one write; an
-    icon from another module is left alone and not listed as missing, and a
+    (in a library of looks, the glyph's look of that name), and for every
+    icon from another package whose library export the module exports under
+    the same name and kind (a library that ships each look as its own
+    package), in one write; any other icon from another module is left alone
+    and not listed as missing, and a
     glyph drawn in no look of that name, or whose own export is that look,
     is listed as missing. For a `./`
     file outside package.json `files`, it names the `files` array that

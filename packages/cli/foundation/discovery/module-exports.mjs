@@ -1582,6 +1582,62 @@ export function exportScalarType(file, exportName) {
 }
 
 /**
+ * The keys of an export whose static value is an object of bindings
+ * (`{faXmark: faXmark, faHouse}`): each property a plain key with a name as
+ * its value. Null for any other value (a spread, a computed key, a literal
+ * value), or when the value cannot be read.
+ * @param {string} file
+ * @param {string} exportName
+ * @returns {string[] | null}
+ */
+export function exportObjectKeys(file, exportName) {
+  const origin = moduleExportOrigin(file, exportName);
+  if (!origin || origin.name === 'default') return null;
+  let ast;
+  try {
+    ast = parseModule(origin.file);
+  } catch {
+    return null;
+  }
+  /** @param {any} node @returns {string[] | null} */
+  const keysOf = node => {
+    const value = withoutTypeWrappers(node);
+    if (value?.type !== 'ObjectExpression') return null;
+    /** @type {string[]} */
+    const keys = [];
+    for (const property of value.properties) {
+      if (
+        property.type !== 'ObjectProperty' ||
+        property.computed ||
+        property.value?.type !== 'Identifier'
+      ) {
+        return null;
+      }
+      const key = property.key?.name ?? property.key?.value;
+      if (typeof key !== 'string') return null;
+      keys.push(key);
+    }
+    return keys;
+  };
+  for (const statement of ast.program.body) {
+    const declaration =
+      statement.type === 'ExportNamedDeclaration'
+        ? statement.declaration
+        : statement;
+    if (declaration?.type !== 'VariableDeclaration') continue;
+    for (const declarator of declaration.declarations) {
+      if (
+        declarator.id?.type === 'Identifier' &&
+        declarator.id.name === origin.name
+      ) {
+        return keysOf(declarator.init);
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * The binding an origin finally names: a top-level `const X = Y` (under `as`
  * or `satisfies` too) is followed to where `Y` is declared, through imports,
  * until a declaration that is not such an alias. Two aliases of one component
