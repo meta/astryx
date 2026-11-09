@@ -112,6 +112,12 @@ export const categories: SandboxCategory[] = [
           'A reorderable List, a TransferList and a reorderable List in a Card, on a page that scrolls with the document, to check on a phone',
       },
       {
+        name: 'Layer Flip Cases',
+        href: '/pages/layer-flip-cases/',
+        description:
+          'A Popover, a DropdownMenu and a Tooltip, each against the edge on the side it asks for, so each flips, on a page that scrolls with the document',
+      },
+      {
         name: 'TextArea Counter',
         href: '/pages/textarea-counter/',
         description:
