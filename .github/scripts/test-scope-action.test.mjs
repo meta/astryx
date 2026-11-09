@@ -203,9 +203,14 @@ describe('per-job scope step', () => {
     expect(skipped.outputs.applies).toBe('false');
   });
 
-  it('marks a release-branch pull request as the generated version bump', async () => {
+  it('keeps a generated release-branch pull request on the narrow bump lane', async () => {
     const {outputs} = await decide({
       context: pullRequestContext('release/v1.2.3'),
+      files: changed(
+        '.changeset/frozen.md',
+        'packages/core/CHANGELOG.md',
+        'packages/core/package.json',
+      ),
     });
     expect(outputs).toMatchObject({
       release_bump: 'true',
@@ -213,6 +218,29 @@ describe('per-job scope step', () => {
       tooling_only: 'true',
       applies: 'false',
     });
+  });
+
+  it('runs every lane for a release-branch test-repair candidate', async () => {
+    const {outputs} = await decide({
+      context: pullRequestContext('release/v1.2.3'),
+      files: changed(
+        'packages/core/src/BottomSheet/__tests__/BottomSheetRelease.a11y.chromium.spec.ts',
+      ),
+      inputs: {'component-audit': 'true'},
+    });
+    expect(outputs).toMatchObject({
+      release_bump: 'true',
+      spec_only: 'false',
+      tooling_only: 'false',
+      full_suite: 'true',
+      vitest_full_suite: 'true',
+      has_components: 'true',
+      force_full_component_audits: 'true',
+      applies: 'true',
+    });
+    expect(fs.readFileSync(outputs.changed_files_path, 'utf8')).toBe(
+      'packages/core/src/BottomSheet/__tests__/BottomSheetRelease.a11y.chromium.spec.ts\n',
+    );
   });
 
   it('classifies the PR file list with the classifier read from the base commit', async () => {
@@ -540,9 +568,14 @@ describe('per-job scope step', () => {
       expect(contentCalls).toContainEqual({file: AUDIT_FILE, ref: BASE_SHA});
     });
 
-    it('applies no audit to a release-branch pull request', async () => {
+    it('applies no audit to the generated release-branch pull request', async () => {
       const {outputs} = await decide({
         context: pullRequestContext('release/v1.2.3'),
+        files: changed(
+          '.changeset/frozen.md',
+          'packages/core/CHANGELOG.md',
+          'packages/core/package.json',
+        ),
         inputs,
       });
       expect(outputs).toMatchObject({
