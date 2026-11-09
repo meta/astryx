@@ -30,6 +30,7 @@ import path from 'node:path';
 
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
+import {matrixFor} from './ci-matrix.mjs';
 import componentPackages from '../../scripts/component-packages.cjs';
 
 const {COMPONENT_PACKAGE_NAMES} = componentPackages;
@@ -92,6 +93,11 @@ const rootScripts = JSON.parse(read('package.json')).scripts;
  * A run block with each `pnpm <root script>` replaced by the script's body,
  * recursively; arguments after the script name stay after its body.
  */
+// The spec-only lane's run of the tests that read a changed record
+// (fs-guard-tests.test.mjs holds its contract); not a lane's suite.
+const specReaderRun = step =>
+  / tests that read a changed record$/.test(step.name ?? '');
+
 function expandScripts(run) {
   return run.replace(/\bpnpm ([a-z][\w:-]*)(?=\s|$)/g, (whole, name) =>
     Object.hasOwn(rootScripts, name) ? expandScripts(rootScripts[name]) : whole,
@@ -146,17 +152,34 @@ describe.each(Object.entries(WORKFLOWS))(
     it('runs FR23 only after the parallel UI suite has exited', () => {
       const benchmark = 'packages/core/src/Markdown/Markdown.fr23.perf.test.ts';
       const job = workflow.jobs['test-ui'];
-      const suites = job.steps.filter(step =>
-        expandScripts(step.run ?? '').includes('--project ui'),
+      const suites = job.steps.filter(
+        step =>
+          !specReaderRun(step) &&
+          /--project (ui|perf)\b/.test(expandScripts(step.run ?? '')),
       );
-      // The two package scripts every lane calls: the parallel suite without
-      // FR23, and FR23 alone with no file parallelism.
-      expect(rootScripts['test:ui']).toBe(
-        `vitest run --project ui --exclude ${benchmark}`,
-      );
+      // The two package scripts every lane calls: the parallel UI project, and
+      // the `perf` project with no file parallelism.
+      expect(rootScripts['test:ui']).toBe('vitest run --project ui');
       expect(rootScripts['test:ui:isolated']).toBe(
-        `vitest run --project ui ${benchmark} --no-file-parallelism`,
+        'vitest run --project perf --no-file-parallelism',
       );
+      // The benchmark is the `perf` project's only file, and `ui` excludes it.
+      // No other project sets a group, so `perf` starts after all of them.
+      const config = read('vitest.config.ts');
+      const projectBlock = name => {
+        const start = config.indexOf(`name: '${name}',`);
+        return config.slice(start, config.indexOf("name: '", start + 1));
+      };
+      const named = /const helperOverheadBenchmark =\s*'([^']+)';/.exec(config);
+      expect(named?.[1]).toBe(benchmark);
+      expect(projectBlock('ui')).toContain(
+        'exclude: [...configDefaults.exclude, helperOverheadBenchmark]',
+      );
+      expect(projectBlock('perf')).toContain(
+        'include: [helperOverheadBenchmark]',
+      );
+      expect(projectBlock('perf')).toContain('sequence: {groupOrder: 1}');
+      expect(config.match(/groupOrder/g)).toHaveLength(1);
       expect(job['continue-on-error']).not.toBe(true);
       for (const suite of suites) {
         expect(suite['continue-on-error']).not.toBe(true);
@@ -171,16 +194,34 @@ describe.each(Object.entries(WORKFLOWS))(
       if (graphScoped) {
         expect(share.run.trim()).toBe(
           [
-            'if [ "$SCOPED" = true ]; then',
-            `  pnpm test:ui --changed=HEAD^1 --passWithNoTests ${SHARD_ARG}`,
+            'if [ "$LAB_ONLY" = true ]; then',
+            '  # A change only to the Lab package runs every Lab test across the',
+            '  # same legs, and the guards below as any scoped run does',
+            '  # (spec:AST-030 FR26).',
+            `  .github/scripts/run-named.sh "Lab tests" -- pnpm test:ui --passWithNoTests ${SHARD_ARG} packages/lab/`,
+            '  # The guard run leaves out the tests the run above already ran, so',
+            '  # no test runs twice. Every leg splits the same reduced list, so a',
+            '  # leg that cannot list them fails rather than split a different one.',
+            '  .github/scripts/run-named.sh "List the tests the first run ran" -- pnpm exec vitest list --project ui packages/lab/ --filesOnly --passWithNoTests --json="$RUNNER_TEMP/already-run.json"',
+            '  .github/scripts/run-named.sh "List the tests that read source files" --stdout "$RUNNER_TEMP/fs-guards.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --already-run "$RUNNER_TEMP/already-run.json"',
+            '  mapfile -t GUARDS < "$RUNNER_TEMP/fs-guards.txt"',
+            '  if [ "${#GUARDS[@]}" -gt 0 ]; then',
+            `    .github/scripts/run-named.sh "Tests that read source files" -- pnpm test:ui --passWithNoTests ${SHARD_ARG} "\${GUARDS[@]}"`,
+            '  fi',
+            'elif [ "$SCOPED" = true ]; then',
+            `  .github/scripts/run-named.sh "Tests the change reaches" -- pnpm test:ui --changed=HEAD^1 --passWithNoTests ${SHARD_ARG}`,
             '  # Tests no module graph relates to the change run too: guards',
             '  # that read sources, and tests that load a changed package from',
             '  # its build (by name or its dist/).',
             '  # The list goes through a file so a failing lister fails the step.',
-            '  node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 > "$RUNNER_TEMP/fs-guards.txt"',
+            '  # The guard run leaves out the tests the run above already ran, so',
+            '  # no test runs twice. Every leg splits the same reduced list, so a',
+            '  # leg that cannot list them fails rather than split a different one.',
+            '  .github/scripts/run-named.sh "List the tests the first run ran" -- pnpm exec vitest list --project ui --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/already-run.json"',
+            '  .github/scripts/run-named.sh "List the tests that read source files" --stdout "$RUNNER_TEMP/fs-guards.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --already-run "$RUNNER_TEMP/already-run.json"',
             '  mapfile -t GUARDS < "$RUNNER_TEMP/fs-guards.txt"',
             '  if [ "${#GUARDS[@]}" -gt 0 ]; then',
-            `    pnpm test:ui --passWithNoTests ${SHARD_ARG} "\${GUARDS[@]}"`,
+            `    .github/scripts/run-named.sh "Tests that read source files" -- pnpm test:ui --passWithNoTests ${SHARD_ARG} "\${GUARDS[@]}"`,
             '  fi',
             'else',
             `  pnpm test:ui ${SHARD_ARG}`,
@@ -188,7 +229,7 @@ describe.each(Object.entries(WORKFLOWS))(
           ].join('\n'),
         );
         expect(share.env.SCOPED).toBe(
-          "${{ github.event_name == 'pull_request' && steps.scope.outputs.full_suite == 'false' }}",
+          "${{ github.event_name == 'pull_request' && steps.scope.outputs.vitest_full_suite == 'false' }}",
         );
         // The Node lane runs the same scoped share, guards included.
         const node = workflow.jobs['test-node'].steps.find(
@@ -197,15 +238,19 @@ describe.each(Object.entries(WORKFLOWS))(
         expect(node.run.trim()).toBe(
           [
             'if [ "$SCOPED" = true ]; then',
-            `  pnpm test:node --changed=HEAD^1 --passWithNoTests ${SHARD_ARG}`,
+            `  .github/scripts/run-named.sh "Tests the change reaches" -- pnpm test:node --changed=HEAD^1 --passWithNoTests ${SHARD_ARG}`,
             '  # Tests no module graph relates to the change run too: guards',
             '  # that read sources, and tests that load a changed package from',
             '  # its build (by name or its dist/).',
             '  # The list goes through a file so a failing lister fails the step.',
-            '  node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 > "$RUNNER_TEMP/fs-guards.txt"',
+            '  # The guard run leaves out the tests the run above already ran, so',
+            '  # no test runs twice. Every leg splits the same reduced list, so a',
+            '  # leg that cannot list them fails rather than split a different one.',
+            '  .github/scripts/run-named.sh "List the tests the first run ran" -- pnpm exec vitest list --project node --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/already-run.json"',
+            '  .github/scripts/run-named.sh "List the tests that read source files" --stdout "$RUNNER_TEMP/fs-guards.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --already-run "$RUNNER_TEMP/already-run.json"',
             '  mapfile -t GUARDS < "$RUNNER_TEMP/fs-guards.txt"',
             '  if [ "${#GUARDS[@]}" -gt 0 ]; then',
-            `    pnpm test:node --passWithNoTests ${SHARD_ARG} "\${GUARDS[@]}"`,
+            `    .github/scripts/run-named.sh "Tests that read source files" -- pnpm test:node --passWithNoTests ${SHARD_ARG} "\${GUARDS[@]}"`,
             '  fi',
             'else',
             `  pnpm test:node ${SHARD_ARG}`,
@@ -220,8 +265,11 @@ describe.each(Object.entries(WORKFLOWS))(
       expect(job.steps.indexOf(isolated)).toBeGreaterThan(
         job.steps.indexOf(share),
       );
+      // The core benchmark is not a Lab test (spec:AST-030 FR26).
       expect(isolated.if).toBe(
-        share.if ? `matrix.shard == 1 && ${share.if}` : 'matrix.shard == 1',
+        share.if
+          ? `matrix.shard == 1 && ${share.if} && steps.scope.outputs.lab_only != 'true'`
+          : 'matrix.shard == 1',
       );
     });
 
@@ -241,17 +289,17 @@ describe.each(Object.entries(WORKFLOWS))(
           );
           expect(Object.keys(job.strategy.matrix)).toEqual(['shard']);
           expect(job.strategy['fail-fast']).toBe(false);
-          const suites = job.steps.filter(step =>
-            /--project \w+/.test(expandScripts(step.run ?? '')),
+          const suites = job.steps.filter(
+            step =>
+              !specReaderRun(step) &&
+              /--project \w+/.test(expandScripts(step.run ?? '')),
           );
-          // The one step that is not sharded is the isolated FR23 benchmark.
+          // The one step that is not sharded is the `perf` project's benchmark.
           const unsharded = suites.filter(
             step => !step.run.includes(SHARD_ARG),
           );
           for (const step of unsharded) {
-            expect(expandScripts(step.run)).toContain(
-              'Markdown.fr23.perf.test.ts',
-            );
+            expect(expandScripts(step.run)).toContain('--project perf');
           }
           expect(suites.length - unsharded.length).toBe(1);
         }
@@ -296,11 +344,16 @@ describe.each(Object.entries(WORKFLOWS))(
           );
         }
       } else {
-        const commands = runLines(join);
+        // deploy.yml passes each result through the step's environment;
+        // main-unit-run.test.mjs runs its pass and fail cases.
+        const step = join.steps.find(
+          candidate => candidate.name === 'Assert every push gate succeeded',
+        );
         for (const lane of lanes) {
-          expect(commands, `join does not assert ${lane}`).toContain(
-            `needs.${lane}.result }}" = "success"`,
-          );
+          expect(
+            Object.values(step.env),
+            `join does not assert ${lane}`,
+          ).toContain(`\${{ needs.${lane}.result }}`);
         }
       }
     });
@@ -324,8 +377,10 @@ describe.each(Object.entries(WORKFLOWS))(
             `${lane} has no scope step`,
           ).toBe(true);
           const steps = workflow.jobs[lane].steps;
-          const suite = steps.find(step =>
-            expandScripts(step.run ?? '').includes('--project'),
+          const suite = steps.find(
+            step =>
+              !specReaderRun(step) &&
+              expandScripts(step.run ?? '').includes('--project'),
           );
           expect(suite.if, `${lane} suite is unconditional`).toContain(
             "docsite_only != 'true'",
@@ -347,6 +402,29 @@ describe.each(Object.entries(WORKFLOWS))(
   },
 );
 
+describe('Vitest scoping for shared infrastructure the module graph reaches (spec:AST-030 FR13)', () => {
+  const workflow = load('ci.yml');
+  const scopedEnv = (job, name) =>
+    workflow.jobs[job].steps.find(step => step.name === name).env.SCOPED;
+
+  it('scopes the UI and Node Vitest lanes by vitest_full_suite', () => {
+    for (const [job, name] of [
+      ['test-ui', 'Run this shard of the UI tests'],
+      ['test-node', 'Run this shard of the Node tests'],
+    ]) {
+      expect(scopedEnv(job, name)).toBe(
+        "${{ github.event_name == 'pull_request' && steps.scope.outputs.vitest_full_suite == 'false' }}",
+      );
+    }
+  });
+
+  it('keeps every other owner on full_suite', () => {
+    const text = read('.github/workflows/ci.yml');
+    expect(text.match(/outputs\.vitest_full_suite/g)).toHaveLength(2);
+    expect(text).toContain("steps.scope.outputs.full_suite == 'false'");
+  });
+});
+
 describe('ci.yml pr-a11y browser specs', () => {
   const steps = load('ci.yml').jobs['pr-a11y-specs'].steps;
   const run = steps.find(
@@ -367,29 +445,45 @@ describe('ci.yml pr-a11y browser specs', () => {
   });
 
   it("runs the merge commit's runner against the PR head", () => {
+    const count = steps.find(
+      step => step.name === "Count this run's accessibility legs",
+    );
     expect(run.if).toBe(
-      "(!cancelled()) && steps.scope.outputs.has_components == 'true'",
+      "(!cancelled()) && steps.scope.outputs.has_components == 'true' && steps.legs.outputs.runs == 'true'",
     );
     // The merge commit the steps come from, not the PR's recorded base, which
-    // can lag main and predate the runner.
-    expect(run.env.WORKFLOW_SHA).toBe('${{ github.sha }}');
-    expect(run.env.BASE_SHA).toBe('${{ github.event.pull_request.base.sha }}');
-    expect(run.env.PR_TITLE).toBe('${{ github.event.pull_request.title }}');
+    // can lag main and predate the runner. The count step selects; the run
+    // step runs that leg's share with the same runner.
+    for (const step of [count, run]) {
+      expect(step.env.WORKFLOW_SHA).toBe('${{ github.sha }}');
+      expect(step.env.PR_TITLE).toBe('${{ github.event.pull_request.title }}');
+    }
+    // The base comes from the merge commit's first parent, not the event.
+    expect(count.env.BASE_SHA).toBeUndefined();
+    expect(count.run).toContain('BASE_SHA=$(git rev-parse "$WORKFLOW_SHA^1")');
+    expect(count.run).toContain(
+      'git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"',
+    );
+    expect(count.run).toContain(
+      '--share-out "$RUNNER_TEMP/a11y-leg-share.json"',
+    );
     expect(run.run).toContain(
       'git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"',
     );
-    expect(run.run).toContain('node "$runner"');
+    expect(run.run).toContain(
+      'node "$runner" --share "$RUNNER_TEMP/a11y-leg-share.json"',
+    );
     expect(
       JSON.parse(read('package.json')).scripts['test:a11y-contract:pr'],
     ).toBe('node .github/scripts/a11y-pr-contracts.mjs');
   });
 
-  it('uploads every spec receipt in one head-bound artifact', () => {
+  it('uploads every spec receipt in one head-bound artifact per leg', () => {
     expect(upload.if).toBe(
-      "(!cancelled()) && steps.scope.outputs.has_components == 'true'",
+      "(!cancelled()) && steps.scope.outputs.has_components == 'true' && steps.legs.outputs.runs == 'true'",
     );
     expect(upload.with.name).toBe(
-      'pr-a11y-evidence-${{ needs.build-storybook.outputs.short_hash }}',
+      'pr-a11y-evidence-${{ needs.build-storybook.outputs.short_hash }}-${{ matrix.leg }}',
     );
     for (const dir of [
       'pr-a11y-evidence/',
@@ -423,11 +517,15 @@ describe('ci.yml RTL package sharding', () => {
     );
     expect(readers.map(([name]) => name).sort()).toEqual(
       [
+        'a11y-dependent-audits-plan',
         'pr-a11y-guards',
         'pr-a11y-specs',
+        'pr-component-a11y-contracts',
+        'pr-interaction-webkit',
         'pr-rtl',
         'pr-rtl-merge',
         'pr-rtl-shard',
+        'pr-touched-components',
         'pr-visual',
         'visual-scout',
       ].sort(),
@@ -506,25 +604,26 @@ describe('ci.yml RTL package sharding', () => {
   });
 
   it('runs one bounded shard for every canonical component package', () => {
-    const legs = shard.strategy.matrix.include;
-    expect([...new Set(legs.map(leg => leg.package))]).toEqual([
-      ...COMPONENT_PACKAGE_NAMES,
-    ]);
-    // Each package's parts are numbered 1..parts exactly once.
-    for (const name of COMPONENT_PACKAGE_NAMES) {
-      const parts = legs.filter(leg => leg.package === name);
-      expect(parts.map(leg => leg.part)).toEqual(
-        Array.from({length: parts[0].parts}, (_, index) => index + 1),
-      );
-      expect(new Set(parts.map(leg => leg.parts)).size).toBe(1);
+    // A release-check splits Core wider than a pull request (FR23).
+    for (const event of ['pull_request', 'workflow_dispatch']) {
+      const legs = matrixFor(shard.strategy.matrix.include, event);
+      expect([...new Set(legs.map(leg => leg.package))]).toEqual([
+        ...COMPONENT_PACKAGE_NAMES,
+      ]);
+      // Each package's parts are numbered 1..parts exactly once.
+      for (const name of COMPONENT_PACKAGE_NAMES) {
+        const parts = legs.filter(leg => leg.package === name);
+        expect(parts.map(leg => leg.part)).toEqual(
+          Array.from({length: parts[0].parts}, (_, index) => index + 1),
+        );
+        expect(new Set(parts.map(leg => leg.parts)).size).toBe(1);
+      }
     }
     // Standard runner for pull requests; a dispatched release gate takes the
     // paid release pool (ci-free-runners.test.mjs).
     expect(shard['runs-on']).toContain("|| 'ubuntu-latest'");
-    // Pull requests get the 15-minute PR budget; the full release roster, 30.
-    expect(shard['timeout-minutes']).toBe(
-      "${{ github.event_name == 'workflow_dispatch' && 30 || 15 }}",
-    );
+    // Every leg, the release roster's included, keeps the 15-minute budget.
+    expect(shard['timeout-minutes']).toBe(15);
     expect(shard['continue-on-error']).not.toBe(true);
     const scope = shard.steps.find(
       step => step.name === 'Resolve RTL shard scope',
@@ -663,8 +762,10 @@ describe('full component typechecks', () => {
     name => {
       const {typecheck, 'typecheck:docs': docs} = scriptsOf(`packages/${name}`);
       expect(docs).toBe('tsc --project tsconfig.docs.json');
+      // Core's project runs in several programs (scripts/typecheck-sharded.mjs);
+      // each covers its whole tsconfig.json.
       expect(typecheck).toMatch(
-        /^tsc (--project tsconfig\.json )?--noEmit && pnpm typecheck:docs$/,
+        /^(tsc (--project tsconfig\.json )?--noEmit|node \.\.\/\.\.\/scripts\/typecheck-sharded\.mjs --project tsconfig\.json --shards \d+) && pnpm typecheck:docs$/,
       );
     },
   );
@@ -705,9 +806,11 @@ describe('deploy.yml push gating', () => {
     ]);
     const join = workflow.jobs.test.steps.find(
       step => step.name === 'Assert every push gate succeeded',
-    ).run;
+    );
     for (const owner of ['test-ui', 'test-node', 'typecheck']) {
-      expect(join).toContain(`needs.${owner}.result`);
+      expect(Object.values(join.env)).toContain(
+        `\${{ needs.${owner}.result }}`,
+      );
     }
   });
 
@@ -775,7 +878,14 @@ describe('ci.yml interaction proofs', () => {
   it('runs the interaction config in Chromium against the exact PR head', () => {
     // One fixed runner: out of scope, every step after the scope step skips.
     expect(KNOWN_RUNNERS.has(job['runs-on']), job['runs-on']).toBe(true);
-    expect(job.needs).toEqual(['build-storybook']);
+    // Admission too: the Storybook build starts beside it (spec:AST-030 FR16).
+    expect(job.needs).toEqual([
+      'room',
+      'admission',
+      'heavy-ci',
+      'build-storybook',
+      'interaction-legs',
+    ]);
     const checkout = job.steps.find(
       candidate =>
         candidate.uses?.startsWith('actions/checkout@') &&
@@ -841,7 +951,7 @@ describe('scoped browser audits (spec:AST-030 FR9, FR13)', () => {
       'if [ -n "$DEPENDENTS" ]; then DEPENDENT_ARGS=(--dependents "$DEPENDENTS"); fi',
     );
     expect(visual.run).toContain(
-      'SCOPE_ARGS=(--tiers component --components "$COMPONENTS" "${DEPENDENT_ARGS[@]}" --no-scout)',
+      'SCOPE_ARGS=(--tiers component --components "$COMPONENTS" ${DEPENDENT_ARGS[@]+"${DEPENDENT_ARGS[@]}"} --no-scout)',
     );
     expect(visual.run).toContain(
       "FORCE_FULL_AUDITS=$(jq -r '.forceFullComponentAudits == true' analysis.json)",
@@ -978,8 +1088,8 @@ describe('heavy lanes outside their component scope (spec:AST-030 FR9)', () => {
     }
   });
 
-  it('validates spec records whenever docsite-test cannot decide its scope', () => {
-    const validate = workflow.jobs['docsite-test'].steps.find(
+  it('validates spec records whenever docsite-build cannot decide its scope', () => {
+    const validate = workflow.jobs['docsite-build'].steps.find(
       step => step.name === 'Validate spec records',
     );
     expect(validate.if).toBe(

@@ -2,11 +2,13 @@
 
 'use client';
 
-import {useCallback, use, useEffect, useRef} from 'react';
+import {useCallback, use} from 'react';
 import {createRoot} from 'react-dom/client';
 import {dataAttr} from '../naming';
 import {ToastContext, type ToastContextValue} from './ToastContext';
 import {ToastViewport} from './ToastViewport';
+import {createToastQueue, ToastQueueConnector} from '../Layer/toastHost';
+import {ThemeNestingContext} from '../theme/Theme';
 import {warnOnce} from '../utils/devWarning';
 import type {
   ToastOptions,
@@ -82,62 +84,21 @@ function getFallbackContext(): ToastContextValue {
   document.body.appendChild(container);
   syncRootThemeAttrs(container);
 
-  let resolveCtx: ((ctx: ToastContextValue) => void) | undefined;
-  const ctxReady = new Promise<ToastContextValue>(r => {
-    resolveCtx = r;
-  });
-
-  const FallbackCapture = () => {
-    const ctx = use(ToastContext);
-    const doneRef = useRef(false);
-    useEffect(() => {
-      if (ctx && !doneRef.current) {
-        doneRef.current = true;
-        fallbackContext = ctx;
-        resolveCtx?.(ctx);
-      }
-    }, [ctx]);
-    return null;
-  };
-
+  // Toasts wait in the queue until the fallback viewport's context connects.
+  const queue = createToastQueue();
   fallbackRoot = createRoot(container);
+  // This root sits inside the app, so a <Theme> in toast content is nested:
+  // it themes its own subtree and leaves the app's <html> sync alone.
   fallbackRoot.render(
-    <ToastViewport>
-      <FallbackCapture />
-    </ToastViewport>,
+    <ThemeNestingContext value={true}>
+      <ToastViewport>
+        <ToastQueueConnector queue={queue} />
+      </ToastViewport>
+    </ThemeNestingContext>,
   );
 
-  // Proxy that queues calls until real context is captured
-  const pending: ToastEntry[] = [];
-  const proxy: ToastContextValue = {
-    addToast: entry => {
-      if (fallbackContext && fallbackContext !== proxy) {
-        fallbackContext.addToast(entry);
-      } else {
-        pending.push(entry);
-        void ctxReady.then(ctx => {
-          for (const e of pending) {
-            ctx.addToast(e);
-          }
-          pending.length = 0;
-        });
-      }
-    },
-    removeToast: (id, reason) => {
-      if (fallbackContext && fallbackContext !== proxy) {
-        fallbackContext.removeToast(id, reason);
-      }
-    },
-    findByUniqueID: uid => {
-      if (fallbackContext && fallbackContext !== proxy) {
-        return fallbackContext.findByUniqueID(uid);
-      }
-      return undefined;
-    },
-  };
-
-  fallbackContext = proxy;
-  return proxy;
+  fallbackContext = queue.context;
+  return queue.context;
 }
 
 let toastIdCounter = 0;

@@ -76,6 +76,9 @@ Approved implementations:
 - `packages/core/src/PowerSearch/formatFilterValue.ts`
 - `packages/core/src/NumberInput/numberParser.ts` — reads typed and pasted
   numbers under the field's locale
+- `packages/core/src/utils/calendarDateParser.ts` — typed dates for DateInput
+  and DateTimeInput in any calendar: names, eras, field order, and digits read
+  off Intl and parsed back, the committed text, and the calendar's name
 - `packages/core/src/utils/timeFormat.ts` — time-of-day text for TimeInput and
   DateTimeInput: the locale's hour cycle, digits, separator, and day periods,
   formatted and parsed back
@@ -209,6 +212,141 @@ removes them; remove an entry when you fix its import, and never add one.
 `node internal/eslint-plugin-astryx/no-internal-barrel-import.baseline.mjs`
 rewrites the list from the source (`--check` verifies it), for example after
 merging `main` into this rule's own branch or after a codemod.
+
+### `@astryx/no-raw-private-attribute`
+
+Reports a private `data-astryx-*` attribute written by hand outside its owner
+module (`architecture:public-component-api` INV23). Each private attribute has
+one owner module in the package that writes it,
+`packages/<package>/src/privateAttributes/<name>.stylex.ts`, named in camelCase
+(`focusOwner.stylex.ts` owns `data-astryx-focus-owner`), that writes its
+name and selectors once and exports ready-made styles, setter props and the
+runtime readers its package needs; every other file spreads those exports.
+
+In Core, the owner can instead be a plain-TS module,
+`packages/core/src/privateAttributes/<name>.ts`, that the uncompiled theme
+engine can import. It may export its name and the selector text built on it,
+and only its `.stylex.ts` sibling and the theme engine in
+`packages/core/src/theme/` may import it; a `.stylex.ts` owner never exports
+them. When a plain-TS owner exists, its `.stylex.ts` sibling is not an owner:
+it writes the attribute's selectors only as literals that reach its own
+`stylex.create` calls (directly, or through module constants read only there),
+because StyleX resolves a selector only where it is written. It never sets the
+attribute or exports a selector, through a literal or through the name it
+imports from its owner, and it never re-exports the owner.
+
+```ts
+// fine in privateAttributes/press.ts, a plain-TS owner
+export const PRESS_ATTRIBUTE = 'data-astryx-press';
+// fine in privateAttributes/press.stylex.ts, its sibling
+const PRESSED_ON = '[data-astryx-press="on"]';
+const styles = stylex.create({
+  base: {opacity: {default: 1, [PRESSED_ON]: 0.8}},
+});
+import {PRESS_ATTRIBUTE} from './press';
+const isPressed = element => element.hasAttribute(PRESS_ATTRIBUTE);
+// flagged in privateAttributes/press.stylex.ts once press.ts exists
+const pressOn = {'data-astryx-press': 'on'};
+el.setAttribute('data-astryx-press', 'on');
+export const pressOn = {[PRESS_ATTRIBUTE]: 'on'};
+export {PRESS_ATTRIBUTE} from './press';
+// flagged in any other Core file but the theme engine, neighbours included
+import {PRESS_ATTRIBUTE} from '../privateAttributes/press';
+```
+
+```ts
+// flagged outside the owner module
+el.setAttribute('data-astryx-popover-fallback-close', '');
+const styles = stylex.create({
+  base: {transform: {default: null, '[data-astryx-press="on"]': 'scale(0.98)'}},
+});
+<div data-astryx-submenu-host="" />;
+style.setAttribute(dataAttr('theme-prose'), name);
+
+// fine: public attributes INV23 lists
+<div data-astryx-theme="dark" />;
+const scope = `[data-astryx-media="${surface}"]`;
+el.setAttribute(dataAttr('theme'), name);
+```
+
+It checks string literals in any position (object keys, call arguments,
+selectors inside `stylex.create` and `stylex.when.*`),
+template literals (including `data-${dataAttrNamespace}-…`), JSX attribute
+names, and `dataAttr()` calls. A name it cannot read (`data-astryx-${part}`,
+`dataAttr(name)`) is reported as `data-astryx-*`. Inside an owner module only
+its own attribute may be written, and a `.stylex.ts` owner may not export the raw name or
+a selector as a string: not as an exported or default-exported value, not inside
+an exported object, array or function's return value, and not through a module
+constant one of those uses, including a selector built from that constant in a
+template or with `+`. The name stays allowed there as an object key
+(setter props and `stylex.create` selectors) and as a call argument (a writer,
+or a `closest`/`matches` reader). An import of another package's owner module is
+reported. The public attributes INV23 lists are never reported: `theme`,
+`media`, `aspect-ratio-override`, `token`, `token-value`, `menu-press`,
+`pressable` and `edge-comp`, each after `data-astryx-`. `naming.ts`, which
+builds every name, is not checked.
+
+The repo config turns it on for `packages/*/src`, outside tests, stories and
+test helpers, at the strict-mode severity (an error in CI). The repo config does
+not lint `.mjs` outside the CLI, so `.doc.mjs` text stays with public-API
+review. Sites that existed when the rule arrived are listed by file in
+`no-raw-private-attribute.baseline.json`, once per site, and that many stay
+allowed until they move into an owner module; remove an entry when you move its
+site, and never add one.
+`node internal/eslint-plugin-astryx/no-raw-private-attribute.baseline.mjs`
+rewrites the list from the source (`--check` verifies it).
+
+### `@astryx/no-comment-provenance`
+
+Reports provenance in source comments. A comment explains only what the code
+cannot show: a reason, a constraint, an invariant, or a platform quirk. The
+record links the code, so `pnpm specs:for <path>` finds it; a citation in a
+comment goes stale and duplicates that link. The "Source comments" rule in
+`docs/architecture/knowledge-contracts.md` is the authority.
+
+```ts
+// flagged
+// Matches spec:AST-108 FR4 and component:Button (#9428).
+// Decided 2026-10-31; true as of Oct 2026.
+// The panel MUST close when focus leaves it.
+
+// fine
+// Safari fires blur before click, so the close waits a frame.
+```
+
+It finds four kinds of text, in comments only, never in strings:
+
+- record ids (`spec:AST-108`, `component:Button`, `module:Icon/registry`,
+  `architecture:…`, `family:…`, `design:…`, `theme:…`, a bare `AST-094`) and
+  claim ids with a known prefix (`FR12`, `INV3`, `DEC-4`, `AR2`, `DR1`, …);
+- pull request and issue references: `#1234`, `PR #77`, `issue 12`, and GitHub
+  pull request, issue, discussion, and commit URLs. A bare `#123` with 3, 6, or
+  8 digits can be a hex colour, so it is not reported;
+- date stamps: an ISO date outside quotes (`2026-10-31`) and `as of Oct 2026`;
+- quote blocks: a comment block with `MUST` or `SHALL` in capitals, or a block
+  of more than six prose lines that also cites a record or a claim. The block
+  is reported once, as `spec quote`, beside its citations.
+
+Every comment is checked, public JSDoc, Effect notes, and file headers
+included. Only the lines a tool reads and code samples are skipped: lint,
+TypeScript, and other tool directives (with their `--` reasons); `@pr-a11y`
+routing lines and `SYNC:` blocks, with their continuation lines; the copyright
+line; and `@example` sections and fenced code. Adjacent line comments in one
+column are one block.
+
+When a citation is the file's only link to a record or a claim, link the file
+from a record first, then remove the citation: the source-comments rule says
+which field to use. A claim citation that `pnpm check:knowledge` cannot resolve
+yet stays in the baseline until it can.
+
+The repo config turns it on for `packages/*/src`, outside tests, stories and
+test helpers, at the strict-mode severity (an error in CI). Sites that existed
+when the rule arrived are listed by file in
+`no-comment-provenance.baseline.json`, once per site, and that many stay
+allowed until they are removed; remove an entry when you remove its site, and
+never add one.
+`node internal/eslint-plugin-astryx/no-comment-provenance.baseline.mjs`
+rewrites the list from the source (`--check` verifies it).
 
 ### `@astryx/no-core-internal-import`
 
@@ -539,9 +677,49 @@ import {isRenderable} from '@astryxdesign/core/utils';
 }
 ```
 
-Ships as a **warning in both tiers** while core migrates its existing call sites; promote to `error` in strict mode once migrated. Provides an ESLint suggestion that rewrites the comparison to `isRenderable(value)` (add the import manually).
+It also flags `isRenderable` written out by hand anywhere (an assignment, a condition, a return): a chain that tests one value for nullishness or the empty string and for a boolean.
+
+```ts
+const hasLabel = label !== '' && label != null && typeof label !== 'boolean'; // flagged
+if (rendered == null || typeof rendered === 'boolean') return null; // flagged
+const hasLabel = isRenderable(label); // good
+```
+
+The presets ship it as a warning. The repository config enforces it in core and richtext, where it is an error in strict mode. A check of a string, number or data value, or a documented `false` opt-out, says so with `// eslint-disable-next-line @astryx/no-nullish-jsx-guard -- <reason>`. The rule still takes `{baseline, root}` (each value's allowed checks per file) for a codebase that adopts it with existing call sites. A chain that also tests the value against another type (`typeof value === 'string'`, `isValidElement`, `Array.isArray`, `instanceof`) is a type switch and is not flagged. For a JSX guard, the rule also provides an ESLint suggestion that rewrites the comparison to `isRenderable(value)` (add the import manually).
 
 See: https://github.com/meta/astryx/issues/2538
+
+### `@astryx/no-truthy-jsx-guard`
+
+Flags a bare truthiness guard on a `ReactNode` value in front of rendered JSX. A `ReactNode` can be `0`: `0 && <Slot />` evaluates to `0`, so React renders a stray "0" where the slot should be, and a ternary drops the slot although `0` is content that renders. Use `isRenderable(value)` from `@astryxdesign/core/utils`; it is false only for `null`, `undefined`, `true`, `false` and `''`.
+
+**Scope:** the guard is a bare value reference (`icon`, `item.icon`) in an `&&` chain whose right side is JSX, or the test of a ternary that renders JSX or `null`. The rule reads types and flags only a value whose type can be both a number and an object, as `ReactNode` and `ReactNode | IconType` can. A boolean, a string, a plain number or a data object is not flagged, and neither is a converted guard (`!!icon`, `Boolean(icon)`, a `hasIcon` local) or a value typed `any`.
+
+**Bad:**
+
+```tsx
+{
+  startIcon && <Slot>{startIcon}</Slot>;
+}
+{
+  label ? <span>{label}</span> : null;
+}
+```
+
+**Good:**
+
+```tsx
+import {isRenderable} from '@astryxdesign/core/utils';
+
+{
+  isRenderable(startIcon) && <Slot>{startIcon}</Slot>;
+}
+{
+  isOpen && <Panel />; // a boolean guard
+}
+```
+
+The rule needs type information (`parserOptions.projectService`) and stops with an error without it, so it is not in the presets. The repository config enforces it in core, where it is an error in strict mode. Other packages read core's types from core's build output, so a core type there is `any` before a build and real after it; the rule would give a different result per build state, so they are out of scope. Core has no baseline: every guard is reported. A guard that is right as written says so with `// eslint-disable-next-line @astryx/no-truthy-jsx-guard -- <reason>`. The rule also provides an ESLint suggestion that wraps the guard in `isRenderable(value)` (add the import manually).
 
 ### `@astryx/focus-outline-keyboard-only`
 
@@ -1086,3 +1264,41 @@ existing. Each wants a token decision rather
 than a mechanical substitution, so they are tracked separately; promote a
 package to `error` once it reaches zero, the same path
 `no-physical-properties` took.
+
+### `@astryx/no-prevent-default-in-passive-react-handler`
+
+Reports `preventDefault()` on the event inside a React `onWheel`,
+`onTouchStart` or `onTouchMove` handler, or their capture forms. React attaches
+its root `wheel`, `touchstart` and `touchmove` listeners as passive, and the
+browser ignores `preventDefault()` in a passive listener: the page still
+scrolls or zooms, and `event.defaultPrevented` stays `false`. A handler that
+must cancel the default uses a native listener added with `{passive: false}`,
+in an Effect or a ref callback.
+
+```tsx
+// flagged
+<div
+  onWheel={e => {
+    e.preventDefault();
+    zoom(e.deltaY);
+  }}
+/>;
+const handleWheel = useCallback(event => event.preventDefault(), []);
+<div onWheel={handleWheel} />;
+
+// fine
+<div onTouchEnd={e => e.preventDefault()} />;
+useEffect(() => {
+  const node = ref.current;
+  const onWheel = event => event.preventDefault();
+  node.addEventListener('wheel', onWheel, {passive: false});
+  return () => node.removeEventListener('wheel', onWheel);
+}, []);
+```
+
+It follows an inline function, or an identifier that names a function in the
+same file (a declaration, a function or arrow, or a `useCallback` of one), and
+reports `<event>.preventDefault()` and `<event>.nativeEvent.preventDefault()`
+on the handler's first parameter. It does not follow a handler imported from
+another module or a function the handler calls. The repo config turns it on at
+`error` for `packages/*/src`, outside tests, stories and test helpers.

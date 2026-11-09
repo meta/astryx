@@ -246,6 +246,21 @@ describe('TextInput', () => {
     expect(container.querySelector('svg')).not.toBeInTheDocument();
   });
 
+  // The shared presence check decides the start icon's slot
+  // (architecture:react-component-runtime INV16).
+  it.each([
+    ['null', null],
+    ['false', false],
+    ['an empty string', ''],
+  ])('renders no start icon for %s', (_label, value) => {
+    const {container} = render(
+      <TextInput label="Name" value="" onChange={() => {}} startIcon={value} />,
+    );
+    const wrapper = screen.getByRole('textbox').parentElement as HTMLElement;
+    expect(wrapper.firstChild).toBe(screen.getByRole('textbox'));
+    expect(container.querySelector('svg')).toBeNull();
+  });
+
   describe('status prop', () => {
     it('renders with error status icon', () => {
       const {container} = render(
@@ -650,6 +665,198 @@ describe('TextInput', () => {
     it('does not set autocomplete when not provided', () => {
       render(<TextInput label="Name" value="" onChange={() => {}} />);
       expect(screen.getByRole('textbox')).not.toHaveAttribute('autocomplete');
+    });
+  });
+
+  describe('touch keyboard traits', () => {
+    it('renders no trait attribute when none is set, leaving the browser default', () => {
+      render(<TextInput label="Name" value="" onChange={() => {}} />);
+      const input = screen.getByRole('textbox');
+      for (const attribute of [
+        'enterkeyhint',
+        'inputmode',
+        'autocapitalize',
+        'autocorrect',
+        'spellcheck',
+      ]) {
+        expect(input).not.toHaveAttribute(attribute);
+      }
+    });
+
+    it('labels the Return key with enterKeyHint', () => {
+      render(
+        <TextInput
+          label="Search"
+          value=""
+          onChange={() => {}}
+          enterKeyHint="search"
+        />,
+      );
+      expect(screen.getByRole('textbox')).toHaveAttribute(
+        'enterkeyhint',
+        'search',
+      );
+    });
+
+    it.each([
+      'enter',
+      'done',
+      'go',
+      'next',
+      'previous',
+      'search',
+      'send',
+    ] as const)(
+      'calls onEnter on Enter whatever the Return key says (%s)',
+      async enterKeyHint => {
+        const user = userEvent.setup();
+        const onEnter = vi.fn();
+        render(
+          <TextInput
+            label="Field"
+            value=""
+            onChange={() => {}}
+            enterKeyHint={enterKeyHint}
+            onEnter={onEnter}
+          />,
+        );
+        await user.type(screen.getByRole('textbox'), '{Enter}');
+        expect(onEnter).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it('asks for a keyboard with inputMode without changing the type', () => {
+      render(
+        <TextInput
+          label="Amount"
+          value=""
+          onChange={() => {}}
+          inputMode="decimal"
+        />,
+      );
+      const input = screen.getByRole('textbox');
+      expect(input).toHaveAttribute('inputmode', 'decimal');
+      expect(input).toHaveAttribute('type', 'text');
+    });
+
+    it('sets capitalization, correction and spell checking', () => {
+      render(
+        <TextInput
+          label="Username"
+          value=""
+          onChange={() => {}}
+          autoCapitalize="none"
+          hasAutoCorrect={false}
+          hasSpellCheck={false}
+        />,
+      );
+      const input = screen.getByRole('textbox');
+      expect(input).toHaveAttribute('autocapitalize', 'none');
+      expect(input).toHaveAttribute('autocorrect', 'off');
+      expect(input).toHaveAttribute('spellcheck', 'false');
+    });
+
+    it('keeps an untyped spellCheck passed through while hasSpellCheck is unset', () => {
+      const passthrough = {spellCheck: false} as Record<string, unknown>;
+      render(
+        <TextInput
+          label="Code"
+          value=""
+          onChange={() => {}}
+          {...passthrough}
+        />,
+      );
+      expect(screen.getByRole('textbox')).toHaveAttribute(
+        'spellcheck',
+        'false',
+      );
+    });
+
+    it('turns correction and spell checking on explicitly', () => {
+      render(
+        <TextInput
+          label="Title"
+          value=""
+          onChange={() => {}}
+          autoCapitalize="words"
+          hasAutoCorrect
+          hasSpellCheck
+        />,
+      );
+      const input = screen.getByRole('textbox');
+      expect(input).toHaveAttribute('autocapitalize', 'words');
+      expect(input).toHaveAttribute('autocorrect', 'on');
+      expect(input).toHaveAttribute('spellcheck', 'true');
+    });
+
+    it('keeps the traits on the input inside an InputGroup', () => {
+      render(
+        <InputGroup label="Website">
+          <TextInput
+            label="Website"
+            value=""
+            onChange={() => {}}
+            type="url"
+            enterKeyHint="go"
+            autoCapitalize="none"
+          />
+        </InputGroup>,
+      );
+      const input = screen.getByRole('textbox');
+      expect(input).toHaveAttribute('type', 'url');
+      expect(input).toHaveAttribute('enterkeyhint', 'go');
+      expect(input).toHaveAttribute('autocapitalize', 'none');
+    });
+
+    it('lets the trait props win over the same attributes passed untyped', () => {
+      const untyped = {enterKeyHint: 'done', autoCorrect: 'on'} as object;
+      render(
+        <TextInput
+          label="Code"
+          value=""
+          onChange={() => {}}
+          {...untyped}
+          enterKeyHint="next"
+          hasAutoCorrect={false}
+        />,
+      );
+      const input = screen.getByRole('textbox');
+      expect(input).toHaveAttribute('enterkeyhint', 'next');
+      expect(input).toHaveAttribute('autocorrect', 'off');
+    });
+  });
+
+  describe('type', () => {
+    it.each([
+      ['search', 'searchbox'],
+      ['tel', 'textbox'],
+      ['url', 'textbox'],
+      ['email', 'textbox'],
+    ] as const)('renders type="%s" as a %s', (type, role) => {
+      render(
+        <TextInput label="Field" value="" onChange={() => {}} type={type} />,
+      );
+      expect(screen.getByRole(role, {name: 'Field'})).toHaveAttribute(
+        'type',
+        type,
+      );
+    });
+
+    it('keeps onEnter on a search field', async () => {
+      const user = userEvent.setup();
+      const onEnter = vi.fn();
+      render(
+        <TextInput
+          label="Search"
+          value=""
+          onChange={() => {}}
+          type="search"
+          enterKeyHint="search"
+          onEnter={onEnter}
+        />,
+      );
+      await user.type(screen.getByRole('searchbox'), '{Enter}');
+      expect(onEnter).toHaveBeenCalledTimes(1);
     });
   });
 

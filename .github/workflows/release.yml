@@ -13,7 +13,8 @@
 #     node scripts/npm/setup-trusted-publishing.mjs --setup-trust --replace --workflow release.yml
 #
 # Two jobs, selected by trigger:
-#   - publish (stable): workflow_dispatch only. Publishes the `latest` dist-tag.
+#   - publish (stable): workflow_dispatch with channel=stable (the default)
+#     only. Publishes the `latest` dist-tag.
 #     The release flow is:
 #       1. Cut and mark one release/vX.Y.Z branch from exact window-time main;
 #          X.Y.Z is the version main's package.json declares at that commit.
@@ -24,10 +25,20 @@
 #          release branch and head. Stable publication from main is rejected.
 #     Version-gated and idempotent: any version already on the registry is
 #     skipped, so re-running (or a `dry-run` first) is safe.
-#   - canary: push to main only. Main normally declares the next planned version,
-#     so this publishes <declared>-canary.<short-sha> to the `canary` dist-tag.
-#     The trusted release merge-back briefly leaves main equal to the stable tag;
-#     that push publishes no canary and waits for the separate next-plan PR:
+#     Registry verification runs in bounded windows: the publish job's own,
+#     then at most two follow-up verification jobs while packages are not yet
+#     readable. Anything that acts on a stable release (the GitHub
+#     Release, deployment, merge-back, release receipts, release tracking)
+#     waits for this workflow run's conclusion, never the publish job's: while
+#     packages are still propagating, the publish job passes and a follow-up
+#     job decides the run.
+#   - canary: at most hourly from main's tip (schedule), or on demand from main
+#     (workflow_dispatch with channel=canary, for example the release-time
+#     provenance proof). A tip that already has its canary publishes nothing.
+#     Main normally declares the next planned version, so this publishes
+#     <declared>-canary.<short-sha> to the `canary` dist-tag. The trusted
+#     release merge-back briefly leaves main equal to the stable tag; that tip
+#     publishes no canary and waits for the separate next-plan PR:
 #       npm install @astryxdesign/core@canary
 #
 # Why both jobs live here instead of in deploy.yml:
@@ -39,8 +50,8 @@
 #     published tarball matches the released commit and carries provenance.
 #
 # Concurrency is per-JOB (deliberately NOT a single workflow-level group): a
-# busy main firing many canary pushes must NEVER cancel or starve a pending
-# stable dispatch. Stable and canary therefore use independent concurrency
+# canary run must NEVER cancel or starve a pending stable dispatch, and a
+# stable dispatch never waits for the hourly canary. Stable and canary therefore use independent concurrency
 # groups (see each job below).
 #
 # Provenance requires a PUBLIC repo (meta/astryx is public).
@@ -50,6 +61,11 @@ run-name: Release (${{ github.sha }})
 on:
   workflow_dispatch:
     inputs:
+      channel:
+        description: 'stable publishes the release below; canary publishes main now'
+        type: choice
+        options: [stable, canary]
+        default: stable
       dry-run:
         description: 'Build and resolve what would publish, but do not publish'
         type: boolean
@@ -57,42 +73,70 @@ on:
       release-branch:
         description: 'Single marked release/vX.Y.Z branch'
         type: string
-        required: true
+        required: false
       release-version:
         description: 'Exact X.Y.Z version recorded by the active marker'
         type: string
-        required: true
+        required: false
       release-tag:
         description: 'Exact immutable vX.Y.Z tag checked out by this run'
         type: string
-        required: true
+        required: false
       expected-head:
         description: 'Exact full release branch SHA carried by this tag'
         type: string
-        required: true
+        required: false
       plan-digest:
         description: 'Exact SHA-256 digest recorded by the active marker'
         type: string
-        required: true
-  push:
-    branches: [main]
+        required: false
+  # Hourly canary from main's tip. A pending hourly run is replaced by the
+  # next one rather than queued behind it (the canary concurrency group).
+  schedule:
+    - cron: '17 * * * *'
 
 permissions: {}
 
 jobs:
   # Stable publish — manual dispatch only. Publishes the `latest` dist-tag.
   publish:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.channel != 'canary'
     runs-on: 4-core-ubuntu
     # Dedicated, non-cancelling group. Independent of the canary group so a
-    # canary push can never cancel or queue ahead of a stable release.
+    # canary run can never cancel or queue ahead of a stable release.
     concurrency:
       group: npm-release-stable
       cancel-in-progress: false
     permissions:
+      # The release-check receipt for the cut commit is a ci.yml run.
+      actions: read
       contents: read
       id-token: write # npm OIDC trusted publishing + provenance
+    outputs:
+      verified: ${{ steps.publish.outputs.verified }}
     steps:
+      # The release inputs are optional only so a canary dispatch can omit
+      # them; a stable dispatch needs every one.
+      - name: Require every stable release input
+        env:
+          RELEASE_BRANCH: ${{ inputs['release-branch'] }}
+          RELEASE_VERSION: ${{ inputs['release-version'] }}
+          RELEASE_TAG: ${{ inputs['release-tag'] }}
+          EXPECTED_HEAD: ${{ inputs['expected-head'] }}
+          PLAN_DIGEST: ${{ inputs['plan-digest'] }}
+        run: |
+          set -eu
+          missing=""
+          [ -n "$RELEASE_BRANCH" ] || missing="$missing release-branch"
+          [ -n "$RELEASE_VERSION" ] || missing="$missing release-version"
+          [ -n "$RELEASE_TAG" ] || missing="$missing release-tag"
+          [ -n "$EXPECTED_HEAD" ] || missing="$missing expected-head"
+          [ -n "$PLAN_DIGEST" ] || missing="$missing plan-digest"
+          if [ -n "$missing" ]; then
+            echo "::error::A stable release needs every release input; missing:$missing"
+            exit 1
+          fi
+
       - name: Checkout immutable release tag
         uses: actions/checkout@v7
         with:
@@ -122,6 +166,23 @@ jobs:
             --ref-name "$GITHUB_REF_NAME" \
             --active-branches "$ACTIVE_BRANCHES" \
             | tee release-publish-receipt.json
+
+      # A release is built from a main commit whose canonical release-check
+      # and full unit run passed (spec:AST-030 FR12, FR21, DEC-11, DEC-15):
+      # main is checked about hourly, so the cut commit's own checks are
+      # required here, before anything builds.
+      - name: Require a passing release-check at the exact cut commit
+        uses: actions/github-script@v9
+        with:
+          retries: 3
+          script: |
+            const {pathToFileURL} = require('node:url');
+            const {requireReleaseCheck, requireUnitRun} = await import(
+              pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/release/release-check-receipt.mjs`).href
+            );
+            const {cutSha} = require(`${process.env.GITHUB_WORKSPACE}/.release/active.json`);
+            const check = await requireReleaseCheck({github, core, ...context.repo, sha: cutSha});
+            if (check) await requireUnitRun({github, core, ...context.repo, sha: cutSha});
 
       - name: Upload exact release authority receipt
         uses: actions/upload-artifact@v7
@@ -155,13 +216,18 @@ jobs:
         run: pnpm build
 
       - name: Publish changed packages
+        id: publish
         env:
           DRY_RUN: ${{ inputs.dry-run }}
           RELEASE_VERSION: ${{ inputs['release-version'] }}
         run: |
           set -eu
           published=0
-          for pkg_dir in packages/* packages/themes/*; do
+          FAILED=""
+          # Dependencies first, so the hold-back below sees every failed
+          # dependency before the packages that use it.
+          ORDER=$(node scripts/npm/publish-order.mjs packages/* packages/themes/*)
+          for pkg_dir in $ORDER; do
             [ -f "$pkg_dir/package.json" ] || continue
             # Stable `latest` never includes canaryOnly packages (e.g. lab):
             # skip them explicitly so even an accidental `private: false` can
@@ -178,32 +244,143 @@ jobs:
               echo "[dry-run] Would publish $NAME@$VERSION"
               continue
             fi
+            # A package that depends on (or peers on) a package that failed
+            # here would reach `latest` uninstallable: hold it back as failed
+            # too, so the re-run publishes both together.
+            BLOCKED_BY=$(node -e "
+              const p = require('./$pkg_dir/package.json');
+              const failed = new Set(process.argv[1].split(' ').filter(Boolean));
+              const deps = Object.keys({...p.dependencies, ...p.peerDependencies});
+              process.stdout.write(deps.filter(d => failed.has(d)).join(' '));
+            " "$FAILED")
+            if [ -n "$BLOCKED_BY" ]; then
+              echo "::error::Not publishing $NAME@$VERSION because $BLOCKED_BY failed"
+              FAILED="$FAILED $NAME"
+              continue
+            fi
             echo "Publishing $NAME@$VERSION"
-            pnpm publish "./$pkg_dir" --tag latest --provenance --access public --no-git-checks
-            published=$((published + 1))
+            # At most once, retried while the registry lacks the version (see
+            # scripts/npm/publish-package.mjs). One package that cannot
+            # publish does not stop the rest; the step fails at the end.
+            if node scripts/npm/publish-package.mjs --dir "./$pkg_dir" --tag latest; then
+              published=$((published + 1))
+            else
+              echo "::error::Stable publish failed for $NAME@$VERSION"
+              FAILED="$FAILED $NAME"
+            fi
           done
+          if [ -n "$FAILED" ]; then
+            echo "::error::Stable publish failed for:$FAILED. Re-running this workflow on the same tag publishes only what is missing."
+            exit 1
+          fi
           if [ "$DRY_RUN" = "true" ]; then
             echo "Dry run complete; no packages were published."
           else
+            # One bounded verification window. Packages that are still not
+            # readable when it ends (exit 2) do not fail the release: the
+            # follow-up verification jobs below continue with windows of
+            # their own.
+            STATUS=0
             node scripts/npm/verify-published.mjs \
               --version "$RELEASE_VERSION" \
-              --tag latest
-            echo "Published $published package(s); registry verification passed."
+              --tag latest || STATUS=$?
+            case "$STATUS" in
+              0)
+                echo "verified=true" >> "$GITHUB_OUTPUT"
+                echo "Published $published package(s); registry verification passed."
+                ;;
+              2)
+                echo "verified=pending" >> "$GITHUB_OUTPUT"
+                echo "::notice::Published $published package(s); some are not yet readable on the registry. A follow-up verification job continues."
+                ;;
+              *)
+                exit "$STATUS"
+                ;;
+            esac
           fi
 
-  # Canary publish — runs on every push to main. The @canary dist-tag always
-  # points to the latest main commit:
+  # Follow-up registry verification: each job is one more bounded window for
+  # packages that were published but not yet readable, with the same exact-
+  # version proofs. The last one fails the release if a package is still not
+  # readable.
+  # A follow-up starts no check after 7 minutes, which leaves room in its
+  # 10-minute limit for checkout, Node setup and a last slow check.
+  verify-registry-1:
+    name: Verify registry (follow-up 1)
+    needs: publish
+    if: needs.publish.outputs.verified == 'pending'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      verified: ${{ steps.verify.outputs.verified }}
+    steps:
+      - name: Checkout immutable release tag
+        uses: actions/checkout@v7
+      - name: Setup Node
+        uses: ./.github/actions/setup
+        with:
+          install: 'false'
+      - name: Verify published packages
+        id: verify
+        env:
+          RELEASE_VERSION: ${{ inputs['release-version'] }}
+        run: |
+          set -eu
+          STATUS=0
+          node scripts/npm/verify-published.mjs --version "$RELEASE_VERSION" --tag latest --window-ms 420000 || STATUS=$?
+          case "$STATUS" in
+            0) echo "verified=true" >> "$GITHUB_OUTPUT" ;;
+            2)
+              echo "verified=pending" >> "$GITHUB_OUTPUT"
+              echo "::notice::Some packages are still not readable on the registry. The last follow-up verification job continues."
+              ;;
+            *) exit "$STATUS" ;;
+          esac
+
+  verify-registry-2:
+    name: Verify registry (follow-up 2, last)
+    needs: verify-registry-1
+    if: needs.verify-registry-1.outputs.verified == 'pending'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout immutable release tag
+        uses: actions/checkout@v7
+      - name: Setup Node
+        uses: ./.github/actions/setup
+        with:
+          install: 'false'
+      - name: Verify published packages
+        env:
+          RELEASE_VERSION: ${{ inputs['release-version'] }}
+        run: |
+          set -eu
+          STATUS=0
+          node scripts/npm/verify-published.mjs --version "$RELEASE_VERSION" --tag latest --window-ms 420000 || STATUS=$?
+          if [ "$STATUS" -eq 2 ]; then
+            echo "::error::Published packages are still not readable on the registry after three verification windows."
+          fi
+          exit "$STATUS"
+
+  # Canary publish — hourly from main's tip, or on demand. The @canary
+  # dist-tag points to main's tip as of the last canary:
   #   npm install @astryxdesign/core@canary
   canary:
     name: Publish canary to npm
-    if: github.event_name == 'push'
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.channel == 'canary')
     runs-on: ubuntu-latest
     # Dedicated group, independent of the stable group, so this can never
     # cancel or starve a stable dispatch. Never cancel in progress: a canary
     # that has started may already have published some packages, and
     # cancelling it mid-loop leaves a partial canary set on npm. Bursts still
-    # coalesce: while one canary runs, a newer push waits as the single pending
-    # run, and a later push replaces that pending run before it starts.
+    # coalesce: while one canary runs, a newer run waits as the single pending
+    # run, and a later one replaces that pending run before it starts.
     concurrency:
       group: npm-release-canary
       cancel-in-progress: false
@@ -216,6 +393,20 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Require main and no dry run
+        env:
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          set -eu
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Canaries publish only from main, not $GITHUB_REF."
+            exit 1
+          fi
+          if [ "${DRY_RUN:-false}" = "true" ]; then
+            echo "::error::A canary dispatch publishes; it has no dry run."
+            exit 1
+          fi
+
       - name: Decide whether main may publish a canary
         id: canary-scope
         run: |
@@ -223,42 +414,74 @@ jobs:
           git fetch origin 'refs/tags/v*:refs/tags/v*'
           node scripts/release/active-release.mjs canary-eligibility
 
+      # The hourly run publishes nothing when every package the loop would
+      # publish already has this tip's canary. A package still missing, or a
+      # read the registry cannot answer, publishes; the per-package publisher
+      # skips versions already there.
+      - name: Skip a tip whose canaries are all published
+        if: steps.canary-scope.outputs.publish == 'true'
+        id: fresh
+        run: |
+          set -eu
+          CANARY_VERSION="$(node -p "require('./packages/core/package.json').version")-canary.${GITHUB_SHA:0:7}"
+          echo "version=${CANARY_VERSION}" >> "$GITHUB_OUTPUT"
+          node scripts/npm/canary-pending.mjs --version "$CANARY_VERSION"
+          if grep -qx 'pending=0' "$GITHUB_OUTPUT"; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
       # registry-url makes setup-node write the auth config `npm publish` reads.
       # The Node line in .nvmrc must stay >= 24 so npm >= 11.5.1 ships with it,
       # which OIDC trusted publishing requires.
       - name: Setup Node and pnpm
-        if: steps.canary-scope.outputs.publish == 'true'
+        if: steps.fresh.outputs.publish == 'true'
         uses: ./.github/actions/setup
         with:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Build all packages
-        if: steps.canary-scope.outputs.publish == 'true'
+        if: steps.fresh.outputs.publish == 'true'
         run: pnpm build
 
       - name: Publish canary versions
-        if: steps.canary-scope.outputs.publish == 'true'
-        # Pure OIDC trusted publishing — no NPM_TOKEN.
+        if: steps.fresh.outputs.publish == 'true'
+        # Pure OIDC trusted publishing — no NPM_TOKEN. The canary version is
+        # main's declared next version plus this commit, computed once above.
+        env:
+          CANARY_VERSION: ${{ steps.fresh.outputs.version }}
         run: |
           set -eu
-          SHORT_SHA="${GITHUB_SHA:0:7}"
-          # Main's package.json carries the next planned version.
-          DECLARED_VERSION=$(node -p "require('./packages/core/package.json').version")
-          CANARY_VERSION="${DECLARED_VERSION}-canary.${SHORT_SHA}"
+          [ -n "$CANARY_VERSION" ] || { echo "::error::No canary version was computed."; exit 1; }
 
           echo "Publishing canary ${CANARY_VERSION}"
 
+          # Remember which canaryOnly packages were private before this
+          # ephemeral checkout removes the guard. Only those packages may be
+          # skipped when their npm name has not been bootstrapped yet.
+          PRIVATE_CANARY_PACKAGES="$RUNNER_TEMP/astryx-private-canary-packages.txt"
+          : > "$PRIVATE_CANARY_PACKAGES"
+          export PRIVATE_CANARY_PACKAGES
+
           # Stamp canary version into all publishable packages. canaryOnly
-          # packages (e.g. lab) stay `private: true` in git as npm's hard
+          # packages (for example Native) stay `private: true` in git as npm's hard
           # guarantee against a stable publish; here — in the ephemeral CI
           # checkout ONLY — we strip `private` so they publish to @canary.
-          for pkg in packages/*/package.json packages/themes/*/package.json; do
+          # One list of the packages this job publishes drives the stamp, the
+          # publish loop and the skip check above.
+          CANARY_DIRS=$(node scripts/npm/canary-pending.mjs --list-dirs)
+          for pkg_dir in $CANARY_DIRS; do
+            pkg="$pkg_dir/package.json"
             node -e "
               const fs = require('fs');
               const p = JSON.parse(fs.readFileSync('$pkg','utf8'));
               if (!p.name?.startsWith('@astryxdesign/')) process.exit(0);
               if (p.private && !p.astryx?.canaryOnly) process.exit(0);
-              if (p.private && p.astryx?.canaryOnly) delete p.private;
+              if (p.private && p.astryx?.canaryOnly) {
+                fs.appendFileSync(process.env.PRIVATE_CANARY_PACKAGES, p.name + '\n');
+                delete p.private;
+              }
               p.version = '${CANARY_VERSION}';
               for (const dt of ['dependencies','peerDependencies','devDependencies']) {
                 if (!p[dt]) continue;
@@ -273,24 +496,44 @@ jobs:
 
           # Publish each package with --tag canary. Failures are collected and
           # the job still fails at the end (never `|| true`-swallowed), but one
-          # rejected publish no longer aborts the loop: when lab's first OIDC
-          # publish was rejected (no npm package/trust bootstrapped yet), every
-          # package after it in the loop (all seven themes) stopped receiving
-          # canaries. Publishes are per-package and idempotent, so attempting
+          # rejected publish no longer aborts the loop: when a private
+          # canary-only package's first OIDC publish is rejected because its npm
+          # package/trust is not bootstrapped yet, packages after it still need
+          # their canaries. Publishes are per-package and idempotent, so attempting
           # the rest is always safe.
           FAILED=""
-          for pkg_dir in packages/* packages/themes/*; do
+          for pkg_dir in $CANARY_DIRS; do
             [ -f "$pkg_dir/package.json" ] || continue
             # canaryOnly packages are publishable here (the stamp step above
             # already stripped their `private` flag in this ephemeral checkout).
             IS_PUBLISHABLE=$(node -p "const p=require('./$pkg_dir/package.json'); (!p.private || p.astryx?.canaryOnly) && p.name?.startsWith('@astryxdesign/') ? 'yes' : 'no'")
             if [ "$IS_PUBLISHABLE" = "yes" ]; then
               NAME=$(node -p "require('./$pkg_dir/package.json').name")
-              echo "Publishing ${NAME}@${CANARY_VERSION}"
-              if ! pnpm publish "./$pkg_dir" --tag canary --provenance --access public --no-git-checks; then
-                echo "::error::Canary publish failed for ${NAME}@${CANARY_VERSION}"
-                FAILED="${FAILED} ${NAME}"
+              # A private canary-only package is skipped while its npm name
+              # does not exist yet (exit 3); a registry that cannot say
+              # whether it exists fails it, never skips it.
+              SKIP_IF_ABSENT=""
+              if grep -Fxq "$NAME" "$PRIVATE_CANARY_PACKAGES"; then
+                SKIP_IF_ABSENT="--skip-if-package-absent"
               fi
+              echo "Publishing ${NAME}@${CANARY_VERSION}"
+              # publish-package.mjs publishes at most once and lets the
+              # registry decide: a version already there is skipped, and a
+              # failed attempt (npm's provenance signing can answer "409 an
+              # equivalent entry already exists") is retried with a new
+              # signature only while the registry does not have the version.
+              STATUS=0
+              node scripts/npm/publish-package.mjs --dir "./$pkg_dir" --tag canary $SKIP_IF_ABSENT || STATUS=$?
+              case "$STATUS" in
+                0) ;;
+                3)
+                  echo "::notice::Skipping absent private canary-only package ${NAME}; bootstrap it and register release.yml as its trusted publisher."
+                  ;;
+                *)
+                  echo "::error::Canary publish failed for ${NAME}@${CANARY_VERSION}"
+                  FAILED="${FAILED} ${NAME}"
+                  ;;
+              esac
             fi
           done
 
@@ -302,7 +545,7 @@ jobs:
           echo "Canary published: npm install @astryxdesign/core@${CANARY_VERSION}"
 
       - name: Prune old canary versions
-        if: steps.canary-scope.outputs.publish == 'true'
+        if: steps.fresh.outputs.publish == 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |

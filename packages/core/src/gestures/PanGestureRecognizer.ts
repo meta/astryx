@@ -29,6 +29,8 @@
  *   scroll for that movement — the finger landed at the edge and pulls away
  *   from it. The browser has not committed yet, so beginning claims the
  *   touch and the browser never scrolls.
+ * - `firstMoveDecides`: a one-way pan holds the touch from a first move its
+ *   own way. Any other first move fails it, so the page keeps the touch.
  *
  * Who gets the drag is decided once, when it begins: a drag that began as
  * the browser's scroll stays the browser's to the lift and rubber-bands at
@@ -55,7 +57,12 @@ export interface PanGestureRecognizerOptions extends GestureRecognizerOptions<Pa
   minimumNumberOfTouches?: number;
   /** @default Infinity */
   maximumNumberOfTouches?: number;
-  hysteresis?: number;
+  /**
+   * The travel that begins the pan, px. A function gives each press its own
+   * threshold: it reads the press's first touch when that touch lands.
+   * @default UIKit's 10
+   */
+  hysteresis?: number | ((touch: GestureTouch) => number);
   /** Movement that may begin the pan; anything else fails it. @default 'any' */
   direction?: PanDirection;
   /**
@@ -73,8 +80,23 @@ export interface PanGestureRecognizerOptions extends GestureRecognizerOptions<Pa
    * at the start only (UIScrollView's directional lock).
    */
   lockAxis?: boolean;
+  /**
+   * A trackpad's two-finger scroll (`continuous`) drives the pan where its
+   * owner allows it. It moves as a contact with the content, along its own
+   * axis, after the scrollers under the pointer. Its own element is the pan's
+   * on the axis its `touch-action` keeps, as for a finger. A mouse wheel's
+   * notches never drive a pan; they scroll what is under the pointer.
+   * @default [] (none)
+   */
+  allowedScrollTypes?: ReadonlyArray<'continuous'>;
   /** Begin only when the native scrollers under the touch are at the edge. */
   scrollEdge?: boolean;
+  /**
+   * A one-way pan decides on the touch's first move. A first move its own way
+   * holds the touch from that move. Any other first move fails the pan, so the
+   * page keeps the touch. A toast's swipe works this way.
+   */
+  firstMoveDecides?: boolean;
 }
 
 const ZERO: Point = {x: 0, y: 0};
@@ -91,6 +113,11 @@ export class PanGestureRecognizer extends GestureRecognizer {
     return 'pan';
   }
 
+  /** @internal The host's brand: a pan follows the one-finger rule (recognizerInternals). */
+  protected get family(): 'pan' {
+    return 'pan';
+  }
+
   minimumNumberOfTouches: number;
   maximumNumberOfTouches: number;
   hysteresis: number;
@@ -98,12 +125,18 @@ export class PanGestureRecognizer extends GestureRecognizer {
   axisRatio: number;
   lockAxis: boolean;
   scrollEdge: boolean;
+  firstMoveDecides: boolean;
   /** The axis a `lockAxis` pan locked to when it began. */
   lockedAxis: 'x' | 'y' | null = null;
   /** The movement the begin threshold took (excluded from `translation()`). */
   travelAtBegan: Point = ZERO;
 
   private readonly tracker: VelocityTracker;
+  /**
+   * Read once per press. A finger that lands later keeps the press's
+   * threshold.
+   */
+  private readonly hysteresisFor: ((touch: GestureTouch) => number) | null;
   /** The lift's event time once the pan ended: its release (AST-100 FR2). */
   private releaseTime: number | undefined = undefined;
   /** The centroid where the gesture started, in client px. */
@@ -113,17 +146,23 @@ export class PanGestureRecognizer extends GestureRecognizer {
   /** Translation since touch-down, before `setTranslation` offsets. */
   private raw: Point = ZERO;
   private offset: Point = ZERO;
+  /** How a `firstMoveDecides` pan read the touch's first move, once it moved. */
+  private firstMove: 'begin' | 'fail' | 'wait' | null = null;
 
   constructor(options: PanGestureRecognizerOptions = {}) {
     super(options);
     this.minimumNumberOfTouches = options.minimumNumberOfTouches ?? 1;
     this.maximumNumberOfTouches =
       options.maximumNumberOfTouches ?? Number.POSITIVE_INFINITY;
-    this.hysteresis = options.hysteresis ?? UIKIT_PAN.hysteresis.value;
+    const {hysteresis} = options;
+    this.hysteresisFor = typeof hysteresis === 'function' ? hysteresis : null;
+    this.hysteresis =
+      typeof hysteresis === 'number' ? hysteresis : UIKIT_PAN.hysteresis.value;
     this.direction = options.direction ?? 'any';
     this.axisRatio = options.axisRatio ?? 1;
     this.lockAxis = options.lockAxis ?? false;
     this.scrollEdge = options.scrollEdge ?? false;
+    this.firstMoveDecides = options.firstMoveDecides ?? false;
     this.tracker = new VelocityTracker();
   }
 
@@ -224,6 +263,10 @@ export class PanGestureRecognizer extends GestureRecognizer {
     event: GestureEventContext,
   ): void {
     if (this.numberOfTouches === touches.length) {
+      const first = touches[0];
+      if (this.hysteresisFor != null && first != null) {
+        this.hysteresis = this.hysteresisFor(first);
+      }
       this.origin = centroid(this.touches.values());
       this.adjust = ZERO;
       this.raw = ZERO;
@@ -247,6 +290,17 @@ export class PanGestureRecognizer extends GestureRecognizer {
   ): void {
     this.track(event.time);
     if (this.state === 'possible') {
+      if (
+        this.firstMoveDecides &&
+        this.firstMove == null &&
+        (this.raw.x !== 0 || this.raw.y !== 0)
+      ) {
+        this.firstMove = this.classify(this.raw);
+        if (this.firstMove !== 'begin') {
+          this.setState('failed');
+          return;
+        }
+      }
       this.tryBegin();
     } else if (isActive(this.state)) {
       this.setState('changed');
@@ -284,6 +338,7 @@ export class PanGestureRecognizer extends GestureRecognizer {
     this.raw = ZERO;
     this.offset = ZERO;
     this.releaseTime = undefined;
+    this.firstMove = null;
     this.tracker.reset();
   }
 
@@ -366,6 +421,40 @@ export class PanGestureRecognizer extends GestureRecognizer {
     };
     this.travelAtBegan = swallowed;
     this.offset = {x: -swallowed.x, y: -swallowed.y};
+  }
+
+  /**
+   * A scroll-edge pan holds its finger from the first move while every
+   * scroller under it is at its edge and the finger pulls away from that
+   * edge, the pan's own way (`spec:AST-094` FR19, DEC-18):
+   * the browser would only rubber-band there. It still begins at its
+   * hysteresis; a move the content can still scroll stays the browser's,
+   * and so does every move while a second finger is down (a pinch).
+   */
+  protected override keepsTouch(touchId: number): boolean {
+    const touch = this.touches.get(touchId);
+    if (
+      (!this.scrollEdge && !this.firstMoveDecides) ||
+      this.state !== 'possible' ||
+      // A lone finger only: two fingers before a claim are the page's pinch
+      // (spec:AST-094 FR10).
+      this.touches.size !== 1 ||
+      touch == null ||
+      touch.pointerType !== 'touch' ||
+      touch.takenByBrowser
+    ) {
+      return false;
+    }
+    if (this.firstMoveDecides) {
+      // A first move its own way holds the finger until the pan begins.
+      return this.firstMove === 'begin';
+    }
+    const moved = this.raw;
+    return (
+      (moved.x !== 0 || moved.y !== 0) &&
+      this.classify(moved) === 'begin' &&
+      !this.nativeCanScroll(moved.x, moved.y)
+    );
   }
 
   private nativeCanScroll(dx: number, dy: number): boolean {

@@ -283,6 +283,57 @@ describe('TextArea', () => {
     expect(container.querySelector('svg')).not.toBeInTheDocument();
   });
 
+  // One presence check decides the start icon's slot and its padding
+  // (architecture:react-component-runtime INV16): empty values render no
+  // slot, and 0 is content shown inside the slot, never a stray "0" beside it.
+  describe('start icon slot presence', () => {
+    const zeroTextParent = (container: HTMLElement) => {
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (node.textContent === '0') {
+          return node.parentElement;
+        }
+      }
+      return null;
+    };
+
+    it.each([
+      ['null', null],
+      ['false', false],
+      ['an empty string', ''],
+    ])('renders no slot and reserves no padding for %s', (_label, value) => {
+      const {container} = render(
+        <TextArea
+          label="Description"
+          value=""
+          onChange={() => {}}
+          startIcon={value}
+        />,
+      );
+      expect(container.querySelector('[class*="startIcon"]')).toBeNull();
+      expect(screen.getByRole('textbox').className).not.toContain(
+        'textareaWithStartIcon',
+      );
+    });
+
+    it('shows 0 inside the slot, with its padding, not beside it', () => {
+      const {container} = render(
+        <TextArea
+          label="Description"
+          value=""
+          onChange={() => {}}
+          startIcon={0}
+        />,
+      );
+      const parent = zeroTextParent(container);
+      expect(parent).not.toBeNull();
+      expect(parent?.className).toContain('startIcon');
+      expect(screen.getByRole('textbox').className).toContain(
+        'textareaWithStartIcon',
+      );
+    });
+  });
+
   describe('status prop', () => {
     it('renders with error status icon', () => {
       const {container} = render(
@@ -968,6 +1019,57 @@ describe('TextArea', () => {
       expect([
         ...new FormData(container.querySelector('form')!).keys(),
       ]).toEqual([]);
+    });
+  });
+
+  describe('touch keyboard traits', () => {
+    it('renders no trait attribute when none is set, leaving the browser default', () => {
+      render(<TextArea label="Notes" value="" onChange={() => {}} />);
+      const textarea = screen.getByRole('textbox');
+      for (const attribute of [
+        'enterkeyhint',
+        'inputmode',
+        'autocapitalize',
+        'autocorrect',
+      ]) {
+        expect(textarea).not.toHaveAttribute(attribute);
+      }
+    });
+
+    it('forwards every trait to the native textarea', () => {
+      render(
+        <TextArea
+          label="Message"
+          value=""
+          onChange={() => {}}
+          enterKeyHint="send"
+          inputMode="text"
+          autoCapitalize="sentences"
+          hasAutoCorrect={false}
+          hasSpellCheck={false}
+        />,
+      );
+      const textarea = screen.getByRole('textbox');
+      expect(textarea).toHaveAttribute('enterkeyhint', 'send');
+      expect(textarea).toHaveAttribute('inputmode', 'text');
+      expect(textarea).toHaveAttribute('autocapitalize', 'sentences');
+      expect(textarea).toHaveAttribute('autocorrect', 'off');
+      expect(textarea).toHaveAttribute('spellcheck', 'false');
+    });
+
+    it('keeps Return a line break whatever enterKeyHint says', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <TextArea
+          label="Message"
+          value="a"
+          onChange={onChange}
+          enterKeyHint="send"
+        />,
+      );
+      await user.type(screen.getByRole('textbox'), '{Enter}');
+      expect(onChange).toHaveBeenLastCalledWith('a\n', expect.anything());
     });
   });
 

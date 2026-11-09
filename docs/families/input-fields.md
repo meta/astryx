@@ -18,6 +18,9 @@ verified_by:
     packages/core/src/Selector/Selector.test.tsx,
     packages/core/src/Typeahead/Typeahead.test.tsx,
     packages/core/src/Tokenizer/Tokenizer.test.tsx,
+    packages/core/src/Typeahead/BaseTypeahead.test.tsx,
+    packages/core/src/MultiSelector/MultiSelector.test.tsx,
+    packages/core/src/Field/__tests__/SearchKeyboard.interaction.browser.spec.ts,
     packages/core/src/inputFontFloor.test.ts,
   ]
 members:
@@ -43,7 +46,13 @@ architecture:
     architecture:public-component-api,
   ]
 contributing: []
-deciding_specs: [spec:AST-001/DEC-1, spec:AST-001/DEC-2, spec:AST-002/DEC-1]
+deciding_specs:
+  [
+    spec:AST-001/DEC-1,
+    spec:AST-001/DEC-2,
+    spec:AST-002/DEC-1,
+    spec:AST-099/DEC-5,
+  ]
 ---
 
 # Input field family contract
@@ -236,6 +245,32 @@ another implementation helper.
   on hover and keyboard focus, whatever the field's label or the scope of the
   clear. Its accessible name stays contextual and member-owned, such as "Clear
   Search" or "Clear all Countries", and contains the visible word.
+- **FR12 — A search input asks for a Search key and no autocorrection.** The
+  search input of Typeahead, Tokenizer, and the Selector and MultiSelector
+  search row MUST carry `enterkeyhint="search"` and `autocorrect="off"`, so a
+  touch keyboard shows its Search key and leaves names and identifiers as typed.
+  They are keyboard hints only: Enter does what each member's own contract
+  says, whatever the key shows, and desktop browsers ignore both. They are
+  member-owned defaults with no caller prop on these members;
+  `component:TextInput` FR16 admits the keyboard props only on TextInput and
+  TextArea, where a caller sets `enterKeyHint="search"` for a search field.
+
+- **FR13 — A member that brings up the keyboard stays above it.** When the
+  on-screen keyboard opens, a member's focused text-entry field stays visible
+  above it when the member renders in the page's scrolling content, in a Core
+  host such as a sheet, or in an app's fixed bar docked to the viewport's bottom
+  edge with no `translate` of its own; a member in such a bar rides the keyboard
+  with it, as `spec:AST-099` FR9 defines. A member inside any other fixed
+  container, one floating above the bottom edge, one that sets its own
+  `translate`, or a full-viewport one, is not moved; the app positions it. This
+  covers TextInput, TextArea, NumberInput, the typed fields of DateInput,
+  DateTimeInput, and TimeInput, the inputs of Typeahead and Tokenizer, and the
+  search row of Selector and MultiSelector. It is internal behavior with no prop
+  or other public API, as `spec:AST-099` FR9 requires; that record owns the
+  observable rule and the full list of covered fields, including those of
+  PowerSearch, CommandPalette, and ChatComposer. A member whose field brings up
+  no keyboard, such as DateRangeInput, FileInput, ComplexSelector, or a touch
+  picker field with no input mode, is outside it.
 
 ## Allowed component variation
 
@@ -361,17 +396,14 @@ DEC-6 does not require unrelated components to add a new floor.
   below accepts root `xstyle`/`className`/`style`, and none accepts `container*`
   or `control*`. Today's targets:
 
-  | Component                          | Root styling reaches | Base props reach                       | Primary semantic control | Root styling migrates to |
-  | ---------------------------------- | -------------------- | -------------------------------------- | ------------------------ | ------------------------ |
-  | FileInput                          | control box          | native file input                      | native file input        | `control*`               |
-  | DateInput (pointer, native, touch) | control box          | control box                            | date input               | `control*`               |
-  | DateRangeInput                     | control box          | control box; `ref` on a trigger button | range trigger            | `control*`               |
-  | Selector                           | control box          | trigger button                         | trigger button           | `control*`               |
-  | MultiSelector                      | control box          | not forwarded                          | trigger button           | `control*`               |
-  | ComplexSelector                    | control box          | control box                            | trigger button           | `control*`               |
-  | Typeahead                          | Field                | Field                                  | combobox input           | `container*`             |
-  | Tokenizer                          | Field                | Field                                  | combobox input           | `container*`             |
-  | Slider                             | Field                | not forwarded; `ref` on the track      | slider control           | `container*`             |
+  | Component      | Root styling reaches | Base props reach                       | Primary semantic control | Root styling migrates to |
+  | -------------- | -------------------- | -------------------------------------- | ------------------------ | ------------------------ |
+  | FileInput      | control box          | native file input                      | native file input        | `control*`               |
+  | DateRangeInput | control box          | control box; `ref` on a trigger button | range trigger            | `control*`               |
+  | Selector       | control box          | trigger button                         | trigger button           | `control*`               |
+  | Typeahead      | Field                | Field                                  | combobox input           | `container*`             |
+  | Tokenizer      | Field                | Field                                  | combobox input           | `container*`             |
+  | Slider         | Field                | not forwarded; `ref` on the track      | slider control           | `container*`             |
 
   Conformance is an approved removal of root
   styling; an `astryx upgrade` codemod rewrites each component's root styling to
@@ -379,6 +411,9 @@ DEC-6 does not require unrelated components to add a new floor.
   styling passed through a product wrapper's own props or spread; FR10's type
   error surfaces those callsites.
 
+- **On-screen keyboard (FR13):** no member meets FR13 on current main. No
+  member has keyboard handling, and the keyboard module does not exist
+  yet; `spec:AST-099` lists each gap.
 - **Verification coverage:** current unit tests prove composition, semantics, and
   individual state behavior, but do not yet provide the complete real-browser
   inline-size/end-overlap matrix below. This current record names those
@@ -389,19 +424,21 @@ The exhaustive coverage obligation follows the membership and adoption tables.
 
 ## Verification map
 
-| Contract | Verification                                                                                                                                                                                                                                  | Representative members and states                                                                                                 | Mutation or failure expectation                                                                                                                                                                                          |
-| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| FR1      | Real-Chromium before/after inline-size measurements in block, flex-item, inline-block, grid auto-track, and explicit-width containers                                                                                                         | TextInput baseline; Selector exception; Typeahead empty/selected/source-busy; Tokenizer zero/one/many tokens                      | Value or busy state changes the field's outer inline size outside a recorded exception                                                                                                                                   |
-| FR2      | Real-Chromium content-box/control-box overlap matrix at narrow supported widths and LTR/RTL                                                                                                                                                   | clear, Spinner, status, disclosure, Tokenizer `endContent`; alone and combined                                                    | Content, caret, or pointer hit area intersects a rendered end control, or stale reserve remains after it unmounts                                                                                                        |
-| FR3      | InputGroup unit tests plus rendered size/height, surface/focus-ownership, overflow, and interaction checks                                                                                                                                    | every admitted member; Tokenizer zero/one/many tokens, focused/unfocused, explicit/default overflow; mismatched child/group sizes | A child keeps competing outer geometry, expands or adds a row, loses connected focus/border ownership, or changes naming, keyboard, focus, editing, or selection semantics                                               |
-| FR4      | Keyboard, pointer, and accessibility-tree tests                                                                                                                                                                                               | each member that exposes `disabledMessage`                                                                                        | Reason becomes unreachable, or the disabled control mutates/activates                                                                                                                                                    |
-| FR5      | Selector and MultiSelector interaction and announcement tests from AST-001                                                                                                                                                                    | populated options while input-busy; explicit source-pending; completed empty                                                      | Input busy suppresses supplied options or substitutes for source state                                                                                                                                                   |
-| FR6      | Focused callback/order/optimistic/busy tests for every Action-capable mutation path                                                                                                                                                           | typing, selection, calendar/preset, file selection, and clear where exposed                                                       | Callback/Action order changes, optimistic feedback disappears, or a clear path bypasses the Action contract                                                                                                              |
-| FR7      | Typeahead/Tokenizer source-busy tests and real-browser geometry checks                                                                                                                                                                        | direct BaseTypeahead, standalone wrappers, grouped Typeahead, selected/tokenized values                                           | Busy feedback is unnamed/duplicated, `aria-busy` is absent, or source loading changes row/inline geometry                                                                                                                |
-| FR8      | Representative member tests plus real-browser overlap/opacity/height checks                                                                                                                                                                   | eligible single-line direct controls; wrapped, custom, tall, and translucent controls; all three placements                       | Attached is missing where supported, appears where unsafe, or tooltip reaches direct FieldStatus                                                                                                                         |
-| FR9      | `inputFontFloor.test.ts`, focused computed-style checks, and real iOS Safari focus evidence                                                                                                                                                   | iOS touch, non-iOS coarse pointer, and desktop fine pointer                                                                       | iOS renders below 16 CSS px or focus zooms, or a non-iOS coarse pointer receives the iOS-only floor                                                                                                                      |
-| FR10     | A type test over every Field-composed component's props that fails if one accepts root `xstyle`, `className`, or `style`; per-component render tests for every base prop, `container*`, and `control*` prop and for both development warnings | every Field-composed component standalone, in horizontal-label FormLayout, and inside InputGroup where admitted                   | A component type-checks with root styling, a base prop lands off the primary semantic control, `container*` lands off the Field box or on the control box, `control*` lands off the control box, or a warning is missing |
-| FR11     | `InputClearButton.test.tsx` tooltip and accessible-name assertions, plus real-Chromium hover captures                                                                                                                                         | a long field label; a locale override; light and dark                                                                             | The tooltip repeats the field label, or the accessible name loses the field label                                                                                                                                        |
+| Contract | Verification                                                                                                                                                                                                                                                                                                             | Representative members and states                                                                                                 | Mutation or failure expectation                                                                                                                                                                                                                                                                                                            |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| FR1      | Real-Chromium before/after inline-size measurements in block, flex-item, inline-block, grid auto-track, and explicit-width containers                                                                                                                                                                                    | TextInput baseline; Selector exception; Typeahead empty/selected/source-busy; Tokenizer zero/one/many tokens                      | Value or busy state changes the field's outer inline size outside a recorded exception                                                                                                                                                                                                                                                     |
+| FR2      | Real-Chromium content-box/control-box overlap matrix at narrow supported widths and LTR/RTL                                                                                                                                                                                                                              | clear, Spinner, status, disclosure, Tokenizer `endContent`; alone and combined                                                    | Content, caret, or pointer hit area intersects a rendered end control, or stale reserve remains after it unmounts                                                                                                                                                                                                                          |
+| FR3      | InputGroup unit tests plus rendered size/height, surface/focus-ownership, overflow, and interaction checks                                                                                                                                                                                                               | every admitted member; Tokenizer zero/one/many tokens, focused/unfocused, explicit/default overflow; mismatched child/group sizes | A child keeps competing outer geometry, expands or adds a row, loses connected focus/border ownership, or changes naming, keyboard, focus, editing, or selection semantics                                                                                                                                                                 |
+| FR4      | Keyboard, pointer, and accessibility-tree tests                                                                                                                                                                                                                                                                          | each member that exposes `disabledMessage`                                                                                        | Reason becomes unreachable, or the disabled control mutates/activates                                                                                                                                                                                                                                                                      |
+| FR5      | Selector and MultiSelector interaction and announcement tests from AST-001                                                                                                                                                                                                                                               | populated options while input-busy; explicit source-pending; completed empty                                                      | Input busy suppresses supplied options or substitutes for source state                                                                                                                                                                                                                                                                     |
+| FR6      | Focused callback/order/optimistic/busy tests for every Action-capable mutation path                                                                                                                                                                                                                                      | typing, selection, calendar/preset, file selection, and clear where exposed                                                       | Callback/Action order changes, optimistic feedback disappears, or a clear path bypasses the Action contract                                                                                                                                                                                                                                |
+| FR7      | Typeahead/Tokenizer source-busy tests and real-browser geometry checks                                                                                                                                                                                                                                                   | direct BaseTypeahead, standalone wrappers, grouped Typeahead, selected/tokenized values                                           | Busy feedback is unnamed/duplicated, `aria-busy` is absent, or source loading changes row/inline geometry                                                                                                                                                                                                                                  |
+| FR8      | Representative member tests plus real-browser overlap/opacity/height checks                                                                                                                                                                                                                                              | eligible single-line direct controls; wrapped, custom, tall, and translucent controls; all three placements                       | Attached is missing where supported, appears where unsafe, or tooltip reaches direct FieldStatus                                                                                                                                                                                                                                           |
+| FR9      | `inputFontFloor.test.ts`, focused computed-style checks, and real iOS Safari focus evidence                                                                                                                                                                                                                              | iOS touch, non-iOS coarse pointer, and desktop fine pointer                                                                       | iOS renders below 16 CSS px or focus zooms, or a non-iOS coarse pointer receives the iOS-only floor                                                                                                                                                                                                                                        |
+| FR10     | A type test over every Field-composed component's props that fails if one accepts root `xstyle`, `className`, or `style`; per-component render tests for every base prop, `container*`, and `control*` prop and for both development warnings                                                                            | every Field-composed component standalone, in horizontal-label FormLayout, and inside InputGroup where admitted                   | A component type-checks with root styling, a base prop lands off the primary semantic control, `container*` lands off the Field box or on the control box, `control*` lands off the control box, or a warning is missing                                                                                                                   |
+| FR11     | `InputClearButton.test.tsx` tooltip and accessible-name assertions, plus real-Chromium hover captures                                                                                                                                                                                                                    | a long field label; a locale override; light and dark                                                                             | The tooltip repeats the field label, or the accessible name loses the field label                                                                                                                                                                                                                                                          |
+| FR12     | `Typeahead.test.tsx`, `BaseTypeahead.test.tsx`, `Tokenizer.test.tsx`, `Selector.test.tsx`, and `MultiSelector.test.tsx` cases for both attributes, with Enter keeping its member-owned effect; `SearchKeyboard.interaction.browser.spec.ts` on a touch-emulated phone, where the search input a tap focuses carries both | Typeahead; Tokenizer; Selector and MultiSelector search row; a phone viewport with touch emulation                                | A missing attribute, or an Enter whose effect changes with the label, fails                                                                                                                                                                                                                                                                |
+| FR13     | TBD (gap): the per-field keyboard focus tests and simulator evidence `spec:AST-099` FR9 names                                                                                                                                                                                                                            | each member FR13 covers, in the page, a sheet, a docked bar Core moves, a floating bar, and a bar with its own `translate`        | A focused field left under the keyboard in a scroller (including one inside a fixed container FR9 leaves to the app), a Core host, or a docked bar Core moves, or a public prop for the behavior; a field with no scroller between it and a floating, own-`translate`, or full-viewport host is the app's to position and is not a failure |
 
 ## Decision links
 
@@ -541,6 +578,15 @@ read as awkward copy. A screen-reader user does not see the field around the
 button, so the accessible name keeps the label.
 
 Rejected: a tooltip that repeats the accessible name; it doubles the label on screen.
+
+### DEC-10 — Search inputs label their Return key Search
+
+**Decider:** `cixzhang`, `2026-11-01`
+
+A member's search input already knows that Enter searches or commits a result,
+so it labels the key itself (`architecture:public-component-api` INV4), as
+NumberInput picks its number keyboard (`component:NumberInput` FR1). Search
+terms are names and identifiers that autocorrect rewrites, so correction is off.
 
 ## Open questions
 

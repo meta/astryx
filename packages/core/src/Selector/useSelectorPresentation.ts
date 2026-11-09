@@ -26,6 +26,7 @@ import {
   type AdaptivePresentation,
   type ResolvedAdaptivePresentation,
 } from '../hooks/useAdaptivePresentation';
+import type {InteractionModalityTracking} from '../utils/interactionModality';
 import {useFocusReturnVisibility} from '../hooks/useFocusReturnVisibility';
 
 interface UseSelectorPresentationOptions {
@@ -34,6 +35,11 @@ interface UseSelectorPresentationOptions {
   onShow: () => void;
   popoverOptions: Omit<UsePopoverOptions, 'onHide' | 'onShow'>;
   triggerRef: RefObject<HTMLElement | null>;
+  /**
+   * The component's one modality tracking, its `ref` attached to the trigger,
+   * so the returned trigger's ring follows the trigger's own document.
+   */
+  triggerModality: Pick<InteractionModalityTracking, 'readModality'>;
   /**
    * Return focus to the trigger on every close, even when a press already
    * moved focus to another element. A caller-rendered trigger needs this
@@ -62,6 +68,7 @@ export function useSelectorPresentation({
   onShow,
   popoverOptions,
   triggerRef,
+  triggerModality,
   isFocusReturnAlways = false,
 }: UseSelectorPresentationOptions): SelectorPresentationController {
   const resolvedPresentation = useAdaptivePresentation(presentation);
@@ -84,7 +91,7 @@ export function useSelectorPresentation({
     onFocusReturnTargetFocus,
     prepareFocusReturn,
     resetFocusReturn,
-  } = useFocusReturnVisibility();
+  } = useFocusReturnVisibility(triggerModality);
   onHideRef.current = onHide;
   onShowRef.current = onShow;
 

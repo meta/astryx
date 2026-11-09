@@ -4,20 +4,23 @@
 
 /**
  * @file observeMainOverflow.ts
- * @input AppShell's main region under `height="fill"`: its own scroll
- *   container, holding its content as direct children with no wrapper
+ * @input A scroll container that holds its content as direct children with
+ *   no wrapper: AppShell's main region under `height="fill"`, or a scrolling
+ *   LayoutContent, LayoutPanel or StackItem
  * @output observeMainOverflow(main, onChange): reports whether main's content
  *   overflows it on either axis, once at the start and on every change, and
  *   returns the function that stops observing
- * @position Internal to AppShell and never exported. AppShell makes main a
+ * @position Internal and never exported. AppShell makes main a
  *   keyboard stop only while it overflows (`spec:AST-025` FR12,
- *   `component:AppShell` FR4 and PR1). Main has no inner content box, so its
- *   content grows inside it without resizing it: its direct children's sizes
- *   are watched instead.
+ *   `component:AppShell` FR4 and PR1). useScrollRegionProps names a
+ *   scrolling region only while it overflows. Main has no inner content
+ *   box, so its content grows inside it without resizing it: its direct
+ *   children's sizes are watched instead.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/AppShell/AppShell.tsx
  * - /packages/core/src/AppShell/observeMainOverflow.test.ts
+ * - /packages/core/src/hooks/useScrollRegionProps.ts
  */
 
 import {

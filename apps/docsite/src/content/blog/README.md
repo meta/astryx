@@ -184,6 +184,34 @@ How it works: the same build-time scan records the natural size of every
 of it. The dark variant takes the light image's width, so the theme toggle
 never shifts the layout. Images without the suffix are unchanged.
 
+## 5a. Live examples
+
+A fenced block whose info string is `tsx live` runs as a live example instead
+of showing as code:
+
+````md
+```tsx live
+import {Button} from '@astryxdesign/core/Button';
+
+export default function Example() {
+  return <Button label="Try me" />;
+}
+```
+````
+
+- The block needs a default-exported component. It runs in the playground's
+  preview frame: sandboxed, with its own origin, so a compile or runtime error
+  shows inside the frame and the rest of the post still renders.
+- It can import published Astryx packages, plus demo material that lives
+  beside the post: put `.tsx` modules in a folder named after the post
+  (`posts/<slug>/TarotCard.tsx` next to `posts/<slug>.md`) and import them as
+  `./TarotCard`. They are not Astryx components, no package exports them, and
+  only this post's examples can import them.
+- The plain-text route (`/blog/<slug>.txt`) shows the block's source as an
+  ordinary `tsx` code block.
+- `src/content/blog/fixtures/` holds test posts: the canary serves them at
+  `/blog/<slug>`, but the index, feed and sitemap never list them.
+
 ## 6. Preview locally
 
 ```bash

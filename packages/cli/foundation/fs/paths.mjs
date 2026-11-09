@@ -13,7 +13,13 @@ import {createRequire} from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {listDir, pathExists} from './listing-cache.mjs';
+import {
+  findEntry,
+  listDir,
+  listDirEntries,
+  listingCacheActive,
+  pathExists,
+} from './listing-cache.mjs';
 import {ERROR_CODES} from '../response/error-codes.mjs';
 import {carriedCore, runChoice} from '../release/run-context.mjs';
 import {findDeclaringPackage} from '../release/project.mjs';
@@ -806,7 +812,7 @@ export function discoverExternalPackages(startDir = process.cwd()) {
   /** @param {string} searchDir */
   const scanDir = searchDir => {
     if (!fs.existsSync(searchDir)) return;
-    const entries = fs.readdirSync(searchDir, {withFileTypes: true});
+    const entries = listDirEntries(searchDir);
 
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
@@ -848,7 +854,8 @@ export function discoverExternalPackages(startDir = process.cwd()) {
 
 /**
  * List available component directories in packages/core/src.
- * Returns directory names that contain Astryx*.tsx files.
+ * Component directories are capitalized (`Button`, `Dialog`); lowercase
+ * directories hold shared infrastructure and are never listed.
  * @param {string} coreDir
  */
 export function listComponents(coreDir) {
@@ -859,12 +866,35 @@ export function listComponents(coreDir) {
   return entries
     .filter(e => {
       if (!e.isDirectory()) return false;
-      // Skip non-component dirs
-      if (['hooks', 'theme', 'utils'].includes(e.name)) return false;
-      return true;
+      return /^[A-Z]/.test(e.name);
     })
     .map(e => e.name)
     .sort();
+}
+
+/**
+ * `path.relative(root, target)`, read straight off the string when `target`
+ * is a plain path under `root`. A resolver probes tens of thousands of such
+ * paths, and `path.relative` normalizes both on every call.
+ * @param {string} root
+ * @param {string} target
+ * @returns {string}
+ */
+function relativeInside(root, target) {
+  const prefix = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
+  if (path.isAbsolute(root) && target.startsWith(prefix)) {
+    const rest = target.slice(prefix.length);
+    const plain =
+      rest !== '' &&
+      !(path.sep === '\\' && rest.includes('/')) &&
+      rest
+        .split(path.sep)
+        .every(
+          segment => segment !== '' && segment !== '.' && segment !== '..',
+        );
+    if (plain) return rest;
+  }
+  return path.relative(root, target);
 }
 
 /**
@@ -883,13 +913,28 @@ export function listComponents(coreDir) {
  * @returns {boolean}
  */
 export function existsCaseExact(targetPath, rootDir) {
-  if (!pathExists(targetPath)) return false;
-
-  const rel = path.relative(rootDir, targetPath);
-  if (rel === '') return true;
+  const rel = relativeInside(rootDir, targetPath);
+  if (rel === '') return pathExists(targetPath);
   if (path.isAbsolute(rel) || rel === '..' || rel.startsWith(`..${path.sep}`))
     return false;
 
+  if (listingCacheActive()) {
+    // Inside an operation the folders' listings answer, so a name that a
+    // listing lacks costs no probe of the disk. A symbolic link still needs
+    // its target.
+    let folder = rootDir;
+    let entry = null;
+    for (const segment of rel.split(path.sep)) {
+      entry = findEntry(folder, segment);
+      if (!entry) return false;
+      folder = folder.endsWith(path.sep)
+        ? `${folder}${segment}`
+        : `${folder}${path.sep}${segment}`;
+    }
+    return !entry?.isSymbolicLink() || pathExists(targetPath);
+  }
+
+  if (!pathExists(targetPath)) return false;
   let dir = rootDir;
   for (const segment of rel.split(path.sep)) {
     let entries;

@@ -7,7 +7,8 @@
  * @input Uses React use/useRef/useEffect, stylex, theme tokens, BreadcrumbContext,
  *   rtlStyles for the contextual default slash, and (for the menu trigger)
  *   usePopover + the shared DropdownMenu item API (renderDropdownItems,
- *   DropdownMenuContext, MENU_ITEM_SELECTOR, useListFocus)
+ *   DropdownMenuContext, MENU_ITEM_SELECTOR, useListFocus), and
+ *   the AppShell mobile drawer helpers
  * @output Exports BreadcrumbItem component and BreadcrumbItemProps
  * @position Individual breadcrumb item; used inside Breadcrumbs
  *
@@ -57,6 +58,7 @@ import {menuTouchActionStyles} from '../DropdownMenu/menuTouchAction.stylex';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
+import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {renderDropdownItems} from '../DropdownMenu/renderDropdownItems';
 import {
   DropdownMenuContext,
@@ -72,7 +74,16 @@ import {
 import type {DropdownMenuOption} from '../DropdownMenu/DropdownMenu';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
+  useCloseMobileDrawerOnActivate,
+  useIsInAppShellMobileDrawer,
+} from '../AppShell/useCloseMobileDrawerOnActivate';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {isRenderable} from '../utils/isRenderable';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 // =============================================================================
 // Props
 // =============================================================================
@@ -248,7 +259,12 @@ const menuStyles = stylex.create({
     display: 'flex',
     flexDirection: 'column',
     gap: spacingVars['--spacing-0-5'],
-    maxHeight: '300px',
+    // 300 px, and no taller than its layer's block-size cap, which folds in
+    // the software keyboard's.
+    maxHeight: stylex.firstThatWorks(
+      `min(300px, ${layerViewportInset.maxBlockSize})`,
+      `min(300px, ${layerViewportInset.maxBlockSizeFallback})`,
+    ),
     overflowY: 'auto',
     '--_dropdown-menu-radius': radiusVars['--radius-container'],
     '--_dropdown-menu-padding': spacingVars['--spacing-1'],
@@ -304,6 +320,11 @@ export function BreadcrumbItem({
   // link/button/span in the auto-candidate path). Auto-current detection sets
   // aria-current on this instead of guessing the <li>'s last child.
   const contentRef = useRef<HTMLElement>(null);
+
+  const closeDrawerAfter = useCloseMobileDrawerOnActivate(
+    useIsInAppShellMobileDrawer(),
+  );
+  const handleActivate = closeDrawerAfter(onClick);
 
   const isCurrent = isCurrentProp === true;
   const isAutoCandidate = isCurrentProp == null;
@@ -373,7 +394,9 @@ export function BreadcrumbItem({
 
   const content = (
     <>
-      {startIcon && <span {...stylex.props(itemStyles.icon)}>{startIcon}</span>}
+      {isRenderable(startIcon) && (
+        <span {...stylex.props(itemStyles.icon)}>{startIcon}</span>
+      )}
       {children}
     </>
   );
@@ -453,7 +476,7 @@ export function BreadcrumbItem({
         <LinkComponent
           ref={contentRef}
           href={href}
-          onClick={onClick}
+          onClick={handleActivate}
           {...focusOutlineProps.focusVisible(
             itemStyles.link,
             isSupporting ? itemStyles.supportingLink : itemStyles.defaultLink,
@@ -464,7 +487,7 @@ export function BreadcrumbItem({
         <button
           ref={contentRef as React.RefObject<HTMLButtonElement | null>}
           type="button"
-          onClick={onClick}
+          onClick={handleActivate}
           {...focusOutlineProps.focusVisible(
             itemStyles.link,
             itemStyles.buttonReset,
@@ -527,7 +550,7 @@ function BreadcrumbMenuTrigger({
   // The menu's rows move focus with the last input
   // (`architecture:interaction-modality` INV1); this menu has no press model
   // to activate the tracking they read, so it activates it itself.
-  useInteractionModalityTracking();
+  const {ref: modalityRef} = useInteractionModalityTracking();
 
   const popover = usePopover({
     hasLightDismiss: true,
@@ -536,6 +559,9 @@ function BreadcrumbMenuTrigger({
     // The popup's own role="menu" is the exposed semantics; a modal dialog
     // wrapper would announce an unnamed dialog around the menu.
     role: 'none',
+    // The entrance runs on the surface: an anchored layer lays out again on
+    // each frame its own style animates.
+    xstyle: layerAnimations.below,
   });
 
   const closeMenu = useCallback(() => {
@@ -579,7 +605,12 @@ function BreadcrumbMenuTrigger({
     (e: React.KeyboardEvent) => {
       // A submenu flyout renders inline inside this menu; its key events bubble
       // up here. Let that level own them — only handle events from this level.
+      // Except Tab: each open flyout has closed itself as the key bubbled up,
+      // and the menu closes as Tab from one of its own rows would (APG).
       if (!ownsEvent(e)) {
+        if (e.key === 'Tab') {
+          closeMenu();
+        }
         return;
       }
       if (e.key === 'Enter' || e.key === ' ') {
@@ -646,6 +677,7 @@ function BreadcrumbMenuTrigger({
         ref={useMergedRefs(
           ref as React.Ref<HTMLButtonElement>,
           buttonRef,
+          modalityRef,
           popover.triggerRef,
         )}
         type="button"
@@ -711,7 +743,7 @@ function BreadcrumbMenuTrigger({
         {
           placement: 'below',
           alignment: 'start',
-          xstyle: [menuStyles.popover, layerAnimations.below],
+          xstyle: menuStyles.popover,
         },
       )}
     </>

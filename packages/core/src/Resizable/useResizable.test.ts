@@ -11,14 +11,24 @@
  * SYNC: When useResizable changes, update tests to match new behavior
  */
 
-import {createElement, useLayoutEffect, useRef} from 'react';
+import {
+  Activity,
+  createElement,
+  useLayoutEffect,
+  useRef,
+  type ComponentProps,
+} from 'react';
 import {createRoot, hydrateRoot} from 'react-dom/client';
 import {flushSync} from 'react-dom';
 import {renderToString} from 'react-dom/server';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {render, renderHook, act, waitFor} from '@testing-library/react';
-import {useResizable} from './useResizable';
-import type {ResizableProps, UseResizableSingleConfig} from './useResizable';
+import {endResizeAt, useResizable} from './useResizable';
+import type {
+  ResizableProps,
+  ResizableRegion,
+  UseResizableSingleConfig,
+} from './useResizable';
 import {percent, pixel} from './utils';
 import type {ResizableSize} from './utils';
 
@@ -158,14 +168,71 @@ describe('useResizable persistence', () => {
     act(() => result.current.resize(300));
     act(() => result.current.props._onResizeStart());
     act(() => result.current.props._onResizeMove(-270));
-
+    // The lift decides the close; a drag below the threshold must not
+    // clobber the saved width either.
+    expect(result.current.isCollapsed).toBe(false);
+    act(() => result.current.props._onResizeMove(-275));
+    act(() => result.current.props._onResizeEnd());
     expect(result.current.isCollapsed).toBe(true);
     expect(readStored()).toEqual({size: 300, isCollapsed: true});
 
-    // A continued drag below the threshold must not clobber the saved width.
-    act(() => result.current.props._onResizeMove(-275));
     act(() => result.current.expand());
     expect(result.current.size).toBe(300);
+  });
+
+  it.each([
+    ['_onResizeEnd', (p: ResizableProps) => p._onResizeEnd()],
+    ['_onResizeCancel', (p: ResizableProps) => p._onResizeCancel?.()],
+  ])(
+    'writes the size a drag reached once, after %s releases it',
+    (_name, finish) => {
+      const {result} = renderHook(() => useResizable(BASE_CONFIG));
+      const setItem = vi.spyOn(Storage.prototype, 'setItem');
+      try {
+        act(() => result.current.props._onResizeStart());
+        act(() => result.current.props._onResizeMove(20));
+        act(() => result.current.props._onResizeMove(40));
+        expect(result.current.size).toBe(300);
+        expect(setItem).not.toHaveBeenCalled();
+
+        act(() => finish(result.current.props));
+        expect(setItem.mock.calls).toEqual([
+          [KEY, JSON.stringify({size: 300, isCollapsed: false})],
+        ]);
+      } finally {
+        setItem.mockRestore();
+      }
+    },
+  );
+
+  it('writes the final size once when the release comes before the last move renders', () => {
+    const {result} = renderHook(() => useResizable(BASE_CONFIG));
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    try {
+      act(() => result.current.props._onResizeStart());
+      act(() => result.current.props._onResizeMove(20));
+      expect(result.current.size).toBe(280);
+
+      // One batch: the last move has not rendered when the release lands.
+      act(() => {
+        result.current.props._onResizeMove(40);
+        result.current.props._onResizeEnd();
+      });
+      expect(result.current.size).toBe(300);
+      expect(setItem.mock.calls).toEqual([
+        [KEY, JSON.stringify({size: 300, isCollapsed: false})],
+      ]);
+    } finally {
+      setItem.mockRestore();
+    }
+  });
+
+  it('keeps the size a region was dragged to when it unmounts mid-drag', () => {
+    const {result, unmount} = renderHook(() => useResizable(BASE_CONFIG));
+    act(() => result.current.props._onResizeStart());
+    act(() => result.current.props._onResizeMove(40));
+    unmount();
+    expect(readStored()).toEqual({size: 300, isCollapsed: false});
   });
 
   it('does not touch storage without an autoSaveId', () => {
@@ -252,6 +319,8 @@ describe('useResizable uncontrolled collapse', () => {
 
     act(() => result.current.props._onResizeStart());
     act(() => result.current.props._onResizeMove(-240));
+    expect(result.current.isCollapsed).toBe(false);
+    act(() => result.current.props._onResizeEnd());
 
     expect(result.current.isCollapsed).toBe(true);
     expect(onCollapseChange).toHaveBeenCalledWith(true);
@@ -305,6 +374,7 @@ describe('useResizable controlled collapse', () => {
 
     act(() => result.current.props._onResizeStart());
     act(() => result.current.props._onResizeMove(-240));
+    act(() => result.current.props._onResizeEnd());
 
     expect(onCollapseChange).toHaveBeenCalledWith(true);
     expect(result.current.isCollapsed).toBe(false);
@@ -360,12 +430,14 @@ describe('useResizable live collapse state', () => {
     for (const delta of [-240, -245, -250, -255, -260]) {
       act(() => gesture._onResizeMove(delta));
     }
+    expect(onCollapseChange).not.toHaveBeenCalled();
+    act(() => gesture._onResizeEnd());
 
     expect(onCollapseChange).toHaveBeenCalledExactlyOnceWith(true);
     expect(result.current.isCollapsed).toBe(true);
   });
 
-  it('re-expands mid-gesture when the drag crosses back above the threshold', () => {
+  it('stays open when the drag crosses back above the threshold before the lift', () => {
     const onCollapseChange = vi.fn();
     const {result} = renderHook(() =>
       useResizable({...BASE_CONFIG, collapsible: true, onCollapseChange}),
@@ -375,10 +447,39 @@ describe('useResizable live collapse state', () => {
     const gesture = result.current.props;
     act(() => gesture._onResizeMove(-240));
     act(() => gesture._onResizeMove(-20));
+    act(() => gesture._onResizeEnd());
 
-    expect(onCollapseChange.mock.calls).toEqual([[true], [false]]);
+    expect(onCollapseChange).not.toHaveBeenCalled();
     expect(result.current.isCollapsed).toBe(false);
     expect(result.current.size).toBe(240);
+  });
+
+  it('closes on a lift released fast enough to come to rest past the threshold', () => {
+    const onCollapseChange = vi.fn();
+    const {result} = renderHook(() =>
+      useResizable({...BASE_CONFIG, collapsible: true, onCollapseChange}),
+    );
+
+    act(() => result.current.props._onResizeStart());
+    act(() => result.current.props._onResizeMove(-100));
+    // 1,500 px/s toward closing projects about 750 px further.
+    act(() => endResizeAt(result.current.props, -1500));
+
+    expect(onCollapseChange).toHaveBeenCalledExactlyOnceWith(true);
+    expect(result.current.isCollapsed).toBe(true);
+  });
+
+  it('springs back to the minimum from a slow lift above the threshold', () => {
+    const {result} = renderHook(() =>
+      useResizable({...BASE_CONFIG, collapsible: true}),
+    );
+
+    act(() => result.current.props._onResizeStart());
+    act(() => result.current.props._onResizeMove(-130));
+    act(() => endResizeAt(result.current.props, 0));
+
+    expect(result.current.isCollapsed).toBe(false);
+    expect(result.current.size).toBe(BASE_CONFIG.minSize);
   });
 
   it('notifies when resize() lifts the panel out of collapse', () => {
@@ -704,6 +805,33 @@ describe('useResizable percentage configuration (AST-010)', () => {
       // Inverted on purpose: the maximum wins, as the released clamp order has
       // always done.
       expect(result.current.size).toBe(80);
+    });
+
+    it('warns as useResizable, in the words it always used', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const inverted = renderHook(() =>
+        useResizable({defaultSize: 200, minSize: 300, maxSize: 100}),
+      );
+      expect(warn).toHaveBeenCalledWith(
+        'useResizable: the resolved minimum (300px) is above the resolved ' +
+          'maximum (100px). The maximum wins, as it always has.',
+      );
+      act(() => {
+        inverted.result.current.resize(Number.NaN);
+      });
+      expect(warn).toHaveBeenCalledWith(
+        'useResizable: resize(NaN) is not a pixel size. Keeping the current ' +
+          'size. Percentages configure the hook; they are not a programmatic ' +
+          'input.',
+      );
+      inverted.unmount();
+      warn.mockClear();
+      renderHook(() => useResizable({defaultSize: pixel(-1)}));
+      expect(warn.mock.calls.length).toBeGreaterThan(0);
+      for (const [message] of warn.mock.calls) {
+        expect(String(message)).toMatch(/^useResizable: /);
+      }
+      warn.mockRestore();
     });
 
     it('permanently re-clamps a caller-recomputed numeric maxSize', () => {
@@ -1502,6 +1630,23 @@ describe('useResizable percentage configuration (AST-010)', () => {
       expect(result.current.props._maxSizePx).toBe(399);
     });
 
+    it('follows a container swapped behind the ref with a configuration object kept across renders', () => {
+      // A module constant or a memoized object: no new options reach the
+      // region when the element behind its ref changes.
+      const first = makeSized(398);
+      const second = makeSized(798);
+      const containerRef: {current: HTMLElement | null} = {current: first};
+      const config = {containerRef, defaultSize: 150, maxSize: '50%'} as const;
+      const {result, rerender} = renderHook(() => useResizable(config));
+      expect(result.current.props._maxSizePx).toBe(199);
+
+      act(() => {
+        containerRef.current = second;
+      });
+      rerender();
+      expect(result.current.props._maxSizePx).toBe(399);
+    });
+
     it('stops observing the element it left behind', () => {
       const first = makeSized(398);
       const second = makeSized(798);
@@ -1559,6 +1704,44 @@ describe('useResizable percentage configuration (AST-010)', () => {
       localStorage.clear();
     });
 
+    it('resolves a percentage default against its container once measured, after an <Activity> hid and showed the region before then', () => {
+      // The temporary 1200px basis stands in while the container is not laid
+      // out. A factory made for the reveal must not take the size the old one
+      // showed against it as a selection.
+      content = 0;
+      const containerRef = makeContainer();
+      let region: ResizableRegion | undefined;
+      function Panel() {
+        region = useResizable({
+          containerRef,
+          defaultSize: '30%',
+          autoSaveId: 'pct-activity',
+        });
+        return null;
+      }
+      // Activity's props type requires children, which the third argument
+      // passes.
+      const host = (mode: 'visible' | 'hidden') =>
+        createElement(
+          Activity,
+          {mode} as ComponentProps<typeof Activity>,
+          createElement(Panel),
+        );
+      const view = render(host('visible'));
+      expect(region?.size).toBe(360);
+      view.rerender(host('hidden'));
+      view.rerender(host('visible'));
+      content = 800;
+      act(() => {
+        StubResizeObserver.resizeAll();
+      });
+      expect(region?.size).toBe(240);
+      expect(localStorage.getItem('astryx-resizable:pct-activity')).toBe(
+        JSON.stringify({size: 240, isCollapsed: false}),
+      );
+      localStorage.clear();
+    });
+
     it('still persists for a pixel-only region that supplies a container', () => {
       // The "is the basis measured yet" guard must not disable persistence for
       // a region that never asks for a percentage in the first place.
@@ -1603,6 +1786,44 @@ describe('useResizable percentage configuration (AST-010)', () => {
       });
       expect(result.current.props._maxSizePx).toBe(100);
       expect(result.current.size).toBe(100);
+    });
+
+    it('writes only the re-clamped size when the container shrank mid-drag', () => {
+      const key = 'astryx-resizable:pct-release';
+      content = 600;
+      const containerRef = makeContainer();
+      const {result} = renderHook(() =>
+        useResizable({
+          containerRef,
+          defaultSize: 200,
+          maxSize: '50%',
+          autoSaveId: 'pct-release',
+        }),
+      );
+      expect(result.current.props._maxSizePx).toBe(300);
+      const setItem = vi.spyOn(Storage.prototype, 'setItem');
+      const writes = () => setItem.mock.calls.filter(([k]) => k === key);
+      try {
+        act(() => result.current.props._onResizeStart());
+        act(() => result.current.props._onResizeMove(80));
+        expect(result.current.size).toBe(280);
+        // The bound holds at 300 until the release, which re-clamps to 200.
+        act(() => {
+          content = 400;
+          StubResizeObserver.resizeAll();
+        });
+        expect(result.current.size).toBe(280);
+        expect(writes()).toHaveLength(0);
+
+        act(() => result.current.props._onResizeEnd());
+        expect(result.current.size).toBe(200);
+        expect(writes()).toEqual([
+          [key, JSON.stringify({size: 200, isCollapsed: false})],
+        ]);
+      } finally {
+        setItem.mockRestore();
+        localStorage.removeItem(key);
+      }
     });
   });
 });

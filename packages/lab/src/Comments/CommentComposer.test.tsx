@@ -106,7 +106,7 @@ describe('CommentComposer', () => {
       <CommentComposer value="" onChange={() => {}} onSubmit={onSubmit} />,
     );
     const post = screen.getByRole('button', {name: /send/i});
-    expect(post).toBeDisabled();
+    expect(post).toHaveAttribute('aria-disabled', 'true');
     rerender(
       <CommentComposer
         value="Looks good"
@@ -200,6 +200,62 @@ describe('CommentComposer', () => {
     expect(screen.getByTestId('draft').textContent).toBe('Ship it 🎉');
   });
 
+  it('ends the upload busy state when onActionPendingChange is a new function each render', async () => {
+    let finishUpload: (images: {url: string; alt: string}[]) => void = () => {};
+    const onUploadImages = vi.fn(
+      () =>
+        new Promise<{url: string; alt: string}[]>(resolve => {
+          finishUpload = resolve;
+        }),
+    );
+    function Host() {
+      const [draft, setDraft] = useState('See this');
+      const [pending, setPending] = useState(false);
+      return (
+        <>
+          <CommentComposerBase
+            value={draft}
+            onChange={setDraft}
+            onSubmit={() => {}}
+            placeholder="Reply"
+            context={{kind: 'comment'}}
+            highlightColor="yellow"
+            triggers={[]}
+            agentCommands={[]}
+            hasEmojiPicker={false}
+            isSubmitting={false}
+            onUploadImages={onUploadImages}
+            // Inline: a new callback on every render of the host.
+            onActionPendingChange={isPending => setPending(isPending)}
+          />
+          <output data-testid="pending">{String(pending)}</output>
+        </>
+      );
+    }
+    const {container} = render(<Host />);
+    const input = container.querySelector('input[type="file"]');
+    if (!(input instanceof HTMLInputElement)) {
+      throw new Error('File input not found');
+    }
+    const file = new File(['png'], 'chart.png', {type: 'image/png'});
+    await act(async () => {
+      fireEvent.change(input, {target: {files: [file]}});
+      await Promise.resolve();
+    });
+    await settle();
+    expect(onUploadImages).toHaveBeenCalledWith([file]);
+    expect(screen.getByTestId('pending').textContent).toBe('true');
+
+    await act(async () => {
+      finishUpload([{url: 'https://example.com/a.png', alt: 'Chart'}]);
+      await Promise.resolve();
+    });
+    await settle();
+
+    expect(screen.getByTestId('pending').textContent).toBe('false');
+    expect(container.querySelector('[aria-busy="true"]')).toBeNull();
+  });
+
   it('uploads attached images and appends them as Markdown', async () => {
     const onChange = vi.fn();
     const onUploadImages = vi
@@ -252,6 +308,60 @@ describe('CommentComposer', () => {
       await Promise.resolve();
     });
     expect(onUploadImages).not.toHaveBeenCalled();
+  });
+
+  it('refuses images pasted or dropped into the input while a post is in flight (AST-085 FR2)', async () => {
+    const onChange = vi.fn();
+    const onUploadImages = vi
+      .fn()
+      .mockResolvedValue([{url: 'https://example.com/a.png', alt: 'Chart'}]);
+    render(
+      <CommentComposer
+        value="Draft"
+        onChange={onChange}
+        onSubmit={() => {}}
+        onUploadImages={onUploadImages}
+        isSubmitting
+      />,
+    );
+    const textbox = screen.getByRole('textbox');
+    const file = new File(['png'], 'chart.png', {type: 'image/png'});
+    fireEvent.paste(textbox, {
+      clipboardData: {files: [file], getData: () => ''},
+    });
+    fireEvent.paste(textbox, {
+      clipboardData: {files: [file], getData: () => ''},
+    });
+    fireEvent.drop(textbox, {dataTransfer: {files: [file], types: ['Files']}});
+    await settle();
+    expect(onUploadImages).not.toHaveBeenCalled();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('starts no second upload from a paste while an upload is pending', async () => {
+    const onUploadImages = vi.fn(
+      () => new Promise<{url: string; alt: string}[]>(() => {}),
+    );
+    render(
+      <CommentComposer
+        value="Draft"
+        onChange={() => {}}
+        onSubmit={() => {}}
+        onUploadImages={onUploadImages}
+      />,
+    );
+    const textbox = screen.getByRole('textbox');
+    const file = new File(['png'], 'chart.png', {type: 'image/png'});
+    fireEvent.paste(textbox, {
+      clipboardData: {files: [file], getData: () => ''},
+    });
+    await settle();
+    fireEvent.paste(textbox, {
+      clipboardData: {files: [file], getData: () => ''},
+    });
+    fireEvent.drop(textbox, {dataTransfer: {files: [file], types: ['Files']}});
+    await settle();
+    expect(onUploadImages).toHaveBeenCalledTimes(1);
   });
 
   it('does not open the image chooser from the error banner while busy', async () => {

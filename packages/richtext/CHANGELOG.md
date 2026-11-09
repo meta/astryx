@@ -1,5 +1,97 @@
 # @astryxdesign/richtext
 
+# 0.7.11
+
+#### Fixes
+
+- In `RichTextEditor`, Backspace at the very start of a code block turns it into a paragraph holding its lines, with the caret at its start. It used to merge the code into the block above, so a heading above took the code in, and the Markdown read back as a longer heading and a stray paragraph. A code block with nothing above it, which already became a paragraph, now keeps its lines when its Markdown is read back. (#8581)
+- RichText: an image in Markdown, inline (`![alt](url)`) or by reference (`![alt][ref]`), comes back exactly as written after you edit the text around it; a shortcut reference image (`![alt]`) followed directly by a link is written in its collapsed form (`![alt][]`), so the link stays a link. Before, an edit in an image's paragraph could escape its brackets (`!\[\](…)`), so other Markdown readers saw text instead of an image. RichText has no image node: an image shows as its Markdown source, one token that Backspace deletes whole and autolinking leaves alone. A caret placed inside it moves to its edge, so typing adds text beside the image instead of replacing it. Copying it, or splitting or joining its paragraph, keeps the source. (#10356)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @emilyhorsman
+- @ernestt
+
+---
+
+# 0.7.10
+
+---
+
+# 0.7.9
+
+#### Fixes
+
+- RichTextExtensionNode is constructible with no arguments, as a registered node class must be. A Yjs collaboration binding builds one instance of every registered node class, with no arguments, to read its default properties, so creating a binding over an editor with this package's default nodes threw `TypeError: Cannot read properties of undefined (reading 'display')` before any document was loaded. Its `facts` now default to the same empty values the class already reads for damaged stored state, so a no-argument node reports an empty inline extension instead of throwing. A node built with facts is unchanged.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @potatowagon
+
+---
+
+# 0.7.8
+
+#### New Features
+
+- In `RichTextEditor`, Cmd+A (Ctrl+A on other platforms) in a code block or a table cell now selects the code or the cell text first, and the whole document on the next press. Anywhere else it still selects the whole document at once.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @emilyhorsman
+- @ernestt
+
+---
+
+# 0.7.7
+
+#### Fixes
+
+- RichTextEditorToolbar: Insert link with nothing selected did not insert a link at the caret. In an empty paragraph nothing was inserted, and with the caret inside text the whole text around it was linked, while the dialog closed as if it had worked. Now, with the caret outside a link, Insert link inserts the entered URL as link text at the caret; with a non-empty selection it links the selected text, and with the caret inside a link it updates that link, as before.
+
+#### Performance
+
+- Typing in a `RichTextEditor` code block no longer re-tokenizes the whole block. In TypeScript, JavaScript, Python, and shell code, an edit inside one line re-tokenizes that line, plus at most the line above it, and replaces only the color ranges inside the text node it edited, so a keystroke in a 2,000-line block tokenizes as little code as one in a short block. Edits that open or close a string or comment across lines, and other languages, still re-tokenize the whole block. Colors are unchanged, except that a block whose text nodes are replaced by others with the same text is now recolored instead of left uncolored.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @emilyhorsman
+- @ernestt
+
+---
+
+# 0.7.6
+
+#### Fixes
+
+- RichTextEditor's `toolbar` now treats `''` as empty, as it already treated `null`, `undefined` and booleans, so `toolbar=""` no longer adds the toolbar's top border to the editing surface. RichTextEditorToolbar's `endContent` treats `''`, `false` and `true` as empty, so it no longer adds a trailing separator. `0` still counts as content and shows "0". (#9265)
+- Published packages no longer include repository test and benchmark files, reducing install size without changing exports. (#9153)
+
+#### Other Changes
+
+- RichTextEditor: `statusVariant` names `'tooltip'` in its own type, so it keeps accepting `statusVariant="tooltip"` after FieldStatus drops its deprecated `tooltip` variant in the next minor release. No behavior change. (#9196)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @ernestt
+- @parinith-web
+- @potatowagon
+
+---
+
 # 0.7.5
 
 #### New Features

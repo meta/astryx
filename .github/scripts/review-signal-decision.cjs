@@ -138,6 +138,10 @@ const SPEC_WAITING_TEXT = {
 };
 const SPEC_MIRROR_PREFIX = 'Mirrors review-required · spec ';
 const SPEC_CHECKING_TEXT = '⏳ Checking for spec changes…';
+// A run over the spec-owner job's request budget decides nothing; a
+// maintainer's dispatch decides (spec:AST-030 FR15).
+const SPEC_TOO_LARGE_TEXT =
+  '⏳ Too large to reconcile automatically: a maintainer can run the Review signal workflow for this PR';
 const CODE_WAITING_PREFIX = 'Waiting on code review';
 const REVIEW_COMPLETE = 'Review complete.';
 
@@ -174,6 +178,9 @@ function readSpecStatus(status) {
         satisfied: false,
         text: SPEC_WAITING_TEXT.held(holder),
       };
+    }
+    if (rest.startsWith('too large')) {
+      return {known: true, satisfied: false, text: SPEC_TOO_LARGE_TEXT};
     }
     if (rest.startsWith('waiting (design)')) {
       return {known: true, satisfied: false, text: SPEC_WAITING_TEXT.design};
@@ -274,6 +281,7 @@ module.exports = {
   REVIEW_GATE_CONTEXT,
   SPEC_GATE_CONTEXT,
   SPEC_MIRROR_PREFIX,
+  SPEC_TOO_LARGE_TEXT,
   SPEC_WAITING_TEXT,
   classifyReviewSignalPaths,
   composeReviewGate,

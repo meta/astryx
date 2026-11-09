@@ -27,6 +27,7 @@ import {
 import {MetadataListContext} from './MetadataListContext';
 import type {BaseProps} from '../BaseProps';
 import {mergeProps} from '../utils';
+import {isRenderable} from '../utils/isRenderable';
 import {themeProps} from '../utils/themeProps';
 
 // =============================================================================
@@ -153,7 +154,7 @@ export function MetadataListItem({
 
   const labelContent = (
     <>
-      {icon != null && (
+      {isRenderable(icon) && (
         <span {...stylex.props(styles.iconWrapper)}>{icon}</span>
       )}
       {label}

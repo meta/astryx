@@ -4,35 +4,19 @@
 
 /**
  * @file useAnnounce.ts
- * @input Uses React context and useCallback; DOM APIs and cancellable
- *   animation frames for a singleton live-region pair on the page body and
- *   one persistent polite/assertive pair inside each open Astryx modal
- * @output Exports useAnnounce hook (with its `hasReplace` option),
- *   AnnouncePoliteness and UseAnnounceOptions types; the internal modal
- *   context, the in-dialog region writer the busy-announcement hook uses, and
- *   the hook the modal route (`modalAnnounce.ts`, loaded only with an Astryx
- *   modal) installs itself through
- * @position Core a11y hook; provides imperative screen-reader announcements.
- *   A message follows the nearest open native modal enclosing its caller
- *   (`spec:AST-086` FR14): inside an Astryx modal it is written to that
- *   dialog's own containers, since the page-body channel is not exposed
- *   while a native modal is open; otherwise to the shared page-body pair.
- *   Containers are created empty (FR3), carry the two urgencies (FR5), join
- *   messages written before the previous is exposed and say an identical
- *   same-frame repeat once (FR9), except that a `hasReplace` instance's
- *   message withdraws that instance's previous one not yet exposed, and clear
- *   shortly after each announcement;
- *   the route in `modalAnnounce.ts` hands a message still unexposed when its
- *   modal stops being exposed to the channel exposed after it — the modal
- *   then on top, or the page body once no modal is open. Each write keeps a
- *   receipt per announcer beside the words, which follows them wherever
- *   they are moved, so the announcer can take back its own share.
+ * @input React context; DOM live regions; animation frames
+ * @output useAnnounce, AnnouncePoliteness, UseAnnounceOptions; the internal
+ *   modal context, in-dialog region writer, and modal route hook
+ * @position Core a11y hook for screen-reader announcements. A message goes to
+ *   the nearest open native modal around its caller, else to the shared
+ *   page-body regions. `modalAnnounce.ts` holds the modal route.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/hooks/index.ts
  */
 
-import {createContext, use, useCallback, useRef, type RefObject} from 'react';
+import {use, useCallback, useRef, type RefObject} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 
 /**
  * Announcement urgency:
@@ -54,13 +38,10 @@ export type AnnounceFn = (
 /** Options for `useAnnounce`. */
 export interface UseAnnounceOptions {
   /**
-   * The instance states one current state of its owner, such as a search's
-   * result count: each message it writes withdraws the instance's previous
-   * message while that one is not yet exposed, whatever their urgencies, and
-   * is spoken in the region of its own urgency; a message already exposed has
-   * been heard and stays. Messages from other instances, and from instances
-   * without `hasReplace`, still join (`spec:AST-086` FR9). Give each state a
-   * component reports its own instance.
+   * Each message from this instance withdraws the instance's previous message
+   * if assistive technology has not exposed it yet, whatever its urgency. An
+   * exposed message stays. Messages from other instances still join. Use one
+   * instance for each state that a component reports, such as a result count.
    * @default false
    */
   hasReplace?: boolean;
@@ -104,8 +85,8 @@ export function handleOf(receipt: AnnounceReceipt): WithdrawAnnouncement {
 /**
  * Move `waiting` words elsewhere, one delivery per announcer and in order,
  * and point each receipt at its delivery, so every announcer can still take
- * back its own share (`spec:AST-086` FR9, FR14). The deliveries join where
- * they land, so the words are spoken once. @internal
+ * back its own share. The deliveries join where they land, so the words are
+ * spoken once. @internal
  */
 export function forwardWaiting(
   waiting: ReadonlyArray<WaitingWords>,
@@ -120,8 +101,8 @@ export function forwardWaiting(
 
 const CONTAINER_ATTR = 'data-astryx-live-region';
 
-// Visually-hidden clip block (matches the VisuallyHidden primitive). Applied
-// inline so the regions work without any stylesheet being present.
+// The same clip as VisuallyHidden. It is inline, so the regions work without
+// a stylesheet.
 const VISUALLY_HIDDEN_CSS =
   'position:absolute;width:1px;height:1px;margin:-1px;padding:0;' +
   'overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;' +
@@ -134,10 +115,8 @@ interface LiveRegions {
 }
 
 /**
- * How long an announcement stays in its region before being auto-cleared.
- * Long enough for screen readers to pick the message up and finish reading
- * it; clearing afterwards keeps stale status text out of the accessibility
- * tree for users who browse the DOM later. Each announce resets the timer.
+ * Screen readers need this time to read the message. The clear then keeps
+ * stale status text out of the accessibility tree.
  */
 const CLEAR_DELAY_MS = 2000;
 
@@ -156,17 +135,15 @@ function cancelScheduledClear(politeness: AnnouncePoliteness): void {
   }
 }
 
-// Messages announced before the region exposes them (written in the same
-// frame) wait here and are exposed together, in order, so none is dropped;
-// an identical repeat is the same message and is kept once (spec:AST-086
-// FR9). One frame per region writes them.
+// Messages written before the region exposes them wait here. One frame
+// exposes them together and in order, so none is dropped. An identical repeat
+// is kept once.
 const pendingFrames: Record<AnnouncePoliteness, number | null> = {
   polite: null,
   assertive: null,
 };
-// Each pending message counts the announcers waiting on it, so one of them
-// withdrawing it (a busy start overtaken by its outcome) leaves it in place
-// for the others.
+// Each pending message counts its waiting announcers. When one withdraws it
+// (a busy start overtaken by its outcome), the message stays for the others.
 interface PendingMessage {
   text: string;
   holders: number;
@@ -198,11 +175,9 @@ function scheduleClear(
   }, CLEAR_DELAY_MS);
 }
 
-// Singleton: the live regions are created ONCE and stay mounted for the
-// lifetime of the document. This is the crux of reliable announcements — many
-// screen readers will not announce content injected into a live region that is
-// created together with its content ("born with content"). By mounting empty
-// regions up front and only mutating their text later, updates are announced.
+// The live regions are created once and stay mounted. Many screen readers do
+// not announce a live region that is created with its content. They do
+// announce a text change in an empty region that is already mounted.
 let regions: LiveRegions | null = null;
 
 function createRegion(politeness: AnnouncePoliteness): HTMLElement {
@@ -221,7 +196,7 @@ function getRegions(): LiveRegions | null {
     return null;
   }
   if (regions) {
-    // Re-attach if a region was removed from the DOM (e.g. by a test cleanup).
+    // A test cleanup can remove a region from the DOM. Attach it again.
     if (!regions.polite.isConnected) {
       document.body.appendChild(regions.polite);
     }
@@ -262,11 +237,11 @@ export function announceMessage(
   pendingMessages[politeness].push(pending);
   lastJoined = pending;
   if (pendingFrames[politeness] == null) {
-    // Clearing first guarantees the mutation is observed even when the new
-    // message equals the current text — some AT deduplicate identical content.
+    // Clear first, so the change is seen when the new text equals the old
+    // text. Some assistive technology ignores identical content.
     target.textContent = '';
-    // A re-set in the next frame is more reliable across AT than an immediate
-    // re-set, which can be coalesced with the clear.
+    // Some assistive technology merges an immediate re-set with the clear. A
+    // re-set in the next frame is more reliable.
     pendingFrames[politeness] = requestAnimationFrame(() => {
       pendingFrames[politeness] = null;
       target.textContent = pendingMessages[politeness]
@@ -275,9 +250,8 @@ export function announceMessage(
       pendingMessages[politeness] = [];
     });
   }
-  // Auto-clear so the last message does not linger in the accessibility tree
-  // indefinitely. Scheduled per announce, so a newer announcement always
-  // resets the countdown (the delay comfortably outlasts the rAF re-set).
+  // The clear keeps the last message out of the accessibility tree. Each
+  // announce restarts the delay, which is much longer than the frame re-set.
   scheduleClear(politeness, target);
   return () => withdrawPendingAnnouncement(pending, politeness);
 }
@@ -313,7 +287,7 @@ export function clearRegion(politeness: AnnouncePoliteness): void {
  * An instance created with `hasReplace` states one current state, such as a
  * search's result count: each message it writes withdraws its previous one
  * while that one is not yet exposed, so typing faster than a frame says only
- * the latest count (`spec:AST-086` FR9).
+ * the latest count.
  *
  * @param options - `hasReplace` (default false)
  * @example
@@ -331,8 +305,8 @@ export function useAnnounce({
   hasReplace = false,
 }: UseAnnounceOptions = {}): AnnounceFn {
   const modal = use(ModalAnnounceContext);
-  // A `hasReplace` instance's latest write, which its next message takes back
-  // if assistive technology has not had it yet.
+  // The latest write of a `hasReplace` instance. Its next message withdraws
+  // it if assistive technology has not had it yet.
   const withdrawPreviousRef = useRef<WithdrawAnnouncement | null>(null);
   return useCallback(
     (message: string, politeness: AnnouncePoliteness = 'polite') => {
@@ -342,15 +316,13 @@ export function useAnnounce({
         withdrawPrevious?.();
       }
       let written: WithdrawAnnouncement | null;
-      // Inside an Astryx modal's provider: the modal route decides, per call,
-      // where the caller is heard — `modal` is non-null only where a provider
-      // rendered, and rendering one loads the route.
+      // `modal` is non-null only below a provider, and a provider loads the
+      // route. The route decides where the caller is heard.
       if (modal != null && modalRoute != null) {
         written = modalRoute.announce(modal, message, politeness);
       } else if (!message) {
-        // An empty message clears any lingering status from the region,
-        // including messages joined but not yet exposed — useful when the
-        // triggering context ends.
+        // An empty message clears the region, with the messages that are
+        // not yet exposed.
         clearRegion(politeness);
         written = null;
       } else {
@@ -364,20 +336,13 @@ export function useAnnounce({
   );
 }
 
-// =============================================================================
-// Inside an Astryx modal (spec:AST-086 FR14)
-// =============================================================================
+// Inside an Astryx modal (AST-086 FR14)
 //
-// `useAnnounce` reads the nearest ModalAnnounceProvider's scope. The route a
-// scope implies — exposure, the top-layer order, hand-off and hold on close,
-// the covered rule, deferral while a modal is being presented — lives in
-// `modalAnnounce.ts`, which ModalAnnounceProvider imports and which installs
-// itself here when it loads. A context value is non-null only where a
-// provider rendered, so the route is installed before it is needed, and a
-// component that calls `useAnnounce` but renders no modal never loads it.
-// What stays in this module is what a caller without any Astryx modal still
-// needs: the region writer the busy-announcement hook uses inside a native
-// modal an app renders without Astryx, and the DOM walk that finds it.
+// The modal route lives in `modalAnnounce.ts`. ModalAnnounceProvider imports
+// it, and it installs itself here when it loads. A component that calls
+// `useAnnounce` but renders no modal never loads it. This module keeps what a
+// caller without an Astryx modal needs: the region writer for a native modal
+// that an app renders, and the DOM walk that finds that modal.
 
 const MODAL_REGION_ATTR = 'data-astryx-modal-live-region';
 
@@ -388,15 +353,18 @@ const MODAL_REGION_ATTR = 'data-astryx-modal-live-region';
  */
 export interface ModalAnnounceScope {
   dialogRef: RefObject<HTMLDialogElement | null>;
-  // The owner's intent: open (or presented) in this render. A dialog meant
-  // to be open that is not open yet is being presented in this commit.
+  // The owner's intent: open or presented in this render. A dialog that is
+  // meant to be open but is not open yet is being presented in this commit.
   isOpen: boolean;
   parent: ModalAnnounceScope | null;
 }
 
-export const ModalAnnounceContext = createContext<ModalAnnounceScope | null>(
-  null,
-);
+export const ModalAnnounceContext =
+  createSharedContext<ModalAnnounceScope | null>(
+    'ModalAnnounceContext',
+    1,
+    null,
+  );
 ModalAnnounceContext.displayName = 'ModalAnnounceContext';
 
 /** The modal route `modalAnnounce.ts` installs when a provider loads it. */
@@ -440,7 +408,7 @@ export function isOpenModal(
  * The nearest open native modal dialog enclosing `element` in the DOM, Astryx
  * or app-rendered. Internal: the busy-announcement hook routes by its owner's
  * element so a busy start inside a native modal an app renders without Astryx
- * is still heard inside it (`spec:AST-086` FR14, last sentence).
+ * is still heard inside it.
  */
 export function enclosingModalDialog(
   element: Element | null | undefined,
@@ -463,8 +431,7 @@ export function enclosingModalDialog(
  * written to the dialog while it is open as a modal, else to the shared
  * channel. Returns how to take the words back while they wait, wherever they
  * move, so a busy start overtaken by its own outcome is never heard ahead of
- * it inside a modal (`spec:AST-086` FR8). Internal: used by the
- * busy-announcement hook.
+ * it inside a modal. Internal: used by the busy-announcement hook.
  */
 export function announceInModal(
   dialog: HTMLDialogElement,
@@ -487,18 +454,15 @@ export interface ModalWriteGuard {
   redirect: (waiting: ReadonlyArray<WaitingWords>) => void;
 }
 
-// Each in-dialog region's pending state: the messages written since its text
-// was last exposed, the frame that will expose them joined, the frame after
-// that (text set in one frame is not yet taken by assistive technology in
-// that same frame, so a message arriving before this frame runs still joins
-// rather than wiping the words), and the timer that clears them afterwards.
+// The pending state of each in-dialog region: the messages written since its
+// text was last exposed, the frame that exposes them, the next frame, and the
+// clear timer. Assistive technology does not take text in the frame that sets
+// it. So a message that arrives before the next frame joins the words.
 interface ModalPending {
   messages: string[];
-  // The announcers waiting on each message, one receipt each: one taking its
-  // share back (a busy start overtaken by its outcome, a `hasReplace`
-  // instance's next message) leaves the message for the others. A fresh map
-  // once the words are exposed, so a receipt never reaches equal words
-  // written after its own were exposed.
+  // One receipt for each announcer of a message. When one announcer withdraws
+  // its share, the message stays for the others. The map is new after each
+  // exposure, so a receipt never reaches equal words written later.
   receipts: Map<string, AnnounceReceipt[]>;
   frame: number | null;
   settleFrame: number | null;
@@ -611,8 +575,8 @@ export function writeModalRegion(
   if (previous != null) {
     cancelPending(previous);
   }
-  // Clearing first guarantees the mutation is observed even when the new
-  // message equals the current text — some AT deduplicate identical content.
+  // Clear first, so the change is seen when the new text equals the old
+  // text. Some assistive technology ignores identical content.
   target.textContent = '';
   const pending: ModalPending = {
     messages,
@@ -624,8 +588,8 @@ export function writeModalRegion(
   pending.frame = requestAnimationFrame(() => {
     pending.frame = null;
     if (guard != null && !guard.isExposed()) {
-      // Stopped being exposed between the call and this frame: the words go
-      // where they will be heard, their receipts with them.
+      // The region stopped being exposed after the call. Send the words and
+      // their receipts to where they will be heard.
       pendingByRegion.delete(target);
       guard.redirect(waitingIn(pending));
       return;
@@ -646,12 +610,10 @@ export function writeModalRegion(
 
 /**
  * Withdraw one announcer's share of `message` from `target` while it is not
- * yet exposed — written but not yet spoken — so a busy start overtaken by its
- * own outcome is never heard ahead of it (`spec:AST-086` FR8), and a
- * `hasReplace` instance's next message replaces its previous one (FR9,
- * FR14). The message stays while another announcer holds it; a receipt not
- * among the waiting words (they were exposed, cleared, or moved) takes back
- * nothing.
+ * yet exposed. Then a busy start overtaken by its outcome is never heard, and
+ * a `hasReplace` instance's next message replaces its previous one. The
+ * message stays while another announcer holds it. A receipt that is not among
+ * the waiting words takes back nothing.
  */
 function withdrawFromRegion(
   target: HTMLElement,
@@ -720,9 +682,10 @@ export function takeJoinedAnnouncement(): object | null {
   return joined;
 }
 
+// A busy start overtaken by its own outcome is never spoken (AST-086 FR8).
 /**
  * Withdraws one announcer's share of a message still waiting to be exposed, so
- * a busy start overtaken by its own outcome is never spoken (spec:AST-086 FR8).
+ * a busy start overtaken by its own outcome is never spoken.
  * The message stays while another announcer still holds it.
  *
  * @internal

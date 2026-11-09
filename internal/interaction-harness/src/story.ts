@@ -6,7 +6,8 @@
  *   static server over a built Storybook
  * @output `phone` (the touch-phone browser context every interaction proof
  *   runs in), `withStorybook` (serve the built Storybook for a spec file), and
- *   `openStory` (load one story and wait until it has rendered).
+ *   `openStory` (load one story, with Storybook's highlight module off, and
+ *   wait until Storybook has finished rendering it).
  * @position Stories are the reproduction path, as for every other browser
  *   check in this repository: a scenario used for verification is checked in,
  *   not built in a one-off page.
@@ -59,13 +60,55 @@ export function withStorybook(test: TestType<any, any>): () => string {
   };
 }
 
-/** Loads a story in the page and waits for its first render, its fonts and two frames. */
+/** Pages whose Storybook highlight module `openStory` turned off. */
+const highlightOff = new WeakSet<Page>();
+
+export interface OpenStoryOptions {
+  /**
+   * Keeps Storybook's highlight module on. It is off by default: when on, it
+   * observes `#storybook-root` and, on every insertion, reads the computed
+   * style of every element on the page inside the inserting task, so a proof
+   * would measure Storybook as well as the component.
+   */
+  readonly storybookHighlight?: boolean;
+}
+
+/**
+ * Loads a story in the page and waits for its first render, for Storybook to
+ * finish that render, for its fonts and for two frames. Storybook's highlight
+ * module is off (see `OpenStoryOptions`), and that is checked: its root
+ * element must be absent once the story renders.
+ *
+ * Storybook finishes a render after the story first paints: it waits out the
+ * story's animations (phase `completing`), runs `afterEach`, and only then
+ * reports the story finished (`STORY_FINISHED`, phase `finished`), about
+ * 150 ms later. Its decorators' effects (a `pointermove` listener on the
+ * document, for one) land in between, so a proof measuring from first paint
+ * would measure Storybook as well.
+ */
 export async function openStory(
   page: Page,
   origin: string,
   storyId: string,
   args?: Readonly<Record<string, string>>,
+  {storybookHighlight = false}: OpenStoryOptions = {},
 ): Promise<void> {
+  if (storybookHighlight) {
+    if (highlightOff.has(page)) {
+      throw new Error(
+        "openStory: this page already turned Storybook's highlight module off; open the story in a new page to keep it on",
+      );
+    }
+  } else if (!highlightOff.has(page)) {
+    highlightOff.add(page);
+    // Storybook's highlight module returns at once when this is set before
+    // its preview runs.
+    await page.addInitScript(() => {
+      (
+        globalThis as unknown as {__STORYBOOK_HIGHLIGHT_INITIALIZED?: boolean}
+      ).__STORYBOOK_HIGHLIGHT_INITIALIZED = true;
+    });
+  }
   const params = new URLSearchParams({id: storyId, viewMode: 'story'});
   if (args != null) {
     params.set(
@@ -80,12 +123,30 @@ export async function openStory(
     .locator('#storybook-root > *')
     .first()
     .waitFor({state: 'attached'});
+  await page.waitForFunction(id => {
+    const render = (
+      globalThis as unknown as {
+        __STORYBOOK_PREVIEW__?: {
+          currentRender?: {readonly id?: string; readonly phase?: string};
+        };
+      }
+    ).__STORYBOOK_PREVIEW__?.currentRender;
+    return render?.id === id && render.phase === 'finished';
+  }, storyId);
   await page.evaluate(async () => {
     await document.fonts.ready;
     await new Promise<void>(resolve =>
       requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
     );
   });
+  if (
+    !storybookHighlight &&
+    (await page.locator('#storybook-highlights-root').count()) > 0
+  ) {
+    throw new Error(
+      "openStory: Storybook's highlight module is on (#storybook-highlights-root exists), so every insertion would also read the style of every element on the page; this Storybook may no longer read __STORYBOOK_HIGHLIGHT_INITIALIZED",
+    );
+  }
 }
 
 /** Resolves after `count` animation frames have been presented in the page. */
@@ -110,8 +171,14 @@ export async function frames(page: Page, count = 2): Promise<void> {
 
 // A held callback is queued under its timer or frame id, so the page's own
 // clearTimeout and cancelAnimationFrame still cancel it while frozen; a held
-// frame callback gets the time it actually runs at. `frame` stays the real
-// requestAnimationFrame, for the harness's own waits.
+// frame callback gets the time it actually runs at. `frame` and `timeout`
+// stay the real requestAnimationFrame and setTimeout, for the harness's own
+// waits, and `now` the real clock for their deadlines, which a page freeze
+// does not stop. The gate's freeze() and thaw() are its one way in:
+// freezeTimers and thawTimers call them, and so does a page freeze
+// (freeze.ts), which stops the page's clock too.
+// `clearTimeout` is the real clearTimeout, so a harness wait that ends early
+// cancels its own timer.
 const TIMER_GATE = `(() => {
   if (window.__harnessTimerGate) return;
   const realTimeout = window.setTimeout.bind(window);
@@ -119,17 +186,82 @@ const TIMER_GATE = `(() => {
   const realInterval = window.setInterval.bind(window);
   const realFrame = window.requestAnimationFrame.bind(window);
   const realCancelFrame = window.cancelAnimationFrame.bind(window);
-  const gate = {frozen: false, queue: [], frame: realFrame, timeout: realTimeout};
+  // The page freeze (freeze.ts) installs first and keeps the real clock.
+  const realNow = window.__harnessFreeze ? window.__harnessFreeze.realNow : () => performance.now();
+  // Timeouts not yet due, by the id the page holds: the real timer that runs
+  // it, and when it comes due on the page's clock (performance.now, which a
+  // page freeze stops).
+  const pending = new Map();
+  let isPaused = false;
+  const fire = (id, entry) => {
+    pending.delete(id);
+    if (gate.frozen) gate.queue.push({key: 't' + id, run: entry.run}); else entry.run();
+  };
+  const arm = (id, entry, ms) => { entry.real = realTimeout(() => fire(id, entry), ms); };
+  const gate = {
+    frozen: false,
+    queue: [],
+    frame: realFrame,
+    now: realNow,
+    timeout: realTimeout,
+    clearTimeout: realClearTimeout,
+    // Holds every callback that comes due. With the page's clock stopped as
+    // well, the timeouts not yet due stop counting.
+    freeze(isClockStopped = false) {
+      gate.frozen = true;
+      if (isClockStopped && !isPaused) {
+        isPaused = true;
+        for (const entry of pending.values()) realClearTimeout(entry.real);
+      }
+    },
+    // Holds the stopped timeouts the page's clock has reached, in the order
+    // they came due.
+    catchUp() {
+      if (!isPaused) return;
+      const now = performance.now();
+      const due = [...pending].filter(([, entry]) => entry.due <= now).sort((a, b) => a[1].due - b[1].due);
+      for (const [id, entry] of due) {
+        pending.delete(id);
+        gate.queue.push({key: 't' + id, run: entry.run});
+      }
+    },
+    // Runs the held callbacks in the order they came due, then restarts the
+    // stopped timeouts for what is left of them on the page's clock.
+    thaw() {
+      gate.catchUp();
+      gate.frozen = false;
+      try {
+        // One at a time from the live queue: a callback may cancel a later
+        // one. A callback that throws still leaves the clock running.
+        while (gate.queue.length > 0) gate.queue.shift().run();
+      } finally {
+        if (isPaused) {
+          isPaused = false;
+          const now = performance.now();
+          for (const [id, entry] of pending) arm(id, entry, Math.max(0, entry.due - now));
+        }
+      }
+    },
+  };
   window.__harnessTimerGate = gate;
   const drop = key => { gate.queue = gate.queue.filter(entry => entry.key !== key); };
   window.setTimeout = (fn, ms, ...args) => {
-    const id = realTimeout(() => {
-      const run = () => (typeof fn === 'function' ? fn(...args) : 0);
-      if (gate.frozen) gate.queue.push({key: 't' + id, run}); else run();
-    }, ms);
+    const delay = Math.max(0, Number(ms) || 0);
+    const entry = {due: performance.now() + delay, real: 0, run: () => (typeof fn === 'function' ? fn(...args) : 0)};
+    // The first real timer's id is the one the page holds. A stopped clock
+    // starts it again at the thaw.
+    const id = realTimeout(() => fire(id, entry), delay);
+    entry.real = id;
+    pending.set(id, entry);
+    if (isPaused) realClearTimeout(id);
     return id;
   };
-  window.clearTimeout = id => { realClearTimeout(id); drop('t' + id); };
+  window.clearTimeout = id => {
+    const entry = pending.get(id);
+    pending.delete(id);
+    realClearTimeout(entry == null ? id : entry.real);
+    drop('t' + id);
+  };
   window.setInterval = (fn, ms, ...args) => realInterval(() => { if (!gate.frozen && typeof fn === 'function') fn(...args); }, ms);
   window.requestAnimationFrame = fn => {
     const id = realFrame(time => {
@@ -159,35 +291,22 @@ export async function installTimerGate(page: Page): Promise<void> {
  */
 export async function freezeTimers(page: Page): Promise<void> {
   await page.evaluate(() => {
-    const gate = (window as unknown as {__harnessTimerGate?: {frozen: boolean}})
+    const gate = (window as unknown as {__harnessTimerGate?: {freeze(): void}})
       .__harnessTimerGate;
     if (gate == null) {
       throw new Error(
         'freezeTimers: call installTimerGate before the animation starts',
       );
     }
-    gate.frozen = true;
+    gate.freeze();
   });
 }
 
 /** Releases the gate: held callbacks run now, in the order they came due. */
 export async function thawTimers(page: Page): Promise<void> {
   await page.evaluate(() => {
-    const gate = (
-      window as unknown as {
-        __harnessTimerGate?: {
-          frozen: boolean;
-          queue: {key: string; run: () => void}[];
-        };
-      }
-    ).__harnessTimerGate;
-    if (gate == null) {
-      return;
-    }
-    gate.frozen = false;
-    // One at a time from the live queue: a callback may cancel a later one.
-    while (gate.queue.length > 0) {
-      gate.queue.shift()?.run();
-    }
+    (
+      window as unknown as {__harnessTimerGate?: {thaw(): void}}
+    ).__harnessTimerGate?.thaw();
   });
 }

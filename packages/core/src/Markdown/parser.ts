@@ -2748,11 +2748,12 @@ const URL_LITERAL_RE = new RegExp(
 /** Bare www. URL. Resulting href gets `http://` prepended. */
 const WWW_LITERAL_RE = new RegExp(`www\\.${ANY_NON_WHITESPACE_OR_ANGLE}`, 'g');
 
-/** Bare email: local-part@domain (at least one dot in domain). */
-const EMAIL_LITERAL_RE = new RegExp(
-  `${EMAIL_LOCAL_PART}@${DOMAIN_WITH_DOT}`,
-  'g',
-);
+/**
+ * The domain of a bare email, with at least one dot. The scan matches it after
+ * each `@`. A pattern that starts at every character rereads a long run each
+ * time, so its cost grows with the square of the run.
+ */
+const EMAIL_DOMAIN_RE = new RegExp(DOMAIN_WITH_DOT, 'y');
 
 /** Angle-bracket autolink: `<scheme:url>` (CommonMark §6.5). */
 const ANGLE_URL_RE = new RegExp(`<(${ANGLE_SCHEME}:${ANGLE_URL_BODY})>`, 'g');
@@ -2771,6 +2772,11 @@ const EMAIL_LOCAL_CHARS = new Set(
   'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._%+-@',
 );
 
+/** The characters `EMAIL_LOCAL_PART` allows. */
+const EMAIL_LOCAL_PART_CHARS = new Set(
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._%+-',
+);
+
 interface AutolinkMatch {
   start: number;
   end: number;
@@ -2786,35 +2792,30 @@ interface AutolinkMatch {
  * `https://example.com/Foo_(bar)` keeps the inner pair).
  */
 function peelTrailingPunctAndParens(url: string): string {
-  let s = url;
-  while (s.length > 0) {
-    // Peel trailing punctuation characters in one pass.
-    if (TRAILING_PUNCT_CHARS.has(s[s.length - 1])) {
-      let end = s.length - 1;
-      while (end > 0 && TRAILING_PUNCT_CHARS.has(s[end - 1])) {
-        end--;
-      }
-      s = s.slice(0, end);
-      continue;
+  // Each peeled `)` lowers the close count instead of a recount, so a long
+  // run of `)` costs one pass.
+  let open = 0;
+  let close = 0;
+  for (let idx = 0; idx < url.length; idx++) {
+    if (url[idx] === '(') {
+      open++;
+    } else if (url[idx] === ')') {
+      close++;
     }
-    if (s.endsWith(')')) {
-      let open = 0;
-      let close = 0;
-      for (let idx = 0; idx < s.length; idx++) {
-        if (s[idx] === '(') {
-          open++;
-        } else if (s[idx] === ')') {
-          close++;
-        }
-      }
-      if (close > open) {
-        s = s.slice(0, -1);
-        continue;
-      }
-    }
-    break;
   }
-  return s;
+  let end = url.length;
+  while (end > 0) {
+    const ch = url[end - 1];
+    if (TRAILING_PUNCT_CHARS.has(ch)) {
+      end--;
+    } else if (ch === ')' && close > open) {
+      close--;
+      end--;
+    } else {
+      break;
+    }
+  }
+  return url.slice(0, end);
 }
 
 /** Characters that, when preceding a URL, indicate it's part of a larger token. */
@@ -2922,26 +2923,48 @@ function scanAutolinksInText(text: string): AutolinkMatch[] {
     }
   }
 
-  // bare email
+  // bare email: local-part@domain, found from each `@`
   {
-    const re = new RegExp(EMAIL_LITERAL_RE.source, 'g');
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(text)) !== null) {
-      const prev = text[m.index - 1];
+    // A match, accepted or not, ends where the next one may start.
+    let consumedTo = 0;
+    for (
+      let at = text.indexOf('@');
+      at !== -1;
+      at = text.indexOf('@', at + 1)
+    ) {
+      let start = at;
+      while (
+        start > consumedTo &&
+        EMAIL_LOCAL_PART_CHARS.has(text[start - 1])
+      ) {
+        start--;
+      }
+      if (start === at) {
+        continue;
+      }
+      EMAIL_DOMAIN_RE.lastIndex = at + 1;
+      const domain = EMAIL_DOMAIN_RE.exec(text);
+      if (domain === null) {
+        continue;
+      }
+      const end = at + 1 + domain[0].length;
+      consumedTo = end;
+      const prev = text[start - 1];
       // Reject if previous char could be part of the local part or sits in
       // a position that would make this match continuation of something
       // bigger (`name@x.y@host`, `foo+bar@x`, `mailto:user@host`).
       if (prev != null && EMAIL_LOCAL_CHARS.has(prev)) {
         continue;
       }
-      if (text.slice(Math.max(0, m.index - 7), m.index) === 'mailto:') {
+      if (text.slice(Math.max(0, start - 7), start) === 'mailto:') {
         continue;
       }
+      const email = text.slice(start, end);
       matches.push({
-        start: m.index,
-        end: m.index + m[0].length,
-        href: `mailto:${m[0]}`,
-        display: m[0],
+        start,
+        end,
+        href: `mailto:${email}`,
+        display: email,
       });
     }
   }
