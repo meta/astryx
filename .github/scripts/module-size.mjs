@@ -185,7 +185,8 @@ export async function measureAdapter({root, host, adapter, engine}) {
 }
 
 const overText = m =>
-  `${m.name} is ${m.gzipBytes} B min+gz; its budget is ${m.budgetBytes} B.`;
+  `${m.name} is ${m.gzipBytes} B min+gz; its budget is ${m.budgetBytes} B.` +
+  (m.sizeNote ? ` ${m.sizeNote}` : '');
 
 /**
  * Measure every configured module against its budget.
@@ -208,6 +209,7 @@ export async function checkBudgets({root, config}) {
       budgetBytes: entry.budgetBytes,
       enforce: entry.enforce === true,
       over: gzipBytes > entry.budgetBytes,
+      sizeNote: entry.sizeNote ?? null,
     };
     modules.push(measured);
     if (measured.over)
@@ -227,6 +229,8 @@ function renderTable(modules) {
     '| Module | Min | Min + gzip | Budget | State |',
     '| --- | --- | --- | --- | --- |',
     ...rows,
+    '',
+    ...modules.filter(m => m.sizeNote).map(m => `${m.name}: ${m.sizeNote}`),
     '',
   ].join('\n');
 }

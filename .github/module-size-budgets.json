@@ -30,6 +30,7 @@
       },
       "budgetBytes": 2000,
       "enforce": false,
+      "sizeNote": "host-resident wiring isn't counted while it lives in the host component (list-windowing INV5 gap)",
       "note": "Over budget until its windowing moves into the converged engine."
     }
   ]
