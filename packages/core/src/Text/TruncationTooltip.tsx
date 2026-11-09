@@ -27,7 +27,7 @@ import {
 import type {LayerPlacement} from '../Layer';
 import {createModuleLoader} from '../utils/moduleLoader';
 import type {Tooltip as TooltipType} from '../Tooltip/Tooltip';
-import {useTapRecognizer} from '../Layer/useTouchTrigger';
+import {useTapRecognizer} from '../Layer/tapRecognizer';
 import {
   TooltipPresentInterestContext,
   type TooltipPresentInterestState,
@@ -69,10 +69,12 @@ export function useTruncationTooltipInterest(
   const [tooltip, setTooltip] = useState<TooltipComponent | null>(
     () => tooltipModule.loaded()?.Tooltip ?? null,
   );
+  // True after a failed load, until the next interaction asks again.
+  const [hasLoadFailed, setHasLoadFailed] = useState(false);
   // Syncs with the module loader: truncated text loads the Tooltip module, so
   // the first interaction mounts the tooltip at once.
   useEffect(() => {
-    if (!isEnabled || tooltip != null) {
+    if (!isEnabled || tooltip != null || hasLoadFailed) {
       return;
     }
     let isCurrent = true;
@@ -82,12 +84,16 @@ export function useTruncationTooltipInterest(
           setTooltip(() => loaded.Tooltip);
         }
       },
-      () => {},
+      () => {
+        if (isCurrent) {
+          setHasLoadFailed(true);
+        }
+      },
     );
     return () => {
       isCurrent = false;
     };
-  }, [isEnabled, tooltip]);
+  }, [isEnabled, tooltip, hasLoadFailed]);
   const interestRef = useRef<TooltipPresentInterestState>({
     interest: null,
     tapEvent: null,
@@ -103,6 +109,8 @@ export function useTruncationTooltipInterest(
       state.interest = interest;
       state.tapEvent = tapEvent;
       setIsWanted(true);
+      // After a failed load, an interaction asks the module loader again.
+      setHasLoadFailed(false);
     },
     [isEnabled],
   );
