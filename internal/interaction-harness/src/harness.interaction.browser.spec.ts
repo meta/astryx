@@ -139,6 +139,7 @@ import {
   withFinger,
   writeEvidence,
 } from './index';
+import type {TapIntervalFault} from './touch';
 
 // An element positioned against an anchor: a composited animation of it lays
 // out in every main-thread frame, so it shows any per-frame main-thread work.
@@ -558,6 +559,45 @@ test.describe('touch input', () => {
     expect(String(outcome)).toMatch(
       /an event waited \d+ ms for the main thread before the page's listeners began/,
     );
+  });
+
+  test('a double tap whose second touch-down reaches the page past the tap interval, after a frame, fails the play by name', async ({
+    page,
+  }) => {
+    // The driver comes first, so its mark does too.
+    const driver = await touchDriver(page);
+    await fixture(page);
+    const at = {x: 160, y: 150};
+    const doubleTap = [
+      {t: 0, fingers: [{id: 0, ...at}]},
+      {t: 50, fingers: []},
+      {t: 170, fingers: [{id: 0, ...at}]},
+      {t: 220, fingers: []},
+    ];
+    const boundaries = {tapIntervalMs: 350};
+    // On time, the second tap lands 120 ms after the lift.
+    await driver.play(doubleTap, {boundaries});
+    // The runner stalls after the lift, as a starved one does. So the second
+    // touch-down leaves 450 ms later, and the page reads two taps.
+    const stall = async (_step: unknown, index: number) => {
+      if (index === 1) {
+        await new Promise(resolve => setTimeout(resolve, 450));
+      }
+    };
+    const late = await driver
+      .play(doubleTap, {boundaries, onEvent: stall})
+      .then(
+        () => null,
+        (error: unknown) => error,
+      );
+    expect((late as Error | null)?.name).toBe('TouchTapIntervalError');
+    const {fault} = late as Error & {fault: TapIntervalFault};
+    expect(fault.step).toBe(2);
+    expect(fault.scriptedGapMs).toBe(120);
+    expect(fault.gapMs).toBeGreaterThan(350);
+    expect((late as Error).message).toContain('The page drew a frame');
+    // Without the boundary, the play does not judge its taps.
+    await driver.play(doubleTap, {onEvent: stall});
   });
 
   test("a page's own window capture listener counts as the page's listeners when the driver is created before the page loads", async ({
