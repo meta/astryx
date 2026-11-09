@@ -1370,6 +1370,9 @@ export function Selector<T extends SelectorOptionType>(
       // The theme target belongs on the SURFACE that paints the popup, which
       // `usePopover` owns — not on the scrolling list inside it.
       surfaceTarget: 'selector-popup',
+      // The entrance runs on the surface: an anchored layer lays out again on
+      // each frame its own style animates.
+      xstyle: layerAnimations[placement ?? 'below'],
     },
   });
   const {popover} = surface;
@@ -1599,6 +1602,15 @@ export function Selector<T extends SelectorOptionType>(
     comboboxTriggerClick();
     noteHighlightMove();
   }, [comboboxTriggerClick, noteHighlightMove]);
+
+  // A new query is a new list: the old highlight's index would name another
+  // option, or one past the end. Adjusted during render rather than in an
+  // effect.
+  const [highlightedQuery, setHighlightedQuery] = useState(searchQuery);
+  if (highlightedQuery !== searchQuery) {
+    setHighlightedQuery(searchQuery);
+    setHighlightedIndex(-1);
+  }
 
   // Type-to-select, shared with the other collections (menus, listboxes).
   // Open, it walks the highlight — aria-activedescendant announces each match.
@@ -2111,7 +2123,7 @@ export function Selector<T extends SelectorOptionType>(
       offset: shouldOverlaySelectedItem
         ? undefined
         : spacingVars['--spacing-1'],
-      xstyle: [styles.popover, layerAnimations[popoverPlacement]],
+      xstyle: styles.popover,
       style: popoverOffsetStyle,
     });
   }

@@ -219,6 +219,26 @@ export function analyzeTargeting({observedTargets, targets, themeOverrides}) {
 }
 
 /**
+ * The capture date of the run the manifest's context names: the date on the
+ * shots that the last accept promoted from it. Null when no shot came from
+ * that run, as after an accept that only pruned.
+ * @param {{context?: {runId?: string | number}, shots?: Record<string, {capturedAt?: string, runId?: string | number}>}} manifest
+ * @returns {string | null}
+ */
+function contextCapture(manifest) {
+  const runId = manifest.context?.runId;
+  if (runId === undefined || runId === null) return null;
+  const shot = Object.values(manifest.shots ?? {}).find(
+    candidate =>
+      candidate.runId !== undefined &&
+      candidate.runId !== null &&
+      String(candidate.runId) === String(runId) &&
+      typeof candidate.capturedAt === 'string',
+  );
+  return shot?.capturedAt ?? null;
+}
+
+/**
  * The verdict document. The release cron reads `status` and, when it is
  * `changed`, walks `changes` with the report open.
  *
@@ -264,7 +284,10 @@ export function buildVerdict({
     context,
     platform: currentManifest.platform,
     baseline: {
+      // The oldest shot's date. `sha` names the commit of the capture that
+      // the last accept read; `shaCapturedAt` is that capture's date.
       capturedAt: baselineManifest.capturedAt ?? null,
+      shaCapturedAt: contextCapture(baselineManifest),
       sha: baselineManifest.context?.sha ?? null,
       platform: baselineManifest.platform ?? null,
     },

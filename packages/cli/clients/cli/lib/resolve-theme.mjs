@@ -76,6 +76,17 @@ function extractTheme(mod) {
 }
 
 /**
+ * Print a theme warning as one inert line. The configured theme value and the
+ * generated record come from the checkout, so a newline, an escape sequence or
+ * a bidi override in them must not rewrite the terminal. Control and format
+ * characters print as U+FFFD.
+ * @param {string} message
+ */
+function warnTheme(message) {
+  console.warn(message.replace(/[\p{Cc}\p{Cf}]/gu, '\uFFFD'));
+}
+
+/**
  * Read the custom-value metadata a built theme module exports as
  * `themeVariants`: `{ [componentKey]: { [prop]: value[] } }`. It is a sibling
  * of the theme object rather than a theme field, because build/CLI metadata
@@ -92,7 +103,7 @@ function extractVariants(mod) {
 function resolvedThemeData(mod, specifier) {
   const theme = extractTheme(mod);
   if (!theme) {
-    console.warn(
+    warnTheme(
       `⚠ theme: loaded "${specifier}" but could not find a theme object`,
     );
     return null;
@@ -115,7 +126,7 @@ export async function resolveTheme(cwd = process.cwd()) {
   const loaded = await resolveRecordedTheme(cwd);
   if (loaded.configured) {
     if (!loaded.module) {
-      console.warn(
+      warnTheme(
         `⚠ theme: ${loaded.problem ?? `could not resolve the generated default theme (${loaded.specifier})`}`,
       );
       return null;
@@ -145,15 +156,13 @@ export async function resolveTheme(cwd = process.cwd()) {
   if (specifier.startsWith('.') || specifier.startsWith('/')) {
     mod = tryLoadLegacyModule(specifier, cwd);
     if (!mod) {
-      console.warn(
-        `⚠ theme: could not resolve file "${specifier}" from ${cwd}`,
-      );
+      warnTheme(`⚠ theme: could not resolve file "${specifier}" from ${cwd}`);
       return null;
     }
   } else if (specifier.startsWith('@')) {
     mod = tryLoadLegacyModule(specifier, cwd);
     if (!mod) {
-      console.warn(`⚠ theme: could not resolve package "${specifier}"`);
+      warnTheme(`⚠ theme: could not resolve package "${specifier}"`);
       return null;
     }
   } else {
@@ -162,7 +171,7 @@ export async function resolveTheme(cwd = process.cwd()) {
       tryLoadLegacyModule(conventional, cwd) ??
       tryLoadLegacyModule(specifier, cwd);
     if (!mod) {
-      console.warn(
+      warnTheme(
         `⚠ theme: could not resolve "${specifier}" (tried ${conventional} and ${specifier})`,
       );
       return null;

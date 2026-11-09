@@ -13,12 +13,17 @@ import {
   costsFor,
   countTests,
   estimateSeconds,
+  folderSpecs,
   isInteractionSpec,
   legCount,
+  legsFitMessage,
+  nearCeilingMessage,
   planLegs,
   recordLog,
+  selectProofs,
   testsReader,
 } from './playwright-legs.mjs';
+import {matrixFor} from './ci-matrix.mjs';
 
 const root = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -34,6 +39,51 @@ const durations = JSON.parse(
   ),
 );
 const step = (job, name) => job.steps.find(each => each.name === name);
+
+describe('nearCeilingMessage', () => {
+  const limits = {setupSeconds: 90, maxSeconds: 600, maxLegs: 6};
+
+  it('stays quiet while a whole leg of room is left', () => {
+    expect(nearCeilingMessage({seconds: 2549, ...limits})).toBeNull();
+  });
+
+  it('names the room left once the proofs need the last leg', () => {
+    expect(nearCeilingMessage({seconds: 2600, ...limits})).toBe(
+      '2600 s of proofs need 6 of the 6 legs; 460 s of room is left before the ceiling',
+    );
+  });
+});
+
+describe('legsFitMessage', () => {
+  const limits = {setupSeconds: 90, maxSeconds: 600, maxLegs: 3};
+  const costs = {'a.spec.ts': 500, 'b.spec.ts': 500, 'c.spec.ts': 480};
+
+  it('fits when the proofs need the last leg the matrix has', () => {
+    expect(
+      legsFitMessage({seconds: 1480, files: Object.keys(costs), costs, ...limits}),
+    ).toBeNull();
+  });
+
+  it('names the heaviest specs when the proofs need more legs than the matrix has', () => {
+    const more = {...costs, 'd.spec.ts': 400};
+    const message = legsFitMessage({
+      seconds: 1880,
+      files: Object.keys(more),
+      costs: more,
+      ...limits,
+    });
+    expect(message).toContain('need 4 legs');
+    expect(message).toContain('the matrix has 3');
+    expect(message).toContain('a.spec.ts (500 s), b.spec.ts (500 s), c.spec.ts (480 s)');
+  });
+
+  it('names the spec when one spec alone outlasts a leg', () => {
+    const one = {'huge.spec.ts': 700};
+    expect(
+      legsFitMessage({seconds: 700, files: ['huge.spec.ts'], costs: one, ...limits}),
+    ).toContain('huge.spec.ts (700 s)');
+  });
+});
 
 describe('planLegs', () => {
   const times = {a: 120, b: 100, c: 80, d: 50, e: 40, f: 30, g: 20, h: 10};
@@ -221,15 +271,17 @@ describe('estimateSeconds and legCount', () => {
 });
 
 describe('the list reader and recordLog', () => {
-  it('reads the list report with the reader the accessibility contracts use', () => {
+  it("reads the list report and the component folder with the accessibility contracts' own helpers", () => {
     const source = fs.readFileSync(
       path.join(root, '.github/scripts/playwright-legs.mjs'),
       'utf8',
     );
-    expect(source).toContain(
-      "import {listedFiles} from './a11y-pr-contracts.mjs';",
+    expect(source).toMatch(
+      /import \{[^}]*\bisComponentPath\b[^}]*\blistedFiles\b[^}]*\bspecOwners\b[^}]*\} from '\.\/a11y-pr-contracts\.mjs';/,
     );
     expect(source).not.toMatch(/function listedFiles/);
+    // No folder rule of its own.
+    expect(source).not.toMatch(/const FOLDER =/);
   });
 
   it("records each test's gap from the line before it, under its spec file and project", () => {
@@ -267,12 +319,121 @@ describe('the list reader and recordLog', () => {
   });
 });
 
+describe('the interaction leg count job in ci.yml', () => {
+  const counter = ci.jobs['interaction-legs'];
+  const lanes = [
+    {id: 'pr-interaction', key: 'chromium', count: "Count this run's legs", mine: 'Count the Chromium legs'},
+    {id: 'pr-interaction-webkit', key: 'webkit', count: "Count this run's WebKit legs", mine: 'Count the WebKit legs'},
+  ];
+
+  it('runs beside the Storybook build, behind the gate the lanes share', () => {
+    expect(counter.needs).toEqual(['room', 'admission', 'heavy-ci']);
+    expect(counter.if).toBe(ci.jobs['pr-interaction'].if);
+    expect(counter.if).toBe(ci.jobs['pr-interaction-webkit'].if);
+    expect(counter.env).toEqual(ci.jobs['pr-interaction-webkit'].env);
+    expect(counter.outputs).toEqual({
+      chromium: '${{ steps.matrix.outputs.chromium }}',
+      webkit: '${{ steps.matrix.outputs.webkit }}',
+    });
+  });
+
+  it('checks out and keeps the planner exactly as each lane does', () => {
+    // A file the lanes' planner needs but this job did not copy would fail
+    // its count and send every run back to the ten-leg fallback.
+    for (const lane of lanes) {
+      const job = ci.jobs[lane.id];
+      expect(counter.steps[0]).toEqual(job.steps[0]);
+      const keep = "Keep the leg planner from the workflow's commit";
+      expect(step(counter, keep).run).toBe(step(job, keep).run);
+    }
+  });
+
+  for (const lane of lanes) {
+    it(`counts the ${lane.key} lane the way its legs do`, () => {
+      const job = ci.jobs[lane.id];
+      const scope = step(job, "Decide this job's scope");
+      const myScope = counter.steps.find(each => each.id === `scope-${lane.key}`);
+      expect(myScope.uses).toBe(scope.uses);
+      expect(myScope.with).toEqual(scope.with);
+      const theirs = step(job, lane.count);
+      const mine = step(counter, lane.mine);
+      expect(mine.id).toBe(`count-${lane.key}`);
+      expect(mine.if).toBe(`steps.scope-${lane.key}.outputs.applies == 'true'`);
+      // A failed count falls back to ten legs that each decide for themselves.
+      expect(mine['continue-on-error']).toBe(true);
+      expect(mine.env ?? {}).toEqual(
+        JSON.parse(
+          JSON.stringify(theirs.env ?? {}).replaceAll('steps.scope.', `steps.scope-${lane.key}.`),
+        ),
+      );
+      expect(mine.run).toBe(theirs.run.replaceAll('${{ matrix.leg }}', '1'));
+      expect(theirs.run).toContain('--max-legs 10');
+    });
+  }
+
+  it('names each lane one leg out of scope, its count in scope, and ten when the count failed', () => {
+    const name = step(counter, "Name each lane's legs");
+    expect(name.id).toBe('matrix');
+    const outputs = (chromium, webkit) => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'interaction-legs-'));
+      try {
+        const output = path.join(dir, 'output.txt');
+        fs.writeFileSync(output, '');
+        execFileSync('bash', ['-e', '-c', name.run], {
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            GITHUB_OUTPUT: output,
+            CHROMIUM_OUTCOME: chromium[0],
+            CHROMIUM_COUNT: chromium[1],
+            WEBKIT_OUTCOME: webkit[0],
+            WEBKIT_COUNT: webkit[1],
+          },
+        });
+        return fs.readFileSync(output, 'utf8');
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true});
+      }
+    };
+    expect(outputs(['success', '3'], ['success', '0'])).toBe('chromium=[1, 2, 3]\nwebkit=[1]\n');
+    expect(outputs(['skipped', ''], ['failure', ''])).toBe(
+      'chromium=[1]\nwebkit=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]\n',
+    );
+    expect(outputs(['success', '12'], ['success', '6'])).toBe(
+      'chromium=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]\nwebkit=[1, 2, 3, 4, 5, 6]\n',
+    );
+  });
+
+  it('caps every count at the ceiling the lanes\' fallback matrix lists, ten legs', () => {
+    const ceiling = matrixFor(ci.jobs['pr-interaction'].strategy.matrix.leg, 'pull_request').length;
+    expect(ceiling).toBe(10);
+    expect(matrixFor(ci.jobs['pr-interaction-webkit'].strategy.matrix.leg, 'pull_request')).toHaveLength(ceiling);
+    for (const lane of lanes) {
+      expect(step(ci.jobs[lane.id], lane.count).run).toContain(`--max-legs ${ceiling}`);
+      expect(step(counter, lane.mine).run).toContain(`--max-legs ${ceiling}`);
+    }
+    const name = step(counter, "Name each lane's legs").run;
+    expect(name).toContain(`*) count=${ceiling} ;;`);
+    expect(name).toContain(`[ "$count" -le ${ceiling} ] || count=${ceiling}`);
+  });
+
+  it('reads a counted matrix as its fallback list, the most legs it starts', () => {
+    expect(
+      matrixFor(
+        "${{ fromJSON(needs.interaction-legs.outputs.webkit || '[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]') }}",
+        'pull_request',
+      ),
+    ).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  });
+});
+
 describe('the interaction proof legs in ci.yml', () => {
   const lanes = [
     {
       id: 'pr-interaction',
       project: 'chromium',
-      legs: [1, 2, 3, 4, 5, 6],
+      legs: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      matrix: 'chromium',
       run: 'Run interaction proofs',
       plan: "Plan this leg's interaction proofs",
       evidence: 'interaction-evidence-${{ matrix.leg }}',
@@ -286,7 +447,8 @@ describe('the interaction proof legs in ci.yml', () => {
     {
       id: 'pr-interaction-webkit',
       project: 'webkit',
-      legs: [1, 2, 3, 4, 5],
+      legs: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      matrix: 'webkit',
       run: 'Run WebKit interaction proofs',
       plan: "Plan this leg's WebKit interaction proofs",
       evidence: 'interaction-evidence-webkit-${{ matrix.leg }}',
@@ -300,11 +462,13 @@ describe('the interaction proof legs in ci.yml', () => {
   ];
 
   for (const lane of lanes) {
-    it(`${lane.id} runs as ${lane.legs.length} legs that each plan their share and run only it`, () => {
+    it(`${lane.id} runs as the legs interaction-legs counts, at most ${lane.legs.length}, that each plan their share and run only it`, () => {
       const job = ci.jobs[lane.id];
       expect(job.strategy).toEqual({
         'fail-fast': false,
-        matrix: {leg: lane.legs},
+        matrix: {
+          leg: `\${{ fromJSON(needs.interaction-legs.outputs.${lane.matrix} || '${JSON.stringify(lane.legs).replaceAll(',', ', ')}') }}`,
+        },
       });
       expect(job.name).toBe(
         `${lane.id} (\${{ matrix.leg }}/\${{ strategy.job-total }})`,
@@ -395,7 +559,7 @@ describe('the interaction proof legs in ci.yml', () => {
         '--key interaction-webkit --fallback-key interaction-chromium',
         '--durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json"',
         '--setup-seconds 90 --max-seconds 600',
-        '--leg ${{ matrix.leg }} --max-legs ${{ strategy.job-total }}',
+        '--leg ${{ matrix.leg }} --max-legs 10',
         // Every spec file in the merge commit, recorded or not.
         'git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"',
         '--listed "$RUNNER_TEMP/interaction-legs/listed.txt" --source .test-scope',
@@ -409,10 +573,12 @@ describe('the interaction proof legs in ci.yml', () => {
     });
 
     // Runs the count step with the real planner on these recorded times.
+    // A shared-code change: the lane's own paths count.
+    const gestureChange = ['packages/core/src/gestures/GestureHost.ts'];
     function countFor(
       leg,
       webkitTimes,
-      changed = [],
+      changed = gestureChange,
       unrecorded = [],
       {deleted = [], sources = {}, perTest, env = {}} = {},
     ) {
@@ -482,7 +648,7 @@ describe('the interaction proof legs in ci.yml', () => {
               .replaceAll('${{ matrix.leg }}', String(leg))
               .replaceAll(
                 '${{ strategy.job-total }}',
-                String(job.strategy.matrix.leg.length),
+                '6',
               ),
           ],
           {
@@ -494,6 +660,7 @@ describe('the interaction proof legs in ci.yml', () => {
               CHANGED_FILES: list,
               GITHUB_OUTPUT: output,
               WEBKIT_SPEC_PATHS: job.env.WEBKIT_SPEC_PATHS,
+              WEBKIT_SHARED_PATHS: job.env.WEBKIT_SHARED_PATHS,
               ...env,
             },
           },
@@ -568,9 +735,10 @@ describe('the interaction proof legs in ci.yml', () => {
       expect(
         countFor(1, times, [], [], {env: {WEBKIT_ALL_SPECS: 'true'}}),
       ).toEqual({count: '2', runs: 'true', leg: '1'});
+      // Without it, a change that touches nothing WebKit covers plans none.
       expect(
         countFor(1, times, [], [], {env: {WEBKIT_ALL_SPECS: 'false'}}),
-      ).toEqual({count: '1', runs: 'true', leg: '1'});
+      ).toEqual({count: '0', runs: 'false', leg: '1'});
     });
 
     it('writes the test counts it read for the plan, and skips a deleted spec', () => {
@@ -609,14 +777,9 @@ describe('the interaction proof legs in ci.yml', () => {
       expect(countFor(2, near)).toEqual({count: '1', runs: 'false', leg: '2'});
       // So does a planned spec with no recorded time: here the median, 500 s.
       expect(
-        countFor(
-          2,
-          near,
-          [],
-          [
-            'internal/interaction-harness/src/pointer.interaction.browser.spec.ts',
-          ],
-        ),
+        countFor(2, near, gestureChange, [
+          'internal/interaction-harness/src/pointer.interaction.browser.spec.ts',
+        ]),
       ).toEqual({count: '2', runs: 'true', leg: '2'});
       expect(
         countFor(2, near, [
@@ -672,26 +835,26 @@ describe('the interaction proof legs in ci.yml', () => {
       'packages/core/src/hooks/__tests__/usePager.interaction',
       'internal/interaction-harness/',
     ]);
-    // The leg count and the plan read the same paths; the plan adds the
-    // interaction specs this pull request changes.
-    for (const name of [
-      "Count this run's WebKit legs",
-      "Plan this leg's WebKit interaction proofs",
-    ]) {
-      const {run} = step(job, name);
-      expect(run, name).toContain(
-        'if [ "${WEBKIT_ALL_SPECS:-}" = true ]; then SPEC_PATHS=(packages/ internal/); else read -ra SPEC_PATHS <<< "$WEBKIT_SPEC_PATHS"; fi',
-      );
-      expect(run, name).toContain('"${SPEC_PATHS[@]}"');
-    }
+    // The leg count selects from the lane's paths once, and the count and
+    // the plan both read that selection, so the two legs agree. The release
+    // interaction check selects every spec.
+    const count = step(job, "Count this run's WebKit legs").run;
+    expect(count).toContain(
+      'if [ "${WEBKIT_ALL_SPECS:-}" = true ]; then SPEC_PATHS=(packages/ internal/); else read -ra SPEC_PATHS <<< "$WEBKIT_SPEC_PATHS"; fi',
+    );
+    expect(count).toContain('-- "${SPEC_PATHS[@]}" > "$selected"');
+    expect(count).toContain('-- "${SELECTED[@]}"');
     const plan = step(job, "Plan this leg's WebKit interaction proofs").run;
+    expect(plan).toContain(
+      'done < "$RUNNER_TEMP/interaction-legs/selected.txt"',
+    );
     expect(
       plan
         .slice(plan.indexOf(' -- ') + 4)
         .replaceAll('\\', '')
         .trim()
         .split(/\s+/),
-    ).toEqual(['"${SPEC_PATHS[@]}"', '"${CHANGED_SPECS[@]}"']);
+    ).toEqual(['"${PLANNED[@]}"']);
   });
 
   it("the test join reads each lane's whole result, so a failed, cancelled or skipped leg fails it", () => {
@@ -775,7 +938,7 @@ describe('the interaction proof legs in ci.yml', () => {
       '--key interaction-chromium --fallback-key interaction-webkit',
       '--durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json"',
       '--setup-seconds 90 --max-seconds 600',
-      '--leg ${{ matrix.leg }} --max-legs ${{ strategy.job-total }}',
+      '--leg ${{ matrix.leg }} --max-legs 10',
     ])
       expect(count.run).toContain(part);
     // No path filter: the Chromium lane counts every spec.
@@ -869,34 +1032,33 @@ describe('the interaction proof legs in ci.yml', () => {
           testsOf,
           perTest,
         });
-        // The matrix still has room: the count stays under its legs.
-        const needed = Math.ceil(
-          seconds / (limits.maxSeconds - limits.setupSeconds),
-        );
+        // The planner fits the matrix: no more legs than it has, and no leg
+        // over ten minutes (plus one spec's slack). It fails naming the
+        // heaviest specs, not by a margin under the matrix.
+        // Within one leg of the ceiling: a warning in the log, not a failure,
+        // so the next step is proposed before the guard trips.
+        const near = nearCeilingMessage({seconds, ...limits});
+        if (near)
+          console.log(`::warning title=Interaction legs near the ceiling::${label}: ${near}`);
         expect(
-          needed,
-          `${label}: ${Math.round(seconds)} s of proofs`,
-        ).toBeLessThan(lane.legs.length);
-        const legsNow = legCount({seconds, ...limits});
-        const planned = planLegs(
-          specs.filter(
-            file =>
-              filters.length === 0 ||
-              filters.some(each => file.includes(each)) ||
-              changed.includes(file),
-          ),
-          Object.fromEntries(
-            specs.map(file => [
-              file,
-              times[file] ?? fallback[file] ?? testsOf(file) * perTest,
-            ]),
-          ),
-          legsNow,
-        );
-        for (const leg of planned)
-          expect(leg.seconds + limits.setupSeconds, label).toBeLessThanOrEqual(
-            limits.maxSeconds + 60,
-          );
+          legsFitMessage({
+            seconds,
+            files: specs.filter(
+              file =>
+                filters.length === 0 ||
+                filters.some(each => file.includes(each)) ||
+                changed.includes(file),
+            ),
+            costs: Object.fromEntries(
+              specs.map(file => [
+                file,
+                times[file] ?? fallback[file] ?? testsOf(file) * perTest,
+              ]),
+            ),
+            ...limits,
+          }),
+          label,
+        ).toBeNull();
       }
     }
   });
@@ -1035,5 +1197,79 @@ describe('the interaction proof legs in ci.yml', () => {
     } finally {
       fs.rmSync(path.dirname(out), {recursive: true, force: true});
     }
+  });
+});
+
+describe('what a WebKit run covers for a change', () => {
+  const listed = [
+    'packages/core/src/DateInput/DateInput.tsx',
+    'packages/core/src/DateInput/__tests__/DateInputWheel.interaction.browser.spec.ts',
+    'packages/core/src/DateInput/__tests__/DateInputTouch.interaction.browser.spec.ts',
+    'packages/core/src/Switch/__tests__/Switch.interaction.browser.spec.ts',
+    'packages/lab/src/RefreshControl/__tests__/RefreshControl.interaction.browser.spec.ts',
+    'packages/core/src/utils/__tests__/press.interaction.browser.spec.ts',
+    'packages/core/src/gestures/__tests__/browser/gestures.interaction.browser.spec.ts',
+  ];
+  const shared =
+    /^(packages\/core\/src\/gestures\/|\.github\/workflows\/ci\.yml$)/;
+  const filters = ['packages/core/src/gestures/'];
+  const select = changed => selectProofs({listed, changed, shared, filters});
+
+  it('runs every interaction spec in a component folder whose code changes, in any package', () => {
+    expect(select(['packages/core/src/DateInput/DateInput.tsx'])).toEqual([
+      'packages/core/src/DateInput/__tests__/DateInputTouch.interaction.browser.spec.ts',
+      'packages/core/src/DateInput/__tests__/DateInputWheel.interaction.browser.spec.ts',
+    ]);
+    expect(
+      select(['packages/lab/src/RefreshControl/useRefreshControl.ts']),
+    ).toEqual([
+      'packages/lab/src/RefreshControl/__tests__/RefreshControl.interaction.browser.spec.ts',
+    ]);
+  });
+
+  it('runs nothing for files that put no code on a page, or a folder without specs', () => {
+    for (const file of [
+      'packages/core/src/DateInput/DateInput.test.tsx',
+      'packages/core/src/DateInput/__tests__/DateInput.calendar.test.tsx',
+      'packages/core/src/DateInput/DateInput.doc.mjs',
+      'packages/core/src/DateInput/DateInput.stories.tsx',
+      'packages/core/src/DateInput/README.md',
+      'packages/core/src/Selector/Selector.tsx',
+      // A shared folder is the shared-code pattern's to decide.
+      'packages/core/src/utils/focusReturn.ts',
+    ]) {
+      expect(select([file]), file).toEqual([]);
+    }
+  });
+
+  it("runs the lane's own paths for shared code, and each spec a change edits", () => {
+    expect(select(['packages/core/src/gestures/GestureHost.ts'])).toEqual(
+      filters,
+    );
+    const edited =
+      'packages/core/src/Switch/__tests__/Switch.interaction.browser.spec.ts';
+    expect(select([edited])).toEqual([edited]);
+    expect(
+      select([
+        '.github/workflows/ci.yml',
+        'packages/core/src/DateInput/DateInput.tsx',
+      ]),
+    ).toEqual([
+      ...filters,
+      'packages/core/src/DateInput/__tests__/DateInputTouch.interaction.browser.spec.ts',
+      'packages/core/src/DateInput/__tests__/DateInputWheel.interaction.browser.spec.ts',
+    ]);
+  });
+
+  it("runs only the lane's own paths when the changed files are unknown", () => {
+    expect(selectProofs({listed, changed: null, shared, filters})).toEqual(
+      filters,
+    );
+  });
+
+  it('lists only interaction specs of the folder', () => {
+    expect(
+      folderSpecs(listed, ['packages/core/src/DateInput/DateInput.tsx']),
+    ).not.toContain('packages/core/src/DateInput/DateInput.tsx');
   });
 });

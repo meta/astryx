@@ -186,11 +186,10 @@ RichText adopts DEC-8: its package entry stops exporting `sharedEditorTheme`,
 gains `BaseProps` and a `ref` and renames `linkOpensInNewTab` to `hasNewTabLinks`; and its
 Lexical peer ranges move to the Lexical 0.52 minor.
 `Markdown` renders fenced code unwrapped, scrolling sideways, and adopts the
-FR5 wrap; RichText already wraps fenced code. RichText's editing surface is
-18px narrower than the reading surface at every width, the field's inset, so a
-line that wraps close to the available width can take one more line in edit
-mode than in read mode, against FR9; at phone width a long fenced code line
-does.
+FR5 wrap; RichText already wraps fenced code. A product that switches in
+place keeps the editor's text as wide as the reading surface by setting the
+field's inset and border outside it, as the RichTextEditor docs show; a
+standalone editor keeps its form width.
 `Markdown`, through `component:CodeBlock`, and the RichText surfaces float
 Copy over the code of a fence that names no language; both adopt the FR8
 corner cluster that `component:CodeBlock` FR11 places.

@@ -138,7 +138,7 @@ export const VerticalSplit: Story = {
   },
 };
 
-/** Collapsible sidebar — drag past threshold or double-click to collapse. */
+/** Collapsible sidebar: a lift or a key step past the threshold, or a double-click, collapses it. */
 export const Collapsible: Story = {
   render: () => {
     const resizable = useResizable({
@@ -839,4 +839,219 @@ function CollapsingScrollPanel() {
 export const CollapsingScrollPanelFixture: Story = {
   tags: ['!autodocs', 'no-visual'],
   render: () => <CollapsingScrollPanel />,
+};
+
+/**
+ * A LayoutPanel that takes a `useResizable` region slides closed and open
+ * from the edge facing its ResizeHandle. The content beside it moves on
+ * the same motion. "Close panel" collapses it from inside, so focus moves to
+ * the handle and the collapsed panel is inert. Enter on the handle, a
+ * double-click or "Open panel" opens it again.
+ */
+function SlidingPanelSplit({
+  side,
+  lineCount = 0,
+  minSize = 120,
+}: {
+  side: 'start' | 'end';
+  lineCount?: number;
+  minSize?: number;
+}) {
+  const resizable = useResizable({
+    defaultSize: 200,
+    minSize,
+    maxSize: 320,
+    collapsible: true,
+  });
+  const pane = (
+    <LayoutPanel resizable={resizable} data-testid="sliding-panel">
+      <Stack gap={2}>
+        <Heading level={4}>Panel</Heading>
+        <Button label="Close panel" onClick={resizable.collapse} />
+        {Array.from({length: lineCount}, (_, index) => (
+          <Text key={index}>Line {index + 1}</Text>
+        ))}
+      </Stack>
+    </LayoutPanel>
+  );
+  const handle = (
+    <ResizeHandle
+      resizable={resizable}
+      isReversed={side === 'end'}
+      hasDivider
+      label="Resize panel"
+    />
+  );
+  return (
+    <div {...stylex.props(ps.shell)}>
+      <Layout
+        height="fill"
+        start={
+          side === 'start' ? (
+            <>
+              {pane}
+              {handle}
+            </>
+          ) : undefined
+        }
+        content={
+          <LayoutContent data-testid="sliding-content">
+            <Stack gap={2}>
+              <Text>The content glides with the panel's edge.</Text>
+              <Button label="Open panel" onClick={resizable.expand} />
+              <Button
+                label="Toggle panel"
+                onClick={
+                  resizable.isCollapsed ? resizable.expand : resizable.collapse
+                }
+              />
+            </Stack>
+          </LayoutContent>
+        }
+        end={
+          side === 'end' ? (
+            <>
+              {handle}
+              {pane}
+            </>
+          ) : undefined
+        }
+      />
+    </div>
+  );
+}
+
+export const SlidingStartPanel: Story = {
+  render: () => <SlidingPanelSplit side="start" />,
+};
+
+export const SlidingEndPanel: Story = {
+  render: () => <SlidingPanelSplit side="end" />,
+};
+
+/** A sliding start panel with more lines than fit, for a scrolled slide. */
+export const SlidingScrolledPanelFixture: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  render: () => <SlidingPanelSplit side="start" lineCount={40} />,
+};
+
+/**
+ * A sliding start panel at the hook's default minimum (50 px), so a key step
+ * from it ends under the collapsed size.
+ */
+export const SlidingPanelAtDefaultMinimumFixture: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  render: () => <SlidingPanelSplit side="start" minSize={50} />,
+};
+
+/**
+ * A start LayoutPanel whose collapse state its parent owns: `isCollapsed`
+ * with `onCollapseChange`, and a toggle that flips the parent's state. The
+ * panel slides on each controlled change too.
+ */
+function ControlledSlidingPanel() {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const resizable = useResizable({
+    defaultSize: 200,
+    minSize: 120,
+    maxSize: 320,
+    collapsible: true,
+    isCollapsed,
+    onCollapseChange: setIsCollapsed,
+  });
+  return (
+    <div {...stylex.props(ps.shell)}>
+      <Layout
+        height="fill"
+        start={
+          <>
+            <LayoutPanel resizable={resizable} data-testid="sliding-panel">
+              <Stack gap={2}>
+                <Heading level={4}>Panel</Heading>
+                <Button label="Close panel" onClick={resizable.collapse} />
+              </Stack>
+            </LayoutPanel>
+            <ResizeHandle
+              resizable={resizable}
+              hasDivider
+              label="Resize panel"
+            />
+          </>
+        }
+        content={
+          <LayoutContent data-testid="sliding-content">
+            <Stack gap={2}>
+              <Text>The parent owns whether the panel is collapsed.</Text>
+              <Button
+                label="Toggle panel"
+                onClick={() => {
+                  setIsCollapsed(!isCollapsed);
+                }}
+              />
+            </Stack>
+          </LayoutContent>
+        }
+      />
+    </div>
+  );
+}
+
+export const SlidingControlledPanel: Story = {
+  render: () => <ControlledSlidingPanel />,
+};
+
+/**
+ * Browser fixtures for two start panels. One takes the hook's own `props`
+ * and slides. The other takes a hand-built `ResizableProps` object, with the same
+ * fields in an object the hook did not return, and collapses without a slide.
+ * Both move focus inside them to the handle and go inert while collapsed.
+ */
+function PropsPanelSplit({isHandBuilt}: {isHandBuilt: boolean}) {
+  const resizable = useResizable({
+    defaultSize: 200,
+    minSize: 120,
+    maxSize: 320,
+    collapsible: true,
+  });
+  const panelValue = isHandBuilt ? {...resizable.props} : resizable.props;
+  return (
+    <div {...stylex.props(ps.shell)}>
+      <Layout
+        height="fill"
+        start={
+          <>
+            <LayoutPanel resizable={panelValue} data-testid="sliding-panel">
+              <Stack gap={2}>
+                <Heading level={4}>Panel</Heading>
+                <Button label="Close panel" onClick={resizable.collapse} />
+              </Stack>
+            </LayoutPanel>
+            <ResizeHandle
+              resizable={resizable}
+              hasDivider
+              label="Resize panel"
+            />
+          </>
+        }
+        content={
+          <LayoutContent data-testid="sliding-content">
+            <Stack gap={2}>
+              <Text>The content glides with the panel's edge.</Text>
+              <Button label="Open panel" onClick={resizable.expand} />
+            </Stack>
+          </LayoutContent>
+        }
+      />
+    </div>
+  );
+}
+
+export const SlidingPanelWithHookProps: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  render: () => <PropsPanelSplit isHandBuilt={false} />,
+};
+
+export const PanelWithHandBuiltProps: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  render: () => <PropsPanelSplit isHandBuilt />,
 };

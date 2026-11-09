@@ -10,15 +10,17 @@
  *   moved; a freeze, whose catch-up is more than one step, and a stall
  *   longer than the component's runs before it do not. Runs
  *   of a block too short to judge alone are judged pooled: the control over
- *   all of them, each run's stall against that run's control.
+ *   all of them, each run's stall against that run's control. A held
+ *   animation is judged up to its curve's end. A stall before that end still
+ *   fails, and a curve that ends too soon is named.
  * @position Unit test of ./busy's control judgment; the frames are
  *   busy.test.ts's fixtures, and the browser proof with a real compositor
  *   control is in harness.interaction.browser.spec.ts.
  */
 
 import {describe, expect, it} from 'vitest';
-import {busyWindowProof, pooledBusyProof} from './busy';
-import type {TrackedFrame} from './frames';
+import {busyWindowProof, BusyWindowTooLateError, pooledBusyProof} from './busy';
+import {FrameStarvationError, type TrackedFrame} from './frames';
 
 const FRAME = 1000 / 60;
 const BLOCK = {from: 1000, to: 1700};
@@ -268,16 +270,183 @@ describe('busyWindowProof against a control', () => {
     expect(proof.control?.belowStep).toBeGreaterThan(0);
   });
 
+  it('judges a component that enters from off screen from its first position inside the block, against the control', () => {
+    // A card pushed in from an edge first shows 20 ms into the block. The
+    // cast's frames before the block show the screen without it.
+    const entering = moving().map(f =>
+      f.t < 1020
+        ? ({...f, box: null} as TrackedFrame)
+        : ({...f, box: {...f.box!, y: f.box!.y - 60}} as TrackedFrame),
+    );
+    const proof = busyWindowProof(entering, BLOCK, {
+      control: asControl(moving()),
+    });
+    expect(proof.verdict.failures, proof.summary).toEqual([]);
+    expect(proof.onScreenFromMs).toBeGreaterThanOrEqual(20);
+  });
+
+  it('throws FrameStarvationError for a run the machine starved: its control moved on too few frames, and no frame came for longer than 50 ms', () => {
+    const run = () =>
+      busyWindowProof(starvedCast(), BLOCK, {
+        control: asControl(starvedCast()),
+      });
+    expect(run).toThrow(FrameStarvationError);
+    expect(run).toThrow(
+      /busyWindowProof: the page drew 3 frames while a 700 ms block held the main thread, and the control moved on 3 of them, where the proof needs 4\. No frame came for 2\d\d\.\d ms/,
+    );
+  });
+
+  it('fails a component hidden inside an on-pace block as the component, not as starvation', () => {
+    // Every 60 Hz frame came, and none inside the 90 ms block showed the
+    // component: the cast's own frames show it was not starved.
+    const block = {from: 1000, to: 1090};
+    const hidden = moving().map(f =>
+      f.t > block.from && f.t < block.to
+        ? ({...f, box: null} as TrackedFrame)
+        : f,
+    );
+    const proof = busyWindowProof(hidden, block, {
+      control: asControl(moving()),
+    });
+    expect(proof.verdict.failures.join('\n')).toMatch(
+      /moved on 0 of the 3 frames the control moved/,
+    );
+  });
+
   it('fails a window in which the control itself presented too little to judge', () => {
     const still = asControl(
       moving().map(f => ({...f, box: {...f.box!, y: 0}}) as TrackedFrame),
     );
     const proof = busyWindowProof(moving(), BLOCK, {control: still});
+    // It names how starved the cast was: here every frame came, 60 Hz.
     expect(proof.verdict.failures.join('\n')).toMatch(
-      /the control moved on 0 frames in the judged part/,
+      /the control moved on 0 frames in the judged part, under 4: the compositor presented too little in this window to judge \(the cast delivered \d+ frames in the \d+ ms block, none for 1[67] ms\)/,
     );
   });
+
+  it("judges a held animation up to its curve's end: after it, the frames show the compositor's fallback to the committed value", () => {
+    // The curve ends 520 ms into the block. WebKit then presents the value
+    // the main thread last committed, the box at rest, until the block ends.
+    const curveEnd = 1520;
+    const fallback = moving().map(f =>
+      f.t > curveEnd ? ({...f, box: {...f.box!, y: 0}} as TrackedFrame) : f,
+    );
+    const proof = busyWindowProof(fallback, held(curveEnd), {
+      control: asControl(moving()),
+    });
+    expect(proof.verdict.failures, proof.summary).toEqual([]);
+    expect(proof.monotonic).toBe(true);
+    expect(proof.judged.to).toBe(curveEnd);
+    expect(proof.summary).toMatch(/judged to the held curve's end at \+520 ms/);
+  });
+
+  it('still names a starved run as starvation when its held curve also ends inside the block', () => {
+    // Three frames in the whole block: too few even before the curve's end.
+    const run = () =>
+      busyWindowProof(starvedCast(), held(1600), {
+        control: asControl(starvedCast()),
+      });
+    expect(run).toThrow(FrameStarvationError);
+  });
+
+  it("keeps a settle bound's end: the held curve's end does not cut a proof that bounds its settle", () => {
+    // Arrives at 1530, just after its curve's end at 1520.
+    const arrives = moving().map(f =>
+      f.t > 1530
+        ? ({...f, box: {...f.box!, y: 3 * at(1530)}} as TrackedFrame)
+        : f,
+    );
+    const proof = busyWindowProof(arrives, held(1520), {
+      control: asControl(moving()),
+      settledWithin: 2,
+    });
+    expect(proof.judged.to).toBeGreaterThan(1520);
+    expect(proof.summary).not.toMatch(/held curve's end/);
+  });
+
+  it('judges the whole block when the held animation keeps its end value: a stop at its curve end still fails', () => {
+    // A fill that holds the end, or a held tail: the frames after the curve
+    // still show the animation, at rest.
+    const curveEnd = 1520;
+    const stops = moving().map(f =>
+      f.t > curveEnd
+        ? ({...f, box: {...f.box!, y: 3 * at(curveEnd)}} as TrackedFrame)
+        : f,
+    );
+    const proof = busyWindowProof(stops, held(curveEnd, true), {
+      control: asControl(moving()),
+    });
+    expect(proof.judged.to).toBe(BLOCK.to - 20);
+    expect(proof.verdict.failures.join('\n')).toMatch(
+      /longest stall [\d.]+ ms, longer than the control's/,
+    );
+  });
+
+  it('still fails a held animation that stops advancing before its curve ends', () => {
+    // Frozen from 300 ms into the block, while its curve runs to 520 ms.
+    const frozen = moving().map(f =>
+      f.t > 1300
+        ? ({...f, box: {...f.box!, y: 3 * (at(1300) - 1)}} as TrackedFrame)
+        : f,
+    );
+    const proof = busyWindowProof(frozen, held(1520), {
+      control: asControl(moving()),
+    });
+    const failures = proof.verdict.failures.join('\n');
+    expect(failures).toMatch(
+      /moved on \d+ of the \d+ frames the control moved/,
+    );
+    expect(failures).toMatch(
+      /longest stall [\d.]+ ms, longer than the control's/,
+    );
+  });
+
+  it('throws BusyWindowTooLateError when the held curve ends too soon after the block began for the control to move on enough frames', () => {
+    const run = (curveEnd: number) => () =>
+      busyWindowProof(moving(), held(curveEnd), {
+        control: asControl(moving()),
+      });
+    expect(run(1060)).toThrow(BusyWindowTooLateError);
+    expect(run(1060)).toThrow(
+      /busyWindowProof: the held animation's curve ended 60 ms after the block began, so the part judged from 20 ms held 2 of the frames it needs, 4 \(\d+ frames presented in the block\): the block started late for the motion\./,
+    );
+    // A curve that ended before the judged part began leaves nothing.
+    expect(run(1010)).toThrow(
+      /curve ended 10 ms after the block began, so the part judged from 20 ms held 0 of the frames it needs/,
+    );
+    let caught: unknown = null;
+    try {
+      run(1060)();
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(BusyWindowTooLateError);
+    expect((caught as BusyWindowTooLateError).numbers).toMatchObject({
+      curveEndMs: 60,
+      judgedFromMs: 20,
+    });
+  });
 });
+
+/**
+ * `BLOCK` as `blockMainThread` holds it with `during`: the held animation
+ * started before the block and its curve ends at `curveEnd`. It keeps its end
+ * value after that only with `holds`.
+ */
+function held(curveEnd: number, holds = false) {
+  return {...BLOCK, spanMs: 700, animation: {from: 800, to: curveEnd, holds}};
+}
+
+/**
+ * `moving()` with three frames in `BLOCK`, about 200 ms apart, as a cast the
+ * machine starved delivers.
+ */
+function starvedCast(): TrackedFrame[] {
+  const kept = [at(1150), at(1350), at(1550)];
+  return moving().filter(
+    (f, i) => f.t < BLOCK.from || f.t > BLOCK.to || kept.includes(i),
+  );
+}
 
 /** A 90 ms block from `from`: its judged part holds three 60 Hz frames. */
 const short = (from: number) => ({from, to: from + 90});
@@ -301,6 +470,58 @@ describe('pooledBusyProof', () => {
     expect(pooled.summary).toMatch(
       /^3 runs pooled: moved on 9 of the control's 9 frames; run 1: /,
     );
+  });
+
+  it('leaves out a run whose block began after its motion had settled, and names it', () => {
+    const control = asControl(moving());
+    // Settled 50 ms before the run's block: nothing in it is left to judge.
+    const settled = moving().map(f =>
+      f.t < 950
+        ? f
+        : ({...f, box: {...f.box!, y: 3 * at(950)}} as TrackedFrame),
+    );
+    const pooled = pooledBusyProof(
+      [
+        {tracked: settled, control, window: short(1000)},
+        {tracked: moving(), control, window: short(1300)},
+        {tracked: moving(), control, window: short(1600)},
+      ],
+      {settledWithin: 2},
+    );
+    expect(pooled.verdict.failures, pooled.summary).toEqual([]);
+    expect(pooled.judged).toEqual([false, true, true]);
+    expect(pooled.runs[0]).toBeNull();
+    expect(pooled.late[0]).toBeInstanceOf(BusyWindowTooLateError);
+    expect(pooled.late.slice(1)).toEqual([null, null]);
+    // Only the judged runs' frames count toward the pool's floors.
+    expect(pooled.control).toEqual({moved: 6, movedWith: 6});
+    expect(pooled.summary).toMatch(
+      /^3 runs pooled, 2 judged: .*; run 1: too late to judge: busyWindowProof: /,
+    );
+  });
+
+  it('fails by name a pool left with fewer judged runs than its minimum, however many began too late', () => {
+    const control = asControl(moving());
+    const settled = moving().map(f =>
+      f.t < 950
+        ? f
+        : ({...f, box: {...f.box!, y: 3 * at(950)}} as TrackedFrame),
+    );
+    // One long run passes every floor alone, beside two that began too late.
+    const pooled = pooledBusyProof(
+      [
+        {tracked: settled, control, window: short(1000)},
+        {tracked: settled, control, window: short(1000)},
+        {tracked: moving(), control, window: {from: 1100, to: 1700}},
+      ],
+      {settledWithin: 2},
+    );
+    expect(pooled.verdict.pass).toBe(false);
+    expect(pooled.verdict.failures).toEqual([
+      '1 of 3 runs judged, under 2: 2 began too late for their motion, and the compositor presented too little in any other to judge',
+    ]);
+    expect(pooled.summary).toMatch(/run 1: too late to judge/);
+    expect(pooled.summary).toMatch(/run 2: too late to judge/);
   });
 
   it('still fails a component that is frozen in every run while the control moves', () => {
@@ -509,6 +730,21 @@ describe('pooledBusyProof', () => {
       moved: single.control?.moved,
       movedWith: single.control?.movedWith,
     });
+  });
+
+  it('reads a run the machine starved without throwing, and judges it with the others', () => {
+    const run = (tracked: TrackedFrame[]) => ({
+      tracked,
+      control: asControl(tracked),
+      window: BLOCK,
+    });
+    const pooled = pooledBusyProof([
+      run(moving()),
+      run(moving()),
+      run(starvedCast()),
+    ]);
+    expect(pooled.judged).toEqual([true, true, true]);
+    expect(pooled.verdict.failures, pooled.summary).toEqual([]);
   });
 
   it('throws on no runs', () => {
