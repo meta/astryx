@@ -100,14 +100,20 @@ export function iconIdOf(name) {
 
 /**
  * The name an icon set exports an icon as: PascalCase ending in `Icon`
- * (`Trash2` → `Trash2Icon`; `TrashIcon` stays). A name that starts with a
- * digit gets the word `Digit` in front (`0` → `Digit0Icon`), because a
- * JavaScript name cannot start with a digit.
+ * (`Trash2` → `Trash2Icon`; `TrashIcon` stays). A JavaScript name cannot
+ * start with a digit, so a name that starts with one is refused.
+ * {@link iconNaming} keeps a library prefix to prevent this (`fa0` →
+ * `Fa0Icon`).
  * @param {string} name
  */
 export function iconExportName(name) {
-  const upper = name[0].toUpperCase() + name.slice(1);
-  const pascal = /^[0-9]/u.test(upper) ? `Digit${upper}` : upper;
+  if (/^[0-9]/u.test(name)) {
+    throw new IconSetAuthoringError(
+      `The icon id "${iconIdOf(name)}" starts with a digit, and an export name cannot. Pass --id with an id that starts with a letter.`,
+      'ERR_INVALID_ARGUMENT',
+    );
+  }
+  const pascal = name[0].toUpperCase() + name.slice(1);
   return pascal.endsWith('Icon') ? pascal : `${pascal}Icon`;
 }
 
@@ -693,7 +699,9 @@ export function libraryPrefix(names) {
 
 /**
  * An export's id and the name the set exports it as, with the library prefix
- * left out: `featherEye` with prefix `feather` is id `eye`, `EyeIcon`.
+ * left out: `featherEye` with prefix `feather` is id `eye`, `EyeIcon`. A
+ * name that would start with a digit keeps the prefix (`fa500px` is
+ * `fa-500px`, `Fa500pxIcon`).
  * @param {string} name
  * @param {string[]} prefix
  * @returns {{id: string, name: string}}
@@ -701,9 +709,12 @@ export function libraryPrefix(names) {
 export function iconNaming(name, prefix) {
   const all = iconIdOf(name).split('-');
   // Only a name that starts with the prefix, and has more after it, loses it.
+  // A name that would then start with a digit keeps the prefix: `fa0` is
+  // `fa-0`, `Fa0Icon`.
   const strip =
     all.length > prefix.length &&
-    prefix.every((word, index) => all[index] === word);
+    prefix.every((word, index) => all[index] === word) &&
+    !/^[0-9]/u.test(all[prefix.length]);
   if (!strip) prefix = [];
   const words = all.slice(prefix.length);
   const id = words.join('-');

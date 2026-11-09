@@ -2,8 +2,10 @@
 
 /**
  * @file Icon sets over library exports whose names start with a digit once
- * the library prefix comes off (`fa0`, `Digit1Icon`): every export name the
- * CLI writes is a valid JavaScript name, and the set passes the strict check.
+ * the library prefix comes off (`fa0`, `Digit1Icon`): such an icon keeps the
+ * prefix, every export name the CLI writes is a valid JavaScript name, and
+ * the set passes the strict check. An id given with a leading digit is
+ * refused.
  */
 
 import * as fs from 'node:fs';
@@ -60,6 +62,8 @@ beforeEach(() => {
           '@acme/glyph-data': '^1.0.0',
           '@acme/digits': '^1.0.0',
           '@acme/more-digits': '^1.0.0',
+          '@acme/both-digits': '^1.0.0',
+          '@acme/brand-data': '^1.0.0',
         },
       },
       null,
@@ -75,6 +79,8 @@ beforeEach(() => {
     [
       "export const fa0 = {prefix: 'fas', iconName: '0', icon: [320, 512, [], '30', 'M0 0']};",
       "export const fa1 = {prefix: 'fas', iconName: '1', icon: [320, 512, [], '31', 'M0 1']};",
+      "export const fa42Group = {prefix: 'fab', iconName: '42-group', icon: [640, 512, [], 'e080', 'M0 2']};",
+      "export const fa500px = {prefix: 'fab', iconName: '500px', icon: [448, 512, [], 'f26e', 'M0 3']};",
       "export const faXmark = {prefix: 'fas', iconName: 'xmark', icon: [384, 512, [], 'f00d', 'M1 1']};",
       "export const faHouse = {prefix: 'fas', iconName: 'house', icon: [576, 512, [], 'f015', 'M2 2']};",
       '',
@@ -91,6 +97,23 @@ beforeEach(() => {
   writeLibrary(
     '@acme/more-digits',
     'export function Digit1Icon(props) { return null; }\n',
+  );
+  writeLibrary(
+    '@acme/both-digits',
+    [
+      "export const fa0 = {prefix: 'fas', iconName: '0', icon: [320, 512, [], '30', 'M0 0']};",
+      "export const faDigit0 = {prefix: 'fas', iconName: 'digit-0', icon: [320, 512, [], 'e0a0', 'M0 1']};",
+      "export const faXmark = {prefix: 'fas', iconName: 'xmark', icon: [384, 512, [], 'f00d', 'M1 1']};",
+      '',
+    ].join('\n'),
+  );
+  writeLibrary(
+    '@acme/brand-data',
+    [
+      "export const si1password = {title: '1Password', path: 'M0 0'};",
+      "export const siGithub = {title: 'GitHub', path: 'M0 1'};",
+      '',
+    ].join('\n'),
   );
 });
 afterEach(() => {
@@ -200,18 +223,21 @@ describe('library names that start with a digit once the prefix comes off', () =
     expect(
       dataOf('solid').icons.map((/** @type {any} */ i) => [i.id, i.export]),
     ).toEqual([
-      ['0', 'Digit0Icon'],
-      ['1', 'Digit1Icon'],
+      ['fa-0', 'Fa0Icon'],
+      ['fa-1', 'Fa1Icon'],
+      ['fa-42-group', 'Fa42GroupIcon'],
+      ['fa-500px', 'Fa500pxIcon'],
       ['house', 'HouseIcon'],
       ['xmark', 'XmarkIcon'],
     ]);
     const names = writtenNames('solid');
-    expect(names).toContain('Digit0Icon');
+    expect(names).toContain('Fa0Icon');
+    expect(names).toContain('Fa500pxIcon');
     expect(names.filter(name => !IDENTIFIER_RE.test(name))).toEqual([]);
     expect(await strictFailures('solid', 'xmark')).toEqual([]);
   });
 
-  it('a component library whose only shared word is `Digit` keeps valid names, also for an icon added under a digit id', async () => {
+  it('a component library whose only shared word is `Digit` keeps it, and an id given with a leading digit is refused', async () => {
     const created = await json([
       'experimental',
       'icon',
@@ -224,10 +250,11 @@ describe('library names that start with a digit once the prefix comes off', () =
     expect(
       dataOf('digits').icons.map((/** @type {any} */ i) => [i.id, i.export]),
     ).toEqual([
-      ['1', 'Digit1Icon'],
-      ['2', 'Digit2Icon'],
+      ['digit-1', 'Digit1Icon'],
+      ['digit-2', 'Digit2Icon'],
     ]);
-    const added = await json([
+    const before = fs.readFileSync(setFile('digits', 'icons.json'), 'utf-8');
+    const refused = await json([
       'experimental',
       'icon',
       'add',
@@ -239,10 +266,80 @@ describe('library names that start with a digit once the prefix comes off', () =
       '--definition',
       'close',
     ]);
+    expect(refused.code).not.toBe(0);
+    expect(JSON.stringify(refused.body)).toContain(
+      'The icon id \\"7\\" starts with a digit, and an export name cannot. Pass --id with an id that starts with a letter.',
+    );
+    expect(fs.readFileSync(setFile('digits', 'icons.json'), 'utf-8')).toBe(
+      before,
+    );
+    const added = await json([
+      'experimental',
+      'icon',
+      'add',
+      'Digit1Icon',
+      '--from',
+      '@acme/more-digits',
+      '--id',
+      'seven',
+      '--definition',
+      'close',
+    ]);
     expect(added.code, JSON.stringify(added.body)).toBe(0);
     const names = writtenNames('digits');
-    expect(names).toContain('Digit7Icon');
+    expect(names).toContain('SevenIcon');
     expect(names.filter(name => !IDENTIFIER_RE.test(name))).toEqual([]);
-    expect(await strictFailures('digits', '1')).toEqual([]);
+    expect(await strictFailures('digits', 'digit-1')).toEqual([]);
+  });
+
+  it('a library that exports both `fa0` and `faDigit0` gives two icons with two export names', async () => {
+    const created = await json(['experimental', 'icon', 'new-set', 'both']);
+    expect(created.code, JSON.stringify(created.body)).toBe(0);
+    const data = dataOf('both');
+    data.adapter = {module: './src/adapt.js', export: 'adapt'};
+    fs.writeFileSync(setFile('both', 'icons.json'), JSON.stringify(data));
+    const wrapped = await json([
+      'experimental',
+      'icon',
+      'new-set',
+      'both',
+      '--from',
+      '@acme/both-digits',
+    ]);
+    expect(wrapped.code, JSON.stringify(wrapped.body)).toBe(0);
+    expect(
+      dataOf('both').icons.map((/** @type {any} */ i) => [i.id, i.export]),
+    ).toEqual([
+      ['digit-0', 'Digit0Icon'],
+      ['fa-0', 'Fa0Icon'],
+      ['xmark', 'XmarkIcon'],
+    ]);
+    const names = writtenNames('both');
+    expect(names.filter(name => !IDENTIFIER_RE.test(name))).toEqual([]);
+    expect(await strictFailures('both', 'xmark')).toEqual([]);
+  });
+
+  it('a brand library keeps its prefix only on the icon whose name starts with a digit (`si1password`)', async () => {
+    const created = await json(['experimental', 'icon', 'new-set', 'brands']);
+    expect(created.code, JSON.stringify(created.body)).toBe(0);
+    const data = dataOf('brands');
+    data.adapter = {module: './src/adapt.js', export: 'adapt'};
+    fs.writeFileSync(setFile('brands', 'icons.json'), JSON.stringify(data));
+    const wrapped = await json([
+      'experimental',
+      'icon',
+      'new-set',
+      'brands',
+      '--from',
+      '@acme/brand-data',
+    ]);
+    expect(wrapped.code, JSON.stringify(wrapped.body)).toBe(0);
+    expect(
+      dataOf('brands').icons.map((/** @type {any} */ i) => [i.id, i.export]),
+    ).toEqual([
+      ['github', 'GithubIcon'],
+      ['si-1password', 'Si1passwordIcon'],
+    ]);
+    expect(await strictFailures('brands', 'github')).toEqual([]);
   });
 });
