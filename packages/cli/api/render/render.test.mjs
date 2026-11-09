@@ -14,6 +14,7 @@ import {fileURLToPath} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {render} from './render.mjs';
 import {template} from '../template/template.mjs';
+import {segmenterWarning} from '../../foundation/render/render-page.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
 
@@ -1452,6 +1453,55 @@ describe('render(): a crash of Node itself', () => {
     expect(error.message).toContain('crashed (SIGSEGV)');
     expect(fs.existsSync(path.join(dir, 'crash.html'))).toBe(false);
   }, 60_000);
+});
+
+describe('render(): Avatar initials without Intl.Segmenter', () => {
+  // A render on a Node build that crashes in Intl.Segmenter removes it before
+  // the page loads. A local module imported first does the same here.
+  const NAMES = [
+    ['Ada Lovelace', 'AL', 'AL'],
+    ['José Ñúñez', 'JÑ', 'JÑ'],
+    ['Zoë Kravitz', 'ZK', 'ZK'],
+    ['Åsa Öberg', 'ÅÖ', 'ÅÖ'],
+    ['李小龙', '李', '李'],
+    ['김민준', '김', '김'],
+    // The accent is a separate mark after E.
+    ['E\u0301mile Zola', 'E\u0301Z', 'EZ'],
+    ['👩‍💻 Dev Team', '👩‍💻T', '👩T'],
+    ['🇯🇵 Tanaka', '🇯🇵T', '🇯T'],
+  ];
+  const body = `import {Avatar} from '@astryxdesign/core/Avatar';
+const NAMES = ${JSON.stringify(NAMES.map(([name]) => name))};
+export default function Page() {
+  return <main>{NAMES.map((name, i) => <div key={i} data-name={i}><Avatar name={name} /></div>)}</main>;
+}
+`;
+
+  /** @param {string} name */
+  async function initialsOf(name) {
+    await render(`initials/${name}.tsx`, {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'initials', `${name}.html`), 'utf8');
+    return [...html.matchAll(/<div data-name="\d+">([\s\S]*?)(?=<div data-name=|<\/main>)/g)].map(m => m[1].replace(/<[^>]+>/g, ''));
+  }
+
+  // On a Node build that crashes in Intl.Segmenter, both renders run without it.
+  const segmenterCrashes =
+    spawnSync(process.execPath, ['-e', "[...new Intl.Segmenter('en').segment('a b')]"], {stdio: 'ignore'}).signal !== null;
+
+  it.skipIf(segmenterCrashes)('match for ordinary names and differ only for joined emoji, flags and separate accent marks', async () => {
+    put('initials/with.tsx', body);
+    put('initials/no-segmenter.ts', 'delete (Intl as any).Segmenter;\nexport {};\n');
+    put('initials/without.tsx', `import './no-segmenter';\n${body}`);
+    expect(await initialsOf('with')).toEqual(NAMES.map(([, withSegmenter]) => withSegmenter));
+    expect(await initialsOf('without')).toEqual(NAMES.map(([, , withoutSegmenter]) => withoutSegmenter));
+  }, 60_000);
+
+  it('names the Node build in the warning and says the output may differ slightly', () => {
+    const warning = segmenterWarning();
+    expect(warning.code).toBe('node-crash');
+    expect(warning.message).toContain(`${process.version} at ${process.execPath}`);
+    expect(warning.message).toContain('may differ slightly');
+  });
 });
 
 describe('render(): every ready page template', () => {

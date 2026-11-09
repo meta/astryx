@@ -358,11 +358,19 @@ async function runPage(input, timeoutMs, warnings) {
   if (!segmenterCrashes()) throw crashError(first.crashed, false);
   const again = await runWorker({...input, withoutSegmenter: true}, Math.max(1000, timeoutMs - (Date.now() - started)));
   if (again.crashed) throw crashError(again.crashed, true);
-  warnings.push({
-    code: 'node-crash',
-    message: `Node ${process.version} (${process.execPath}) crashes in Intl.Segmenter, so the page rendered without it, and text that components split by character (such as Avatar initials) can differ for joined emoji. Render with an official Node.js build to use it.`,
-  });
+  warnings.push(segmenterWarning());
   return again;
+}
+
+/**
+ * The warning for a page rendered without Intl.Segmenter.
+ * @returns {RenderWarning}
+ */
+export function segmenterWarning() {
+  return {
+    code: 'node-crash',
+    message: `This Node build (${process.version} at ${process.execPath}) crashes in Intl.Segmenter, so the page rendered without it, and the output may differ slightly: initials and character counts (such as Avatar initials) can split a joined emoji, a flag, or a letter written with a separate accent mark. Render with an official Node.js build to remove the difference.`,
+  };
 }
 
 /**
