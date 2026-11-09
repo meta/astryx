@@ -303,9 +303,9 @@ export const docsZh = {get props() { throw new TypeError('bad translation'); }};
     ).rejects.toThrow(/received null/);
   });
 
-  it('keeps the unchecked readers on a plain import', () => {
+  it('reads an installed TypeScript doc through the unchecked reader too', () => {
     // Outside vitest's own loader: a plain import cannot strip types under
-    // node_modules, and the checked loader (jiti) can, as on main.
+    // node_modules, so every reader takes a `.ts` doc through jiti.
     const dir = path.join(tmpDir, 'node_modules', 'kit');
     fs.mkdirSync(dir, {recursive: true});
     const file = path.join(dir, 'Typed.doc.ts');
@@ -329,7 +329,7 @@ catch (e) { console.log('threw', e.message.split('\\n')[0]); }`,
         ],
         {encoding: 'utf8'},
       ).stdout.trim();
-    expect(run('loadDocs')).toMatch(/^threw .*node_modules/);
+    expect(run('loadDocs')).toBe('ok Typed');
     expect(run('loadComponentDoc')).toMatch(/^(ok Typed|threw .*is invalid)/);
   });
 });
@@ -358,19 +358,18 @@ describe('an edited doc file, read again in the same process', () => {
     expect((await loadComponentDoc(file)).displayName).toBe('Second, longer');
   });
 
-  it('gives each importer its own read of an edited TypeScript doc, as a new process would', async () => {
+  it('reads an edited TypeScript doc again, one jiti read shared by every importer', async () => {
     const file = write('Pair.doc.ts', doc('First'));
-    const nativeBefore = await importNativeModule(file);
-    expect(await importDocModule(file)).not.toBe(nativeBefore);
+    const before = await importNativeModule(file);
+    expect(before.default.displayName).toBe('First');
     fs.writeFileSync(file, doc('Second, longer'));
-    // The unchecked reader (a plain import) first, then the checked one (jiti).
+    // The unchecked reader first, then the checked one: both read the edit.
     expect((await loadDocs(file)).displayName).toBe('Second, longer');
     expect((await loadComponentDoc(file)).displayName).toBe('Second, longer');
-    const nativeAfter = await importNativeModule(file);
-    const docAfter = await importDocModule(file);
-    expect(docAfter).not.toBe(nativeAfter);
-    expect(await importNativeModule(file)).toBe(nativeAfter);
-    expect(await importDocModule(file)).toBe(docAfter);
+    const after = await importNativeModule(file);
+    expect(after).not.toBe(before);
+    expect(await importDocModule(file)).toBe(after);
+    expect(await importNativeModule(file)).toBe(after);
   });
 
   it('lowers an edited file again for a whole-project compile', async () => {
