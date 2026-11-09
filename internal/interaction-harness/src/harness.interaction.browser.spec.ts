@@ -1946,12 +1946,61 @@ test.describe('frame evidence', () => {
       100.5,
     );
     expect(held.verdict.failures, held.summary).toEqual([]);
+    // The freeze is the curve's held tail, so every engine shows it: WebKit
+    // on Linux ignores a fill on its compositor.
     const jumpThenFreeze = await run(
-      [{transform: 'translateY(0px)'}, {transform: 'translateY(50px)'}],
-      {duration: 800, easing: 'steps(1, end)', fill: 'forwards'},
+      [
+        {transform: 'translateY(0px)', offset: 0},
+        {transform: 'translateY(0px)', offset: 0.5},
+        {transform: 'translateY(50px)', offset: 0.5},
+        {transform: 'translateY(50px)', offset: 1},
+      ],
+      {duration: 1600, easing: 'linear'},
     );
     expect(jumpThenFreeze.verdict.pass, jumpThenFreeze.summary).toBe(false);
     await control.remove();
+  });
+
+  test('blockMainThread says a held curve keeps its end value only through a held tail or a fill the compositor honors', async ({
+    page,
+    browserName,
+  }) => {
+    await busyFixture(page);
+    const box = page.locator('#box');
+    const holds = async (
+      timing: KeyframeAnimationOptions,
+      keyframes: Keyframe[] = [
+        {transform: 'translateY(0px)'},
+        {transform: 'translateY(200px)'},
+      ],
+    ) => {
+      await box.evaluate(
+        (el, [frames, options]) => {
+          el.getAnimations().forEach(a => a.cancel());
+          el.animate(frames, options);
+        },
+        [keyframes, timing] as const,
+      );
+      const window = await blockMainThread(page, 50, {during: box});
+      return window.animation?.holds;
+    };
+    // A held tail: the last keyframes repeat the end value. So the curve ends
+    // halfway, and the element keeps that value after it with no fill.
+    expect(
+      await holds({duration: 1000}, [
+        {transform: 'translateY(0px)', offset: 0},
+        {transform: 'translateY(200px)', offset: 0.5},
+        {transform: 'translateY(200px)', offset: 1},
+      ]),
+    ).toBe(true);
+    // WebKit on Linux ignores `fill` on its compositor (motion/animator.ts,
+    // END_HOLD_MS): there a filled move that ends inside a block snaps back.
+    expect(await holds({duration: 1000, fill: 'forwards'})).toBe(
+      browserName !== 'webkit' || process.platform !== 'linux',
+    );
+    expect(await holds({duration: 1000})).toBe(false);
+    // An end delay shows nothing with no fill: it is no held tail.
+    expect(await holds({duration: 1000, endDelay: 500})).toBe(false);
   });
 
   test('a block too short to judge alone is judged over pooled runs: a compositor animation passes, and a rAF one fails, timed or frame-counted', async ({
