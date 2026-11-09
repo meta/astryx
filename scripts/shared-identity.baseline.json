@@ -433,6 +433,10 @@
       "status": "allowed",
       "reason": "Deduplicates an idempotent style insertion; a copy can at most insert the same rules again."
     },
+    "packages/core/src/hooks/modalAnnounce.ts:deferredByScope": {
+      "status": "open",
+      "group": "F5 Focus and announce"
+    },
     "packages/core/src/hooks/modalAnnounce.ts:held": {
       "status": "open",
       "group": "F5 Focus and announce"

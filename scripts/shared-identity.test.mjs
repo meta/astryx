@@ -77,6 +77,19 @@ describe('cross-module identity in module scope (spec:AST-110 FR3)', () => {
     ]);
   });
 
+  it('flags state a function the module hands out at load reaches', () => {
+    const hits = findInSource(
+      'route.ts',
+      [
+        `import {installRoute} from './other';`,
+        `const deferred = new WeakMap<object, string>();`,
+        `function announce(scope: object) { deferred.set(scope, 'x'); }`,
+        `installRoute({announce});`,
+      ].join('\n'),
+    );
+    expect(hits.map(hit => hit.name)).toEqual(['deferred']);
+  });
+
   it('lists every hit in the baseline, and nothing the source no longer has', () => {
     const baseline = JSON.parse(fs.readFileSync(BASELINE, 'utf8')).entries;
     const hits = findAll();

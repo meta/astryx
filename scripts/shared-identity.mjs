@@ -150,10 +150,7 @@ export function findInSource(file, code) {
           // typed read-only, is a constant, not a registry.
           const isConstant =
             /^Readonly/.test(typeText) ||
-            ((init.arguments?.length ?? 0) > 0 &&
-              !new RegExp(`\\b${name}\\.(?:add|set|delete|clear)\\(`).test(
-                code,
-              ));
+            ((init.arguments?.length ?? 0) > 0 && !isMutated(name));
           if (COLLECTION.test(ctor) && !isConstant) {
             const keyType =
               init.typeArguments?.[0]?.getText(source) ??
@@ -245,9 +242,34 @@ export function findInSource(file, code) {
     [...scopes].map(([name, scope]) => [name, usesIn(scope.node)]),
   );
 
+  // A function the module hands to another module at load, such as a
+  // callback it installs, acts for the module as an export does.
+  const handedOut = new Set();
+  for (const statement of source.statements) {
+    if (
+      ts.isExpressionStatement(statement) ||
+      (ts.isVariableStatement(statement) &&
+        statement.declarationList.declarations.some(
+          declaration =>
+            declaration.initializer &&
+            ts.isCallExpression(declaration.initializer),
+        ))
+    ) {
+      for (const name of usesIn(statement).refers) {
+        if (!exported.has(name) && !scopes.get(name).isType) {
+          handedOut.add(name);
+        }
+      }
+    }
+  }
+
+  const rootName = root =>
+    exported.has(root)
+      ? `the exported ${root}`
+      : `${root}, which the module hands out at load,`;
   /** @type {Map<string, string>} name -> why it crosses modules */
   const found = new Map();
-  for (const root of [...exported].sort()) {
+  for (const root of [...[...exported].sort(), ...[...handedOut].sort()]) {
     const scope = scopes.get(root);
     if (!scope) continue;
     if (scope.isType) {
@@ -281,10 +303,10 @@ export function findInSource(file, code) {
         found.set(
           used,
           candidates.get(used) === 'document-registry'
-            ? `a per-document store the exported ${root} uses`
+            ? `a per-document store ${rootName(root)} uses`
             : candidates.get(used) === 'symbol'
-              ? `read or written by the exported ${root}`
-              : `module state the exported ${root} uses`,
+              ? `read or written by ${rootName(root)}`
+              : `module state ${rootName(root)} uses`,
         );
       }
     }
