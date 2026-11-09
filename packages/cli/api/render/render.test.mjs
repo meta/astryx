@@ -13,6 +13,7 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {render} from './render.mjs';
+import {template} from '../template/template.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
 
@@ -1433,6 +1434,73 @@ describe('render(): refusals', () => {
     put('big.tsx', "import big from './big.png';\nexport default () => <img src={big} alt='' />;");
     expect(await codeOf(() => render('big.tsx', {cwd: dir}))).toBe('ERR_RENDER_ASSET_TOO_LARGE');
   }, 30_000);
+});
+
+describe('render(): a crash of Node itself', () => {
+  // A signal that Node raises when it fails ends only the page's process.
+  it.skipIf(process.platform === 'win32')('fails with a message that names this Node', async () => {
+    put('crash.tsx', "process.kill(process.pid, 'SIGSEGV');\nexport default () => <p>Hi</p>;\n");
+    /** @type {any} */
+    let error;
+    try {
+      await render('crash.tsx', {cwd: dir});
+    } catch (e) {
+      error = e;
+    }
+    expect(error?.code).toBe('ERR_RENDER_FAILED');
+    expect(error.message).toContain(`Node ${process.version}`);
+    expect(error.message).toContain('crashed (SIGSEGV)');
+    expect(fs.existsSync(path.join(dir, 'crash.html'))).toBe(false);
+  }, 60_000);
+});
+
+describe('render(): every ready page template', () => {
+  /** @type {string} */
+  let home;
+
+  beforeAll(() => {
+    home = makeLinkedFixture('astryx-render-templates-', ['@astryxdesign', '@stylexjs', '@heroicons', 'lucide-react', 'react', 'react-dom', 'recharts']);
+  });
+
+  afterAll(() => {
+    removeLinkedFixture(home);
+  });
+
+  it('scaffolds and renders each one', async () => {
+    const listed = /** @type {any} */ (await template(undefined, {list: true, type: 'page', cwd: home}));
+    /** @type {string[]} */
+    const ids = listed.data.filter((/** @type {any} */ t) => t.isReady).map((/** @type {any} */ t) => t.id);
+    expect(ids.length).toBeGreaterThan(0);
+    /** @type {Set<string>} */
+    const themes = new Set();
+    for (const id of ids) {
+      await template(id, {targetPath: `templates/${id}`, type: 'page', cwd: home});
+      const source = fs.readFileSync(path.join(home, 'templates', id, 'page.tsx'), 'utf8');
+      for (const m of source.matchAll(/from '(@astryxdesign\/theme-[a-z0-9-]+)[/']/g)) themes.add(m[1]);
+    }
+    // The node tests build Core only. A template that imports a theme's build
+    // needs that build.
+    for (const name of themes) {
+      const themeDir = fs.realpathSync(path.join(home, '..', 'node_modules', name));
+      if (fs.existsSync(path.join(themeDir, 'dist'))) continue;
+      const built = spawnSync('pnpm', ['run', 'build'], {cwd: themeDir, encoding: 'utf8', shell: process.platform === 'win32'});
+      expect(built.status, `${name} build: ${built.stderr}`).toBe(0);
+    }
+    /** @type {string[]} */
+    const failed = [];
+    for (let i = 0; i < ids.length; i += 4) {
+      await Promise.all(
+        ids.slice(i, i + 4).map(async id => {
+          try {
+            await render(`templates/${id}/page.tsx`, {cwd: home});
+          } catch (e) {
+            failed.push(`${id}: ${/** @type {any} */ (e).code} ${/** @type {any} */ (e).message}`);
+          }
+        }),
+      );
+    }
+    expect(failed).toEqual([]);
+  }, 900_000);
 });
 
 describe('render(): a page outside a project', () => {

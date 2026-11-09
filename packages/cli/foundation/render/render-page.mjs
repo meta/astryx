@@ -18,7 +18,8 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {Worker} from 'node:worker_threads';
+import {fork, spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import postcss from 'postcss';
 import {assetDataUri, isAssetBytes, isAssetPath, RenderAssetError} from './assets.mjs';
 import {classesIn, cutCss, layerOrderOf} from './css-cut.mjs';
@@ -34,7 +35,7 @@ export {PAGE_EXTENSIONS} from './embedded-files.mjs';
 
 /**
  * @typedef {object} RenderWarning
- * @property {'dropped-children' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'not-embedded'} code - What kind of problem.
+ * @property {'dropped-children' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'not-embedded' | 'node-crash'} code - What kind of problem.
  * @property {string} message - What happened and what to do, in one sentence.
  */
 
@@ -221,31 +222,83 @@ function expandImports(file, css, ctx) {
 
 /** @typedef {{dir: string, integrations: readonly string[]}} ServedSet */
 
+/** Signals that Node itself or a native module raises when it fails. */
+const CRASH_SIGNALS = new Set(['SIGSEGV', 'SIGBUS', 'SIGILL', 'SIGFPE', 'SIGABRT', 'SIGTRAP']);
+
+/** The heap the page may use, in MB. */
+const PAGE_HEAP_MB = 4096;
+
 /**
- * Run the page in a worker, stopping it after `timeoutMs`.
- * @param {string} entry
- * @param {string} root
- * @param {number} timeoutMs
- * @param {ServedSet | null} served
- * @returns {Promise<any>}
+ * Whether this Node crashes when it splits text with Intl.Segmenter. Some
+ * Node builds do, and Astryx components such as Avatar split text with it.
  */
-function runWorker(entry, root, timeoutMs, served) {
+function segmenterCrashes() {
+  const probe = spawnSync(
+    process.execPath,
+    ['-e', "[...new Intl.Segmenter('en', {granularity: 'grapheme'}).segment('a b')]"],
+    {stdio: 'ignore', timeout: 10_000},
+  );
+  return probe.signal !== null && probe.signal !== 'SIGTERM';
+}
+
+/**
+ * The error for a page process that a signal ended. A crash signal comes from
+ * Node itself or a native module, never from the page's JavaScript, so the
+ * message names this Node.
+ * @param {NodeJS.Signals} signal
+ * @param {boolean} withoutSegmenter whether the page already ran without Intl.Segmenter
+ */
+function crashError(signal, withoutSegmenter) {
+  const node = `Node ${process.version} (${process.execPath})`;
+  const detail = {signal, node: process.version, nodePath: process.execPath};
+  if (signal === 'SIGKILL') {
+    return new RenderError(
+      'ERR_RENDER_FAILED',
+      `${node} was stopped by the system (${signal}) while it rendered the page. This usually means the machine ran out of memory.`,
+      detail,
+    );
+  }
+  if (!CRASH_SIGNALS.has(signal)) {
+    return new RenderError('ERR_RENDER_FAILED', `The page process was stopped by a signal (${signal}) while it rendered the page.`, detail);
+  }
+  const cause = withoutSegmenter ? ' It crashed again with Intl.Segmenter removed, so the fault is elsewhere in this Node or in a native module.' : '';
+  return new RenderError(
+    'ERR_RENDER_FAILED',
+    `${node} crashed (${signal}) while it rendered the page. A fault in Node or in a native module causes this, not the page's code.${cause} Render with an official Node.js build of another version.`,
+    detail,
+  );
+}
+
+/**
+ * Run the page in a child process, stopping it after `timeoutMs`.
+ * @param {{entry: string, root: string, served: ServedSet | null, withoutSegmenter: boolean}} input
+ * @param {number} timeoutMs
+ * @returns {Promise<any>} the page process's answer, or `{crashed: signal}`
+ *   when a crash signal ended it
+ */
+function runWorker(input, timeoutMs) {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(new URL('./page-worker.mjs', import.meta.url), {
-      workerData: {entry, root, served: served ? {dir: served.dir, integrations: [...served.integrations]} : null},
-      execArgv: [],
-      stdout: true,
-      stderr: true,
-      resourceLimits: {maxOldGenerationSizeMb: 4096},
+    const data = {
+      ...input,
+      served: input.served ? {dir: input.served.dir, integrations: [...input.served.integrations]} : null,
+    };
+    const child = fork(fileURLToPath(new URL('./page-worker.mjs', import.meta.url)), [JSON.stringify(data)], {
+      // Never the CLI's own flags (such as --input-type).
+      execArgv: [`--max-old-space-size=${PAGE_HEAP_MB}`],
+      // The page's own writes to stdout never reach the CLI's output. Node
+      // writes fatal errors, such as running out of memory, to stderr.
+      stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
+      serialization: 'advanced',
     });
-    // The page's own writes to stdout/stderr never reach the CLI's output.
-    worker.stdout.resume();
-    worker.stderr.resume();
+    let stderrTail = '';
+    child.stderr?.on('data', chunk => {
+      stderrTail = (stderrTail + String(chunk)).slice(-8192);
+    });
     let settled = false;
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
-      void worker.terminate();
+      child.kill('SIGKILL');
       reject(
         new RenderError(
           'ERR_RENDER_TIMEOUT',
@@ -254,30 +307,62 @@ function runWorker(entry, root, timeoutMs, served) {
         ),
       );
     }, timeoutMs);
-    worker.once('message', message => {
+    child.once('message', message => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      void worker.terminate();
+      child.kill('SIGKILL');
       resolve(message);
     });
-    worker.once('error', (/** @type {any} */ error) => {
+    child.once('error', error => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      const out =
-        /ERR_WORKER_OUT_OF_MEMORY|heap out of memory/.test(String(error?.message ?? error))
-          ? new RenderError('ERR_RENDER_FAILED', 'The page ran out of memory while rendering.')
-          : new RenderError('ERR_RENDER_FAILED', `The page could not be rendered: ${String(error?.message ?? error).split('\n')[0]}`);
-      reject(out);
+      child.kill('SIGKILL');
+      reject(new RenderError('ERR_RENDER_FAILED', `The page could not be rendered: ${String(error?.message ?? error).split('\n')[0]}`));
     });
-    worker.once('exit', code => {
+    child.once('exit', (code, signal) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      reject(new RenderError('ERR_RENDER_FAILED', `The page stopped rendering without an answer (exit ${code}).`));
+      if (/heap out of memory|ERR_WORKER_OUT_OF_MEMORY/.test(stderrTail)) {
+        reject(new RenderError('ERR_RENDER_FAILED', 'The page ran out of memory while rendering.'));
+      } else if (signal && CRASH_SIGNALS.has(signal)) {
+        resolve({crashed: signal});
+      } else if (signal) {
+        reject(crashError(signal, input.withoutSegmenter));
+      } else {
+        const thrown = /^(?:[A-Za-z]*Error|Uncaught)\b.*$/m.exec(stderrTail)?.[0];
+        reject(
+          new RenderError(
+            'ERR_RENDER_FAILED',
+            thrown ? `The page could not be rendered: ${thrown}` : `The page stopped rendering without an answer (exit ${code}).`,
+          ),
+        );
+      }
     });
   });
+}
+
+/**
+ * Run the page. When this Node crashes in Intl.Segmenter, run it once more
+ * without Intl.Segmenter and say so in a warning.
+ * @param {{entry: string, root: string, served: ServedSet | null}} input
+ * @param {number} timeoutMs
+ * @param {RenderWarning[]} warnings
+ */
+async function runPage(input, timeoutMs, warnings) {
+  const started = Date.now();
+  const first = await runWorker({...input, withoutSegmenter: false}, timeoutMs);
+  if (!first.crashed) return first;
+  if (!segmenterCrashes()) throw crashError(first.crashed, false);
+  const again = await runWorker({...input, withoutSegmenter: true}, Math.max(1000, timeoutMs - (Date.now() - started)));
+  if (again.crashed) throw crashError(again.crashed, true);
+  warnings.push({
+    code: 'node-crash',
+    message: `Node ${process.version} (${process.execPath}) crashes in Intl.Segmenter, so the page rendered without it, and text that components split by character (such as Avatar initials) can differ for joined emoji. Render with an official Node.js build to use it.`,
+  });
+  return again;
 }
 
 /**
@@ -371,9 +456,9 @@ export async function renderPage(entry, options = {}) {
   const dir = path.dirname(entry);
   const root = projectRootOf(dir);
   const served = options.served ?? null;
-  const message = await runWorker(entry, root, options.timeoutMs ?? RENDER_TIMEOUT_MS, served);
   /** @type {RenderWarning[]} */
   const warnings = [];
+  const message = await runPage({entry, root, served}, options.timeoutMs ?? RENDER_TIMEOUT_MS, warnings);
   if (!message.ok) {
     throw new RenderError(message.error.code, message.error.message, message.error.detail);
   }

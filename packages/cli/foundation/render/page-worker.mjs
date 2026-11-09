@@ -5,8 +5,9 @@
  * the project (TypeScript, JSX and StyleX compiled in memory) and renders its
  * default export to static markup with the project's own React.
  *
- * It runs in a worker thread so a page that never finishes rendering can be
- * stopped, and so nothing the page prints reaches the CLI's own output.
+ * It runs in a child process so a page that never finishes rendering can be
+ * stopped, so nothing the page prints reaches the CLI's own output, and so a
+ * crash of Node itself ends only this process, never the CLI.
  *
  * Outside a project, the Astryx packages the page's folder lacks resolve
  * from the package set the CLI runs from (served-packages.mjs), and React and
@@ -16,8 +17,8 @@
  * so the server render sets them aside and draws them after it with React
  * DOM in a small document (charts.mjs).
  *
- * @input workerData {entry, root, served}
- * @output one message: {ok: true, markup, css, files, texts, logs} or
+ * @input argv[2]: JSON {entry, root, served, withoutSegmenter}
+ * @output one IPC message: {ok: true, markup, css, files, texts, logs} or
  *   {ok: false, error: {code, message, detail?}}
  * @position foundation/render — started by render-page.mjs
  */
@@ -27,7 +28,6 @@ import * as path from 'node:path';
 import Module, {createRequire, register} from 'node:module';
 import {pathToFileURL} from 'node:url';
 import {format} from 'node:util';
-import {parentPort, workerData} from 'node:worker_threads';
 import {transformSync} from '@babel/core';
 import {matchPath, readPathsIn, resolvePath} from './ts-paths.mjs';
 import {createJiti} from 'jiti';
@@ -38,8 +38,16 @@ import {CHART_GLOBAL, CHART_ROOTS, chartDocument, chartSize, markLegends} from '
 
 /** @typedef {{level: string, text: string}} PageLog */
 
-/** @type {{entry: string, root: string, served: {dir: string, integrations: string[]} | null}} */
+/** @type {{entry: string, root: string, served: {dir: string, integrations: string[]} | null, withoutSegmenter?: boolean}} */
+const workerData = JSON.parse(process.argv[2] ?? '{}');
 const {entry, root} = workerData;
+
+// Some Node builds crash in Intl.Segmenter. Without it, Core splits text by
+// code points, so a joined emoji can count as several characters.
+if (workerData.withoutSegmenter) delete (/** @type {any} */ (Intl)).Segmenter;
+
+/** @param {unknown} message */
+const postMessage = message => process.send?.(message);
 
 /** The package set, for a page outside a project whose folder has no Core of its own. */
 const served = workerData.served && findNodeModulesPackage(path.dirname(entry), '@astryxdesign/core') === null ? workerData.served : null;
@@ -776,7 +784,7 @@ const jiti = createJiti(entry, {
  * @param {Record<string, unknown>} [detail]
  */
 function fail(code, message, detail) {
-  parentPort?.postMessage({ok: false, error: {code, message, detail}, logs});
+  postMessage({ok: false, error: {code, message, detail}, logs});
 }
 
 /** @param {unknown} e */
@@ -889,7 +897,7 @@ try {
   if (stylexRules.length > 0) {
     css = stylexPlugin.processStylexRules(stylexRules, {useLayers: false});
   }
-  parentPort?.postMessage({
+  postMessage({
     ok: true,
     markup,
     css,

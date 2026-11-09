@@ -357,7 +357,7 @@ const RUNNERS = {
     sites: ['importDocModule', 'importNativeModule ×3', 'importTemplateModule'],
   },
   'foundation/render/page-worker.mjs': {
-    runs: 'the page `astryx experimental render` renders, its local modules, React, and the StyleX compiler, in a worker, then React DOM and the recharts settings to draw its charts; outside a project, Node resolves the packages its folder lacks, and React and StyleX for every module (resolve hooks for ES modules), from the package set the CLI runs from',
+    runs: 'the page `astryx experimental render` renders, its local modules, React, and the StyleX compiler, in a child process, then React DOM and the recharts settings to draw its charts; outside a project, Node resolves the packages its folder lacks, and React and StyleX for every module (resolve hooks for ES modules), from the package set the CLI runs from',
     sites: [
       '.import() ×6',
       'createJiti ×2',
@@ -367,8 +367,8 @@ const RUNNERS = {
     ],
   },
   'foundation/render/render-page.mjs': {
-    runs: 'the render worker, so a page that never finishes can be stopped',
-    sites: ['worker_threads.Worker'],
+    runs: 'the render child process, so a page that never finishes can be stopped and a crash of Node ends only that process, and a one-line Intl.Segmenter check after a crash',
+    sites: ['child_process.fork', 'child_process.spawnSync'],
   },
   'foundation/fs/import-url.mjs': {
     runs: 'the doc file at a file URL, for the doc importers',
