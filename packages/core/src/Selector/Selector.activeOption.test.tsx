@@ -193,6 +193,39 @@ describe('Selector active option indicator', () => {
     expect(hasRing(row)).toBe(true);
   });
 
+  it('keeps the ring when the follow lands the keyboard highlight on a still mouse’s option', async () => {
+    const user = userEvent.setup();
+    const {rerender} = render(
+      <Selector
+        label="Fruit"
+        options={OPTIONS}
+        value="Apple"
+        onChange={() => {}}
+      />,
+    );
+    const field = screen.getByRole('combobox', {name: 'Fruit'});
+    field.focus();
+    await user.keyboard('{ArrowDown}');
+    await user.keyboard('{ArrowDown}');
+    // The row under a still pointer is reported as entered while the keyboard
+    // move holds the highlight.
+    fireEvent.mouseEnter(option('Cherry'));
+    expect(activeOption(field)).toHaveTextContent('Banana');
+
+    // Banana leaves; the highlight follows to Cherry, the next option.
+    rerender(
+      <Selector
+        label="Fruit"
+        options={[OPTIONS[0], OPTIONS[2]]}
+        value="Apple"
+        onChange={() => {}}
+      />,
+    );
+    const row = activeOption(field);
+    expect(row).toHaveTextContent('Cherry');
+    expect(hasRing(row)).toBe(true);
+  });
+
   // WCAG 2.2 1.4.11: a state indicator needs 3:1 against the listbox it sits
   // on. The overlay fill alone measures about 1.09:1 (light) and 1.15:1
   // (dark).

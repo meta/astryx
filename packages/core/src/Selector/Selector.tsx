@@ -1685,7 +1685,9 @@ export function Selector<T extends SelectorOptionType>(
           const moved = filteredItems.findIndex(
             item => item.value === hoveredValue,
           );
-          setHoveredIndex(moved >= 0 ? moved : null);
+          // A follow that lands the keyboard highlight on the hovered option
+          // keeps it a keyboard highlight.
+          setHoveredIndex(moved >= 0 && moved !== followed ? moved : null);
         }
       }
     }
