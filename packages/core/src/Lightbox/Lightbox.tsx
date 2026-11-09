@@ -53,7 +53,10 @@ import {announceInModal} from '../hooks/useAnnounce';
 import {useScrollLock} from '../hooks/useScrollLock';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useAttachment} from '../hooks/useAttachment';
-import {observeResize} from '../utils/sharedResizeObserver';
+import {
+  observeResize,
+  observeResizeAfterLayout,
+} from '../utils/sharedResizeObserver';
 import {observeContent} from '../utils/sharedMutationObserver';
 import {MIN_TOUCH_TARGET} from '../utils/hitArea';
 import {useTouchHitArea, type TouchHitAreaOptions} from '../utils/touchHitArea';
@@ -630,31 +633,6 @@ const KEYBOARD_PAN_OFFSETS: Record<string, [number, number]> = {
 const VIDEO_CONTROLS_BAND = 48;
 
 /**
- * Calls `onDelivery` with each entry of the shared ResizeObserver for
- * `element`. It skips the call that registers it, which runs in React's
- * commit, where a read forces a layout before the browser's own. The first
- * delivery comes after the browser lays `element` out. Where no
- * ResizeObserver exists (jsdom), it returns null and the caller measures at
- * once.
- */
-function observeAfterLayout(
-  element: Element,
-  onDelivery: (entry: ResizeObserverEntry) => void,
-): (() => void) | null {
-  if (typeof ResizeObserver === 'undefined') {
-    return null;
-  }
-  let isRegistered = false;
-  const stop = observeResize(element, entry => {
-    if (isRegistered) {
-      onDelivery(entry);
-    }
-  });
-  isRegistered = true;
-  return stop;
-}
-
-/**
  * A fullscreen overlay for viewing images and videos at full resolution.
  *
  * Supports single image and gallery modes. In gallery mode, it provides
@@ -1072,7 +1050,7 @@ export function Lightbox({
     element => {
       const box = element.closest('[data-lightbox-caption]') ?? element;
       const register = (): (() => void) | undefined => {
-        const stop = observeAfterLayout(box, () => {
+        const stop = observeResizeAfterLayout(box, () => {
           noteCaptionDelivery(true, null);
         });
         if (stop == null) {
@@ -1120,8 +1098,13 @@ export function Lightbox({
   useAttachment(
     captionToggleRef,
     toggle => {
-      const stop = observeAfterLayout(toggle, entry => {
-        const width = entry.borderBoxSize?.[0]?.inlineSize ?? 0;
+      const stop = observeResizeAfterLayout(toggle, entry => {
+        // No entry: another subscriber already observes the toggle, so it
+        // is measured here.
+        const width =
+          entry == null
+            ? toggle.offsetWidth
+            : (entry.borderBoxSize?.[0]?.inlineSize ?? 0);
         if (width > 0) {
           noteCaptionDelivery(false, Math.round(width));
         }

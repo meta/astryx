@@ -16,7 +16,7 @@
 
 import {useCallback, useRef, useState, type RefCallback} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
-import {isResizeObserved, observeResize} from '../utils/sharedResizeObserver';
+import {observeResizeAfterLayout} from '../utils/sharedResizeObserver';
 import {observeContent} from '../utils/sharedMutationObserver';
 
 export interface UseTruncationOptions {
@@ -187,36 +187,16 @@ function useTruncationMeasure(
       }
 
       if (element && maxLines > 0) {
-        // Observe via the shared singleton, if available. The call that
-        // observeResize makes on registration runs inside React's commit, so
-        // it measures nothing. The observer's first notification measures a
-        // new element. The browser sends it after its own layout, so mounting
-        // text forces no layout pass. An element another subscriber already
-        // observes gets no new first notification, so a microtask after the
-        // commit measures it. The truncated state only decides whether to
-        // compose the tooltip, so nothing paints differently.
-        if (typeof ResizeObserver !== 'undefined') {
-          let registered = false;
-          const wasObserved = isResizeObserved(element);
-          const unobserve = observeResize(element, () => {
-            if (registered) {
-              checkTruncation(element);
-            }
-          });
-          registered = true;
-          unobserveRef.current = unobserve;
-          // Skipped when this registration has ended by then (measuring
-          // turned off, or the element replaced, in the same task).
-          if (wasObserved) {
-            queueMicrotask(() => {
-              if (unobserveRef.current === unobserve) {
-                checkTruncation(element);
-              }
-            });
-          }
-        } else {
+        // Measured after the browser's layout, so mounting text forces no
+        // layout pass. The truncated state only decides whether to compose
+        // the tooltip, so nothing paints differently.
+        const unobserve = observeResizeAfterLayout(element, () => {
+          checkTruncation(element);
+        });
+        if (unobserve == null) {
           checkTruncation(element);
         }
+        unobserveRef.current = unobserve;
         // New text in a box that keeps its size fires no resize, so the
         // captured text and truncated state would otherwise stay stale.
         unobserveContentRef.current = observeContent(element, () => {
