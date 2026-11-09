@@ -15,6 +15,9 @@ import {Table} from '../../Table';
 import {InternationalizationProvider} from '../../../i18n';
 import type {TableColumn} from '../../types';
 import {useTableSortable, type TableSortState} from './useTableSortable';
+import type {ComponentIconMap} from '../../../Icon/index';
+import {defineTheme} from '../../../theme/defineTheme';
+import {Theme} from '../../../theme/Theme';
 
 // =============================================================================
 // Test Data
@@ -782,5 +785,107 @@ describe('useTableSortable — header alignment', () => {
     );
 
     expect(buttonFor(/^age$/i).className).toBe(buttonFor(/^name$/i).className);
+  });
+});
+
+describe('sort indicator icon slot', () => {
+  // Label each shared icon's artwork, so a test reads which name rendered.
+  const icons = {
+    arrowUp: <span data-icon="arrowUp" />,
+    arrowDown: <span data-icon="arrowDown" />,
+    arrowsUpDown: <span data-icon="arrowsUpDown" />,
+    chevronDown: <span data-icon="chevronDown" />,
+    chevronRight: <span data-icon="chevronRight" />,
+  };
+  let themeCount = 0;
+
+  function renderSorted(
+    componentIcons?: ComponentIconMap<never>,
+    initialSort: TableSortState = [{sortKey: 'name', direction: 'ascending'}],
+  ) {
+    const theme = defineTheme({
+      name: `table-sort-slot-${themeCount++}`,
+      icons,
+      componentIcons,
+    });
+    render(
+      <Theme theme={theme}>
+        <SortableTable initialSort={initialSort} />
+      </Theme>,
+    );
+  }
+
+  const glyph = (name: string) =>
+    screen
+      .getByRole('button', {name})
+      .querySelector('[data-icon]')
+      ?.getAttribute('data-icon') ?? null;
+
+  it('draws arrowUp, arrowDown, or arrowsUpDown by direction when the theme maps nothing', () => {
+    renderSorted(undefined, [{sortKey: 'age', direction: 'descending'}]);
+    expect(glyph('Age')).toBe('arrowDown');
+    expect(glyph('Name')).toBe('arrowsUpDown');
+    fireEvent.click(screen.getByRole('button', {name: 'Name'}));
+    expect(glyph('Name')).toBe('arrowUp');
+  });
+
+  it('passes the direction to a slot function, with none for an unsorted column', () => {
+    const slot = vi.fn(
+      ({direction}: {direction: 'ascending' | 'descending' | 'none'}) =>
+        direction === 'none'
+          ? null
+          : {
+              icon:
+                direction === 'ascending'
+                  ? ('chevronRight' as const)
+                  : ('chevronDown' as const),
+            },
+    );
+    renderSorted({'table-sort-indicator': slot});
+
+    expect(glyph('Name')).toBe('chevronRight');
+    expect(glyph('Age')).toBeNull();
+    expect(slot).toHaveBeenCalledWith({direction: 'ascending'});
+    expect(slot).toHaveBeenCalledWith({direction: 'none'});
+    fireEvent.click(screen.getByRole('button', {name: 'Name'}));
+    expect(glyph('Name')).toBe('chevronDown');
+    expect(slot).toHaveBeenCalledWith({direction: 'descending'});
+  });
+
+  it('hides only the glyph for null; sorting and aria-sort still work', () => {
+    const onSortChange = vi.fn();
+    const theme = defineTheme({
+      name: `table-sort-slot-${themeCount++}`,
+      componentIcons: {'table-sort-indicator': null},
+    });
+    render(
+      <Theme theme={theme}>
+        <SortableTable
+          initialSort={[{sortKey: 'name', direction: 'ascending'}]}
+          onSortChange={onSortChange}
+        />
+      </Theme>,
+    );
+
+    const button = screen.getByRole('button', {name: 'Name'});
+    expect(button.querySelector('.astryx-icon')).toBeNull();
+    expect(screen.getByRole('columnheader', {name: 'Name'})).toHaveAttribute(
+      'aria-sort',
+      'ascending',
+    );
+    fireEvent.click(button);
+    expect(onSortChange).toHaveBeenCalledWith([
+      {sortKey: 'name', direction: 'descending'},
+    ]);
+  });
+
+  it('changes only the icon size for a size request', () => {
+    renderSorted({'table-sort-indicator': {size: 'sm'}});
+
+    const icon = screen
+      .getByRole('button', {name: 'Name'})
+      .querySelector('.astryx-icon');
+    expect(icon).toHaveAttribute('data-size', 'sm');
+    expect(glyph('Name')).toBe('arrowUp');
   });
 });

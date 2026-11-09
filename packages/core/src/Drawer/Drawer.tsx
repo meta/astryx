@@ -72,7 +72,9 @@ import {
   shadowVars,
 } from '../theme/tokens.stylex';
 import type {DialogPurpose} from '../Dialog';
-import {useFocusTrap, useMergedRefs, useScrollLock} from '../hooks';
+import {useFocusTrap} from '../hooks/useFocusTrap';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useScrollLock} from '../hooks/useScrollLock';
 import {LayerDepthProvider, useLayerDismissal} from '../Layer';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
@@ -505,7 +507,7 @@ export function Drawer({
   // Toasts outside an open modal are inert, so the open drawer hosts them.
   // It releases them when its exit starts.
   // showModal() must run first, so keep this call after useDrawerDialogPresence.
-  useModalOutlet(dialogRef, isOpen && hasScrim);
+  const outletRef = useModalOutlet(dialogRef, isOpen && hasScrim);
 
   const handleDismiss = useCallback(() => {
     onOpenChange(false);
@@ -639,6 +641,7 @@ export function Drawer({
             {/* Scrollable content area — tabIndex so the dialog's focusing steps
               land on the panel body rather than the first button inside. */}
             <div
+              ref={outletRef}
               tabIndex={-1}
               {...stylex.props(
                 styles.content,

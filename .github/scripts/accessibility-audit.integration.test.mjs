@@ -116,7 +116,12 @@ const page = {
 const context = {
   addInitScript: async () => {},
   route: async (pattern, handler) => {
-    if (pattern === '**/*' && typeof handler === 'function') {
+    // The route must reach remote hosts and skip the loopback story server.
+    const routesRemote =
+      typeof pattern?.test === 'function' &&
+      pattern.test('https://picsum.photos/400') &&
+      !pattern.test('http://127.0.0.1:6006/iframe.html');
+    if (routesRemote && typeof handler === 'function') {
       remoteImagesRouted = true;
     }
   },
@@ -176,9 +181,7 @@ function runFixture(
         // let the OS assign a free one.
         '--port',
         '0',
-        ...(readySelector == null
-          ? []
-          : ['--ready-selector', readySelector]),
+        ...(readySelector == null ? [] : ['--ready-selector', readySelector]),
         ...(stories == null ? [] : ['--stories', stories]),
       ],
       {
@@ -187,7 +190,8 @@ function runFixture(
         env: {
           ...process.env,
           A11Y_TEST_SCENARIO: scenario,
-          NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --require=${mock}`.trim(),
+          NODE_OPTIONS:
+            `${process.env.NODE_OPTIONS ?? ''} --require=${mock}`.trim(),
         },
       },
     );
@@ -315,16 +319,10 @@ describe.sequential('accessibility-audit CLI readiness', () => {
   });
 
   it('routes a11y contract fixtures to canonical owners and legacy aliases', () => {
-    const result = runFixture(
-      'delayed',
-      PATTERN_INDEX,
-      'core/ClickableCard',
-    );
+    const result = runFixture('delayed', PATTERN_INDEX, 'core/ClickableCard');
     expect(result.status).toBe(0);
     expect(result.report.ownerStoryRoutes).toEqual({
-      'core/ClickableCard': [
-        'a11y-button-pattern--clickable-card-disabled',
-      ],
+      'core/ClickableCard': ['a11y-button-pattern--clickable-card-disabled'],
     });
     expect(result.report.legacyBaselineAliases).toEqual({
       'ClickableCard::Disabled': [

@@ -72,7 +72,8 @@ browsers receive a usable reduced fallback, not equivalent behavior.
 - **FR4 — Passive dependents never shield owners.** An unpinned Tooltip is
   passive. It does not win or block dismissal and disappears as a consequence
   when its associated owner or trigger interaction closes. A Tooltip that a
-  press pinned open (`component:Tooltip` FR9) is an active owner: it takes
+  press pinned open through `useTooltip`'s `show()` (`component:Tooltip` FR9,
+  FR12), as a press on `component:InfoTip` does, is an active owner: it takes
   Escape first and closes, and the owner beneath it stays open for that press
   (DEC-6).
 - **FR5 — Associations are explicit.** Every active or blocking owner records an
@@ -241,6 +242,7 @@ Interaction modality continues to follow `architecture:interaction-modality`.
 | FR1–FR6   | Pure registry/resolver tests plus family interaction tests | active, blocking, passive Tooltip, pinned Tooltip over a Dialog, visual-only, controlled owner  | Passive surface wins, a pinned surface lets Escape reach the owner beneath, blocker leaks, or wrong owner closes |
 | FR7–FR10  | Branch resolver tests and real-browser outside interaction | root menu with two submenu levels; parent + child Popover; associated trigger                   | Outside root leaves submenu open, or child-only outside closes parent                                            |
 | FR11–FR14 | Gesture-counter and browser event-order tests              | native light dismiss before/after click; menu button; hover-open; touch; backdrop; swipe        | Same gesture reopens any associated trigger or exposed hover reopens panel                                       |
+| FR11–FR13 | Gesture-counter tests; real-Chromium context-menu press    | layer and DropdownMenu opened from `contextmenu`; release on and off the zone                   | The release of the press that opened the layer dismisses it, or a later press does not                           |
 | FR15–FR20 | Chromium/WebKit native host tests                          | Toast at root; Toast through one/two modals; CommandPalette above modal; ordinary local Popover | Global surface is behind/inert, loses state, or ordinary overlay becomes global                                  |
 | FR21–FR23 | Supported/unsupported browser matrix and public-doc checks | anchor/fixed/custom; auto/manual; explicit controls; absent feature APIs                        | Docs promise equivalence or reduced fallback is unusable                                                         |
 | IR1–IR3   | API/type tests and mutation tests for resolvers/claims     | one-at-a-time channel versus branch channel                                                     | One topmost query is reused for outside branches or timestamps replace identity                                  |
@@ -339,8 +341,8 @@ implement the missing browser systems.
 **Reference:** `spec:AST-003/DEC-6`
 **Decider:** `cixzhang`, `2026-10-31`
 
-A Tooltip that a press pinned open is something the person asked
-to keep, so it is an active owner and Escape closes it before the owner beneath
+A Tooltip that the person's press pinned open through `useTooltip`'s
+`show()`, as a press on InfoTip does, is something the person asked to keep, so it is an active owner and Escape closes it before the owner beneath
 it. A Tooltip that only previews on hover or focus stays passive.
 
 Rejected: keeping every Tooltip passive, which lets Escape close a Dialog behind

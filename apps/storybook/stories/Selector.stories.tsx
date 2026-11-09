@@ -6,6 +6,7 @@ import {useState} from 'react';
 import {Button} from '@astryxdesign/core/Button';
 import {InputGroup, InputGroupText} from '@astryxdesign/core/InputGroup';
 import {Selector, SelectorOption} from '@astryxdesign/core/Selector';
+import {TextInput} from '@astryxdesign/core/TextInput';
 import {Theme, defineTheme} from '@astryxdesign/core/theme';
 import {RadioIndicator} from '@astryxdesign/core/Indicator';
 import {
@@ -1099,6 +1100,37 @@ export const PreSelected: Story = {
         value={value}
         onChange={v => setValue(v)}
       />
+    );
+  },
+};
+
+/**
+ * A text field above a Selector. On a phone, focus the field so that its
+ * software keyboard rises, then open the Selector. Its list slides above the
+ * keyboard, with every option in view.
+ */
+export const OverlayBesideKeyboard: Story = {
+  parameters: {layout: 'fullscreen'},
+  render: () => {
+    const [name, setName] = useState('');
+    const [value, setValue] = useState<string | undefined>('Banana');
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 16,
+          padding: '96px 24px 0',
+        }}>
+        <TextInput label="Name" value={name} onChange={setName} />
+        <div style={{height: 64}} />
+        <Selector
+          label="Fruit"
+          options={['Apple', 'Banana', 'Cherry', 'Date', 'Elderberry', 'Fig']}
+          value={value}
+          onChange={v => setValue(v)}
+        />
+      </div>
     );
   },
 };

@@ -8,9 +8,11 @@ import path from 'node:path';
 
 import {
   fsGuardTests,
+  readTestList,
   scopedExtraTests,
   specReaderTests,
   uiTestRoots,
+  withoutAlreadyRun,
 } from './fs-guard-tests.mjs';
 import os from 'node:os';
 import yaml from 'yaml';
@@ -471,4 +473,67 @@ describe('spec readers on this repository (contract)', () => {
       );
     },
   );
+});
+
+describe('a test the --changed run already ran runs once', () => {
+  const root = '/repo';
+
+  it('reads Vitest list JSON and plain lines as repository paths', () => {
+    expect(
+      readTestList(
+        JSON.stringify([
+          {file: '/repo/scripts/a.test.mjs', projectName: 'node'},
+          {file: '/repo/packages/cli/b.test.mjs', projectName: 'node'},
+        ]),
+        root,
+      ),
+    ).toEqual(['scripts/a.test.mjs', 'packages/cli/b.test.mjs']);
+    expect(
+      readTestList('./scripts/a.test.mjs\nscripts/c.test.mjs\n', root),
+    ).toEqual(['scripts/a.test.mjs', 'scripts/c.test.mjs']);
+    expect(readTestList('', root)).toEqual([]);
+    expect(readTestList('[]', root)).toEqual([]);
+  });
+
+  it('leaves out only the tests already run', () => {
+    expect(
+      withoutAlreadyRun(
+        ['scripts/a.test.mjs', 'scripts/guard.test.mjs'],
+        ['scripts/a.test.mjs', 'scripts/other.test.mjs'],
+      ),
+    ).toEqual(['scripts/guard.test.mjs']);
+  });
+
+  it('the lister drops a guard the changed run listed, and keeps the rest', () => {
+    const repoRoot = path.resolve(import.meta.dirname, '../..');
+    const script = path.join(repoRoot, '.github/scripts/fs-guard-tests.mjs');
+    const lines = text => text.split('\n').filter(Boolean);
+    const all = lines(
+      execFileSync(process.execPath, [script, '--changed', 'HEAD'], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      }),
+    );
+    expect(all.length).toBeGreaterThan(1);
+    const [ran, ...rest] = all;
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'already-run-'));
+    try {
+      const list = path.join(dir, 'already-run.json');
+      fs.writeFileSync(
+        list,
+        JSON.stringify([{file: path.join(repoRoot, ran), projectName: 'node'}]),
+      );
+      const guards = lines(
+        execFileSync(
+          process.execPath,
+          [script, '--changed', 'HEAD', '--already-run', list],
+          {cwd: repoRoot, encoding: 'utf8'},
+        ),
+      );
+      expect(guards).not.toContain(ran);
+      expect(guards).toEqual(rest);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
 });

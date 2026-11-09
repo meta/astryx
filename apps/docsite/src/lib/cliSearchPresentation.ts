@@ -19,6 +19,7 @@ import {
   type LucideProps,
 } from 'lucide-react';
 import type {SiteSearchResult} from './cliSearchTypes';
+import {DEPRECATED_LABEL} from '../components/Deprecation';
 
 const FALLBACK_DOC_ROOT_TYPES: Readonly<Record<string, string>> = {
   'Astryx CLI': 'Reference',
@@ -99,7 +100,9 @@ function contextForCatalogResult(result: SiteSearchResult): string {
   }
   switch (result.domain) {
     case 'component':
-      return 'Component';
+      return result.deprecated
+        ? `Component · ${DEPRECATED_LABEL}`
+        : 'Component';
     case 'hook':
       return 'Hook';
     case 'template':

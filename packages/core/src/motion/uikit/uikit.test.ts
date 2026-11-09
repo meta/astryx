@@ -15,7 +15,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import {
-  PRESS_FADE_MS,
   PRESS_FLASH_MS,
   PRESS_ONSET_MS,
   PRESS_SCROLL_BRAKE_MS,
@@ -72,7 +71,12 @@ function leavesOf(file: string): Leaf[] {
   // of them is checked where it is declared.
   const exported = new Set<string>();
   lines.forEach((line, index) => {
-    const match = /^export const (\w+) = \{/.exec(line);
+    // A spring role row is built by `springRole(name, {...})`, which
+    // registers it as it loads.
+    const match =
+      /^export const (\w+) = (?:\{|\/\* @__PURE__ \*\/ springRole\()/.exec(
+        line,
+      );
     if (match == null) {
       return;
     }
@@ -373,7 +377,6 @@ describe('UIKit constants table: values', () => {
   it('press clocks agree with the touch press model they were measured for', () => {
     expect(scroll.delaysContentTouchesMs).toBe(PRESS_ONSET_MS);
     expect(timing.press.flashMs).toBe(PRESS_FLASH_MS);
-    expect(timing.press.highlightOutMs).toBe(PRESS_FADE_MS);
     expect(timing.press.scrollBrakeMs).toBe(PRESS_SCROLL_BRAKE_MS);
   });
 

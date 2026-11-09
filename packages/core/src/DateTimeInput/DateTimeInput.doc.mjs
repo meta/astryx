@@ -141,8 +141,15 @@ export const docs = {
       name: 'placeholder',
       type: 'string',
       description:
-        'Placeholder text shown in the date portion when no date is selected.',
+        'Placeholder text shown in the date portion when no date is selected. A caller placeholder replaces the calendar format hint.',
       default: "'Select a date'",
+    },
+    {
+      name: 'calendar',
+      type: "'gregory' | 'iso8601' | 'buddhist' | 'roc' | 'japanese' | 'persian' | 'indian' | 'hebrew' | 'chinese' | 'dangi' | 'coptic' | 'ethiopic' | 'ethioaa' | 'islamic-civil' | 'islamic-tbla' | 'islamic-umalqura'",
+      description:
+        'The calendar the date segment reads and writes typed dates in, and the calendar its popover and bottom sheet show. value, onChange, min, and max stay Gregorian ISO datetimes. People type a date the way the locale writes it in this calendar, in any decimal digits; the field reports a date only once it is complete, and names a date the calendar does not have. Years are years of this calendar, so set min and max on Buddhist and Minguo calendar fields to catch a Gregorian year typed by mistake. Calendars other than gregory, iso8601, buddhist, roc, and japanese need Temporal, native or a polyfill the application loads; without it the field shows Gregorian dates. With a calendar other than gregory or iso8601, a presentation that would show native controls shows the popovers on a fine pointer and the bottom sheet on a coarse pointer, because the native date control is Gregorian; the Date panel of the bottom sheet shows the months, leap months, and era years of the calendar. A year in which the era changes is labeled with the era of the shown month, such as 平成31 in January 2019 and 令和元 in July.',
+      default: "the InternationalizationProvider's calendar, else 'gregory'",
     },
     {
       name: 'timePlaceholder',
@@ -193,14 +200,14 @@ export const docs = {
       name: 'presentation',
       type: "'popover' | 'bottom-sheet' | 'native' | 'adaptive-bottom-sheet' | 'adaptive-native'",
       description:
-        "Which surfaces draw the date and time pickers. 'adaptive-native' (the default) uses Astryx's typed fields and popovers on a fine pointer and browser/OS controls on a coarse pointer — with per-segment Astryx fallbacks: hasSeconds, non-default timeIncrement, or timeOptionInterval retain Astryx's time field because iOS cannot express them faithfully; 'native' always uses both browser/OS controls with no fallback; 'adaptive-bottom-sheet' uses popovers on a fine pointer and Astryx's coordinated bottom sheet on a coarse pointer; 'popover' and 'bottom-sheet' force that Astryx surface on every pointer. Every value opens pickers; typed-only fields are TimeInput's alone. Use a non-native presentation when numberOfMonths, weekStartsOn, or visible dateConstraints behavior matters. Constraints are enforced on commit; min/max are forwarded as hints. hourFormat formats the closed time, while the OS picker follows the user's locale.",
+        "Which surfaces draw the date and time pickers. 'adaptive-native' (the default) uses Astryx's typed fields and popovers on a fine pointer and browser/OS controls on a coarse pointer — with per-segment Astryx fallbacks: hasSeconds, non-default timeIncrement, or timeOptionInterval retain Astryx's time field because iOS cannot express them faithfully; 'native' always uses both browser/OS controls with no fallback; 'adaptive-bottom-sheet' uses popovers on a fine pointer and Astryx's coordinated bottom sheet on a coarse pointer; 'popover' and 'bottom-sheet' force that Astryx surface on every pointer. Every value opens pickers; typed-only fields are TimeInput's alone. Use a non-native presentation when numberOfMonths, weekStartsOn, or visible dateConstraints behavior matters. Constraints are enforced on commit; min/max are forwarded as hints. hourFormat formats the closed time, while the OS picker follows the user's locale. With a calendar other than gregory or iso8601, 'native' and 'adaptive-native' use the popovers on a fine pointer and the bottom sheet on a coarse pointer, and an explicit 'native' warns in development.",
       default: "'adaptive-native'",
     },
     {
       name: 'nativePicker',
       type: "'touch' | 'always' | 'never'",
       description:
-        "Deprecated: use presentation ('touch' = 'adaptive-native', 'always' = 'native', 'never' = 'adaptive-bottom-sheet'). Still works exactly as released; presentation wins when both are set.",
+        "Deprecated: use presentation ('touch' = 'adaptive-native', 'always' = 'native', 'never' = 'adaptive-bottom-sheet'). Still works exactly as released; presentation wins when both are set. With a calendar other than gregory or iso8601, 'touch' and 'always' use the popovers on a fine pointer and the bottom sheet on a coarse pointer.",
       default: "'touch'",
     },
     {
@@ -261,6 +268,11 @@ export const docs = {
         guidance: true,
         description:
           'Use min and max to restrict selectable datetimes to valid ranges.',
+      },
+      {
+        guidance: true,
+        description:
+          'Set min and max on a Buddhist or Minguo calendar field, so a Gregorian year typed by mistake shows an error instead of a date centuries away.',
       },
       {
         guidance: true,
@@ -388,6 +400,11 @@ export const docsZh = {
       {
         guidance: true,
         description:
+          'Set min and max on a Buddhist or Minguo calendar field, so a Gregorian year typed by mistake shows an error instead of a date centuries away.',
+      },
+      {
+        guidance: true,
+        description:
           'Use hasClear when the datetime is optional so the user can reset it.',
       },
       {
@@ -445,7 +462,8 @@ export const docsZh = {
     {
       name: 'isDisabled',
       type: 'boolean',
-      description: '禁用输入框和选择器。字段仍可聚焦并暴露 `aria-disabled`，但不能输入或打开选择器。',
+      description:
+        '禁用输入框和选择器。字段仍可聚焦并暴露 `aria-disabled`，但不能输入或打开选择器。',
       default: 'false',
     },
     {
@@ -522,8 +540,16 @@ export const docsZh = {
     {
       name: 'placeholder',
       type: 'string',
-      description: '日期部分未选择日期时显示的占位符文本。',
+      description:
+        '日期部分未选择日期时显示的占位符文本。调用方提供的占位符会替代日历格式提示。',
       default: "'Select a date'",
+    },
+    {
+      name: 'calendar',
+      type: "'gregory' | 'iso8601' | 'buddhist' | 'roc' | 'japanese' | 'persian' | 'indian' | 'hebrew' | 'chinese' | 'dangi' | 'coptic' | 'ethiopic' | 'ethioaa' | 'islamic-civil' | 'islamic-tbla' | 'islamic-umalqura'",
+      description:
+        '日期部分读写输入日期所用的历法，也是其弹出日历和底部面板显示的历法。value、onChange、min 和 max 始终为公历 ISO 日期时间。用户按当前语言区域在该历法中的写法输入日期，可使用任意十进制数字；只有输入完整时字段才会报告日期，并会指出该历法中不存在的日期。年份是该历法的年份，因此请为佛历和民国纪年字段设置 min 和 max，以发现误输入的公历年份。gregory、iso8601、buddhist、roc 和 japanese 以外的历法需要 Temporal（原生或由应用加载的 polyfill）；没有 Temporal 时字段显示公历日期。使用 gregory 或 iso8601 以外的历法时，原本显示原生控件的呈现会在精细指针上显示弹出层、在粗指针上显示底部面板，因为原生日期控件只显示公历；底部面板的日期页显示该历法的月份、闰月和带纪元的年份。年号更替的年份按所显示月份的年号标注，如 2019 年 1 月为“平成31”，7 月为“令和元”。',
+      default: "InternationalizationProvider 的历法，否则为 'gregory'",
     },
     {
       name: 'timePlaceholder',
@@ -572,14 +598,14 @@ export const docsZh = {
       name: 'presentation',
       type: "'popover' | 'bottom-sheet' | 'native' | 'adaptive-bottom-sheet' | 'adaptive-native'",
       description:
-        "选择由哪些界面绘制日期和时间选择器。'adaptive-native'（默认）在精细指针上使用 Astryx 文本字段与弹出层、在粗指针上使用浏览器/操作系统控件，并按段回退：hasSeconds、非默认 timeIncrement 或 timeOptionInterval 会保留 Astryx 时间字段；'native' 始终使用两个原生控件且不回退；'adaptive-bottom-sheet' 在精细指针上用弹出层、在粗指针上用 Astryx 协调底部面板；'popover' 与 'bottom-sheet' 在任何指针上强制使用对应 Astryx 界面。每个值都会打开选择器；仅文本字段的呈现只属于 TimeInput。需要 numberOfMonths、weekStartsOn 或可见 dateConstraints 行为时请使用非原生呈现。约束会在提交时执行，min/max 作为提示传给原生控件。hourFormat 格式化关闭状态的时间，而操作系统选择器遵循用户区域设置。",
+        "选择由哪些界面绘制日期和时间选择器。'adaptive-native'（默认）在精细指针上使用 Astryx 文本字段与弹出层、在粗指针上使用浏览器/操作系统控件，并按段回退：hasSeconds、非默认 timeIncrement 或 timeOptionInterval 会保留 Astryx 时间字段；'native' 始终使用两个原生控件且不回退；'adaptive-bottom-sheet' 在精细指针上用弹出层、在粗指针上用 Astryx 协调底部面板；'popover' 与 'bottom-sheet' 在任何指针上强制使用对应 Astryx 界面。每个值都会打开选择器；仅文本字段的呈现只属于 TimeInput。需要 numberOfMonths、weekStartsOn 或可见 dateConstraints 行为时请使用非原生呈现。约束会在提交时执行，min/max 作为提示传给原生控件。hourFormat 格式化关闭状态的时间，而操作系统选择器遵循用户区域设置。使用 gregory 或 iso8601 以外的历法时，'native' 与 'adaptive-native' 在精细指针上使用弹出层、在粗指针上使用底部面板，显式的 'native' 会在开发环境中发出警告。",
       default: "'adaptive-native'",
     },
     {
       name: 'nativePicker',
       type: "'touch' | 'always' | 'never'",
       description:
-        "已弃用：请使用 presentation（'touch'='adaptive-native'、'always'='native'、'never'='adaptive-bottom-sheet'）。仍按已发布行为工作；同时设置时以 presentation 为准。",
+        "已弃用：请使用 presentation（'touch'='adaptive-native'、'always'='native'、'never'='adaptive-bottom-sheet'）。仍按已发布行为工作；同时设置时以 presentation 为准。使用 gregory 或 iso8601 以外的历法时，'touch' 与 'always' 在精细指针上使用弹出层、在粗指针上使用底部面板。",
       default: "'touch'",
     },
     {
@@ -644,6 +670,11 @@ export const docsDense = {
       {
         guidance: true,
         description:
+          'Set min and max on a Buddhist or Minguo calendar field, so a Gregorian year typed by mistake shows an error instead of a date centuries away.',
+      },
+      {
+        guidance: true,
+        description:
           'Use hasClear when the datetime is optional so the user can reset it.',
       },
       {
@@ -699,6 +730,8 @@ export const docsDense = {
       'preset-time combobox cadence; setting it retains Astryx time field because native pickers have no equivalent list',
     hasClear: 'Shows clear button when datetime is set',
     placeholder: 'date-portion placeholder when empty',
+    calendar:
+      "calendar for typed + committed date text, the popover, and the sheet's Date panel (months, leap months, era years; an era-change year follows the shown month, e.g. 平成31 in Jan 2019, 令和元 in Jul) (default: provider's, else 'gregory'); values stay Gregorian ISO; years are the calendar's, so set min/max on buddhist/roc fields; non-Gregorian-aligned calendars need Temporal (native or app-loaded polyfill), else Gregorian; non-gregory/iso8601 never shows native controls: popovers fine / sheet coarse",
     timePlaceholder:
       'time-portion placeholder when empty; shown on touch closed time segment',
     timeLabel:
@@ -711,9 +744,9 @@ export const docsDense = {
     weekStartsOn:
       'first day of week in Astryx calendars (0=Sunday, or name e.g. "mon"); ignored by native date controls',
     presentation:
-      "date+time surfaces: 'adaptive-native' (default) = Astryx popovers fine / browser/OS coarse w/ per-segment fallbacks (seconds/timeIncrement/timeOptionInterval); 'native' = browser/OS always, no fallback; 'adaptive-bottom-sheet' = popovers fine / coordinated sheet coarse; 'popover'/'bottom-sheet' force Astryx. every value opens pickers (no typed-only value; that is TimeInput's).",
+      "date+time surfaces: 'adaptive-native' (default) = Astryx popovers fine / browser/OS coarse w/ per-segment fallbacks (seconds/timeIncrement/timeOptionInterval); 'native' = browser/OS always, no fallback; 'adaptive-bottom-sheet' = popovers fine / coordinated sheet coarse; 'popover'/'bottom-sheet' force Astryx. every value opens pickers (no typed-only value; that is TimeInput's). non-gregory/iso8601 calendar: native + adaptive-native become popovers fine / sheet coarse; explicit 'native' warns in dev.",
     nativePicker:
-      "deprecated, use presentation: 'touch'='adaptive-native', 'always'='native', 'never'='adaptive-bottom-sheet'. still works as released; presentation wins if both set.",
+      "deprecated, use presentation: 'touch'='adaptive-native', 'always'='native', 'never'='adaptive-bottom-sheet'. still works as released, except that a calendar other than gregory or iso8601 never shows the native control; presentation wins if both set.",
     containerXstyle:
       'Field box (label+control+status); also containerClassName/containerStyle. no effect in InputGroup or horizontal-labels FormLayout',
     controlXstyle:

@@ -12,7 +12,12 @@
  */
 
 import AxeBuilder from '@axe-core/playwright';
-import {expect, test, type Locator, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   COMBOBOX_PATTERN,
   blockingResults,

@@ -203,6 +203,7 @@ function holdNodeDocument(
  * tracker of its own for modality.
  */
 export function useInteractionModalityTracking(): InteractionModalityTracking {
+  // Syncs the document's interaction-modality tracking with this mount.
   useEffect(() => trackInteractionModality(), []);
   const nodeRef = useRef<Element | null>(null);
   const holdRef = useRef<{release: (() => void) | null}>({release: null});
@@ -231,15 +232,24 @@ export function useInteractionModalityTracking(): InteractionModalityTracking {
  * (useMenuPress's `menuRef`, useTouchTrigger's trigger), so it cannot attach a
  * callback ref. After every commit it holds the ref's CURRENT owner document,
  * and the same Effect's cleanup releases it, so a detached, replaced or moved
- * node releases the old document before the new one is held.
+ * node releases the old document before the new one is held. While
+ * `isEnabled` is false, it holds no tracking.
  */
 export function useInteractionModalityTrackingFor(
   elementRef: RefObject<Element | null>,
+  isEnabled: boolean = true,
 ): () => InteractionModality {
-  useEffect(() => trackInteractionModality(), []);
+  // Syncs the document's interaction-modality tracking with this mount.
+  useEffect(
+    () => (isEnabled ? trackInteractionModality() : undefined),
+    [isEnabled],
+  );
+  // Syncs modality tracking in the element's second document, such as an iframe
+  // or a Picture-in-Picture window.
   useEffect(() => {
     const ownerDocument = elementRef.current?.ownerDocument;
     if (
+      !isEnabled ||
       ownerDocument == null ||
       (typeof document !== 'undefined' && ownerDocument === document)
     ) {

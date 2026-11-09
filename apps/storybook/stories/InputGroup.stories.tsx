@@ -55,6 +55,7 @@ type Story = StoryObj<typeof InputGroup>;
 
 const TEAM_OPTIONS = ['Design Systems', 'Infrastructure', 'Product'];
 const VISIBILITY_OPTIONS = ['Only me', 'Members', 'Anyone'];
+const COUNTRY_CODE_OPTIONS = ['+1', '+44', '+81'];
 
 export const WithPrefix: Story = {
   render: args => {
@@ -577,5 +578,38 @@ export const AllVariations: Story = {
         </InputGroup>
       </div>
     );
+  },
+};
+
+/**
+ * Two inputs side by side, with no addon between them. Focus either one: its
+ * whole focus ring shows, because a focused member stays above its
+ * neighbour.
+ */
+export const AdjacentInputs: Story = {
+  render: args => {
+    const [code, setCode] = useState<string | undefined>('+1');
+    const [number, setNumber] = useState('');
+    return (
+      <InputGroup {...args}>
+        <Selector
+          label="Country code"
+          isLabelHidden
+          options={COUNTRY_CODE_OPTIONS}
+          value={code}
+          onChange={setCode}
+        />
+        <TextInput
+          label="Number"
+          isLabelHidden
+          value={number}
+          onChange={setNumber}
+          placeholder="555 0100"
+        />
+      </InputGroup>
+    );
+  },
+  args: {
+    label: 'Phone',
   },
 };

@@ -36,6 +36,7 @@ import {
 import {installCommandFor} from './_adapter.mjs';
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
 import {Project} from '../../foundation/config/project.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
 const cwd = REPO;
@@ -102,11 +103,15 @@ describe('doctor never reads the carried Core (spec AST-081 FR3)', () => {
     const load = vi.spyOn(Project, 'load');
     const coreDir = vi.spyOn(Project.prototype, 'coreDir');
     try {
-      await doctor({cwd: dir});
+      const r = await doctor({cwd: dir});
       // Doctor's own project reads only the installed Core, and no Core a
       // project read during the run is the carried one.
       expect(load.mock.calls.some(([, options]) => options?.core === 'project')).toBe(true);
-      expect(coreDir).toHaveBeenCalled();
+      // Nothing is installed, so the Core check fails. The carried Core would
+      // pass it.
+      expect(
+        r.data.checks.find(check => check.id === 'core-installed'),
+      ).toMatchObject({status: 'fail'});
       for (const result of coreDir.mock.results) expect(result.value).toBeNull();
     } finally {
       load.mockRestore();
@@ -675,7 +680,7 @@ describe('checkDocsProgressiveDisclosure', () => {
   });
 
   it('names a section over the budget and a topic that fails to load', async () => {
-    const dir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-doctor-docs-'));
+    const dir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-doctor-docs-'));
     tmpDirs.push(dir);
     const huge = {
       name: 'huge',
@@ -720,7 +725,7 @@ describe('checkCliDocs', () => {
 
   /** A doc tree under the working directory, as the CLI root. */
   function writeRoot(/** @type {Record<string, any>} */ docsByPath) {
-    const root = fs.mkdtempSync(path.join(process.cwd(), '.astryx-doctor-cli-docs-'));
+    const root = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-doctor-cli-docs-'));
     tmpDirs.push(root);
     for (const [rel, doc] of Object.entries(docsByPath)) {
       const file = path.join(root, rel);
@@ -856,7 +861,7 @@ describe('checkAuthoringDocs against the public authoring surface', () => {
   /** A copy of this repo's authoring tree, to break one piece of at a time. */
   function copyAuthoring() {
     const root = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-doctor-authoring-'),
+      path.join(REPO_ROOT, '.astryx-doctor-authoring-'),
     );
     tmpDirs.push(root);
     fs.cpSync(AUTHORING_ROOT, root, {
@@ -1111,7 +1116,7 @@ describe('doctor docs checks', () => {
 
 describe('checkDocsProgressiveDisclosure languages', () => {
   it('checks every overlay a topic ships, not only English', async () => {
-    const dir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-doctor-lang-'));
+    const dir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-doctor-lang-'));
     tmpDirs.push(dir);
     const deploying = {
       name: 'deploying',
@@ -1258,7 +1263,7 @@ describe('doctor says why it skipped and what it checked', () => {
   /** A project under the working directory, so its config can be imported. */
   function cwdProject(files) {
     const dir = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-doctor-shape-'),
+      path.join(REPO_ROOT, '.astryx-doctor-shape-'),
     );
     tmpDirs.push(dir);
     for (const [rel, content] of Object.entries(files)) {
@@ -1385,7 +1390,7 @@ describe('a configured integration that cannot load fails the gate', () => {
    * @param {string} [at]
    */
   async function report(files, at = '.') {
-    const dir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-doctor-gate-'));
+    const dir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-doctor-gate-'));
     tmpDirs.push(dir);
     for (const [rel, content] of Object.entries(files)) {
       const abs = path.join(dir, rel);
@@ -1483,7 +1488,7 @@ describe('a configured integration that cannot load fails the gate', () => {
   it(
     'fails when node_modules links the configured name back to the authored package and its manifest throws',
     async () => {
-      const dir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-doctor-gate-'));
+      const dir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-doctor-gate-'));
       tmpDirs.push(dir);
       const files = {
         ...CORE_STUB,
@@ -1512,9 +1517,9 @@ describe('a configured integration that cannot load fails the gate', () => {
   it(
     'fails for the self-linked authored package when the working directory is itself a symlink',
     async () => {
-      const real = fs.mkdtempSync(path.join(process.cwd(), '.astryx-doctor-gate-'));
+      const real = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-doctor-gate-'));
       tmpDirs.push(real);
-      const linkParent = fs.mkdtempSync(path.join(process.cwd(), '.astryx-doctor-gate-'));
+      const linkParent = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-doctor-gate-'));
       tmpDirs.push(linkParent);
       const cwd = path.join(linkParent, 'link');
       fs.symlinkSync(real, cwd, 'dir');
