@@ -67,7 +67,9 @@ async function calibrate(page: Page): Promise<number> {
       await page.evaluate(() => {
         const start = performance.now();
         let sum = 0;
-        for (let i = 0; i < 20_000_000; i++) sum += Math.sqrt(i);
+        for (let i = 0; i < 20_000_000; i++) {
+          sum += Math.sqrt(i);
+        }
         // Using the sum keeps the loop from being optimized away.
         return performance.now() - start + (sum < 0 ? 1 : 0);
       }),
