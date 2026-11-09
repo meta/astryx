@@ -13,7 +13,7 @@ import {
 import {Heading} from '@astryxdesign/core/Text';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Tooltip} from '@astryxdesign/core/Tooltip';
-import {Theme, defineTheme} from '@astryxdesign/core/theme';
+import {Theme, defineTheme, useTheme} from '@astryxdesign/core/theme';
 import {neutralTheme} from '@astryxdesign/theme-neutral';
 import {
   PlusIcon,
@@ -1120,15 +1120,17 @@ export const DescribedTabs: Story = {
 };
 
 /**
- * An editor-style strip that underlines the whole selected tab. A nested Theme
- * restyles the `tab-indicator` target, so only this strip changes.
+ * An editor-style strip that runs the selected indicator edge to edge. A
+ * nested Theme restyles the `tab-indicator` target, so only this strip
+ * changes; it takes the outer color mode. `insetInline` is not a guaranteed
+ * property of that target, so the override is best effort across releases.
  */
 const fullWidthIndicatorTheme = defineTheme({
   name: 'full-width-tab-indicator',
   extends: neutralTheme,
   components: {
     'tab-indicator': {
-      base: {insetInline: 0},
+      base: {insetInline: '0'},
     },
   },
 });
@@ -1137,13 +1139,13 @@ export const FullWidthIndicator: Story = {
   name: 'Full-Width Indicator (Nested Theme)',
   render: () => {
     const [value, setValue] = useState('app');
+    const {mode} = useTheme();
     return (
       <VStack gap={4}>
-        <Theme theme={fullWidthIndicatorTheme}>
+        <Theme theme={fullWidthIndicatorTheme} mode={mode}>
           <TabList
             value={value}
             onChange={setValue}
-            role="tablist"
             aria-label="Open files"
             size="sm"
             hasDivider>

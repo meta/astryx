@@ -18,27 +18,32 @@ export const docs = {
     {
       label: 'Underline the whole tab in one strip',
       code: `import {Tab, TabList} from '@astryxdesign/core/TabList';
-import {Theme, defineTheme} from '@astryxdesign/core/theme';
+import {Theme, defineTheme, useTheme} from '@astryxdesign/core/theme';
 import {appTheme} from './theme';
 
-// The selected indicator spans the label by default. An editor-style strip
-// can underline the whole tab, icon and end content included, by restyling
+// By default the selected indicator spans the tab's content and stops at its
+// inline padding. An editor-style strip can run it edge to edge by restyling
 // the tab-indicator target in a nested Theme. Only this strip changes: every
-// other TabList keeps the app theme's indicator.
+// other TabList keeps the app theme's indicator. insetInline is not a
+// guaranteed property of the tab-indicator target, so treat this override as
+// best effort across releases.
 const fullWidthIndicatorTheme = defineTheme({
   name: 'full-width-tab-indicator',
   extends: appTheme,
   components: {
     'tab-indicator': {
-      base: {insetInline: 0},
+      base: {insetInline: '0'},
     },
   },
 });
 
+// An open-files bar switches views, so it uses TabList's navigation pattern
+// (no role="tablist"). The nested Theme takes the app's color mode.
 function EditorTabs() {
+  const {mode} = useTheme();
   return (
-    <Theme theme={fullWidthIndicatorTheme}>
-      <TabList value="app" onChange={() => {}} role="tablist" aria-label="Open files" size="sm" hasDivider>
+    <Theme theme={fullWidthIndicatorTheme} mode={mode}>
+      <TabList value="app" onChange={() => {}} aria-label="Open files" size="sm" hasDivider>
         <Tab value="app" label="App.tsx" />
         <Tab value="styles" label="styles.css" />
       </TabList>
