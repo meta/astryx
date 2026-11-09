@@ -97,6 +97,19 @@ export const CustomDelay: Story = {
   },
 };
 
+export const NeighbouringTriggers: Story = {
+  render: () => (
+    <HStack gap={2}>
+      <Tooltip content="First hint" delay={1000}>
+        <Button label="First action">First action</Button>
+      </Tooltip>
+      <Tooltip content="Second hint" delay={1000}>
+        <Button label="Second action">Second action</Button>
+      </Tooltip>
+    </HStack>
+  ),
+};
+
 export const Disabled: Story = {
   name: 'Disabled Tooltip',
   args: {

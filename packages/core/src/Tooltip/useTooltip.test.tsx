@@ -95,6 +95,88 @@ function tick(ms: number) {
   });
 }
 
+function Neighbour({name, ...options}: TooltipOptions & {name: string}) {
+  const tooltip = useTooltip(options);
+  return (
+    <>
+      <button
+        type="button"
+        ref={tooltip.ref}
+        aria-describedby={tooltip.describedBy}>
+        {name}
+      </button>
+      {tooltip.renderTooltip(`${name} help`)}
+    </>
+  );
+}
+
+describe('useTooltip — neighbouring triggers', () => {
+  it('keeps a warm group when a caller replaces its inline ref', async () => {
+    const onShow = vi.fn();
+    const pair = () => (
+      <>
+        <MergedRefHarness consumerRef={() => {}} />
+        <Neighbour name="Second" onShow={onShow} />
+      </>
+    );
+    const {rerender} = render(pair());
+    fireEvent.mouseEnter(trigger());
+    tick(200);
+    rerender(pair());
+    await act(async () => {});
+    const second = screen.getByRole('button', {name: 'Second'});
+    fireEvent.mouseLeave(trigger(), {relatedTarget: second});
+    fireEvent.mouseEnter(second, {relatedTarget: trigger()});
+    expect(onShow).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the next tooltip without another delay and closes the previous one', () => {
+    const firstShow = vi.fn();
+    const firstHide = vi.fn();
+    const secondShow = vi.fn();
+    render(
+      <>
+        <Neighbour name="First" onShow={firstShow} onHide={firstHide} />
+        <Neighbour name="Second" onShow={secondShow} />
+      </>,
+    );
+    const first = screen.getByRole('button', {name: 'First'});
+    const second = screen.getByRole('button', {name: 'Second'});
+    fireEvent.mouseEnter(first);
+    tick(199);
+    expect(firstShow).not.toHaveBeenCalled();
+    tick(1);
+    expect(firstShow).toHaveBeenCalledTimes(1);
+
+    fireEvent.mouseLeave(first, {relatedTarget: second});
+    fireEvent.mouseEnter(second, {relatedTarget: first});
+    expect(secondShow).toHaveBeenCalledTimes(1);
+    expect(firstHide).toHaveBeenCalledTimes(1);
+    tick(200);
+    expect(firstHide).toHaveBeenCalledTimes(1);
+    expect(secondShow).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits again after leaving the group beyond the hover bridge', () => {
+    const onShow = vi.fn();
+    render(
+      <>
+        <Neighbour name="First" />
+        <Neighbour name="Second" onShow={onShow} />
+      </>,
+    );
+    fireEvent.mouseEnter(screen.getByRole('button', {name: 'First'}));
+    tick(200);
+    fireEvent.mouseLeave(screen.getByRole('button', {name: 'First'}));
+    tick(100);
+    fireEvent.mouseEnter(screen.getByRole('button', {name: 'Second'}));
+    tick(199);
+    expect(onShow).not.toHaveBeenCalled();
+    tick(1);
+    expect(onShow).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('useTooltip — show delay', () => {
   it('does not show before the default 200ms delay elapses', () => {
     const onShow = vi.fn();

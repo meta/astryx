@@ -86,7 +86,8 @@ export const docs = {
         {
           name: 'delay',
           type: 'number',
-          description: 'Show delay in milliseconds.',
+          description:
+            'Initial hover delay in milliseconds. Moving between tooltip triggers in the same document skips it while the previous tooltip is still within its hover bridge. Leaving beyond the bridge restores the delay.',
           default: '200',
         },
         {
@@ -220,7 +221,8 @@ export const docsZh = {
         {
           name: 'delay',
           type: 'number',
-          description: '显示延迟（毫秒）。',
+          description:
+            '首次悬停显示延迟（毫秒）。同一文档内，在悬停桥接时间内移至其他提示触发器时跳过延迟；离开超过桥接时间后恢复。',
           default: '200',
         },
         {
@@ -354,7 +356,8 @@ export const docsDense = {
           "Position relative to anchor. Logical: start/end follow the popover's inherited direction (RTL mirrors).",
         alignment:
           "Alignment along placement axis. Logical: start/end follow the popover's inherited direction (RTL mirrors).",
-        delay: 'Show delay in ms.',
+        delay:
+          'Initial hover delay in ms. Skipped between triggers in the same document during the hover bridge; restored after leaving beyond it.',
         hideDelay: 'Hide delay in ms.',
         focusTrigger: 'Controls when focus events trigger tooltip.',
         touchTrigger:

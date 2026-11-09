@@ -4,7 +4,7 @@
 
 /**
  * @file useTooltip.tsx
- * @input Uses useLayer, useTouchTriggerInternal, React hooks
+ * @input Uses useLayer, useTouchTriggerInternal, HoverGestureRecognizer, React hooks
  * @output Exports useTooltip hook with stable trigger refs for hover/focus/tap tooltips
  *   and imperative show() and hide() for an app-built toggle trigger
  * @position Layer hook; builds on useLayer for tooltip behavior
@@ -23,6 +23,7 @@ import {
   type RefCallback,
 } from 'react';
 import {TooltipPresentInterestContext} from './tooltipPresentInterest';
+import {HoverGestureRecognizer} from '../gestures/HoverGestureRecognizer';
 import {createTriggerFocusGate, isFocusOnTrigger} from '../utils/triggerFocus';
 import * as stylex from '@stylexjs/stylex';
 import {
@@ -105,7 +106,7 @@ export interface TooltipOptions {
   alignment?: LayerAlignment;
 
   /**
-   * Delay before showing on hover (ms)
+   * Initial hover delay (ms). Moving between warm tooltip triggers skips it.
    * @default 200
    */
   delay?: number;
@@ -312,8 +313,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
 
   const popoverXstyle = styles.container;
 
-  const showTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [hover] = useState(() => new HoverGestureRecognizer());
   const triggerRef = useRef<HTMLElement | null>(null);
   // Set only by a Core component that mounts the tooltip on interaction.
   const presentInterest = use(TooltipPresentInterestContext);
@@ -331,15 +331,8 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
 
   // Clear all timeouts
   const clearTimeouts = useCallback(() => {
-    if (showTimeoutRef.current) {
-      clearTimeout(showTimeoutRef.current);
-      showTimeoutRef.current = null;
-    }
-    if (hideTimeoutRef.current) {
-      clearTimeout(hideTimeoutRef.current);
-      hideTimeoutRef.current = null;
-    }
-  }, []);
+    hover.cancel();
+  }, [hover]);
 
   // Touch resolves immediately: the hover delays exist to filter out a pointer
   // passing across the trigger, and a tap is never that.
@@ -478,19 +471,45 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
 
   // Schedule show with delay (suppressed when isOpen is false)
   const scheduleShow = useCallback(() => {
-    if (!isEnabled || isOpen === false) {
+    const document = triggerRef.current?.ownerDocument;
+    if (!isEnabled || isOpen === false || document == null) {
       return;
     }
-    clearTimeouts();
     const disabledRenders = disabledRendersRef.current;
-    showTimeoutRef.current = setTimeout(() => {
-      // A show runs only if the tooltip stayed enabled since it was
-      // scheduled: nothing would close a tooltip that opens after a disable.
-      if (disabledRendersRef.current === disabledRenders) {
-        showLayer();
-      }
-    }, delay);
-  }, [isEnabled, isOpen, clearTimeouts, showLayer, delay]);
+    hover.enter(
+      document,
+      {
+        enterMs: delay,
+        exitMs: hideDelay > 0 ? hideDelay : HOVER_BRIDGE_DELAY,
+        group: 'tooltip',
+      },
+      {
+        isActive: () =>
+          isEnabledRef.current &&
+          disabledRendersRef.current === disabledRenders &&
+          latestRef.current.isOpen === undefined &&
+          !isHeldRef.current,
+        onEnter: () => {
+          showLayer();
+          return true;
+        },
+        onExit: () => {
+          if (latestRef.current.isOpen === undefined && !isHeldOpen()) {
+            hideLayer();
+          }
+        },
+      },
+    );
+  }, [
+    isEnabled,
+    isOpen,
+    hover,
+    showLayer,
+    hideLayer,
+    isHeldOpen,
+    delay,
+    hideDelay,
+  ]);
 
   // Schedule hide with delay (suppressed when isOpen is true).
   // A small hover bridge (when hideDelay is 0) lets the pointer travel from the
@@ -500,20 +519,16 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     if (isOpen === true || isHeldOpen()) {
       return;
     }
-    clearTimeouts();
     const effectiveHideDelay = hideDelay > 0 ? hideDelay : HOVER_BRIDGE_DELAY;
-    hideTimeoutRef.current = setTimeout(() => {
+    hover.leave(() => {
       hideLayer();
     }, effectiveHideDelay);
-  }, [isOpen, isHeldOpen, clearTimeouts, hideLayer, hideDelay]);
+  }, [isOpen, isHeldOpen, hover, hideLayer, hideDelay]);
 
   // Cancel a pending hide (e.g. the pointer entered the tooltip surface).
   const cancelHide = useCallback(() => {
-    if (hideTimeoutRef.current) {
-      clearTimeout(hideTimeoutRef.current);
-      hideTimeoutRef.current = null;
-    }
-  }, []);
+    hover.cancelExit();
+  }, [hover]);
 
   // Event handlers
   const handleMouseEnter = useCallback(() => {
@@ -660,10 +675,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       if (handleTouchPointerDown(event)) {
         // A pen in range starts the hover show before it lands. Left pending,
         // that show opens the layer during the press. The tap then closes it.
-        if (showTimeoutRef.current) {
-          clearTimeout(showTimeoutRef.current);
-          showTimeoutRef.current = null;
-        }
+        hover.cancelEnter();
         return;
       }
       if (isOpen !== undefined) {
@@ -677,6 +689,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       trackTriggerPress,
       isOpen,
       clearTimeouts,
+      hover,
       hideLayer,
     ],
   );
@@ -699,6 +712,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     opensOnFocus,
     presentInterest,
     answerTap,
+    clearTimeouts,
   });
   handlersRef.current = {
     handleMouseEnter,
@@ -716,6 +730,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     opensOnFocus,
     presentInterest,
     answerTap,
+    clearTimeouts,
   };
 
   // Removes the attached trigger's listeners (the trigger ref callback's
@@ -832,6 +847,12 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       if (triggerRef.current === el) {
         triggerRef.current = null;
       }
+      // Inline refs can detach and reattach the same trigger in one commit.
+      queueMicrotask(() => {
+        if (triggerRef.current == null) {
+          latest().clearTimeouts();
+        }
+      });
       // A caller removes the wiring as it disables the tooltip. Close an
       // uncontrolled tooltip then, or the next attach shows a stale tooltip.
       // A detach while enabled, such as a merged ref that changes identity
