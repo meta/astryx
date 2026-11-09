@@ -3,7 +3,8 @@
 /**
  * @file blog-list-markers.spec.ts
  * @input Production docsite's 0.7.0 release post and its 26-item migration list
- * @output App-level proof of intact counters, aligned item text, and no overlap
+ * @output App-level proof of unwrapped counters, aligned item text, no overlap,
+ *   and a bullet dot before each bulleted item
  * @position Docsite integration regression; screenshots stay in test-results
  */
 
@@ -68,12 +69,42 @@ for (const {width, dir, colorScheme} of [
     // Preserve the adjacent article structures, not just the long list.
     const steps = page.locator('ol').filter({hasText: 'Pin Core and the CLI'});
     await expect(steps.locator(':scope > li')).toHaveCount(3);
-    const bullet = page
+    // Each bulleted item keeps its marker: a text-free element before the
+    // content whose box is the small dot. A list without bullets fails here,
+    // because the item's first element is then its label.
+    const bullets = await page
       .locator('ul')
       .filter({hasText: 'Core spacing uses rem'})
-      .locator(':scope > li > span:first-child > span')
-      .first();
-    await expect(bullet).toBeVisible();
+      .locator(':scope > li')
+      .evaluateAll(items =>
+        items.map(item => {
+          const marker = item.firstElementChild;
+          const content = marker?.nextElementSibling;
+          const dot = marker?.firstElementChild;
+          if (marker == null || content == null || dot == null) {
+            return null;
+          }
+          const dotBox = dot.getBoundingClientRect();
+          const contentBox = content.getBoundingClientRect();
+          const rtl = getComputedStyle(item).direction === 'rtl';
+          return {
+            text: (marker.textContent ?? '').trim(),
+            width: dotBox.width,
+            height: dotBox.height,
+            isBeforeContent: rtl
+              ? dotBox.left >= contentBox.right
+              : dotBox.right <= contentBox.left,
+          };
+        }),
+      );
+    expect(bullets.length).toBeGreaterThan(0);
+    for (const bullet of bullets) {
+      expect(bullet).not.toBeNull();
+      expect(bullet?.text).toBe('');
+      expect(Math.abs((bullet?.width ?? 0) - 6)).toBeLessThanOrEqual(1);
+      expect(Math.abs((bullet?.height ?? 0) - 6)).toBeLessThanOrEqual(1);
+      expect(bullet?.isBeforeContent).toBe(true);
+    }
 
     await migrations.locator(':scope > li').nth(20).scrollIntoViewIfNeeded();
     await page.screenshot({
