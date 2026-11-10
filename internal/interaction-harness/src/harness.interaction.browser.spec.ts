@@ -2087,6 +2087,42 @@ test.describe('frame evidence', () => {
     ).rejects.toThrow(/no animation started/);
   });
 
+  test("blockMainThread's deadline counts a finished or cancelled run as no run", async ({
+    page,
+  }) => {
+    await page.setContent(
+      '<div id="box" style="width:80px;height:80px;background:#08f"></div>',
+    );
+    const box = page.locator('#box');
+    // A run that finished, its end value held by its fill.
+    await box.evaluate(async el => {
+      await el.animate([{opacity: 1}, {opacity: 0.5}], {
+        duration: 100,
+        fill: 'forwards',
+      }).finished;
+    });
+    await expect(
+      blockMainThread(page, 50, {during: box, minProgressMs: 16, timeout: 500}),
+    ).rejects.toThrow(/no animation started/);
+    // A run the page cancels while the wait runs.
+    await box.evaluate(el => {
+      for (const run of el.getAnimations()) {
+        run.cancel();
+      }
+      const run = el.animate([{opacity: 1}, {opacity: 0.2}], {duration: 6000});
+      setTimeout(() => {
+        run.cancel();
+      }, 200);
+    });
+    await expect(
+      blockMainThread(page, 50, {
+        during: box,
+        minProgressMs: 5000,
+        timeout: 900,
+      }),
+    ).rejects.toThrow(/no animation started/);
+  });
+
   test('a control started ahead runs half a leg ahead of the first, in the strip below, and the two read every frame', async ({
     page,
   }, testInfo) => {

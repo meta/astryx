@@ -1352,10 +1352,13 @@ export async function blockMainThread(
             }
           }
           const furthest = present
-            .filter(a => a.playState !== 'idle')
+            .filter(a => a.playState === 'running' || a.playState === 'paused')
             .sort(
               (a, b) => Number(b.currentTime ?? 0) - Number(a.currentTime ?? 0),
             )[0];
+          // The verdict reads a run that runs or is paused at this frame. A
+          // finished run, or one that left, is no run.
+          lastRun = null;
           if (furthest != null) {
             lastRun = {
               progressMs: Number(furthest.currentTime ?? 0),
