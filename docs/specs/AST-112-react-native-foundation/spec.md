@@ -101,8 +101,7 @@ shared icon names under FR17.
   - Astryx owns everything in navigation except routing state: the native
     stack and tab containers, transitions, gestures, insets, and every bar,
     header, button, and search field, rendered by the system through the
-    platform's hosts or drawn by the library. The Astryx router holds the
-    routing state and drives the `navigation` hosts. The packages of the set
+    platform's hosts or drawn by the library. The Astryx router (the library's `navigation` entry) holds the routing state and drives the platform's `navigation` hosts. The packages of the set
     take no third-party navigation dependency, a router included: their
     only third-party peer dependencies are React and React Native. A React Navigation
     adapter may exist as a separate optional package under
@@ -157,6 +156,8 @@ shared icon names under FR17.
   - `./testing` is the testing surface: mocks of every native module in its
     absent, older, and current shapes, event emitters, and a Jest setup file.
     It is public and documented.
+  - On the library, `.` holds no router, and `./navigation` holds the Astryx
+    router and its navigators (FR2).
   - On the platform, `.` is the core and exports no capability's objects or
     views; `./camera`, `./media`, `./web`, `./pdf`, `./controls`, and `./navigation` are the capabilities' entries.
   - `./host` holds the plumbing the library and the capabilities need, such
