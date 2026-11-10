@@ -128,6 +128,12 @@ describe('RadioList', () => {
       </RadioList>,
     );
 
+    const radio = screen.getByRole('radio', {name: 'Option A'});
+    expect(radio).not.toHaveAttribute('disabled');
+    expect(radio).toHaveAttribute('aria-disabled', 'true');
+    radio.focus();
+    expect(radio).toHaveFocus();
+
     // userEvent honors `pointer-events: none`, so clicking the disabled row's
     // delegate surface is genuinely blocked (it refuses and throws) rather than
     // merely ignored by the handler — the guarantee this PR's delegation relies
@@ -146,6 +152,12 @@ describe('RadioList', () => {
         <RadioListItem label="Option A" value="a" isDisabled />
       </RadioList>,
     );
+
+    const radio = screen.getByRole('radio', {name: 'Option A'});
+    expect(radio).not.toHaveAttribute('disabled');
+    expect(radio).toHaveAttribute('aria-disabled', 'true');
+    radio.focus();
+    expect(radio).toHaveFocus();
 
     // userEvent honors `pointer-events: none`, so clicking the disabled row's
     // delegate surface is genuinely blocked (it refuses and throws) rather than
@@ -412,7 +424,7 @@ describe('RadioList', () => {
       expect(radios[2]).toHaveFocus();
     });
 
-    it('skips disabled radios when choosing the deterministic tab stop', () => {
+    it('keeps disabled radios in the deterministic tab stop', () => {
       render(
         <>
           <button type="button">before</button>
@@ -425,13 +437,13 @@ describe('RadioList', () => {
         </>,
       );
       const outside = screen.getByText('before');
-      const optionB = screen.getByLabelText('Option B');
       const optionC = screen.getByLabelText('Option C');
-      // A middle enabled radio (C) entered from outside is normalized to the
-      // first *enabled* radio (B) — the disabled Option A is skipped.
+      // A middle radio (C) entered from outside is normalized to the first
+      // radio (A). Disabled radios stay focusable and remain in the group's
+      // tab sequence.
       outside.focus();
       optionC.focus();
-      expect(optionB).toHaveFocus();
+      expect(screen.getByLabelText('Option A')).toHaveFocus();
     });
   });
 
