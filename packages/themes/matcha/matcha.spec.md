@@ -13,6 +13,7 @@ verified_by:
     packages/themes/matcha/src/matchaTheme.test.ts,
     packages/themes/matcha/src/matchaColorMapping.test.ts,
     scripts/generate-matcha-palette-refs.test.mjs,
+    scripts/check-secondary-text-contrast.test.mjs,
   ]
 package: '@astryxdesign/theme-matcha'
 source_theme: packages/themes/matcha/src/matchaTheme.ts
@@ -84,10 +85,11 @@ Matcha-specific mapping and rendered-component evidence covers light and dark
 semantic and categorical states. A palette stop alone is not an accessibility
 claim; contextual component evidence remains authoritative.
 
+Light secondary text (`--color-text-secondary`, Neutral Light 30) measures
+5.11:1 on the body and 5.88:1 on the surface and card.
+
 Known normal-text exceptions in the maintained mappings are:
 
-- light secondary body text at 16px is 3.83:1 on the body; typographic role and
-  placement distinguish it from primary content;
 - light success, warning, and error Banner descriptions and FieldStatus text are
   4.58:1, 5.01:1, and 4.73:1 when their translucent fills are composited over
   white. Over the light body `#f0f0e0`, the same pairs are 4.03:1, 4.42:1, and

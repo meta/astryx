@@ -296,6 +296,50 @@ const SHIPPED_THEMES = [
   'y2k',
 ] as const;
 
+/**
+ * The caption's colour against the lightest pixel in its top padding, above
+ * its first line: what the text sits on, with no glyph there.
+ */
+async function captionContrast(page: Page, caption: Locator) {
+  await frames(page, 2);
+  const {color, points, isOverPhoto} = await caption.evaluate(box => {
+    const element =
+      box.matches('.astryx-text') || box.querySelector('.astryx-text') == null
+        ? box
+        : (box.querySelector('.astryx-text') as Element);
+    const style = getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    const y = rect.top + parseFloat(style.paddingTop) / 2;
+    const spots = [0.25, 0.5, 0.75].map(f => ({
+      x: rect.left + rect.width * f,
+      y,
+    }));
+    const photo = element
+      .closest('[data-current]')
+      ?.querySelector('img')
+      ?.getBoundingClientRect();
+    return {
+      color: style.color,
+      points: spots,
+      isOverPhoto:
+        photo != null &&
+        spots.every(
+          ({x, y: top}) =>
+            top >= photo.top &&
+            top <= photo.bottom &&
+            x >= photo.left &&
+            x <= photo.right,
+        ),
+    };
+  });
+  const shot = PNG.sync.read(await page.screenshot());
+  const scale = shot.width / (page.viewportSize()?.width ?? shot.width);
+  return {
+    value: contrast(parseRgb(color), lightestAt(shot, scale, points)),
+    isOverPhoto,
+  };
+}
+
 for (const theme of SHIPPED_THEMES) {
   test(`over a zoomed light photo, Close, Previous, Next and the counter keep their contrast (${theme})`, async ({
     page,
@@ -511,45 +555,9 @@ for (const [photo, fill] of [
       )
       .toBe(2000);
     const caption = dialog
-      .locator('[data-current] [data-lightbox-caption] .astryx-text')
+      .locator('[data-current] [data-lightbox-caption]')
       .first();
-    // The caption's colour against the lightest pixel in its top padding,
-    // above its first line: what the text sits on, with no glyph there.
-    const ratio = async () => {
-      await frames(page, 2);
-      const {color, points, isOverPhoto} = await caption.evaluate(element => {
-        const style = getComputedStyle(element);
-        const box = element.getBoundingClientRect();
-        const y = box.top + parseFloat(style.paddingTop) / 2;
-        const spots = [0.25, 0.5, 0.75].map(f => ({
-          x: box.left + box.width * f,
-          y,
-        }));
-        const photo = element
-          .closest('[data-current]')
-          ?.querySelector('img')
-          ?.getBoundingClientRect();
-        return {
-          color: style.color,
-          points: spots,
-          isOverPhoto:
-            photo != null &&
-            spots.every(
-              ({x, y: top}) =>
-                top >= photo.top &&
-                top <= photo.bottom &&
-                x >= photo.left &&
-                x <= photo.right,
-            ),
-        };
-      });
-      const shot = PNG.sync.read(await page.screenshot());
-      const scale = shot.width / (page.viewportSize()?.width ?? shot.width);
-      return {
-        value: contrast(parseRgb(color), lightestAt(shot, scale, points)),
-        isOverPhoto,
-      };
-    };
+    const ratio = async () => captionContrast(page, caption);
     const inBand = await ratio();
     expect(inBand.value, 'in the band').toBeGreaterThanOrEqual(4.5);
     await tapOn(dialog.getByRole('button', {name: 'more'}));
@@ -627,6 +635,42 @@ for (const [story, trigger] of [
     expect(
       contrast(parseRgb(color), lightestAt(shot, scale, points)),
     ).toBeGreaterThanOrEqual(4.5);
+  });
+}
+
+// A light page's overlay is the lightest backdrop under the caption's band.
+for (const theme of SHIPPED_THEMES) {
+  test(`in light mode, a gallery's caption keeps 4.5:1 in its band (${theme})`, async ({
+    page,
+  }) => {
+    await page.route('https://picsum.photos/**', async route =>
+      route.fulfill({
+        contentType: 'image/svg+xml',
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="3000" height="2000"><rect width="3000" height="2000" fill="#fff"/></svg>',
+      }),
+    );
+    await page.goto(
+      `${storybook()}/iframe.html?id=core-lightbox--gallery-with-captions&viewMode=story&globals=astryxTheme:${theme};colorMode:light`,
+    );
+    await page.locator('#storybook-root > *').first().waitFor();
+    await frames(page, 2);
+    const driver = await touchDriver(page);
+    const opener = await page
+      .getByRole('button', {name: 'Open gallery with captions'})
+      .boundingBox();
+    if (opener == null) {
+      throw new Error('no opener');
+    }
+    await driver.tap({
+      x: opener.x + opener.width / 2,
+      y: opener.y + opener.height / 2,
+    });
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    const caption = dialog.locator('[data-lightbox-caption]').first();
+    await expect(caption).toBeVisible();
+    const {value} = await captionContrast(page, caption);
+    expect(value).toBeGreaterThanOrEqual(4.5);
   });
 }
 
