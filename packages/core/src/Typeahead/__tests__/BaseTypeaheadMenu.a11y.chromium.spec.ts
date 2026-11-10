@@ -1,5 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope ^(packages/core/src/Typeahead/|packages/core/src/Tokenizer/|packages/core/src/Popover/|apps/storybook/stories/BaseTypeahead)
+// @pr-a11y scope ^(packages/core/src/Typeahead/|packages/core/src/Tokenizer/|packages/core/src/Popover/|packages/cli/assets/templates/blocks/components/BaseTypeahead/|apps/storybook/stories/BaseTypeahead|apps/storybook/\.storybook/)
 
 /**
  * @file BaseTypeaheadMenu.a11y.chromium.spec.ts
@@ -7,7 +7,8 @@
  * @output Real-browser proof of component:BaseTypeahead FR13–FR16: the arrow
  *   keys move through the listbox menu's options with information around it,
  *   a pick switches the same open layer to a named dialog that takes focus,
- *   and closing the dialog returns focus to the element that opened it.
+ *   and closing the dialog returns focus to the element that opened it. The
+ *   field draws its keyboard focus ring.
  * @position Runs in pr-a11y when Typeahead, Tokenizer, Popover or this story
  *   changes. jsdom has no top layer and no real focus movement on close.
  */
@@ -42,6 +43,20 @@ async function openStory(page: Page) {
   await expect(input).toBeVisible();
   return input;
 }
+
+test('the field draws its focus ring when the input has keyboard focus', async ({
+  page,
+}) => {
+  const input = await openStory(page);
+  await page.keyboard.press('Tab');
+  await expect(input).toBeFocused();
+  const ring = await input.evaluate(element => {
+    const style = getComputedStyle(element.parentElement as HTMLElement);
+    return {width: parseFloat(style.outlineWidth), style: style.outlineStyle};
+  });
+  expect(ring.style).toBe('solid');
+  expect(ring.width).toBeGreaterThanOrEqual(2);
+});
 
 /** The text of the option the field marks active, or null. */
 async function activeOption(page: Page) {

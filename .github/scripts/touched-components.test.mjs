@@ -704,8 +704,9 @@ describe('pr-component-a11y-contracts routing', () => {
       'heavy-ci',
       'build-storybook',
     ]);
-    // The same gate as the interaction proofs, which the test join also reads.
-    expect(contracts.if).toBe(ci.jobs['pr-interaction'].if);
+    // The same gate as the WebKit interaction proofs, which the test join
+    // also reads.
+    expect(contracts.if).toBe(ci.jobs['pr-interaction-webkit'].if);
     expect(contracts['runs-on']).toBe('ubuntu-latest');
     expect(contracts['timeout-minutes']).toBeLessThanOrEqual(15);
     expect(contracts.permissions).toEqual({

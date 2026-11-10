@@ -2,7 +2,7 @@
 
 /**
  * @file BaseTypeahead.menu.test.tsx
- * @input BaseTypeahead and Typeahead with a `menu` config and a handle
+ * @input BaseTypeahead, Typeahead and Tokenizer with a `menu` config and a handle
  * @output The menu's listbox and dialog roles, the handle, focus return, and role switches
  * @position Colocated verification for the BaseTypeahead menu
  */
@@ -10,13 +10,14 @@
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {createRef, useRef, useState} from 'react';
+import {createRef, useRef, useState, type MouseEvent} from 'react';
 import {
   BaseTypeahead,
   type BaseTypeaheadHandle,
   type BaseTypeaheadMenu,
 } from './BaseTypeahead';
 import {Typeahead} from './Typeahead';
+import {Tokenizer, type TokenizerHandle} from '../Tokenizer';
 import type {SearchSource, SearchableItem} from './types';
 
 const popoverOpenState = new WeakMap<HTMLElement, boolean>();
@@ -714,5 +715,423 @@ describe('BaseTypeahead menu', () => {
         input.removeEventListener('focus', inputFocus);
       },
     );
+
+    it('Escape returns focus to a Tokenizer token whose button opened the dialog', async () => {
+      function TokenFilters() {
+        const handleRef = useRef<TokenizerHandle>(null);
+        const [editing, setEditing] = useState<string | null>(null);
+        return (
+          <Tokenizer
+            label="Filters"
+            presentation="popover"
+            searchSource={fruits}
+            value={[{id: 'apple', label: 'Apple'}]}
+            onChange={() => {}}
+            handleRef={handleRef}
+            onOpenChange={isOpen => {
+              if (!isOpen) {
+                setEditing(null);
+              }
+            }}
+            renderToken={item => (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditing(item.label);
+                  handleRef.current?.open();
+                }}>
+                {`Edit ${item.label}`}
+              </button>
+            )}
+            menu={
+              editing == null
+                ? {role: 'listbox'}
+                : {
+                    role: 'dialog',
+                    label: editing,
+                    render: () => <input aria-label="Value" />,
+                  }
+            }
+          />
+        );
+      }
+      const user = userEvent.setup();
+      render(<TokenFilters />);
+      const token = screen.getByRole('button', {name: 'Edit Apple'});
+      await user.click(token);
+      const dialog = await screen.findByRole('dialog', {
+        name: 'Apple',
+        hidden: true,
+      });
+      await waitFor(() =>
+        expect(dialog.contains(document.activeElement)).toBe(true),
+      );
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(token).toHaveFocus());
+
+      // By keyboard too.
+      await user.keyboard('{Enter}');
+      await waitFor(() =>
+        expect(
+          screen
+            .getByRole('dialog', {name: 'Apple', hidden: true})
+            .contains(document.activeElement),
+        ).toBe(true),
+      );
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(token).toHaveFocus());
+    });
+
+    it.each([
+      ['nothing focused', false],
+      ['focus already in the field', true],
+    ])(
+      'Escape returns focus to a token whose click did not focus it, as in Safari, with %s',
+      async (_, startsInField) => {
+        function TokenFilters() {
+          const handleRef = useRef<TokenizerHandle>(null);
+          const [editing, setEditing] = useState<string | null>(null);
+          return (
+            <Tokenizer
+              label="Filters"
+              presentation="popover"
+              searchSource={fruits}
+              value={[{id: 'apple', label: 'Apple'}]}
+              onChange={() => {}}
+              handleRef={handleRef}
+              onOpenChange={isOpen => {
+                if (!isOpen) {
+                  setEditing(null);
+                }
+              }}
+              renderToken={item => (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditing(item.label);
+                    handleRef.current?.open();
+                  }}>
+                  {`Edit ${item.label}`}
+                </button>
+              )}
+              menu={
+                editing == null
+                  ? {role: 'listbox'}
+                  : {
+                      role: 'dialog',
+                      label: editing,
+                      render: () => <input aria-label="Value" />,
+                    }
+              }
+            />
+          );
+        }
+        render(<TokenFilters />);
+        const token = screen.getByRole('button', {name: 'Edit Apple'});
+        const input = screen.getByRole('combobox', {name: 'Filters'});
+        if (startsInField) {
+          act(() => input.focus());
+        }
+        // A press and click that do not focus the button, as Safari does: the
+        // press's mousedown only blurs the focused input.
+        fireEvent.pointerDown(token);
+        if (startsInField) {
+          act(() => input.blur());
+        }
+        fireEvent.pointerUp(token);
+        fireEvent.click(token);
+        const dialog = await screen.findByRole('dialog', {
+          name: 'Apple',
+          hidden: true,
+        });
+        await waitFor(() =>
+          expect(dialog.contains(document.activeElement)).toBe(true),
+        );
+        fireEvent.keyDown(document.activeElement ?? document.body, {
+          key: 'Escape',
+        });
+        await waitFor(() => expect(token).toHaveFocus());
+      },
+    );
+
+    it('a press on a token released outside the field records no opener for a later dialog', async () => {
+      function TokenFilters() {
+        const handleRef = useRef<TokenizerHandle>(null);
+        const [editing, setEditing] = useState<string | null>(null);
+        return (
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                setEditing('Apple');
+                handleRef.current?.open();
+              }}>
+              Open from outside
+            </button>
+            <Tokenizer
+              label="Filters"
+              presentation="popover"
+              searchSource={fruits}
+              value={[{id: 'apple', label: 'Apple'}]}
+              onChange={() => {}}
+              handleRef={handleRef}
+              onOpenChange={isOpen => {
+                if (!isOpen) {
+                  setEditing(null);
+                }
+              }}
+              renderToken={item => (
+                <button type="button">{`Edit ${item.label}`}</button>
+              )}
+              menu={
+                editing == null
+                  ? {role: 'listbox'}
+                  : {
+                      role: 'dialog',
+                      label: editing,
+                      render: () => <input aria-label="Value" />,
+                    }
+              }
+            />
+          </>
+        );
+      }
+      render(<TokenFilters />);
+      const token = screen.getByRole('button', {name: 'Edit Apple'});
+      const outside = screen.getByRole('button', {name: 'Open from outside'});
+      // A press on the token that ends outside the field: no click follows.
+      fireEvent.pointerDown(token);
+      fireEvent.pointerUp(document.body);
+      act(() => outside.focus());
+      fireEvent.click(outside);
+      const dialog = await screen.findByRole('dialog', {
+        name: 'Apple',
+        hidden: true,
+      });
+      await waitFor(() =>
+        expect(dialog.contains(document.activeElement)).toBe(true),
+      );
+      fireEvent.keyDown(document.activeElement ?? document.body, {
+        key: 'Escape',
+      });
+      await waitFor(() => expect(outside).toHaveFocus());
+    });
+
+    it('a token click that stops propagation records no opener for a later dialog', async () => {
+      function TokenFilters() {
+        const handleRef = useRef<TokenizerHandle>(null);
+        const [editing, setEditing] = useState<string | null>(null);
+        return (
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                setEditing('Apple');
+                handleRef.current?.open();
+              }}>
+              Open from outside
+            </button>
+            <Tokenizer
+              label="Filters"
+              presentation="popover"
+              searchSource={fruits}
+              value={[{id: 'apple', label: 'Apple'}]}
+              onChange={() => {}}
+              handleRef={handleRef}
+              onOpenChange={isOpen => {
+                if (!isOpen) {
+                  setEditing(null);
+                }
+              }}
+              renderToken={item => (
+                <button
+                  type="button"
+                  onClick={event => event.stopPropagation()}>
+                  {`Edit ${item.label}`}
+                </button>
+              )}
+              menu={
+                editing == null
+                  ? {role: 'listbox'}
+                  : {
+                      role: 'dialog',
+                      label: editing,
+                      render: () => <input aria-label="Value" />,
+                    }
+              }
+            />
+          </>
+        );
+      }
+      render(<TokenFilters />);
+      const token = screen.getByRole('button', {name: 'Edit Apple'});
+      const outside = screen.getByRole('button', {name: 'Open from outside'});
+      // The token's click stops before it bubbles back to the field.
+      fireEvent.click(token);
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+      act(() => outside.focus());
+      fireEvent.click(outside);
+      const dialog = await screen.findByRole('dialog', {
+        name: 'Apple',
+        hidden: true,
+      });
+      await waitFor(() =>
+        expect(dialog.contains(document.activeElement)).toBe(true),
+      );
+      fireEvent.keyDown(document.activeElement ?? document.body, {
+        key: 'Escape',
+      });
+      await waitFor(() => expect(outside).toHaveFocus());
+    });
+
+    it("a click on a custom token's own control leaves focus on it", async () => {
+      const user = userEvent.setup();
+      render(
+        <Tokenizer
+          label="Filters"
+          presentation="popover"
+          searchSource={fruits}
+          value={[{id: 'apple', label: 'Apple'}]}
+          onChange={() => {}}
+          renderToken={item => (
+            <button type="button">{`Details ${item.label}`}</button>
+          )}
+        />,
+      );
+      const details = screen.getByRole('button', {name: 'Details Apple'});
+      await user.click(details);
+      expect(details).toHaveFocus();
+    });
+
+    describe("a press on a custom token's own control keeps focus on it", () => {
+      const renderTokenField = (onClick?: (event: MouseEvent) => void) =>
+        render(
+          <Tokenizer
+            label="Filters"
+            presentation="popover"
+            searchSource={fruits}
+            value={[{id: 'apple', label: 'Apple'}]}
+            onChange={() => {}}
+            renderToken={item => (
+              <button type="button" onClick={onClick}>
+                {`Details ${item.label}`}
+              </button>
+            )}
+          />,
+        );
+
+      it('when the press is released outside the field', async () => {
+        const user = userEvent.setup();
+        renderTokenField();
+        const details = screen.getByRole('button', {name: 'Details Apple'});
+        await user.pointer({keys: '[MouseLeft>]', target: details});
+        fireEvent.pointerUp(document.body);
+        expect(details).toHaveFocus();
+      });
+
+      it('when the click stops propagation', async () => {
+        const user = userEvent.setup();
+        renderTokenField(event => event.stopPropagation());
+        const details = screen.getByRole('button', {name: 'Details Apple'});
+        await user.click(details);
+        expect(details).toHaveFocus();
+      });
+    });
+
+    describe('a press on an endContent control moves focus to the input', () => {
+      const renderApplyField = (onClick?: (event: MouseEvent) => void) =>
+        render(
+          <Tokenizer
+            label="Filters"
+            presentation="popover"
+            searchSource={fruits}
+            value={[{id: 'apple', label: 'Apple'}]}
+            onChange={() => {}}
+            endContent={
+              <button type="button" onClick={onClick}>
+                Apply
+              </button>
+            }
+          />,
+        );
+
+      it('when the click completes', async () => {
+        const user = userEvent.setup();
+        renderApplyField();
+        await user.click(screen.getByRole('button', {name: 'Apply'}));
+        expect(screen.getByRole('combobox', {name: 'Filters'})).toHaveFocus();
+      });
+
+      it('when the press is released outside the field', async () => {
+        const user = userEvent.setup();
+        renderApplyField();
+        await user.pointer({
+          keys: '[MouseLeft>]',
+          target: screen.getByRole('button', {name: 'Apply'}),
+        });
+        fireEvent.pointerUp(document.body);
+        expect(screen.getByRole('combobox', {name: 'Filters'})).toHaveFocus();
+      });
+
+      it('when the click stops propagation', async () => {
+        const user = userEvent.setup();
+        renderApplyField(event => event.stopPropagation());
+        await user.click(screen.getByRole('button', {name: 'Apply'}));
+        expect(screen.getByRole('combobox', {name: 'Filters'})).toHaveFocus();
+      });
+    });
+
+    it('a press on a token released outside the field still lets Tab land on the input', async () => {
+      const user = userEvent.setup();
+      render(
+        <>
+          <button type="button">Before</button>
+          <Tokenizer
+            label="Filters"
+            presentation="popover"
+            searchSource={fruits}
+            value={[{id: 'apple', label: 'Apple'}]}
+            onChange={() => {}}
+          />
+        </>,
+      );
+      const remove = screen.getByRole('button', {name: /remove apple/i});
+      // A press that starts on the token's control and is called off by
+      // releasing it outside the field.
+      fireEvent.pointerDown(remove);
+      fireEvent.pointerUp(document.body);
+      screen.getByRole('button', {name: 'Before'}).focus();
+      await user.tab();
+      expect(screen.getByRole('combobox', {name: 'Filters'})).toHaveFocus();
+    });
+
+    it('Tokenizer forwards the menu, the handle and onOpenChange', async () => {
+      const handle = createRef<TokenizerHandle>();
+      const onOpenChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Filters"
+          presentation="popover"
+          searchSource={fruits}
+          value={[]}
+          onChange={() => {}}
+          handleRef={handle}
+          onOpenChange={onOpenChange}
+          menu={{role: 'dialog', label: 'Status', render: () => <p>Panel</p>}}
+        />,
+      );
+      act(() => handle.current?.open());
+      const dialog = await screen.findByRole('dialog', {
+        name: 'Status',
+        hidden: true,
+      });
+      expect(isLayerOpen(dialog)).toBe(true);
+      expect(onOpenChange).toHaveBeenLastCalledWith(true);
+      act(() => handle.current?.close());
+      expect(isLayerOpen(dialog)).toBe(false);
+      expect(onOpenChange).toHaveBeenLastCalledWith(false);
+    });
   });
 });
