@@ -3,8 +3,9 @@
 
 /**
  * @file TableCellMenuLoad.a11y.chromium.spec.ts
- * @input Core's built package, React's server renderer and hydrateRoot,
- *   esbuild with code splitting, and native Chromium mouse, keyboard and touch
+ * @input The TableCellMenuLoad fixture built from source with Vite (a client
+ *   build and a server build), React's server renderer and hydrateRoot, and
+ *   native Chromium mouse, keyboard and touch
  * @output Browser evidence for an invocation that reaches a table cell while
  *   its menu code still loads: the server-rendered table hydrates without a
  *   recoverable error, the browser's own menu stays shut, the held invocation
@@ -17,72 +18,22 @@
 
 import {once} from 'node:events';
 import fs from 'node:fs';
-import {createRequire} from 'node:module';
 import {createServer, type Server, type ServerResponse} from 'node:http';
-import os from 'node:os';
 import path from 'node:path';
-import {fileURLToPath} from 'node:url';
+import {pathToFileURL} from 'node:url';
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {tap, touchDriver} from '@astryxdesign/interaction-harness';
-import {build} from 'esbuild';
+import {build} from 'vite';
 
-const CORE = fileURLToPath(new URL('../../../', import.meta.url));
-
-const APP = `
-import * as React from 'react';
-import {Table, TableBody, TableRow, TableCell} from '@astryxdesign/core';
-
-const actions = [
-  {id: 'copy', label: 'Copy', onSelect: () => {}},
-  {id: 'paste', label: 'Paste', onSelect: () => {}},
-];
-
-function Hydrated() {
-  React.useEffect(() => {
-    document.documentElement.dataset.hydrated = 'true';
-  }, []);
-  return null;
-}
-
-export function Root() {
-  return (
-    <>
-      <Table>
-        <TableBody>
-          <TableRow>
-            <TableCell contextMenuActions={actions}>
-              Alice <button type="button">Edit</button>
-            </TableCell>
-            <TableCell>Plain cell</TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
-      <Hydrated />
-    </>
-  );
-}
-`;
-
-const CLIENT = `
-import {hydrateRoot} from 'react-dom/client';
-import {Root} from './app.jsx';
-
-window.__recoverable = [];
-hydrateRoot(document.getElementById('root'), <Root />, {
-  onRecoverableError: error => window.__recoverable.push(String(error)),
-});
-`;
-
-const SERVER = `
-import {renderToString} from 'react-dom/server';
-import {Root} from './app.jsx';
-
-export const html = renderToString(<Root />);
-`;
+const CONFIG = path.resolve(
+  'packages/core/src/Table/__tests__/TableCellMenuLoad.vite.mjs',
+);
+const SERVER_ENTRY = path.resolve(
+  'packages/core/src/Table/__tests__/TableCellMenuLoad.server.tsx',
+);
 
 let server: Server;
 let origin: string;
-let scratch: string;
 
 /** The fixture server holds the menu chunk until a test releases it. */
 const gate = {
@@ -98,53 +49,54 @@ function release() {
   }
 }
 
+const TYPES: Record<string, string> = {
+  '.js': 'text/javascript',
+  '.css': 'text/css',
+  '.html': 'text/html',
+};
+
 test.beforeAll(async () => {
-  scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-cell-menu-load-'));
-  fs.writeFileSync(path.join(scratch, 'app.jsx'), APP);
-  fs.writeFileSync(path.join(scratch, 'client.jsx'), CLIENT);
-  fs.writeFileSync(path.join(scratch, 'server.jsx'), SERVER);
-  const shared = {
-    absWorkingDir: CORE,
-    nodePaths: [path.join(CORE, 'node_modules')],
-    alias: {'@astryxdesign/core': path.join(CORE, 'dist/index.js')},
-    bundle: true,
-    jsx: 'automatic' as const,
-    define: {'process.env.NODE_ENV': '"production"'},
-    loader: {'.css': 'empty' as const},
-    logLevel: 'silent' as const,
-  };
-  await build({
-    ...shared,
-    entryPoints: [path.join(scratch, 'server.jsx')],
-    platform: 'node',
-    format: 'cjs',
-    outfile: path.join(scratch, 'server.cjs'),
-  });
-  const {html} = createRequire(import.meta.url)(
-    path.join(scratch, 'server.cjs'),
-  ) as {html: string};
-  const client = await build({
-    ...shared,
-    entryPoints: [path.join(scratch, 'client.jsx')],
-    platform: 'browser',
-    format: 'esm',
-    splitting: true,
-    outdir: path.join(scratch, 'client'),
-    entryNames: 'client',
-    write: false,
-    metafile: true,
-  });
-  const files = new Map(
-    client.outputFiles.map(file => [path.basename(file.path), file.contents]),
+  // A folder per worker, so parallel workers never share a build.
+  const out = path.resolve(
+    `test-results/table-cell-menu-load-${test.info().parallelIndex}`,
   );
-  const menuChunk = Object.entries(client.metafile.outputs).find(([, output]) =>
-    output.entryPoint?.endsWith('Table/tableContextMenu.js'),
-  )?.[0];
+  const clientDir = path.join(out, 'client');
+  const serverDir = path.join(out, 'server');
+  await build({
+    configFile: CONFIG,
+    logLevel: 'warn',
+    build: {outDir: clientDir, emptyOutDir: true},
+  });
+  await build({
+    configFile: CONFIG,
+    logLevel: 'warn',
+    build: {
+      outDir: serverDir,
+      emptyOutDir: true,
+      ssr: SERVER_ENTRY,
+      manifest: false,
+      rollupOptions: {
+        input: SERVER_ENTRY,
+        external: [/^react(?:-dom)?(?:\/|$)/],
+        output: {entryFileNames: '[name].mjs'},
+      },
+    },
+  });
+  const {renderHtml} = (await import(
+    pathToFileURL(path.join(serverDir, 'TableCellMenuLoad.server.mjs')).href
+  )) as {renderHtml: () => string};
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(clientDir, '.vite/manifest.json'), 'utf8'),
+  ) as Record<string, {file: string; src?: string}>;
+  const menuChunk = Object.values(manifest).find(chunk =>
+    chunk.src?.endsWith('tableContextMenu.tsx'),
+  )?.file;
   if (menuChunk == null) {
-    throw new Error('the bundle has no lazy table menu chunk');
+    throw new Error('the build has no lazy table menu chunk');
   }
-  const gated = path.basename(menuChunk);
-  const page = `<!doctype html><html><head><meta charset="utf-8"><title>Table cell menu load</title><link rel="stylesheet" href="/reset.css"><link rel="stylesheet" href="/astryx.css"></head><body><div id="root">${html}</div><script type="module" src="/client.js"></script></body></html>`;
+  const page = fs
+    .readFileSync(path.join(clientDir, 'TableCellMenuLoad.html'), 'utf8')
+    .replace('<!--ssr-->', renderHtml());
   const send = (response: ServerResponse, type: string, body: Uint8Array) => {
     response.writeHead(200, {
       'Content-Type': type,
@@ -156,23 +108,24 @@ test.beforeAll(async () => {
     const name = (request.url ?? '/').split('?')[0].slice(1);
     if (name === '') {
       send(response, 'text/html', Buffer.from(page));
-    } else if (name === 'reset.css' || name === 'astryx.css') {
-      const file = name === 'reset.css' ? 'src/reset.css' : 'dist/astryx.css';
-      send(response, 'text/css', fs.readFileSync(path.join(CORE, file)));
-    } else if (files.has(name)) {
-      const body = files.get(name) as Uint8Array;
-      if (name === gated) {
-        gate.requests += 1;
-        if (!gate.released) {
-          gate.waiting.push(() => send(response, 'text/javascript', body));
-          return;
-        }
-      }
-      send(response, 'text/javascript', body);
-    } else {
+      return;
+    }
+    const file = path.join(clientDir, name);
+    if (!file.startsWith(clientDir) || !fs.existsSync(file)) {
       response.writeHead(404);
       response.end();
+      return;
     }
+    const type = TYPES[path.extname(file)] ?? 'application/octet-stream';
+    const body = fs.readFileSync(file);
+    if (name === menuChunk) {
+      gate.requests += 1;
+      if (!gate.released) {
+        gate.waiting.push(() => send(response, type, body));
+        return;
+      }
+    }
+    send(response, type, body);
   });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -189,9 +142,6 @@ test.afterAll(async () => {
     await new Promise<void>((resolve, reject) =>
       server.close(error => (error ? reject(error) : resolve())),
     );
-  }
-  if (scratch) {
-    fs.rmSync(scratch, {recursive: true, force: true});
   }
 });
 

@@ -31,6 +31,7 @@ import type {
 import {
   ContextMenuTrigger,
   contextMenuPoint,
+  longPressPoint,
   type TriggerPoint,
 } from '../ContextMenu/ContextMenuTrigger';
 import {useIsHydrating} from '../hooks/useIsHydrating';
@@ -228,15 +229,10 @@ function CellTrigger({
       if (handlers != null) {
         handlers.openFromLongPress(point);
       } else {
-        const rect = triggerRef.current?.getBoundingClientRect();
         holdInvocation({
           owner: triggerRef,
           gesture: currentGesture(),
-          point: {
-            x: rect ? point.x - rect.left : point.x,
-            y: rect ? point.y - rect.top : point.y,
-            isTouch: true,
-          },
+          point: longPressPoint(point, triggerRef.current),
         });
       }
     },

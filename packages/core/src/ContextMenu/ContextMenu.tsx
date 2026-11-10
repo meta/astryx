@@ -111,6 +111,7 @@ import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
   ContextMenuTrigger,
   contextMenuPoint,
+  longPressPoint,
   type TriggerPoint,
 } from './ContextMenuTrigger';
 import {
@@ -683,13 +684,6 @@ function useContextMenuElement(
     [layer, updateOpenState, usesBottomSheet],
   );
 
-  // The box the cursor anchor's offsets are measured from: the trigger, which
-  // is its containing block.
-  const getAnchorBaseRect = useCallback(
-    (): DOMRect | undefined => triggerRef.current?.getBoundingClientRect(),
-    [],
-  );
-
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
       if (isDisabled) {
@@ -729,18 +723,11 @@ function useContextMenuElement(
   // The hook also returns the imperative start/moveTo/cancel API the menu press
   // model drives; only its four touch handlers belong on the trigger element.
   const openFromLongPress = useCallback(
-    (point: {x: number; y: number}) => {
-      const rect = getAnchorBaseRect();
+    (point: {x: number; y: number}) =>
       // The finger is still down: the compatibility mousedown iOS sends
       // mid-hold, or Chromium as it lifts, belongs to this press.
-      openingGestureRef.current = currentGesture();
-      openAtLocalPoint(
-        rect ? point.x - rect.left : point.x,
-        rect ? point.y - rect.top : point.y,
-        triggerRef.current,
-      );
-    },
-    [openAtLocalPoint, getAnchorBaseRect],
+      openAtTriggerPoint(longPressPoint(point, triggerRef.current)),
+    [openAtTriggerPoint],
   );
   const {
     onTouchStart: handleLongPressTouchStart,

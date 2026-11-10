@@ -58,6 +58,18 @@ async function settle() {
   });
 }
 
+/**
+ * Waits until the loader has run `count` times, then lets the result land. A
+ * loaded machine can run the mocked import later than one fixed wait.
+ */
+async function afterLoads(count: number) {
+  for (let tries = 0; loader.calls < count && tries < 100; tries += 1) {
+    await settle();
+  }
+  await settle();
+  expect(loader.calls).toBe(count);
+}
+
 describe('TableCellContextMenu menu load failure', () => {
   it('keeps the table, drops the held right-click and returns the browser menu when the menu fails to load', async () => {
     loader.failures = 1;
@@ -66,7 +78,7 @@ describe('TableCellContextMenu menu load failure', () => {
     // Held while the menu loads, so the browser's menu does not open.
     expect(fireEvent.contextMenu(cell)).toBe(false);
 
-    await settle();
+    await afterLoads(1);
 
     expect(container.textContent).toBe('Page headingAlicePlain cell');
     expect(screen.getByText('Alice')).toBe(cell);
@@ -80,8 +92,7 @@ describe('TableCellContextMenu menu load failure', () => {
   it('loads the menu again in a later render after a failed load', async () => {
     loader.failures = 1;
     const first = await renderTable('Alice');
-    await settle();
-    expect(loader.calls).toBe(1);
+    await afterLoads(1);
     expect(first.container.textContent).toBe('Page headingAlicePlain cell');
 
     await renderTable('Bob');
@@ -102,8 +113,7 @@ describe('TableCellContextMenu menu load failure', () => {
   it('opens the menu on the first right-click after another cell loaded it', async () => {
     loader.failures = 1;
     await renderTable('Alice');
-    await settle();
-    expect(loader.calls).toBe(1);
+    await afterLoads(1);
 
     // A second table loads the menu module after Alice's load failed.
     await renderTable('Bob');

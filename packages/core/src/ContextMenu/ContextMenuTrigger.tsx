@@ -6,7 +6,8 @@
  * @file ContextMenuTrigger.tsx
  * @input React, StyleX, mergeProps
  * @output ContextMenuTrigger, the right-click target and its 1px cursor anchor,
- *   and contextMenuPoint, where a right-click opens the menu in the trigger
+ *   and contextMenuPoint and longPressPoint, where a right-click or a long
+ *   press opens the menu in the trigger
  * @position ContextMenu renders it around its children; Table cells render it
  * before their lazily loaded menu arrives. It imports no menu code.
  */
@@ -51,6 +52,19 @@ export interface TriggerPoint {
   y: number;
   /** The invocation came from a finger, so its press belongs to the open. */
   isTouch: boolean;
+}
+
+/** The point in `trigger`'s box where a long press at this viewport point opens the menu. */
+export function longPressPoint(
+  point: {x: number; y: number},
+  trigger: Element | null,
+): TriggerPoint {
+  const rect = trigger?.getBoundingClientRect();
+  return {
+    x: rect ? point.x - rect.left : point.x,
+    y: rect ? point.y - rect.top : point.y,
+    isTouch: true,
+  };
 }
 
 /**
