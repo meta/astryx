@@ -387,6 +387,54 @@ async function setExitDuration(page: Page, value: string) {
     );
 }
 
+/** A scroller's scroll offset, by test id. */
+async function scrollTopOf(page: Page, testId: string) {
+  return page.getByTestId(testId).evaluate(element => element.scrollTop);
+}
+
+/** Scrolls a scroller to `top` at once, by test id. */
+async function setScrollTop(page: Page, testId: string, top: number) {
+  await page
+    .getByTestId(testId)
+    .evaluate((element, offset) => element.scrollTo({top: offset}), top);
+  await expect.poll(() => scrollTopOf(page, testId)).toBe(top);
+}
+
+/**
+ * Starts recording a scroller's offset every frame, from now until it has
+ * read 0 or 2 s have passed. The returned function waits for the end and
+ * gives the offsets.
+ */
+async function recordScrollTop(page: Page, testId: string) {
+  await page.getByTestId(testId).evaluate(element => {
+    const record = {offsets: [] as number[], isDone: false};
+    (window as unknown as {__scrollRecord: typeof record}).__scrollRecord =
+      record;
+    const start = performance.now();
+    const sample = () => {
+      record.offsets.push(element.scrollTop);
+      if (element.scrollTop === 0 || performance.now() - start > 2000) {
+        record.isDone = true;
+        return;
+      }
+      requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
+  return async () => {
+    await page.waitForFunction(
+      () =>
+        (window as unknown as {__scrollRecord: {isDone: boolean}})
+          .__scrollRecord.isDone,
+    );
+    return page.evaluate(
+      () =>
+        (window as unknown as {__scrollRecord: {offsets: number[]}})
+          .__scrollRecord.offsets,
+    );
+  };
+}
+
 /** How long a tab's paint takes to change now, in ms. */
 async function paintFadeMs(page: Page, name: string) {
   return tab(page, name)
@@ -1299,6 +1347,64 @@ test('a finger’s release fades only its paint layer’s opacity, which the com
       }),
     );
   expect(fades).toEqual([{property: 'opacity', layer: '::before'}]);
+});
+
+test('choosing the selected tab again scrolls its own panel to the top, and no other scroller moves', async ({
+  page,
+}) => {
+  const {driver} = await openBar(page, 'scroll-to-top');
+  await setScrollTop(page, 'scroller-home', 800);
+  await setScrollTop(page, 'scroller-library', 300);
+  await setScrollTop(page, 'other-scroller', 100);
+  const home = await itemCenter(page, 'Home');
+  await driver.play(tapScript(home));
+  await expect(page.getByTestId('reselects')).toHaveText('Reselected 1 times');
+  await expect.poll(() => scrollTopOf(page, 'scroller-home')).toBe(0);
+  expect(await scrollTopOf(page, 'scroller-library')).toBe(300);
+  expect(await scrollTopOf(page, 'other-scroller')).toBe(100);
+});
+
+test('the panel glides back to the top over several frames', async ({page}) => {
+  const {driver} = await openBar(page, 'scroll-to-top');
+  await setScrollTop(page, 'scroller-home', 800);
+  const offsets = await recordScrollTop(page, 'scroller-home');
+  const home = await itemCenter(page, 'Home');
+  await driver.play(tapScript(home));
+  const read = await offsets();
+  expect(read.at(-1)).toBe(0);
+  // A glide passes through offsets between where it started and the top.
+  expect(read.some(offset => offset > 0 && offset < 800)).toBe(true);
+});
+
+test('with Reduce Motion the panel jumps to the top at once', async ({
+  page,
+}) => {
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  const {driver} = await openBar(page, 'scroll-to-top');
+  await setScrollTop(page, 'scroller-home', 800);
+  const offsets = await recordScrollTop(page, 'scroller-home');
+  const home = await itemCenter(page, 'Home');
+  await driver.play(tapScript(home));
+  const read = await offsets();
+  expect(read.at(-1)).toBe(0);
+  expect(read.filter(offset => offset > 0 && offset < 800)).toEqual([]);
+});
+
+test('choosing another tab switches without scrolling any panel', async ({
+  page,
+}) => {
+  const {driver} = await openBar(page, 'scroll-to-top');
+  await setScrollTop(page, 'scroller-home', 800);
+  await setScrollTop(page, 'scroller-library', 300);
+  await setScrollTop(page, 'other-scroller', 100);
+  const library = await itemCenter(page, 'Library');
+  await driver.play(tapScript(library));
+  await expect(tab(page, 'Library')).toHaveAttribute('aria-selected', 'true');
+  await page.waitForTimeout(500);
+  expect(await scrollTopOf(page, 'scroller-home')).toBe(800);
+  expect(await scrollTopOf(page, 'scroller-library')).toBe(300);
+  expect(await scrollTopOf(page, 'other-scroller')).toBe(100);
+  await expect(page.getByTestId('reselects')).toHaveText('Reselected 0 times');
 });
 
 test('past the last item, still on the bar, the lens rubber-bands beyond it and the lift commits the last item; past the bar’s end the lift chooses nothing', async ({
@@ -2575,6 +2681,22 @@ async function expectCssSlide(page: Page, {isRunning = true} = {}) {
 test.describe('touch work costs nothing under a fine pointer', () => {
   test.describe('under a mouse', () => {
     test.use({hasTouch: false, isMobile: false});
+
+    test('a click on the selected tab scrolls its own panel to the top, and nothing else', async ({
+      page,
+    }) => {
+      await expectFinePointer(page);
+      await openStory(page, storybook(), 'lab-tabbar--scroll-to-top');
+      await expect(page.getByRole('tablist', {name: 'Sections'})).toBeVisible();
+      await setScrollTop(page, 'scroller-home', 800);
+      await setScrollTop(page, 'other-scroller', 100);
+      await tab(page, 'Home').click();
+      await expect(page.getByTestId('reselects')).toHaveText(
+        'Reselected 1 times',
+      );
+      await expect.poll(() => scrollTopOf(page, 'scroller-home')).toBe(0);
+      expect(await scrollTopOf(page, 'other-scroller')).toBe(100);
+    });
 
     test('a click chooses a tab, and so do the keys', async ({page}) => {
       await expectFinePointer(page);

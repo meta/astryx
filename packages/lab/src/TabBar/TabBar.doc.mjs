@@ -18,7 +18,7 @@ export const docs = {
     'badge',
   ],
   description:
-    "The bottom tab bar of a phone app, as on iOS 26: the app's top-level sections as a floating capsule above the bottom edge, with a selection lens that slides to the chosen tab. Each tab has an icon, a label and an optional badge. Under a finger, on iOS and Android alike, it behaves like iOS 26's: the lens lifts into glass as a finger lands, follows a finger dragged across the tabs and settles on the tab nearest where it lifts, while the bar flexes; under a mouse, a press is a plain button press: a click chooses a tab and the lens follows the theme's motion. With no tab selected, a held finger highlights the tab under it. Choosing the selected tab again is reported separately, so a screen can return to its root as iOS does. Experimental: lands in lab first.",
+    "The bottom tab bar of a phone app, as on iOS 26: the app's top-level sections as a floating capsule above the bottom edge, with a selection lens that slides to the chosen tab. Each tab has an icon, a label and an optional badge. Under a finger, on iOS and Android alike, it behaves like iOS 26's: the lens lifts into glass as a finger lands, follows a finger dragged across the tabs and settles on the tab nearest where it lifts, while the bar flexes; under a mouse, a press is a plain button press: a click chooses a tab and the lens follows the theme's motion. With no tab selected, a held finger highlights the tab under it. Choosing the selected tab again scrolls its panel to the top and is reported separately, so a screen can also return to its root as iOS does. Experimental: lands in lab first.",
   components: [
     {
       name: 'TabBar',
@@ -43,7 +43,7 @@ export const docs = {
           name: 'onReselect',
           type: '(value: string) => void',
           description:
-            "Called with the selected tab's value when it is chosen again, for example to return the tab's navigation stack to its root, as iOS does.",
+            "Called with the selected tab's value when it is chosen again, for example to return the tab's navigation stack to its root, as iOS does. On every reselect TabBar also scrolls the tab's panel (panelId) to its top.",
         },
         {
           name: 'label',
@@ -108,7 +108,7 @@ export const docs = {
           name: 'panelId',
           type: 'string',
           description:
-            "Id of the panel this tab controls, wired up as aria-controls. Put the same id on the section's panel element.",
+            "Id of the panel this tab controls, wired up as aria-controls. Put the same id on the section's panel element. Choosing the selected tab again scrolls that panel to its top: the panel itself when it scrolls, or else the first scroll area inside it.",
         },
         {
           name: 'aria-disabled',
@@ -136,7 +136,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          "Give each tab a panelId naming its section's panel, so assistive technology can associate the two.",
+          "Give each tab a panelId naming its section's panel, so assistive technology can associate the two. Put the section's content in a ScrollableArea inside that panel, so choosing the tab again scrolls it to the top.",
       },
       {
         guidance: true,
