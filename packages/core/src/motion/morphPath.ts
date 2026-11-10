@@ -143,7 +143,9 @@ function growPath(
         height: box.height * scaleY,
       };
     },
-    opacityAt: p => stateAt(p).opacity,
+    // Before its start and past its end, the straight line reads below 0,
+    // which draws as 0.
+    opacityAt: p => Math.max(0, stateAt(p).opacity),
     restartFrom(rect, opacity, end) {
       const scaleX = box.width > 0 ? rect.width / box.width : 1;
       const scaleY = box.height > 0 ? rect.height / box.height : 1;

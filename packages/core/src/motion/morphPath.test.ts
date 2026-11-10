@@ -285,6 +285,12 @@ function cardModel(box: MorphRect) {
 /** Progresses 0 to 1.1 (a spring's overshoot) and a little below 0. */
 const PROGRESSES = Array.from({length: 24}, (_, i) => -0.05 + i * 0.05);
 
+/**
+ * An opacity as drawn: clamped to 0 through 1. A popover's path stops at 0,
+ * while Popover's own model reads below 0 before its start and past its end.
+ */
+const drawn = (opacity: number) => Math.min(1, Math.max(0, opacity));
+
 describe('the presentations that move onto the morph are the same rect at every progress', () => {
   it('an anchored menu (#8080): a straight line from the collapsed square on its control', () => {
     const anchor = {x: 190, y: 171};
@@ -320,7 +326,7 @@ describe('the presentations that move onto the morph are the same rect at every 
       for (const p of PROGRESSES) {
         const frame = popoverFrame(state, p);
         expectRect(path.rectAt(p), popoverRect(surface, state, frame), 0.5);
-        expect(path.opacityAt!(p)).toBeCloseTo(frame.opacity, 9);
+        expect(path.opacityAt!(p)).toBeCloseTo(Math.max(0, frame.opacity), 9);
       }
     }
   });
@@ -352,10 +358,6 @@ describe('the presentations that move onto the morph are the same rect at every 
     );
     const back = path.restartFrom!(onScreen, 0.5, 'rest');
     const away = path.restartFrom!(onScreen, 0.5, 'source');
-    // An opacity draws clamped to 0 through 1. Past its end, a turn-around
-    // toward the source takes the path below 0, where Popover's curves stop
-    // at 0. Both draw 0, so the proof compares them as drawn.
-    const drawn = (opacity: number) => Math.min(1, Math.max(0, opacity));
     for (const p of [0, 0.25, 0.5, 0.75, 1, 1.05]) {
       for (const [morph, live] of [
         [back, toRest],
@@ -374,6 +376,29 @@ describe('the presentations that move onto the morph are the same rect at every 
           9,
         );
       }
+    }
+  });
+
+  it('a popover never reads an opacity below 0, before its start or past its end', () => {
+    const surface = {x: 41, y: 204, width: 320, height: 253};
+    const state = popoverState(surface, {
+      x: 141,
+      y: 160,
+      width: 120,
+      height: 44,
+    });
+    const path = popoverPath(surface, state);
+    const shown = frameOf({scale: 0.4, length: 0.6, opacity: 0.5}, state.axis);
+    const away = path.restartFrom!(
+      popoverRect(surface, state, shown),
+      0.5,
+      'source',
+    );
+    for (const p of [-0.1, -0.05, 0]) {
+      expect(path.opacityAt!(p)).toBe(0);
+    }
+    for (const p of [1, 1.05, 1.1]) {
+      expect(away.opacityAt!(p)).toBe(0);
     }
   });
 
