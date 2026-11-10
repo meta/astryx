@@ -58,6 +58,17 @@ describe('Kbd', () => {
     expect(screen.getByText('\u2318')).toBeInTheDocument(); // \u2318
   });
 
+  it('shows ⌘ for meta on Apple platforms', () => {
+    Object.defineProperty(navigator, 'platform', {
+      value: 'MacIntel',
+      configurable: true,
+    });
+    render(<Kbd keys="meta+k" />);
+    expect(screen.getByText('\u2318')).toBeInTheDocument();
+    expect(screen.queryByText('META')).not.toBeInTheDocument();
+    expect(screen.queryByText('Win')).not.toBeInTheDocument();
+  });
+
   it('shows Apple modifier symbols for ctrl, alt and shift on Apple platforms', () => {
     Object.defineProperty(navigator, 'platform', {
       value: 'MacIntel',

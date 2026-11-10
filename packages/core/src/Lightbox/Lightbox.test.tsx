@@ -5,6 +5,7 @@ import {act, render, screen, fireEvent, waitFor} from '@testing-library/react';
 import {Profiler, StrictMode, useState} from 'react';
 import {Lightbox} from './Lightbox';
 import {getFocusableElements} from '../hooks/useFocusTrap';
+import {getGestureHost} from '../gestures/GestureHost';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {InternationalizationProvider} from '../i18n';
 
@@ -61,9 +62,7 @@ function stubStageLayout(): () => void {
   // The zoom stage: a single item's photo box, or a gallery page's.
   const isStage = (element: Element) =>
     element.hasAttribute('data-lightbox-page-media') ||
-    (element.getAttribute('role') === 'button' &&
-      element.getAttribute('aria-label') === 'Zoom' &&
-      element.querySelector('[data-lightbox-page]') == null);
+    element.querySelector(':scope > img') != null;
   define(HTMLElement.prototype, 'offsetWidth', element =>
     isPhoto(element) ? 400 : 0,
   );
@@ -563,6 +562,28 @@ describe('Lightbox', () => {
         expect(screen.getByText(`1 / ${media.length}`)).toBeTruthy();
         unmount();
       }
+    });
+
+    // An index that is not a whole number opens the nearest item, as an
+    // index past either end does.
+    it.each([
+      ['a controlled NaN index', {index: Number.NaN}, 'Image A', 1],
+      ['a default NaN index', {defaultIndex: Number.NaN}, 'Image A', 1],
+      ['a controlled index of 1.5', {index: 1.5}, 'Image C', 3],
+      ['a controlled index of 0.4', {index: 0.4}, 'Image A', 1],
+      ['a default index of 1.2', {defaultIndex: 1.2}, 'Image B', 2],
+    ])('opens the nearest item for %s', (_, indexProps, alt, position) => {
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={media}
+          {...indexProps}
+        />,
+      );
+      const page = screen.getByAltText(alt).closest('[data-lightbox-page]')!;
+      expect(page).toHaveAttribute('data-current');
+      expect(screen.getByText(`${position} / ${media.length}`)).toBeTruthy();
     });
 
     it('pauses a playing video once the viewer moves to another item', () => {
@@ -1132,6 +1153,76 @@ describe('Lightbox', () => {
       // `=` (unshifted `+` on most layouts) also zooms in.
       fireEvent.keyDown(dialog, {key: '='});
       expect(zoomTarget()).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('returns a zoomed photo to its fitted size with 0', () => {
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={{src: '/photo.jpg', alt: 'Photo'}}
+          hasZoom
+        />,
+      );
+      const dialog = document.querySelector('dialog')!;
+      fireEvent.keyDown(dialog, {key: '+'});
+      expect(zoomTarget()).toHaveAttribute('aria-pressed', 'true');
+      fireEvent.keyDown(dialog, {key: '0'});
+      expect(zoomTarget()).toHaveAttribute('aria-pressed', 'false');
+      // At the fitted size, 0 leaves the photo there.
+      fireEvent.keyDown(dialog, {key: '0'});
+      expect(zoomTarget()).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('leaves Ctrl+0 and Cmd+0 to the browser', () => {
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={{src: '/photo.jpg', alt: 'Photo'}}
+          hasZoom
+        />,
+      );
+      const dialog = document.querySelector('dialog')!;
+      fireEvent.keyDown(dialog, {key: '+'});
+      expect(fireEvent.keyDown(dialog, {key: '0', ctrlKey: true})).toBe(true);
+      expect(fireEvent.keyDown(dialog, {key: '0', metaKey: true})).toBe(true);
+      expect(zoomTarget()).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('announces a zoom inside the open modal viewer', async () => {
+      // jsdom has no :modal; treat an open dialog as modal, as showModal()
+      // makes it in a browser.
+      const matches = Element.prototype.matches;
+      const spy = vi
+        .spyOn(Element.prototype, 'matches')
+        .mockImplementation(function (this: Element, selector: string) {
+          return selector === ':modal'
+            ? this instanceof HTMLDialogElement && this.open
+            : matches.call(this, selector);
+        });
+      try {
+        render(
+          <Lightbox
+            isOpen={true}
+            onOpenChange={() => {}}
+            media={{src: '/photo.jpg', alt: 'Photo'}}
+            hasZoom
+          />,
+        );
+        const dialog = document.querySelector('dialog')!;
+        fireEvent.keyDown(dialog, {key: '+'});
+        await waitFor(() => {
+          expect(
+            dialog.querySelector(
+              ':scope > [data-astryx-modal-live-region="polite"]',
+            ),
+          ).toHaveTextContent('Zoomed in');
+        });
+        expect(politeRegion()?.textContent ?? '').toBe('');
+      } finally {
+        spy.mockRestore();
+      }
     });
 
     it('pans with arrow keys while zoomed instead of navigating the gallery', () => {
@@ -1735,6 +1826,64 @@ describe('Lightbox double-click under the touch layer', () => {
   });
 });
 
+describe('Lightbox recognizers attach for every pointer (spec:AST-094 FR43)', () => {
+  /** Names of the Lightbox recognizers attached while `body` runs. */
+  function lightboxRecognizersAttached(body: () => void): string[] {
+    const attach = vi.spyOn(getGestureHost(document), 'attach');
+    try {
+      body();
+      return attach.mock.calls
+        .map(([, recognizer]) => recognizer.name)
+        .filter(name => /lightbox/i.test(name));
+    } finally {
+      attach.mockRestore();
+    }
+  }
+
+  it('attaches no drag to dismiss where the primary pointer is fine', () => {
+    expect(
+      lightboxRecognizersAttached(() => {
+        render(
+          <Lightbox
+            isOpen={true}
+            onOpenChange={() => {}}
+            media={{src: '/photo.jpg', alt: 'Photo'}}
+          />,
+        );
+      }),
+    ).toEqual([]);
+  });
+
+  it('attaches the drag to dismiss under the touch layer', () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = (query: string) => ({
+      matches: query === '(pointer: coarse)',
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    });
+    try {
+      expect(
+        lightboxRecognizersAttached(() => {
+          render(
+            <Lightbox
+              isOpen={true}
+              onOpenChange={() => {}}
+              media={{src: '/photo.jpg', alt: 'Photo'}}
+            />,
+          );
+        }),
+      ).toContain('Lightbox.dismissPan');
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+});
+
 describe('Lightbox touch zoom (synthetic touches)', () => {
   let restoreLayout: () => void = () => {};
   const originalMatchMedia = window.matchMedia;
@@ -1989,6 +2138,106 @@ describe('Lightbox touch zoom (synthetic touches)', () => {
     expect(x()).toBeLessThan(before - 20);
     touch('touchend', stage, [], [finger], 900 + 9 * 16);
   });
+
+  // Times on the arena's clock: velocities read the gap since the last sample.
+  let clock = 0;
+
+  /** A one-finger drag down by `dy` in 10 px steps. */
+  function dragDown(
+    stage: Element,
+    dy: number,
+  ): {x: number; y: number; id: number} {
+    clock = performance.now();
+    let finger = {id: 1, x: 200, y: 300};
+    touch('touchstart', stage, [finger], [finger], clock);
+    for (let i = 1; i <= dy / 10; i++) {
+      finger = {...finger, y: 300 + 10 * i};
+      touch('touchmove', stage, [finger], [finger], clock + i * 16);
+    }
+    clock += (dy / 10) * 16;
+    return finger;
+  }
+
+  it('carries a photo dragged down, shrinking it, and the release dismisses', async () => {
+    const onOpenChange = vi.fn();
+    render(
+      <Lightbox
+        isOpen={true}
+        onOpenChange={onOpenChange}
+        media={{src: '/photo.jpg', alt: 'Photo'}}
+      />,
+    );
+    const img = screen.getByAltText('Photo');
+    const stage = img.parentElement!;
+    const finger = dragDown(stage, 100);
+    // The travel past the pan's 10 px threshold is 90 px: the photo's centre
+    // moved 90 px down, and it shrank to 1 − 4.91e-6 × 90².
+    const scale = 1 - 4.91e-6 * 90 * 90;
+    expect(parseFloat(photoTransform(img).scale)).toBeCloseTo(scale, 4);
+    const [tx, ty] = photoTransform(img).translate.split(' ').map(parseFloat);
+    expect(tx).toBeCloseTo(((1 - scale) * 400) / 2, 2);
+    expect(ty).toBeCloseTo(90 + ((1 - scale) * 200) / 2, 2);
+    expect(onOpenChange).not.toHaveBeenCalled();
+    touch('touchend', stage, [], [finger], clock + 16);
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+  });
+
+  it('springs back when the finger lifts moving up', async () => {
+    const onOpenChange = vi.fn();
+    render(
+      <Lightbox
+        isOpen={true}
+        onOpenChange={onOpenChange}
+        media={{src: '/photo.jpg', alt: 'Photo'}}
+        hasZoom
+      />,
+    );
+    const img = screen.getByAltText('Photo');
+    const stage = img.parentElement!;
+    let finger = dragDown(stage, 100);
+    for (let i = 1; i <= 6; i++) {
+      finger = {...finger, y: finger.y - 10};
+      touch('touchmove', stage, [finger], [finger], clock + i * 16);
+    }
+    touch('touchend', stage, [], [finger], clock + 7 * 16);
+    // The return's end state is in place at once (it springs there on the
+    // compositor); at rest the photo keeps no inline transform.
+    expect(photoTransform(img)).toEqual({translate: '', scale: ''});
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it('ignores the first tap on the strip after a drag to close springs back, as before', async () => {
+    const onOpenChange = vi.fn();
+    render(
+      <Lightbox
+        isOpen={true}
+        onOpenChange={onOpenChange}
+        media={{src: '/photo.jpg', alt: 'Photo', caption: 'A caption'}}
+        hasZoom
+      />,
+    );
+    const img = screen.getByAltText('Photo');
+    const stage = img.parentElement!;
+    let finger = dragDown(stage, 100);
+    for (let i = 1; i <= 6; i++) {
+      finger = {...finger, y: finger.y - 10};
+      touch('touchmove', stage, [finger], [finger], clock + i * 16);
+    }
+    touch('touchend', stage, [], [finger], clock + 7 * 16);
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(onOpenChange).not.toHaveBeenCalled();
+    const group = screen.getByText('A caption').parentElement!;
+    const tapStrip = () => {
+      fingerDown(group, 200, 590);
+      fireEvent.click(group, {clientX: 200, clientY: 590, detail: 1});
+    };
+    // The first tap on the strip below the stage only clears the drag's flag.
+    tapStrip();
+    expect(onOpenChange).not.toHaveBeenCalled();
+    tapStrip();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
 });
 
 describe('Lightbox zoom reset timing', () => {
@@ -2041,6 +2290,40 @@ describe('Lightbox zoom reset timing', () => {
       translate: '',
       scale: '',
     });
+  });
+});
+
+describe('Lightbox restore after a dismissal', () => {
+  const media = [
+    {src: '/a.jpg', alt: 'Image A'},
+    {src: '/b.jpg', alt: 'Image B'},
+  ];
+  // The backdrop's blur is off while the backdrop moves, as during a
+  // cancelled drag's return, and the restore brings it back.
+  const BLUR_OFF = '--_lightbox-backdrop-filter';
+
+  it('brings the backdrop back to rest as the viewer opens', () => {
+    const {rerender} = render(
+      <Lightbox isOpen={false} onOpenChange={() => {}} media={media} hasZoom />,
+    );
+    const dialog = document.querySelector('dialog');
+    expect(dialog).not.toBeNull();
+    dialog?.style.setProperty(BLUR_OFF, 'none');
+    rerender(
+      <Lightbox isOpen={true} onOpenChange={() => {}} media={media} hasZoom />,
+    );
+    expect(dialog?.style.getPropertyValue(BLUR_OFF)).toBe('');
+  });
+
+  it('leaves a moving backdrop alone on a page change while the viewer is open', () => {
+    render(
+      <Lightbox isOpen={true} onOpenChange={() => {}} media={media} hasZoom />,
+    );
+    const dialog = screen.getByRole('dialog');
+    dialog.style.setProperty(BLUR_OFF, 'none');
+    fireEvent.click(screen.getByRole('button', {name: /next/i}));
+    expect(dialog).toHaveTextContent('2 / 2');
+    expect(dialog.style.getPropertyValue(BLUR_OFF)).toBe('none');
   });
 });
 

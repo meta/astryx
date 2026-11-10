@@ -36,12 +36,14 @@ import {describe, expect, it} from 'vitest';
 const SRC = path.resolve(__dirname, '..');
 
 /**
- * The utility, the list row's press layer and the controller define the
+ * The utility, the list row's press layer, the press attribute's owner
+ * module (the selector a themed press uses) and the controller define the
  * model; they are not surfaces.
  */
 const MODEL_FILES = new Set([
   'utils/interactionOverlay.stylex.ts',
   'privateAttributes/press.stylex.ts',
+  'privateAttributes/press.ts',
   'utils/pressFeedback.ts',
   'utils/pressGesture.ts',
 ]);

@@ -1017,6 +1017,75 @@ test('the page does not scroll under the finger that held the menu open, and it 
   expect(await page.evaluate(() => document.body.style.position)).toBe('');
 });
 
+/** WebKit makes a click only from its own tap gesture (harness README). */
+const CLICK_FROM_SCRIPT_SKIP =
+  'WebKit makes a click from its own tap gesture only, not from a scripted touch';
+
+/** Counts the clicks that reach the trigger from now on. */
+async function countTriggerClicks(page: Page) {
+  await page.evaluate(() => {
+    const w = window as unknown as {__triggerClicks?: number};
+    w.__triggerClicks = 0;
+    const trigger = document.querySelector(
+      '[data-testid="touch-context-menu"]',
+    );
+    document.addEventListener(
+      'click',
+      event => {
+        if (
+          trigger != null &&
+          event.target instanceof Node &&
+          trigger.contains(event.target)
+        ) {
+          w.__triggerClicks = (w.__triggerClicks ?? 0) + 1;
+        }
+      },
+      true,
+    );
+  });
+  return async () =>
+    page.evaluate(
+      () =>
+        (window as unknown as {__triggerClicks?: number}).__triggerClicks ?? 0,
+    );
+}
+
+test('a finger that lifts before 400 ms makes a plain tap: one click and no menu', async ({
+  page,
+}) => {
+  const {driver, center} = await openTouchStory(page);
+  test.skip(!driver.drivesNativeGestures, CLICK_FROM_SCRIPT_SKIP);
+  const clicks = await countTriggerClicks(page);
+  // Past core's press onset at 150 ms: a long press that fails is still a
+  // tap.
+  await driver.play(hold(center, 250));
+  const startedAt = await touchStartedAt(page);
+  const liftedAfterMs = (await lastInput(page, 'touchend')) - startedAt;
+  // The commit at 400 ms runs on the page clock. A lift that reached the page
+  // later makes a real long press, so the case cannot judge a tap.
+  if (liftedAfterMs >= contextMenu.press.commitMs) {
+    throw new Error(
+      `the lift reached the page ${liftedAfterMs.toFixed(1)} ms after the touch, past the ${contextMenu.press.commitMs} ms a tap allows`,
+    );
+  }
+  await expect.poll(clicks).toBe(1);
+  // The menu's moment passes with no menu.
+  await page.waitForFunction(
+    dueAt => performance.now() > dueAt,
+    startedAt + menuDisplayMs + 100,
+  );
+  // One task more, so a timer that is due runs before the read.
+  await page.evaluate(
+    async () =>
+      new Promise<void>(resolve => {
+        setTimeout(resolve, 0);
+      }),
+  );
+  expect(await menuShownAt(page)).toBeNull();
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeHidden();
+  expect(await clicks()).toBe(1);
+});
+
 test('a new finger that pans outside the open menu closes it, and the page scrolls', async ({
   page,
 }) => {

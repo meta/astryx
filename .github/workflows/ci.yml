@@ -6,6 +6,9 @@
 # Merge queue: test + build also run on merge_group events so the
 # merge queue can gate on them before landing a PR.
 name: CI
+# Main's nightly full interaction run names its commit, so the main heavy
+# lanes tell it from a release-check. Every other run keeps its default name.
+run-name: "${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'interaction-full' && format('Interaction proofs of {0}', github.sha) || '' }}"
 
 on:
   pull_request:
@@ -20,9 +23,9 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: 'Run the canonical check on exact main or a marked release branch, or capture a main baseline candidate'
+        description: 'Run the canonical check on exact main or a marked release branch, capture a main baseline candidate, or run every Chromium interaction proof on main'
         type: choice
-        options: [capture, release-check]
+        options: [capture, release-check, interaction-full]
         default: capture
         required: true
       release-branch:
@@ -80,7 +83,9 @@ permissions: {}
 #
 # One group per pull request (a fork's branch name can repeat across forks),
 # so a new push cancels the superseded run. Merge-queue entries and dispatches
-# get their own groups and are never cancelled by a pull request. The
+# get their own groups and are never cancelled by a pull request. Main's
+# nightly full interaction run has a group of its own, so it never replaces a
+# waiting release-check. The
 # release-checks main-heavy-lanes.yml and the release re-check dispatch (as
 # github-actions[bot]) share one group: one runs and the newest waits. Only a
 # release re-check cancels the running check; it checks main's tip in full, so
@@ -93,7 +98,7 @@ permissions: {}
 # its own, so re-running an older head never cancels the run for the pull
 # request's current head.
 concurrency:
-  group: "ci-${{ github.event.pull_request.number && (github.run_attempt == '1' && github.event.pull_request.number || format('{0}-rerun-{1}', github.event.pull_request.number, github.run_id)) || github.event.merge_group.head_sha || (github.event_name == 'workflow_dispatch' && github.triggering_actor == 'github-actions[bot]' && 'main-heavy-lanes') || github.run_id }}"
+  group: "ci-${{ github.event.pull_request.number && (github.run_attempt == '1' && github.event.pull_request.number || format('{0}-rerun-{1}', github.event.pull_request.number, github.run_id)) || github.event.merge_group.head_sha || (github.event_name == 'workflow_dispatch' && inputs.operation == 'interaction-full' && 'interaction-full') || (github.event_name == 'workflow_dispatch' && github.triggering_actor == 'github-actions[bot]' && 'main-heavy-lanes') || github.run_id }}"
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' || (inputs.recheck && github.triggering_actor == 'github-actions[bot]') }}
 
 jobs:
@@ -146,7 +151,7 @@ jobs:
         timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 125 || 13 }}
         with:
           phase: room
-          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 16 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 17 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
@@ -200,7 +205,7 @@ jobs:
           started: ${{ needs.room.outputs.started }}
           looks: ${{ needs.room.outputs.looks }}
           next: ${{ needs.room.outputs.next }}
-          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 16 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 17 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
@@ -302,6 +307,8 @@ jobs:
           mkdir -p "$TRUSTED_POLICY/scripts/release" "$TRUSTED_POLICY/scripts/lib"
           git show "origin/$RELEASE_BRANCH:scripts/release/active-release.mjs" \
             > "$TRUSTED_POLICY/scripts/release/active-release.mjs"
+          git show "origin/$RELEASE_BRANCH:scripts/release/release-paths.mjs" \
+            > "$TRUSTED_POLICY/scripts/release/release-paths.mjs"
           git show "origin/$RELEASE_BRANCH:scripts/lib/workspace-globs.mjs" \
             > "$TRUSTED_POLICY/scripts/lib/workspace-globs.mjs"
           VALIDATOR="$TRUSTED_POLICY/scripts/release/active-release.mjs"
@@ -372,26 +379,30 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      - name: Fetch release refs, base, and trusted release policy
+      - name: Fetch release refs, base, main, and trusted release policy
         run: |
           git fetch origin '+refs/heads/release/v*:refs/remotes/origin/release/v*'
-          git fetch origin "${{ github.base_ref }}" --depth=50
+          git fetch origin "${{ github.base_ref }}" --depth=200
+          git fetch origin 'main:refs/remotes/origin/main'
           TRUSTED_POLICY="$RUNNER_TEMP/release-policy"
           mkdir -p "$TRUSTED_POLICY/scripts/release" "$TRUSTED_POLICY/scripts/lib"
           git show "origin/${{ github.base_ref }}:scripts/release/active-release.mjs" \
             > "$TRUSTED_POLICY/scripts/release/active-release.mjs"
+          git show "origin/${{ github.base_ref }}:scripts/release/release-paths.mjs" \
+            > "$TRUSTED_POLICY/scripts/release/release-paths.mjs"
           git show "origin/${{ github.base_ref }}:scripts/lib/workspace-globs.mjs" \
             > "$TRUSTED_POLICY/scripts/lib/workspace-globs.mjs"
 
       - name: Setup Node and pnpm
         uses: ./.github/actions/setup
 
-      - name: Require generated-only release bookkeeping
+      - name: Require generated release bookkeeping or a proven test repair
         run: |
           node "$RUNNER_TEMP/release-policy/scripts/release/active-release.mjs" validate-diff \
             --root "$GITHUB_WORKSPACE" \
             --base "origin/${{ github.base_ref }}" \
-            --head "${{ github.event.pull_request.head.sha }}"
+            --head "${{ github.event.pull_request.head.sha }}" \
+            --main-ref origin/main
 
       - name: Validate branch, head, plan, versions, and Changeset consumption
         run: |
@@ -471,6 +482,8 @@ jobs:
           mkdir -p "$TRUSTED_POLICY/scripts/release" "$TRUSTED_POLICY/scripts/lib"
           git show origin/main:scripts/release/active-release.mjs \
             > "$TRUSTED_POLICY/scripts/release/active-release.mjs"
+          git show origin/main:scripts/release/release-paths.mjs \
+            > "$TRUSTED_POLICY/scripts/release/release-paths.mjs"
           git show origin/main:scripts/lib/workspace-globs.mjs \
             > "$TRUSTED_POLICY/scripts/lib/workspace-globs.mjs"
 
@@ -1468,7 +1481,7 @@ jobs:
     # the run; every job that uses its build also needs admission, so the heavy
     # legs still wait for room (spec:AST-030 FR16, DEC-16).
     needs: [room, heavy-ci]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && ((github.event_name != 'workflow_dispatch' || inputs.operation == 'release-check') && always() && !cancelled() && needs.room.outputs.full != 'true')) }}
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && ((github.event_name != 'workflow_dispatch' || inputs.operation == 'release-check' || inputs.operation == 'interaction-full' && github.ref == 'refs/heads/main') && always() && !cancelled() && needs.room.outputs.full != 'true')) }}
     # Every browser lane waits for this job, and the package builds and the
     # Storybook build run side by side (build-packages-and-storybook.mjs).
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '4-core-ubuntu' || 'ubuntu-latest' }}
@@ -1624,7 +1637,7 @@ jobs:
             # pull request changes its source. A published package the base
             # leaves unbuilt is reported from the head build only when none of
             # its report inputs changed (SHARED_INPUTS in the API report CLI);
-            # otherwise from its committed report.
+            # otherwise it is reported as unknown, with no rows.
             pnpm -F @astryxdesign/build build
             pnpm -F @astryxdesign/core build
             for pkg in lab charts richtext vega; do
@@ -1637,8 +1650,13 @@ jobs:
                   git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- "$dir" || pnpm -F "./$dir" build
                 done
                 # The CLI publishes declarations generated from its JSDoc.
-                git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- packages/cli || pnpm -F @astryxdesign/cli sync:api-types
-              } || echo "Building the published packages of the merge base failed; those packages compare with its committed reports."
+                # The head build always writes them, and the CLI report also
+                # reads Core, so the base writes them on every pull request,
+                # not only when the CLI changes. Without them the CLI base
+                # report falls back to the committed one. Keep apostrophes
+                # out of these comments: the script is single-quoted.
+                pnpm -F @astryxdesign/cli sync:api-types
+              } || echo "Building the published packages of the merge base failed; the API changes report those packages as unknown."
             fi
             touch ../base-build.done
           ' > base-build.log 2>&1 || touch base-build.failed &
@@ -1716,8 +1734,10 @@ jobs:
           echo "short_hash=${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
           printf '{"forceFullComponentAudits":true}\n' > analysis.json
 
+      # The interaction proofs read it on a pull request and in main's nightly
+      # full interaction run.
       - name: Upload Storybook artifact
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && (github.event_name == 'pull_request' || inputs.operation == 'release-check')
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && (github.event_name == 'pull_request' || inputs.operation == 'release-check' || inputs.operation == 'interaction-full')
         uses: actions/upload-artifact@v7
         with:
           name: storybook-${{ steps.release.outputs.short_hash || steps.urls.outputs.short_hash }}
@@ -1850,7 +1870,9 @@ jobs:
       # Advisory API changes (architecture:public-component-api INV24): each
       # published package's report from this build, compared with the merge
       # base's surface (Main's record of it, else the base built above, else
-      # the reports committed there, read with git). A committed report that
+      # the reports committed there, read with git). A package the base built
+      # above cannot surface is reported as unknown, never from its committed
+      # report. A committed report that
       # differs from this build is one stale line, not rows. It reads the
       # dists built above and never fails the job; api-changes.json goes into
       # the pr-analysis artifact. With no merge base there is nothing to compare.
@@ -1897,7 +1919,9 @@ jobs:
             package-size.json
             api-changes.json
             api-changes.md
-          retention-days: 1
+          # merge-guard reads this run's api-changes.json up to a day after the
+          # run, so the artifact outlives that.
+          retention-days: 3
 
   # Typechecks run beside build-storybook instead of before its Storybook
   # build, so the browser checks that wait on the Storybook artifact start
@@ -2533,20 +2557,249 @@ jobs:
           retention-days: 30
           delete-merged: true
 
+  # How many legs each interaction lane starts. It counts each lane the way
+  # its legs do (same scope, planner and recorded times, at most ten legs),
+  # so a lane starts only the legs that have a share. A leg fails when its
+  # own count needs more legs than started.
+  interaction-legs:
+    name: interaction-legs
+    needs: [room, admission, heavy-ci]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && ((github.event_name != 'workflow_dispatch' || inputs.operation == 'interaction-full' && github.ref == 'refs/heads/main') && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      # The code where WebKit and Chromium differ on touch, and the lane's
+      # shared setup. A change to it runs WEBKIT_SPEC_PATHS.
+      WEBKIT_SHARED_PATHS: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch|primaryClick|isApplePlatform|flatTree|inputStream|clickGuard|selectionLock|coarsePointer|sharedResizeObserver|scrollView|nodeType|inputAge)|packages/core/src/privateAttributes/(hapticSwitch|reducedMotion)\.stylex\.ts$|packages/core/src/theme/tokenReferences\.ts$|packages/core/src/Layer/(inputHold|modalOutlet)\.ts$|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback|isRtlElement|useIsomorphicLayoutEffect|useAttachment|usePager|__tests__/(usePager|pagerBundle))|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|\.github/scripts/(stale-head-hint|merge-base)\.sh$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
+      # The release interaction check's throwaway pull request runs every
+      # interaction spec in WebKit: the release receipt needs the whole suite,
+      # which the leg count spreads over the matrix. Only the release tooling
+      # opens it: an interaction-check/ branch in this repository, opened by
+      # the account the tooling uses. Any other pull request keeps the paths
+      # below.
+      WEBKIT_ALL_SPECS: ${{ startsWith(github.head_ref, 'interaction-check/') && github.event.pull_request.user.login == 'cixzhang' && github.event.pull_request.head.repo.full_name == github.repository }}
+      # The specs a shared-code change runs. Besides them, a change runs each
+      # interaction spec it edits, and every interaction spec in a component
+      # folder whose code it changes (`playwright-legs.mjs select`).
+      WEBKIT_SPEC_PATHS: >-
+        packages/core/src/gestures/
+        packages/core/src/motion/__tests__/animatedLayout.interaction
+        packages/core/src/motion/__tests__/animator.interaction
+        packages/core/src/hooks/__tests__/usePager.interaction
+        internal/interaction-harness/
+    outputs:
+      chromium: ${{ steps.matrix.outputs.chromium }}
+      webkit: ${{ steps.matrix.outputs.webkit }}
+    steps:
+      - name: Check out the scope action
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            .github/actions/test-scope
+            .github/scripts
+            scripts/lib
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Decide the Chromium proofs' scope
+        id: scope-chromium
+        uses: ./.test-scope/.github/actions/test-scope
+        with:
+          # Unit tests, docs, records and accessibility specs in a component
+          # folder (packages/<component package>/src/<Component>/) put nothing
+          # on a page these proofs load, so they stay out of scope. Shared
+          # folders, src roots, theme sources and every other package are
+          # shared code and stay in.
+          paths: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/(?!(?:core|lab|charts|richtext|vega)/)[^/]+/src/|packages/(?:core|lab|charts|richtext|vega)/src/(?![A-Z][^/]*/)|packages/(?:core|lab|charts|richtext|vega)/src/[A-Z][^/]*/(?!.*(?:\.test\.[^/]+|\.doc\.mjs|\.md|\.a11y\.[^/]+\.spec\.ts)$)|packages/themes/[^/]+/src/|packages/[^/]+/src/theme/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|\.github/scripts/(stale-head-hint|merge-base)\.sh$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
+          # Main's nightly full run plans every spec; a merge-group entry plans
+          # none.
+          outside-pull-request: ${{ inputs.operation == 'interaction-full' && 'run' || 'skip' }}
+          requires-head-file: playwright.interaction.config.ts
+          # A Lab-only change still runs each interaction spec it edits.
+          lab-only-specs: '\.interaction\.browser\.spec\.ts$'
+          # Lists the changed files, so the Chromium selection reads them.
+          component-audit: 'true'
+
+      - name: Decide the WebKit proofs' scope
+        id: scope-webkit
+        uses: ./.test-scope/.github/actions/test-scope
+        with:
+          # Unit tests, docs, records and accessibility specs in a component
+          # folder (packages/<component package>/src/<Component>/) put nothing
+          # on a page these proofs load, so they stay out of scope. Shared
+          # folders, src roots, theme sources and every other package are
+          # shared code and stay in.
+          paths: '^(packages/(?!(?:core|lab|charts|richtext|vega)/)[^/]+/src/[^/]+/|packages/(?:core|lab|charts|richtext|vega)/src/(?![A-Z])[^/]+/|packages/(?:core|lab|charts|richtext|vega)/src/[A-Z][^/]*/(?!.*(?:\.test\.[^/]+|\.doc\.mjs|\.md|\.a11y\.[^/]+\.spec\.ts)$)|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|packages/[^/]+/src/theme/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$|\.github/scripts/(stale-head-hint|merge-base)\.sh$)'
+          outside-pull-request: skip
+          requires-head-file: playwright.interaction.config.ts
+          # A Lab-only change still runs each interaction spec it edits.
+          lab-only-specs: '\.interaction\.browser\.spec\.ts$'
+          # Lists the changed files, so the planner adds a changed spec.
+          component-audit: 'true'
+
+      - name: Keep the leg planner from the workflow's commit
+        if: steps.scope-chromium.outputs.applies == 'true' || steps.scope-webkit.outputs.applies == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/interaction-legs/.github/scripts" "$RUNNER_TEMP/interaction-legs/scripts/lib"
+          cp .test-scope/.github/scripts/playwright-legs.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
+          cp .test-scope/scripts/lib/duration-split.mjs "$RUNNER_TEMP/interaction-legs/scripts/lib/"
+          cp .test-scope/.github/scripts/a11y-pr-contracts.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
+          cp .test-scope/.github/playwright-leg-durations.json "$RUNNER_TEMP/interaction-legs/.github/"
+          cp .test-scope/.github/scripts/lane-environment.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
+          cp .test-scope/.github/scripts/stale-head-hint.sh "$RUNNER_TEMP/interaction-legs/.github/scripts/"
+          cp .test-scope/.github/scripts/merge-base.sh "$RUNNER_TEMP/interaction-legs/.github/scripts/"
+          cp .test-scope/.github/lane-environments.json "$RUNNER_TEMP/interaction-legs/.github/"
+
+      - name: Count the Chromium legs
+        id: count-chromium
+        if: steps.scope-chromium.outputs.applies == 'true'
+        continue-on-error: true
+        env:
+          LAB_SPECS: ${{ steps.scope-chromium.outputs.lab_specs_path }}
+        run: |
+          # A Lab-only change runs only the interaction specs it edits.
+          FILTERS=()
+          if [ -n "${LAB_SPECS:-}" ]; then mapfile -t LAB < "$LAB_SPECS"; FILTERS=(-- "${LAB[@]}"); fi
+          git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"
+          node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" legs \
+            --listed "$RUNNER_TEMP/interaction-legs/listed.txt" --source .test-scope \
+            --tests-out "$RUNNER_TEMP/interaction-legs/tests.json" \
+            --key interaction-chromium --fallback-key interaction-webkit \
+            --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
+            --setup-seconds 90 --max-seconds 600 \
+            --leg 1 --max-legs 10 \
+            "${FILTERS[@]}"
+
+      # The Chromium selection (spec:AST-030 FR31) runs in shadow: this step
+      # computes it, reports it and keeps it as an artifact, and the lane
+      # still runs every spec until a replay of recent pull requests shows the
+      # selection catches what the full runs caught. Its import graphs read
+      # the merge commit's package, harness and Storybook sources.
+      - name: Select the Chromium proofs, in shadow
+        id: select-chromium
+        if: github.event_name == 'pull_request' && steps.scope-chromium.outputs.applies == 'true' && steps.scope-chromium.outputs.lab_specs_path == ''
+        continue-on-error: true
+        # A slow sparse fetch must not time out the whole job.
+        timeout-minutes: 2
+        env:
+          CHANGED_FILES: ${{ steps.scope-chromium.outputs.changed_files_path }}
+          FULL_SUITE: ${{ steps.scope-chromium.outputs.full_suite }}
+          SCOPE_PATHS: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/(?!(?:core|lab|charts|richtext|vega)/)[^/]+/src/|packages/(?:core|lab|charts|richtext|vega)/src/(?![A-Z][^/]*/)|packages/(?:core|lab|charts|richtext|vega)/src/[A-Z][^/]*/(?!.*(?:\.test\.[^/]+|\.doc\.mjs|\.md|\.a11y\.[^/]+\.spec\.ts)$)|packages/themes/[^/]+/src/|packages/[^/]+/src/theme/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|\.github/scripts/(stale-head-hint|merge-base)\.sh$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
+        run: |
+          set -o pipefail
+          listed="$RUNNER_TEMP/interaction-legs/listed.txt"
+          git -C .test-scope ls-tree -r --name-only HEAD > "$listed"
+          mapfile -t SOURCES < <(grep -oE '^packages/[^/]+/src/' "$listed" | sort -u)
+          git -C .test-scope sparse-checkout add "${SOURCES[@]}" internal/interaction-harness apps/storybook/stories apps/storybook/.storybook
+          node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" select-chromium \
+            --listed "$listed" --changed "${CHANGED_FILES:-}" \
+            --scope "$SCOPE_PATHS" --full-suite "${FULL_SUITE:-true}" \
+            --every-spec "${WEBKIT_ALL_SPECS:-false}" --root .test-scope \
+            --selection .test-scope/.github/interaction-selection.json \
+            --primitives .test-scope/.github/a11y-shared-primitives.json \
+            --out "$RUNNER_TEMP/interaction-legs/chromium-selection.json" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the Chromium selection
+        if: steps.select-chromium.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: interaction-selection-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/interaction-legs/chromium-selection.json
+          retention-days: 90
+
+      - name: Count the WebKit legs
+        id: count-webkit
+        if: steps.scope-webkit.outputs.applies == 'true'
+        continue-on-error: true
+        env:
+          CHANGED_FILES: ${{ steps.scope-webkit.outputs.changed_files_path }}
+          LAB_SPECS: ${{ steps.scope-webkit.outputs.lab_specs_path }}
+        run: |
+          if [ "${WEBKIT_ALL_SPECS:-}" = true ]; then SPEC_PATHS=(packages/ internal/); else read -ra SPEC_PATHS <<< "$WEBKIT_SPEC_PATHS"; fi
+          # With every spec planned, the changed files add nothing. Leave them
+          # out, so a missing list cannot make each leg run the whole suite.
+          CHANGED=(--changed "${CHANGED_FILES:-}")
+          if [ "${WEBKIT_ALL_SPECS:-}" = true ]; then CHANGED=(); fi
+          git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"
+          selected="$RUNNER_TEMP/interaction-legs/selected.txt"
+          # A Lab-only change runs only the interaction specs it edits.
+          if [ -n "${LAB_SPECS:-}" ]; then
+            cp "$LAB_SPECS" "$selected"
+          else
+            node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" select \
+              --listed "$RUNNER_TEMP/interaction-legs/listed.txt" \
+              "${CHANGED[@]}" \
+              --shared "$WEBKIT_SHARED_PATHS" \
+              -- "${SPEC_PATHS[@]}" > "$selected"
+          fi
+          if [ ! -s "$selected" ]; then
+            echo "No WebKit interaction proof covers this change: it touches no shared touch code, no interaction spec, and no component folder that holds one."
+            printf 'count=0\nruns=false\nleg=%s\n' "1" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "WebKit proofs for this change:"; sed 's/^/  /' "$selected"
+          mapfile -t SELECTED < "$selected"
+          node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" legs \
+            --listed "$RUNNER_TEMP/interaction-legs/listed.txt" --source .test-scope \
+            --tests-out "$RUNNER_TEMP/interaction-legs/tests.json" \
+            --key interaction-webkit --fallback-key interaction-chromium \
+            --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
+            "${CHANGED[@]}" \
+            --setup-seconds 90 --max-seconds 600 \
+            --leg 1 --max-legs 10 \
+            -- "${SELECTED[@]}"
+
+      # The matrix each lane starts: its counted legs, one leg (which skips)
+      # outside its scope or with nothing to run, and all ten when its count
+      # failed, so each leg decides for itself as before.
+      - name: Name each lane's legs
+        id: matrix
+        env:
+          CHROMIUM_OUTCOME: ${{ steps.count-chromium.outcome }}
+          CHROMIUM_COUNT: ${{ steps.count-chromium.outputs.count }}
+          WEBKIT_OUTCOME: ${{ steps.count-webkit.outcome }}
+          WEBKIT_COUNT: ${{ steps.count-webkit.outputs.count }}
+        run: |
+          legs() {
+            local outcome="$1" count="$2"
+            case "$outcome" in
+              success) [ "${count:-0}" -ge 1 ] 2>/dev/null || count=1 ;;
+              skipped) count=1 ;;
+              *) count=10 ;;
+            esac
+            [ "$count" -le 10 ] || count=10
+            local list=1 leg
+            for ((leg = 2; leg <= count; leg++)); do list="$list, $leg"; done
+            printf '[%s]' "$list"
+          }
+          echo "chromium=$(legs "$CHROMIUM_OUTCOME" "$CHROMIUM_COUNT")" >> "$GITHUB_OUTPUT"
+          echo "webkit=$(legs "$WEBKIT_OUTCOME" "$WEBKIT_COUNT")" >> "$GITHUB_OUTPUT"
+          for lane in "Chromium:$CHROMIUM_OUTCOME" "WebKit:$WEBKIT_OUTCOME"; do
+            case "${lane#*:}" in
+              success | skipped) ;;
+              *) echo "::warning title=Leg count fell back to ten::The ${lane%%:*} leg count failed, so its lane starts ten legs that each decide for themselves." ;;
+            esac
+          done
+          cat "$GITHUB_OUTPUT"
+
   pr-interaction:
     name: pr-interaction (${{ matrix.leg }}/${{ strategy.job-total }})
-    needs: [room, admission, heavy-ci, build-storybook]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true')) }}
+    needs: [room, admission, heavy-ci, build-storybook, interaction-legs]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && ((github.event_name != 'workflow_dispatch' || inputs.operation == 'interaction-full' && github.ref == 'refs/heads/main') && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true')) }}
     # Frame evidence measures timing: four cores, one Playwright worker.
     # The legs share the spec files by their recorded times
     # (playwright-legs.mjs), as few legs as keep each leg's setup and proofs
     # within ten minutes, which leaves a third of the job's fifteen for a slow
-    # runner or checkout. A leg with no share passes. `test` reads the job's
-    # result, which is success only when every leg passed.
+    # runner or checkout; interaction-legs starts only those legs, at most
+    # ten. `test` reads the job's result, which is success only when every
+    # leg passed.
     strategy:
       fail-fast: false
       matrix:
-        leg: [1, 2, 3, 4, 5, 6]
+        leg: ${{ fromJSON(needs.interaction-legs.outputs.chromium || '[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -2575,9 +2828,18 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          paths: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|\.github/scripts/(stale-head-hint|merge-base)\.sh$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
-          outside-pull-request: skip
+          # Unit tests, docs, records and accessibility specs in a component
+          # folder (packages/<component package>/src/<Component>/) put nothing
+          # on a page these proofs load, so they stay out of scope. Shared
+          # folders, src roots, theme sources and every other package are
+          # shared code and stay in.
+          paths: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/(?!(?:core|lab|charts|richtext|vega)/)[^/]+/src/|packages/(?:core|lab|charts|richtext|vega)/src/(?![A-Z][^/]*/)|packages/(?:core|lab|charts|richtext|vega)/src/[A-Z][^/]*/(?!.*(?:\.test\.[^/]+|\.doc\.mjs|\.md|\.a11y\.[^/]+\.spec\.ts)$)|packages/themes/[^/]+/src/|packages/[^/]+/src/theme/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|\.github/scripts/(stale-head-hint|merge-base)\.sh$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
+          outside-pull-request: ${{ inputs.operation == 'interaction-full' && 'run' || 'skip' }}
           requires-head-file: playwright.interaction.config.ts
+          # A Lab-only change still runs each interaction spec it edits.
+          lab-only-specs: '\.interaction\.browser\.spec\.ts$'
+          # Lists the changed files, so the Chromium selection reads them.
+          component-audit: 'true'
 
       - name: Require this pull request's Storybook build
         if: steps.scope.outputs.applies == 'true' && needs.build-storybook.result != 'success'
@@ -2614,7 +2876,12 @@ jobs:
       - name: Count this run's legs
         id: legs
         if: steps.scope.outputs.applies == 'true'
+        env:
+          LAB_SPECS: ${{ steps.scope.outputs.lab_specs_path }}
         run: |
+          # A Lab-only change runs only the interaction specs it edits.
+          FILTERS=()
+          if [ -n "${LAB_SPECS:-}" ]; then mapfile -t LAB < "$LAB_SPECS"; FILTERS=(-- "${LAB[@]}"); fi
           git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" legs \
             --listed "$RUNNER_TEMP/interaction-legs/listed.txt" --source .test-scope \
@@ -2622,7 +2889,14 @@ jobs:
             --key interaction-chromium --fallback-key interaction-webkit \
             --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
             --setup-seconds 90 --max-seconds 600 \
-            --leg ${{ matrix.leg }} --max-legs ${{ strategy.job-total }}
+            --leg ${{ matrix.leg }} --max-legs 10 \
+            "${FILTERS[@]}"
+
+      - name: Require a leg for every share
+        if: steps.scope.outputs.applies == 'true' && fromJSON(steps.legs.outputs.count || '0') > strategy.job-total
+        run: |
+          echo "::error::This run's proofs need ${{ steps.legs.outputs.count }} legs, but only ${{ strategy.job-total }} started, so a share would run nowhere. Re-run all jobs."
+          exit 1
 
       - name: Leave the proofs to the other legs
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs != 'true'
@@ -2648,16 +2922,17 @@ jobs:
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         run: 'true'
 
+      # The pull request's head, or the main commit a nightly run checks.
       - name: Checkout
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Verify evidence checkout
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         env:
-          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD_SHA"
 
       # The head's specs run in this lane's environment, which comes from the
@@ -2694,13 +2969,19 @@ jobs:
       - name: Plan this leg's interaction proofs
         id: plan
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
+        env:
+          LAB_SPECS: ${{ steps.scope.outputs.lab_specs_path }}
         run: |
+          # A Lab-only change runs only the interaction specs it edits.
+          FILTERS=()
+          if [ -n "${LAB_SPECS:-}" ]; then mapfile -t LAB < "$LAB_SPECS"; FILTERS=(-- "${LAB[@]}"); fi
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" plan \
             --key interaction-chromium --fallback-key interaction-webkit --tests "$RUNNER_TEMP/interaction-legs/tests.json" \
             --config playwright.interaction.config.ts --project chromium \
             --leg ${{ steps.legs.outputs.leg }} --of ${{ steps.legs.outputs.count }} \
             --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
-            --out "$RUNNER_TEMP/interaction-leg.txt"
+            --out "$RUNNER_TEMP/interaction-leg.txt" \
+            "${FILTERS[@]}"
 
       - name: Run interaction proofs
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true' && steps.plan.outputs.files != '0'
@@ -2749,16 +3030,16 @@ jobs:
   # in WebKit.
   pr-interaction-webkit:
     name: pr-interaction-webkit (${{ matrix.leg }}/${{ strategy.job-total }})
-    needs: [room, admission, heavy-ci, build-storybook]
+    needs: [room, admission, heavy-ci, build-storybook, interaction-legs]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true')) }}
     # Frame evidence measures timing: four cores, one Playwright worker.
     # The leg count plans as many legs as keep each one's setup and proofs
-    # within ten minutes, as the Chromium proofs' count does. The matrix is
-    # the ceiling, six legs as for Chromium; a leg with no share passes at once.
+    # within ten minutes, as the Chromium proofs' count does, at most ten;
+    # interaction-legs starts only those legs.
     strategy:
       fail-fast: false
       matrix:
-        leg: [1, 2, 3, 4, 5, 6]
+        leg: ${{ fromJSON(needs.interaction-legs.outputs.webkit || '[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Playwright's own image for the version the lockfile resolves, with
@@ -2819,9 +3100,16 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          paths: '^(packages/[^/]+/src/[^/]+/|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$|\.github/scripts/(stale-head-hint|merge-base)\.sh$)'
+          # Unit tests, docs, records and accessibility specs in a component
+          # folder (packages/<component package>/src/<Component>/) put nothing
+          # on a page these proofs load, so they stay out of scope. Shared
+          # folders, src roots, theme sources and every other package are
+          # shared code and stay in.
+          paths: '^(packages/(?!(?:core|lab|charts|richtext|vega)/)[^/]+/src/[^/]+/|packages/(?:core|lab|charts|richtext|vega)/src/(?![A-Z])[^/]+/|packages/(?:core|lab|charts|richtext|vega)/src/[A-Z][^/]*/(?!.*(?:\.test\.[^/]+|\.doc\.mjs|\.md|\.a11y\.[^/]+\.spec\.ts)$)|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|packages/[^/]+/src/theme/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$|\.github/scripts/(stale-head-hint|merge-base)\.sh$)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
+          # A Lab-only change still runs each interaction spec it edits.
+          lab-only-specs: '\.interaction\.browser\.spec\.ts$'
           # Lists the changed files, so the planner adds a changed spec.
           component-audit: 'true'
 
@@ -2854,7 +3142,7 @@ jobs:
 
       # One leg runs every proof while its setup and the recorded times fit
       # ten minutes, which leaves a third of the job's limit for a slow
-      # runner. Past that the planner adds legs, up to the matrix, so a
+      # runner. Past that the planner adds legs, up to the ten-leg ceiling, so a
       # growing suite or a wide change does not reach the limit. Each leg decides the same way, before its
       # own setup, from the workflow's times and the changed files. The spec
       # files come from the merge commit's tree, which the scope checkout
@@ -2864,6 +3152,7 @@ jobs:
         if: steps.scope.outputs.applies == 'true'
         env:
           CHANGED_FILES: ${{ steps.scope.outputs.changed_files_path }}
+          LAB_SPECS: ${{ steps.scope.outputs.lab_specs_path }}
         run: |
           if [ "${WEBKIT_ALL_SPECS:-}" = true ]; then SPEC_PATHS=(packages/ internal/); else read -ra SPEC_PATHS <<< "$WEBKIT_SPEC_PATHS"; fi
           # With every spec planned, the changed files add nothing. Leave them
@@ -2872,11 +3161,16 @@ jobs:
           if [ "${WEBKIT_ALL_SPECS:-}" = true ]; then CHANGED=(); fi
           git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"
           selected="$RUNNER_TEMP/interaction-legs/selected.txt"
-          node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" select \
-            --listed "$RUNNER_TEMP/interaction-legs/listed.txt" \
-            "${CHANGED[@]}" \
-            --shared "$WEBKIT_SHARED_PATHS" \
-            -- "${SPEC_PATHS[@]}" > "$selected"
+          # A Lab-only change runs only the interaction specs it edits.
+          if [ -n "${LAB_SPECS:-}" ]; then
+            cp "$LAB_SPECS" "$selected"
+          else
+            node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" select \
+              --listed "$RUNNER_TEMP/interaction-legs/listed.txt" \
+              "${CHANGED[@]}" \
+              --shared "$WEBKIT_SHARED_PATHS" \
+              -- "${SPEC_PATHS[@]}" > "$selected"
+          fi
           if [ ! -s "$selected" ]; then
             echo "No WebKit interaction proof covers this change: it touches no shared touch code, no interaction spec, and no component folder that holds one."
             printf 'count=0\nruns=false\nleg=%s\n' "${{ matrix.leg }}" >> "$GITHUB_OUTPUT"
@@ -2891,8 +3185,14 @@ jobs:
             --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
             "${CHANGED[@]}" \
             --setup-seconds 90 --max-seconds 600 \
-            --leg ${{ matrix.leg }} --max-legs ${{ strategy.job-total }} \
+            --leg ${{ matrix.leg }} --max-legs 10 \
             -- "${SELECTED[@]}"
+
+      - name: Require a leg for every share
+        if: steps.scope.outputs.applies == 'true' && fromJSON(steps.legs.outputs.count || '0') > strategy.job-total
+        run: |
+          echo "::error::This run's proofs need ${{ steps.legs.outputs.count }} legs, but only ${{ strategy.job-total }} started, so a share would run nowhere. Re-run all jobs."
+          exit 1
 
       - name: Leave the proofs to the other legs
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs != 'true'
@@ -3186,6 +3486,18 @@ jobs:
           if [ "$SCOPED" = true ]; then VISUAL_ARGS=(--scoped); fi
           node .github/scripts/visual-scope.mjs --github-output "$GITHUB_OUTPUT" "${VISUAL_ARGS[@]}" < "$FILES_PATH"
 
+      # The baseline is read from the head, which built the Storybook this job
+      # compares: a branch behind a main baseline refresh would otherwise show
+      # main's accepted pixel changes as its own.
+      - name: Check out the head's visual baseline
+        if: steps.visual-scope.outputs.has_stable_visual == 'true' && steps.visual-scope.outputs.broad_stable_visual == 'true'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: .head-visual-baseline
+          sparse-checkout: .github/visual-baseline
+          persist-credentials: false
+
       - name: Setup Node and pnpm
         if: steps.visual-scope.outputs.has_stable_visual == 'true' && steps.visual-scope.outputs.broad_stable_visual == 'true'
         uses: ./.github/actions/setup
@@ -3218,7 +3530,7 @@ jobs:
         run: |
           node .github/scripts/visual-gate/gate.mjs scout \
             --storybook-dir apps/storybook/dist \
-            --baseline .github/visual-baseline \
+            --baseline .head-visual-baseline/.github/visual-baseline \
             --shard "${{ matrix.shard }}/${{ strategy.job-total }}" \
             --concurrency 4 \
             --observations-out ".visual-scout/observations-${{ matrix.shard }}.json"
@@ -3305,6 +3617,18 @@ jobs:
           if [ "$SCOPED" = true ]; then VISUAL_ARGS=(--scoped); fi
           node .github/scripts/visual-scope.mjs --github-output "$GITHUB_OUTPUT" "${VISUAL_ARGS[@]}" < "$FILES_PATH"
 
+      # The baseline is read from the head, which built the Storybook this job
+      # compares: a branch behind a main baseline refresh would otherwise show
+      # main's accepted pixel changes as its own.
+      - name: Check out the head's visual baseline
+        if: github.event_name == 'pull_request' && steps.visual-scope.outputs.has_stable_visual == 'true'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: .head-visual-baseline
+          sparse-checkout: .github/visual-baseline
+          persist-credentials: false
+
       - name: Setup Node and pnpm
         if: github.event_name != 'pull_request' || steps.visual-scope.outputs.has_stable_visual == 'true'
         uses: ./.github/actions/setup
@@ -3334,7 +3658,7 @@ jobs:
           node .github/scripts/touched-components.mjs scope \
             --analysis analysis.json \
             --files "$FILES_PATH" \
-            --baseline-manifest .github/visual-baseline/manifest.json \
+            --baseline-manifest .head-visual-baseline/.github/visual-baseline/manifest.json \
             --out touched-scope.json \
             --wide-verdict .visual-run/verdict.json
 
@@ -3422,7 +3746,7 @@ jobs:
           run_gate() {
             node .github/scripts/visual-gate/gate.mjs "$COMMAND" \
               --storybook-dir apps/storybook/dist \
-              --baseline .github/visual-baseline \
+              --baseline .head-visual-baseline/.github/visual-baseline \
               --out .visual-run \
               ${SCOPE_ARGS[@]+"${SCOPE_ARGS[@]}"} \
               ${OBS_ARGS[@]+"${OBS_ARGS[@]}"} \
@@ -3451,7 +3775,7 @@ jobs:
             set +e
             node .github/scripts/visual-gate/gate.mjs release \
               --storybook-dir apps/storybook/dist \
-              --baseline .github/visual-baseline \
+              --baseline .head-visual-baseline/.github/visual-baseline \
               --out .visual-run \
               ${OBS_ARGS[@]+"${OBS_ARGS[@]}"} \
               --summary-output visual-summary.md
@@ -3482,7 +3806,7 @@ jobs:
           set +e
           node .github/scripts/visual-gate/gate.mjs check \
             --storybook-dir apps/storybook/dist \
-            --baseline .github/visual-baseline \
+            --baseline .head-visual-baseline/.github/visual-baseline \
             --out .visual-run \
             --tiers component \
             --components "$COMPONENTS" \
@@ -4040,15 +4364,17 @@ jobs:
         with:
           persist-credentials: false
 
-      # The accessibility baseline is read from the head, which built the
-      # Storybook this job audits: a branch behind a main fix that dropped a
-      # baseline entry would otherwise report that entry as new.
+      # The accessibility and visual baselines are read from the head, which
+      # built the Storybook this job audits: a branch behind a main fix that
+      # dropped a baseline entry would otherwise report that entry as new.
       - name: Check out the head's accessibility baseline
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           path: .head-baseline
-          sparse-checkout: .github/a11y-baseline.json
+          sparse-checkout: |
+            .github/a11y-baseline.json
+            .github/visual-baseline/manifest.json
           sparse-checkout-cone-mode: false
           persist-credentials: false
 
@@ -4072,7 +4398,7 @@ jobs:
           node .github/scripts/touched-components.mjs scope \
             --analysis analysis.json \
             --files "$FILES_PATH" \
-            --baseline-manifest .github/visual-baseline/manifest.json \
+            --baseline-manifest .head-baseline/.github/visual-baseline/manifest.json \
             --head-sha "$HEAD_SHA" \
             --out touched-components.json
 
@@ -4201,7 +4527,7 @@ jobs:
             --visual .visual-run/verdict.json \
             --visual-manifest .visual-run/manifest.json \
             --visual-job "$VISUAL_JOB" \
-            --baseline-manifest .github/visual-baseline/manifest.json \
+            --baseline-manifest .head-baseline/.github/visual-baseline/manifest.json \
             --a11y a11y-report.json \
             --a11y-baseline .head-baseline/.github/a11y-baseline.json \
             --a11y-step "$A11Y_STEP" \
@@ -4292,10 +4618,21 @@ jobs:
         with:
           persist-credentials: false
 
+      # When the scope could not be decided (a diff GitHub truncates at 3,000
+      # files, say), everything is in scope: every file counts as changed, and
+      # the job runs every contract its budget fits and lists the rest.
+      - name: List every file when the scope is undecided
+        id: everything
+        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == '' && steps.scope.outputs.decided == 'false'
+        run: |
+          git ls-files > "$RUNNER_TEMP/every-file.txt"
+          echo "path=$RUNNER_TEMP/every-file.txt" >> "$GITHUB_OUTPUT"
+          echo "::notice title=Every contract in scope::The scope could not be decided, so every file counts as changed."
+
       # The changed-spec list and the folder rule both read this list. Without
       # it, a contract would not run and the job would still pass.
       - name: Require the changed-file list
-        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == ''
+        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == '' && steps.scope.outputs.decided != 'false'
         run: |
           echo "::error::The scope step could not list the changed files, so the contracts to run are unknown. Re-run the job."
           exit 1
@@ -4315,7 +4652,7 @@ jobs:
         id: touched
         if: steps.scope.outputs.applies == 'true'
         env:
-          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path || steps.everything.outputs.path }}
         run: |
           GITHUB_STEP_SUMMARY=/dev/null node .github/scripts/touched-components.mjs scope \
             --analysis analysis.json \
@@ -4411,7 +4748,7 @@ jobs:
           ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           WORKFLOW_SHA: ${{ github.sha }}
           SPECS_PATH: ${{ steps.specs.outputs.path }}
-          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path || steps.everything.outputs.path }}
           OWNERS: ${{ steps.touched.outputs.contract_owners }}
           FOLDERS: ${{ steps.touched.outputs.contract_folders }}
           A11Y_CONTRACT_WORKERS: 4
@@ -4434,9 +4771,10 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # Dependent audits (spec:AST-030 FR12): a change to a shared primitive that
-  # .github/a11y-shared-primitives.json lists runs the `audit` specs of the
-  # components that use it, which otherwise run only in their own
+  # Dependent audits (spec:AST-030 FR12): a change to a component's source runs
+  # that component's own `audit` specs, and a change to a shared primitive that
+  # .github/a11y-shared-primitives.json lists also runs the `audit` specs of
+  # the components that use it. These otherwise run only in their own
   # component-audit pull request and in the release check. The plan job reads
   # the changed files and the import graph at the merge commit and splits the
   # audits into at most three legs of about ten minutes each by recorded time.
@@ -4449,9 +4787,17 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+    # owed, ran, deferred and complete are the record merge-guard reads: a
+    # head merges only on a run whose complete is true. The same record is
+    # the a11y-dependent-audits-record-<attempt> artifact.
     outputs:
       count: ${{ steps.plan.outputs.count || '0' }}
+      legs: ${{ steps.plan.outputs.legs || '[1]' }}
       shares: ${{ steps.plan.outputs.shares || '[]' }}
+      owed: ${{ steps.plan.outputs.owed || '[]' }}
+      ran: ${{ steps.plan.outputs.ran || '[]' }}
+      deferred: ${{ steps.plan.outputs.deferred || '[]' }}
+      complete: ${{ steps.plan.outputs.complete || 'true' }}
     steps:
       - name: Check out the scope action
         uses: actions/checkout@v7
@@ -4468,9 +4814,17 @@ jobs:
           outside-pull-request: skip
           component-audit: 'true'
 
+      # Out of scope the run still writes its record, so merge-guard reads
+      # "nothing owed" rather than a missing record.
       - name: Skip the dependent audits outside their scope
         if: steps.scope.outputs.applies != 'true'
-        run: echo "No package source changed; no dependent audit to run."
+        env:
+          ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          echo "No package source changed; no dependent audit to run."
+          printf '{"head": "%s", "attempt": %s, "owed": [], "ran": [], "deferred": [], "complete": true}\n' \
+            "$ASTRYX_HEAD_SHA" "$RUN_ATTEMPT" > "$RUNNER_TEMP/a11y-dependent-audits.json"
 
       # The planner, the primitive list, the import graph and the recorded
       # times all come from the merge commit.
@@ -4482,18 +4836,47 @@ jobs:
 
       # Without the list a changed primitive would go unseen and its
       # dependents' audits would not run.
+      # When the scope could not be decided (a diff GitHub truncates, say),
+      # everything is in scope and every audit is owed. A decided scope
+      # without its list is an error.
       - name: Require the changed-file list
-        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == ''
+        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == '' && steps.scope.outputs.decided != 'false'
         run: |
           echo "::error::The scope step could not list the changed files, so the dependent audits to run are unknown. Re-run the job."
           exit 1
 
+      # A first run fits what it can into three legs of about ten minutes and
+      # names the rest as not yet run; a later run at the same head (a re-run
+      # of all jobs) runs every owed audit.
       - name: Plan the dependent audits
         id: plan
         if: steps.scope.outputs.applies == 'true'
         env:
           CHANGED_FILES: ${{ steps.scope.outputs.changed_files_path }}
-        run: node .github/scripts/a11y-dependent-audits.mjs --changed "$CHANGED_FILES" --out "$RUNNER_TEMP/dependent-audits.json"
+          ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          TRUNCATED: ${{ steps.scope.outputs.truncated }}
+        run: |
+          if [ -n "$CHANGED_FILES" ]; then
+            changes=(--changed "$CHANGED_FILES")
+          elif [ "$TRUNCATED" = true ]; then
+            changes=(--all --truncated)
+          else
+            changes=(--all)
+          fi
+          node .github/scripts/a11y-dependent-audits.mjs "${changes[@]}" --out "$RUNNER_TEMP/a11y-dependent-audits.json" --attempt "$RUN_ATTEMPT"
+
+      # Every run of this job uploads its record. A run that planned audits
+      # but wrote no record fails here, not later at the merge.
+      - name: Upload the dependent-audit record
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          # One record per attempt: merge-guard reads the latest attempt's.
+          name: a11y-dependent-audits-record-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/a11y-dependent-audits.json
+          if-no-files-found: error
+          retention-days: 30
 
   # Each leg runs its share of the plan at the head that built the Storybook.
   # A leg without a share runs on a slim runner and only says so. The `test`
@@ -4506,10 +4889,13 @@ jobs:
     # An empty count (the plan skipped) compares as 0.
     runs-on: ${{ needs.a11y-dependent-audits-plan.outputs.count >= matrix.leg && 'ubuntu-latest' || 'ubuntu-slim' }}
     timeout-minutes: 15
+    # A first run plans at most three legs; a later run at the same head may
+    # plan up to six to run every owed audit. The matrix starts only the
+    # planned legs; without a plan it starts all six, which then stop.
     strategy:
       fail-fast: false
       matrix:
-        leg: [1, 2, 3]
+        leg: ${{ fromJSON(needs.a11y-dependent-audits-plan.outputs.legs || '[1, 2, 3, 4, 5, 6]') }}
     permissions:
       contents: read
     steps:
