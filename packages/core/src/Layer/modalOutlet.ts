@@ -39,7 +39,7 @@ import {
   type RefCallback,
   type RefObject,
 } from 'react';
-import {realmValue, sharedKey, sharedState} from '../utils/sharedRealm';
+import {sharedState} from '../utils/sharedRealm';
 
 // Every copy of Core on the page shares these outlets. The top layer is one
 // per document, so a swizzled modal and a package modal order as one.
@@ -62,13 +62,13 @@ const modalState = sharedState('layer/modal-outlet/state', 1, () => ({
 export type ModalOutletChange = 'outlet' | 'entry';
 
 // The global hosts that move into the latest open modal. Each host removes
-// its own mark when it goes, so the set keeps no node past its host.
-// Registered, so the input hold of a swizzled copy leaves the package's hosts
-// live, as the package's own hold does.
-const hosts = realmValue(
-  sharedKey('layer/modal-outlet-hosts', 1),
+// its own mark when it goes, so the set keeps no node past its host. Every
+// copy of Core shares it, so the input hold of a swizzled copy leaves the
+// package's hosts live, as the package's own hold does.
+const hosts = sharedState(
+  'layer/modal-outlet/hosts',
+  1,
   () => new Set<Element>(),
-  value => value instanceof Set,
 );
 
 function notify(change: ModalOutletChange): void {
