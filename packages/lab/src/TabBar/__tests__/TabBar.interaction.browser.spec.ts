@@ -20,9 +20,11 @@ import type {TouchScript} from '@astryxdesign/interaction-harness';
 import {
   advanceFrozenPage,
   animationStoryboard,
+  armHold,
   blockMainThread,
   busyWindowProof,
   castStoryboard,
+  compareCurve,
   CONTROL_RGB,
   countBetween,
   cubicBezier,
@@ -34,6 +36,7 @@ import {
   installPageFreeze,
   installTimerGate,
   markElement,
+  MARKER_RGB,
   merge,
   openStory,
   PARTIAL_LIFT_SKIP,
@@ -51,9 +54,10 @@ import {
   touchDriver,
   touchStoryboard,
   traceRendering,
-  trackMarker,
+  trackMarkers,
   waitForAnimation,
   waitForRest,
+  watchAnimations,
   webInputDriver,
   withFinger,
   withStorybook,
@@ -121,13 +125,15 @@ async function liftedScale(page: Page) {
  */
 function animationLog(): void {
   const w = window as unknown as {
-    __tabBarMade?: {animation: Animation; at: number}[];
+    __tabBarMade?: {animation: Animation; at: number; wall: number}[];
     __tabBarLifted?: number;
   };
   if (w.__tabBarMade != null) {
     return;
   }
-  const made: {animation: Animation; at: number}[] = [];
+  // `at` is the document time, which stands still within a frame. `wall`
+  // is the real time the animator made the run.
+  const made: {animation: Animation; at: number; wall: number}[] = [];
   w.__tabBarMade = made;
   w.__tabBarLifted = 0;
   const now = () => Number(document.timeline.currentTime ?? 0);
@@ -137,7 +143,7 @@ function animationLog(): void {
     ...args: Parameters<Element['animate']>
   ) {
     const animation = animate.apply(this, args);
-    made.push({animation, at: now()});
+    made.push({animation, at: now(), wall: performance.now()});
     if (made.length > 5000) {
       made.splice(0, made.length - 5000);
     }
@@ -211,6 +217,47 @@ async function lensCenterX(page: Page) {
     throw new Error('no lens');
   }
   return box.x + box.width / 2;
+}
+
+/**
+ * Each animation that ran on the lens itself since `mark`, a page time. That
+ * is its body, its clip or the copy, never their `::before`: the glass and
+ * its shadow. It reads the recorder's page log, which `watchAnimations`
+ * arms. The log keeps `animate()` runs and CSS transitions alike. The read
+ * changes nothing in it. In WebKit, a CSS run that starts and ends between
+ * two frames never reaches the log. No drawn frame shows it either, and the
+ * case judges every drawn frame.
+ */
+async function lensRuns(page: Page, mark: number) {
+  return lensBody(page).evaluate((body, from) => {
+    const log =
+      (
+        window as unknown as {
+          __harnessAnimations?: {
+            log: {animation: Animation; seenAt: number}[];
+          };
+        }
+      ).__harnessAnimations?.log ?? [];
+    return log
+      .filter(({animation, seenAt}) => {
+        const effect = animation.effect as KeyframeEffect | null;
+        const target = effect?.target;
+        return (
+          seenAt >= from &&
+          target != null &&
+          body.contains(target) &&
+          effect?.pseudoElement == null
+        );
+      })
+      .map(({animation}) => {
+        const frames = (animation.effect as KeyframeEffect).getKeyframes();
+        const keys = Object.keys(frames[0] ?? {}).filter(
+          key =>
+            !['offset', 'computedOffset', 'easing', 'composite'].includes(key),
+        );
+        return `${animation.constructor.name} ${keys.join(' ')}`;
+      });
+  }, mark);
 }
 
 /** How strongly a tab's press paint shows: its layer's opacity, 0 when off. */
@@ -1338,8 +1385,9 @@ test('the slide keeps advancing every frame while the main thread is blocked', a
   const block = await blocking;
   await page.waitForTimeout(150);
   const castFrames = await cast.stop();
-  const tracked = await trackMarker(page, castFrames);
-  const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
+  const [tracked, control] = await trackMarkers(page, castFrames, {
+    colors: [MARKER_RGB, CONTROL_RGB],
+  });
   const proof = busyWindowProof(
     tracked,
     {from: block.from, to: block.to},
@@ -1567,22 +1615,11 @@ function assertCrossFade(
 }
 
 /**
- * design:reduced-motion DR2: under Reduce Motion, a change on a touch screen
- * is a cross-fade of 200 ms on UIKit's easeInEaseOut.
+ * The animator's cross-fade under Reduce Motion on a touch screen: 200 ms on
+ * UIKit's easeInEaseOut, as core's `reducedMotionCrossFade` sets it. The
+ * design rule asks only for opacity, within 200 ms.
  */
 const REDUCED_MOTION_FADE = {ms: 200, curve: [0.42, 0, 0.58, 1]} as const;
-
-/** The steepest slope of an easing curve, in progress per unit of time. */
-function steepestSlope(ease: (progress: number) => number) {
-  let steepest = 0;
-  for (let step = 0; step < 1000; step += 1) {
-    steepest = Math.max(
-      steepest,
-      (ease((step + 1) / 1000) - ease(step / 1000)) * 1000,
-    );
-  }
-  return steepest;
-}
 
 /**
  * design:reduced-motion DR2 on animations already read, the fade itself not
@@ -1900,16 +1937,12 @@ test.describe('with Reduce Motion (design:reduced-motion)', () => {
     await page.emulateMedia({reducedMotion: 'reduce'});
     const {driver} = await openBar(page);
     const to = await itemCenter(page, 'Browse');
+    const glass = page.locator('[data-tab-bar-lens-clip]');
     // Every frame from here: the lifted look's opacity, the glass (the
     // clip's ::before) and its shadow (the body's ::before).
     await page.evaluate(() => {
       const w = window as unknown as {
-        __liftFrames: {
-          t: number;
-          at: number;
-          glass: number;
-          shadow: number;
-        }[];
+        __liftFrames: {t: number; glass: number; shadow: number}[];
         __liftDown: number;
         __liftUp: number;
       };
@@ -1941,11 +1974,9 @@ test.describe('with Reduce Motion (design:reduced-motion)', () => {
           ? NaN
           : Number(getComputedStyle(element, '::before').opacity);
       };
-      // `at` is the frame's time, at which the page computes its animations.
-      const step = (at: number) => {
+      const step = () => {
         w.__liftFrames.push({
           t: performance.now(),
-          at,
           glass: opacityOf('[data-tab-bar-lens-clip]'),
           shadow: opacityOf('[data-tab-bar-lens-body]'),
         });
@@ -1956,42 +1987,68 @@ test.describe('with Reduce Motion (design:reduced-motion)', () => {
       requestAnimationFrame(step);
     });
     const since = await timelineNow(page);
+    // The lowering's course is read held, at set moments. A press under
+    // Reduce Motion only sets the lifted look. So the first new runs on the
+    // glass and its shadow are the lowering's, and the page holds them as
+    // they start.
+    const hold = await armHold(page, lensBody(page), {
+      judges: [
+        {target: glass, property: 'opacity', pseudoElement: '::before'},
+        {
+          target: lensBody(page),
+          property: 'opacity',
+          pseudoElement: '::before',
+        },
+      ],
+      count: 2,
+      newOnly: true,
+    });
     await driver.play(tapScript(to, {holdMs: 500}));
+    await hold.held();
+    const times = Array.from({length: 16}, (_, i) => (i * 1000) / 60);
+    const glassAt = await samplePseudoOpacity(glass, times);
+    const shadowAt = await samplePseudoOpacity(lensBody(page), times);
+    await releaseAnimations(page, {finish: true});
     await expect(tab(page, 'Browse')).toHaveAttribute('aria-selected', 'true');
     await waitForRest(lensBody(page));
-    // The lens can rest before the lift's window ends. Wait until the trace
-    // passes the latest end of that window.
-    await page.waitForFunction(
-      end => {
-        const w = window as unknown as {
-          __liftFrames: {t: number}[];
-          __liftUp: number;
-        };
-        const last = w.__liftFrames[w.__liftFrames.length - 1];
-        return w.__liftUp > 0 && last != null && last.t > w.__liftUp + end;
-      },
-      REDUCED_MOTION_FADE.ms - FRAME_STARVATION_MS + 250,
-    );
-    const {frames, down, up} = await page.evaluate(() => {
+    const {frames, down, up, lowerings} = await page.evaluate(from => {
       const w = window as unknown as {
-        __liftFrames: {
-          t: number;
-          at: number;
-          glass: number;
-          shadow: number;
-        }[];
+        __liftFrames: {t: number; glass: number; shadow: number}[];
         __liftDown: number;
         __liftUp: number;
+        __tabBarMade?: {animation: Animation; at: number; wall: number}[];
       };
-      return {frames: w.__liftFrames, down: w.__liftDown, up: w.__liftUp};
-    });
+      const layers = [
+        document.querySelector('[data-tab-bar-lens-clip]'),
+        document.querySelector('[data-tab-bar-lens-body]'),
+      ];
+      return {
+        frames: w.__liftFrames,
+        down: w.__liftDown,
+        up: w.__liftUp,
+        // When the animator made each fade of the glass and its shadow. A
+        // set is a run of one value, which is no fade.
+        lowerings: (w.__tabBarMade ?? [])
+          .filter(({animation, at}) => {
+            const effect = animation.effect as KeyframeEffect | null;
+            const values = new Set(
+              effect?.getKeyframes().map(frame => frame.opacity),
+            );
+            values.delete(undefined);
+            return (
+              at >= from &&
+              effect?.pseudoElement === '::before' &&
+              layers.includes(effect.target) &&
+              values.size > 1
+            );
+          })
+          .map(({wall}) => wall),
+      };
+    }, since);
     expect(down, 'no touch reached the page').toBeGreaterThan(0);
     expect(up, 'no lift reached the page').toBeGreaterThan(down);
-    const isLifted = (frame: {glass: number; shadow: number}) =>
-      frame.glass >= 0.99 && frame.shadow >= 0.99;
-    // The first frame drawn after the touch shows the lifted look, and so
-    // does every frame of the hold. As at the lift, that frame must come
-    // while one starvation threshold of a fade is still left to draw.
+    // The first frame drawn after the touch shows the lifted look. It must
+    // come while one starvation threshold of a fade is still left to draw.
     const [first] = requireFrames(frames, {
       min: 1,
       during: 'the frame after the touch',
@@ -1999,59 +2056,54 @@ test.describe('with Reduce Motion (design:reduced-motion)', () => {
         frame.t > down &&
         frame.t <= down + REDUCED_MOTION_FADE.ms - FRAME_STARVATION_MS,
     });
+    const isLifted = (frame: {glass: number; shadow: number}) =>
+      frame.glass >= 0.99 && frame.shadow >= 0.99;
     expect(isLifted(first), 'the first frame after the touch').toBe(true);
-    const held = requireFrames(frames, {
-      min: 12,
-      during: 'the held press',
-      where: frame => frame.t >= first.t && frame.t < up,
-    });
+    // Every frame drawn from it to the lift shows the lifted look too.
     expect(
-      held
+      frames
+        .filter(frame => frame.t >= first.t && frame.t < up)
         .filter(frame => !isLifted(frame))
         .map(frame => Math.round(frame.t - down)),
       'ms after the touch of each held frame without the lifted look',
     ).toEqual([]);
-    // The lowering is the Reduce Motion cross-fade, dated from the lift.
-    // Each frame shows the fade at the frame's own time.
-    const fade = cubicBezier(...REDUCED_MOTION_FADE.curve);
-    const fadingGlass = (at: number) =>
-      1 - fade(Math.min(1, Math.max(0, (at - up) / REDUCED_MOTION_FADE.ms)));
-    // A later first frame leaves less than one starvation threshold of the
-    // fade to draw.
-    const [afterLift] = requireFrames(frames, {
+    // The animator makes the two fades in the lift's own event: after the
+    // pointerup, and before the page draws its next frame.
+    const [next] = requireFrames(frames, {
       min: 1,
-      during: 'the start of the lift',
-      where: frame =>
-        frame.t > up &&
-        frame.t <= up + REDUCED_MOTION_FADE.ms - FRAME_STARVATION_MS,
+      during: 'the frame after the lift',
+      where: frame => frame.t > up,
     });
-    // The page drew no frame before it, so the window starts there.
-    const lift = requireFrames(frames, {
-      min: 10,
-      during: 'the lift',
-      where: frame => frame.t >= afterLift.t && frame.t <= afterLift.t + 250,
-    });
-    // The slack is one 60 Hz frame of the fade at its steepest. A fade two
-    // frames late, a faster fade or no fade goes past it.
-    const slack = steepestSlope(fade) * (1000 / 60 / REDUCED_MOTION_FADE.ms);
+    expect(lowerings, 'the fades of the glass and its shadow').toHaveLength(2);
     expect(
-      lift
-        .filter(frame => Math.abs(frame.glass - fadingGlass(frame.at)) > slack)
-        .map(frame => [
-          Math.round(frame.at - up),
-          Number(frame.glass.toFixed(2)),
-          Number(fadingGlass(frame.at).toFixed(2)),
-        ]),
-      'ms after the lift, glass and the fade’s glass, of each frame off the fade',
+      lowerings
+        .filter(wall => wall < up || wall > next.t)
+        .map(wall => Math.round(wall - up)),
+      'ms after the lift of each fade made outside its event',
     ).toEqual([]);
-    expect(
-      lift.some(frame => frame.glass > 0.01 && frame.glass < 0.99),
-      'a frame of the glass fading at the lift',
-    ).toBe(true);
-    expect(
-      lift[lift.length - 1].glass,
-      'the glass at the end of the lift',
-    ).toBeLessThanOrEqual(0.01);
+    // Each held moment follows the animator's cross-fade.
+    const fade = cubicBezier(...REDUCED_MOTION_FADE.curve);
+    const fading = (t: number) =>
+      1 - fade(Math.min(1, Math.max(0, t / REDUCED_MOTION_FADE.ms)));
+    for (const [layer, values] of [
+      ['glass', glassAt],
+      ['shadow', shadowAt],
+    ] as const) {
+      const curve = compareCurve(
+        times.map((t, index) => ({t, value: values[index]})),
+        fading,
+        0.02,
+      );
+      expect(
+        curve.maxError,
+        `the ${layer}'s fade: ${JSON.stringify(curve.worst)}`,
+      ).toBeLessThanOrEqual(0.02);
+      // Past 200 ms the held fade reads its end value exactly.
+      expect(
+        values[values.length - 1],
+        `the ${layer} at the end of the lift`,
+      ).toBeLessThanOrEqual(0.01);
+    }
     assertOpacityOnly(await runningAnimations(page, since));
     expect(Math.abs((await lensCenterX(page)) - to.x)).toBeLessThan(0.5);
   });
@@ -2062,12 +2114,10 @@ test.describe('with Reduce Motion (design:reduced-motion)', () => {
     await page.emulateMedia({reducedMotion: 'reduce'});
     const {driver} = await openBar(page);
     const to = await itemCenter(page, 'Profile');
-    // Every frame from here: the lens's own opacity, and how many opacity
-    // animations run on the lens itself. Its glass and shadow are
-    // pseudo-elements, with animations of their own.
+    // Every frame from here: the lens's own opacity.
     await lensBody(page).evaluate(body => {
       const w = window as unknown as {
-        __lensFrames: {t: number; opacity: number; fades: number}[];
+        __lensFrames: {t: number; opacity: number}[];
         __lensDown: number;
       };
       w.__lensFrames = [];
@@ -2083,13 +2133,6 @@ test.describe('with Reduce Motion (design:reduced-motion)', () => {
         w.__lensFrames.push({
           t: performance.now(),
           opacity: Number(getComputedStyle(body).opacity),
-          fades: body
-            .getAnimations()
-            .filter(animation =>
-              (animation.effect as KeyframeEffect)
-                .getKeyframes()
-                .some(frame => frame.opacity != null),
-            ).length,
         });
         if (w.__lensFrames.length < 600) {
           requestAnimationFrame(step);
@@ -2097,33 +2140,57 @@ test.describe('with Reduce Motion (design:reduced-motion)', () => {
       };
       requestAnimationFrame(step);
     });
+    // The recorder logs each animation from its first frame, CSS
+    // transitions too. The watch arms it before the tap.
+    await watchAnimations(lensBody(page));
+    const mark = await page.evaluate(() => performance.now());
+    const opacity = () =>
+      lensBody(page).evaluate(body => Number(getComputedStyle(body).opacity));
+    expect(await opacity(), 'the lens before the tap').toBe(1);
     await driver.play(tapScript(to, {holdMs: 150}));
     await expect(tab(page, 'Profile')).toHaveAttribute('aria-selected', 'true');
     await waitForRest(lensBody(page));
     const {frames, down} = await page.evaluate(() => {
       const w = window as unknown as {
-        __lensFrames: {t: number; opacity: number; fades: number}[];
+        __lensFrames: {t: number; opacity: number}[];
         __lensDown: number;
       };
       return {frames: w.__lensFrames, down: w.__lensDown};
     });
     expect(down, 'no touch reached the page').toBeGreaterThan(0);
-    // The tap's own window: its 150 ms hold and the 200 ms a settle takes.
-    const tap = requireFrames(frames, {
-      min: 12,
-      during: 'the tap and its settle',
-      where: frame => frame.t >= down && frame.t <= down + 350,
+    // The first frame drawn after the touch shows the lens. It must come
+    // while one starvation threshold of a fade is still left to draw.
+    const [first] = requireFrames(frames, {
+      min: 1,
+      during: 'the frame after the touch',
+      where: frame =>
+        frame.t > down &&
+        frame.t <= down + REDUCED_MOTION_FADE.ms - FRAME_STARVATION_MS,
     });
     expect(
-      tap.filter(frame => frame.opacity < 0.9 || frame.fades > 0),
-      'a frame with the lens faded, or fading',
+      first.opacity,
+      'the lens in the first frame after the touch',
+    ).toBeGreaterThanOrEqual(0.9);
+    // Every frame drawn after the touch shows the lens.
+    expect(
+      frames
+        .filter(frame => frame.t > down && !(frame.opacity >= 0.9))
+        .map(frame => Math.round(frame.t - down)),
+      'ms after the touch of each drawn frame with the lens faded',
     ).toEqual([]);
+    // No animation ran on the lens itself, even one that ended between two
+    // frames.
+    expect(
+      await lensRuns(page, mark),
+      'each animation that ran on the lens itself',
+    ).toEqual([]);
+    expect(await opacity(), 'the lens at rest').toBe(1);
     expect(Math.abs((await lensCenterX(page)) - to.x)).toBeLessThan(0.5);
   });
 
   test('on a touch screen a held lens shows the touched tab in its selected look, as UIKit’s does, through the lift to rest', async ({
     page,
-  }) => {
+  }, testInfo) => {
     await page.emulateMedia({reducedMotion: 'reduce'});
     const {driver} = await openBar(page);
     const to = await itemCenter(page, 'Profile');
@@ -2146,13 +2213,17 @@ test.describe('with Reduce Motion (design:reduced-motion)', () => {
         },
         {capture: true, once: true},
       );
-      window.addEventListener(
-        'touchend',
-        () => {
+      // The press ends at the touch's pointerup, before its touchend.
+      const lifted = (event: Event) => {
+        if (
+          w.__copyUp === 0 &&
+          (!(event instanceof PointerEvent) || event.pointerType === 'touch')
+        ) {
           w.__copyUp = performance.now();
-        },
-        {capture: true, once: true},
-      );
+        }
+      };
+      window.addEventListener('pointerup', lifted, {capture: true});
+      window.addEventListener('touchend', lifted, {capture: true});
       const centre = (element: Element | null) => {
         const box = element?.getBoundingClientRect();
         return box == null ? NaN : box.left + box.width / 2;
@@ -2201,6 +2272,18 @@ test.describe('with Reduce Motion (design:reduced-motion)', () => {
     await expect(tab(page, 'Profile')).toHaveAttribute('aria-selected', 'true');
     await waitForRest(lensBody(page));
     await expect(lensCopy(page)).toHaveCount(0);
+    // At rest from here. The trace goes on until it holds a frame drawn
+    // after this.
+    const rested = await page.evaluate(() => performance.now());
+    await page.waitForFunction(
+      at => {
+        const frames = (window as unknown as {__copyFrames: {t: number}[]})
+          .__copyFrames;
+        return frames.length > 0 && frames[frames.length - 1].t > at;
+      },
+      rested,
+      {timeout: 2000},
+    );
     const {frames, down, up} = await page.evaluate(() => {
       const w = window as unknown as {
         __copyFrames: {t: number; selected: boolean; copy: boolean}[];
@@ -2211,30 +2294,51 @@ test.describe('with Reduce Motion (design:reduced-motion)', () => {
     });
     expect(down, 'no touch reached the page').toBeGreaterThan(0);
     expect(up, 'no lift reached the page').toBeGreaterThan(down);
-    // The first frame drawn after the touch already holds the copy.
-    const first = frames.find(frame => frame.t > down);
-    expect(first?.copy, 'the first frame after the touch').toBe(true);
-    // Enough frames to judge the hold, once the touch's first frames are
-    // drawn (WebKit draws its first frame after a touch late), and the lift.
-    requireFrames(frames, {
-      min: 8,
-      during: 'the held press',
-      where: frame => frame.t >= down + 120 && frame.t <= down + 280,
-    });
-    requireFrames(frames, {
-      min: 10,
-      during: 'the lift and its settle',
-      where: frame => frame.t >= up && frame.t <= up + 250,
+    // Every frame drawn from the touch to rest shows Profile's selected look.
+    const drawn = frames.filter(frame => frame.t > down);
+    testInfo.annotations.push({
+      type: 'drawn frames',
+      description: `${drawn.length} from the touch to rest`,
     });
     expect(
-      frames
-        .filter(frame => frame.t > down)
+      drawn
         .filter(frame => !frame.selected)
         .map(frame => Math.round(frame.t - down)),
       'ms after the touch of each frame whose Profile shows no selected look',
     ).toEqual([]);
+    // Three moments must be drawn, or the run proves nothing. First, the
+    // frame after the touch holds the copy. It must come while one
+    // starvation threshold of a fade is still left to draw.
+    const [first] = requireFrames(frames, {
+      min: 1,
+      during: 'the frame after the touch',
+      where: frame =>
+        frame.t > down &&
+        frame.t <= down + REDUCED_MOTION_FADE.ms - FRAME_STARVATION_MS,
+    });
+    expect(first.copy, 'the first frame after the touch').toBe(true);
+    // Second, the hand-off: the last frame with the copy, and the next frame,
+    // which has none, within one starvation threshold.
+    let handOff = 0;
+    for (let index = 0; index < drawn.length; index += 1) {
+      if (drawn[index].copy) {
+        handOff = index;
+      }
+    }
+    requireFrames(drawn, {
+      min: 2,
+      during: 'the hand-off from the copy to the item’s own look',
+      where: frame =>
+        frame.t >= drawn[handOff].t &&
+        frame.t <= drawn[handOff].t + FRAME_STARVATION_MS,
+    });
+    // Third, a frame at rest.
+    requireFrames(frames, {
+      min: 1,
+      during: 'rest',
+      where: frame => frame.t > rested,
+    });
   });
-
   test('on a touch screen a drag from a disabled tab onto an enabled one lifts the lens with that tab in its selected look', async ({
     page,
   }) => {

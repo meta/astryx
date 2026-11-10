@@ -32,6 +32,31 @@ import {parseTransform, type TimedValue, type Transform2D} from './math';
 export const END_INSET_MS = 0.5;
 
 /**
+ * How long a hold waits for its scope, or a judged target, to be on the
+ * page, ms.
+ */
+const TARGET_WAIT_MS = 5_000;
+
+/**
+ * The element that `scope` names, or null without a scope. Throws by name
+ * when no element matches within TARGET_WAIT_MS: it is gone, or it never
+ * came.
+ */
+async function scopeElement(caller: string, scope: Locator | undefined) {
+  if (scope == null) {
+    return null;
+  }
+  return scope.elementHandle({timeout: TARGET_WAIT_MS}).catch(error => {
+    if (error instanceof Error && error.name === 'TimeoutError') {
+      throw new Error(
+        `${caller}: the scope ${scope.toString()} is not on the page after ${TARGET_WAIT_MS} ms: it is gone, or it never came`,
+      );
+    }
+    throw error;
+  });
+}
+
+/**
  * Page side: records every animation the document runs, from its first frame
  * or its creation (a frame loop on the page's real requestAnimationFrame, and
  * the CSS animation and transition events), so an animation that starts and
@@ -717,9 +742,11 @@ export interface HeldAnimation {
  * only it. A second call adds to the held set: what the first held stays held
  * until the release, and offsets keep counting from the origin the first call
  * set (the earliest start it took), so offsets already returned stay true.
- * An animation the page cancels after the hold (retargeting a CSS transition
- * cancels it) leaves the held set: seeking, sampling and releasing skip it
- * rather than revive it.
+ * An animation the page cancels after the hold leaves the held set.
+ * Retargeting a CSS transition cancels it. Seeking, sampling and releasing
+ * skip such an animation rather than revive it. A judged motion's run fails
+ * the next seek or sample instead: a read would show a run that the hold did
+ * not take.
  *
  * `judges` names the motion that the test reads from the hold, as for
  * `armHold`. A hold sent from the test takes what runs when it reaches the
@@ -733,7 +760,7 @@ export async function holdAnimations(
   options: HoldOptions,
 ): Promise<HeldAnimation[]> {
   const motions = judgedMotions('holdAnimations', options?.judges);
-  const scopeHandle = scope ? await scope.elementHandle() : null;
+  const scopeHandle = await scopeElement('holdAnimations', scope);
   await installCurveEnd(page);
   holdKeys += 1;
   const key = holdKeys;
@@ -879,7 +906,7 @@ export async function armHold(
     timeout = 5_000,
   } = options ?? ({} as Partial<ArmHoldOptions>);
   const motions = judgedMotions('armHold', judges);
-  const scopeHandle = scope ? await scope.elementHandle() : null;
+  const scopeHandle = await scopeElement('armHold', scope);
   await installCurveEnd(page);
   holdKeys += 1;
   const id = holdKeys;
@@ -1037,7 +1064,7 @@ async function expectJudgedMotionsHeld(
   }
   const targets = await Promise.all(
     motions.map(motion =>
-      motion.target.elementHandle({timeout: 5_000}).catch(() => {
+      motion.target.elementHandle({timeout: TARGET_WAIT_MS}).catch(() => {
         throw new Error(
           `${failure.caller}: the judged target ${motion.target.toString()} is not on the page`,
         );
@@ -1048,12 +1075,13 @@ async function expectJudgedMotionsHeld(
     ([armed, elements, wanted]) => {
       const w = window as unknown as {
         __harnessTook?: Record<number, Animation[]>;
+        __harnessHeldJudged?: {animation: Animation; motion: string}[];
         __harnessAnimatedProperties: (animation: Animation) => string[];
         __harnessAnimates: (animation: Animation, property: string) => boolean;
       };
       const animations = w.__harnessTook?.[armed] ?? [];
       delete w.__harnessTook?.[armed];
-      const describe = (animation: Animation) => {
+      const nameOf = (animation: Animation) => {
         const effect = animation.effect as KeyframeEffect | null;
         const target = effect?.target ?? null;
         const name =
@@ -1064,21 +1092,34 @@ async function expectJudgedMotionsHeld(
               (target.classList.length
                 ? `.${[...target.classList].slice(0, 2).join('.')}`
                 : '');
-        return `${name}${effect?.pseudoElement ?? ''} ${w.__harnessAnimatedProperties(animation).join(' ')}`;
+        return `${name}${effect?.pseudoElement ?? ''}`;
       };
+      const describe = (animation: Animation) =>
+        `${nameOf(animation)} ${w.__harnessAnimatedProperties(animation).join(' ')}`;
+      const runs = wanted.map((motion, index) =>
+        animations.filter(animation => {
+          const effect = animation.effect as KeyframeEffect | null;
+          return (
+            effect != null &&
+            effect.target === elements[index] &&
+            (effect.pseudoElement ?? null) === motion.pseudoElement &&
+            w.__harnessAnimates(animation, motion.property)
+          );
+        }),
+      );
+      // A seek or a sample fails by name once the page cancels one of these.
+      w.__harnessHeldJudged = [
+        ...(w.__harnessHeldJudged ?? []),
+        ...runs.flatMap((found, index) =>
+          found.map(animation => ({
+            animation,
+            motion: `${wanted[index].property} on ${nameOf(animation)}`,
+          })),
+        ),
+      ];
       return {
-        missing: wanted.flatMap((motion, index) =>
-          animations.some(animation => {
-            const effect = animation.effect as KeyframeEffect | null;
-            return (
-              effect != null &&
-              effect.target === elements[index] &&
-              (effect.pseudoElement ?? null) === motion.pseudoElement &&
-              w.__harnessAnimates(animation, motion.property)
-            );
-          })
-            ? []
-            : [index],
+        missing: runs.flatMap((found, index) =>
+          found.length > 0 ? [] : [index],
         ),
         took: animations.map(describe),
       };
@@ -1117,6 +1158,8 @@ async function expectJudgedMotionsHeld(
  * round `currentTime` writes to their timer resolution.) Returns the time the
  * page then presents: `timeMs`, or the latest clamped end when every held
  * animation was clamped.
+ * It throws when the page has cancelled a judged motion's held run since the
+ * hold.
  */
 export async function seekAnimations(
   page: Page,
@@ -1128,7 +1171,16 @@ export async function seekAnimations(
         __harnessHeld?: Animation[];
         __harnessHeldStarts?: number[];
         __harnessHeldOrigin?: number;
+        __harnessHeldJudged?: {animation: Animation; motion: string}[];
       };
+      const cancelled = (w.__harnessHeldJudged ?? []).filter(
+        run => run.animation.playState === 'idle',
+      );
+      if (cancelled.length > 0) {
+        throw new Error(
+          `seekAnimations: the page cancelled the held run of a judged motion (${[...new Set(cancelled.map(run => run.motion))].join(', ')}) since the hold. A later style change retargeted it, so a read now shows a run that the hold did not take`,
+        );
+      }
       // An animation the page cancelled since the hold (a CSS transition is
       // cancelled whenever the page retargets its property) leaves the held set:
       // applying or playing it again would revive what the page dropped.
@@ -1173,6 +1225,7 @@ export async function releaseAnimations(
       __harnessHeld?: Animation[];
       __harnessHeldStarts?: number[];
       __harnessHeldOrigin?: number;
+      __harnessHeldJudged?: {animation: Animation; motion: string}[];
     };
     // An animation the page cancelled since the hold (a CSS transition is
     // cancelled whenever the page retargets its property) leaves the held set:
@@ -1199,6 +1252,7 @@ export async function releaseAnimations(
       w.__harnessHeld = [];
       w.__harnessHeldStarts = [];
       w.__harnessHeldOrigin = undefined;
+      w.__harnessHeldJudged = [];
     }
   }, finish);
 }
@@ -1262,7 +1316,16 @@ export async function sampleCurve(
         __harnessHeld?: Animation[];
         __harnessHeldStarts?: number[];
         __harnessHeldOrigin?: number;
+        __harnessHeldJudged?: {animation: Animation; motion: string}[];
       };
+      const cancelled = (w.__harnessHeldJudged ?? []).filter(
+        run => run.animation.playState === 'idle',
+      );
+      if (cancelled.length > 0) {
+        throw new Error(
+          `sampleCurve: the page cancelled the held run of a judged motion (${[...new Set(cancelled.map(run => run.motion))].join(', ')}) since the hold. A later style change retargeted it, so a read now shows a run that the hold did not take`,
+        );
+      }
       // An animation the page cancelled since the hold (a CSS transition is
       // cancelled whenever the page retargets its property) leaves the held set:
       // applying or playing it again would revive what the page dropped.

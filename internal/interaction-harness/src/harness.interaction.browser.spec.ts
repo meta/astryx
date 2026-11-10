@@ -191,6 +191,46 @@ async function fixture(page: Page) {
 }
 
 /**
+ * Starts a chain of 4 ms timers in the test process. It records how late each
+ * woke, when, and how long the process ran while that timer waited. A runner
+ * whose CPU quota stalls the process wakes them late, as it wakes the touch
+ * pacer late. The process then runs little in the wait. Harness code that
+ * holds the process wakes them late too, but the process runs through the
+ * wait.
+ */
+function startWakeControl(): {
+  stop(): {
+    readonly at: number;
+    readonly lateMs: number;
+    readonly ranMs: number;
+  }[];
+} {
+  const wakes: {at: number; lateMs: number; ranMs: number}[] = [];
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const arm = () => {
+    const due = performance.now() + 4;
+    const cpu = process.cpuUsage();
+    timer = setTimeout(() => {
+      const now = performance.now();
+      const ran = process.cpuUsage(cpu);
+      wakes.push({
+        at: now,
+        lateMs: now - due,
+        ranMs: (ran.user + ran.system) / 1000,
+      });
+      arm();
+    }, 4);
+  };
+  arm();
+  return {
+    stop() {
+      clearTimeout(timer);
+      return wakes;
+    },
+  };
+}
+
+/**
  * Waits until a cast holds `min` frames. A cast sends a frame only when the
  * screen changes, and a loaded runner sends fewer of them. Past `capMs`
  * with fewer, the run is starved, and fails as such.
@@ -237,19 +277,22 @@ test.describe('touch input', () => {
     );
     // One take: a fresh page, the script played, and the harness's record of
     // when each step left (`dispatchedAt`) and when its dispatch was answered.
+    // A control timer runs in the test process beside it.
     const take = async () => {
       await fixture(page);
       const driver = await touchDriver(page);
       const answeredAt: number[] = [];
       // Taken before the harness reads its own clock to schedule the script.
       const playStart = Date.now();
+      const control = startWakeControl();
       const played = await driver.play(script, {
         onEvent: () => {
           answeredAt.push(Date.now());
         },
       });
+      const wakes = control.stop();
       const log = await readInputLog(page);
-      return {played, answeredAt, playStart, log};
+      return {played, answeredAt, playStart, wakes, log};
     };
     const checkInput = (log: readonly InputRecord[]) => {
       const moves = log.filter(r => r.type === 'pointermove');
@@ -292,81 +335,132 @@ test.describe('touch input', () => {
     // the dispatch (it answers only once the page has the event), so a driver
     // that holds the moves and sends them in a burst fails.
     //
-    // This take watches every step (`onEvent`), so each step leaves at its
-    // scripted time and none waits for WebKit's answer to the one before.
+    // This take watches every step (`onEvent`), so the test records when
+    // WebKit answered each step's dispatch.
     //
-    // The pacing is bounded from above too. The harness waits only while it
-    // is ahead of the script and sends a late step at once, so a move it
-    // waited for (it left more than 2 ms after the step before was answered)
-    // must leave on time (no more than 2 ms after its scripted time). A harness
-    // that paces slowly waits past every move's time: sending each step at
-    // twice its time leaves every move both waited for and late. A harness
-    // whose send itself outlasts the step's spacing never waits, so a move
-    // behind such a send is off pace too. A runner whose CPU quota holds the
-    // test process also wakes the harness late from a wait, or holds a send,
-    // on a few moves (in a container capped at 3 CPUs, where the quota stalls
-    // the process for about 100 ms at a time), so a take is off pace when more
-    // than half its moves are. It is re-taken once, and a second such take
-    // fails. Under CPU starvation (a 3-CPU cap with 16 workers, with the
-    // software compositor's threads matched to the cap by LP_NUM_THREADS), a
-    // pacer the cap throttles falls behind and need not wait, so the pacing
-    // check can miss a slow pacer there (sending each step at twice its time
-    // failed 8 of 20 runs), and the quota slows some sends past the step's
-    // spacing, which reads like a harness whose send is slow (the real test
-    // passed 40 of 40 there, re-taken 9 times).
-    for (const attempt of [1, 2] as const) {
-      const {played, answeredAt, playStart, log} = await take();
-      const {moves} = checkInput(log);
-      const sentAt = played.map(step => step.dispatchedAt);
-      const moveSteps = played.flatMap((step, i) =>
-        step.type === 'touchMove' ? [i] : [],
+    // The pacing is bounded from above too. A WebKit play keeps each gap, less
+    // ANSWER_SLACK_MS, after WebKit answered the step before (`pacedDeadline`),
+    // so a stall stretches the gesture. A move must leave no more than 2 ms
+    // after that paced deadline, and a step's send must not outlast the
+    // spacing to the next. A harness that sends each step at twice its time
+    // leaves every move later than that. One whose send is that slow stretches
+    // the next gap by the send, less ANSWER_SLACK_MS. A runner whose CPU quota
+    // stalls the test process also wakes the harness late, or holds a send.
+    // A chain of 4 ms control timers then wakes late too: when the harness
+    // woke, or while it sent. A control timer wakes no more than 4 ms less
+    // late than the harness in the same stall. So a move is the runner's when
+    // the control woke more than 2 ms late, and the move was at most 4 ms
+    // later. The test names such a move and does not fail. Harness code
+    // that holds the process delays the control timers too, but the process
+    // runs through that delay. So a control wake counts only when the process
+    // ran for less than half of how late the wake was. A take fails when more
+    // than half its moves are off pace while the control woke on time.
+    const {played, answeredAt, playStart, wakes, log} = await take();
+    const {moves} = checkInput(log);
+    const sentAt = played.map(step => step.dispatchedAt);
+    const moveSteps = played.flatMap((step, i) =>
+      step.type === 'touchMove' ? [i] : [],
+    );
+    expect(moveSteps).toHaveLength(moves.length);
+    const timeOrigin = await page.evaluate(() => performance.timeOrigin);
+    for (const [m, i] of moveSteps.entries()) {
+      // Against the clock before play() started, not the start event's
+      // send, which can itself leave late. Date.now() counts whole
+      // milliseconds, hence the 1 ms.
+      expect(sentAt[i] - playStart).toBeGreaterThanOrEqual(played[i].t - 1);
+      // 2 ms of rounding between the two processes' clocks.
+      expect(timeOrigin + moves[m].timeStamp).toBeGreaterThanOrEqual(
+        sentAt[i] - 2,
       );
-      expect(moveSteps).toHaveLength(moves.length);
-      const timeOrigin = await page.evaluate(() => performance.timeOrigin);
-      for (const [m, i] of moveSteps.entries()) {
-        // Against the clock before play() started, not the start event's
-        // send, which can itself leave late. Date.now() counts whole
-        // milliseconds, hence the 1 ms.
-        expect(sentAt[i] - playStart).toBeGreaterThanOrEqual(played[i].t - 1);
-        // 2 ms of rounding between the two processes' clocks.
-        expect(timeOrigin + moves[m].timeStamp).toBeGreaterThanOrEqual(
-          sentAt[i] - 2,
+      expect(timeOrigin + moves[m].timeStamp).toBeLessThanOrEqual(
+        answeredAt[i] + 2,
+      );
+      if (m > 0) {
+        expect(moves[m].timeStamp).toBeGreaterThanOrEqual(
+          moves[m - 1].timeStamp,
         );
-        expect(timeOrigin + moves[m].timeStamp).toBeLessThanOrEqual(
-          answeredAt[i] + 2,
-        );
-        if (m > 0) {
-          expect(moves[m].timeStamp).toBeGreaterThanOrEqual(
-            moves[m - 1].timeStamp,
-          );
-        }
       }
-      // Lateness against the latest the play clock can have started: the
-      // start event's send.
-      const waitedLate = moveSteps.filter(
-        i =>
-          sentAt[i] - answeredAt[i - 1] > 2 &&
-          sentAt[i] - sentAt[0] - played[i].t > 2,
-      );
-      // A move behind a send that took longer than the step's spacing: a
-      // harness whose send itself is that slow never waits, and paces every
-      // move at the send's speed.
-      const slowSent = moveSteps.filter(
-        i => answeredAt[i - 1] - sentAt[i - 1] > played[i].t - played[i - 1].t,
-      );
-      const offPace = new Set([...waitedLate, ...slowSent]);
-      if (offPace.size <= moves.length / 2) {
-        return;
-      }
-      const lateMs = waitedLate.map(i =>
-        Math.round(sentAt[i] - sentAt[0] - played[i].t),
-      );
-      const note = `take ${attempt}: ${offPace.size} of ${moves.length} moves off pace: ${waitedLate.length} left late after the harness waited for them${lateMs.length > 0 ? ` (${lateMs.join(', ')} ms late)` : ''}, ${slowSent.length} followed a send slower than the step`;
-      if (attempt === 2) {
-        throw new Error(`touch pacing: ${note}`);
-      }
-      testInfo.annotations.push({type: 'touch-retake', description: note});
     }
+    // How late the control woke between two times, ms. With no wake in that
+    // span, the first wake after it. A wake whose process ran for half its
+    // delay or more counts as on time. The test process itself held it, not
+    // the runner.
+    const controlLateMs = (from: number, to: number) => {
+      const within = wakes.filter(wake => wake.at >= from && wake.at <= to);
+      const next = wakes.find(wake => wake.at > to);
+      return Math.max(
+        0,
+        ...(within.length > 0 ? within : next == null ? [] : [next]).map(
+          wake => (wake.ranMs < wake.lateMs / 2 ? wake.lateMs : 0),
+        ),
+      );
+    };
+    // Each move's paced deadline, from the latest the play clock can have
+    // started (the start event's send) and WebKit's answer to the step
+    // before. Both come from the clock the play paces on, which reads a
+    // fraction of a millisecond, as do the control's wakes.
+    const pacedSent = played.map(step => step.pacedSentAt);
+    const pacedReturned = played.map(step => step.pacedReturnedAt);
+    const offPace = moveSteps.flatMap((i, move) => {
+      const spacing = played[i].t - played[i - 1].t;
+      const deadline = Math.max(
+        pacedSent[0] + played[i].t,
+        pacedReturned[i - 1] + spacing - ANSWER_SLACK_MS,
+      );
+      const lateMs = pacedSent[i] - deadline;
+      const sendMs = pacedReturned[i - 1] - pacedSent[i - 1];
+      return [
+        // The control wakes that a stall ending at the harness's own wake
+        // delayed too.
+        ...(lateMs > 2
+          ? [
+              {
+                move,
+                why: 'left late',
+                ms: lateMs,
+                runnerMs: controlLateMs(pacedSent[i] - 2, pacedSent[i] + 8),
+              },
+            ]
+          : []),
+        ...(sendMs > spacing
+          ? [
+              {
+                move,
+                why: 'followed a slow send',
+                ms: sendMs - ANSWER_SLACK_MS,
+                runnerMs: controlLateMs(
+                  pacedSent[i - 1],
+                  pacedReturned[i - 1] + 4,
+                ),
+              },
+            ]
+          : []),
+      ];
+    });
+    const byRunner = (move: (typeof offPace)[number]) =>
+      move.runnerMs > 2 && move.ms <= move.runnerMs + 4;
+    const runner = offPace.filter(byRunner);
+    const harness = offPace.filter(move => !byRunner(move));
+    // A move can be off pace for both reasons: it counts once.
+    const countMoves = (list: typeof offPace) =>
+      new Set(list.map(entry => entry.move)).size;
+    const describe = (list: typeof offPace) =>
+      list
+        .map(
+          move =>
+            `${move.why} by ${Math.round(move.ms)} ms (control ${Math.round(move.runnerMs)} ms late)`,
+        )
+        .join(', ');
+    if (runner.length > 0) {
+      testInfo.annotations.push({
+        type: 'touch-runner-late',
+        description: `${countMoves(runner)} of ${moves.length} moves were off pace while the runner woke a control timer as late: ${describe(runner)}`,
+      });
+    }
+    expect(
+      countMoves(harness),
+      `touch pacing: ${countMoves(harness)} of ${moves.length} moves off pace while the control woke on time: ${describe(harness)}`,
+    ).toBeLessThanOrEqual(moves.length / 2);
   });
 
   test("a page whose pointer listener holds its main thread changes a paced flick's release itself: TouchPageStallError, never the runner's", async ({
@@ -1891,6 +1985,70 @@ test.describe('frame evidence', () => {
     await first.remove();
   });
 
+  test('a busy proof given the control ahead judges a compositor animation through a blocked main thread, and a rAF one still freezes', async ({
+    page,
+  }, testInfo) => {
+    await busyFixture(page);
+    const box = page.locator('#box');
+    await markElement(box, {mode: 'outline'});
+    // Opted in: the control ahead dates the frames near the first one's turns.
+    const first = await startBusyControl(page);
+    const ahead = await startBusyControl(page, {ahead: true});
+    const run = async (driver: 'compositor' | 'raf') => {
+      const cast = await startScreencast(page);
+      await box.evaluate((el, how) => {
+        el.getAnimations().forEach(a => a.cancel());
+        el.style.transform = 'none';
+        if (how === 'compositor') {
+          el.animate(
+            [{transform: 'translateY(0px)'}, {transform: 'translateY(560px)'}],
+            {duration: 1100, easing: 'linear'},
+          );
+          return;
+        }
+        const start = performance.now();
+        const step = (now: number) => {
+          const progress = Math.min(1, (now - start) / 1100);
+          el.style.transform = `translateY(${560 * progress}px)`;
+          if (progress < 1) {
+            requestAnimationFrame(step);
+          }
+        };
+        requestAnimationFrame(step);
+      }, driver);
+      // A rendering update first, so the compositor drops the last run's
+      // animation before the block.
+      await page.evaluate(
+        () =>
+          new Promise<void>(resolve =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+      const window = await blockMainThread(
+        page,
+        700,
+        driver === 'compositor' ? {during: box} : {},
+      );
+      await page.waitForTimeout(200);
+      const castFrames = await cast.stop();
+      return busyWindowProof(await trackMarker(page, castFrames), window, {
+        axis: 'y',
+        control: await trackControl(page, castFrames),
+        ahead: await trackControl(page, castFrames, {ahead: true}),
+        controlStarts: [first.start, ahead.start],
+      });
+    };
+    const compositor = await run('compositor');
+    testInfo.annotations.push({
+      type: 'busy proof with the control ahead',
+      description: compositor.summary,
+    });
+    expect(compositor.verdict.failures, compositor.summary).toEqual([]);
+    const raf = await run('raf');
+    expect(raf.verdict.failures, raf.summary).not.toEqual([]);
+    await first.remove();
+  });
+
   test('a hold that starts before the block is judged from its first presented change inside it; a single change and then a freeze still fails', async ({
     page,
   }) => {
@@ -1946,12 +2104,61 @@ test.describe('frame evidence', () => {
       100.5,
     );
     expect(held.verdict.failures, held.summary).toEqual([]);
+    // The freeze is the curve's held tail, so every engine shows it: WebKit
+    // on Linux ignores a fill on its compositor.
     const jumpThenFreeze = await run(
-      [{transform: 'translateY(0px)'}, {transform: 'translateY(50px)'}],
-      {duration: 800, easing: 'steps(1, end)', fill: 'forwards'},
+      [
+        {transform: 'translateY(0px)', offset: 0},
+        {transform: 'translateY(0px)', offset: 0.5},
+        {transform: 'translateY(50px)', offset: 0.5},
+        {transform: 'translateY(50px)', offset: 1},
+      ],
+      {duration: 1600, easing: 'linear'},
     );
     expect(jumpThenFreeze.verdict.pass, jumpThenFreeze.summary).toBe(false);
     await control.remove();
+  });
+
+  test('blockMainThread says a held curve keeps its end value only through a held tail or a fill the compositor honors', async ({
+    page,
+    browserName,
+  }) => {
+    await busyFixture(page);
+    const box = page.locator('#box');
+    const holds = async (
+      timing: KeyframeAnimationOptions,
+      keyframes: Keyframe[] = [
+        {transform: 'translateY(0px)'},
+        {transform: 'translateY(200px)'},
+      ],
+    ) => {
+      await box.evaluate(
+        (el, [frames, options]) => {
+          el.getAnimations().forEach(a => a.cancel());
+          el.animate(frames, options);
+        },
+        [keyframes, timing] as const,
+      );
+      const window = await blockMainThread(page, 50, {during: box});
+      return window.animation?.holds;
+    };
+    // A held tail: the last keyframes repeat the end value. So the curve ends
+    // halfway, and the element keeps that value after it with no fill.
+    expect(
+      await holds({duration: 1000}, [
+        {transform: 'translateY(0px)', offset: 0},
+        {transform: 'translateY(200px)', offset: 0.5},
+        {transform: 'translateY(200px)', offset: 1},
+      ]),
+    ).toBe(true);
+    // WebKit on Linux ignores `fill` on its compositor (motion/animator.ts,
+    // END_HOLD_MS): there a filled move that ends inside a block snaps back.
+    expect(await holds({duration: 1000, fill: 'forwards'})).toBe(
+      browserName !== 'webkit' || process.platform !== 'linux',
+    );
+    expect(await holds({duration: 1000})).toBe(false);
+    // An end delay shows nothing with no fill: it is no held tail.
+    expect(await holds({duration: 1000, endDelay: 500})).toBe(false);
   });
 
   test('a block too short to judge alone is judged over pooled runs: a compositor animation passes, and a rAF one fails, timed or frame-counted', async ({
@@ -2033,8 +2240,7 @@ test.describe('frame evidence', () => {
     };
 
     const compositor = await runs('compositor');
-    // One run is too little to judge: its verdict says so, or, when the
-    // machine also starved its cast, the proof throws by name.
+    // One run is too little to judge, so the proof throws by name.
     const single = (() => {
       try {
         const proof = busyWindowProof(
@@ -2061,7 +2267,8 @@ test.describe('frame evidence', () => {
     expect(pooled.verdict.failures, pooled.summary).toEqual([]);
 
     // The same runs with the control taken out of the last blocks. A starved
-    // run is named and left out. With too few judged runs, the pool fails.
+    // run is named and left out. With too few judged runs, the pool throws by
+    // name.
     const starve = (count: number) =>
       pooledBusyProof(
         compositor.map((run, i) =>
@@ -2083,10 +2290,9 @@ test.describe('frame evidence', () => {
     expect(lastStarved.summary).toMatch(
       /; run 6: too little to judge, the control moved on 0 frames/,
     );
-    const oneLeft = starve(5);
-    expect(oneLeft.verdict.failures.join('\n'), oneLeft.summary).toMatch(
-      /[01] of 6 runs judged, under 3/,
-    );
+    const oneLeft = () => starve(5);
+    expect(oneLeft).toThrow(FrameStarvationError);
+    expect(oneLeft).toThrow(/[01] of 6 runs judged, under 3/);
 
     // The mutant: a main-thread animation freezes in every block.
     const raf = pooledBusyProof(await runs('raf'), {axis: 'y'});
@@ -3573,6 +3779,61 @@ test.describe('wheel and pen input', () => {
     }
   });
 
+  test("a page that draws no frame across a burst's gap splits it itself, with its listeners idle: WheelPageStallError names the frame gap", async ({
+    browser,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'webkit',
+      'only WebKit dispatches a wheel step once the page is free',
+    );
+    const context = await browser.newContext({
+      viewport: {width: 402, height: 714},
+      isMobile: false,
+      hasTouch: false,
+    });
+    try {
+      const page = await context.newPage();
+      // The first step queues a 150 ms task, as engine or page work can hold
+      // the main thread. The listener itself returns at once, and the page
+      // draws no frame until the task ends.
+      await page.route('http://wheel-task-page.test/', route =>
+        route.fulfill({
+          contentType: 'text/html',
+          body: '<!doctype html><body style="margin:0;height:3000px"><script>let queued=false;addEventListener("wheel",()=>{if(queued)return;queued=true;setTimeout(()=>{const end=performance.now()+150;while(performance.now()<end){}},0)},{passive:true});</script>',
+        }),
+      );
+      await page.goto('http://wheel-task-page.test/');
+      const driver = await webInputDriver(page);
+      test.skip(!driver.wheels, WHEEL_SKIP);
+      const outcome = await driver
+        .wheelBurst({
+          x: 200,
+          y: 300,
+          steps: Array.from({length: 6}, () => ({dx: 10})),
+          maxGapMs: 100,
+        })
+        .then(
+          () => 'resolved',
+          (error: unknown) => error,
+        );
+      expect(outcome).toBeInstanceOf(WheelPageStallError);
+      const {stall} = outcome as WheelPageStallError;
+      expect(stall.frameGapMs).toBeGreaterThan(100);
+      expect(stall.handlingMs).toBeLessThan(stall.gapMs);
+      expect(String(outcome)).toMatch(
+        /the page drew no frame for \d+ ms around a \d+ ms gap between two wheel steps, over its 100 ms \(engine or page work\)/,
+      );
+      // A starved runner's renderer draws no frame either, and the error
+      // says so.
+      expect(String(outcome)).toMatch(
+        /On a starved runner the renderer draws no frame either/,
+      );
+    } finally {
+      await context.close();
+    }
+  });
+
   test('a page whose wheel listener stops the step and holds its main thread still splits a burst itself', async ({
     browser,
     browserName,
@@ -4043,6 +4304,24 @@ test.describe('holding', () => {
       ),
     ).toEqual(['running', 'paused']);
     await releaseAnimations(page, {finish: true});
+  });
+
+  test('a hold whose scope is not on the page fails by name within its wait, not at the test timeout', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // The scope's element is gone before either hold resolves it, as a
+    // viewer the page has closed is.
+    await box.evaluate(el => el.remove());
+    await expect(armHold(page, box, {judges: 'count-only'})).rejects.toThrow(
+      /armHold: the scope .*#box.* is not on the page after 5000 ms: it is gone, or it never came/,
+    );
+    await expect(
+      holdAnimations(page, box, {judges: 'count-only'}),
+    ).rejects.toThrow(
+      /holdAnimations: the scope .*#box.* is not on the page after 5000 ms/,
+    );
   });
 
   test('an armed hold rejects when nothing under its scope starts', async ({
@@ -4845,7 +5124,7 @@ test.describe('holding', () => {
     await releaseAnimations(page);
   });
 
-  test('a held transition the page retargets is dropped, not revived', async ({
+  test('a held transition the page retargets fails a seek or a sample by name, and is dropped, not revived', async ({
     page,
   }) => {
     await fixture(page);
@@ -4879,8 +5158,15 @@ test.describe('holding', () => {
           held: w.__harnessHeld.length,
         };
       });
-    await seekAnimations(page, 150);
-    expect(await state()).toEqual({cancelled: 'idle', held: 0});
+    // The judged run is gone, so a read would show the run that replaced
+    // it: a seek and a sample fail by name.
+    await expect(seekAnimations(page, 150)).rejects.toThrow(
+      /seekAnimations: the page cancelled the held run of a judged motion \(transform on div#box\) since the hold/,
+    );
+    await expect(sampleCurve(box, [150])).rejects.toThrow(
+      /sampleCurve: the page cancelled the held run of a judged motion \(transform on div#box\) since the hold/,
+    );
+    expect((await state()).cancelled).toBe('idle');
     await releaseAnimations(page);
     await waitForRest(box);
     expect(await state()).toEqual({cancelled: 'idle', held: 0});

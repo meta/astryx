@@ -293,7 +293,11 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     an icon exported under several names is recorded once, its other names
     as words; `…Provider` and `…Context` components
     are never icons; and `--exclude` adds exports that are not icons to the
-    data file's `exclude`, which every refresh honors. From an installed
+    data file's `exclude`, which every refresh honors. An icon whose id
+    would start with a digit once the shared prefix comes off keeps the
+    prefix (`fa0` is id `fa-0`, exported as `Fa0Icon`), and an id that
+    starts with a digit with no prefix to keep is refused with
+    `ERR_INVALID_ARGUMENT`. From an installed
     package it records `source` (the library and version), copies the
     library's license notices into the set, and takes the library's license
     for the descriptor; when the library ships none and the set and package
@@ -369,12 +373,17 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     its name from `--id`, and when its first look word that differs from
     the wrapped export's is a declared variant other than the default, the
     listing adds the command that adds it as that icon's variant. With
-    `--variant <name> --all` and no export, it adds that variant for every
-    icon from that module's package whose `id` an export of the module has
-    (in a library of looks, the glyph's look of that name), in one write; an
-    icon from another module is left alone and not listed as missing, and a
-    glyph drawn in no look of that name, or whose own export is that look,
-    is listed as missing. For a `./`
+    `--variant <name> --all` and no export, it adds that variant in one
+    write for every icon from that module's package whose `id` an export of
+    the module has (in a library of looks, the glyph's look of that name),
+    and for every icon from another package whose library export the module
+    exports under the same name and kind (a library that ships each look as
+    its own package). Once one icon of another package matches this way,
+    the other icons of that package are matched as icons of the module's
+    package, and each one the module has no export for is listed as
+    missing. Any other icon from another module is left alone and not
+    listed as missing, and a glyph drawn in no look of that name, or whose
+    own export is that look, is listed as missing. For a `./`
     file outside package.json `files`, it names the `files` array that
     publishes it.
   - `experimental icon map <definition> <icon>` writes one `map` entry,
