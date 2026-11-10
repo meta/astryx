@@ -916,6 +916,93 @@ function reducedMotionFailures(log: readonly RecordedAnimation[]) {
   );
 }
 
+/**
+ * Records how much of a row the list shows on each frame. Every element that
+ * draws the row's label counts: the content's own and any copy of it. The
+ * share shown is 1 − Π(1 − opacity), each opacity taken up the tree.
+ */
+async function recordRowShown(page: Page, label: string) {
+  await page.evaluate(text => {
+    const record = window as unknown as {
+      __rowShown: {t: number; shown: number}[];
+      __rowShownStop: boolean;
+    };
+    record.__rowShown = [];
+    record.__rowShownStop = false;
+    const frame = () => {
+      let hidden = 1;
+      const texts = document.createTreeWalker(
+        document.body,
+        NodeFilter.SHOW_TEXT,
+      );
+      for (let node = texts.nextNode(); node != null; node = texts.nextNode()) {
+        if (node.nodeValue?.trim() !== text) {
+          continue;
+        }
+        let opacity = 1;
+        for (
+          let element = node.parentElement;
+          element != null;
+          element = element.parentElement
+        ) {
+          opacity *= Number(getComputedStyle(element).opacity);
+        }
+        hidden *= 1 - opacity;
+      }
+      record.__rowShown.push({t: performance.now(), shown: 1 - hidden});
+      if (!record.__rowShownStop) {
+        requestAnimationFrame(frame);
+      }
+    };
+    requestAnimationFrame(frame);
+  }, label);
+}
+
+const stopRowShown = (page: Page) =>
+  page.evaluate(() => {
+    const record = window as unknown as {
+      __rowShown: {t: number; shown: number}[];
+      __rowShownStop: boolean;
+    };
+    record.__rowShownStop = true;
+    return record.__rowShown;
+  });
+
+test('under Reduce Motion the list shows on every frame: the release and the end cross-fade rather than dip', async ({
+  page,
+}) => {
+  // A cross-fade connects the two states: the list where it was fades out as
+  // the list in its new place fades in. A dip fades out, lands and fades back
+  // in, so the list area goes blank between the two.
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  await primaryPointer(page, 'coarse');
+  const {driver, content, start} = await openRefresh(page, undefined, {
+    refreshMs: '-1',
+  });
+  await recordRowShown(page, 'Message 2');
+  await driver.play(slowPull(start, 300, 200));
+  await waitForContentRest(content);
+  expect(await shownPull(content)).toBeCloseTo(HEIGHT, 1);
+  await endRefresh(page);
+  await expect.poll(() => isBusy(content), {timeout: 8000}).toBe(false);
+  // The end starts two frames after the busy state clears.
+  await expect
+    .poll(() => shownPull(content), {timeout: 8000})
+    .toBeCloseTo(0, 1);
+  await waitForContentRest(content);
+  const frames = await stopRowShown(page);
+  const least = Math.min(...frames.map(frame => frame.shown));
+  const emptiest = frames
+    .filter(frame => frame.shown < 0.5)
+    .map(frame => frame.shown.toFixed(3))
+    .join(' ');
+  // Two equal fades crossing show the row at 0.75 or more. Half is the floor.
+  expect(
+    least,
+    `the row showed at ${least.toFixed(3)} on its emptiest frame; the list blanked (frames under half: ${emptiest})`,
+  ).toBeGreaterThanOrEqual(0.5);
+});
+
 test('under Reduce Motion a release cross-fades onto the inset: opacity only, within 200 ms', async ({
   page,
 }) => {
