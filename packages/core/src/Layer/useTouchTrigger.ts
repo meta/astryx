@@ -56,6 +56,7 @@ import {
 } from 'react';
 import {currentGesture} from './gestureCounter';
 import {noteOutsideDismissal} from './outsidePress';
+import {waitForPressClick} from '../utils/waitForPressClick';
 import {
   innermostInteractive,
   matchesInteractiveSelectors,
@@ -129,22 +130,9 @@ function createTapRecognizer(): TapRecognizer {
       // advances the gesture, so a keyboard activation that later fires
       // `click` on the trigger (Enter on a button) is not mistaken for it.
       const gesture = currentGesture();
-      const stop = () => {
-        trigger.removeEventListener('click', handleTap);
-        trigger.removeEventListener('pointercancel', stop);
-        if (stopWaiting === stop) {
-          stopWaiting = null;
-        }
-      };
-      const handleTap = (tapEvent: Event) => {
-        stop();
-        if (currentGesture() === gesture) {
-          onTap(tapEvent);
-        }
-      };
-      trigger.addEventListener('click', handleTap);
-      trigger.addEventListener('pointercancel', stop);
-      stopWaiting = stop;
+      stopWaiting = waitForPressClick(trigger, onTap, {
+        isSamePress: () => currentGesture() === gesture,
+      });
       return true;
     },
     forget,

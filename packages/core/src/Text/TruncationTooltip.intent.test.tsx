@@ -2,7 +2,8 @@
 
 /**
  * @file TruncationTooltip.intent.test.tsx
- * @output Tests that importing Text or Heading loads no touch or layer code,
+ * @output Tests that importing Text or Heading loads neither the Tooltip
+ *   component, the layer runtime nor the touch trigger,
  *   that a held tap opens the tooltip as soon as it loads, that a scroll or a
  *   key press drops a held press, and that a failed load keeps the text and
  *   is asked for again on the next interaction
@@ -97,7 +98,7 @@ async function settle(ms = 50) {
 }
 
 describe('the truncation tooltip base (PR1)', () => {
-  it('importing Text or Heading loads no touch or layer code', async () => {
+  it('importing Text or Heading loads neither the Tooltip component, the layer runtime nor the touch trigger', async () => {
     const {Text} = await import('./Text');
     const {Heading} = await import('../Heading/Heading');
     render(
