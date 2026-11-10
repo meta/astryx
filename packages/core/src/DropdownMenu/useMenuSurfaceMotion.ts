@@ -12,13 +12,13 @@
  *   menuSurfaceMotion.ts.
  *
  * A finger's or a pen's open grows the menu out of its trigger, a tap's open
- * included. The menu shrinks back into it as it starts to close. A mouse and
- * the keyboard keep the layer's own entrance. The grow's code loads at the
- * first touch on the page or on a trigger. A page no finger touches never
- * loads it. When the menu opens before that code arrives, the surface stays
- * clear until it does, then grows. A load that fails, or takes longer than
- * an entrance, shows the menu with the layer's own entrance instead. A failed
- * load is tried again at the next open.
+ * included. The menu shrinks back into it as it starts to close. A mouse,
+ * the keyboard and Reduce Motion keep the layer's own entrance. The grow's
+ * code loads at the first touch on the page or on a trigger. A page no finger
+ * touches never loads it. When the menu opens before that code arrives, the
+ * surface stays clear until it does, then grows. A load that fails, or takes
+ * longer than an entrance, shows the menu with the layer's own entrance
+ * instead. A failed load is tried again at the next open.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/DropdownMenu/DropdownMenu.tsx
@@ -28,6 +28,7 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {holdInput} from '../Layer/inputHold';
 import {createPresentationHold} from '../Layer/presentationHold';
+import {themeReducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import {isCoarsePointer} from '../utils/coarsePointer';
 import {subscribeInput} from '../utils/inputStream';
 import type * as MenuSurfaceMotionModule from './menuSurfaceMotion';
@@ -93,6 +94,19 @@ function loadAtFirstTouch(view: Window): () => void {
     void loadMotion().catch(() => {});
   });
   return unsubscribe;
+}
+
+/**
+ * Whether Reduce Motion applies to `element`, as the animator reads it: the
+ * person's setting, or a theme around it that reduces motion for everyone.
+ */
+function prefersReducedMotion(element: Element): boolean {
+  const view = element.ownerDocument.defaultView;
+  return (
+    (typeof view?.matchMedia === 'function' &&
+      view.matchMedia('(prefers-reduced-motion: reduce)').matches) ||
+    themeReducesMotion(element)
+  );
 }
 
 function boxOf(element: Element): MenuSurfaceGeometry['surface'] {
@@ -177,7 +191,13 @@ export function useMenuSurfaceMotion(): MenuSurfaceMotionCalls {
       isTouch: boolean,
       holdEntrance: () => void = () => {},
     ) => {
-      const grows = isTouch && surface != null && source != null;
+      // Under Reduce Motion the layer's own entrance plays: it only fades in,
+      // where the menu rests.
+      const grows =
+        isTouch &&
+        surface != null &&
+        source != null &&
+        !prefersReducedMotion(surface);
       touchHold.take(grows);
       waitingRef.current?.end();
       waitingRef.current = null;

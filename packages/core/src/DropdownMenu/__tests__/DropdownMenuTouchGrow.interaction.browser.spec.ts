@@ -73,10 +73,11 @@ async function heldGrow(
   page: Page,
   surface: Locator,
   act: () => Promise<void>,
+  judged: 'scale' | 'opacity' = 'scale',
 ): Promise<Frame[]> {
   // Scoped to the layer: the trigger's own press animation runs too.
   const hold = await armHold(page, surface.locator('xpath=..'), {
-    judges: {target: surface, property: 'scale'},
+    judges: {target: surface, property: judged},
     newOnly: true,
   });
   await act();
@@ -275,6 +276,32 @@ test("the menu's grow follows Popover's path and timing, frame by frame", async 
       0.02,
     );
   });
+});
+
+test("under Reduce Motion, a finger's open lands the menu at its full size and fades it in", async ({
+  page,
+}) => {
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  const story = await openOnPhone(
+    page,
+    'core-dropdownmenu--default',
+    'Actions',
+  );
+  const surface = page.locator(MENU_SURFACE).first();
+  const faded = await heldGrow(
+    page,
+    surface,
+    async () => story.driver.tap(story.center),
+    'opacity',
+  );
+  const shown = faded.filter(frame => frame.opacity > 0.01);
+  expect(shown.length).toBeGreaterThan(0);
+  // No frame scales the menu: it is where it rests from the first frame.
+  for (const frame of shown) {
+    expect(frame.scaleX).toBeCloseTo(1, 3);
+    expect(frame.scaleY).toBeCloseTo(1, 3);
+  }
+  expect(faded.at(-1)?.opacity).toBeCloseTo(1, 2);
 });
 
 test("a mouse keeps the layer's own entrance", async ({page}) => {

@@ -21,6 +21,7 @@ import {
   resetMenuSurfaceMotionForTest,
   setMenuSurfaceMotionImportForTest,
 } from './useMenuSurfaceMotion';
+import {reducedMotionMarkProps} from '../privateAttributes/reducedMotion.stylex';
 import {TOUCH_QUERY} from '../utils/touchQueries';
 
 const motion = vi.hoisted(() => ({
@@ -193,6 +194,39 @@ describe('DropdownMenu touch grow', () => {
     await settleLoad();
     motion.enter.mockClear();
     fireEvent.keyDown(trigger, {key: 'ArrowDown'});
+    await settleLoad();
+    expect(screen.getByRole('menu', {hidden: true})).toBeTruthy();
+    expect(motion.enter).not.toHaveBeenCalled();
+  });
+
+  it("under Reduce Motion a finger's open keeps the layer's own entrance", async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        matches: query === '(prefers-reduced-motion: reduce)',
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+    render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
+    fireEvent.pointerDown(screen.getByRole('button', {name: 'Actions'}), touch);
+    await settleLoad();
+    expect(screen.getByRole('menu', {hidden: true})).toBeTruthy();
+    expect(motion.enter).not.toHaveBeenCalled();
+  });
+
+  it("under a theme that reduces motion, a finger's open keeps the layer's own entrance", async () => {
+    render(
+      <div {...reducedMotionMarkProps(true)}>
+        <DropdownMenu button={{label: 'Actions'}} items={ITEMS} />
+      </div>,
+    );
+    fireEvent.pointerDown(screen.getByRole('button', {name: 'Actions'}), touch);
     await settleLoad();
     expect(screen.getByRole('menu', {hidden: true})).toBeTruthy();
     expect(motion.enter).not.toHaveBeenCalled();
