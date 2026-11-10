@@ -23,6 +23,13 @@ export const docs = {
         'The element the popover sits on when it is not the trigger: a ref to any element or a function returning one. A ref is read on open and on each render; a function is read on open and when you pass a different function, so pass a new one when your page replaces the element. The trigger keeps its toggle and ARIA; the anchor gets neither. With no trigger attached, open it with show(). Omit it and the trigger is the anchor.',
     },
     {
+      name: 'anchorOutOfViewBehavior',
+      type: "'stay' | 'hideWhileOutOfView'",
+      description:
+        "What the popover does while its anchor is out of view (scrolled out of the viewport or a scrolling panel, or removed): 'stay' keeps its place and size until the anchor returns; 'hideWhileOutOfView' hides it and takes no pointer input until the anchor returns. It never closes for this, so onHide does not fire.",
+      default: "'stay'",
+    },
+    {
       name: 'onShow',
       type: '() => void',
       description: 'Callback fired when the popover becomes visible.',
@@ -212,6 +219,8 @@ export const docsDense = {
   paramDescriptions: {
     anchor:
       'element popover sits on when not the trigger: ref (read each render) or function (read on open and when a new one is passed); no trigger ARIA on it.',
+    anchorOutOfViewBehavior:
+      "while anchor out of view: 'stay' (default) or 'hideWhileOutOfView' (hidden, still open; no onHide).",
     onShow: 'fires when popover becomes visible.',
     onHide: 'fires when popover hides; use to return focus when needed.',
     xstyle: 'StyleX styles for content wrapper, after default surface.',
