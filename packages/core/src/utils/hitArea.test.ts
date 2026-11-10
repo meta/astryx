@@ -399,7 +399,7 @@ describe('watchHitArea', () => {
     stop();
   });
 
-  it('matches the page against its selector once, and again only after a mutation can change what it matches', () => {
+  it('matches the page against its selector once, and keeps what it found current from each mutation', () => {
     const control = byId('switch');
     place(control, rect(100, 100, 24, 24));
     place(byId('link'), rect(132, 100, 60, 24));
@@ -421,14 +421,15 @@ describe('watchHitArea', () => {
     expect(log).toContain('read link');
     expect(heard.at(-1)).toEqual({top: 10, right: 8, bottom: 10, left: 10});
 
-    // A neighbour added in the same task as the pass counts in it.
+    // A neighbour added in the same task as the pass counts in it. Only the
+    // added element is matched, not the whole page again.
     const above = document.createElement('button');
     above.id = 'above';
     document.body.append(above);
     place(above, rect(100, 80, 24, 12));
     window.dispatchEvent(new Event('resize'));
     flush();
-    expect(queries).toHaveBeenCalledTimes(2);
+    expect(queries).toHaveBeenCalledTimes(1);
     expect(heard.at(-1)).toEqual({top: 4, right: 8, bottom: 10, left: 10});
 
     // An attribute the selector reads makes an element a neighbour.
@@ -981,6 +982,191 @@ describe('watchHitArea', () => {
     expect(onElement).not.toHaveBeenCalled();
     stop();
     left();
+  });
+
+  it('reads no layout as a finger presses: the click that the press sends measures, and a nearer neighbour swallows it', () => {
+    const control = byId('switch');
+    const link = byId('link');
+    place(control, rect(100, 100, 24, 24));
+    place(link, rect(400, 100, 60, 24));
+    const stop = watchHitArea(control, () => {});
+    show(control);
+    flush();
+    // The link moved to 8 px away with nothing re-measuring yet.
+    place(link, rect(132, 100, 60, 24));
+    log.length = 0;
+    const press = new Event('pointerdown', {bubbles: true});
+    Object.assign(press, {pointerType: 'touch', clientX: 130, clientY: 112});
+    control.dispatchEvent(press);
+    // The press decides nothing yet, so a scroll it starts waits on no layout.
+    expect(log).toEqual([]);
+    const click = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+    });
+    control.dispatchEvent(click);
+    expect(log).toContain('read link');
+    expect(click.defaultPrevented).toBe(true);
+    stop();
+  });
+
+  it('leaves the insets alone at the click of a press that scales the control, and measures them once the press’s motion ends', async () => {
+    const control = byId('switch');
+    place(control, rect(100, 100, 24, 24));
+    place(byId('link'), rect(400, 100, 60, 24));
+    const heard: HitInsets[] = [];
+    const stop = watchHitArea(control, insets => heard.push(insets));
+    show(control);
+    flush();
+    expect(heard).toEqual([{top: 10, right: 10, bottom: 10, left: 10}]);
+    // The press scales the control about its center, and its motion runs.
+    control.style.transform = 'matrix(0.9, 0, 0, 0.9, 0, 0)';
+    place(control, rect(101.2, 101.2, 21.6, 21.6));
+    let finish = () => {};
+    const finished = new Promise<void>(resolve => {
+      finish = resolve;
+    });
+    control.getAnimations = () => [
+      {
+        playState: 'running',
+        effect: {getComputedTiming: () => ({endTime: 150})},
+        finished,
+      } as unknown as Animation,
+    ];
+    const press = new Event('pointerdown', {bubbles: true});
+    Object.assign(press, {pointerType: 'touch', clientX: 112, clientY: 112});
+    control.dispatchEvent(press);
+    const click = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+    });
+    control.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(false);
+    // The scaled box reads other insets, but the click writes none.
+    expect(heard).toHaveLength(1);
+    // The motion ends at the layout box: the pass finds the same insets.
+    control.style.transform = '';
+    place(control, rect(100, 100, 24, 24));
+    control.getAnimations = () => [];
+    finish();
+    await finished;
+    await Promise.resolve();
+    flush();
+    expect(heard).toEqual([{top: 10, right: 10, bottom: 10, left: 10}]);
+    stop();
+  });
+
+  it('runs no pass while the page scrolls: a control that scrolls into view is measured once the scroll ends', () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+    try {
+      const control = byId('switch');
+      place(control, rect(100, 100, 24, 24));
+      place(byId('link'), rect(132, 100, 60, 24));
+      const heard: HitInsets[] = [];
+      const stop = watchHitArea(control, insets => heard.push(insets));
+      flush();
+      log.length = 0;
+      window.dispatchEvent(new Event('scroll'));
+      show(control);
+      window.dispatchEvent(new Event('resize'));
+      flush();
+      // A frame of the scroll reads no layout and writes no insets.
+      expect(log).toEqual([]);
+      expect(heard).toEqual([]);
+      window.dispatchEvent(new Event('scrollend'));
+      flush();
+      expect(heard).toEqual([{top: 10, right: 4, bottom: 10, left: 10}]);
+
+      // Where no scrollend comes, the pass runs once the scroll is still.
+      log.length = 0;
+      place(byId('link'), rect(140, 100, 60, 24));
+      window.dispatchEvent(new Event('scroll'));
+      window.dispatchEvent(new Event('resize'));
+      flush();
+      expect(log).toEqual([]);
+      vi.advanceTimersByTime(1000);
+      flush();
+      expect(heard.at(-1)).toEqual({top: 10, right: 8, bottom: 10, left: 10});
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('measures nothing while an ancestor animates, as a screen that slides in or a layer that grows, and measures once it comes to rest', async () => {
+    const control = byId('switch');
+    const screen = control.closest('label') as HTMLElement;
+    place(control, rect(100, 100, 24, 24));
+    place(byId('link'), rect(132, 100, 60, 24));
+    let finish = () => {};
+    const finished = new Promise<void>(resolve => {
+      finish = resolve;
+    });
+    const slide = {
+      playState: 'running',
+      effect: {target: screen, getComputedTiming: () => ({endTime: 300})},
+      finished,
+    };
+    // jsdom has no Web Animations: the page reports one running slide.
+    Object.defineProperty(document, 'getAnimations', {
+      configurable: true,
+      value: () => (slide.playState === 'running' ? [slide] : []),
+    });
+    try {
+      const heard: HitInsets[] = [];
+      const stop = watchHitArea(control, insets => heard.push(insets));
+      show(control);
+      flush();
+      expect(log).toEqual([]);
+      expect(heard).toEqual([]);
+      slide.playState = 'finished';
+      finish();
+      await finished;
+      await Promise.resolve();
+      flush();
+      expect(heard).toEqual([{top: 10, right: 4, bottom: 10, left: 10}]);
+      stop();
+    } finally {
+      delete (document as {getAnimations?: unknown}).getAnimations;
+    }
+  });
+
+  it('keeps the page’s interactive elements across a layer’s open and close, and a row watched in it: it matches only what changed, never the whole page again', () => {
+    const control = byId('switch');
+    place(control, rect(100, 100, 24, 24));
+    place(byId('link'), rect(400, 100, 60, 24));
+    place(byId('other'), rect(400, 400, 24, 24));
+    const queries = vi.spyOn(document, 'querySelectorAll');
+    const heard: HitInsets[] = [];
+    const stop = watchHitArea(control, insets => heard.push(insets));
+    show(control);
+    flush();
+    expect(queries).toHaveBeenCalledTimes(1);
+    expect(heard).toEqual([{top: 10, right: 10, bottom: 10, left: 10}]);
+
+    // A layer opens beside the control with two rows, and a row is watched.
+    const layer = document.createElement('div');
+    layer.innerHTML =
+      '<div role="menuitem" id="row1" tabindex="-1"></div>' +
+      '<div role="menuitem" id="row2" tabindex="-1"></div>';
+    document.body.append(layer);
+    place(byId('row1'), rect(132, 100, 60, 24));
+    place(byId('row2'), rect(132, 128, 60, 24));
+    const stopRow = watchHitArea(byId('row1'), () => {});
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(heard.at(-1)).toEqual({top: 10, right: 4, bottom: 10, left: 10});
+
+    // The layer closes: its rows stop counting.
+    stopRow();
+    layer.remove();
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(heard.at(-1)).toEqual({top: 10, right: 10, bottom: 10, left: 10});
+    expect(queries).toHaveBeenCalledTimes(1);
+    stop();
   });
 
   it('stops hearing a control after its function runs', () => {
