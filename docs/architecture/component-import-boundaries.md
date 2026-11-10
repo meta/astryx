@@ -65,15 +65,32 @@ Three kinds of code meet in a component's import:
   `useSnapPaging`, and the Markdown remark adapter. Its **capability module**
   holds the code only it needs.
 
-An **entry** is one public import as the pull-request size report builds it
-(`.github/scripts/lib/component-size.js`): minified ESM, code splitting on,
-with the entry chunk and every chunk it imports statically counted as eager.
-`import()` targets are lazy. Sizes are gzip at the default level, and 1 KB is
-1,024 bytes (`architecture:component-style-authoring` INV6).
+An **entry** is one public import, built with the esbuild options of the
+pull-request size report (`.github/scripts/lib/component-size.js`): minified
+ESM for the browser, code splitting on, production mode, and CSS left out.
+The build makes React, React DOM, and StyleX external, which the size report
+does not, so an entry's size counts only the code Astryx ships. The entry
+chunk and every chunk it imports statically are eager. `import()` targets are
+lazy. Sizes are gzip at the default level, and 1 KB is 1,024 bytes
+(`architecture:component-style-authoring` INV6).
 
-A **crossing** is a static import, inside an entry's eager graph, from a
-module of base code into a surface module or a capability module, or into a
-touch module that the entry carries only for a deferred surface (INV8).
+A **crossing** is the first static import, on a path through an entry's eager
+graph, from a module of base code into a surface module or a capability
+module. A static import of a touch module from a base module that defers a
+surface is a crossing too (INV8). The walk stops at a crossing, so imports
+inside a surface's or a capability's own graph are not crossings. Each pair
+of a base module and the module it first crosses into is one crossing and
+one allowlist row. A module that an `import()` targets is a surface module.
+
+Some modules in a surface or capability folder are base code: the trigger
+contract a surface folder keeps for base imports
+(`Tooltip/tooltipPresentInterest`, `Layer/layerScopedContext`), and a
+capability's own import (a Table plugin's folder index and the modules it
+re-exports, and `SnapPaging/SnapPaging`). INV7's wiring lives in base code:
+the component's own modules or the capability's own import. A wiring module
+such as the Table's `useTableRowsVirtualization` stays base code while it
+imports no engine code; its first static import of engine code is a
+crossing.
 
 The shared module loader (`utils/moduleLoader.ts`, `createModuleLoader`) holds
 one pending load per module, caches a success, and resets after a failure.
@@ -97,9 +114,13 @@ one pending load per module, caches a success, and resets after a failure.
   moment after the page's first render. A load never starts during server
   render or the render that hydrates server markup (`spec:AST-013` FR9).
 - **INV3 — The trigger contract is complete before load.** The trigger's
-  role, accessible name, tab stop, `aria-haspopup`, `aria-expanded`, and
-  `aria-controls` are in server and hydrating markup and do not change when
-  the module loads. Every ARIA reference names an element in the document. A
+  role, accessible name, and tab stop, and the ARIA its own record gives its
+  closed state, are in server and hydrating markup and do not change when the
+  module loads. That ARIA differs per trigger: `component:Timestamp` AR3
+  gives its `time` no `aria-haspopup` or `aria-expanded` and sets
+  `aria-controls` only while the card is open, as
+  `component:DropdownMenuSubMenu` FR1 does for its surface. Every ARIA
+  reference names an element in the document. A
   description a surface supplies (a tooltip on an icon-only button) is in the
   base markup as hidden text before load, or the trigger carries no reference
   to it. Focus stays where it is across the load, and the load remounts no
@@ -158,36 +179,41 @@ one pending load per module, caches a success, and resets after a failure.
 
 | Crossing (base module → module it imports statically)             | Entries that reach it                          | Cost, gzip             | Invariant  | Row leaves when                                                          |
 | ----------------------------------------------------------------- | ---------------------------------------------- | ---------------------- | ---------- | ------------------------------------------------------------------------ |
-| `Text/TruncationTooltip` → `Layer/useTouchTrigger`                | Text, Heading, Button, IconButton, Link, Table | 4.8 KB (Text, Heading) | INV1, INV8 | the truncation tooltip's eager code carries no touch tap recognizer      |
-| `Button/Button` → `Tooltip/useTooltip`                            | Button, IconButton                             | 16.1 KB                | INV1       | Button's tooltip layer code is lazy                                      |
-| `Link/Link` → `Tooltip`                                           | Link                                           | 18.1 KB                | INV1       | Link's tooltip layer code is lazy                                        |
-| `Table/tableContextMenu` → `ContextMenu`                          | Table                                          | 79.0 KB                | INV1       | cells without actions reach no menu module                               |
-| `Table/BaseTable` → `Table/plugins/virtualization/useTableWindow` | Table                                          | 3.3 KB                 | INV7       | a Table that never windows reaches neither the controller nor its engine |
+| `Text/TruncationTooltip` → `Layer/useTouchTrigger`                | Text, Heading, Button, IconButton, Link, Table | 4.6 KB (Text, Heading) | INV1, INV8 | the truncation tooltip's eager code carries no touch tap recognizer      |
+| `Button/Button` → `Tooltip/useTooltip`                            | Button, IconButton                             | 15.4 KB                | INV1       | Button's tooltip layer code is lazy                                      |
+| `Link/Link` → `Tooltip`                                           | Link                                           | 17.5 KB                | INV1       | Link's tooltip layer code is lazy                                        |
+| `Table/tableContextMenu` → `ContextMenu`                          | Table                                          | 78.0 KB                | INV1       | cells without actions reach no menu module                               |
+| `Table/BaseTable` → `Table/plugins/virtualization/useTableWindow` | Table                                          | 3.0 KB                 | INV7       | a Table that never windows reaches neither the controller nor its engine |
 
-Costs are each crossing's removal from the entry with every other crossing
-kept, measured as INV9 measures, with React, React DOM, and StyleX external.
-Rows share modules, so they do not add up. The truncation tooltip's touch
-code costs Button, IconButton, Link, and Table nothing on its own, because
-another of their crossings brings the same module. Table carries 121.7 KB
-eager and 37.0 KB with every listed crossing removed.
+Costs are the check's own printout: each crossing's removal from the entry
+with every other crossing kept, in the entry build above. Rows share modules,
+so they do not add up. The truncation tooltip's touch code costs Button,
+IconButton, Link, and Table nothing on its own, because another of their
+crossings brings the same module. Table carries 123.0 KB eager.
 
 ## Current-state impact
 
 - INV1, INV8 gap: Text's and Heading's imports reach the touch tap recognizer
-  through the truncation tooltip, 4.8 KB gzip each, on pages whose text never
+  through the truncation tooltip, 4.6 KB gzip each, on pages whose text never
   truncates. Button, IconButton, Link, and Table reach it the same way
   through Text.
+- INV1 gap: the `Tooltip`, `HoverCard`, `Popover`, `DropdownMenu`, and
+  `ContextMenu` imports load their layer statically. `useTooltip`,
+  `useHoverCard`, `usePopover`, and `ContextMenu` import the layer hook from
+  `Layer/useLayer`, and `DropdownMenu` reaches it through `usePopover`. These
+  five are not in INV9's entry list, so the check does not hold them; it
+  holds only the listed entries.
 - INV1 gap: Button's and IconButton's imports reach the tooltip hook and the
-  layer runtime, 16.1 KB gzip, with or without a `tooltip` prop. Through
+  layer runtime, 15.4 KB gzip, with or without a `tooltip` prop. Through
   Button, Link, or their own code, 32 of Core's 95 component imports that are
   not surfaces carry 17–24 KB of tooltip code, and 52 carry at least 1 KB.
 - INV1 gap: Link's import reaches the Tooltip component and the layer
-  runtime, 18.1 KB gzip, with or without a `tooltip` prop.
-- INV1 gap: Table's import reaches the cell context menu, 79.0 KB gzip, for
+  runtime, 17.5 KB gzip, with or without a `tooltip` prop.
+- INV1 gap: Table's import reaches the cell context menu, 78.0 KB gzip, for
   cells with no actions, while `component:TableCell` PR1 loads a menu only
   when actions are given.
 - INV7 gap: Table's import reaches the window controller and the shared
-  windowing module, 3.3 KB gzip, for a Table that never windows.
+  windowing module, 3.0 KB gzip, for a Table that never windows.
 - INV3 gap: no record says how a tooltip's description reaches assistive
   technology before its surface loads, for the triggers whose tooltip is
   their description.
@@ -218,8 +244,8 @@ Review against this record when a change:
   `packages/core/src/Popover/`, `packages/core/src/DropdownMenu/`,
   `packages/core/src/ContextMenu/` — surfaces and their triggers.
 - `packages/core/src/Table/plugins/` — Table's opt-in capabilities.
-- `.github/scripts/lib/component-size.js` — the entry build INV9 shares with
-  the size report.
+- `.github/scripts/lib/component-size.js` — the esbuild options and gzip
+  measure INV9's entry build shares with the size report.
 
 ## Deciding specs
 
@@ -283,7 +309,7 @@ Rejected: rules held by review alone, because a crossing shows only in the built
 | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | INV1, INV7 | The entry-boundary check (INV9) with a positive control per kind: a fixture entry that imports a surface statically, and one that imports a capability                  | A listed entry reaches a surface or capability module statically outside the allowlist; a component reaches a capability module with `import()`; a positive control passes |
 | INV2       | Unit tests per surface: no load before intent; one load per intent kind (mouse or pen enter, focus, pointer down, open request); none during server render or hydration | A load before intent, during server render, or during hydration; an intent that starts no load; a gesture recognizer in the pre-load listeners                             |
-| INV3       | Server render then hydrate, plus real-browser tests (Chromium and WebKit) with axe before and after load                                                                | Trigger ARIA differs between server, hydration, and after load; an ARIA reference names a missing element; focus moves or content remounts on load                         |
+| INV3       | Server render then hydrate, plus real-browser tests (Chromium and WebKit) with axe before and after load                                                                | Closed-state trigger ARIA differs between server, hydration, and after load; an ARIA reference names a missing element; focus moves or content remounts on load            |
 | INV4       | Tests with a deferred loader: hover, tap, focus, and open request before load; leave, blur, and a later intent before load                                              | A held intent lost or replayed twice; a hover delay restarted at load; a stale intent opening after a newer one; a replayed tap without outside dismissal                  |
 | INV5       | Real-browser layout test: trigger box before and after load; no paint of a closed surface                                                                               | Any trigger box change; a closed surface painted; a false state during load                                                                                                |
 | INV6       | Tests with a rejecting loader                                                                                                                                           | The page unmounts or the trigger stops working; a held intent survives; a suppressed native behavior does not return; a later intent does not retry                        |

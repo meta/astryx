@@ -146,7 +146,7 @@ browser, accessibility and performance verification remain release requirements.
 - **PR4 — Shared lifetime.** Parent shared viewport/content observation also serves sticky state; no independent virtualizer detector or second viewport is installed. Unmount, disablement and node replacement release owned subscriptions, queued frames, island elements and obsolete snapshots without silencing shared subscribers.
 - **PR5 — Timing targets.** The p95 range-plus-commit target is 4 ms; p95 no-op is 2 ms. At 60 Hz, p95 whole-frame work is at most 16.7 ms with at most 1% missed frames and no persistent blank windows. Core cold render at 100k rows, including key validation, is at most 250 ms. Supported-plugin incremental p95 scroll overhead is at most 2 ms.
 - **PR6 — Memory targets.** Additional identity bookkeeping is at most 32 MiB at 100k rows, excluding caller data. Fixed-viewport mounted heap at 100k is at most the 1k case plus 8 MiB. After 20 mount/unmount and viewport-replacement cycles, controlled-GC retained growth plateaus within 1 MiB and no instance node, listener or frame survives.
-- **PR7 — Evidence.** Targets are release requirements, not measured results. Verification records environment/build/browser versions, corpus, viewport/pitch/column count, p50/p95/max and operation counts at 1k/10k/100k, core and supported combinations; timing and memory results remain outside this record.
+- **PR7 — Evidence.** Targets are release requirements, not measured results. Timing targets gate on the release check's 4-core-ubuntu runner, where the timing proof runs alone in its contract leg on one worker; release checks on ubuntu-latest, including the scheduled monitoring runs, report timing without gating. Count, work and memory targets gate on every runner. The gating timing values are the PR5 targets; isolated runs on that runner stay at least 25% inside every one of them, and a single-machine measurement is a non-gating reference. Verification records environment/build/browser versions, corpus, viewport/pitch/column count, p50/p95/max and operation counts at 1k/10k/100k, core and supported combinations; per-release timing and memory results remain outside this record.
 
 ## Accessibility contract
 
@@ -246,8 +246,10 @@ Rejected: a parallel public scroll wrapper/detector or a subjective smoothness v
 
 ## Open questions
 
-None. The normative contract is complete. Implementation and release verification
-remain separate from contract approval.
+The normative contract is complete. Implementation and release verification
+remain separate from contract approval. One open item:
+
+- **OQ1 — Tighter timing gates.** Gating timing values move toward the worst isolated run plus 25% once isolated samples span both 4-core-ubuntu host types (AMD EPYC 9V74 and 7763); the missed-frame target stays 1% while the measured worst is zero.
 
 ## Content boundary
 
