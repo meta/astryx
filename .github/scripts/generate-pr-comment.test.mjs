@@ -15,8 +15,13 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {describe, it, expect} from 'vitest';
+import yaml from 'yaml';
+
+import {computeChanges} from '../../scripts/api-report/changes.mjs';
+import {changesFile} from '../../scripts/api-report/cli.mjs';
 
 const SCRIPTS_DIR = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(SCRIPTS_DIR, '../..');
 const SCRIPT = path.join(SCRIPTS_DIR, 'generate-pr-comment.js');
 
 /** Run the comment generator with the given analysis.json; return stdout. */
@@ -221,6 +226,78 @@ describe('comment length budget', () => {
     } finally {
       fs.rmSync(dir, {recursive: true, force: true});
     }
+  });
+
+  // Two readers depend on pr-analysis/api-changes.json: this PR report and
+  // merge-guard, which reads a run's file up to a day later. The shape below
+  // is what both read; a change to it breaks merge-guard as well.
+  it("keeps api-changes.json's shape for its readers, the PR report and merge-guard", () => {
+    const base = fs.readFileSync(
+      path.join(repoRoot, 'packages/build/api-report.md'),
+      'utf8',
+    );
+    const head = base.replace(/^function postcss: .*\n/m, '');
+    const changes = computeChanges([
+      {pkg: '@astryxdesign/build', base, head, committed: base},
+      {pkg: '@astryxdesign/new', base: null, head, committed: null},
+    ]);
+    const file = changesFile(changes, {haveSurface: true, baseRecord: 'main'});
+    expect(Object.keys(file).sort()).toEqual([
+      'baseRecord',
+      'packages',
+      'version',
+    ]);
+    expect(file.version).toBe(2);
+    expect(file.baseRecord).toBe('main');
+    expect(
+      changesFile(changes, {haveSurface: true, baseRecord: 'build'}).baseRecord,
+    ).toBe('build');
+    expect(changesFile(changes, {haveSurface: false}).baseRecord).toBeNull();
+    for (const pkg of file.packages) {
+      expect(Object.keys(pkg).sort()).toEqual(
+        [
+          'baseSource',
+          'baseline',
+          'counts',
+          'missing',
+          'pkg',
+          'rows',
+          'stale',
+          'staleOwnRows',
+          'staleRows',
+        ].sort(),
+      );
+      expect(typeof pkg.pkg).toBe('string');
+      for (const key of ['baseline', 'stale', 'missing'])
+        expect(typeof pkg[key], key).toBe('boolean');
+      expect(Object.keys(pkg.counts).sort()).toEqual([
+        'added',
+        'changed',
+        'removed',
+      ]);
+      for (const row of pkg.rows) {
+        expect(['added', 'changed', 'removed']).toContain(row.change);
+        for (const key of ['entry', 'section', 'item', 'line', 'usage'])
+          expect(typeof row[key], key).toBe('string');
+      }
+    }
+    const [build, added] = file.packages;
+    expect(build.counts).toEqual({added: 0, changed: 0, removed: 1});
+    expect(build.rows[0]).toMatchObject({
+      change: 'removed',
+      item: 'function postcss',
+    });
+    expect(added).toMatchObject({baseline: true, missing: true, rows: []});
+    // The artifact that carries it outlives a day, so merge-guard can read it.
+    const ci = yaml.parse(
+      fs.readFileSync(path.join(repoRoot, '.github/workflows/ci.yml'), 'utf8'),
+    );
+    const upload = ci.jobs['build-storybook'].steps.find(
+      step => step.name === 'Upload analysis artifact',
+    );
+    expect(upload.with.name).toBe('pr-analysis');
+    expect(upload.with.path.split('\n')).toContain('api-changes.json');
+    expect(upload.with['retention-days']).toBe(3);
   });
 
   it("keeps a report with 150 long API rows under GitHub's comment limit", () => {

@@ -12,6 +12,7 @@ import * as path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {integrationPackCheck} from './pack-check.mjs';
 import {COMPONENT_REPLACES_CLI} from '../../foundation/integrations/cli-requirement.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const SLOW = 120_000;
 
@@ -19,7 +20,7 @@ let tmpDir;
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-pack-check-component-replaces-'),
+    path.join(REPO_ROOT, '.astryx-pack-check-component-replaces-'),
   );
 });
 

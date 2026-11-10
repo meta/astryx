@@ -186,6 +186,7 @@ export function Timer({
   const resolvedFormat = resolveFormat(format);
   const initialPresentation = getPresentation(0, resolvedFormat);
 
+  // Syncs the elapsed-time text with a timer.
   useEffect(() => {
     const resolvedStartTime =
       startTime !== undefined && Number.isFinite(startTime)

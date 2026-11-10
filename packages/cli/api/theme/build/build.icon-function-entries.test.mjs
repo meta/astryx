@@ -20,19 +20,26 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import ts from 'typescript';
 import {themeBuild, themeBuildFamily} from './build.mjs';
+import {
+  makeLinkedFixture,
+  removeLinkedFixture,
+} from '../../../test-utils/linked-fixture.mjs';
 
 const SIZES = ['xsm', 'sm', 'md', 'lg'];
 
 let tmpDir;
 beforeEach(() => {
-  // Under the CLI package, so core, React, and TypeScript resolve both in the
-  // theme loader and in the native artifact checks.
-  tmpDir = fs.mkdtempSync(
-    path.resolve(import.meta.dirname, '../../..', '.tmp-icon-functions-'),
-  );
+  // Core, React and TypeScript resolve both in the theme loader and in the
+  // native artifact checks.
+  tmpDir = makeLinkedFixture('astryx-icon-functions-', [
+    '@astryxdesign',
+    'react',
+    'react-dom',
+    'typescript',
+  ]);
 });
 afterEach(() => {
-  fs.rmSync(tmpDir, {recursive: true, force: true});
+  removeLinkedFixture(tmpDir);
 });
 
 /** @param {string} file @param {string} source */

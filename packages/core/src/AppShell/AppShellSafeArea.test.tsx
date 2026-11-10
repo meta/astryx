@@ -13,37 +13,28 @@
  */
 
 import {render, screen} from '@testing-library/react';
-import {beforeAll, beforeEach, describe, expect, it, vi} from 'vitest';
-import type {AppShell as AppShellComponent} from './AppShell';
-import type {
-  SideNav as SideNavComponent,
-  SideNavItem as SideNavItemComponent,
-  SideNavSection as SideNavSectionComponent,
-} from '../SideNav';
+import {beforeEach, describe, expect, it, vi} from 'vitest';
 
 /** Every rule StyleX inserted, as the raw text it handed to `insertRule`. */
 const rawRules: string[] = [];
-let AppShell: typeof AppShellComponent;
-let SideNav: typeof SideNavComponent;
-let SideNavItem: typeof SideNavItemComponent;
-let SideNavSection: typeof SideNavSectionComponent;
 
-beforeAll(async () => {
-  const insertRule = CSSStyleSheet.prototype.insertRule;
-  CSSStyleSheet.prototype.insertRule = function (
-    this: CSSStyleSheet,
-    rule: string,
-    index?: number,
-  ) {
-    rawRules.push(rule);
-    return insertRule.call(this, rule, index);
-  };
-  // StyleX injects when the styles are created: load AppShell after the
-  // recorder is in place.
-  vi.resetModules();
-  ({AppShell} = await import('./AppShell'));
-  ({SideNav, SideNavItem, SideNavSection} = await import('../SideNav'));
-});
+const insertRule = CSSStyleSheet.prototype.insertRule;
+CSSStyleSheet.prototype.insertRule = function (
+  this: CSSStyleSheet,
+  rule: string,
+  index?: number,
+) {
+  rawRules.push(rule);
+  return insertRule.call(this, rule, index);
+};
+// StyleX injects when the styles are created: load AppShell after the
+// recorder is in place. The file loads them before any test runs, so no
+// hook's time limit covers the load.
+vi.resetModules();
+const {AppShell} = await import('./AppShell');
+const {SideNav} = await import('../SideNav/SideNav');
+const {SideNavItem} = await import('../SideNav/SideNavItem');
+const {SideNavSection} = await import('../SideNav/SideNavSection');
 
 function stubMatchMedia(matches: boolean) {
   vi.stubGlobal(

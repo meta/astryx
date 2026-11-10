@@ -166,6 +166,7 @@ var --color-text-yellow (./theme.css)
 var --color-tint-hover (./theme.css)
 var --color-warning (./theme.css)
 var --color-warning-muted (./theme.css)
+var --duration-exit (./theme.css)
 var --duration-fast (./theme.css)
 var --duration-fast-max (./theme.css)
 var --duration-fast-min (./theme.css)
@@ -255,5 +256,6 @@ var --text-supporting-weight (./theme.css)
 
 ```text
 attr data-astryx-media (public data attribute)
+attr data-astryx-pressable (public data attribute)
 attr data-astryx-theme (public data attribute)
 ```

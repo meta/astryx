@@ -5,7 +5,7 @@
 /**
  * @file Slider.tsx
  * @input Uses React, useId, useRef, useCallback, useEffect, Field, useTooltip, VisuallyHidden, the touch presentation resolver and useSliderTouch (UISlider's touch tracking)
- * @output Exports Slider and its props. Unfilled marks share the track token. Modifier-only key presses do not restore the thumb focus ring. A drag belongs to the pointer that started it. The thumbs and the filled range travel by `translate` in container units, so moving them never lays out. Padding on the control moves no part. The value tooltip anchors to a box that layout places at the value. A drag on a thumb is a pan for every pointer, tracked as UISlider does. Under a coarse primary pointer, each thumb's `::before` is its touch target. A finger's tap on the track sets the value on its lift. A mouse press on the track keeps the pointer handlers. Two coincident range thumbs separate toward the press or the first movement
+ * @output Exports Slider and its props. Unfilled marks share the track token. Modifier-only key presses do not restore the thumb focus ring. A drag belongs to the pointer that started it. The thumbs and the filled range travel by `translate` in container units, so moving them never lays out. Padding on the control moves no part. The value tooltip anchors to a box that layout places at the value. During a drag and its coast, the box keeps its place and the tooltip moves with the thumb by translate. A drag on a thumb is a pan for every pointer, tracked as UISlider does. Under a coarse primary pointer, each thumb's `::before` is its touch target. A finger's tap on the track sets the value on its lift. A mouse press on the track keeps the pointer handlers. Two coincident range thumbs separate toward the press or the first movement
  * @position Core implementation; consumed by index.ts, tested by Slider.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -23,13 +23,13 @@ import {
   useRef,
   useState,
   useCallback,
-  type CSSProperties,
   type FocusEvent,
   type KeyboardEvent,
   type PointerEvent,
   type ReactElement,
   type ReactNode,
   type Ref,
+  type RefObject,
 } from 'react';
 import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
@@ -48,6 +48,7 @@ import {VisuallyHidden} from '../VisuallyHidden';
 import type {InputStatus} from '../Field/types';
 import {mergeProps, rtlStyles} from '../utils';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {joinAriaIDs} from '../utils/inputAria';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {isRtlElement} from '../hooks/isRtlElement';
@@ -209,6 +210,12 @@ type ThumbStyle = React.CSSProperties &
   Partial<Record<(typeof HIT_INSET)[keyof typeof HIT_INSET], string>>;
 type FillStyle = React.CSSProperties &
   Record<typeof FILL_START | typeof FILL_END, number>;
+type AnchorStyle = React.CSSProperties & Record<typeof THUMB_PROGRESS, number>;
+/** A thumb's value-tooltip anchor and the id of the tooltip it places. */
+interface ValueAnchor {
+  readonly element: HTMLElement;
+  readonly tooltipId: string;
+}
 
 // =============================================================================
 // Styles
@@ -255,12 +262,22 @@ const styles = stylex.create({
   // Where layout places a thumb at its value: the value tooltip's position
   // anchor. CSS anchor positioning reads the anchor's layout box, which the
   // thumb's `translate` does not move in every engine. So the tooltip anchors
-  // here while hover and focus stay on the thumb.
+  // here while hover and focus stay on the thumb. During a drag the anchor
+  // keeps the place the drag held, and the tooltip moves with the thumb by
+  // translate.
   valueAnchor: {
     position: 'absolute',
     width: THUMB_SIZE,
     height: THUMB_SIZE,
     pointerEvents: 'none',
+  },
+  valueAnchorHorizontal: {
+    top: `calc(50% - ${THUMB_SIZE / 2}px)`,
+    insetInlineStart: `calc(var(${THUMB_PROGRESS}) * (100cqi - ${THUMB_SIZE}px))`,
+  },
+  valueAnchorVertical: {
+    insetInlineStart: `calc(50% - ${THUMB_SIZE / 2}px)`,
+    bottom: `calc(var(${THUMB_PROGRESS}) * (100cqb - ${THUMB_SIZE}px))`,
   },
   trackContainerHorizontal: {
     height: THUMB_SIZE,
@@ -634,14 +651,21 @@ function SliderValueTooltip({
   content,
   placement,
   isOpen,
-  anchorStyle,
+  isHorizontal,
+  progress,
+  index,
+  anchors,
   thumbRef,
   children,
 }: {
   content: ReactNode;
   placement: 'above' | 'start';
   isOpen: boolean | undefined;
-  anchorStyle: CSSProperties;
+  isHorizontal: boolean;
+  /** The thumb's place along the travel, from 0 to 1. */
+  progress: number;
+  index: number;
+  anchors: RefObject<Map<number, ValueAnchor>>;
   thumbRef: Ref<HTMLDivElement> | undefined;
   children: (trigger: {
     ref: Ref<HTMLDivElement>;
@@ -658,12 +682,36 @@ function SliderValueTooltip({
     thumbRef,
     tooltip.interactionRef,
   );
+  const {describedBy} = tooltip;
+  const recordAnchor = useCallback(
+    (element: HTMLSpanElement | null) => {
+      if (element == null) {
+        anchors.current.delete(index);
+      } else {
+        anchors.current.set(index, {element, tooltipId: describedBy});
+      }
+    },
+    [anchors, index, describedBy],
+  );
+  const anchorRef = useMergedRefs<HTMLSpanElement>(
+    tooltip.positionRef,
+    recordAnchor,
+  );
+  const anchorStyle: AnchorStyle = {[THUMB_PROGRESS]: progress};
   return (
     <>
       <span
         aria-hidden="true"
-        ref={tooltip.positionRef}
-        {...mergeProps(stylex.props(styles.valueAnchor), {style: anchorStyle})}
+        ref={anchorRef}
+        {...mergeProps(
+          stylex.props(
+            styles.valueAnchor,
+            isHorizontal
+              ? styles.valueAnchorHorizontal
+              : styles.valueAnchorVertical,
+          ),
+          {style: anchorStyle},
+        )}
       />
       {children({ref: triggerRef, describedBy: tooltip.describedBy})}
       {tooltip.renderTooltip(content)}
@@ -742,15 +790,20 @@ export function Slider({ref, ...props}: SliderProps) {
 
   const isHorizontal = orientation === 'horizontal';
 
-  // Consumer handlers run after the component's own and always run: the
-  // component's handlers call preventDefault() for their own reasons, which
-  // must not silence a consumer.
+  // Consumer handlers run after the component's own, so the component's
+  // preventDefault() calls never silence an enabled slider's consumer.
   const after =
     <E,>(own: (event: E) => void, consumer?: (event: E) => void) =>
     (event: E) => {
       own(event);
       consumer?.(event);
     };
+
+  // A disabled slider keeps its tab stop, so the browser still sends its events.
+  // Drop the caller's handlers, but keep focus and blur.
+  const callerProps = withholdCallerHandlers(rest, isDisabled);
+  const callerHandler = <E,>(handler?: (event: E) => void) =>
+    isDisabled ? undefined : handler;
   const generatedId = useId();
   const id = idProp ?? generatedId;
   const labelID = useId();
@@ -761,6 +814,11 @@ export function Slider({ref, ...props}: SliderProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const fillMoverRef = useRef<HTMLDivElement>(null);
   const fillRef = useRef<HTMLDivElement>(null);
+  const valueAnchorsRef = useRef(new Map<number, ValueAnchor>());
+  /** The places an interaction holds value-tooltip anchors at, by thumb. */
+  const [heldAnchors, setHeldAnchors] = useState<ReadonlyMap<number, number>>(
+    () => new Map(),
+  );
   const draggingThumbRef = useRef<number | null>(null);
   const [draggingThumb, setDraggingThumb] = useState<number | null>(null);
 
@@ -1263,6 +1321,35 @@ export function Slider({ref, ...props}: SliderProps) {
       });
     },
     reportEnd: () => fireChangeEnd(),
+    // A held anchor renders at its held place, so a render during the drag
+    // writes nothing on it. In Chromium, any style change on an element in
+    // anchor positioning lays it out.
+    holdAnchor: index => {
+      const anchor = valueAnchorsRef.current.get(index)?.element;
+      const progress = parseFloat(
+        anchor?.style.getPropertyValue(THUMB_PROGRESS) ?? '',
+      );
+      if (anchor == null || !Number.isFinite(progress)) {
+        return null;
+      }
+      setHeldAnchors(held => new Map(held).set(index, progress));
+      return progress;
+    },
+    // From the controller's hand-back, after the owner rendered the last
+    // value. The anchors take their final place in this render, before the
+    // next frame.
+    releaseAnchors: indices => {
+      // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the anchors must reach their final place in the task that ends the tooltips' translates
+      flushSync(() => {
+        setHeldAnchors(held => {
+          const next = new Map(held);
+          for (const index of indices) {
+            next.delete(index);
+          }
+          return next;
+        });
+      });
+    },
     // A tap on the track, from useSliderTouch. It takes a mark's value on a
     // mark, else the point along the travel. It moves the thumb a track
     // press moves.
@@ -1286,13 +1373,20 @@ export function Slider({ref, ...props}: SliderProps) {
       if (control == null) {
         return null;
       }
+      const thumbs = Array.from(
+        control.querySelectorAll<HTMLElement>('[role="slider"]'),
+      );
       return {
         control,
-        thumbs: Array.from(
-          control.querySelectorAll<HTMLElement>('[role="slider"]'),
-        ),
+        thumbs,
         fillMover: fillMoverRef.current,
         fill: fillRef.current,
+        tooltips: thumbs.map((_, index) => {
+          const anchor = valueAnchorsRef.current.get(index);
+          return anchor == null
+            ? null
+            : control.ownerDocument.getElementById(anchor.tooltipId);
+        }),
       };
     },
   });
@@ -1475,7 +1569,7 @@ export function Slider({ref, ...props}: SliderProps) {
     ) => (
       <div
         key={thumbIndex}
-        {...(!isRange ? rest : undefined)}
+        {...(!isRange ? callerProps : undefined)}
         ref={trigger != null ? trigger.ref : !isRange ? ref : undefined}
         id={!isRange ? id : undefined}
         role="slider"
@@ -1504,7 +1598,7 @@ export function Slider({ref, ...props}: SliderProps) {
         }
         onKeyDown={after(
           e => handleKeyDown(thumbIndex, e),
-          !isRange ? onKeyDown : undefined,
+          !isRange ? callerHandler(onKeyDown) : undefined,
         )}
         onFocus={after(
           e => handleThumbFocus(thumbIndex, e),
@@ -1533,7 +1627,6 @@ export function Slider({ref, ...props}: SliderProps) {
     );
 
     if (useValueTooltip) {
-      const anchorAt = `calc(${insetPosition(percent)} - ${THUMB_SIZE / 2}px)`;
       return (
         <SliderValueTooltip
           key={thumbIndex}
@@ -1544,17 +1637,10 @@ export function Slider({ref, ...props}: SliderProps) {
           isOpen={
             draggingThumb === null ? undefined : draggingThumb === thumbIndex
           }
-          anchorStyle={
-            isHorizontal
-              ? {
-                  insetInlineStart: anchorAt,
-                  top: `calc(50% - ${THUMB_SIZE / 2}px)`,
-                }
-              : {
-                  bottom: anchorAt,
-                  insetInlineStart: `calc(50% - ${THUMB_SIZE / 2}px)`,
-                }
-          }
+          isHorizontal={isHorizontal}
+          progress={heldAnchors.get(thumbIndex) ?? percent / 100}
+          index={thumbIndex}
+          anchors={valueAnchorsRef}
           thumbRef={!isRange ? ref : undefined}>
           {thumbElement}
         </SliderValueTooltip>
@@ -1634,10 +1720,10 @@ export function Slider({ref, ...props}: SliderProps) {
         <div
           // In range mode the role="group" control takes the base props; a
           // single slider gives them to its role="slider" thumb.
-          {...(isRange ? rest : undefined)}
+          {...(isRange ? callerProps : undefined)}
           {...(isRange
             ? {
-                onKeyDown,
+                onKeyDown: callerHandler(onKeyDown),
                 onFocus,
                 onBlur,
                 'aria-describedby': ariaDescribedByProp,
@@ -1655,10 +1741,13 @@ export function Slider({ref, ...props}: SliderProps) {
                 'aria-labelledby': joinAriaIDs(labelID, ariaLabelledByProp),
               }
             : undefined)}
-          onPointerDown={after(handlePointerDown, onPointerDown)}
-          onPointerMove={after(handlePointerMove, onPointerMove)}
-          onPointerUp={after(handlePointerUp, onPointerUp)}
-          onPointerCancel={after(handlePointerUp, onPointerCancel)}
+          onPointerDown={after(handlePointerDown, callerHandler(onPointerDown))}
+          onPointerMove={after(handlePointerMove, callerHandler(onPointerMove))}
+          onPointerUp={after(handlePointerUp, callerHandler(onPointerUp))}
+          onPointerCancel={after(
+            handlePointerUp,
+            callerHandler(onPointerCancel),
+          )}
           {...mergeProps(
             themeProps('slider-control', {
               orientation,

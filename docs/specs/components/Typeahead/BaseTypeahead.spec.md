@@ -275,6 +275,10 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Current-state impact
 
+- **Active option perception.** The active option shows only the
+  `--color-overlay-hover` fill, under 3:1 against the listbox in light and
+  dark, against `spec:AST-020` FR1 (WCAG 2.2 1.4.11). Selector draws the
+  shared focus ring after keyboard input (`component:Selector` AR5).
 - **Empty-search message (FR4).** A completed empty search renders its message
   as a disabled option instead of presentational text, against `spec:AST-058`
   FR7.
