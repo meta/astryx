@@ -98,11 +98,14 @@ shared icon names under FR17.
   - No package of the set depends on react-native-screens,
     react-native-safe-area-context, or a navigation package that ships native
     code or requires either of them (DEC-9).
-  - The `navigation` hosts are platform views that any router drives. React
-    Navigation's JavaScript core (`@react-navigation/core`) is an optional
-    integration under `spec:AST-082/FR13`: an app that routes with it
-    depends on it itself, and neither the library nor the platform depends
-    on it.
+  - Astryx owns everything in navigation except routing state: the native
+    stack and tab containers, transitions, gestures, insets, and every bar,
+    header, button, and search field, rendered by the system through the
+    platform's hosts or drawn by the library. A router holds only routing
+    state and drives the `navigation` hosts. React Navigation's JavaScript
+    core (`@react-navigation/core`) is an optional integration under
+    `spec:AST-082/FR13`: an app that routes with it depends on it itself,
+    and neither the library nor the platform depends on it.
   - React Native command-line tools are development dependencies. An app's
     runtime never imports them, and `@astryxdesign/cli` never depends on them.
 - **FR3 — An app opts in to each capability.** Each optional capability
@@ -440,18 +443,23 @@ The library and the platform change together, so they share
 one version and release together. They stay on the canary channel until a
 platform is supported under `spec:AST-082/FR15`.
 
-### DEC-9 — Astryx owns native navigation and insets
+### DEC-9 — Astryx owns navigation except routing state
 
 **Reference:** `spec:AST-112/DEC-9`
 **Decider:** imdreamrunner, 2026-11-09
 
-Gestures, bars, and safe areas meet in the native stack, so the platform owns
-it: a `navigation` capability holds the native stack and tab hosts, the core
-holds safe-area insets, and React Navigation's JavaScript core only routes.
-Apps, and the projects the Astryx app previews, then run no third-party native code for navigation.
+Gestures, bars, and safe areas meet in the native stack, so Astryx owns
+everything in navigation except routing state: the `navigation` capability
+holds the native stack and tab containers with their transitions and
+gestures, the core holds safe-area insets, and every bar, header, button,
+and search field is the system's, through the platform's hosts, or drawn by
+the library. React Navigation's JavaScript core holds only routing state.
+Apps, and the projects the Astryx app previews, then run no third-party
+native code for navigation.
 
 Rejected: building on react-native-screens and react-native-safe-area-context,
-because their gesture handling couples to the platform's and the Astryx app would serve their native code to the projects it previews.
+because their gesture handling couples to the platform's and the Astryx app
+would serve their native code to the projects it previews.
 
 ## Open questions
 
