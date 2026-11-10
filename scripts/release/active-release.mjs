@@ -11,16 +11,23 @@
  * @output fail-closed receipts plus the cut-time release description frozen in the plan digest
  * @position single authority used by release CI, stable publishing, and branch cleanup
  *
- * CI copies this file and lib/workspace-globs.mjs alone as trusted policy, so
- * it imports nothing else at module load.
+ * CI copies this file, release-paths.mjs, and lib/workspace-globs.mjs as
+ * trusted policy.
  */
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {expandWorkspaceDirs} from '../lib/workspace-globs.mjs';
+import {
+  classifyReleaseDiff,
+  diffEntryFiles,
+  isReleaseOutputPath,
+  isReleaseTestRepairPath,
+} from './release-paths.mjs';
 
 const ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -360,8 +367,18 @@ function validateReleaseState({
   return errors;
 }
 
+const GIT_MAX_BUFFER = 64 * 1024 * 1024;
+
+function gitRaw(root, args) {
+  return execFileSync('git', args, {
+    cwd: root,
+    encoding: 'utf8',
+    maxBuffer: GIT_MAX_BUFFER,
+  });
+}
+
 function git(root, args) {
-  return execFileSync('git', args, {cwd: root, encoding: 'utf8'}).trim();
+  return gitRaw(root, args).trim();
 }
 
 /** The highest local stable vX.Y.Z tag, or null when none exists. */
@@ -706,17 +723,522 @@ function listActiveBranches(root) {
   return active.sort();
 }
 
-const RELEASE_OUTPUT_PATTERNS = [
-  /^packages\/(?:[^/]+|themes\/[^/]+)\/package\.json$/,
-  /^packages\/(?:[^/]+|themes\/[^/]+)\/CHANGELOG\.md$/,
-  /^packages\/cli\/assets\/codemods\/registry\.mjs$/,
-  /^packages\/cli\/assets\/codemods\/__tests__\/registry\.test\.mjs$/,
-  /^packages\/cli\/assets\/codemods\/transforms\/(?:next|v\d+\.\d+\.\d+)\//,
-  /^pnpm-lock\.yaml$/,
+const RELEASE_TEST_REPAIR_FORBIDDEN_STATEMENT =
+  /(?:unbounded changed statement|\b(?:expect|assert)\s*[.(]|\b(?:expect|assert)[A-Z]\w*\s*\(|\.(?:not\.)?to[A-Z]\w*\s*\(|\b(?:skip|fixme|fail|slow)\s*\(|\b(?:test|it|describe)(?:\.[A-Za-z]+)*\.(?:skip|fixme|fail|slow|skipIf|runIf)\b|\b(?:skip|fixme)\s*:\s*true\b|\breturn\b|timeout|retr(?:y|ies)|\b(?:disableRules|disabledRules|excludeRules)\b|\btoMatch(?:Inline)?Snapshot\b)/i;
+
+function changedStatementsFromDiff(diff) {
+  const statements = [];
+  let oldLines = [];
+  let newLines = [];
+
+  const statementData = text => {
+    const masked = [...text];
+    const stack = [];
+    const pairs = [];
+    let quote = null;
+    let escaped = false;
+    let lineComment = false;
+    let blockComment = false;
+    for (let index = 0; index < text.length; index += 1) {
+      const character = text[index];
+      const next = text[index + 1];
+      if (lineComment) {
+        masked[index] = ' ';
+        if (character === '\n') lineComment = false;
+        continue;
+      }
+      if (blockComment) {
+        masked[index] = ' ';
+        if (character === '*' && next === '/') {
+          masked[index + 1] = ' ';
+          blockComment = false;
+          index += 1;
+        }
+        continue;
+      }
+      if (quote) {
+        masked[index] = ' ';
+        if (escaped) escaped = false;
+        else if (character === '\\') escaped = true;
+        else if (character === quote) quote = null;
+        continue;
+      }
+      if (character === '/' && next === '/') {
+        masked[index] = ' ';
+        masked[index + 1] = ' ';
+        lineComment = true;
+        index += 1;
+        continue;
+      }
+      if (character === '/' && next === '*') {
+        masked[index] = ' ';
+        masked[index + 1] = ' ';
+        blockComment = true;
+        index += 1;
+        continue;
+      }
+      if (character === "'" || character === '"' || character === '`') {
+        masked[index] = ' ';
+        quote = character;
+        continue;
+      }
+      if ('([{'.includes(character)) {
+        stack.push({character, index});
+        continue;
+      }
+      if (')]}'.includes(character)) {
+        const expected = {')': '(', ']': '[', '}': '{'}[character];
+        const opening = stack.at(-1);
+        if (opening?.character === expected) {
+          stack.pop();
+          pairs.push({
+            close: index,
+            open: opening.index,
+            type: opening.character,
+          });
+        }
+      }
+    }
+    return {masked: masked.join(''), pairs};
+  };
+
+  const addChangedStatements = lines => {
+    const text = lines.map(line => line.text).join('\n');
+    const ranges = [];
+    let offset = 0;
+    for (const line of lines) {
+      ranges.push({end: offset + line.text.length, start: offset});
+      offset += line.text.length + 1;
+    }
+    const {masked, pairs} = statementData(text);
+    for (let index = 0; index < lines.length; index += 1) {
+      if (!lines[index].changed) continue;
+      const range = ranges[index];
+      const enclosingCall = pairs
+        .filter(
+          pair =>
+            pair.type === '(' &&
+            pair.open <= range.start &&
+            pair.close >= range.end,
+        )
+        .sort((a, b) => a.close - a.open - (b.close - b.open))[0];
+      const changedCode = masked.slice(range.start, range.end).trim();
+      if (!changedCode) {
+        if (
+          /@(?:vitest-environment|jest-environment|ts-check|ts-nocheck)|(?:eslint|prettier)-(?:disable|enable)/i.test(
+            lines[index].text,
+          )
+        ) {
+          statements.push('<unbounded changed statement>');
+        }
+        continue;
+      }
+      if (!enclosingCall) {
+        if (!changedCode.includes(';')) {
+          statements.push('<unbounded changed statement>');
+          continue;
+        }
+        for (const statement of changedCode.split(';')) {
+          if (statement.trim()) statements.push(`${statement.trim()};`);
+        }
+        continue;
+      }
+      const previousSemicolon = masked.lastIndexOf(';', enclosingCall.open - 1);
+      if (previousSemicolon === -1) {
+        statements.push('<unbounded changed statement>');
+        continue;
+      }
+      const start = previousSemicolon + 1;
+      const semicolon = masked.indexOf(';', enclosingCall.close);
+      if (semicolon === -1) {
+        statements.push('<unbounded changed statement>');
+        continue;
+      }
+      statements.push(text.slice(start, semicolon + 1).trim());
+    }
+  };
+  const flush = () => {
+    addChangedStatements(oldLines);
+    addChangedStatements(newLines);
+    oldLines = [];
+    newLines = [];
+  };
+
+  for (const line of diff.split('\n')) {
+    if (line.startsWith('@@')) {
+      flush();
+      continue;
+    }
+    if (/^(?:diff --git |index |--- |\+\+\+ )/.test(line)) continue;
+    const marker = line[0];
+    const text = line.slice(1);
+    if (marker === ' ') {
+      oldLines.push({changed: false, text});
+      newLines.push({changed: false, text});
+    } else if (marker === '-') {
+      oldLines.push({changed: true, text});
+    } else if (marker === '+') {
+      newLines.push({changed: true, text});
+    }
+  }
+  flush();
+  return [...new Set(statements)];
+}
+
+function validateReleaseTestRepair({
+  entries,
+  changedLines,
+  changedStatements,
+  commitCount,
+  mergeCommitCount,
+  patchId,
+  changeDigest,
+  mainPatches,
+  baseChangesets,
+}) {
+  const errors = [];
+  if (entries.length === 0)
+    errors.push('release test repair has no changed files');
+  if (commitCount !== 1 || mergeCommitCount !== 0)
+    errors.push(
+      'release test repair must contain exactly one non-merge commit',
+    );
+  if (baseChangesets.size !== 0)
+    errors.push(
+      'release test repair requires the generated version bump to be merged first',
+    );
+
+  for (const entry of entries) {
+    const status = entry.split('\t', 1)[0];
+    if (status !== 'M')
+      errors.push(`release test repair may only modify an existing test: ${entry}`);
+    const files = diffEntryFiles(entry);
+    if (files === null) {
+      errors.push(`invalid diff entry: ${entry}`);
+      continue;
+    }
+    for (const file of files) {
+      if (!isReleaseTestRepairPath(file))
+        errors.push(`release test repair contains a non-test path: ${file}`);
+    }
+  }
+  for (const statement of changedStatements ?? changedLines ?? []) {
+    if (RELEASE_TEST_REPAIR_FORBIDDEN_STATEMENT.test(statement))
+      errors.push(
+        `release test repair changes an assertion, test control, timeout, retry, or snapshot: ${statement}`,
+      );
+  }
+
+  const source = patchId
+    ? (mainPatches.get(patchId) ?? []).find(
+        candidate =>
+          candidate.changeDigest === changeDigest && candidate.presentAtMain,
+      )
+    : null;
+  if (!patchId || !changeDigest || !source)
+    errors.push(
+      'release test repair does not exactly match a non-merge commit still present on main',
+    );
+  return {errors, sourceCommit: source?.commit ?? null};
+}
+
+function stablePatchId(root, diff) {
+  if (!diff.trim()) return null;
+  const output = execFileSync('git', ['patch-id', '--stable'], {
+    cwd: root,
+    encoding: 'utf8',
+    input: diff,
+  }).trim();
+  return output.split(/\s+/)[0] || null;
+}
+
+function exactChangeDigest(diff) {
+  const change = diff
+    .split('\n')
+    .filter(
+      line =>
+        /^(?:diff --git |new file mode |deleted file mode |rename (?:from|to) |copy (?:from|to) )/.test(
+          line,
+        ) ||
+        (/^[+-]/.test(line) && !/^(?:\+\+\+|---)/.test(line)),
+    )
+    .join('\n');
+  return change ? sha256(change) : null;
+}
+
+function patchIsPresentAtRef(root, ref, diff) {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-release-index-'));
+  const index = path.join(temp, 'index');
+  const env = {...process.env, GIT_INDEX_FILE: index};
+  try {
+    execFileSync('git', ['read-tree', ref], {
+      cwd: root,
+      env,
+      stdio: 'ignore',
+    });
+    execFileSync(
+      'git',
+      ['apply', '--cached', '--reverse', '--check', '--whitespace=nowarn'],
+      {
+        cwd: root,
+        env,
+        input: diff.endsWith('\n') ? diff : `${diff}\n`,
+        stdio: ['pipe', 'ignore', 'ignore'],
+      },
+    );
+    return true;
+  } catch {
+    return false;
+  } finally {
+    fs.rmSync(temp, {recursive: true, force: true});
+  }
+}
+
+function validateReleaseTestRepairAtRef(
+  root,
+  {base, head, mainRef, entries, baseChangesets},
+) {
+  const mergeBase = git(root, ['merge-base', base, head]);
+  const commits = git(root, ['rev-list', `${mergeBase}..${head}`])
+    .split('\n')
+    .filter(Boolean);
+  const mergeCommits = git(root, [
+    'rev-list',
+    '--min-parents=2',
+    `${mergeBase}..${head}`,
+  ])
+    .split('\n')
+    .filter(Boolean);
+  const diff = gitRaw(root, [
+    'diff',
+    '--binary',
+    `${mergeBase}..${head}`,
+  ]);
+  const changedStatements = changedStatementsFromDiff(
+    git(root, ['diff', '--unified=20', `${mergeBase}..${head}`]),
+  );
+  const patchId = stablePatchId(root, diff);
+  const changeDigest = exactChangeDigest(diff);
+  const files = [
+    ...new Set(entries.flatMap(entry => diffEntryFiles(entry) ?? [])),
+  ];
+  const mainPatches = new Map();
+  if (mainRef) {
+    const candidates = git(root, [
+      'log',
+      '--format=%H',
+      '--no-merges',
+      mainRef,
+      '--',
+      ...files,
+    ])
+      .split('\n')
+      .filter(Boolean);
+    for (const commit of candidates) {
+      const candidateDiff = gitRaw(root, [
+        'show',
+        '--format=',
+        '--binary',
+        commit,
+      ]);
+      const candidatePatchId = stablePatchId(root, candidateDiff);
+      if (!candidatePatchId || candidatePatchId !== patchId) continue;
+      const candidateChangeDigest = exactChangeDigest(candidateDiff);
+      const matches = mainPatches.get(candidatePatchId) ?? [];
+      matches.push({
+        commit,
+        changeDigest: candidateChangeDigest,
+        presentAtMain:
+          candidateChangeDigest === changeDigest &&
+          patchIsPresentAtRef(root, mainRef, candidateDiff),
+      });
+      mainPatches.set(candidatePatchId, matches);
+    }
+  }
+  return {
+    ...validateReleaseTestRepair({
+      entries,
+      changedStatements,
+      commitCount: commits.length,
+      mergeCommitCount: mergeCommits.length,
+      patchId,
+      changeDigest,
+      mainPatches,
+      baseChangesets,
+    }),
+    patchId,
+  };
+}
+
+const RELEASE_POLICY_CARRY_PATTERNS = [
+  /^scripts\/release\/active-release(?:\.test)?\.mjs$/,
+  /^scripts\/release\/release-paths\.mjs$/,
+  /^\.github\/actions\/test-scope\/action\.yml$/,
+  /^\.github\/scripts\/(?:test-scope-action|touched-components)\.test\.mjs$/,
+  /^\.github\/workflows\/ci\.yml$/,
+  /^docs\/release\.md$/,
+  /^docs\/specs\/AST-(?:017|030)\/spec\.md$/,
 ];
 
-function isReleaseOutputPath(file) {
-  return RELEASE_OUTPUT_PATTERNS.some(pattern => pattern.test(file));
+function isAncestor(root, ancestor, descendant) {
+  try {
+    execFileSync('git', ['merge-base', '--is-ancestor', ancestor, descendant], {
+      cwd: root,
+      stdio: 'ignore',
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function patchBuildsHead(root, base, head, patch) {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-policy-carry-'));
+  const index = path.join(temp, 'index');
+  const env = {...process.env, GIT_INDEX_FILE: index};
+  try {
+    execFileSync('git', ['read-tree', base], {cwd: root, env, stdio: 'ignore'});
+    execFileSync(
+      'git',
+      ['apply', '--cached', '--unidiff-zero', '--whitespace=nowarn'], {
+      cwd: root,
+      env,
+      input: patch.endsWith('\n') ? patch : `${patch}\n`,
+      stdio: ['pipe', 'ignore', 'ignore'],
+    });
+    const tree = execFileSync('git', ['write-tree'], {
+      cwd: root,
+      env,
+      encoding: 'utf8',
+    }).trim();
+    return tree === git(root, ['rev-parse', `${head}^{tree}`]);
+  } catch {
+    return false;
+  } finally {
+    fs.rmSync(temp, {recursive: true, force: true});
+  }
+}
+
+function validateReleasePolicyCarryAtRef(
+  root,
+  {base, head, source, mainRef, manifestPath, releaseBranch},
+) {
+  const errors = [];
+  const baseCommit = git(root, ['rev-parse', base]);
+  const commits = git(root, ['rev-list', `${baseCommit}..${head}`])
+    .split('\n')
+    .filter(Boolean);
+  const mergeCommits = git(root, [
+    'rev-list',
+    '--min-parents=2',
+    `${baseCommit}..${head}`,
+  ])
+    .split('\n')
+    .filter(Boolean);
+  if (commits.length !== 1 || mergeCommits.length !== 0)
+    errors.push(
+      'release policy carry must contain exactly one non-merge commit',
+    );
+  if (git(root, ['rev-parse', `${head}^`]) !== baseCommit)
+    errors.push('release policy carry commit must directly follow the release head');
+  if (!isAncestor(root, source, mainRef))
+    errors.push('release policy carry source is not merged on current main');
+  if (
+    !/^scripts\/release\/policy-carry\/v\d+\.\d+\.\d+\.json$/.test(manifestPath)
+  )
+    errors.push('release policy carry manifest path is invalid');
+
+  const manifest = jsonAtRef(root, source, manifestPath);
+  if (
+    manifest?.schemaVersion !== 1 ||
+    manifest.releaseBranch !== releaseBranch ||
+    manifest.base !== baseCommit ||
+    !/^scripts\/release\/policy-carry\/v\d+\.\d+\.\d+\.diff$/.test(
+      manifest?.patch ?? '',
+    ) ||
+    !/^[0-9a-f]{64}$/.test(manifest?.patchSha256 ?? '') ||
+    !manifest?.targets ||
+    Array.isArray(manifest.targets) ||
+    typeof manifest.targets !== 'object'
+  ) {
+    errors.push(
+      'release policy carry manifest does not match this branch and base',
+    );
+  }
+
+  const targets =
+    manifest?.targets &&
+    !Array.isArray(manifest.targets) &&
+    typeof manifest.targets === 'object'
+      ? Object.entries(manifest.targets).sort(([a], [b]) => a.localeCompare(b))
+      : [];
+  for (const [file, digest] of targets) {
+    if (
+      !RELEASE_POLICY_CARRY_PATTERNS.some(pattern => pattern.test(file)) ||
+      !/^[0-9a-f]{64}$/.test(digest)
+    ) {
+      errors.push(
+        `release policy carry manifest has an invalid target: ${file}`,
+      );
+    }
+  }
+
+  const candidateEntries = git(root, [
+    'diff',
+    '--name-status',
+    baseCommit,
+    head,
+  ])
+    .split('\n')
+    .filter(Boolean);
+  const candidateFiles = [
+    ...new Set(
+      candidateEntries.flatMap(entry => {
+        const files = diffEntryFiles(entry);
+        if (files === null) {
+          errors.push(`invalid release policy carry diff entry: ${entry}`);
+          return [];
+        }
+        return files;
+      }),
+    ),
+  ].sort();
+  const targetFiles = targets.map(([file]) => file);
+  for (const file of candidateFiles) {
+    if (!RELEASE_POLICY_CARRY_PATTERNS.some(pattern => pattern.test(file)))
+      errors.push(
+        `release policy carry contains an unauthorized path: ${file}`,
+      );
+  }
+  if (canonicalJson(candidateFiles) !== canonicalJson(targetFiles))
+    errors.push(
+      'release policy carry file set does not match its reviewed bundle',
+    );
+
+  const candidateDigests = fileDigestsAtRef(root, head, candidateFiles);
+  for (const [file, digest] of targets) {
+    if (candidateDigests.get(file) !== digest)
+      errors.push(
+        `release policy carry file does not match its reviewed bundle: ${file}`,
+      );
+  }
+
+  const patchContent = manifest?.patch
+    ? filesAtRef(root, source, [manifest.patch]).get(manifest.patch)
+    : null;
+  const patch = patchContent?.toString('utf8') ?? '';
+  if (!patch || sha256(patchContent) !== manifest?.patchSha256)
+    errors.push(
+      'release policy carry patch does not match its manifest digest',
+    );
+  else if (!patchBuildsHead(root, baseCommit, head, patch))
+    errors.push('release policy carry patch does not build the candidate head');
+
+  return {
+    errors,
+    files: candidateEntries.length,
+    bundleDigest: manifest ? sha256(canonicalJson(manifest)) : null,
+  };
 }
 
 function validateReleaseDiff(entries, {plan, baseChangesets} = {}) {
@@ -726,14 +1248,9 @@ function validateReleaseDiff(entries, {plan, baseChangesets} = {}) {
     : null;
   const deletedChangesets = new Set();
   for (const entry of entries) {
-    const [status, ...files] = entry.split('\t');
-    const isMove = status?.startsWith('R') || status?.startsWith('C');
-    const expectedPaths = isMove ? 2 : 1;
-    if (
-      !status ||
-      files.length !== expectedPaths ||
-      files.some(file => !file)
-    ) {
+    const [status] = entry.split('\t');
+    const files = diffEntryFiles(entry);
+    if (files === null) {
       errors.push(`invalid diff entry: ${entry}`);
       continue;
     }
@@ -1263,6 +1780,35 @@ async function main() {
     console.log(JSON.stringify(marker));
     return;
   }
+  if (command === 'validate-policy-carry') {
+    const base = required(values, 'base');
+    const head = required(values, 'head');
+    const source = required(values, 'source');
+    const mainRef = required(values, 'main-ref');
+    const manifestPath = required(values, 'manifest');
+    const releaseBranch = required(values, 'release-branch');
+    const result = validateReleasePolicyCarryAtRef(root, {
+      base,
+      head,
+      source,
+      mainRef,
+      manifestPath,
+      releaseBranch,
+    });
+    if (result.errors.length) throw new Error(result.errors.join('\n'));
+    console.log(
+      JSON.stringify({
+        kind: 'policy-carry',
+        base,
+        head,
+        source,
+        manifest: manifestPath,
+        files: result.files,
+        bundleDigest: result.bundleDigest,
+      }),
+    );
+    return;
+  }
   if (command === 'validate-diff') {
     const base = required(values, 'base');
     const head = required(values, 'head');
@@ -1271,20 +1817,40 @@ async function main() {
       git(root, ['show', `${base}:${RELEASE_DIR}/${PLAN_FILE}`]),
     );
     const raw = git(root, ['diff', '--name-status', `${base}...${head}`]);
-    const errors = [
-      ...validateIdentity(marker, plan),
-      ...validateReleaseDiff(raw ? raw.split('\n') : [], {
-        plan,
-        baseChangesets: changesetMapAtRef(root, base),
-      }),
-    ];
+    const entries = raw ? raw.split('\n') : [];
+    const baseChangesets = changesetMapAtRef(root, base);
+    const kind = classifyReleaseDiff(entries);
+    let sourceCommit = null;
+    let patchId = null;
+    let diffErrors;
+    if (kind === 'test-repair') {
+      const repair = validateReleaseTestRepairAtRef(root, {
+        base,
+        head,
+        mainRef: required(values, 'main-ref'),
+        entries,
+        baseChangesets,
+      });
+      sourceCommit = repair.sourceCommit;
+      patchId = repair.patchId;
+      diffErrors = repair.errors;
+    } else if (kind === 'version-bump') {
+      diffErrors = validateReleaseDiff(entries, {plan, baseChangesets});
+    } else {
+      diffErrors = [
+        'release candidate contains paths outside the generated version bump or test-repair classes',
+      ];
+    }
+    const errors = [...validateIdentity(marker, plan), ...diffErrors];
     if (errors.length) throw new Error(errors.join('\n'));
     console.log(
       JSON.stringify({
         base,
         head,
+        kind,
         planDigest: marker.planDigest,
-        files: raw ? raw.split('\n').length : 0,
+        files: entries.length,
+        ...(sourceCommit ? {sourceCommit, patchId} : {}),
       }),
     );
     return;
@@ -1397,11 +1963,13 @@ export {
   buildPlan,
   canaryEligibility,
   canonicalJson,
+  changedStatementsFromDiff,
   compareVersions,
   computePlanDigest,
   declaredVersionAtRef,
   filesAtRef,
   nextPlannedVersion,
+  isReleaseTestRepairPath,
   isStableReleasePackage,
   latestStableVersion,
   listActiveBranches,
@@ -1409,6 +1977,7 @@ export {
   validateIdentity,
   validateRefMarker,
   validateReleaseDiff,
+  validateReleaseTestRepair,
   validateReleaseState,
   validateReleaseMergeBack,
   validateHistoricalReleaseMergeBack,
