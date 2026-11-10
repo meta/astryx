@@ -520,6 +520,13 @@ interface InternalContextLayerOptions extends ContextLayerOptions {
    */
   onOpenPendingChange?: (isPending: boolean) => void;
   /**
+   * The owner names an anchor that may not exist yet (usePopover's `anchor`).
+   * A `show()` with no anchor element then waits until one attaches, as a
+   * show() on a trigger with no box waits for its box, instead of opening
+   * at the page origin.
+   */
+  waitsForAnchor?: boolean;
+  /**
    * The component writes the entrance's side itself, after the commit that
    * moves the layer (a Selector's list over its selected option). The runtime
    * then skips its own read as the layer shows, so a show reads the layer
@@ -1300,6 +1307,9 @@ function useLayerImplementation(
   const onCloseStart = mode === 'context' ? options.onCloseStart : undefined;
   const onOpenPendingChange =
     mode === 'context' ? options.onOpenPendingChange : undefined;
+  const waitsForAnchorRef = useCommittedRef(
+    mode === 'context' && options.waitsForAnchor === true,
+  );
   const onCloseStartRef = useCommittedRef(onCloseStart);
   const id = useId();
   const anchorId = `--astryx-layer-${id.replace(/:/g, '')}`;
@@ -1782,7 +1792,13 @@ function useLayerImplementation(
   // owns the trigger element (`triggerRef`, set by `contextRef` below) and the
   // one place every context-mode show() funnels through.
   const show = useCallback(() => {
-    const anchor = mode === 'context' ? triggerRef.current : null;
+    const trigger = mode === 'context' ? triggerRef.current : null;
+    // A named anchor whose element left the page is no anchor: the wait below
+    // restarts when the next one attaches.
+    const anchor =
+      waitsForAnchorRef.current && trigger != null && !trigger.isConnected
+        ? null
+        : trigger;
     // A wait for this trigger is already running, and its signals end it.
     // Restarting it would cancel a settle wait that is under way. A wait in a
     // closed `<dialog>` asks for a render. A controlled layer calls show() on
@@ -1797,6 +1813,15 @@ function useLayerImplementation(
     cancelPendingAnchorWait();
 
     if (!anchor) {
+      if (waitsForAnchorRef.current) {
+        // No anchor element yet: the trigger ref below restarts this show()
+        // when one attaches.
+        pendingAnchorWaitRef.current = () => {};
+        if (!isOpenRef.current) {
+          onOpenPendingChange?.(true);
+        }
+        return;
+      }
       openNow();
       return;
     }
@@ -1937,6 +1962,7 @@ function useLayerImplementation(
     cancelPendingAnchorWait,
     finishAnchorWait,
     onOpenPendingChange,
+    waitsForAnchorRef,
   ]);
 
   const hide = useCallback(() => {
@@ -2075,11 +2101,11 @@ function useLayerImplementation(
         }
       }
 
-      // A show() is still waiting for a box on a different trigger: that wait
-      // observes the element it started with, so it would never end for this
-      // one. Restart it on the new trigger, after the commit that attached it.
+      // A show() is still waiting for a box on a different trigger, or for any
+      // anchor at all: that wait would never end for this one. Restart it on
+      // the new trigger, after the commit that attached it.
       const waitingOn = pendingAnchorElementRef.current;
-      if (waitingOn && waitingOn !== el) {
+      if (pendingAnchorWaitRef.current != null && waitingOn !== el) {
         cancelPendingAnchorWait();
         const restart = {cancelled: false};
         pendingRestartRef.current = restart;

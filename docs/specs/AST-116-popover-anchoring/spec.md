@@ -338,9 +338,6 @@ Dialog and DropdownMenu.
   - The rich text editor's link form, a dialog popover in a published package.
   - The `LayerSamePress` story and Popover's own tests.
 
-FR1 gap: `usePopover` anchors only to the element `triggerRef` receives, with
-no separate anchor and no function anchor; Popover's `anchorRef` that names an
-element holding no button warns in development and never anchors.
 FR7 gap: an anchor scrolled out of a scrolling panel leaves the surface held
 over unrelated content.
 FR9 gap: outside presses close the popover through native light dismiss, which

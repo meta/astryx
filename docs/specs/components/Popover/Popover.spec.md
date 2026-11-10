@@ -80,7 +80,7 @@ rung, so a caller whose content owns its own edges can ask for a flush surface.
   within that frame reaches the page.
 - Popover has no viewport-rectangle anchor: it anchors to its trigger or to
   a button through `anchorRef`, and `usePopover`'s `anchor` names an element
-  (`spec:AST-116` FR1; FR1 gap there). A panel whose control moved into a More menu
+  (`spec:AST-116` FR1). A panel whose control moved into a More menu
   anchors to the More trigger through a `usePopover` composition whose
   `triggerRef` receives that trigger, so the trigger keeps its menu-button
   attributes (`component:MoreMenu` AR1). This is revisited once the headless
