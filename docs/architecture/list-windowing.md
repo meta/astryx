@@ -51,9 +51,19 @@ windowing module computes which rows render and where the scroll range ends.
 Each consumer keeps its own records for when it windows, what it renders, and
 how it exposes the full list to assistive technology.
 
+The module windows a list on either scroll axis. On the block axis, every row
+has one fixed pitch. On the inline axis, each item has its own width. The
+consumer names the viewport space that its pinned items cover at each edge,
+and the module plans only for the space between them. The module reads the
+inline scroll position as a distance from the inline start, so a
+right-to-left list windows the same way. On both axes, one shared focus island
+keeps the focused item mounted outside the window.
+
 Consumers:
 
 - Table's row virtualization, behind `module:Table/useTableRowsVirtualization`.
+- Table's column virtualization, behind
+  `module:Table/useTableColumnsVirtualization`, on the inline axis.
 - Selector's option list.
 - Chat's message list.
 
@@ -78,7 +88,9 @@ Consumers:
 
 - **The module is `packages/core/src/virtualization/`.** Other packages reach
   it only through `@astryxdesign/core/internal/virtualization`. Table's row
-  virtualization, behind `module:Table/useTableRowsVirtualization`, uses it.
+  virtualization, behind `module:Table/useTableRowsVirtualization`, and its
+  column virtualization, behind `module:Table/useTableColumnsVirtualization`,
+  use it.
   Selector renders every option when it opens, and Chat renders every message.
 
 ## Change coupling
@@ -94,6 +106,8 @@ windowing symbol.
   packages.
 - `module:Table/useTableRowsVirtualization` — Table's public virtualization
   hook, a consumer.
+- `module:Table/useTableColumnsVirtualization` — Table's public column
+  virtualization hook, a consumer on the inline axis.
 - `packages/core/src/Selector/` — a consumer.
 - `packages/core/src/Chat/` — a consumer.
 
