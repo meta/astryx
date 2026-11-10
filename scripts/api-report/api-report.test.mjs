@@ -544,12 +544,35 @@ describe('API changes', () => {
     ],
     [
       'no report for a changed package that a merge base this run built could not surface',
-      {surface: null, haveSurface: true, unchanged: false, selfBuilt: true},
+      {
+        surface: null,
+        haveSurface: true,
+        unchanged: false,
+        selfBuilt: true,
+        listed: true,
+      },
       {base: null, baseSource: 'unknown', baseUnknown: true},
     ],
     [
+      'its committed report (none: a new package) for a package the self-built merge base does not list',
+      {
+        surface: null,
+        haveSurface: true,
+        unchanged: false,
+        selfBuilt: true,
+        listed: false,
+      },
+      {base: 'C', baseSource: 'committed'},
+    ],
+    [
       'this build for an unchanged package that a merge base this run built could not surface',
-      {surface: null, haveSurface: true, unchanged: true, selfBuilt: true},
+      {
+        surface: null,
+        haveSurface: true,
+        unchanged: true,
+        selfBuilt: true,
+        listed: true,
+      },
       {base: 'H', baseSource: 'head'},
     ],
   ])("takes the merge base's report from %s", (_label, input, expected) => {
@@ -578,8 +601,8 @@ describe('API changes', () => {
       rows: [],
       counts: {added: 0, changed: 0, removed: 0},
     });
-    expect(renderChanges([change])).toContain(
-      'Unknown: base surface unavailable for `demo`',
+    expect(renderChanges([change]).split('\n')[0]).toBe(
+      '**API changes:** unknown (base surface unavailable): `demo`',
     );
   });
 

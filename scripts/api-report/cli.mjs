@@ -217,8 +217,11 @@ function unchangedSince(ref, dir) {
 /**
  * The merge base's report for one package, and where it came from.
  * @param {{surface: string|null, unchanged: boolean, haveSurface: boolean,
- *   selfBuilt?: boolean, head: string, committedAtBase: string|null}} input
- *   `selfBuilt`: the surface is a merge base this run built, not Main's record
+ *   selfBuilt?: boolean, listed?: boolean, head: string,
+ *   committedAtBase: string|null}} input
+ *   `selfBuilt`: the surface is a merge base this run built, not Main's record;
+ *   `listed`: its surface.json lists the package (built or skipped), so the
+ *   package existed at the merge base
  * @returns {{base: string|null, baseSource: 'build'|'head'|'committed'|'unknown',
  *   baseUnknown?: true}}
  */
@@ -227,13 +230,14 @@ export function chooseBase({
   unchanged,
   haveSurface,
   selfBuilt = false,
+  listed = false,
   head,
   committedAtBase,
 }) {
   if (surface != null) return {base: surface, baseSource: 'build'};
   // A merge base built without this package, which has not changed since.
   if (haveSurface && unchanged) return {base: head, baseSource: 'head'};
-  if (haveSurface && selfBuilt)
+  if (haveSurface && selfBuilt && listed)
     return {base: null, baseSource: 'unknown', baseUnknown: true};
   return {base: committedAtBase, baseSource: 'committed'};
 }
@@ -269,6 +273,20 @@ async function writeSurface(root, out) {
         ? `; not built: ${skipped.map(p => p.name).join(', ')}`
         : ''),
   );
+}
+
+/** The package directories a surface lists, built or skipped. */
+function surfaceListing(dir) {
+  try {
+    const surface = JSON.parse(
+      fs.readFileSync(path.join(dir, SURFACE_FILE), 'utf8'),
+    );
+    return new Set(
+      [...(surface.packages ?? []), ...(surface.skipped ?? [])].map(p => p.dir),
+    );
+  } catch {
+    return new Set();
+  }
 }
 
 /** A report from a surface directory, or null. */
@@ -309,6 +327,7 @@ async function main() {
     const haveSurface =
       !!args.baseSurface &&
       fs.existsSync(path.join(args.baseSurface, SURFACE_FILE));
+    const listed = haveSurface ? surfaceListing(args.baseSurface) : new Set();
     const changes = computeChanges(
       results.map(r => {
         const dir = path.posix.dirname(r.file);
@@ -320,6 +339,7 @@ async function main() {
             surface: haveSurface ? surfaceReport(args.baseSurface, dir) : null,
             haveSurface,
             selfBuilt: args.baseRecord === 'build',
+            listed: listed.has(dir),
             unchanged: !!args.base && unchangedSince(args.base, dir),
             head: r.head,
             committedAtBase: args.base

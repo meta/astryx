@@ -413,7 +413,7 @@ function rowTable(packages) {
  * @param {ReturnType<typeof computeChanges>} list
  */
 function renderBuiltChanges(list) {
-  // Packages the merge base could not surface share one line.
+  // Packages the merge base could not surface share one headline entry.
   const unknown = list.filter(c => c.baseUnknown === true);
   const touched = list.filter(
     c =>
@@ -440,14 +440,13 @@ function renderBuiltChanges(list) {
         : '';
     return `${short(c.pkg)}${counts}${missing}${committed}`;
   });
+  if (unknown.length)
+    parts.push(
+      `unknown (base surface unavailable): ${unknown.map(c => short(c.pkg)).join(', ')}`,
+    );
   const L = [
     `**API changes:** ${parts.length ? parts.join('; ') : 'none in this pull request'}`,
   ];
-  if (unknown.length)
-    L.push(
-      '',
-      `Unknown: base surface unavailable for ${unknown.map(c => short(c.pkg)).join(', ')}; their changes are not listed.`,
-    );
   if (stale.length) {
     const behind = stale.map(c =>
       count(c.staleRows)
