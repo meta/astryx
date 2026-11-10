@@ -15,25 +15,33 @@ const LINKS = ['Home', 'Projects', 'Team', 'Settings'];
 export default function steps(page) {
   const link = name => page.getByRole('link', {name, exact: true});
   const menuButton = page.getByRole('button', {name: 'Open menu', exact: true});
-  const homeIsCurrent = async () =>
-    (await link('Home').filter({visible: true}).getAttribute('aria-current')) === 'page';
   // A closed drawer can sit off screen or be inert instead of hidden, so a link counts only when a person can reach it.
-  const onScreen = name =>
-    link(name).evaluateAll(links =>
-      links.some(element => {
-        const box = element.getBoundingClientRect();
-        const inView = box.width > 0 && box.height > 0 && box.right > 0 && box.bottom > 0 && box.left < innerWidth && box.top < innerHeight;
-        return inView && element.checkVisibility({visibilityProperty: true}) && !element.closest('[inert]');
-      }),
+  const onScreen = (name, read) =>
+    link(name).evaluateAll(
+      (links, readAttribute) =>
+        links.flatMap((element, index) => {
+          const box = element.getBoundingClientRect();
+          const inView = box.width > 0 && box.height > 0 && box.right > 0 && box.bottom > 0 && box.left < innerWidth && box.top < innerHeight;
+          const reachable = inView && element.checkVisibility({visibilityProperty: true}) && !element.closest('[inert]');
+          return reachable ? [{index, value: readAttribute ? element.getAttribute(readAttribute) : null}] : [];
+        }),
+      read,
     );
+  const onScreenCount = async name => (await onScreen(name)).length;
+  /** The aria-current values of the links a person can reach with this name. */
+  const currentOf = async name => (await onScreen(name, 'aria-current')).map(({value}) => value);
+  const homeIsCurrent = async () => {
+    const values = await currentOf('Home');
+    return values.length === 1 && values[0] === 'page';
+  };
   const allLinksShown = async where => {
     for (const name of LINKS) {
-      await one(link(name), `${name} link ${where}`);
-      await eventually(() => onScreen(name), `${name} link is off screen ${where}`);
+      let count;
+      await eventually(async () => (count = await onScreenCount(name)) === 1, () => `expected 1 ${name} link on screen ${where}, found ${count}`);
     }
   };
   const allLinksHidden = async where => {
-    for (const name of LINKS) await eventually(async () => !(await onScreen(name)), `${name} link is still shown ${where}`);
+    for (const name of LINKS) await eventually(async () => (await onScreenCount(name)) === 0, `${name} link is still on screen ${where}`);
   };
   const openMenu = async () => {
     await one(menuButton, 'Open menu button');
@@ -50,7 +58,7 @@ export default function steps(page) {
     ['wide: Home is the current page', async () => {
       assert(await homeIsCurrent(), 'the Home link does not have aria-current="page"');
       for (const name of LINKS.slice(1)) {
-        const current = await link(name).filter({visible: true}).getAttribute('aria-current');
+        const [current = null] = await currentOf(name);
         assert(current === null || current === 'false', `the ${name} link has aria-current="${current}"`);
       }
     }],
@@ -79,7 +87,9 @@ export default function steps(page) {
     }],
     ['narrow: choosing a link closes the panel', async () => {
       await openMenu();
-      await link('Team').filter({visible: true}).click();
+      const [team] = await onScreen('Team');
+      assert(team, 'no Team link on screen in the open panel');
+      await link('Team').nth(team.index).click();
       await allLinksHidden('after choosing Team');
       await one(menuButton, 'Open menu button after choosing a link');
     }],

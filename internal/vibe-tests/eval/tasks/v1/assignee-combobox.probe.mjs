@@ -25,7 +25,7 @@ export default function steps(page) {
   return [
     ['a labelled combobox starts unassigned', async () => {
       await one(combobox, 'Assignee combobox');
-      await shown(page.getByText('Unassigned', {exact: true}), '"Unassigned"');
+      await shown(page.getByText(/(^|:\s*)Unassigned\s*$/), '"Unassigned"');
     }],
     ['typing filters the options, ignoring case', async () => {
       await combobox.click();
