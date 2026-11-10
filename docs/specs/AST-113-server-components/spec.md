@@ -323,3 +323,12 @@ ref, or a component `as`, and every provider, stays a client component (FR9).
   inside it render through their client builds (FR6). Candidate: one markup
   tree with CSS-only breakpoints and drawer state, which renders both layouts
   without script. The answer belongs to AppShell's own record.
+- **OQ5 — Does a server-rendering build of client components make server
+  rendering faster?** (`checkable`) A client build carries effect, gesture,
+  and animation code that never runs while a server renders it to HTML.
+  Candidates: the `react-server` condition alone (which serves only React
+  Server Components); or a separate condition for server rendering of client
+  components, with a build that leaves out code that runs only after
+  hydration and produces the same HTML (FR6). Evidence: server render time
+  and memory per component, for the client build and the candidate build, on
+  the same pages.
