@@ -318,259 +318,263 @@ for (const item of cases) {
       colorScheme: item.mode,
       reducedMotion: 'reduce',
     });
-    const page = await context.newPage();
-    const pageErrors: string[] = [];
-    page.on('pageerror', error => pageErrors.push(String(error)));
-    await page.goto(storyUrl(item), {waitUntil: 'load'});
-    const first = page.locator('#storybook-root .astryx-link').first();
-    await first.waitFor();
-    await page.mouse.move(0, 0);
-    await settle(page);
+    try {
+      const page = await context.newPage();
+      const pageErrors: string[] = [];
+      page.on('pageerror', error => pageErrors.push(String(error)));
+      await page.goto(storyUrl(item), {waitUntil: 'load'});
+      const first = page.locator('#storybook-root .astryx-link').first();
+      await first.waitFor();
+      await page.mouse.move(0, 0);
+      await settle(page);
 
-    // Drive the real state: a pointer hover, a keyboard Tab, or a held press.
-    if (item.state === 'hover') {
-      // A disabled Link takes no pointer events, so hover its line instead.
-      const box = await first.boundingBox();
-      if (box == null) {
-        throw new Error('no Link box to hover');
-      }
-      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    } else if (item.state === 'focus') {
-      await page.keyboard.press('Tab');
-    } else if (item.state === 'pressed') {
-      const box = await first.boundingBox();
-      if (box == null) {
-        throw new Error('no Link box to press');
-      }
-      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-      await page.mouse.down();
-    }
-    await settle(page);
-    const before = await observe(page);
-    await page.waitForTimeout(100);
-    await settle(page);
-    const observed = await observe(page);
-    const geometryStable =
-      JSON.stringify(before.links.map(link => link.box)) ===
-      JSON.stringify(observed.links.map(link => link.box));
-
-    const failures: string[] = [];
-    const check = (condition: boolean, message: string) => {
-      if (!condition) {
-        failures.push(message);
-      }
-    };
-    check(storybookSha === checkoutSha, 'storybook build mismatch');
-    check(pageErrors.length === 0, `page errors: ${pageErrors.join(' | ')}`);
-    check(!observed.storybookError, 'storybook error display');
-    check(observed.theme === item.theme, `theme ${observed.theme}`);
-    check(observed.mode === item.mode, `mode ${observed.mode}`);
-    check(
-      observed.viewport.width === item.viewport.width &&
-        observed.viewport.height === item.viewport.height,
-      'viewport mismatch',
-    );
-    check(observed.dpr === 2, `dpr ${observed.dpr}`);
-    check(observed.reducedMotion, 'reduced motion not applied');
-    check(observed.fonts === 'loaded', `fonts ${observed.fonts}`);
-    check(geometryStable, 'geometry changed between samples');
-    check(
-      observed.links.length === LINKS[item.story],
-      `${observed.links.length} links, expected ${LINKS[item.story]}`,
-    );
-    check(
-      observed.documentOverflow <= 0,
-      `document scrolls sideways by ${observed.documentOverflow}px`,
-    );
-
-    observed.links.forEach((link, index) => {
-      const where = `link ${index} (${link.tag} ${link.dataColor})`;
-      const disabled = link.ariaDisabled === 'true';
-      check(
-        JSON.stringify(link.targets) === '["astryx-link"]',
-        `${where} targets ${link.targets.join(' ')}`,
-      );
-      check(link.dataColor !== '', `${where} has no data-color`);
-      check(
-        link.direction === item.direction,
-        `${where} direction ${link.direction}`,
-      );
-      // FR1 and AR1: the element form and its role.
-      if (link.tag === 'a') {
-        if (disabled) {
-          check(link.href == null, `${where} disabled anchor has an href`);
-          check(link.role === 'link', `${where} role ${link.role}`);
-          check(link.tabIndex === 0, `${where} tabIndex ${link.tabIndex}`);
-        } else {
-          check(link.href != null, `${where} has no href`);
+      // Drive the real state: a pointer hover, a keyboard Tab, or a held press.
+      if (item.state === 'hover') {
+        // A disabled Link takes no pointer events, so the pointer over its box
+        // hovers the line under it.
+        const box = await first.boundingBox();
+        if (box == null) {
+          throw new Error('no Link box to hover');
         }
-      } else {
-        check(link.tag === 'button', `${where} element ${link.tag}`);
-        check(link.type === 'button', `${where} type ${link.type}`);
-        check(link.tabIndex === 0, `${where} tabIndex ${link.tabIndex}`);
-      }
-      // FR5: a disabled Link is half opacity and takes no pointer events.
-      if (disabled) {
-        check(link.opacity === '0.5', `${where} opacity ${link.opacity}`);
-        check(
-          link.pointerEvents === 'none',
-          `${where} pointer-events ${link.pointerEvents}`,
-        );
-      } else {
-        check(link.opacity === '1', `${where} opacity ${link.opacity}`);
-      }
-      // FR7: at rest the root paints its color token and the label inherits it.
-      // A hovered or pressed Link is under the pointer, so it takes the hover tint.
-      const hovered =
-        (item.state === 'hover' || item.state === 'pressed') &&
-        index === 0 &&
-        !disabled;
-      if (!hovered) {
-        check(
-          link.color === link.expectedColor,
-          `${where} color ${link.color}, expected ${link.expectedColor}`,
-        );
-      }
-      if (link.dataColor !== 'inherit' && link.labelColor != null) {
-        check(
-          link.labelColor === link.color,
-          `${where} label ${link.labelColor} differs from root ${link.color}`,
-        );
-      }
-      // FR3: the external icon takes the root color; the new-tab text is hidden.
-      if (link.iconColor != null) {
-        check(
-          link.iconColor === link.color,
-          `${where} icon ${link.iconColor} differs from root ${link.color}`,
-        );
-        check(
-          link.hiddenText === '(opens in new tab)',
-          `${where} new-tab text ${link.hiddenText}`,
-        );
-        check(
-          link.hiddenBox != null &&
-            link.hiddenBox.width <= 1 &&
-            link.hiddenBox.height <= 1,
-          `${where} new-tab text is visible ${JSON.stringify(link.hiddenBox)}`,
-        );
-        if (link.labelBox != null && link.iconBox != null) {
-          const trailing =
-            item.direction === 'rtl'
-              ? link.iconBox.right <= link.labelBox.left + 0.5
-              : link.iconBox.left >= link.labelBox.right - 0.5;
-          check(trailing, `${where} external icon is not trailing`);
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      } else if (item.state === 'focus') {
+        await page.keyboard.press('Tab');
+      } else if (item.state === 'pressed') {
+        const box = await first.boundingBox();
+        if (box == null) {
+          throw new Error('no Link box to press');
         }
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await page.mouse.down();
       }
-      // AR5: keyboard focus paints the focus outline on the Link itself.
-      if (link.focused && item.state === 'focus') {
-        check(
-          link.outlineStyle !== 'none' && link.outlineWidth >= 1,
-          `${where} focus outline ${link.outlineStyle} ${link.outlineWidth}`,
-        );
-      }
-    });
+      await settle(page);
+      const before = await observe(page);
+      await page.waitForTimeout(100);
+      await settle(page);
+      const observed = await observe(page);
+      const geometryStable =
+        JSON.stringify(before.links.map(link => link.box)) ===
+        JSON.stringify(observed.links.map(link => link.box));
 
-    const firstLink = observed.links[0];
-    const restUnderline = item.story === 'with-underline';
-    if (item.state === 'rest' && firstLink != null) {
+      const failures: string[] = [];
+      const check = (condition: boolean, message: string) => {
+        if (!condition) {
+          failures.push(message);
+        }
+      };
+      check(storybookSha === checkoutSha, 'storybook build mismatch');
+      check(pageErrors.length === 0, `page errors: ${pageErrors.join(' | ')}`);
+      check(!observed.storybookError, 'storybook error display');
+      check(observed.theme === item.theme, `theme ${observed.theme}`);
+      check(observed.mode === item.mode, `mode ${observed.mode}`);
       check(
-        firstLink.decoration === (restUnderline ? 'underline' : 'none'),
-        `rest decoration ${firstLink.decoration}`,
+        observed.viewport.width === item.viewport.width &&
+          observed.viewport.height === item.viewport.height,
+        'viewport mismatch',
       );
-    }
-    if (item.state === 'hover' && firstLink != null) {
-      if (firstLink.ariaDisabled === 'true') {
-        // FR5: no hover paint on a disabled Link.
-        check(
-          firstLink.decoration === 'none',
-          `disabled hover decoration ${firstLink.decoration}`,
-        );
-        check(
-          firstLink.color === firstLink.expectedColor,
-          `disabled hover color ${firstLink.color}`,
-        );
-      } else {
-        // FR7: hover underlines and mixes in the hover tint.
-        check(
-          firstLink.decoration === 'underline',
-          `hover decoration ${firstLink.decoration}`,
-        );
-        check(
-          firstLink.color !== firstLink.expectedColor,
-          `hover color did not change from ${firstLink.color}`,
-        );
-      }
-    }
-    if (item.state === 'focus') {
+      check(observed.dpr === 2, `dpr ${observed.dpr}`);
+      check(observed.reducedMotion, 'reduced motion not applied');
+      check(observed.fonts === 'loaded', `fonts ${observed.fonts}`);
+      check(geometryStable, 'geometry changed between samples');
       check(
-        firstLink != null && firstLink.focused,
-        'the first Tab stop is not the Link',
+        observed.links.length === LINKS[item.story],
+        `${observed.links.length} links, expected ${LINKS[item.story]}`,
       );
-    }
-    if (item.state === 'pressed' && firstLink != null) {
-      // FR8: an enabled link paints the pressed overlay.
       check(
-        firstLink.background !== 'rgba(0, 0, 0, 0)',
-        `pressed background ${firstLink.background}`,
+        observed.documentOverflow <= 0,
+        `document scrolls sideways by ${observed.documentOverflow}px`,
       );
-    }
-    if (item.story === 'truncated-in-constrained-line') {
-      // FR6: maxLines stops the Link at its line and draws an ellipsis.
+
       observed.links.forEach((link, index) => {
+        const where = `link ${index} (${link.tag} ${link.dataColor})`;
+        const disabled = link.ariaDisabled === 'true';
         check(
-          link.box.right <= link.lineBox.right + 0.5 &&
-            link.box.left >= link.lineBox.left - 0.5,
-          `truncating link ${index} leaves its line`,
+          JSON.stringify(link.targets) === '["astryx-link"]',
+          `${where} targets ${link.targets.join(' ')}`,
         );
-        check(link.labelOverflows, `truncating link ${index} does not clip`);
+        check(link.dataColor !== '', `${where} has no data-color`);
         check(
-          link.labelEllipsis === 'ellipsis',
-          `truncating link ${index} text-overflow ${link.labelEllipsis}`,
+          link.direction === item.direction,
+          `${where} direction ${link.direction}`,
         );
+        // The element form and its role.
+        if (link.tag === 'a') {
+          if (disabled) {
+            check(link.href == null, `${where} disabled anchor has an href`);
+            check(link.role === 'link', `${where} role ${link.role}`);
+            check(link.tabIndex === 0, `${where} tabIndex ${link.tabIndex}`);
+          } else {
+            check(link.href != null, `${where} has no href`);
+          }
+        } else {
+          check(link.tag === 'button', `${where} element ${link.tag}`);
+          check(link.type === 'button', `${where} type ${link.type}`);
+          check(link.tabIndex === 0, `${where} tabIndex ${link.tabIndex}`);
+        }
+        // A disabled Link is half opacity and takes no pointer events.
+        if (disabled) {
+          check(link.opacity === '0.5', `${where} opacity ${link.opacity}`);
+          check(
+            link.pointerEvents === 'none',
+            `${where} pointer-events ${link.pointerEvents}`,
+          );
+        } else {
+          check(link.opacity === '1', `${where} opacity ${link.opacity}`);
+        }
+        // At rest the root paints its color token and the label inherits it.
+        // A hovered or pressed Link is under the pointer, so it takes the hover tint.
+        const hovered =
+          (item.state === 'hover' || item.state === 'pressed') &&
+          index === 0 &&
+          !disabled;
+        if (!hovered) {
+          check(
+            link.color === link.expectedColor,
+            `${where} color ${link.color}, expected ${link.expectedColor}`,
+          );
+        }
+        if (link.dataColor !== 'inherit' && link.labelColor != null) {
+          check(
+            link.labelColor === link.color,
+            `${where} label ${link.labelColor} differs from root ${link.color}`,
+          );
+        }
+        // The external icon takes the root color; the new-tab text is hidden.
+        if (link.iconColor != null) {
+          check(
+            link.iconColor === link.color,
+            `${where} icon ${link.iconColor} differs from root ${link.color}`,
+          );
+          check(
+            link.hiddenText === '(opens in new tab)',
+            `${where} new-tab text ${link.hiddenText}`,
+          );
+          check(
+            link.hiddenBox != null &&
+              link.hiddenBox.width <= 1 &&
+              link.hiddenBox.height <= 1,
+            `${where} new-tab text is visible ${JSON.stringify(link.hiddenBox)}`,
+          );
+          if (link.labelBox != null && link.iconBox != null) {
+            const trailing =
+              item.direction === 'rtl'
+                ? link.iconBox.right <= link.labelBox.left + 0.5
+                : link.iconBox.left >= link.labelBox.right - 0.5;
+            check(trailing, `${where} external icon is not trailing`);
+          }
+        }
+        // Keyboard focus paints the focus outline on the Link itself.
+        if (link.focused && item.state === 'focus') {
+          check(
+            link.outlineStyle !== 'none' && link.outlineWidth >= 1,
+            `${where} focus outline ${link.outlineStyle} ${link.outlineWidth}`,
+          );
+        }
       });
-    }
 
-    const subject = page.locator('#storybook-root');
-    const screenshot = await subject.screenshot({animations: 'disabled'});
-    if (item.state === 'pressed') {
-      await page.mouse.up();
+      const firstLink = observed.links[0];
+      const restUnderline = item.story === 'with-underline';
+      if (item.state === 'rest' && firstLink != null) {
+        check(
+          firstLink.decoration === (restUnderline ? 'underline' : 'none'),
+          `rest decoration ${firstLink.decoration}`,
+        );
+      }
+      if (item.state === 'hover' && firstLink != null) {
+        if (firstLink.ariaDisabled === 'true') {
+          // No hover paint on a disabled Link.
+          check(
+            firstLink.decoration === 'none',
+            `disabled hover decoration ${firstLink.decoration}`,
+          );
+          check(
+            firstLink.color === firstLink.expectedColor,
+            `disabled hover color ${firstLink.color}`,
+          );
+        } else {
+          // Hover underlines and mixes in the hover tint.
+          check(
+            firstLink.decoration === 'underline',
+            `hover decoration ${firstLink.decoration}`,
+          );
+          check(
+            firstLink.color !== firstLink.expectedColor,
+            `hover color did not change from ${firstLink.color}`,
+          );
+        }
+      }
+      if (item.state === 'focus') {
+        check(
+          firstLink != null && firstLink.focused,
+          'the first Tab stop is not the Link',
+        );
+      }
+      if (item.state === 'pressed' && firstLink != null) {
+        // An enabled link paints the pressed overlay.
+        check(
+          firstLink.background !== 'rgba(0, 0, 0, 0)',
+          `pressed background ${firstLink.background}`,
+        );
+      }
+      if (item.story === 'truncated-in-constrained-line') {
+        // MaxLines stops the Link at its line and draws an ellipsis.
+        observed.links.forEach((link, index) => {
+          check(
+            link.box.right <= link.lineBox.right + 0.5 &&
+              link.box.left >= link.lineBox.left - 0.5,
+            `truncating link ${index} leaves its line`,
+          );
+          check(link.labelOverflows, `truncating link ${index} does not clip`);
+          check(
+            link.labelEllipsis === 'ellipsis',
+            `truncating link ${index} text-overflow ${link.labelEllipsis}`,
+          );
+        });
+      }
+
+      const subject = page.locator('#storybook-root');
+      const screenshot = await subject.screenshot({animations: 'disabled'});
+      if (item.state === 'pressed') {
+        await page.mouse.up();
+      }
+      const screenshotPath = path.join(OUTPUT, `${item.key}.png`);
+      fs.writeFileSync(screenshotPath, screenshot);
+      const receipt = {
+        component: 'Link',
+        build: storybookSha,
+        checkout: checkoutSha,
+        story: `core-link--${item.story}`,
+        state: item.state,
+        theme: item.theme,
+        mode: item.mode,
+        direction: item.direction,
+        viewport: item.viewport,
+        dpr: observed.dpr,
+        reducedMotion: observed.reducedMotion,
+        fonts: observed.fonts,
+        pageErrors,
+        geometryStable,
+        screenshot: {
+          file: path.basename(screenshotPath),
+          sha256: createHash('sha256').update(screenshot).digest('hex'),
+        },
+        observed,
+        // Recorded, not asserted: the contrast between each Link's color and
+        // the text color around it (WCAG 1.4.1 asks for 3:1 when color alone
+        // marks a link in running text).
+        contrastWithSurrounding: observed.links.map(link =>
+          contrast(link.color, link.surroundingColor),
+        ),
+        passed: failures.length === 0,
+        failures,
+      };
+      fs.writeFileSync(
+        path.join(OUTPUT, `${item.key}.json`),
+        `${JSON.stringify(receipt, null, 2)}\n`,
+      );
+      expect(failures).toEqual([]);
+    } finally {
+      await context.close();
     }
-    const screenshotPath = path.join(OUTPUT, `${item.key}.png`);
-    fs.writeFileSync(screenshotPath, screenshot);
-    const receipt = {
-      component: 'Link',
-      build: storybookSha,
-      checkout: checkoutSha,
-      story: `core-link--${item.story}`,
-      state: item.state,
-      theme: item.theme,
-      mode: item.mode,
-      direction: item.direction,
-      viewport: item.viewport,
-      dpr: observed.dpr,
-      reducedMotion: observed.reducedMotion,
-      fonts: observed.fonts,
-      pageErrors,
-      geometryStable,
-      screenshot: {
-        file: path.basename(screenshotPath),
-        sha256: createHash('sha256').update(screenshot).digest('hex'),
-      },
-      observed,
-      // Recorded, not asserted: the contrast between each Link's color and
-      // the text color around it (WCAG 1.4.1 asks for 3:1 when color alone
-      // marks a link in running text).
-      contrastWithSurrounding: observed.links.map(link =>
-        contrast(link.color, link.surroundingColor),
-      ),
-      passed: failures.length === 0,
-      failures,
-    };
-    fs.writeFileSync(
-      path.join(OUTPUT, `${item.key}.json`),
-      `${JSON.stringify(receipt, null, 2)}\n`,
-    );
-    await context.close();
-    expect(failures).toEqual([]);
   });
 }

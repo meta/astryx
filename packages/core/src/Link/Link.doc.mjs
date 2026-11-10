@@ -109,7 +109,7 @@ export const docs = {
         {
           name: 'type',
           type: "'body' | 'large' | 'label' | 'supporting' | 'code' | 'display-1' | 'display-2' | 'display-3' | 'inherit'",
-          description: 'Text type forwarded to Text. Use `inherit` for a link inside a Text, so the link takes the size and line height of the text around it.',
+          description: 'Text type forwarded to Text, or a custom text type the theme defines. Use `inherit` for a link inside a Text, so the link takes the size and line height of the text around it.',
           default: "'body'",
         },
         {

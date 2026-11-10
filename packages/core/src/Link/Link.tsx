@@ -313,11 +313,12 @@ function disabledAnchorProps(onKeyDown?: LinkKeyDownHandler) {
   } as const;
 }
 
-// A native button has a Tab stop. Remove the caller's `tabIndex` so that the
-// button keeps it.
+// A native button has a Tab stop and the button role. Remove the caller's
+// `tabIndex` and `role` so that the button keeps them.
 function disabledButtonProps(onKeyDown?: LinkKeyDownHandler) {
   return {
     ...disabledInteractionProps(onKeyDown),
+    role: undefined,
     'aria-disabled': true,
     tabIndex: undefined,
   } as const;
@@ -461,8 +462,7 @@ export function Link({
   } else if (isDisabled) {
     // A disabled link renders as an <a> with no href, so nothing can navigate
     // and the consumer onClick never fires. It keeps a Tab stop and the link
-    // role so keyboard and screen-reader users still find it (spec:AST-085
-    // FR1, FR5). The router LinkComponent is deliberately skipped — a disabled
+    // role so keyboard and screen-reader users still find it. The router LinkComponent is deliberately skipped — a disabled
     // link performs no navigation, and custom router links may require a live
     // href. target/rel are omitted with the href.
     linkElement = (

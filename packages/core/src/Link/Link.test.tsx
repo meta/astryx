@@ -701,8 +701,12 @@ describe('Link disabled exposure', () => {
     expect(link).toHaveAttribute('tabindex', '0');
   });
 
-  it('keeps aria-disabled and the Tab stop on the button form when a caller passes its own', () => {
-    const callerProps = {'aria-disabled': false, tabIndex: -1} as const;
+  it('keeps aria-disabled, the button role, and the Tab stop on the button form when a caller passes its own', () => {
+    const callerProps = {
+      'aria-disabled': false,
+      role: 'link',
+      tabIndex: -1,
+    } as const;
     render(
       <Link onClick={() => {}} isDisabled {...callerProps}>
         Retry
@@ -710,6 +714,7 @@ describe('Link disabled exposure', () => {
     );
     const button = screen.getByText('Retry').closest('button') as HTMLElement;
     expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).not.toHaveAttribute('role');
     expect(button.tabIndex).toBe(0);
   });
 
@@ -776,8 +781,8 @@ describe('Link inherited interactive role', () => {
       </InteractiveRoleContext>,
     );
     const button = screen.getByRole('button', {name: 'Profile'});
+    expect(button.tagName).toBe('BUTTON');
     expect(button).toHaveAttribute('aria-disabled', 'true');
-    expect(button).not.toHaveAttribute('href');
   });
 });
 
