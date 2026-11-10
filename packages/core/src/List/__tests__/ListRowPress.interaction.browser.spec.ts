@@ -108,22 +108,22 @@ function timeAtStrength(exit: Exit, strength: number): number {
   return (early + late) / 2;
 }
 
-/** How long the release clock's box moves, ms: 1 px a ms, so also its travel. */
-const RELEASE_CLOCK_MS = 200;
+/** How long the release clock's box moves past the release's end, ms. */
+const RELEASE_CLOCK_MARGIN_MS = 2 * (1000 / 60);
 
 /**
  * Arms a clock that runs with the release only. A `CONTROL_RGB` box in the
  * page's top strip starts to move on the page's own `pointerup`, in the task
- * that lifts the press. It moves 1 px a ms for `RELEASE_CLOCK_MS`. The
- * compositor samples it with the fade, so its offset in a frame gives that
- * frame's time. In Chromium, the start that `ready` gives is the compositor's
- * start, so the clock is on screen from it. WebKit presents a just-started
- * animation about a frame late under load, so the proof stays Chromium-only.
- * The box stays still before the lift and after its leg. So it adds no cast
- * frame outside the fade: on a loaded runner, frames added outside it made
- * the cast drop frames inside it.
+ * that lifts the press. It moves 1 px a ms for `ms`: the release and two
+ * frames more. The compositor samples it with the fade, so its offset in a
+ * frame gives that frame's time. In Chromium, the start that `ready` gives is
+ * the compositor's start, so the clock is on screen from it. WebKit presents a
+ * just-started animation about a frame late under load, so the proof stays
+ * Chromium-only. The box stays still before the lift and after its leg. So it
+ * adds at most two cast frames after the fade. On a loaded runner, frames
+ * added outside the fade made the cast drop frames inside it.
  */
-async function armReleaseClock(page: Page): Promise<void> {
+async function armReleaseClock(page: Page, ms: number): Promise<void> {
   await page.evaluate(
     ({color, side, travel}) => {
       const box = document.createElement('div');
@@ -149,7 +149,7 @@ async function armReleaseClock(page: Page): Promise<void> {
         {capture: true, once: true},
       );
     },
-    {color: [...CONTROL_RGB], side: CONTROL_SIDE, travel: RELEASE_CLOCK_MS},
+    {color: [...CONTROL_RGB], side: CONTROL_SIDE, travel: Math.round(ms)},
   );
 }
 
@@ -161,6 +161,7 @@ async function armReleaseClock(page: Page): Promise<void> {
 async function releaseClockTimes(
   page: Page,
   frames: ReadonlyArray<CastFrame>,
+  ms: number,
 ): Promise<{start: number; times: Map<number, number>}> {
   const start = await page.evaluate(
     () =>
@@ -176,14 +177,14 @@ async function releaseClockTimes(
     region: {
       x: 0,
       y: 0,
-      width: CONTROL_SIDE + RELEASE_CLOCK_MS + 4,
+      width: CONTROL_SIDE + Math.round(ms) + 4,
       height: CONTROL_SIDE + 4,
     },
   });
   const times = new Map<number, number>();
   for (const frame of tracked) {
     const offset = frame.box?.x;
-    if (offset != null && offset > 0 && offset < RELEASE_CLOCK_MS) {
+    if (offset != null && offset > 0 && offset < Math.round(ms)) {
       times.set(frame.t, start + offset);
     }
   }
@@ -416,7 +417,8 @@ for (const story of [LIST_ROW, SCROLLER_ROW, TREE_ROW]) {
     );
     const {driver, row, center, probe} = await openRow(page, story);
     const exit = await exitOf(row);
-    await armReleaseClock(page);
+    const clockMs = exit.ms + RELEASE_CLOCK_MARGIN_MS;
+    await armReleaseClock(page, clockMs);
     const cast = await startScreencast(page);
     // The page starts the block itself, a frame into the release. A block the
     // test sends after the release starts lands later on a busy machine. The
@@ -439,10 +441,10 @@ for (const story of [LIST_ROW, SCROLLER_ROW, TREE_ROW]) {
     const pressed = Math.min(...pressedFrames.map(p => p.value));
     const strength = (v: number) => (rest - v) / (rest - pressed);
     // A loaded runner's cast can stamp a frame tens of ms after it shows it,
-    // and unevenly. So each frame takes its time from the release clock. The
-    // frames keep the cast's order. Every frame of the fade inside the box's
-    // leg must get a time, so no frame there is left out unread.
-    const clock = await releaseClockTimes(page, frames);
+    // and unevenly. So each frame takes its time from the release clock.
+    // Every frame of the fade inside the box's leg must get a time, so no
+    // frame there is left out unread.
+    const clock = await releaseClockTimes(page, frames, clockMs);
     const clocked = stamped.map(p => clock.times.has(p.t));
     const unclocked = stamped.filter((p, i) => {
       const shown = strength(p.value);
@@ -463,8 +465,12 @@ for (const story of [LIST_ROW, SCROLLER_ROW, TREE_ROW]) {
       return t == null ? [] : [{...p, stamp: p.t, t}];
     });
     // Judge the release while it was still visibly moving inside the block.
+    // The frames go in their order on the clock. The cast sorts by stamp, and
+    // a frame stamped late can sort after frames it came before.
     const end = Math.min(block.to, release.to) - 10;
-    const during = pixels.filter(p => p.t > block.from && p.t <= end);
+    const during = pixels
+      .filter(p => p.t > block.from && p.t <= end)
+      .sort((a, b) => a.t - b.t);
     const strengths = during.map(p => ({
       t: +(p.t - block.from).toFixed(1),
       stamp: +(p.stamp - block.from).toFixed(1),
