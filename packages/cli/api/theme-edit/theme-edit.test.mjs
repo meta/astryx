@@ -4,13 +4,19 @@
  * @file Tests for `astryx experimental theme` (the theme-edit API): refusals
  * with the command that works, families, typed modes, the lift pass, the
  * settings round trip, `how` and `explain` on real parts, and `colors`.
- * Every check runs against the Core this repository builds.
+ * Every check runs against the Core and Neutral theme this repository builds.
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as zlib from 'node:zlib';
+import {execFileSync} from 'node:child_process';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {
+  coreBuildLockDir,
+  ensureBuiltOnce,
+} from '../../clients/cli/commands/ensure-core-built.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 import {
   themeEditExplain,
   themeEditNew,
@@ -64,6 +70,18 @@ const sourceOf = slug =>
   fs.readFileSync(path.join(cwd, 'themes', slug, `${slug}.theme.ts`), 'utf8');
 
 beforeAll(async () => {
+  ensureBuiltOnce({
+    isBuilt: () =>
+      fs.existsSync(
+        path.join(REPO_ROOT, 'packages/themes/neutral/dist/neutral.js'),
+      ),
+    build: () =>
+      execFileSync('pnpm', ['-F', '@astryxdesign/theme-neutral', 'build'], {
+        cwd: REPO_ROOT,
+        stdio: 'pipe',
+      }),
+    lockDir: `${coreBuildLockDir(REPO_ROOT)}.neutral`,
+  });
   cwd = makeLinkedFixture('astryx-theme-edit-', [
     '@astryxdesign',
     'react',
