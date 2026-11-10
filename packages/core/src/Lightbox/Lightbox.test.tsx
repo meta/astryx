@@ -699,6 +699,60 @@ describe('Lightbox', () => {
       }
     });
 
+    it('does not start a video inside a single photo caption, with hasAutoPlay', () => {
+      const play = vi
+        .spyOn(HTMLMediaElement.prototype, 'play')
+        .mockImplementation(async () => {});
+      try {
+        render(
+          <Lightbox
+            isOpen={true}
+            onOpenChange={() => {}}
+            media={{
+              src: '/photo.jpg',
+              alt: 'Photo',
+              caption: <video src="/caption.mp4" />,
+            }}
+            hasAutoPlay
+          />,
+        );
+        expect(document.querySelector('video')).not.toBeNull();
+        expect(play).not.toHaveBeenCalled();
+      } finally {
+        play.mockRestore();
+      }
+    });
+
+    it('does not start a video inside a gallery caption, with hasAutoPlay', () => {
+      const play = vi
+        .spyOn(HTMLMediaElement.prototype, 'play')
+        .mockImplementation(async () => {});
+      try {
+        render(
+          <Lightbox
+            isOpen={true}
+            onOpenChange={() => {}}
+            media={[
+              {
+                src: '/photo.jpg',
+                alt: 'Photo',
+                caption: <video src="/caption.mp4" />,
+              },
+              {src: '/b.jpg', alt: 'Image B'},
+            ]}
+            hasAutoPlay
+          />,
+        );
+        const captionVideo = document.querySelector(
+          '[data-lightbox-caption] video',
+        );
+        expect(captionVideo).not.toBeNull();
+        expect(play).not.toHaveBeenCalled();
+      } finally {
+        play.mockRestore();
+      }
+    });
+
     it('withholds autoplay while the viewer is mounted closed', () => {
       const media = {src: '/clip.mp4', alt: 'A clip', type: 'video' as const};
       const view = (isOpen: boolean) => (

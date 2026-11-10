@@ -633,7 +633,8 @@ export function Lightbox({
   // mounted, and a playing one would go on, with its sound, off screen. With
   // `hasAutoPlay`, the video paged to plays again, as a newly shown one does.
   // The closed dialog keeps them mounted too, so closing stops a playing
-  // video. A single video has no page element.
+  // video. A single video has no page element. Play looks only in the media
+  // box: a caption can contain its own video, and that one stays put.
   useEffect(() => {
     const container = containerRef.current;
     if (container == null) {
@@ -657,11 +658,12 @@ export function Lightbox({
       }
     }
     const onAPage = container.querySelector('[data-lightbox-page]') != null;
-    const current =
-      container.querySelector<HTMLVideoElement>(
-        '[data-lightbox-page][data-current] video',
-      ) ??
-      (onAPage ? null : container.querySelector<HTMLVideoElement>('video'));
+    const current = onAPage
+      ? container.querySelector<HTMLVideoElement>(
+          '[data-lightbox-page][data-current] [data-lightbox-page-media] video',
+        )
+      : (imageWrapperRef.current?.querySelector<HTMLVideoElement>('video') ??
+        null);
     if (hasAutoPlay && current != null && current.paused) {
       // A browser can refuse playback without a user's gesture.
       void current.play()?.catch(() => {});
