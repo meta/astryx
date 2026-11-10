@@ -933,6 +933,28 @@ describe('Link tooltip description (FR12)', () => {
 });
 
 describe('Link tooltip mount on the first interaction', () => {
+  it("a touch tap follows the link and shows no tooltip, though the tap's compatibility mouseenter fires", async () => {
+    const showPopover = withPopover();
+    const onClick = vi.fn((event: React.MouseEvent) => event.preventDefault());
+    render(
+      <Link href="/save" tooltip="Save your changes" onClick={onClick}>
+        Save
+      </Link>,
+    );
+    await settle();
+    const link = screen.getByRole('link', {name: 'Save'});
+    fireEvent.pointerEnter(link, {pointerType: 'touch'});
+    fireEvent.pointerDown(link, {pointerType: 'touch'});
+    fireEvent.pointerUp(link, {pointerType: 'touch'});
+    fireEvent.mouseEnter(link);
+    fireEvent.click(link);
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    });
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(showPopover).not.toHaveBeenCalled();
+  }, 15000);
+
   it('the first hover mounts the tooltip and opens it after the delay', async () => {
     const showPopover = withPopover();
     render(
