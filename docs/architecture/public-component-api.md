@@ -285,7 +285,7 @@ guidance owns the process used to propose and test APIs.
   in no public export, `.doc.mjs`, or Changeset, carries no compatibility
   promise, and may change in any release. A data attribute outside the
   `data-astryx-*` namespace is public too, and is added only when a current
-  record names it (DEC-2). The public data attributes are
+  record names it (DEC-2). The public `data-astryx-*` attributes are
   `data-astryx-theme`, the theme scope (`spec:AST-066` FR6);
   `data-astryx-media`, the media-surface scope that theme compilation emits;
   `data-astryx-aspect-ratio-override` (`component:AspectRatio` FR3);
@@ -410,7 +410,7 @@ the system already names.
 
 Rejected: component-local names for shared concepts.
 
-### DEC-2 — Every data attribute a component renders is public surface
+### DEC-2 — A data attribute outside the private `data-astryx-*` namespace is public surface
 
 **Reference:** `architecture:public-component-api/DEC-2`
 **Decider:** `cixzhang`, `2026-11-09`
@@ -425,6 +425,12 @@ targeted by a theme and becomes public surface. A component therefore adds a
 new data attribute only when a current record names it and states why; an
 internal-only concern uses a private `data-astryx-*` attribute under INV23 or no
 attribute at all.
+
+For a per-instance dynamic style, the first choice is a private CSS variable
+set on that instance: a StyleX dynamic style (`stylex.create` with a function),
+which compiles to a hashed variable set inline, so no theme can target it and it
+adds no public surface. The owner said, on Avatar's initials: "We should make
+this the agent's first choice for these types of dynamic styles."
 
 Rejected: adding a data attribute for an internal concern without a record
 that names it.
