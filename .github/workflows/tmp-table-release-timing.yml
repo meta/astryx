@@ -1,0 +1,62 @@
+# Temporary: samples the Table virtualization release spec's timings on the
+# release-check runner (4-core-ubuntu), isolated with one worker, five times, so
+# its timing budgets can be derived on the gating runner. Isolated: one worker,
+# nothing else on the runner. Not for merge.
+name: tmp-table-release-timing
+
+on:
+  pull_request:
+    types: [synchronize]
+    paths:
+      - '.github/workflows/tmp-table-release-timing.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  sample:
+    name: Table release timing sample
+    runs-on: 4-core-ubuntu
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Node and pnpm
+        uses: ./.github/actions/setup
+        with:
+          install: 'false'
+
+      - name: Install Playwright
+        run: pnpm install --frozen-lockfile && npx playwright install chromium
+
+      - name: Run the release spec five times, one at a time
+        continue-on-error: true
+        env:
+          ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          A11Y_CONTRACT_WORKERS: 1
+        run: |
+          pnpm exec playwright test \
+            packages/core/src/Table/__tests__/TableVirtualization.release.a11y.chromium.spec.ts \
+            --config playwright.config.ts --project chromium \
+            --repeat-each=5 --workers=1 --timeout=900000
+
+      - name: Collect receipts
+        if: always()
+        run: |
+          mkdir -p receipts
+          i=0
+          find test-results -name 'table-row-release.json' | sort | while read -r f; do
+            i=$((i + 1))
+            cp "$f" "receipts/run-$i.json"
+          done
+          ls -la receipts
+
+      - name: Upload receipts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: table-release-timing-receipts
+          path: receipts
