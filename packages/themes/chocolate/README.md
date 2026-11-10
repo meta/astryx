@@ -10,14 +10,14 @@ npm install @astryxdesign/theme-chocolate
 
 ## Usage
 
-Wrap your app with `XDSTheme` and pass the theme:
+Wrap your app with `Theme` and pass the theme:
 
 ```tsx
-import {XDSTheme} from '@astryxdesign/core/theme';
+import {Theme} from '@astryxdesign/core/theme';
 import {chocolateTheme} from '@astryxdesign/theme-chocolate/built';
 
 function App() {
-  return <XDSTheme theme={chocolateTheme}>{/* your app */}</XDSTheme>;
+  return <Theme theme={chocolateTheme}>{/* your app */}</Theme>;
 }
 ```
 

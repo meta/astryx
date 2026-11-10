@@ -10,14 +10,14 @@ npm install @astryxdesign/theme-matcha
 
 ## Usage
 
-Wrap your app with `XDSTheme` and pass the theme:
+Wrap your app with `Theme` and pass the theme:
 
 ```tsx
-import {XDSTheme} from '@astryxdesign/core/theme';
+import {Theme} from '@astryxdesign/core/theme';
 import {matchaTheme} from '@astryxdesign/theme-matcha/built';
 
 function App() {
-  return <XDSTheme theme={matchaTheme}>{/* your app */}</XDSTheme>;
+  return <Theme theme={matchaTheme}>{/* your app */}</Theme>;
 }
 ```
 
