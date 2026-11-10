@@ -2,11 +2,11 @@
 
 /**
  * @file Contract: a pull request that adds or changes a release spec
- *   (`*.release.*.spec.ts`) runs exactly those specs in `release-specs
- *   (changed)`, with the runner, workers and config of the release check's
- *   spec-test contracts, and every other pull request skips the job.
- * @position Node contract for spec:AST-030 FR26 and FR31 (a changed spec
- *   always runs).
+ *   (`*.release.*.spec.ts`), or a module such a spec imports, runs those specs
+ *   in full in `release-specs (changed)`: alone, on the release check's
+ *   runner, with its config and timing gate. Every other pull request plans
+ *   nothing on a slim runner and never starts the job.
+ * @position Node contract for spec:AST-030 FR32.
  */
 
 import {spawnSync} from 'node:child_process';
@@ -17,50 +17,60 @@ import path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 
-import {isA11ySpecFile} from './lib/a11y-spec-files.mjs';
-
 const root = path.resolve(import.meta.dirname, '../..');
 const ci = yaml.parse(
   fs.readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'),
 );
+const plan = ci.jobs['release-specs-plan'];
 const job = ci.jobs['release-specs'];
 const contracts = ci.jobs['a11y-contracts-shard'];
-const step = name => job.steps.find(each => each.name === name);
-const scope = job.steps.find(each => each.id === 'scope');
+const stepOf = (owner, name) => owner.steps.find(each => each.name === name);
+const run = stepOf(job, 'Run the planned release specs');
+const GATE = ci.jobs['pr-component-a11y-contracts'].if;
+const TODAY =
+  'packages/core/src/Table/__tests__/TableVirtualization.release.a11y.chromium.spec.ts';
 
-/** Runs the job's spec-finding step on a changed-file list. */
-function findSpecs(files) {
+/**
+ * Runs the job's run step in a scratch checkout holding `files`, with a
+ * `pnpm` that records its arguments instead of running Playwright.
+ */
+function runStep(specs, files) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-specs-'));
-  const changed = path.join(dir, 'changed.txt');
-  const output = path.join(dir, 'output');
-  fs.writeFileSync(changed, files.map(file => `${file}\n`).join(''));
-  fs.writeFileSync(output, '');
-  const result = spawnSync(
-    'bash',
-    ['-e', '-c', step('Find the changed release specs').run],
-    {
-      env: {
-        ...process.env,
-        FILES_PATH: changed,
-        GITHUB_OUTPUT: output,
-        RUNNER_TEMP: dir,
-      },
-      encoding: 'utf8',
+  const temp = path.join(dir, 'temp');
+  const lib = path.join(temp, 'release-specs/.github/scripts/lib');
+  fs.mkdirSync(lib, {recursive: true});
+  fs.copyFileSync(
+    path.join(root, '.github/scripts/lib/a11y-spec-files.mjs'),
+    path.join(lib, 'a11y-spec-files.mjs'),
+  );
+  for (const file of files) {
+    fs.mkdirSync(path.join(dir, path.dirname(file)), {recursive: true});
+    fs.writeFileSync(path.join(dir, file), '');
+  }
+  const bin = path.join(dir, 'bin');
+  fs.mkdirSync(bin);
+  fs.writeFileSync(
+    path.join(bin, 'pnpm'),
+    `#!/bin/sh\necho "$@" > "${path.join(dir, 'pnpm-args')}"\n`,
+    {mode: 0o755},
+  );
+  const result = spawnSync('bash', ['-e', '-c', run.run], {
+    cwd: dir,
+    env: {
+      ...process.env,
+      PATH: `${bin}:${process.env.PATH}`,
+      RUNNER_TEMP: temp,
+      SPECS: JSON.stringify(specs),
     },
-  );
-  const outputs = Object.fromEntries(
-    fs
-      .readFileSync(output, 'utf8')
-      .split('\n')
-      .filter(Boolean)
-      .map(line => line.split('=')),
-  );
+    encoding: 'utf8',
+  });
+  const argsFile = path.join(dir, 'pnpm-args');
   return {
     status: result.status,
-    hasSpecs: outputs.has_specs,
-    specs: outputs.path
-      ? fs.readFileSync(outputs.path, 'utf8').split('\n').filter(Boolean)
-      : [],
+    stdout: result.stdout,
+    pnpm: fs.existsSync(argsFile)
+      ? fs.readFileSync(argsFile, 'utf8').trim()
+      : null,
   };
 }
 
@@ -69,123 +79,104 @@ describe('release-specs (changed)', () => {
     expect(job.name).toBe('release-specs (changed)');
   });
 
-  it('runs on a pull request behind the same gate as the other contract jobs', () => {
-    expect(job.if).toBe(ci.jobs['pr-component-a11y-contracts'].if);
+  it('plans on a slim runner, behind the same gate as the other contract jobs', () => {
+    expect(plan['runs-on']).toBe('ubuntu-slim');
+    expect(plan.if).toBe(GATE);
+    expect(plan.needs).toEqual(['room', 'admission', 'heavy-ci']);
+    const scope = plan.steps.find(each => each.id === 'scope');
+    expect(scope.with['outside-pull-request']).toBe('skip');
+    expect(scope.with['component-audit']).toBe('true');
+  });
+
+  it('starts the release check runner only when the plan names a spec', () => {
     expect(job.needs).toEqual([
       'room',
       'admission',
       'heavy-ci',
       'build-storybook',
+      'release-specs-plan',
     ]);
-    expect(scope.with['outside-pull-request']).toBe('skip');
+    // The plan's answer joins the admission condition inside the gate.
+    expect(GATE.endsWith("needs.admission.outputs.full != 'true')) }}")).toBe(
+      true,
+    );
+    expect(job.if).toBe(
+      GATE.replace(
+        /\)\) \}\}$/,
+        " && needs.release-specs-plan.outputs.has_specs == 'true')) }}",
+      ),
+    );
+    expect(plan.outputs.has_specs).toBe('${{ steps.plan.outputs.has_specs }}');
+    expect(run.env.SPECS).toBe('${{ needs.release-specs-plan.outputs.specs }}');
   });
 
-  it("uses the gating release check's runner and config, on one worker", () => {
+  it('plans from the package and harness sources and the release specs', () => {
+    const scope = plan.steps.find(each => each.id === 'scope');
+    const paths = new RegExp(scope.with.paths);
+    for (const file of [
+      TODAY,
+      'packages/core/src/Table/Table.tsx',
+      'internal/interaction-harness/src/frames.ts',
+    ])
+      expect(paths.test(file), file).toBe(true);
+    for (const file of ['docs/release.md', 'apps/docsite/src/page.tsx'])
+      expect(paths.test(file), file).toBe(false);
+    expect(stepOf(plan, 'Plan the release specs').run).toContain(
+      'release-specs-plan.mjs',
+    );
+  });
+
+  it("uses the gating release check's runner, config and timing gate, on one worker", () => {
     // The release check runs its contracts on 4-core-ubuntu when a person or
     // the release tooling dispatches it.
     expect(contracts['runs-on']).toContain("'4-core-ubuntu'");
     expect(job['runs-on']).toBe('4-core-ubuntu');
-    const run = step('Run the changed release specs');
+    expect(run.env.ASTRYX_TABLE_TIMING_GATE).toBe('1');
+    expect(run.env.A11Y_CONTRACT_WORKERS).toBeUndefined();
     const release = contracts.steps.find(
       each => each.name === 'Run accessibility spec-test contracts',
-    );
-    // A release spec judges timing: it runs alone, on one worker, as the
-    // release check runs it.
-    expect(run.env.A11Y_CONTRACT_WORKERS).toBeUndefined();
-    expect(run.run).toMatch(
-      /playwright test "\$\{SPECS\[@\]\}" .*--workers=1$/m,
-    );
-    expect(run.run).toContain(
-      '--config playwright.config.ts --project chromium',
     );
     expect(release.run).toContain(
       '--config playwright.config.ts --project chromium',
     );
-  });
-
-  it('is scoped to release spec paths', () => {
-    const paths = new RegExp(scope.with.paths);
-    expect(
-      paths.test(
-        'packages/core/src/Table/__tests__/TableVirtualization.release.a11y.chromium.spec.ts',
-      ),
-    ).toBe(true);
-    for (const file of [
-      'packages/core/src/Table/Table.tsx',
-      'packages/core/src/Table/__tests__/TableFocusRing.a11y.chromium.spec.ts',
-      'docs/release.md',
-    ])
-      expect(paths.test(file), file).toBe(false);
-  });
-
-  it('runs exactly the changed release specs', () => {
-    const spec =
-      'packages/core/src/Table/__tests__/TableVirtualization.release.a11y.chromium.spec.ts';
-    expect(
-      findSpecs([
-        spec,
-        'packages/core/src/Table/Table.tsx',
-        'packages/core/src/Table/__tests__/TableFocusRing.a11y.chromium.spec.ts',
-      ]),
-    ).toEqual({status: 0, hasSpecs: 'true', specs: [spec]});
-  });
-
-  it('skips a pull request that changes no release spec', () => {
-    expect(findSpecs(['packages/core/src/Table/Table.tsx'])).toEqual({
+    expect(runStep([TODAY], [TODAY])).toEqual({
       status: 0,
-      hasSpecs: 'false',
-      specs: [],
+      stdout: expect.any(String),
+      pnpm: `exec playwright test ${TODAY} --config playwright.config.ts --project chromium --workers=1`,
     });
-    const skip = step('Skip when no release spec changed');
-    expect(skip.if).toBe(
-      "steps.scope.outputs.applies != 'true' || steps.specs.outputs.has_specs != 'true'",
-    );
-    for (const each of job.steps.slice(job.steps.indexOf(skip) + 1))
-      expect(each.if, each.name).toContain(
-        "steps.specs.outputs.has_specs == 'true'",
-      );
   });
 
-  it('fails when the changed files are unknown', () => {
-    const result = spawnSync(
-      'bash',
-      ['-e', '-c', step('Find the changed release specs').run],
-      {
-        env: {
-          ...process.env,
-          FILES_PATH: '',
-          GITHUB_OUTPUT: '/dev/null',
-          RUNNER_TEMP: os.tmpdir(),
-        },
-        encoding: 'utf8',
-      },
-    );
+  it('fails a planned release spec that no release check would run', () => {
+    const outside = 'packages/core/src/Table/__tests__/Table.release.spec.ts';
+    const result = runStep([TODAY, outside], [TODAY, outside]);
     expect(result.status).toBe(1);
+    expect(result.stdout).toContain(`::error file=${outside}::`);
+    expect(result.pnpm).toBeNull();
   });
 
-  it('fails a release spec the release check would not run', () => {
-    const run = step('Run the changed release specs').run;
-    expect(run).toContain('isA11ySpecFile');
-    // The globs come from the workflow's commit, as the config the release
-    // check runs does.
-    expect(run).toContain(
-      '$RUNNER_TEMP/release-specs/.github/scripts/lib/a11y-spec-files.mjs',
-    );
-    // Today's release spec is inside the config's globs.
-    expect(
-      isA11ySpecFile(
-        'packages/core/src/Table/__tests__/TableVirtualization.release.a11y.chromium.spec.ts',
-      ),
-    ).toBe(true);
-    expect(
-      isA11ySpecFile('packages/core/src/Table/__tests__/Table.release.spec.ts'),
-    ).toBe(false);
+  it('runs nothing for a planned spec that the head deleted', () => {
+    expect(runStep([TODAY], [])).toMatchObject({status: 0, pnpm: null});
   });
 
-  it('has no time budget of its own: a failing spec fails the job', () => {
-    const run = step('Run the changed release specs');
+  it('has no time budget and no retry: a failing spec fails the job', () => {
     expect(run['continue-on-error']).toBeUndefined();
+    expect(run['timeout-minutes']).toBeUndefined();
     expect(run.run).toContain('set -euo pipefail');
-    expect(run.run).toContain('pnpm exec playwright test "${SPECS[@]}"');
+    expect(run.run).not.toContain('--retries');
+  });
+
+  it('says to split a pull request whose file list GitHub truncated', () => {
+    const check = stepOf(plan, 'Require a complete changed-file list');
+    const status = truncated =>
+      spawnSync('bash', ['-e', '-c', check.run], {
+        env: {...process.env, TRUNCATED: truncated},
+        encoding: 'utf8',
+      });
+    const split = status('true');
+    expect(split.status).toBe(1);
+    expect(split.stdout).toContain('Split the pull request.');
+    const other = status('false');
+    expect(other.status).toBe(1);
+    expect(other.stdout).toContain('Re-run the job.');
   });
 });
