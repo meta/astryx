@@ -357,6 +357,26 @@ test('a finger still down gets the menu at 735 ms (iOS 26.2), not before', async
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
 });
 
+test('a finger that shifts slightly just before 735 ms gets the menu at 735 ms when its move reaches the page on time (AST-094 FR12)', async ({
+  page,
+}) => {
+  const {driver, center} = await openTouchStory(page);
+  // One 3 px move at 700 ms, then still. An idle page gets the move at once.
+  await driver.play(
+    drag(
+      center,
+      {x: center.x + 3, y: center.y},
+      {holdMs: 699, durationMs: 1, restMs: 300},
+    ),
+  );
+  const start = await touchStartedAt(page);
+  const shown = await menuShownAt(page);
+  expect(shown, 'the menu never showed').not.toBeNull();
+  const after = (shown as number) - start;
+  expect(after).toBeGreaterThanOrEqual(menuDisplayMs);
+  expect(after).toBeLessThan(menuDisplayMs + 20);
+});
+
 test('the menu mounts at the commit, closed and out of the accessibility tree, and shows at 735 ms', async ({
   page,
 }) => {

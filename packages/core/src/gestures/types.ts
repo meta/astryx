@@ -87,6 +87,12 @@ export interface GestureTouch {
    * this field keeps the time the input came with.
    */
   inputTime: number;
+  /**
+   * The latest event's positions at the times they came with, oldest first,
+   * ending with the current one at `inputTime`. The arena's clock filters
+   * `samples`; it does not filter these.
+   */
+  inputSamples: TouchSample[];
   readonly startX: number;
   readonly startY: number;
   readonly startTime: number;
