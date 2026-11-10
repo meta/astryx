@@ -159,7 +159,7 @@ export const docs = {
   usage: {
     anatomy,
     description:
-      'A right-click context menu that appears at the cursor position. Use to provide contextual actions for specific elements or regions without cluttering the UI with visible buttons. Under a finger, where the primary pointer is coarse, a held finger opens it with iOS timing: a block trigger whose menu opens at the finger starts to grow at 150 ms, and the menu opens at 735 ms, or as soon as the finger lifts after 400 ms. When the menu opens at the finger, the same finger can then slide onto an action and lift to pick it. A block trigger then lifts out of the page, as on iOS: it grows by up to 15% over a tinted page, and the menu sits beside it, below when it fits, else above. A tap on the tint closes the menu.',
+      'A right-click context menu that appears at the cursor position. Use to provide contextual actions for specific elements or regions without cluttering the UI with visible buttons. Under a finger, where the primary pointer is coarse, a held finger opens it with iOS timing: a block trigger whose menu opens at the finger starts to grow at 150 ms, and the menu opens at 735 ms, or as soon as the finger lifts after 400 ms. When the menu opens at the finger, the same finger can then slide onto an action and lift to pick it. A block trigger then lifts out of the page, as on iOS: it grows by up to 15% over a tinted page, and the menu sits beside it, below when it fits, else above. A trigger with no background of its own, such as a row of text, lifts on the theme’s surface, rounded. A tap on the tint closes the menu.',
     bestPractices: [
       {
         guidance: true,
@@ -228,7 +228,7 @@ export const docs = {
 export const docsZh = {
   usage: {
     description:
-      '右键点击时在光标位置出现的上下文菜单。用于为特定元素或区域提供上下文操作，而不使 UI 杂乱。在主指针为粗指针（触摸屏）时，按住手指即可打开，时序与 iOS 相同：150 毫秒时块级触发区域（菜单在手指处打开时）开始放大，735 毫秒时菜单打开；若手指在 400 毫秒后抬起，菜单在抬起时立即打开。随后块级触发区域会像 iOS 一样从页面中浮起：它在着色背景上最多放大 15%，菜单位于其旁边，空间足够时在下方，否则在上方。轻点着色区域即可关闭菜单。',
+      '右键点击时在光标位置出现的上下文菜单。用于为特定元素或区域提供上下文操作，而不使 UI 杂乱。在主指针为粗指针（触摸屏）时，按住手指即可打开，时序与 iOS 相同：150 毫秒时块级触发区域（菜单在手指处打开时）开始放大，735 毫秒时菜单打开；若手指在 400 毫秒后抬起，菜单在抬起时立即打开。随后块级触发区域会像 iOS 一样从页面中浮起：它在着色背景上最多放大 15%，菜单位于其旁边，空间足够时在下方，否则在上方。没有自身背景的触发区域（如一行文字）会在主题表面色的圆角底板上浮起。轻点着色区域即可关闭菜单。',
     bestPractices: [
       {guidance: true, description: '保持菜单项简洁和面向操作。'},
       {guidance: true, description: '有很多项时使用分组和分隔线。'},
@@ -269,7 +269,7 @@ export const docsDense = {
   usage: {
     anatomy,
     description:
-      'A right-click context menu that appears at the cursor position. Use to provide contextual actions for specific elements or regions. Under a finger (a coarse primary pointer): a held finger opens it at 735 ms, or on a lift after 400 ms; a block trigger whose menu opens at the finger grows from 150 ms; when the menu opens at the finger, the same finger then slides onto an action and lifts to pick it; a block trigger then lifts up to 15% larger over a tinted page, with the menu beside it, and a tap on the tint closes it.',
+      'A right-click context menu that appears at the cursor position. Use to provide contextual actions for specific elements or regions. Under a finger (a coarse primary pointer): a held finger opens it at 735 ms, or on a lift after 400 ms; a block trigger whose menu opens at the finger grows from 150 ms; when the menu opens at the finger, the same finger then slides onto an action and lifts to pick it; a block trigger then lifts up to 15% larger over a tinted page, on the theme’s surface when it has no background, with the menu beside it, and a tap on the tint closes it.',
     bestPractices: [
       {guidance: true, description: 'Keep items concise and action-oriented.'},
       {

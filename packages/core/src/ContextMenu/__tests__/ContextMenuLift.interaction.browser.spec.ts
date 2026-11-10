@@ -604,6 +604,62 @@ test('the card grows on from the press, and the backdrop fades in, on springs.co
   expect(Math.max(...samples.map(s => s.scale))).toBeGreaterThan(1.13);
 });
 
+test('a trigger that paints no box of its own lifts on the theme’s surface, rounded, and leaves no style behind once it is back', async ({
+  page,
+}) => {
+  await openStory(page, storybook(), 'core-contextmenu--default');
+  const area = page.getByText('Right-click this area');
+  const trigger = area.locator('xpath=..');
+  await expect(trigger).toHaveAttribute('data-astryx-pressable', '', {
+    timeout: 10_000,
+  });
+  const box = await trigger.boundingBox();
+  if (box == null) {
+    throw new Error('no trigger');
+  }
+  const driver = await touchDriver(page);
+  const read = async () =>
+    trigger.evaluate(el => {
+      const style = getComputedStyle(el);
+      const probe = document.createElement('span');
+      probe.style.backgroundColor = 'var(--color-background-surface)';
+      el.parentElement?.append(probe);
+      const surface = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return {
+        lifted: el.matches(':popover-open'),
+        background: style.backgroundColor,
+        radius: style.borderTopLeftRadius,
+        surface,
+        inline: (el as HTMLElement).style.cssText,
+      };
+    });
+  const rest = await read();
+  await driver.play(
+    tap(
+      {x: box.x + box.width / 2, y: box.y + box.height / 2},
+      {holdMs: menuDisplayMs + 100},
+    ),
+  );
+  await expect(page.getByRole('menu')).toBeVisible();
+  await untilGrown(page);
+  const open = await read();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('menu')).toBeHidden();
+  await expect
+    .poll(async () => (await read()).lifted, {timeout: 4000})
+    .toBe(false);
+  const back = await read();
+  const detail = JSON.stringify({rest, open, back});
+  expect(rest.background, detail).toBe('rgba(0, 0, 0, 0)');
+  expect(open.lifted, detail).toBe(true);
+  expect(open.background, detail).toBe(open.surface);
+  expect(open.radius, detail).toBe('12px');
+  expect(back.background, detail).toBe(rest.background);
+  expect(back.radius, detail).toBe(rest.radius);
+  expect(back.inline, detail).not.toMatch(/background|radius/);
+});
+
 test('the menu fades in on springs.contextMenuMorph, opacity only: no blur, travel or growth (AST-094 FR5)', async ({
   page,
 }) => {

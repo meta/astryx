@@ -1028,6 +1028,36 @@ describe.each([
       expect(layer?.children).toHaveLength(1);
     });
 
+    it('lifts a trigger that paints no box of its own on the theme’s surface, and a picture as it is', () => {
+      const liftOf = (content: React.ReactNode) => {
+        const view = render(
+          <ContextMenu items={[{label: 'Item 1'}]} data-testid="ctx">
+            {content}
+          </ContextMenu>,
+        );
+        const trigger = screen.getByTestId('ctx');
+        const press = finger(trigger);
+        press.down();
+        advance(contextMenu.press.menuDisplayMs);
+        press.up();
+        const platter = {
+          background: trigger.style.backgroundColor,
+          radius: trigger.style.borderRadius,
+        };
+        view.unmount();
+        return platter;
+      };
+      // A row of text: the tint would show through it.
+      expect(liftOf(<div>Long-press me</div>)).toEqual({
+        background: expect.stringContaining('--color-background-surface'),
+        radius: expect.stringContaining('--radius-container'),
+      });
+      // A picture paints its own box: no platter.
+      const picture = liftOf(<img alt="" src="data:," />);
+      expect(picture.background).not.toContain('--color-background-surface');
+      expect(picture.radius).not.toContain('--radius-container');
+    });
+
     it('keeps an inline trigger’s menu at the finger: no lift', () => {
       const trigger = renderMenu({triggerAs: 'span'});
       const press = finger(trigger);
