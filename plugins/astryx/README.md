@@ -1,6 +1,7 @@
 # Astryx agent plugin
 
-One skill that tells Claude Code that Astryx is used through the `astryx` command, when
+One skill, shared by the Claude Code and Codex plugins, that tells a coding agent that Astryx
+is used through the `astryx` command, when
 to use it, and where to start. It is a shortened form of the CLI's guidance, the skill the
 global install writes to `~/.agents/skills/astryx/SKILL.md`: it keeps the discovery and
 restore lines and leaves out the build workflow. It carries no component docs and names no
@@ -15,6 +16,8 @@ Claude Code:
 claude plugin marketplace add meta/astryx
 claude plugin install astryx@astryx
 ```
+
+Codex: add `meta/astryx` as a marketplace and enable `astryx@astryx`.
 
 Listing on the Claude Marketplace is a separate, manual step at
 [Connectors and plugins](https://claude.com/marketplace/connectors-plugins). Only people who

@@ -325,8 +325,8 @@ works on is `spec:AST-040` FR9's.
     `{@command …}` token; a bare one there is a `plain_command` note
     (`architecture:cli-surface` DEC-12). The CLI puts the picked name in
     place of the leading `astryx` when it prints or writes that text. A doc writes a
-    package-manager step as a `{@pm …}` token, or as `{@pm-only <manager>
-    "<reason>" …}` for a step only that package manager can do, and `{@@…}`
+    package-manager step as a `{@pm …}` token, or as
+    `{@pm-only <manager> "<reason>" …}` for a step only that package manager can do, and `{@@…}`
     shows a token as written. The CLI renders each token as it compiles the
     doc: `{@command …}` as the bare command, and `{@pm …}` in the package
     manager of the project it runs in; a host that shows docs to readers of
@@ -627,9 +627,10 @@ works on is `spec:AST-040` FR9's.
     cannot load, naming why; inside a project, it lists the ones `discover`
     lists as available, with the project's install command.
 
-- **FR13 — The repository may ship one Claude Code plugin skill.** The
-  repository MAY ship one Claude Code plugin skill, separate from the
-  computer-level file (FR8). `renderPluginSkillText` generates the skill as
+- **FR13 — The repository may ship one plugin skill, shared by the Claude
+  Code and Codex plugins.** The repository MAY ship one plugin skill, shared
+  by the Claude Code and Codex plugins, separate from the computer-level file
+  (FR8). `renderPluginSkillText` generates the skill as
   a shortened form of the CLI's computer-level guidance, sharing `bodyLines`
   with `renderComputerAgentText`. A `--check` run MUST fail when the
   committed file differs from the generated skill.
