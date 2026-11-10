@@ -125,7 +125,13 @@ node internal/vibe-tests/eval/run.mjs --model <model-id> --budget-usd 15
 
 # Rebuild the report from saved records.
 node internal/vibe-tests/eval/run.mjs --report-only <run directory>
+
+# Free: grade saved runs again with the current probes and audit.
+node internal/vibe-tests/eval/run.mjs --regrade <run directory>
 ```
+
+Use `--regrade` after a probe or audit fix. It starts no agent and keeps
+each run's cost and transcript.
 
 The run directory must be new or empty. A run writes `meta.json` (inputs, versions, control results), one record per
 agent run in `records/`, each run's transcript, final `App.tsx` and screenshots

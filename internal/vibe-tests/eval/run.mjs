@@ -33,6 +33,7 @@ const USAGE = `usage:
   node internal/vibe-tests/eval/run.mjs --model <id> --budget-usd <n> [options]
   node internal/vibe-tests/eval/run.mjs --self-test [--task-set <name>]
   node internal/vibe-tests/eval/run.mjs --report-only <run directory>
+  node internal/vibe-tests/eval/run.mjs --regrade <run directory>
 
 options:
   --task-set <name>        tasks under eval/tasks (default: pilot)
@@ -60,6 +61,7 @@ export function parseOptions(argv) {
       out: {type: 'string'},
       'self-test': {type: 'boolean', default: false},
       'report-only': {type: 'string'},
+      regrade: {type: 'string'},
       help: {type: 'boolean', default: false},
     },
   });
@@ -74,6 +76,7 @@ export function parseOptions(argv) {
     help: values.help,
     selfTest: values['self-test'],
     reportOnly: values['report-only'] ?? null,
+    regrade: values.regrade ?? null,
     taskSet: values['task-set'],
     taskIds: values.tasks ? values.tasks.split(',').map(id => id.trim()).filter(Boolean) : null,
     arms: values.arms.split(',').map(id => id.trim()).filter(Boolean),
@@ -85,7 +88,7 @@ export function parseOptions(argv) {
     model: values.model ?? null,
     budgetUsd: values['budget-usd'] === undefined ? null : number('budget-usd', {min: 0.01}),
   };
-  if (!options.help && !options.selfTest && !options.reportOnly) {
+  if (!options.help && !options.selfTest && !options.reportOnly && !options.regrade) {
     if (!options.model) throw new Error('--model is required: pin one model for every arm');
     if (options.budgetUsd === null) throw new Error('--budget-usd is required: no run starts unless its cap fits within this total');
     if (options.budgetUsd < options.runBudgetUsd) throw new Error('--budget-usd must cover at least one run');
@@ -220,6 +223,78 @@ export function modelMismatch(agent, model) {
   return Boolean(agent.result && !agent.result.models.includes(model));
 }
 
+/** Audits the transcript, grades the workspace, and sets the record's verdict. */
+async function judge({record, lines, workspace, runRoot, arm, task, browser, model, sensitiveRoots, agent}) {
+  record.audit = auditTranscript(lines, workspace, sensitiveRoots);
+  const outDir = path.join(runRoot, 'grade');
+  fs.rmSync(outDir, {recursive: true, force: true});
+  record.grade = await gradeWorkspace({workspace, arm, task, browser, outDir});
+  if (modelMismatch(agent, model)) record.failure = 'model-mismatch';
+  else if (record.audit.violations.length > 0) record.failure = 'integrity';
+  else record.failure = record.grade.failure;
+  record.status = 'graded';
+  record.passed = record.failure === null;
+}
+
+function sensitiveRootsFor(runDir) {
+  // Real paths, because agents see the workspace through its real path.
+  return [runDir, REPO_ROOT, os.homedir()].map(root => fs.realpathSync(root));
+}
+
+/**
+ * Grades finished runs again with the current probes and audit, for example
+ * after a probe fix. It starts no agent, so it spends nothing.
+ */
+async function regrade(dir) {
+  const runDir = fs.realpathSync(path.resolve(dir));
+  const meta = JSON.parse(fs.readFileSync(path.join(runDir, 'meta.json'), 'utf8'));
+  const tasks = loadTaskSet(meta.taskSet);
+  const arms = resolveArms(meta.arms);
+  const sensitiveRoots = sensitiveRootsFor(runDir);
+  const browser = await launchBrowser();
+  try {
+    for (const file of fs.readdirSync(path.join(runDir, 'records')).filter(name => name.endsWith('.json')).sort()) {
+      const recordPath = path.join(runDir, 'records', file);
+      const record = JSON.parse(fs.readFileSync(recordPath, 'utf8'));
+      if (record.status !== 'graded') continue;
+      const task = tasks.find(candidate => candidate.id === record.task);
+      const arm = arms.find(candidate => candidate.id === record.arm);
+      if (!task || !arm) throw new Error(`${file}: task or arm is not in this task set`);
+      const runRoot = path.join(runDir, 'runs', path.basename(file, '.json'));
+      const workspace = fs.realpathSync(path.join(runRoot, 'workspace'));
+      const modules = path.join(workspace, 'node_modules');
+      fs.cpSync(path.join(runDir, 'bases', arm.id, 'node_modules'), modules, {recursive: true, verbatimSymlinks: true});
+      const lines = fs.readFileSync(path.join(runRoot, 'transcript.jsonl'), 'utf8').split('\n').filter(Boolean);
+      const before = record.failure;
+      try {
+        await judge({
+          record,
+          lines,
+          workspace,
+          runRoot,
+          arm,
+          task,
+          browser,
+          model: meta.model,
+          sensitiveRoots,
+          agent: {initModel: record.agent?.initModel ?? null, result: {models: record.agent?.models ?? []}},
+        });
+      } finally {
+        fs.rmSync(modules, {recursive: true, force: true});
+      }
+      record.regradedAt = new Date().toISOString();
+      fs.writeFileSync(recordPath, `${JSON.stringify(record, null, 2)}\n`);
+      log(`${file}: ${before ?? 'pass'} -> ${record.failure ?? 'pass'}`);
+    }
+  } finally {
+    await browser.close();
+  }
+  meta.regradedAt = new Date().toISOString();
+  fs.writeFileSync(path.join(runDir, 'meta.json'), `${JSON.stringify(meta, null, 2)}\n`);
+  writeReport(runDir, meta, readRecords(runDir));
+  process.stdout.write(fs.readFileSync(path.join(runDir, 'report.md'), 'utf8'));
+}
+
 /** A run directory must be new, so a report never mixes in older runs. */
 function freshRunDir(dir) {
   const runDir = assertOutsideRepo(dir);
@@ -255,8 +330,7 @@ async function evaluate(options) {
   };
   fs.writeFileSync(path.join(runDir, 'meta.json'), `${JSON.stringify(meta, null, 2)}\n`);
 
-  // Real paths, because agents see the workspace through its real path.
-  const sensitiveRoots = [runDir, REPO_ROOT, os.homedir()].map(root => fs.realpathSync(root));
+  const sensitiveRoots = sensitiveRootsFor(runDir);
   const budget = new Budget(options.budgetUsd, options.runBudgetUsd);
   const browser = await launchBrowser();
   const queue = planJobs(tasks, arms, options.reps);
@@ -304,13 +378,7 @@ async function evaluate(options) {
         log(`${name}: ${agentError}`);
         return;
       }
-      record.audit = auditTranscript(agent.lines, workspace, sensitiveRoots);
-      record.grade = await gradeWorkspace({workspace, arm, task, browser, outDir: path.join(runRoot, 'grade')});
-      if (modelMismatch(agent, options.model)) record.failure = 'model-mismatch';
-      else if (record.audit.violations.length > 0) record.failure = 'integrity';
-      else record.failure = record.grade.failure;
-      record.status = 'graded';
-      record.passed = record.failure === null;
+      await judge({record, lines: agent.lines, workspace, runRoot, arm, task, browser, model: options.model, sensitiveRoots, agent});
       const entry = path.join(workspace, arm.entry);
       if (fs.existsSync(entry)) fs.copyFileSync(entry, path.join(runRoot, path.basename(arm.entry)));
       fs.rmSync(path.join(workspace, 'node_modules'), {recursive: true, force: true});
@@ -363,7 +431,8 @@ async function main() {
     process.stdout.write(fs.readFileSync(path.join(runDir, 'report.md'), 'utf8'));
     return;
   }
-  if (options.selfTest) await selfTest(options);
+  if (options.regrade) await regrade(options.regrade);
+  else if (options.selfTest) await selfTest(options);
   else await evaluate(options);
 }
 

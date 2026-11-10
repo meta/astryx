@@ -88,3 +88,22 @@ describe('command paths', () => {
     expect(auditTranscript([toolUse('Bash', {command})], WORKSPACE, SENSITIVE).violations).toEqual([]);
   });
 });
+
+describe('agent shell state', () => {
+  it('keeps the shell folder between commands', () => {
+    const lines = [toolUse('Bash', {command: 'cd src'}), toolUse('Bash', {command: 'cd .. && npx tsc -b'})];
+    expect(auditTranscript(lines, WORKSPACE, SENSITIVE, '/home/agent').violations).toEqual([]);
+  });
+
+  it('returns to the workspace after a command leaves it', () => {
+    const lines = [toolUse('Bash', {command: 'cd /tmp'}), toolUse('Bash', {command: 'cat ../package.json'})];
+    expect(auditTranscript(lines, WORKSPACE, SENSITIVE, '/home/agent').violations).toHaveLength(1);
+  });
+
+  it('allows only its own session folder under the home folder', () => {
+    const own = `/home/agent/.claude/projects/${WORKSPACE.replace(/[^A-Za-z0-9]/g, '-')}/s1/tool-results/t.txt`;
+    const other = '/home/agent/.claude/projects/-runs-r1-runs-other-workspace/s2/tool-results/t.txt';
+    const lines = [toolUse('Bash', {command: `grep Button ${own}`}), toolUse('Read', {file_path: other})];
+    expect(auditTranscript(lines, WORKSPACE, SENSITIVE, '/home/agent').violations).toEqual([{tool: 'Read', path: other}]);
+  });
+});

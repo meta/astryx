@@ -7,6 +7,7 @@
  * @position Called by run.mjs after each agent run
  */
 
+import os from 'node:os';
 import path from 'node:path';
 
 /** System locations an agent may name without reading project data. */
@@ -45,11 +46,13 @@ export function pathsInCommand(command) {
 
 /**
  * Paths a shell command names, each resolved from the folder the shell is in
- * at that point. `cd` moves that folder for the segments after it.
- * @returns {{raw: string, resolved: string}[]}
+ * at that point. `cd` moves that folder for the segments after it. The agent's
+ * shell keeps its folder between commands, but returns to the workspace when a
+ * command leaves it.
+ * @returns {{found: {raw: string, resolved: string}[], cwd: string}}
  */
-export function resolveCommandPaths(command, workspace) {
-  let cwd = workspace;
+export function resolveCommandPaths(command, workspace, startCwd = workspace) {
+  let cwd = startCwd;
   const found = [];
   for (const segment of stripHeredocs(command).split(/&&|\|\||;|\n/)) {
     const trimmed = segment.trim();
@@ -59,7 +62,7 @@ export function resolveCommandPaths(command, workspace) {
     }
     if (cd && !cd[2].startsWith('~') && !cd[2].startsWith('$')) cwd = path.resolve(cwd, cd[2]);
   }
-  return found;
+  return {found, cwd: isInside(cwd, workspace) ? cwd : workspace};
 }
 
 function isInside(candidate, workspace) {
@@ -75,13 +78,19 @@ function isInside(candidate, workspace) {
  * @param {string} workspace real path of the workspace
  * @param {string[]} sensitiveRoots
  */
-export function auditTranscript(lines, workspace, sensitiveRoots = []) {
+export function auditTranscript(lines, workspace, sensitiveRoots = [], home = os.homedir()) {
   const violations = [];
   const warnings = [];
   const docsCommands = [];
   const tools = {};
+  // The agent saves long tool output in its own session folder and reads it back.
+  const ownSession = path.join(home, '.claude', 'projects', workspace.replace(/[^A-Za-z0-9]/g, '-'));
+  let shellCwd = workspace;
   const check = (raw, tool, resolved = path.resolve(workspace, raw)) => {
-    if (raw.startsWith('~/') || raw.startsWith('$HOME/')) {
+    const fromHome = /^(~|\$HOME)\//.exec(raw);
+    if (fromHome) resolved = path.join(home, raw.slice(fromHome[0].length));
+    if (isInside(resolved, ownSession)) return;
+    if (fromHome) {
       violations.push({tool, path: raw});
       return;
     }
@@ -108,7 +117,9 @@ export function auditTranscript(lines, workspace, sensitiveRoots = []) {
       check(input.pattern, use.name);
     }
     if (typeof input.command === 'string') {
-      for (const {raw, resolved} of resolveCommandPaths(input.command, workspace)) check(raw, use.name, resolved);
+      const {found, cwd} = resolveCommandPaths(input.command, workspace, shellCwd);
+      for (const {raw, resolved} of found) check(raw, use.name, resolved);
+      shellCwd = cwd;
       if (/\b(astryx|shadcn)\b/.test(input.command)) docsCommands.push(input.command.slice(0, 200));
     }
   }
