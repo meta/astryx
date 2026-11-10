@@ -260,6 +260,8 @@ export function useTablePagination<T extends Record<string, unknown>>(
     labelAbove,
     labelBelow,
   });
+  // Written during render on purpose, an accepted exception to the ref rule:
+  // the plugin object stays stable, so a config change re-renders no row.
   configRef.current = {
     paginationProps,
     position,

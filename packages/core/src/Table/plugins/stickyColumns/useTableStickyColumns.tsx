@@ -490,11 +490,10 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
   const hasStart = start.length > 0;
   const hasEnd = end.length > 0;
 
-  // Live snapshot of the resolved config, read inside the (memoized) transforms
-  // and the scroll-shadow callback. Keeping these in a ref lets the plugin memo
-  // be computed once (deps: only the stable scroll-shadow callback) while never
-  // reading stale config — consumers typically pass fresh array literals each
-  // render, so we never want array identity in the deps.
+  // The resolved config, read by the memoized transforms and the scroll-shadow
+  // callback, so the plugin memo is computed once. Render writes this on
+  // purpose, an accepted exception to the ref rule. Fresh arrays of the same
+  // keys re-render no row. Changed keys reach a body cell when its row renders.
   const stateRef = useRef({start, end, hasStart, hasEnd});
   stateRef.current = {start, end, hasStart, hasEnd};
 

@@ -55,7 +55,7 @@ export const docs = {
       name: 'config.comparators',
       type: 'Partial<Record<TSortKey, (a: T, b: T) => number>>',
       description:
-        'Ascending comparators per sort key; the hook flips the result for descending. Keys without one compare numbers numerically, compare other values as strings with a numeric collator in the active InternationalizationProvider locale, and put null, undefined and NaN last in ascending order and first in descending.',
+        'Ascending comparators per sort key; the hook flips the result for descending. Keys without one compare numbers numerically, compare other values as strings with a numeric collator in the active InternationalizationProvider locale, and put null, undefined and NaN last in ascending order and first in descending. A new comparator applies on the next change to the data, the sort or the locale.',
       required: false,
     },
     {

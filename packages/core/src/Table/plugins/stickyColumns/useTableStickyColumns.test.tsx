@@ -14,7 +14,8 @@
  */
 
 import {afterEach, describe, it, expect, vi} from 'vitest';
-import {render, screen} from '@testing-library/react';
+import {act, fireEvent, render, screen} from '@testing-library/react';
+import {useState} from 'react';
 import {Table} from '../../Table';
 import {useTableStickyColumns} from './useTableStickyColumns';
 import {useTableColumnResize} from '../columnResize/useTableColumnResize';
@@ -355,5 +356,53 @@ describe('useTableStickyColumns', () => {
         expect(observers).toBe(attached);
       },
     );
+  });
+});
+
+describe('useTableStickyColumns render cost', () => {
+  it('re-renders no row when its parent re-renders with fresh column key arrays', () => {
+    const renders: string[] = [];
+    const trackedColumns: TableColumn<Row>[] = [
+      {
+        key: 'name',
+        header: 'Name',
+        width: pixel(180),
+        renderCell: row => {
+          renders.push(row.id);
+          return row.name;
+        },
+      },
+      ...columns.slice(1),
+    ];
+    function Parent() {
+      const [count, setCount] = useState(0);
+      // Fresh array literals each render, as consumers usually pass them.
+      const sticky = useTableStickyColumns<Row>({
+        startKeys: ['name'],
+        endKeys: ['status'],
+      });
+      return (
+        <>
+          <button type="button" onClick={() => setCount(count + 1)}>
+            Bump {count}
+          </button>
+          <Table
+            data={data}
+            columns={trackedColumns}
+            idKey="id"
+            plugins={{stickyColumns: sticky}}
+          />
+        </>
+      );
+    }
+    render(<Parent />);
+    renders.length = 0;
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button', {name: 'Bump 0'}));
+    });
+
+    expect(screen.getByRole('button', {name: 'Bump 1'})).toBeInTheDocument();
+    expect(renders).toEqual([]);
   });
 });
