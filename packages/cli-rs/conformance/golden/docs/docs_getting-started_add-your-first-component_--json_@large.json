@@ -7,7 +7,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Add your first component\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Import each component from its own entry, the path `astryx component <Name>` prints. This keeps bundles small and makes intent clear.\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"tsx\",\n        \"code\": \"import {Button} from '@astryxdesign/core/Button';\\nimport {VStack} from '@astryxdesign/core/VStack';\\n\\nexport default function Page() {\\n  return (\\n    <VStack gap={2}>\\n      <Button label=\\\"Hello Astryx\\\" onClick={() => alert('Hi!')} />\\n    </VStack>\\n  );\\n}\",\n        \"label\": \"app/page.tsx\"\n      }\n    ],\n    \"id\": \"add-your-first-component\",\n    \"links\": {\n      \"up\": \"astryx docs getting-started --index\",\n      \"previous\": \"astryx docs getting-started add-base-css-and-a-theme\",\n      \"next\": \"astryx docs getting-started customize-with-stylex\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

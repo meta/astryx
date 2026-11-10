@@ -5,7 +5,7 @@
   "CommandPaletteList"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# CommandPaletteList\n\nScrollable results container. Renders as a listbox standalone, and inside CommandPalette while selectable results exist. Contains CommandPaletteItem and CommandPaletteGroup children.\n\n**Import:** `import {CommandPaletteList} from '@astryxdesign/core/CommandPalette';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | Items, groups, and empty states. **(required)** |\n| `label` | `string` | `'Commands'` | Accessible label for the listbox. |\n| `xstyle` | `StyleXStyles` | - | StyleX styles for layout customization. Must be a stylex.create() value. |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

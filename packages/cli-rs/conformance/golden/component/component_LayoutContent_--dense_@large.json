@@ -6,7 +6,7 @@
   "--dense"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# LayoutContent\n\nScrollable main content area.\n\n**Import:** `import {LayoutContent} from '@astryxdesign/core/Layout';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | Content. |\n| `padding` | `0 \\| 0.5 \\| 1 \\| 1.5 \\| 2 \\| 3 \\| 4 \\| 5 \\| 6 \\| 8 \\| 10` | - | Internal padding on spacing scale. Overrides layout container default. |\n| `isScrollable` | `boolean` | `true` | Enable scrollable overflow. With arithmetic contentWidth values, the scrollport reaches open sides while context-aware insets align children. |\n| `label` | `string` | - | Accessible label for landmark element; also names the region while it scrolls (default \"Content\"). |\n| `role` | `AriaRole` | - | ARIA landmark role. |\n| `ref` | `React.Ref<HTMLDivElement>` | - | Ref forwarded to the content region element. |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

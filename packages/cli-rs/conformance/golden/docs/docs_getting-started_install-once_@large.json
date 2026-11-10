@@ -6,7 +6,7 @@
   "install-once"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Install once, use everywhere\n\nInstall the CLI once for your computer too, and the astryx command works in any folder, for you and for any coding agent, even before a project exists. Inside a project, the project's own version still answers, so a global install never changes what your team and CI get. Keep it in the project as well; that is the recommended setup.\n\nTerminal:\n```bash\nnpm install -g @astryxdesign/cli\n```\n\nProject, global, or both: `npx @astryxdesign/cli@0.7.12 docs global/project-global-or-both`. Everything else about global mode: `npx @astryxdesign/cli@0.7.12 docs global`.\n\nUp: npx @astryxdesign/cli@0.7.12 docs getting-started --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs getting-started upgrade\nNext: npx @astryxdesign/cli@0.7.12 docs getting-started add-base-css-and-a-theme\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

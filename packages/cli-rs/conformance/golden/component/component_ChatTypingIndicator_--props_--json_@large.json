@@ -7,7 +7,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/lab\",\n  \"data\": [\n    {\n      \"name\": \"names\",\n      \"type\": \"string[]\",\n      \"description\": \"Names of people currently typing. One name renders \\\"is typing\\\", two render both names, more collapse to \\\"and N others\\\". The sentence comes from the i18n catalog and the names are joined with Intl.ListFormat, so the wording and conjunction follow the active locale. When omitted or empty, only the animated dots render.\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

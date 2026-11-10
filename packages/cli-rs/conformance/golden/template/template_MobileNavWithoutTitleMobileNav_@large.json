@@ -5,7 +5,7 @@
   "MobileNavWithoutTitleMobileNav"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {MobileNav} from '@astryxdesign/core/MobileNav';\nimport {SideNavSection, SideNavItem} from '@astryxdesign/core/SideNav';\nimport {Button} from '@astryxdesign/core/Button';\nimport {Icon} from '@astryxdesign/core/Icon';\nimport {HomeIcon, FolderIcon} from '@heroicons/react/24/outline';\n\nexport default function MobileNavWithoutTitleMobileNav() {\n  const [isOpen, setIsOpen] = useState(false);\n  return (\n    <>\n      <Button\n        label=\"Open Navigation\"\n        icon={<Icon icon=\"menu\" color=\"inherit\" />}\n        variant=\"ghost\"\n        onClick={() => setIsOpen(true)}\n        isIconOnly\n      />\n      <MobileNav isOpen={isOpen} onOpenChange={open => setIsOpen(open)}>\n        <SideNavSection title=\"Main\">\n          <SideNavItem\n            label=\"Dashboard\"\n            icon={HomeIcon}\n            isSelected\n            href=\"/dashboard\"\n          />\n          <SideNavItem label=\"Projects\" icon={FolderIcon} href=\"/projects\" />\n        </SideNavSection>\n      </MobileNav>\n    </>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -7,7 +7,7 @@
   "brief"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/lab\n\nTransferList(size: sm|md|lg, placement: above|below|start|end, status: {type: warning|error|success, message?: string}, statusVariant: attached|detached|tooltip, changeAction: (value: readonly T[]) => void|Promise<void>)  <- from '@astryxdesign/lab'\n  Use TransferListSelector by default for medium-to-large, inspectable sets whe...\n  Targets: astryx-transfer-list | astryx-transfer-list-collection | astryx-transfer-list-panel preferred attrs: data-side variants: side | astryx-transfer-list-item preferred attrs: data-side, data-state, data-reorder variants: side, state, reorder\n  onChange: (nextValue: readonly T[]) => void, value: readonly T[], options: readonly TransferListOption<T>[], label: string, commitBehavior, triggerLabel, description, isLabelHidden, selectedLabel, availableLabel, hasSearch, searchLabel, searchPlaceholder, reorderable, hasSelectAll, hasClear, renderOption, selectedEmptyText, availableEmptyText, noResultsText, applyLabel, cancelLabel, width, isOptional, isRequired, isDisabled, isLoading, labelTooltip, controlXstyle, controlClassName, controlStyle, data-testid\n  const [fields, setFields] = useState(['name', 'status']);\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

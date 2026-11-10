@@ -5,7 +5,7 @@
   "VStackShowcase"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {HStack, VStack} from '@astryxdesign/core/Layout';\nimport {Badge} from '@astryxdesign/core/Badge';\nimport {Text} from '@astryxdesign/core/Text';\n\nexport default function VStackShowcase() {\n  return (\n    <HStack gap={10} hAlign=\"center\">\n      <VStack gap={2}>\n        <Text type=\"supporting\" color=\"secondary\">\n          gap=2\n        </Text>\n        <VStack gap={2}>\n          <Badge label=\"Step 1\" />\n          <Badge label=\"Step 2\" />\n          <Badge label=\"Step 3\" />\n        </VStack>\n      </VStack>\n      <VStack gap={2}>\n        <Text type=\"supporting\" color=\"secondary\">\n          gap=4\n        </Text>\n        <VStack gap={4}>\n          <Badge label=\"Step 1\" />\n          <Badge label=\"Step 2\" />\n          <Badge label=\"Step 3\" />\n        </VStack>\n      </VStack>\n      <VStack gap={2}>\n        <Text type=\"supporting\" color=\"secondary\">\n          gap=6\n        </Text>\n        <VStack gap={6}>\n          <Badge label=\"Step 1\" />\n          <Badge label=\"Step 2\" />\n          <Badge label=\"Step 3\" />\n        </VStack>\n      </VStack>\n    </HStack>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

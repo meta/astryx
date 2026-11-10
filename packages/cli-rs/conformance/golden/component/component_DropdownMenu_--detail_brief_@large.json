@@ -7,7 +7,7 @@
   "brief"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nDropdownMenu(presentation: popover|bottom-sheet|adaptive, menuWidth: number|string, placement: above|below|start|end, alignment: start|center|end)  <- from '@astryxdesign/core/DropdownMenu'\n  A dropdown menu that displays a list of actionable items in a popup triggered...\n  Derived: borderRadius -> --_dropdown-menu-radius; padding -> --_dropdown-menu-padding\n  Targets: astryx-dropdown-menu preferred attrs: data-presentation variants: presentation | astryx-dropdown-menu-item preferred attrs: data-size, data-variant variants: size, variant | astryx-dropdown-menu-radio preferred attrs: data-size, data-checked, data-disabled variants: size states: checked, disabled | astryx-dropdown-menu-section-heading | astryx-dropdown-menu-divider | astryx-dropdown-menu-indicator-icon\n  items: DropdownMenuOption[], button, renderTrigger, isMenuOpen, onOpenChange, menuMaxHeight, header, footer, onClick, hasChevron, children\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

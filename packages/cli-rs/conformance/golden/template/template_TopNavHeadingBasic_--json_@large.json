@@ -6,7 +6,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"TopNavHeadingBasic\",\n    \"description\": \"A product heading with a logo inside a TopNav, linked to the home page. Use as the leading brand element of a top navigation bar.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"NavIcon\",\n      \"TopNav\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {TopNav, TopNavHeading} from '@astryxdesign/core/TopNav';\\nimport {NavIcon} from '@astryxdesign/core/NavIcon';\\nimport {Icon} from '@astryxdesign/core/Icon';\\n\\nexport default function TopNavHeadingBasic() {\\n  return (\\n    <TopNav\\n      label=\\\"Product navigation\\\"\\n      heading={\\n        <TopNavHeading\\n          heading=\\\"Acme Platform\\\"\\n          logo={<NavIcon icon={<Icon icon=\\\"viewColumns\\\" />} />}\\n          headingHref=\\\"/\\\"\\n        />\\n      }\\n    />\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

@@ -8,7 +8,7 @@
   "out.html"
  ],
  "fixture": "renderpages",
- "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
+ "fixtureHash": "04c156f185804dc4+4e418a0c2575d9ce",
  "stdout": "Rendered imports.tsx\n\ninput:       imports.tsx\noutput:      out.html\nbytes:       21.0 KB\ncssBytes:    19.1 KB\nclasses:     3\nimages:      1\nfiles:       imports.tsx, main.css, css/base.css, css/sub.css, logo.png\nstylesheets: @astryxdesign/core/reset.css, @astryxdesign/core/astryx.css\n\nWarnings\n\n- main.css imports https://example.com/remote.css, which a sandboxed page cannot load, so it is left out; save it beside the stylesheet and import it instead.\n- main.css imports ./nope.css, which was not found, so its styles are missing.\n- main.css imports ./x.scss, a Sass or Less stylesheet, which a render does not compile, so its styles are missing.\n- ./css/missing.png was not found next to the page, so it is left as is and will not show.\n\nGive it back: npx @astryxdesign/cli@0.7.12 experimental render --reverse out.html\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

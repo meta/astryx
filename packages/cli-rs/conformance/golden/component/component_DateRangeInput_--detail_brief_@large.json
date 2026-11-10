@@ -7,7 +7,7 @@
   "brief"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nDateRangeInput(value: DateRange|null, onChange: (value: DateRange|null) => void, changeAction: (value: DateRange|null) => void|Promise<void>, size: sm|md|lg, status: {type: warning|error|success, message?: string}, statusVariant: attached|detached|tooltip, numberOfMonths: 1|2)  <- from '@astryxdesign/core/DateRangeInput'\n  DateRangeInput lets users select a start and end date from a dual-month calen...\n  Targets: astryx-date-range-input preferred attrs: data-size, data-status, data-disabled variants: size, status states: disabled | astryx-date-range-input-toggle-icon preferred attrs: data-state states: state | astryx-date-range-input-presets | astryx-date-range-input-preset preferred attrs: data-selected, data-disabled states: selected, disabled\n  label: string, isLabelHidden, description, isOptional, isRequired, isDisabled, disabledMessage, isLoading, min, max, dateConstraints, maxRangeSpan, minRangeSpan, presets, hasClear, placeholder, labelTooltip, weekStartsOn, calendar, width, containerXstyle, controlXstyle\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

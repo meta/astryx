@@ -7,7 +7,7 @@
   "--overwrite"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "Copied template to src/page.tsx\n\npackage: @astryxdesign/core\n\nReplaced 6 Astryx demo media references in src/page.tsx: images now show a neutral placeholder and videos have an empty source. Supply your own media there.\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n",
  "exit": 0,

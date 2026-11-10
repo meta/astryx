@@ -7,7 +7,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"When to Use\",\n    \"category\": \"foundations\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Consistent illustration usage reinforces brand identity and helps users understand context at a glance. Use illustrations in these contexts:\"\n      },\n      {\n        \"type\": \"table\",\n        \"headers\": [\n          \"Context\",\n          \"Examples\"\n        ],\n        \"rows\": [\n          [\n            \"Empty states\",\n            \"No data, first-time experience, search with no results\"\n          ],\n          [\n            \"Onboarding\",\n            \"Welcome screens, feature introduction, setup wizards\"\n          ],\n          [\n            \"Feature highlights\",\n            \"New feature announcements, upgrade prompts\"\n          ],\n          [\n            \"Error states\",\n            \"Permission denied, not found, service unavailable\"\n          ]\n        ]\n      }\n    ],\n    \"id\": \"when-to-use\",\n    \"links\": {\n      \"up\": \"astryx docs illustrations --index\",\n      \"next\": \"astryx docs illustrations guidelines\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

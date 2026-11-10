@@ -6,7 +6,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"StatusDotStatusIndicators\",\n    \"description\": \"Labeled status dot list for presence indicators like online, away, and offline.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"StatusDot\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {StatusDot} from '@astryxdesign/core/StatusDot';\\nimport {VStack, HStack} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nconst statuses = [\\n  {variant: 'success', label: 'Online'},\\n  {variant: 'warning', label: 'Away'},\\n  {variant: 'error', label: 'Offline'},\\n  {variant: 'neutral', label: 'Unknown'},\\n] as const;\\n\\nexport default function StatusDotStatusIndicators() {\\n  return (\\n    <VStack gap={2}>\\n      {statuses.map(({variant, label}) => (\\n        <HStack key={variant} gap={2} vAlign=\\\"center\\\">\\n          <StatusDot variant={variant} label={label} />\\n          <Text type=\\\"body\\\">{label}</Text>\\n        </HStack>\\n      ))}\\n    </VStack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

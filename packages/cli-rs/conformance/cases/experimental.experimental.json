@@ -1150,5 +1150,37 @@
       "src/package.tsx"
     ],
     "fixture": "rendercharts"
+  },
+  {
+    "id": "w_render_nodist",
+    "args": [
+      "experimental",
+      "render",
+      "nodist.tsx",
+      "--out",
+      "out.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_nodist_sub",
+    "args": [
+      "experimental",
+      "render",
+      "nodist-sub.tsx",
+      "--out",
+      "out.html"
+    ],
+    "fixture": "renderpages"
+  },
+  {
+    "id": "w_render_nodist_json",
+    "args": [
+      "--json",
+      "experimental",
+      "render",
+      "nodist-sub.tsx"
+    ],
+    "fixture": "renderpages"
   }
 ]

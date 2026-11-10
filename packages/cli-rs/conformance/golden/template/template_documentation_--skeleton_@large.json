@@ -6,7 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# documentation - Reference landing that is pure wayfinding: a banner above a grid of category cards linking into sections, with no article content on the surface itself.\n# Components: Card, ClickableCard, Grid, Layout\n\n<Layout padding={8} height=\"fill\">\n  /* content: */\n  <LayoutContent padding={8}>\n    <VStack gap={10}>\n      <Card padding={10} variant=\"gray\">\n        <HStack gap={8}>\n          <StackItem />\n          <VStack gap={4}>\n            <Text />\n            <Text />\n            <Button variant=\"primary\" />\n          </VStack>\n          <StackItem />\n        </HStack>\n      </Card>\n      <VStack gap={4}>\n        <Heading />\n        <Grid gap={2} columns={{minWidth: 260}}>\n          <ClickableCard />\n          <VStack gap={3}>\n            <Card padding={0} variant=\"muted\" />\n            <VStack gap={0.5}>\n              <Text />\n              <Text />\n            </VStack>\n          </VStack>\n        </Grid>\n      </VStack>\n    </VStack>\n  </LayoutContent>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -5,7 +5,7 @@
   "ChatToolCallsShowcase"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {ChatToolCalls} from '@astryxdesign/core/Chat';\n\nexport default function ChatToolCallsShowcase() {\n  return (\n    <ChatToolCalls\n      defaultIsExpanded\n      calls={[\n        {\n          name: 'bash',\n          target: 'git diff --stat',\n          status: 'complete',\n          duration: '340ms',\n        },\n        {\n          name: 'read',\n          target: 'src/utils/formatDate.ts',\n          status: 'complete',\n          duration: '45ms',\n        },\n        {\n          name: 'edit',\n          target: 'src/utils/formatDate.ts',\n          status: 'complete',\n          duration: '120ms',\n          additions: 12,\n          deletions: 3,\n        },\n      ]}\n    />\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

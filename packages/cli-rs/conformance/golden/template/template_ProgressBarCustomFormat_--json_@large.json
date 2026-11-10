@@ -6,7 +6,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"ProgressBarCustomFormat\",\n    \"description\": \"Progress bar with a custom value label showing disk usage in GB.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"ProgressBar\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {ProgressBar} from '@astryxdesign/core/ProgressBar';\\nimport {VStack} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nexport default function ProgressBarCustomFormat() {\\n  return (\\n    <div style={{width: 300}}>\\n      <VStack gap={1}>\\n        <ProgressBar\\n          value={3.2}\\n          max={5}\\n          label=\\\"Disk usage\\\"\\n          hasValueLabel\\n          formatValueLabel={(value: number, max: number) =>\\n            `${value} GB / ${max} GB`\\n          }\\n        />\\n        <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n          1.8 GB remaining\\n        </Text>\\n      </VStack>\\n    </div>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

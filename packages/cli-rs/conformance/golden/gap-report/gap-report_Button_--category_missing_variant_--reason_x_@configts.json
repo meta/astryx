@@ -9,7 +9,7 @@
   "x"
  ],
  "fixture": "configts",
- "fixtureHash": "bcdd1553b23bcdc6+4e418a0c2575d9ce",
+ "fixtureHash": "75313d97913c18da+4e418a0c2575d9ce",
  "stdout": "Gap report route\n\nstatus:          consent_required\npackage:         @astryxdesign/core\nissuesUrl:       https://github.com/meta/astryx/issues/new\nfiledCount:      0\nroutedOnlyCount: 0\nDeliveries\n\nhandlerType: fallback\nhandler:     github\naudience:    public\nstatus:      consent_required\nmessage:     Rerun with --confirm-public to file this report.\nDestinations\n\ndefault: true\n\nto:        @astryxdesign/lab\ndefault:   false\nissuesUrl: https://github.com/meta/astryx/issues\n\nAsk the person where to file this report, then pass their choice with --to <package>. Never pick a package destination yourself; leave --to out to use the default.\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

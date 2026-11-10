@@ -6,7 +6,7 @@
   "--props"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | Message content: typically ChatMessageList. Flows naturally in the page and scrolls with the container. **(required)** |\n| `composer` | `ReactNode` | - | Composer element: typically ChatComposer. Fixed to the bottom with a frosted glass dock. **(required)** |\n| `emptyState` | `ReactNode` | - | Content shown when children is empty. Centered vertically in the message area. |\n| `scrollButton` | `ReactNode \\| null` | - | Scroll-to-bottom button rendered above the composer. Defaults to ChatLayoutScrollButton with auto-scroll integration. Pass null to hide. |\n| `scrollRef` | `React.RefObject<HTMLElement \\| null>` | - | External scroll container ref. When provided, auto-scroll and scroll-to-bottom target this element instead of the layout root. Use when the chat is embedded in a page where a parent element or the document body scrolls. |\n| `density` | `'compact' \\| 'balanced' \\| 'spacious'` | `'balanced'` | Visual density: controls dock padding, message-area max-width and inline padding, and the height of the frosted glass blur layer. |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

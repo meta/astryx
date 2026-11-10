@@ -8,7 +8,7 @@
   "stylex/localfn.html"
  ],
  "fixture": "renderpages",
- "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
+ "fixtureHash": "04c156f185804dc4+4e418a0c2575d9ce",
  "stdout": "Rendered stylex/localfn.tsx\n\ninput:       stylex/localfn.tsx\noutput:      stylex/localfn.html\nbytes:       19.7 KB\ncssBytes:    18.8 KB\nclasses:     1\nimages:      0\nfiles:       localfn.tsx\nstylesheets: @astryxdesign/core/reset.css, @astryxdesign/core/astryx.css\n\nGive it back: npx @astryxdesign/cli@0.7.12 experimental render --reverse stylex/localfn.html\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

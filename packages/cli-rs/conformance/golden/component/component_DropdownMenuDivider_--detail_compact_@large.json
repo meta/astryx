@@ -7,7 +7,7 @@
   "compact"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# DropdownMenuDivider\n\nA horizontal rule separating groups of rows in a compound menu. Renders role=\"separator\", so it is never a stop in the arrow-key order. The data-driven equivalent is the `{type: \"divider\"}` entry in `items`; both modes render this component, so they look and theme identically. Host attributes and DOM handlers (id, data-*, aria-*) reach the separator; its role and orientation stay component-owned.\n\n## Import\n\n```tsx\nimport { DropdownMenuDivider } from '@astryxdesign/core/DropdownMenu';\n```\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `xstyle` | `StyleXStyles` | - | StyleX styles applied after the menu spacing. Must be a stylex.create() value: not an inline style object like style={{}}. |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

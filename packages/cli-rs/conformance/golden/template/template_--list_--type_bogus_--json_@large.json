@@ -8,7 +8,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"Unknown template type \\\"bogus\\\". Valid types: page, block.\",\n  \"code\": \"ERR_INVALID_ARGUMENT\",\n  \"suggestions\": [\n    {\n      \"name\": \"page\",\n      \"reason\": \"valid type\"\n    },\n    {\n      \"name\": \"block\",\n      \"reason\": \"valid type\"\n    }\n  ]\n}\n",
  "stderr": "",
  "exit": 1,

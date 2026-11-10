@@ -7,7 +7,7 @@
   "brief"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nSelector(size: sm|md|lg, variant: input|secondary|ghost, status: {type: error|warning|success, message?: string}, statusVariant: attached|detached|tooltip, indicatorPosition: start|end, presentation: popover|bottom-sheet|adaptive)  <- from '@astryxdesign/core/Selector'\n  A dropdown selector for choosing a single value from a list of options. Suppo...\n  Targets: astryx-selector preferred attrs: data-variant, data-size, data-status, data-disabled, data-readonly variants: variant, size, status states: disabled, readonly | astryx-selector-option | astryx-selector-option-row preferred attrs: data-size, data-selected, data-disabled variants: size states: selected, disabled | astryx-selector-search | astryx-selector-section-heading | astryx-selector-empty-state | astryx-selector-indicator-icon preferred attrs: data-state states: state | astryx-selector-check | astryx-selector-popup\n  options: SelectorOption[], label: string, value, onChange, hasClear, hasSearch, searchPlaceholder, emptyText, emptySearchText, placeholder, isDisabled, isReadOnly, htmlName, disabledMessage, isLabelHidden, description, isOptional, isRequired, renderOption, renderValue, width, startIcon, isLoading, onClick, onFocus, onKeyDown, containerXstyle, containerClassName, containerStyle, controlXstyle, controlClassName, controlStyle\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

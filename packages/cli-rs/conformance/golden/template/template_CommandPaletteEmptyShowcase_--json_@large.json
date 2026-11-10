@@ -6,7 +6,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"CommandPaletteEmptyShowcase\",\n    \"description\": \"Command palette empty state shown when no commands are available.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"CommandPalette\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useMemo} from 'react';\\nimport {CommandPalette} from '@astryxdesign/core/CommandPalette';\\nimport {Text} from '@astryxdesign/core/Text';\\nimport {createStaticSource} from '@astryxdesign/core/Typeahead';\\n\\nexport default function CommandPaletteEmptyShowcase() {\\n  const emptySource = useMemo(() => createStaticSource([]), []);\\n\\n  return (\\n    <CommandPalette\\n      isOpen\\n      isInline\\n      onOpenChange={() => {}}\\n      searchSource={emptySource}\\n      emptyBootstrapText={\\n        <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n          No commands available yet\\n        </Text>\\n      }\\n    />\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

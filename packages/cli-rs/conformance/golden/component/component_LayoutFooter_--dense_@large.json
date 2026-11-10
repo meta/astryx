@@ -6,7 +6,7 @@
   "--dense"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# LayoutFooter\n\nBottom bar for action bars, pagination, status bars.\n\n**Import:** `import {LayoutFooter} from '@astryxdesign/core/Layout';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | Footer content. |\n| `hasDivider` | `boolean` | `false` | Border at top edge; unset uses the Layout default. |\n| `height` | `SizeValue` | - | Footer height. |\n| `label` | `string` | - | Accessible label for landmark element. |\n| `padding` | `0 \\| 0.5 \\| 1 \\| 1.5 \\| 2 \\| 3 \\| 4 \\| 5 \\| 6 \\| 8 \\| 10` | - | Padding on every edge; replaces the layout inset. 0 is full bleed. |\n| `role` | `AriaRole` | - | ARIA landmark role. |\n| `ref` | `React.Ref<HTMLDivElement>` | - | Ref forwarded to the footer element. |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

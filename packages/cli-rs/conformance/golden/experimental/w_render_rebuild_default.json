@@ -7,7 +7,7 @@
   "proj/stripped.html"
  ],
  "fixture": "renderpages",
- "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
+ "fixtureHash": "04c156f185804dc4+4e418a0c2575d9ce",
  "stdout": "Rebuilt proj/stripped-restored/page.tsx\n\ninput:      proj/stripped.html\nmode:       rebuilt\nexact:      false\noutput:     proj/stripped-restored/page.tsx\nfiles:      proj/stripped-restored/page.tsx\ncomponents: Badge, Button, Card, Divider, Field, FieldLabel, HStack, Heading, Link, Text, TextInput, VStack\nelements:   14\n\nThe file had no embedded source, so the page was rebuilt from its Astryx markup: text and layout only. Review it before use.\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

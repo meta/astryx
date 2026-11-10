@@ -5,7 +5,7 @@
   "BadgeCategoryTags"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Badge} from '@astryxdesign/core/Badge';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\nexport default function BadgeCategoryTags() {\n  return (\n    <Stack direction=\"vertical\" gap={6}>\n      <Stack direction=\"vertical\" gap={2}>\n        <Text type=\"supporting\" color=\"secondary\">\n          Teams\n        </Text>\n        <Stack direction=\"horizontal\" gap={2} style={{flexWrap: 'wrap'}}>\n          <Badge variant=\"blue\" label=\"Design\" />\n          <Badge variant=\"cyan\" label=\"DevOps\" />\n          <Badge variant=\"green\" label=\"Backend\" />\n          <Badge variant=\"pink\" label=\"Marketing\" />\n          <Badge variant=\"purple\" label=\"Engineering\" />\n          <Badge variant=\"teal\" label=\"Research\" />\n        </Stack>\n      </Stack>\n      <Stack direction=\"vertical\" gap={2}>\n        <Text type=\"supporting\" color=\"secondary\">\n          Priority\n        </Text>\n        <Stack direction=\"horizontal\" gap={2}>\n          <Badge variant=\"orange\" label=\"Urgent\" />\n          <Badge variant=\"red\" label=\"Critical\" />\n          <Badge variant=\"yellow\" label=\"Review\" />\n        </Stack>\n      </Stack>\n    </Stack>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

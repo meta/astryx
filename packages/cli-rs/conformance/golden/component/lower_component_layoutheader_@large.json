@@ -5,7 +5,7 @@
   "layoutheader"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# LayoutHeader\n\nTop bar for page titles, app bars, and toolbars.\n\n**Import:** `import {LayoutHeader} from '@astryxdesign/core/Layout';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | Header content. |\n| `hasDivider` | `boolean` | `false` | Border at bottom edge. When unset, the parent Layout's defaultHasDividers decides. |\n| `height` | `SizeValue` | - | Header height. Numbers are treated as pixels, strings are used as-is. |\n| `label` | `string` | - | Accessible label for the landmark element. |\n| `padding` | `0 \\| 0.5 \\| 1 \\| 1.5 \\| 2 \\| 3 \\| 4 \\| 5 \\| 6 \\| 8 \\| 10` | - | Internal padding on every edge, using the spacing scale. Replaces the inset from the layout; 0 is full bleed. |\n| `paddingBlockEnd` | `0 \\| 0.5 \\| 1 \\| 1.5 \\| 2 \\| 3 \\| 4 \\| 5 \\| 6 \\| 8 \\| 10` | - | Block-end (bottom) padding, using the spacing scale. Overrides padding on that edge only; paddingBlockEnd={0} docks the last child on the header bottom edge. |\n| `role` | `AriaRole` | - | ARIA landmark role. |\n| `ref` | `React.Ref<HTMLDivElement>` | - | Ref forwarded to the header element. |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

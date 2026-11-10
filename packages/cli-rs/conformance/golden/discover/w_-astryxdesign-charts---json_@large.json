@@ -6,7 +6,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"discover.detail\",\n  \"package\": \"@astryxdesign/charts\",\n  \"data\": {\n    \"name\": \"@astryxdesign/charts\",\n    \"package\": \"@astryxdesign/charts\",\n    \"category\": \"@astryxdesign/charts\",\n    \"components\": [\n      \"Chart\",\n      \"ChartAxis\",\n      \"ChartGrid\",\n      \"ChartLegend\",\n      \"ChartSwatch\",\n      \"ChartTooltip\"\n    ],\n    \"version\": \"0.1.9\",\n    \"templates\": [\n      \"ChartShowcase\",\n      \"ChartTrendComparison\"\n    ],\n    \"installed\": true\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

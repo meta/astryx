@@ -6,7 +6,7 @@
   "use-what-it-adds"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Use what it adds\n\nOnce installed, the integration's contributions appear alongside Core:\n\n- `npx @astryxdesign/cli@0.7.12 component --list` shows its components next to Core components.\n- `npx @astryxdesign/cli@0.7.12 template --list` includes its page and block templates.\n- `npx @astryxdesign/cli@0.7.12 theme list` lists its themes; add one with `npx @astryxdesign/cli@0.7.12 theme add <slug> --package @acme/brand-integration`.\n- `npx @astryxdesign/cli@0.7.12 docs` shows any guides it provides.\n- `npx @astryxdesign/cli@0.7.12 search <query>` finds everything, from every installed integration.\n\nImport components at the subpath the integration documents. Run `npx @astryxdesign/cli@0.7.12 component <Name>` to see the exact import:\n\n```jsx\nimport {AcmeCarousel} from '@acme/brand-integration/components/AcmeCarousel';\n```\n\nFor themes, see `npx @astryxdesign/cli@0.7.12 docs use-a-theme`. To build an integration of your own, see `npx @astryxdesign/cli@0.7.12 docs authoring`.\n\nUp: npx @astryxdesign/cli@0.7.12 docs use-integrations --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs use-integrations install-an-integration\nNext: npx @astryxdesign/cli@0.7.12 docs use-integrations check-for-problems\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

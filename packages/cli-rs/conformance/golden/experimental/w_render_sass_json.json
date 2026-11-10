@@ -7,7 +7,7 @@
   "sass.tsx"
  ],
  "fixture": "renderpages",
- "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
+ "fixtureHash": "04c156f185804dc4+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"render.page\",\n  \"data\": {\n    \"input\": \"sass.tsx\",\n    \"output\": \"sass.html\",\n    \"bytes\": 19970,\n    \"files\": [\n      \"sass.tsx\"\n    ],\n    \"stylesheets\": [\n      \"@astryxdesign/core/reset.css\",\n      \"@astryxdesign/core/astryx.css\"\n    ],\n    \"classes\": 0,\n    \"cssBytes\": 19249,\n    \"images\": 0,\n    \"warnings\": [\n      {\n        \"code\": \"missing-asset\",\n        \"message\": \"The page imports ./theme.scss, a Sass or Less stylesheet, which a render does not compile, so its styles are missing.\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

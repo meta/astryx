@@ -5,7 +5,7 @@
   "LinkExternalLinks"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Link} from '@astryxdesign/core/Link';\nimport {VStack} from '@astryxdesign/core/Layout';\n\nexport default function LinkExternalLinks() {\n  return (\n    <VStack gap={2}>\n      <Link href=\"https://github.com\" isExternalLink isStandalone>\n        GitHub\n      </Link>\n      <Link href=\"https://developer.mozilla.org\" isExternalLink isStandalone>\n        MDN Web Docs\n      </Link>\n      <Link href=\"https://react.dev\" isExternalLink hasUnderline isStandalone>\n        React Documentation\n      </Link>\n    </VStack>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

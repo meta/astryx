@@ -6,7 +6,7 @@
   "respecting-user-preferences"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Respecting User Preferences\n\nSome users experience motion sensitivity; animation that feels polished to one person can cause discomfort for another. When the OS reduced-motion setting is on, Astryx components change at once under a mouse or trackpad, and under a finger they cross-fade instead of moving: opacity only, in 200 ms or less. A value that changes in place, such as a progress fill, takes its new value at once under any pointer. Do the same in your own animations with `@media (prefers-reduced-motion: reduce)`, adding `(pointer: coarse)` for the touch cross-fade.\n\nUp: npx @astryxdesign/cli@0.7.12 docs motion --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs motion movement-principles\nNext: npx @astryxdesign/cli@0.7.12 docs motion usage\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

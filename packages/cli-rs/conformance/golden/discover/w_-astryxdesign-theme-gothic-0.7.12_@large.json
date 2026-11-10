@@ -5,7 +5,7 @@
   "@astryxdesign/theme-gothic@0.7.12"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "name:        @astryxdesign/theme-gothic\npackage:     @astryxdesign/theme-gothic\ncategory:    @astryxdesign/theme-gothic\nversion:     0.7.12\ndescription: Deep blue-grays and a signature display serif. Dramatic and editorial, for surfaces that want to be remembered.\nthemes:      gothic\ninstalled:   true\nlatest:      0.7.12\nsource:      Astryx\n\nVersions\n1 known, newest first\n\n- 0.7.12  date unknown  latest, installed\n\nSee one item: npx @astryxdesign/cli@0.7.12 discover @astryxdesign/theme-gothic/<item>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

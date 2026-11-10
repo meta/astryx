@@ -5,7 +5,7 @@
   "useListocus"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "Results for \"useListocus\" (2)\n\nname:        useListFocus\ndomain:      hook\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/hooks\ndescription: Manages keyboard navigation within a linear list following WAI-ARIA menu/listbox/toolbar patterns. Supports arrow key navigation (vertical, horizontal, or both), Home/End for boundaries, optional wrap-around, RTL, and Escape to close. Opt into hasRovingTabIndex for composite widgets (toolbars, segmented controls, tab strips) that own a single tab stop. Suitable for dropdown menus, toolbars, and any 1D focusable list.\ncommand:     npx @astryxdesign/cli@0.7.12 hook useListFocus\n\nname:        internationalization/i18n-rtl-and-testing\nsection:     for-contributors\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Internationalization › RTL & Testing › For contributors\ndescription: Astryx component authors read strings with `useTranslator()` rather than hardcoding user-facing text.\ncommand:     npx @astryxdesign/cli@0.7.12 docs internationalization/i18n-rtl-and-testing for-contributors\nparent:      npx @astryxdesign/cli@0.7.12 docs internationalization/i18n-rtl-and-testing --index\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover useListocus\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

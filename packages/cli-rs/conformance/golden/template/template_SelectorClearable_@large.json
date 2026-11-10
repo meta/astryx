@@ -5,7 +5,7 @@
   "SelectorClearable"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {Selector} from '@astryxdesign/core/Selector';\n\nexport default function SelectorClearable() {\n  const [value, setValue] = useState<string | null>('engineering');\n  return (\n    <Selector\n      controlStyle={{width: 300}}\n      label=\"Department\"\n      options={[\n        {value: 'engineering', label: 'Engineering'},\n        {value: 'design', label: 'Design'},\n        {value: 'marketing', label: 'Marketing'},\n        {value: 'sales', label: 'Sales'},\n      ]}\n      value={value}\n      onChange={setValue}\n      placeholder=\"Choose a department...\"\n      hasClear\n    />\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

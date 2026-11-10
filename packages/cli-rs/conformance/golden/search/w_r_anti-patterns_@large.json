@@ -5,7 +5,7 @@
   "anti-patterns"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "Results for \"anti-patterns\" (3)\n\nname:        principles\nsection:     anti-patterns\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Guides › Principles › Anti-Patterns\ndescription: Patterns that break theming, routing, or layout, and what to use instead.\ncommand:     npx @astryxdesign/cli@0.7.12 docs principles anti-patterns\nparent:      npx @astryxdesign/cli@0.7.12 docs principles --index\n\nname:        principles\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Guides › Principles\ndescription: Core design principles and rules for building with the design system.\ncommand:     npx @astryxdesign/cli@0.7.12 docs principles --index\nparent:      npx @astryxdesign/cli@0.7.12 docs guides\n\nname:        styling/styling-advanced\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Styling components › Advanced\ndescription: Compound component styling, data-attribute selectors, migrating removed theme compatibility selectors, and common anti-patterns.\ncommand:     npx @astryxdesign/cli@0.7.12 docs styling/styling-advanced --index\nparent:      npx @astryxdesign/cli@0.7.12 docs styling\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover anti-patterns\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

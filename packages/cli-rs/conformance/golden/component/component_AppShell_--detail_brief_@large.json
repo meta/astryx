@@ -7,7 +7,7 @@
   "brief"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nAppShell(height: fill|auto, variant: wash|surface|section|elevated)  <- from '@astryxdesign/core/AppShell'\n  AppShell is the page shell for an application. It provides slots for top navi...\n  Targets: astryx-app-shell preferred attrs: data-variant variants: variant | astryx-app-shell-header preferred attrs: data-variant variants: variant | astryx-app-shell-sidenav preferred attrs: data-variant variants: variant\n  children, contentPadding, topNav, sideNav, mobileNav, banner, xstyle\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -7,7 +7,7 @@
   "brief"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/lab\n\nEmojiPicker  <- from '@astryxdesign/lab'\n  An emoji picker inserts an emoji into what the viewer is writing, such as a c...\n  Targets: astryx-emoji-picker\n  onSelect: (emoji: string, option: EmojiOption) => void, frequentEmojis, categories, height, hasAutoFocus, label, searchLabel\n  import {Card} from '@astryxdesign/core/Card';\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -6,7 +6,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"ListOrderedSteps\",\n    \"description\": \"Numbered step-by-step instructions using decimal list markers.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"List\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {List, ListItem} from '@astryxdesign/core/List';\\n\\nexport default function ListOrderedSteps() {\\n  return (\\n    <List listStyle=\\\"decimal\\\">\\n      <ListItem\\n        label=\\\"Install the package\\\"\\n        description=\\\"npm install @astryxdesign/core\\\"\\n      />\\n      <ListItem\\n        label=\\\"Import components\\\"\\n        description=\\\"import { List } from '@astryxdesign/core'\\\"\\n      />\\n      <ListItem\\n        label=\\\"Start building\\\"\\n        description=\\\"Use components in your app\\\"\\n      />\\n    </List>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

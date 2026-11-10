@@ -5,7 +5,7 @@
   "ThemeApply"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Theme, defineTheme} from '@astryxdesign/core/theme';\nimport {Card} from '@astryxdesign/core/Card';\nimport {Button} from '@astryxdesign/core/Button';\nimport {Section} from '@astryxdesign/core/Section';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {Heading, Text} from '@astryxdesign/core/Text';\n\nconst forestTheme = defineTheme({\n  name: 'forest-docs',\n  tokens: {\n    '--color-accent': ['#15803D', '#86EFAC'],\n    '--color-background-card': ['#FFFFFF', '#0F3D24'],\n    '--color-text-primary': ['#052E16', '#DCFCE7'],\n    '--color-text-secondary': ['#166534', '#BBF7D0'],\n    '--color-border': ['#BBF7D0', '#15803D66'],\n  },\n});\n\nexport default function ThemeApply() {\n  return (\n    <Section variant=\"muted\" padding={4} maxWidth={420}>\n      <Theme theme={forestTheme}>\n        <Card padding={4} width=\"100%\">\n          <Stack direction=\"vertical\" gap={3}>\n            <Heading level={4}>Forest workspace</Heading>\n            <Text type=\"body\" color=\"secondary\">\n              Wrap any subtree to apply a theme locally.\n            </Text>\n            <Button label=\"Create project\" />\n          </Stack>\n        </Card>\n      </Theme>\n    </Section>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

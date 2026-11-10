@@ -8,7 +8,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.template-conflicts\",\n  \"data\": {\n    \"validated\": true,\n    \"name\": \"@acme/widgets\",\n    \"version\": null,\n    \"conflicts\": [],\n    \"issues\": [\n      {\n        \"code\": \"package_not_found\",\n        \"severity\": \"error\",\n        \"message\": \"Could not find installed integration package \\\"@acme/widgets\\\" at /tmp/astryx-conformance/work/large/node_modules/@acme/widgets/package.json. Install it first.\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 1,

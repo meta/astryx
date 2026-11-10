@@ -5,7 +5,7 @@
   "AvatarInitialsFallback"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Avatar} from '@astryxdesign/core/Avatar';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\nconst NAMES = [\n  {name: 'John Doe', note: 'First + last'},\n  {name: 'Alice', note: 'Single name'},\n  {name: 'Bob Smith Johnson', note: 'Multi-word'},\n  {name: 'Dr. Sarah Connor', note: 'Prefixed'},\n];\n\nexport default function AvatarInitialsFallback() {\n  return (\n    <Stack direction=\"horizontal\" gap={6} vAlign=\"center\">\n      {NAMES.map(({name, note}) => (\n        <Stack key={name} direction=\"vertical\" gap={2} hAlign=\"center\">\n          <Avatar name={name} size=\"lg\" />\n          <Text type=\"supporting\" color=\"secondary\">\n            {note}\n          </Text>\n        </Stack>\n      ))}\n    </Stack>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

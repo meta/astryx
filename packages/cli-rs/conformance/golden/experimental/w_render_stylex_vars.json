@@ -8,7 +8,7 @@
   "stylex/vars.html"
  ],
  "fixture": "renderpages",
- "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
+ "fixtureHash": "04c156f185804dc4+4e418a0c2575d9ce",
  "stdout": "Rendered stylex/vars.tsx\n\ninput:       stylex/vars.tsx\noutput:      stylex/vars.html\nbytes:       20.3 KB\ncssBytes:    19.0 KB\nclasses:     2\nimages:      0\nfiles:       vars.tsx, tokens/vars.stylex.ts\nstylesheets: @astryxdesign/core/reset.css, @astryxdesign/core/astryx.css\n\nGive it back: npx @astryxdesign/cli@0.7.12 experimental render --reverse stylex/vars.html\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

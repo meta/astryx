@@ -5,7 +5,7 @@
   "BannerShowcase"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Banner} from '@astryxdesign/core/Banner';\nimport {Stack} from '@astryxdesign/core/Layout';\n\nexport default function BannerShowcase() {\n  return (\n    <Stack direction=\"vertical\" gap={3} style={{maxWidth: 800}}>\n      <Banner status=\"info\" title=\"A new software update is available.\" />\n      <Banner status=\"success\" title=\"Your changes have been saved.\" />\n      <Banner\n        status=\"warning\"\n        title=\"Your trial expires in 3 days.\"\n        description=\"Upgrade to keep access to all features.\"\n      />\n      <Banner\n        status=\"error\"\n        title=\"Payment failed.\"\n        description=\"Update your billing information to continue.\"\n      />\n    </Stack>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

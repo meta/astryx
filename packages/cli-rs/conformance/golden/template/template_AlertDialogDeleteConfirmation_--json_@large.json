@@ -6,7 +6,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"AlertDialogDeleteConfirmation\",\n    \"description\": \"A delete button that asks the user to confirm before deleting.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"AlertDialog\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {\\n  AlertDialog,\\n  useImperativeAlertDialog,\\n} from '@astryxdesign/core/AlertDialog';\\n\\n// Remove isInline for production — alert dialogs should be modal.\\nexport default function AlertDialogDeleteConfirmation() {\\n  const alert = useImperativeAlertDialog();\\n\\n  const alertProps = {\\n    title: 'Delete item?',\\n    description:\\n      'This action cannot be undone. The item and all its data will be permanently removed.',\\n    actionLabel: 'Delete',\\n  } as const;\\n\\n  return (\\n    <>\\n      <AlertDialog\\n        isOpen\\n        isInline\\n        onOpenChange={() => {}}\\n        {...alertProps}\\n        onAction={() =>\\n          alert.show({...alertProps, onAction: () => alert.hide()})\\n        }\\n      />\\n      {alert.element}\\n    </>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

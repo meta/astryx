@@ -6,7 +6,7 @@
   "--props"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `isStopShown` | `boolean` | - | Whether the stop button is shown. Defaults to context value. |\n| `isDisabled` | `boolean` | - | Whether the send button is disabled. Defaults to !canSend from context. |\n| `onSend` | `() => void` | - | Called when the user clicks send. Defaults to context onSubmit. |\n| `onStop` | `() => void` | - | Called when the user clicks stop during streaming. Defaults to context onStop. |\n| `sendIcon` | `ReactNode` | - | Custom icon for the send state. Defaults to arrowUp from icon registry. |\n| `stopIcon` | `ReactNode` | - | Custom icon for the stop state. Defaults to stop from icon registry. |\n| `size` | `'sm' \\| 'md'` | `'md'` | Button size. |\n| `xstyle` | `StyleXStyles` | - | StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value: not an inline style object like style={{}}. |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

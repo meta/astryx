@@ -6,7 +6,7 @@
   "--zh"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# MetadataListItem\n\nMetadataList 中的单个带标签元数据值。\n\n**Import:** `import {MetadataListItem} from '@astryxdesign/core/MetadataList';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | 此元数据项的内容值。 **(required)** |\n| `label` | `string` | - | 此元数据项的标签文本。 **(required)** |\n| `icon` | `ReactNode` | - | 标签文本前渲染的图标。 |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

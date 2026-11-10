@@ -7,7 +7,7 @@
   "Run acme verify before finishing."
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "agent-doc contribution added\n\n[ok] Run acme verify before finishing.\n\nUpdate astryx.integration.mjs.\n\n- astryx.integration.mjs\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

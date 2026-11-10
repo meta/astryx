@@ -5,7 +5,7 @@
   "StepperShowcase"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {Stepper, Step} from '@astryxdesign/core/Stepper';\n\nexport default function StepperShowcase() {\n  const [active, setActive] = useState(2);\n  return (\n    <div style={{width: '100%', maxWidth: 640}}>\n      <Stepper\n        activeStep={active}\n        orientation=\"horizontal\"\n        onStepClick={setActive}>\n        <Step step={0} label=\"Cart\" />\n        <Step step={1} label=\"Shipping\" />\n        <Step step={2} label=\"Payment\" />\n        <Step step={3} label=\"Review\" />\n        <Step step={4} label=\"Confirm\" />\n      </Stepper>\n    </div>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -7,7 +7,7 @@
   "brief"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nNumberInput(value: number|null|undefined, size: sm|md|lg, status: {type: error|warning|success, message?: string}, statusVariant: attached|detached|tooltip, min: number|null, max: number|null, step: number|null, units: string|null)  <- from '@astryxdesign/core/NumberInput'\n  A form input for numeric values with built-in validation, min/max constraints...\n  Derived: padding -> container tokens; borderRadius -> --_field-radius\n  Targets: astryx-number-input preferred attrs: data-size, data-status, data-disabled, data-readonly variants: size, status states: disabled, readonly\n  onChange: (value: number) => void, label: string, isLabelHidden, description, isOptional, onKeyDown, isRequired, isDisabled, isReadOnly, disabledMessage, placeholder, labelTooltip, startIcon, labelIcon, formatValue, isWheelEnabled, hasNumberSteppers, isIntegerOnly, hasClear, htmlName, autoComplete, width, hasAutoFocus, onFocus, onBlur, onEnter, containerXstyle, containerClassName, containerStyle, controlXstyle, controlClassName, controlStyle\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -6,7 +6,7 @@
   "best-practices"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Best Practices\n\n+ Use component gap props when available; they handle automatic spacing compensation.\n+ Stick to the scale for consistency. If a value isn't on the scale, reconsider the design.\n+ Use smaller steps (0.5–2) for tight internal spacing and larger steps (4–8) for section gaps.\n\nx Use arbitrary pixel values outside the scale.\nx Mix spacing tokens with raw px/rem values in the same component.\n\nUp: npx @astryxdesign/cli@0.7.12 docs spacing --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs spacing usage\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

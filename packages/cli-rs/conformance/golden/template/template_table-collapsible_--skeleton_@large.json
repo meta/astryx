@@ -6,7 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# table-collapsible - Several tables on one page, each in a collapsible card with its own columns - for groups that do not share a schema, where one table would stand full of empty cells. One time range drives them all, and rows expand into a history chart. Accounts, integrations, sections, sort, expand, or collapse.\n# Components: Area, AreaChart, Badge, Card, Collapsible, Layout, ProgressBar, ReferenceLine, ResponsiveContainer, SegmentedControl, Skeleton, Table, Token, Tooltip, XAxis, YAxis\n\n<RangeContext />\n<Layout padding={4} height=\"auto\">\n  /* header: */\n  <LayoutHeader padding={4}>\n    <HStack gap={3}>\n      <StackItem />\n      <VStack gap={0.5}>\n        <Heading />\n        <Text />\n      </VStack>\n      <Button variant=\"ghost\" />\n      <SegmentedControl />\n      <SegmentedControlItem />\n    </HStack>\n  </LayoutHeader>\n  /* content: */\n  <LayoutContent padding={4}>\n    <VStack gap={4}>\n      <AccountGroup />\n      <GroupTable />\n      <DetailChart />\n      <AccountGroup />\n      <GroupTable />\n      <DetailChart />\n      <AccountGroup />\n      <GroupTable />\n      <DetailChart />\n      <AccountGroup />\n      <GroupTable />\n      <DetailChart />\n    </VStack>\n  </LayoutContent>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

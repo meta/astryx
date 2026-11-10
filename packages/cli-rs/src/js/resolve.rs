@@ -185,6 +185,10 @@ thread_local! {
     static JITI_CONDITIONS_OVERRIDE: std::cell::Cell<Option<&'static [&'static str]>> = const { std::cell::Cell::new(None) };
 }
 
+/// Internal code for an exports target that does not exist; reported as
+/// `MODULE_NOT_FOUND` with the target's path.
+const EXPORT_TARGET_MISSING: &str = "MODULE_NOT_FOUND_EXPORT_TARGET";
+
 /// Resolve `specifier` imported from the file `from`.
 pub fn resolve(specifier: &str, from: &Path, mode: Mode) -> Result<Resolved, ResolveError> {
     resolve_with(specifier, from, mode, &Profile::default())
@@ -208,12 +212,21 @@ pub fn resolve_with(
             Err(e) => with_jiti_conditions(JITI_IMPORT_CONDITIONS, || resolve_inner(specifier, from, mode)).map_err(|_| e),
             ok => ok,
         }
+    } else if mode == Mode::Jiti {
+        // jiti's import tries the import conditions, then the require
+        // conditions: a missing import target is retried, and when both
+        // are missing the error names the require target.
+        match resolve_inner(specifier, from, mode) {
+            Err(e) if e.code == EXPORT_TARGET_MISSING => with_jiti_conditions(CJS_CONDITIONS, || resolve_inner(specifier, from, mode)),
+            other => other,
+        }
     } else {
         resolve_inner(specifier, from, mode)
     };
     JITI_EXTS_OVERRIDE.with(|o| *o.borrow_mut() = prev);
     // CommonJS (and jiti) name the specifier as written.
     match result {
+        Err(e) if e.code == EXPORT_TARGET_MISSING => Err(ResolveError { code: "MODULE_NOT_FOUND", message: e.message }),
         Err(e) if e.code == "MODULE_NOT_FOUND" => Err(ResolveError {
             code: e.code,
             message: format!("Cannot find module '{specifier}'\nRequire stack:\n- {}", from.display()),
@@ -558,8 +571,10 @@ fn resolve_exports(
             } else {
                 match mode {
                     Mode::Esm => Err(not_found_module(&p, from)),
+                    // A package's export target that is missing is named by
+                    // its path, not by the specifier (Node and jiti both).
                     Mode::Jiti | Mode::Cjs => Err(ResolveError {
-                        code: "MODULE_NOT_FOUND",
+                        code: EXPORT_TARGET_MISSING,
                         message: format!(
                             "Cannot find module '{}'\nRequire stack:\n- {}",
                             p.display(),

@@ -7,7 +7,7 @@
   "brief"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nIconButton(variant: primary|secondary|ghost|destructive, size: sm|md|lg, elevation: none|low|med|high, clickAction: (e: MouseEvent) => void|Promise<void>, type: button|submit|reset, value: string|number|readonly string[])  <- from '@astryxdesign/core/IconButton'\n  A button that shows only an icon with no visible text. Use IconButton in tool...\n  icon: ReactNode, label: string, isLoading, isDisabled, tooltip, onClick, isInterruptible, width, name, form, href, as, target, rel\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

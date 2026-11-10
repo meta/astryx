@@ -7,7 +7,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Customize with StyleX\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Astryx components support various styling solutions, from plain CSS and `className` to Tailwind and CSS-in-JS. See `astryx docs styling` for the full guide. Astryx also has a deep integration with [StyleX](https://stylexjs.com/), an atomic CSS-in-JS library: create styles with `stylex.create()` and pass them to components with the `xstyle` prop.\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"tsx\",\n        \"code\": \"import * as stylex from '@stylexjs/stylex';\\n\\nconst overrides = stylex.create({\\n  save: { alignSelf: 'flex-end', marginTop: 16 },\\n});\\n\\n<Button label=\\\"Save\\\" xstyle={overrides.save} />\",\n        \"label\": \"Style overrides\"\n      }\n    ],\n    \"id\": \"customize-with-stylex\",\n    \"links\": {\n      \"up\": \"astryx docs getting-started --index\",\n      \"previous\": \"astryx docs getting-started add-your-first-component\",\n      \"next\": \"astryx docs getting-started example-apps\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

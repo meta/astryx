@@ -6,7 +6,7 @@
   "what-each-file-does"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## What each import does\n\nImport                            | Layer        | Purpose                                                                                                              \n--------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------\nreset.css                         | reset        | Cross-browser reset (box-sizing, margins, color-scheme). Zero specificity via :where().                              \nastryx.css                        | astryx-base  | Prebuilt component styles. Required on every path.                                                                   \nrichtext.css, lab.css, charts.css | astryx-base  | Prebuilt styles for each other Astryx package you use. Load after astryx.css.                                        \ntheme.css                         | astryx-theme | Design tokens (colors, spacing, radius, typography) as CSS custom properties. Swap the package for a different theme.\ntailwind-theme.css                | —            | Tailwind v4 bridge. Maps utility classes to design tokens. Pure CSS, no JS. Tailwind path only.                      \n\nUp: npx @astryxdesign/cli@0.7.12 docs styling-overview --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs styling-overview other-packages\nNext: npx @astryxdesign/cli@0.7.12 docs styling-overview further-reading\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

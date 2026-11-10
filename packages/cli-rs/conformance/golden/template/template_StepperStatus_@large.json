@@ -5,7 +5,7 @@
   "StepperStatus"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {Stepper, Step} from '@astryxdesign/core/Stepper';\n\nexport default function StepperStatus() {\n  const [active, setActive] = useState(3);\n  return (\n    <div style={{width: '100%', maxWidth: 400}}>\n      <Stepper\n        activeStep={active}\n        orientation=\"vertical\"\n        onStepClick={setActive}>\n        <Step\n          step={0}\n          label=\"Email verified\"\n          description=\"you@example.com\"\n          status=\"success\"\n        />\n        <Step\n          step={1}\n          label=\"Phone verified\"\n          description=\"+1 (555) 012-3456\"\n          status=\"success\"\n        />\n        <Step\n          step={2}\n          label=\"Identity document\"\n          description=\"Passport upload failed\"\n          status=\"error\"\n        />\n        <Step\n          step={3}\n          label=\"Address verification\"\n          description=\"Pending review\"\n          status=\"accent\"\n        />\n        <Step\n          step={4}\n          label=\"Background check\"\n          isOptional\n          description=\"Skipped\"\n        />\n        <Step step={5} label=\"Account activated\" />\n      </Stepper>\n    </div>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

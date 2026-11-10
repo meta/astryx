@@ -5,7 +5,7 @@
   "DrawerShowcase"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\n/**\n * @input Controlled open state for a modal Drawer\n * @output A single-trigger drawer with a scrim and a DrawerHeader close button\n * @position Drawer's docsite showcase and copyable CLI block\n */\n\nimport {useState} from 'react';\nimport {Drawer, DrawerHeader} from '@astryxdesign/core/Drawer';\nimport {Button} from '@astryxdesign/core/Button';\nimport {Layout, LayoutContent} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\nexport default function DrawerShowcase() {\n  const [isOpen, setIsOpen] = useState(false);\n\n  return (\n    <>\n      <Button label=\"Open drawer\" onClick={() => setIsOpen(true)} />\n      <Drawer\n        isOpen={isOpen}\n        onOpenChange={setIsOpen}\n        label=\"Details\"\n        width={360}>\n        <Layout\n          header={<DrawerHeader title=\"Details\" onOpenChange={setIsOpen} />}\n          content={\n            <LayoutContent>\n              <Text type=\"body\">\n                Close with Escape, the scrim, or the close button.\n              </Text>\n            </LayoutContent>\n          }\n        />\n      </Drawer>\n    </>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

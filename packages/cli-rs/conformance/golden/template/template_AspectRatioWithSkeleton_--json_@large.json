@@ -6,7 +6,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"AspectRatioWithSkeleton\",\n    \"description\": \"Aspect ratio container with a skeleton loading placeholder.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"AspectRatio\",\n      \"Center\",\n      \"Skeleton\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {AspectRatio} from '@astryxdesign/core/AspectRatio';\\nimport {Skeleton} from '@astryxdesign/core/Skeleton';\\nimport {Center} from '@astryxdesign/core/Center';\\n\\nexport default function AspectRatioWithSkeleton() {\\n  return (\\n    <Center width={600}>\\n      <AspectRatio ratio={16 / 9}>\\n        <Skeleton width=\\\"100%\\\" height=\\\"100%\\\" />\\n      </AspectRatio>\\n    </Center>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

@@ -7,7 +7,7 @@
   "script.tsx"
  ],
  "fixture": "renderpages",
- "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
+ "fixtureHash": "04c156f185804dc4+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"render.page\",\n  \"data\": {\n    \"input\": \"script.tsx\",\n    \"output\": \"script.html\",\n    \"bytes\": 20100,\n    \"files\": [\n      \"script.tsx\"\n    ],\n    \"stylesheets\": [\n      \"@astryxdesign/core/reset.css\",\n      \"@astryxdesign/core/astryx.css\"\n    ],\n    \"classes\": 0,\n    \"cssBytes\": 19249,\n    \"images\": 0,\n    \"warnings\": [\n      {\n        \"code\": \"remote-asset\",\n        \"message\": \"https://example.com is loaded from the network, which a sandboxed page cannot reach; save it beside the page and import it instead.\"\n      },\n      {\n        \"code\": \"page-script\",\n        \"message\": \"The page renders a <script> element. A sandboxed viewer blocks it, and anywhere else it runs when the file is opened; remove it from the page.\"\n      },\n      {\n        \"code\": \"remote-asset\",\n        \"message\": \"The page renders a <iframe> that loads https://example.com, which a sandboxed page cannot reach and which loads from the network anywhere else; remove it from the page.\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

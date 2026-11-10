@@ -6,7 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# useOutlineFromMarkdownHookUsage - A docs-style article with an Outline next to it, built from the same Markdown string through useOutlineFromMarkdown. \"Add section\" appends a heading to the string, and a new entry that links to it appears in the outline.\n# Components: Markdown, Outline, ScrollableArea\n\n<HStack gap={6} width=\"100%\">\n  <ScrollableArea height={320} width=\"100%\" />\n  <Markdown />\n  <VStack gap={3} width={220}>\n    <Outline />\n    <Button variant=\"secondary\" />\n  </VStack>\n</HStack>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

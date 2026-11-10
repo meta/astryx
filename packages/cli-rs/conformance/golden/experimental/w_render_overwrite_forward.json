@@ -7,7 +7,7 @@
   "--overwrite"
  ],
  "fixture": "renderpages",
- "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
+ "fixtureHash": "04c156f185804dc4+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: --overwrite applies only to --reverse; rendering replaces an existing HTML file only when a render wrote it\n",
  "exit": 1,

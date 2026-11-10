@@ -6,7 +6,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"AlertDialogAsyncAction\",\n    \"description\": \"A confirmation dialog that shows a spinner while the action runs.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"AlertDialog\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useState} from 'react';\\nimport {AlertDialog} from '@astryxdesign/core/AlertDialog';\\n\\nexport default function AlertDialogAsyncAction() {\\n  const [isLoading, setIsLoading] = useState(false);\\n\\n  return (\\n    <AlertDialog\\n      isOpen\\n      isInline\\n      onOpenChange={() => {}}\\n      title=\\\"Revoke access?\\\"\\n      description=\\\"This user will immediately lose access to all shared resources.\\\"\\n      actionLabel=\\\"Revoke\\\"\\n      isActionLoading={isLoading}\\n      onAction={async () => {\\n        setIsLoading(true);\\n        await new Promise(r => setTimeout(r, 2000));\\n        setIsLoading(false);\\n      }}\\n    />\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

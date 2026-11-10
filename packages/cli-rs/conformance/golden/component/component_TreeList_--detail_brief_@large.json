@@ -7,7 +7,7 @@
   "brief"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nTreeList(density: compact|balanced|spacious, variant: lineGuides|noGuides)  <- from '@astryxdesign/core/TreeList'\n  Tree list container. Accepts items data and rendering configuration. Expansio...\n  Vars: --tree-list-indent (var(--spacing-4)), --tree-list-row-gap (var(--spacing-0-5))\n  Targets: astryx-tree-list preferred attrs: data-density, data-variant variants: density, variant | astryx-tree-list-item preferred attrs: data-density, data-selected, data-disabled variants: density states: selected, disabled | astryx-tree-list-chevron preferred attrs: data-state states: state | astryx-tree-list-item-label preferred attrs: data-selected states: selected | astryx-tree-list-guide\n  items: TreeListItemData[], animatedLayout, header, xstyle\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

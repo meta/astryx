@@ -5,7 +5,7 @@
   "DropdownMenuGroupShowcase"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {\n  DropdownMenu,\n  DropdownMenuDivider,\n  DropdownMenuGroup,\n  DropdownMenuItem,\n} from '@astryxdesign/core/DropdownMenu';\n\nexport default function DropdownMenuGroupShowcase() {\n  return (\n    <DropdownMenu button={{label: 'Version'}}>\n      <DropdownMenuGroup title=\"Version history\">\n        <DropdownMenuItem\n          icon=\"arrowDown\"\n          label=\"Restore this version\"\n          onClick={() => {}}\n        />\n        <DropdownMenuItem\n          icon=\"copy\"\n          label=\"Compare with current\"\n          onClick={() => {}}\n        />\n      </DropdownMenuGroup>\n      <DropdownMenuDivider />\n      <DropdownMenuGroup title=\"Add to message\">\n        <DropdownMenuItem\n          icon=\"externalLink\"\n          label=\"As a link\"\n          onClick={() => {}}\n        />\n        <DropdownMenuItem label=\"As a snippet\" onClick={() => {}} />\n      </DropdownMenuGroup>\n    </DropdownMenu>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

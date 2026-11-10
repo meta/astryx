@@ -7,7 +7,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"id\": \"further-reading\",\n    \"title\": \"Further reading\",\n    \"content\": [\n      {\n        \"type\": \"list\",\n        \"style\": \"unordered\",\n        \"items\": [\n          \"`astryx docs styling` — xstyle, className, data-attribute selectors, design tokens in code.\",\n          \"`astryx docs styling-libraries` — Tailwind bridge details, Panda, Chakra, MUI, CSS Modules, and non-CSS token resolution.\",\n          \"`astryx docs use-a-theme` — applying themes, dark mode, nested themes. `astryx docs author-a-theme` — defineTheme, overrides, production builds.\",\n          \"`astryx docs migration` — cascade layer audit, Tailwind v3 coexistence, and foundation smoke test.\"\n        ]\n      }\n    ],\n    \"links\": {\n      \"up\": \"astryx docs styling-overview --index\",\n      \"previous\": \"astryx docs styling-overview what-each-file-does\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

@@ -1,0 +1,16 @@
+{
+ "id": "w_render_nodist_sub",
+ "args": [
+  "experimental",
+  "render",
+  "nodist-sub.tsx",
+  "--out",
+  "out.html"
+ ],
+ "fixture": "renderpages",
+ "fixtureHash": "04c156f185804dc4+4e418a0c2575d9ce",
+ "stdout": "",
+ "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: The page imports /tmp/astryx-conformance/work/renderpages/node_modules/nodist/dist/built.js, which does not exist\n",
+ "exit": 1,
+ "files": []
+}

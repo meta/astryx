@@ -6,7 +6,7 @@
   "--zh"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/lab\n\n# ChatReactionBar\n\n聊天消息下方的表情回应胶囊行。每个胶囊显示表情和数量；当前用户自己的回应带有强调色和 aria-pressed。提供 onAdd 会渲染末尾的添加回应按钮，打开 ChatEmojiPicker 弹出层。\n\n**Import:** `import {ChatReactionBar} from '@astryxdesign/lab';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `reactions` | `{emoji: string; count: number; isSelected?: boolean; label?: string}[]` | - | 按显示顺序渲染的回应列表。isSelected 标记当前用户自己的回应（强调色 + aria-pressed）。label 是人类可读的描述，用作胶囊的提示与无障碍标签。 **(required)** |\n| `onToggle` | `(emoji: string) => void` | - | 用户切换回应时以该表情调用。 |\n| `onAdd` | `(emoji: string) => void` | - | 用户从表情选择器添加回应时以所选表情调用。仅在提供时渲染末尾的添加按钮。 |\n| `emojis` | `readonly ChatEmojiOption[]` | - | 添加回应选择器的表情选项，默认 DEFAULT_CHAT_EMOJIS。 |\n| `addLabel` | `string` | `'Add reaction'` | 添加回应按钮与选择器对话框的无障碍标签。 |\n| `label` | `string` | `'Reactions'` | 回应组的无障碍标签。 |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

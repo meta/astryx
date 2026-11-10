@@ -6,7 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# useInteractiveRoleHookUsage - A polymorphic Tile used four ways: with an href it renders as a link, with an onClick as a button, with neither as plain content, and placed as a Popover trigger it becomes the trigger button through context - the resolution order in one place.\n# Components: Card, Popover\n\n<VStack gap={3}>\n  <Tile />\n  <Tile />\n  <Popover padding={3} />\n  /* content: */\n  <Card padding={3}>\n    <Text />\n  </Card>\n  <Tile />\n  <Tile />\n</VStack>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

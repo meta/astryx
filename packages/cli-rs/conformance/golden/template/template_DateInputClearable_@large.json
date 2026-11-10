@@ -5,7 +5,7 @@
   "DateInputClearable"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {DateInput} from '@astryxdesign/core/DateInput';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\ntype DateString =\n  `${number}${number}${number}${number}-${number}${number}-${number}${number}`;\n\nexport default function DateInputClearable() {\n  const [value, setValue] = useState<DateString | undefined>(\n    '2026-04-06' as DateString,\n  );\n\n  return (\n    <Stack\n      direction=\"vertical\"\n      gap={4}\n      width=\"100%\"\n      style={{minWidth: 240, maxWidth: 400}}>\n      <Text type=\"supporting\" color=\"secondary\">\n        {value ? `Selected: ${value}` : 'No date selected'}\n      </Text>\n      <DateInput\n        label=\"Event date\"\n        description=\"Pick a date for your event\"\n        placeholder=\"Select a date\"\n        value={value}\n        onChange={setValue}\n        hasClear\n      />\n    </Stack>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

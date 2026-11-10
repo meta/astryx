@@ -7,7 +7,7 @@
   "@astryxdesign/charts"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "Validating integration: @astryxdesign/charts@0.1.9\n\n[ok] No integration issues found.\n\nnote (template_import_not_exported): [next minor] Template \"ChartShowcase\" has public import \"@astryxdesign/charts/blocks/ChartShowcase\", but package.json \"exports\" does not declare \"./blocks/ChartShowcase\", so it cannot be imported once published. Fix: add \"./blocks/ChartShowcase\": \"./blocks/ChartShowcase.tsx\" to package.json \"exports\" (or the built file it compiles to).\n\nnote (template_import_not_exported): [next minor] Template \"ChartTrendComparison\" has public import \"@astryxdesign/charts/blocks/ChartTrendComparison\", but package.json \"exports\" does not declare \"./blocks/ChartTrendComparison\", so it cannot be imported once published. Fix: add \"./blocks/ChartTrendComparison\": \"./blocks/ChartTrendComparison.tsx\" to package.json \"exports\" (or the built file it compiles to).\n\nSummary: 0 errors, 0 warnings\n\n[skip] Docs not type-checked: TypeScript is not installed in this project, so docs were not checked against the authoring types. Install TypeScript in this project (`npm install -D typescript`), then run this check again.\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

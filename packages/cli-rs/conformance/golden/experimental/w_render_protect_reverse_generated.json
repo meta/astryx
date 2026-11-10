@@ -9,7 +9,7 @@
   "vendor/new/page.tsx"
  ],
  "fixture": "renderpages",
- "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
+ "fixtureHash": "04c156f185804dc4+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: aliased.html carries files the page does not import, or that is not the image, font or media file its name says (src/components/Card.tsx, src/data/info.json), which a render never embeds; nothing was written. A file reached through a path alias needs the same alias in this project's tsconfig.json or jsconfig.json.\n",
  "exit": 1,

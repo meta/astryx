@@ -6,7 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# ChatComposerFullFeatured - Chat composer with all slots populated: collapsible attachment drawer, header actions, context progress bar, footer dropdown menus, and mic button. Shows the maximum composer configuration.\n# Components: ChatComposer, ChatComposerDrawer, ChatComposerInput, DropdownMenu, ProgressBar, Stack, Token\n\n<Stack gap={4} width={450} maxWidth=\"100%\" />\n<Text />\n<ChatComposer />\n<ChatComposerDrawer />\n<Token />\n<Token />\n<Token />\n<Token />\n<Token />\n<Button variant=\"ghost\" />\n<Button variant=\"ghost\" />\n<ProgressBar />\n<DropdownMenu />\n<DropdownMenu />\n<Button variant=\"ghost\" />\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

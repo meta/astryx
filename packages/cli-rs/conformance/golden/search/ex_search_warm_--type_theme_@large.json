@@ -7,7 +7,7 @@
   "theme"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "Results for \"warm\" (4)\n\nname:        butter\ndomain:      theme\npackage:     @astryxdesign/cli\ndisplayName: Butter\ndescription: Warm, creamy yellows with a friendly blue accent. Playful enough for consumer surfaces, soft enough to stay readable.\ncommand:     npx @astryxdesign/cli@0.7.12 theme add butter\n\nname:        chocolate\ndomain:      theme\npackage:     @astryxdesign/cli\ndisplayName: Chocolate\ndescription: Warm chocolate theme for Astryx - rich brown palette with Fraunces headings, Albert Sans body, and Lucide icons\ncommand:     npx @astryxdesign/cli@0.7.12 theme add chocolate\n\nname:        neutral\ndomain:      theme\npackage:     @astryxdesign/cli\ndisplayName: Neutral\ndescription: Restrained warm grays. Minimal and quiet, so the content stays the focus.\ncommand:     npx @astryxdesign/cli@0.7.12 theme add neutral\n\nname:        stone\ndomain:      theme\npackage:     @astryxdesign/cli\ndisplayName: Stone\ndescription: Warm stone and slate, earthy and understated, with just enough character to feel handcrafted.\ncommand:     npx @astryxdesign/cli@0.7.12 theme add stone\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover warm\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

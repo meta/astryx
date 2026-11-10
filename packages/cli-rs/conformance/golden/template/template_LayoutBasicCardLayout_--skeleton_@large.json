@@ -6,7 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# LayoutBasicCardLayout - A card layout with header, scrollable content area, and footer with action buttons.\n# Components: Card, Layout\n\n<Card height={300} width=\"100%\">\n  <Layout hasDivider>\n    /* header: */\n    <LayoutHeader hasDivider>\n      <Heading />\n    </LayoutHeader>\n    /* content: */\n    <LayoutContent>\n      <VStack gap={3}>\n        <Text />\n        <Text />\n        <Text />\n        <Text />\n      </VStack>\n    </LayoutContent>\n    /* footer: */\n    <LayoutFooter hasDivider>\n      <HStack gap={2}>\n        <Button variant=\"secondary\" />\n        <Button variant=\"primary\" />\n      </HStack>\n    </LayoutFooter>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

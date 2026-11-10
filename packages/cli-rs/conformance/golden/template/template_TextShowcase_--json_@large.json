@@ -6,7 +6,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"TextShowcase\",\n    \"description\": \"\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Stack\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Text} from '@astryxdesign/core/Text';\\nimport {Stack} from '@astryxdesign/core/Stack';\\n\\nexport default function TextShowcase() {\\n  return (\\n    <Stack direction=\\\"vertical\\\" gap={2}>\\n      <Text type=\\\"body\\\">Body: The bulk of content</Text>\\n      <Text type=\\\"large\\\">Large: Emphasized content</Text>\\n      <Text type=\\\"label\\\">Label: Form and chart labels</Text>\\n      <Text type=\\\"supporting\\\">Supporting: Helper text</Text>\\n      <Text type=\\\"code\\\">Code: const x = 42;</Text>\\n    </Stack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

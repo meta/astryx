@@ -7,7 +7,7 @@
   "brief"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nCollapsible(chevronPosition: start|end)  <- from '@astryxdesign/core/Collapsible'\n  Collapsible hides and reveals content behind a trigger button. Use it in sett...\n  Targets: astryx-collapsible preferred attrs: data-density, data-divided variants: density states: divided | astryx-collapsible-trigger preferred attrs: data-density, data-chevron-position, data-open, data-disabled variants: density, chevronPosition states: open, disabled | astryx-collapsible-content preferred attrs: data-density, data-open variants: density states: open | astryx-collapsible-group preferred attrs: data-density variants: density\n  trigger: ReactNode, children, defaultIsOpen, isOpen, isDisabled, onOpenChange, value, animatedLayout, ref, xstyle, className, style, data-testid\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

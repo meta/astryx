@@ -5,7 +5,7 @@
   "LayerHookUsage"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useLayer} from '@astryxdesign/core/Layer';\nimport {Button} from '@astryxdesign/core/Button';\nimport {Card} from '@astryxdesign/core/Card';\nimport {Center} from '@astryxdesign/core/Center';\nimport {VStack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\nexport default function LayerHookUsage() {\n  const layer = useLayer({mode: 'context', lightDismiss: true});\n\n  return (\n    <Center height={220}>\n      <Button\n        label={layer.isOpen ? 'Hide layer' : 'Show layer'}\n        ref={layer.ref}\n        onClick={layer.isOpen ? layer.hide : layer.show}\n      />\n      {layer.render(\n        <Card padding={3}>\n          <VStack gap={1}>\n            <Text type=\"body\" weight=\"bold\">\n              Anchored content\n            </Text>\n            <Text type=\"body\" color=\"secondary\">\n              useLayer provides positioning; you own semantics and surface.\n            </Text>\n          </VStack>\n        </Card>,\n        {placement: 'below', alignment: 'center'},\n      )}\n    </Center>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

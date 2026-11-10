@@ -7,7 +7,7 @@
   "brief"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nDropdownMenuItem(target: _blank|_self, variant: default|destructive)  <- from '@astryxdesign/core/DropdownMenu'\n  Use DropdownMenuItem inside DropdownMenu compound mode for one action or dest...\n  Targets: astryx-dropdown-menu-item preferred attrs: data-size, data-variant variants: size, variant\n  label: ReactNode, icon, description, onClick, href, rel, isDisabled, endContent, hasCloseOnSelect, xstyle, ref\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

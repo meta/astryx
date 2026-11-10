@@ -6,7 +6,7 @@
   "page.html"
  ],
  "fixture": "renderpages",
- "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
+ "fixtureHash": "04c156f185804dc4+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: page.html is already HTML; pass --reverse to turn it back into a page\n\n  npx @astryxdesign/cli@0.7.12 experimental render --reverse page.html  (turn it back into a page)\n",
  "exit": 1,

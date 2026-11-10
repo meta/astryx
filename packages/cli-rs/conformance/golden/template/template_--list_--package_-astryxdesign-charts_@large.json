@@ -7,7 +7,7 @@
   "@astryxdesign/charts"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "Block Templates\n\nid:          ChartShowcase\nname:        Chart\ndescription: A responsive monthly revenue bar chart.\npackage:     @astryxdesign/charts\n\nid:          ChartTrendComparison\nname:        Chart - Trend Comparison\ndescription: Compares actual values with a planned trend on one shared chart scale.\npackage:     @astryxdesign/charts\n\nUsage\n\nnpx @astryxdesign/cli@0.7.12 template <id> [target-path]     Scaffold page or block\nnpx @astryxdesign/cli@0.7.12 template <id> --skeleton        Layout reference\nnpx @astryxdesign/cli@0.7.12 template --list --type block    List only blocks\nnpx @astryxdesign/cli@0.7.12 template --list --package <pkg> List from one package\nnpx @astryxdesign/cli@0.7.12 template --cdn                 CDN starter page, no build step\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

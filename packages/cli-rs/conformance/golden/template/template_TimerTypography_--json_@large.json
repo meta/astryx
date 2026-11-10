@@ -6,7 +6,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"TimerTypography\",\n    \"description\": \"Timer using its Timestamp-matched default typography and an emphasized override.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Stack\",\n      \"Timer\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useState} from 'react';\\nimport {Timer} from '@astryxdesign/core/Timer';\\nimport {Stack} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nexport default function TimerTypography() {\\n  const [startedAt] = useState(() => Date.now() - 128_000);\\n\\n  return (\\n    <Stack direction=\\\"vertical\\\" gap={3}>\\n      <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n        Default\\n      </Text>\\n      <Timer startTime={startedAt} />\\n      <Text type=\\\"supporting\\\" color=\\\"secondary\\\">\\n        Emphasized\\n      </Text>\\n      <Timer\\n        startTime={startedAt}\\n        type=\\\"body\\\"\\n        size=\\\"xl\\\"\\n        color=\\\"primary\\\"\\n        weight=\\\"semibold\\\"\\n      />\\n    </Stack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

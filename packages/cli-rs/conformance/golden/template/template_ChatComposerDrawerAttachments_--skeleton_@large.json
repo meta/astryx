@@ -6,7 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# ChatComposerDrawerAttachments - Drawer with two rows: a scrollable carousel of image thumbnails and a row of removable file tokens. Omit count to keep the drawer always expanded.\n# Components: Carousel, ChatComposer, ChatComposerDrawer, Stack, Thumbnail, Token\n\n<Stack gap={4} width={450} maxWidth=\"100%\" />\n<ChatComposer />\n<ChatComposerDrawer />\n<Stack gap={2} width=\"100%\" />\n<Carousel gap={1} />\n<Thumbnail />\n<Stack gap={1} />\n<Token />\n<Token />\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

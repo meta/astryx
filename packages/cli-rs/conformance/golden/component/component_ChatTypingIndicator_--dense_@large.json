@@ -6,7 +6,7 @@
   "--dense"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/lab\n\n# ChatTypingIndicator\n\nbouncing three-dot typing hint; label grammar 1/2/N names; reduced-motion safe keyframes; announces each new label once via useAnnounce (polite), or leaves it to an enclosing role=log; no live role on the element; dots-only when names empty\n\n**Import:** `import {ChatTypingIndicator} from '@astryxdesign/lab';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `names` | `string[]` | - | string[]; 1='X is typing', 2='X and Y', 3+='X and N others'; phrases from i18n catalog, names joined by Intl.ListFormat; empty=dots only |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

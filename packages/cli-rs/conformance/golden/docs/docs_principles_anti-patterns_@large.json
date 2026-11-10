@@ -6,7 +6,7 @@
   "anti-patterns"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Anti-Patterns\n\nPatterns that break theming, routing, or layout, and what to use instead.\n\nx Inline styles on raw elements. Use xstyle on components\nx Hardcoded colors (#fff). Use var(--color-*) or Tailwind semantic classes (text-primary, bg-surface)\nx Hardcoded spacing (16px). Use spacing tokens or Tailwind spacing utilities\nx Hardcoded <a> elements. Use useLinkComponent() so consumers can swap in their framework router via LinkProvider\nx Wrapping every list item or page section in a Card. Decide the frame first; dense data renders as rows (see `npx @astryxdesign/cli@0.7.12 docs layout`)\nx Badge as decoration. Reserve Badge for counts and enumerated states; use StatusDot or Token for status\nx Inventing props. Read component docs first\n\nUp: npx @astryxdesign/cli@0.7.12 docs principles --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs principles styling-approach\nNext: npx @astryxdesign/cli@0.7.12 docs principles design-tokens\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

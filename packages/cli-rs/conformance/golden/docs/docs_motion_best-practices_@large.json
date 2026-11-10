@@ -6,7 +6,7 @@
   "best-practices"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Best Practices\n\n+ Animate transitions that involve spatial change: panels opening, content expanding, elements entering the screen.\n+ Use fast tokens for small, frequent interactions. Use medium tokens for larger transitions that rearrange the layout.\n+ Honor reduced motion preferences at the OS level.\n\nx Let hover states or high-frequency interactions feel like they're lagging behind the user.\nx Let animation delay when a user can interact with new content. The transition should complete before (or not block) the next action.\nx Move elements in ways that contradict where they came from or where they're going.\n\nUp: npx @astryxdesign/cli@0.7.12 docs motion --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs motion theme-motion\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

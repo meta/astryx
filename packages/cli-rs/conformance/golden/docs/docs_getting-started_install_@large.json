@@ -6,7 +6,7 @@
   "install"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Install\n\nAstryx requires React 19 or later: `react` and `react-dom` >= 19.0.0 are peer dependencies of `@astryxdesign/core`.\n\nAdd the core package and its `@stylexjs/stylex` peer dependency, plus a theme and the CLI.\n\nTerminal:\n```bash\nnpm install @astryxdesign/core @stylexjs/stylex @astryxdesign/theme-neutral @astryxdesign/cli\n```\n\nThen run `npx @astryxdesign/cli@0.7.12 init` to install the AI agent cheat sheet (AGENTS.md/CLAUDE.md). It's non-interactive; no prompts; so it's safe for AI agents, CI, and scripts. Add `--all` for pointers to the theme and page-building workflows.\n\nTerminal:\n```bash\nnpx @astryxdesign/cli@0.7.12 init\n```\n\nUp: npx @astryxdesign/cli@0.7.12 docs getting-started --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs getting-started quick-start-with-ai\nNext: npx @astryxdesign/cli@0.7.12 docs getting-started upgrade\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

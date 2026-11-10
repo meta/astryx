@@ -6,7 +6,7 @@
   "--blocks"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nShowcase\n\ndisplayName: Bottom Sheet\ndescription: A mobile filter surface that rises from the bottom edge.\n\nExamples\n\nname:        BottomSheetHeights\ndescription: Compares hug, capped, and tall starting heights for different amounts of content.\n\nname:        BottomSheetMobileKeyboard\ndescription: Uses a tall, scrollable form that keeps focused controls visible above the mobile keyboard.\n\nname:        BottomSheetNoScrim\ndescription: Keeps the page visible and interactive behind a non-modal bottom sheet.\n\nname:        BottomSheetSnapPoints\ndescription: Drag-to-resize stops: a half-height working surface, and a peek that slides away and thins the scrim.\n\nname:        BottomSheetSwitcherReviewFlow\ndescription: A two-step form flow of two standalone sheets driven by one state value: Continue replaces the review step with the confirmation in place, and Back returns.\n\nname:        BottomSheetSwitcherShowcase\ndescription: A three-step flow of standalone sheets of different heights, driven by one state value: moving on replaces the open step in place. This is the replacement for the deprecated BottomSheetSwitcher.\n\nRelated: 2 blocks that use BottomSheet\n\n- DialogAdaptivePresentation\n- PopoverBottomSheetAlternative\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

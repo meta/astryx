@@ -6,7 +6,7 @@
   "--dense"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# DropdownMenuDivider\n\nseparator row for compound menus; compound peer of the data API's {type: \"divider\"}; host attributes reach the separator, role/orientation stay owned\n\n**Import:** `import {DropdownMenuDivider} from '@astryxdesign/core/DropdownMenu';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `xstyle` | `StyleXStyles` | - | StyleX styles applied after the menu spacing |\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-dropdown-menu-divider` | - | - | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'dropdown-menu-divider': {\n    base: { /* CSS properties */ },\n  },\n}\n```\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

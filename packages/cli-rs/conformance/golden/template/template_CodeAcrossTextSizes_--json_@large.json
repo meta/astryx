@@ -6,7 +6,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"CodeAcrossTextSizes\",\n    \"description\": \"Inline code rendered inside heading, body, supporting, and label text. Code automatically matches the font size of its parent text element.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Code\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Code} from '@astryxdesign/core/CodeBlock';\\nimport {Text} from '@astryxdesign/core/Text';\\nimport {Heading} from '@astryxdesign/core/Text';\\nimport {VStack} from '@astryxdesign/core/Stack';\\n\\nexport default function CodeAcrossTextSizes() {\\n  return (\\n    <VStack gap={3}>\\n      <Heading level={3}>\\n        Heading with <Code>inline code</Code>\\n      </Heading>\\n      <Text type=\\\"body\\\">\\n        Body text with <Code>inline code</Code>\\n      </Text>\\n      <Text type=\\\"supporting\\\">\\n        Supporting text with <Code>inline code</Code>\\n      </Text>\\n      <Text type=\\\"label\\\">\\n        Label text with <Code>inline code</Code>\\n      </Text>\\n    </VStack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

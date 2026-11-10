@@ -5,7 +5,7 @@
   "TimerTypography"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {Timer} from '@astryxdesign/core/Timer';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\nexport default function TimerTypography() {\n  const [startedAt] = useState(() => Date.now() - 128_000);\n\n  return (\n    <Stack direction=\"vertical\" gap={3}>\n      <Text type=\"supporting\" color=\"secondary\">\n        Default\n      </Text>\n      <Timer startTime={startedAt} />\n      <Text type=\"supporting\" color=\"secondary\">\n        Emphasized\n      </Text>\n      <Timer\n        startTime={startedAt}\n        type=\"body\"\n        size=\"xl\"\n        color=\"primary\"\n        weight=\"semibold\"\n      />\n    </Stack>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

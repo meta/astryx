@@ -6,7 +6,7 @@
   "--index"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "Color\nSemantic color tokens for surfaces, text, icons, borders, and status indicators.\n\npackage: @astryxdesign/cli\n\noverview        Overview - Colors are semantic: tokens describe purpose, not appearance. Every color adapts\n                automatically between light and dark modes via CSS light-dark(). Themes override the resolved values, so\n                your code never references raw hex colors.\nsurface-colors  Color Tokens - Layered surface hierarchy: body -> surface -> card -> popover. Each level sits visually\n                above the previous one.\nusage           Use color tokens in StyleX - Import the typed color tokens and use them in `stylex.create()`; they\n                resolve to the active theme and color mode.\nbest-practices  Best Practices - Use semantic tokens (--color-text-primary) instead of raw hex values.\n\nRead one section: npx @astryxdesign/cli@0.7.12 docs color <section>\nRead everything:  npx @astryxdesign/cli@0.7.12 docs color --full\nUp: npx @astryxdesign/cli@0.7.12 docs foundations\nNext: npx @astryxdesign/cli@0.7.12 docs elevation\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -6,7 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# AppShellWithBanner - Full layout with TopNav, SideNav, and a dismissable info banner between the nav and content.\n# Components: AppShell, Banner, CubeIcon, NavIcon, SideNav, TopNav\n\n<AppShell contentPadding={6} />\n/* topNav: */\n<TopNav />\n<TopNavHeading />\n<NavIcon />\n<TopNavItem />\n<TopNavItem />\n<TopNavItem />\n/* sideNav: */\n<SideNav>\n  <SideNavSection />\n  <SideNavItem />\n  <SideNavItem />\n  <SideNavItem />\n  <SideNavSection />\n  <SideNavItem />\n  <SideNavItem />\n</SideNav>\n<Banner />\n<VStack gap={4}>\n  <Heading />\n  <Text />\n</VStack>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

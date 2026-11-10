@@ -7,7 +7,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Install an integration\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Install the package with your package manager. Integrations autolink: the CLI finds them among your dependencies, so installing is all it takes:\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"bash\",\n        \"code\": \"npm install @acme/brand-integration\"\n      },\n      {\n        \"type\": \"prose\",\n        \"text\": \"Run `astryx doctor` to confirm everything is wired up. If you need to load a package that is not a direct dependency, add it explicitly to `astryx.config.mjs`:\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"js\",\n        \"code\": \"export default {\\n  integrations: ['@acme/brand-integration'],\\n};\",\n        \"label\": \"Optional: explicit config entry\"\n      }\n    ],\n    \"id\": \"install-an-integration\",\n    \"links\": {\n      \"up\": \"astryx docs use-integrations --index\",\n      \"previous\": \"astryx docs use-integrations discover-integrations\",\n      \"next\": \"astryx docs use-integrations use-what-it-adds\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

@@ -5,7 +5,7 @@
   "ChatMessageMetadataStatus"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {\n  ChatMessageList,\n  ChatMessage,\n  ChatMessageBubble,\n  ChatMessageMetadata,\n} from '@astryxdesign/core/Chat';\nimport {Timestamp} from '@astryxdesign/core/Timestamp';\n\nconst STATUSES = [\n  {status: 'sending' as const, text: 'Deploying the update now…'},\n  {status: 'sent' as const, text: 'Config pushed to staging.'},\n  {status: 'delivered' as const, text: 'Verified on the staging cluster.'},\n  {status: 'read' as const, text: 'Looks good — promoting to prod.'},\n  {status: 'error' as const, text: 'Rollback triggered, checking logs.'},\n];\n\nexport default function ChatMessageMetadataStatus() {\n  return (\n    <ChatMessageList style={{maxWidth: 400}}>\n      {STATUSES.map(({status, text}) => (\n        <ChatMessage key={status} sender=\"user\">\n          <ChatMessageBubble\n            metadata={\n              <ChatMessageMetadata\n                timestamp={\n                  <Timestamp value=\"2026-04-29T10:15:00\" format=\"time\" />\n                }\n                status={status}\n              />\n            }>\n            {text}\n          </ChatMessageBubble>\n        </ChatMessage>\n      ))}\n    </ChatMessageList>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

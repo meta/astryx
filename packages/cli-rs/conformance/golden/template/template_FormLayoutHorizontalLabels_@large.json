@@ -5,7 +5,7 @@
   "FormLayoutHorizontalLabels"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {FormLayout} from '@astryxdesign/core/FormLayout';\nimport {TextInput} from '@astryxdesign/core/TextInput';\nimport {Selector} from '@astryxdesign/core/Selector';\nimport {TextArea} from '@astryxdesign/core/TextArea';\n\nexport default function FormLayoutHorizontalLabels() {\n  const [displayName, setDisplayName] = useState('Jane Doe');\n  const [email, setEmail] = useState('jane@example.com');\n  const [timezone, setTimezone] = useState('America/Los_Angeles');\n  const [bio, setBio] = useState('');\n\n  return (\n    <FormLayout direction=\"horizontal-labels\">\n      <TextInput\n        label=\"Display Name\"\n        value={displayName}\n        onChange={setDisplayName}\n      />\n      <TextInput label=\"Email\" value={email} onChange={setEmail} />\n      <Selector\n        label=\"Timezone\"\n        value={timezone}\n        onChange={v => setTimezone(v as string)}\n        options={[\n          {label: 'Pacific Time', value: 'America/Los_Angeles'},\n          {label: 'Eastern Time', value: 'America/New_York'},\n          {label: 'UTC', value: 'UTC'},\n        ]}\n      />\n      <TextArea label=\"Bio\" value={bio} onChange={setBio} rows={3} />\n    </FormLayout>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

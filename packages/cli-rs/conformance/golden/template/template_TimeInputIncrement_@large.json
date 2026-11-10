@@ -5,7 +5,7 @@
   "TimeInputIncrement"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {TimeInput} from '@astryxdesign/core/TimeInput';\nimport {Stack} from '@astryxdesign/core/Layout';\n\nexport default function TimeInputIncrement() {\n  const [slot, setSlot] = useState('09:00');\n\n  return (\n    <Stack direction=\"vertical\" gap={3}>\n      <TimeInput\n        label=\"Appointment slot\"\n        increment={15}\n        description=\"Use arrow keys to change by 15 minutes\"\n        value={slot as never}\n        onChange={setSlot as never}\n        hasClear\n      />\n    </Stack>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

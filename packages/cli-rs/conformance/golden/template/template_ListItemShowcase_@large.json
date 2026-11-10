@@ -5,7 +5,7 @@
   "ListItemShowcase"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {List, ListItem} from '@astryxdesign/core/List';\nimport {Badge} from '@astryxdesign/core/Badge';\nimport {Icon} from '@astryxdesign/core/Icon';\n\nexport default function ListItemShowcase() {\n  return (\n    <List header=\"Settings\" hasDividers>\n      <ListItem\n        label=\"Notifications\"\n        description=\"Push, email, and SMS alerts\"\n        startContent={<Icon icon=\"info\" />}\n        endContent={<Badge label=\"3 new\" variant=\"blue\" />}\n        onClick={() => {}}\n      />\n      <ListItem\n        label=\"Privacy\"\n        description=\"Manage data sharing preferences\"\n        startContent={<Icon icon=\"eyeSlash\" />}\n        onClick={() => {}}\n      />\n      <ListItem\n        label=\"Appearance\"\n        description=\"Theme, font size, and display\"\n        startContent={<Icon icon=\"wrench\" />}\n        onClick={() => {}}\n      />\n      <ListItem\n        label=\"Billing\"\n        description=\"Plans and payment methods\"\n        startContent={<Icon icon=\"copy\" />}\n        endContent={<Badge label=\"Pro\" variant=\"purple\" />}\n        onClick={() => {}}\n      />\n    </List>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -5,7 +5,7 @@
   "LayoutPanelShowcase"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {\n  Layout,\n  LayoutPanel,\n  LayoutContent,\n  LayoutHeader,\n  LayoutFooter,\n  Card,\n} from '@astryxdesign/core/Layout';\nimport {Center} from '@astryxdesign/core/Center';\nimport {List, ListItem} from '@astryxdesign/core/List';\n\nexport default function LayoutPanelShowcase() {\n  return (\n    <Center width={400}>\n      <Layout\n        style={{width: '100%'}}\n        height=\"fill\"\n        header={\n          <LayoutHeader hasDivider>\n            <Card variant=\"muted\" />\n          </LayoutHeader>\n        }\n        start={\n          <LayoutPanel hasDivider width={140} role=\"navigation\">\n            <List>\n              <ListItem label=\"Overview\" isSelected />\n              <ListItem label=\"Analytics\" />\n              <ListItem label=\"Reports\" />\n              <ListItem label=\"Settings\" />\n            </List>\n          </LayoutPanel>\n        }\n        content={\n          <LayoutContent>\n            <Card variant=\"muted\" />\n          </LayoutContent>\n        }\n        footer={\n          <LayoutFooter hasDivider>\n            <Card variant=\"muted\" />\n          </LayoutFooter>\n        }\n      />\n    </Center>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -6,7 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# AvatarShowcase - Avatars at every size with an image, initials fallback, and a status dot. A quick visual reference for choosing the right size.\n# Components: Avatar, AvatarStatusDot, Stack\n\n<Stack gap={4} />\n<Avatar variant=\"success\" />\n<Avatar />\n<Avatar />\n<Avatar variant=\"error\" />\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -6,7 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# BreadcrumbsMenuItem - Give a mid-trail crumb a `menu` prop to turn it into a menu trigger for switching between sibling destinations. It reuses the same item API as DropdownMenu, so an existing option array (or composed item children) drops in verbatim.\n# Components: Breadcrumb, Breadcrumbs\n\n<Breadcrumbs />\n<BreadcrumbItem />\n<BreadcrumbItem />\n<BreadcrumbItem />\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

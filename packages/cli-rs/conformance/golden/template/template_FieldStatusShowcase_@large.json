@@ -5,7 +5,7 @@
   "FieldStatusShowcase"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {FieldStatus} from '@astryxdesign/core/FieldStatus';\nimport {VStack} from '@astryxdesign/core/Layout';\n\nexport default function FieldStatusShowcase() {\n  return (\n    <VStack gap={4}>\n      <FieldStatus\n        type=\"error\"\n        message=\"This field is required\"\n        variant=\"detached\"\n      />\n      <FieldStatus\n        type=\"warning\"\n        message=\"This username is already taken by another team\"\n        variant=\"detached\"\n      />\n      <FieldStatus\n        type=\"success\"\n        message=\"Your changes have been saved\"\n        variant=\"detached\"\n      />\n    </VStack>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

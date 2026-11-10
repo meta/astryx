@@ -6,7 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# BadgeCategoryTags - Tag items with color-coded categories like teams, priorities, or topics. Use the 9 non-semantic color variants when you need to distinguish groups visually.\n# Components: Badge, Stack\n\n<Stack gap={6} />\n<Stack gap={2} />\n<Text />\n<Stack gap={2} />\n<Badge variant=\"blue\" />\n<Badge variant=\"cyan\" />\n<Badge variant=\"green\" />\n<Badge variant=\"pink\" />\n<Badge variant=\"purple\" />\n<Badge variant=\"teal\" />\n<Stack gap={2} />\n<Text />\n<Stack gap={2} />\n<Badge variant=\"orange\" />\n<Badge variant=\"red\" />\n<Badge variant=\"yellow\" />\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

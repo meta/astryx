@@ -6,7 +6,7 @@
   "v0.6.0"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "\nUpgrade\nAborted\n\n",
  "stderr": "Invalid --from value: \"v0.6.0\". Expected a semver string like 0.0.5.\n",
  "exit": 1,

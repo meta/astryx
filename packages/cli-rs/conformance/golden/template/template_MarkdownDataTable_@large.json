@@ -5,7 +5,7 @@
   "MarkdownDataTable"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Center} from '@astryxdesign/core/Center';\nimport {Markdown} from '@astryxdesign/core/Markdown';\n\nconst content = [\n  '## Comparison Table',\n  '',\n  '| Feature | React | Vue | Svelte |',\n  '|:--------|:-----:|:---:|-------:|',\n  '| Virtual DOM | Yes | Yes | No |',\n  '| Bundle Size | ~40KB | ~30KB | ~2KB |',\n  '| TypeScript | Native | Plugin | Native |',\n  '| Learning Curve | Medium | Easy | Easy |',\n].join('\\n');\n\nexport default function MarkdownDataTable() {\n  return (\n    <Center width=\"100%\" style={{maxWidth: 450}}>\n      <Markdown>{content}</Markdown>\n    </Center>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -5,7 +5,7 @@
   "TreeListShowcase"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {TreeList} from '@astryxdesign/core/TreeList';\n\nconst noop = () => {};\n\nexport default function TreeListShowcase() {\n  return (\n    <TreeList\n      items={[\n        {\n          id: 'src',\n          label: 'src',\n          isExpanded: true,\n          children: [\n            {\n              id: 'components',\n              label: 'components',\n              children: [\n                {id: 'button', label: 'Button.tsx', onClick: noop},\n                {id: 'card', label: 'Card.tsx', onClick: noop},\n                {id: 'list', label: 'List.tsx', onClick: noop},\n              ],\n            },\n            {id: 'app', label: 'App.tsx', onClick: noop},\n            {id: 'index', label: 'index.tsx', onClick: noop},\n          ],\n        },\n        {\n          id: 'public',\n          label: 'public',\n          children: [\n            {id: 'favicon', label: 'favicon.ico', onClick: noop},\n            {id: 'index-html', label: 'index.html', onClick: noop},\n          ],\n        },\n        {id: 'pkg', label: 'package.json', onClick: noop},\n        {id: 'readme', label: 'README.md', onClick: noop},\n      ]}\n    />\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

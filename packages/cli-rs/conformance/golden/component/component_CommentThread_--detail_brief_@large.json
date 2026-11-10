@@ -7,7 +7,7 @@
   "brief"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/lab\n\nCommentThread(mode: interactive|non-editable|read-only, container: section|card, onSubmit: (content: string, parentCommentId?: string) => void|Promise<void>, onSaveEdit: (commentId: string, content: string) => void|Promise<void>, onDelete: (commentId: string) => void|Promise<void>, onReact: (commentId: string, reactionKey: string, option?: CommentReactionOption) => void|Promise<void>, onRetryComment: (commentId: string) => void|Promise<void>, onResolveThread: (commentId: string) => void|Promise<void>, onReopenThread: (commentId: string) => void|Promise<void>, onUploadImages: (files: readonly File[], context: CommentComposerContext) => CommentUploadedImage[]|Promise<CommentUploadedImage[]>, getReplyMention: (author: CommentUser) => string|undefined)  <- from '@astryxdesign/lab'\n  A comment thread shows one conversation: its first comment and the replies un...\n  comment: CommentThreadData, isSelected, onSelectedChange, onDismiss, currentUser, onComposerDraftChange, loadVersions, isSubmitting, composerPlaceholder, highlightColor, reactionOptions, agentCommands, composerTriggers, markdownPlugins, markdownInlinePlugins, hasEmojiPicker, renderAnchor, renderBody, renderVersionBody, renderAdditionalActions, renderComposer\n  import {Card} from '@astryxdesign/core/Card';\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

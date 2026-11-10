@@ -6,7 +6,7 @@
   "--props"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `calls` | `ChatToolCallItem[]` | - | Array of tool call data. Each item has name, status, target, duration, node, additions, deletions, stats, errorMessage, resultDetail, key, and data. status is one of 'pending', 'running', 'complete', or 'error' (defaults to 'complete'). **(required)** |\n| `label` | `string` | - | Custom summary label shown for an expanded group. The translated call count is used when omitted. |\n| `isExpanded` | `boolean` | - | Controlled expanded state for the group. |\n| `defaultIsExpanded` | `boolean` | `false` | Default expanded state when uncontrolled. |\n| `onExpandedChange` | `(isExpanded: boolean) => void` | - | Callback fired when the expanded state changes. |\n| `xstyle` | `StyleXStyles` | - | StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object like style={{}}. |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

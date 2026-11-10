@@ -5,7 +5,7 @@
   "CodeVariousContent"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Code} from '@astryxdesign/core/CodeBlock';\nimport {Text} from '@astryxdesign/core/Text';\nimport {VStack} from '@astryxdesign/core/Stack';\n\nexport default function CodeVariousContent() {\n  return (\n    <VStack gap={3}>\n      <Text type=\"body\">\n        Variable: <Code>const count = 0</Code>\n      </Text>\n      <Text type=\"body\">\n        Terminal: <Code>yarn build --watch</Code>\n      </Text>\n      <Text type=\"body\">\n        CSS property: <Code>border-radius: 8px</Code>\n      </Text>\n      <Text type=\"body\">\n        File path: <Code>packages/core/src/CodeBlock/Code.tsx</Code>\n      </Text>\n      <Text type=\"body\">\n        Keyboard shortcut: <Code>Ctrl+Shift+P</Code>\n      </Text>\n    </VStack>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

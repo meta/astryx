@@ -7,7 +7,7 @@
   "brief"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nHoverCard(placement: above|below|start|end, alignment: start|center|end, focusTrigger: auto|always|never, touchTrigger: auto|tap|none, hasHoverIndication: auto|boolean)  <- from '@astryxdesign/core/HoverCard'\n  Component wrapper for hover card display: a richer, larger overlay triggered ...\n  Derived: borderRadius -> --_hovercard-radius\n  Targets: astryx-hover-card\n  content: ReactNode, children, delay, hideDelay, isEnabled, label, onOpenChange, isDefaultOpen, isOpen, xstyle, className, style\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

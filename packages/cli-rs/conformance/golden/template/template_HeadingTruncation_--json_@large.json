@@ -6,7 +6,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"HeadingTruncation\",\n    \"description\": \"Single-line and multi-line heading truncation with ellipsis for constrained layouts\",\n    \"type\": \"block\",\n    \"components\": [],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Heading} from '@astryxdesign/core/Text';\\n\\nexport default function HeadingTruncation() {\\n  return (\\n    <div style={{display: 'flex', flexDirection: 'column', gap: 24}}>\\n      <div style={{width: 300, border: '1px solid #ccc', padding: 12}}>\\n        <Heading level={2} maxLines={1}>\\n          Very Long Heading That Will Be Truncated To One Line With Ellipsis\\n        </Heading>\\n      </div>\\n      <div style={{width: 300, border: '1px solid #ccc', padding: 12}}>\\n        <Heading level={2} maxLines={2}>\\n          Very Long Heading That Will Be Truncated To Two Lines To Keep Card\\n          Layout Compact\\n        </Heading>\\n      </div>\\n    </div>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

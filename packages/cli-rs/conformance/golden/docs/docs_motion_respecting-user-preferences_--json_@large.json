@@ -7,7 +7,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Respecting User Preferences\",\n    \"category\": \"foundations\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Some users experience motion sensitivity; animation that feels polished to one person can cause discomfort for another. When the OS reduced-motion setting is on, Astryx components change at once under a mouse or trackpad, and under a finger they cross-fade instead of moving: opacity only, in 200 ms or less. A value that changes in place, such as a progress fill, takes its new value at once under any pointer. Do the same in your own animations with `@media (prefers-reduced-motion: reduce)`, adding `(pointer: coarse)` for the touch cross-fade.\"\n      }\n    ],\n    \"id\": \"respecting-user-preferences\",\n    \"links\": {\n      \"up\": \"astryx docs motion --index\",\n      \"previous\": \"astryx docs motion movement-principles\",\n      \"next\": \"astryx docs motion usage\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

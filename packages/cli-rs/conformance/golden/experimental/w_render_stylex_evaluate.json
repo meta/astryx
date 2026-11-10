@@ -8,7 +8,7 @@
   "stylex/evaluate.html"
  ],
  "fixture": "renderpages",
- "fixtureHash": "d66c2200a9683125+4e418a0c2575d9ce",
+ "fixtureHash": "04c156f185804dc4+4e418a0c2575d9ce",
  "stdout": "Rendered stylex/evaluate.tsx\n\ninput:       stylex/evaluate.tsx\noutput:      stylex/evaluate.html\nbytes:       20.6 KB\ncssBytes:    19.3 KB\nclasses:     8\nimages:      0\nfiles:       evaluate.tsx\nstylesheets: @astryxdesign/core/reset.css, @astryxdesign/core/astryx.css\n\nGive it back: npx @astryxdesign/cli@0.7.12 experimental render --reverse stylex/evaluate.html\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

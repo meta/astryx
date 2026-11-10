@@ -6,7 +6,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"BreadcrumbsWithIcons\",\n    \"description\": \"Add icons before breadcrumb labels for quick recognition. Use a home icon on the root item and contextual icons on key sections.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Breadcrumb\",\n      \"Breadcrumbs\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Breadcrumbs, BreadcrumbItem} from '@astryxdesign/core/Breadcrumbs';\\nimport {Icon} from '@astryxdesign/core/Icon';\\nimport {HomeIcon, Cog6ToothIcon} from '@heroicons/react/24/outline';\\n\\nexport default function BreadcrumbsWithIcons() {\\n  return (\\n    <Breadcrumbs>\\n      <BreadcrumbItem href=\\\"/\\\" startIcon={<Icon icon={HomeIcon} size=\\\"sm\\\" />}>\\n        Home\\n      </BreadcrumbItem>\\n      <BreadcrumbItem\\n        href=\\\"/settings\\\"\\n        startIcon={<Icon icon={Cog6ToothIcon} size=\\\"sm\\\" />}>\\n        Settings\\n      </BreadcrumbItem>\\n      <BreadcrumbItem isCurrent>Profile</BreadcrumbItem>\\n    </Breadcrumbs>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

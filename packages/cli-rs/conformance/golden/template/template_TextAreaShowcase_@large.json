@@ -5,7 +5,7 @@
   "TextAreaShowcase"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {TextArea} from '@astryxdesign/core/TextArea';\n\nexport default function TextAreaShowcase() {\n  const [value, setValue] = useState('');\n  return (\n    <div style={{width: 400}}>\n      <TextArea\n        label=\"Description\"\n        value={value}\n        onChange={setValue}\n        placeholder=\"Enter a description...\"\n      />\n    </div>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

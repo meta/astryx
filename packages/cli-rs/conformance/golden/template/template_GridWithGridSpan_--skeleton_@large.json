@@ -6,7 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# GridWithGridSpan - Grid with featured items spanning multiple columns and rows\n# Components: Card, Grid, GridSpan\n\n<Grid gap={4} columns={3} width=\"100%\">\n  <GridSpan>\n    <Card variant=\"cyan\">\n      <VStack gap={1}>\n        <Text />\n        <Text />\n      </VStack>\n    </Card>\n  </GridSpan>\n  <Card>\n    <Text />\n    <Text />\n  </Card>\n  <Card>\n    <Text />\n    <Text />\n  </Card>\n  <Card>\n    <Text />\n    <Text />\n  </Card>\n  <Card>\n    <Text />\n    <Text />\n  </Card>\n  <Card>\n    <Text />\n    <Text />\n  </Card>\n  <Card>\n    <Text />\n    <Text />\n  </Card>\n  <Card>\n    <Text />\n    ...\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

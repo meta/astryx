@@ -7,7 +7,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Rules\",\n    \"category\": \"guide\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Eight rules that keep app code on-system.\"\n      },\n      {\n        \"type\": \"list\",\n        \"style\": \"ordered\",\n        \"items\": [\n          \"Use components for everything they cover\",\n          \"Page layout is frame-first: pick the shell and budget regions before writing content (see `astryx docs layout`)\",\n          \"Dense data renders as rows (Table, List/Item), edge-to-edge with dividers; Card is for widgets, galleries, and settings groups\",\n          \"StyleX or Tailwind for custom styling; both are first-class (see `astryx docs styling`)\",\n          \"Semantic tokens, not hardcoded values (see `astryx docs tokens`)\",\n          \"CSS custom properties for colors, not hex values\",\n          \"Form inputs are controlled (value + onChange)\",\n          \"Use useLinkComponent() for navigation so consumers can plug in their framework router via LinkProvider\"\n        ]\n      }\n    ],\n    \"id\": \"rules\",\n    \"links\": {\n      \"up\": \"astryx docs principles --index\",\n      \"previous\": \"astryx docs principles design-philosophy\",\n      \"next\": \"astryx docs principles styling-approach\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,
