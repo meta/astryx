@@ -1512,7 +1512,8 @@ export default function Page() {
   async function initialsOf(name) {
     await render(`initials/${name}.tsx`, {cwd: dir});
     const html = fs.readFileSync(path.join(dir, 'initials', `${name}.html`), 'utf8');
-    return [...html.matchAll(/<div data-name="\d+">([\s\S]*?)(?=<div data-name=|<\/main>)/g)].map(m => m[1].replace(/<[^>]+>/g, ''));
+    // Generated content draws the initials from this attribute, not a text node.
+    return [...html.matchAll(/<div data-name="\d+">([\s\S]*?)(?=<div data-name=|<\/main>)/g)].map(m => /\bdata-initials="([^"]*)"/.exec(m[1])?.[1] ?? '');
   }
 
   // On a Node build that crashes in Intl.Segmenter, both renders run without it.
