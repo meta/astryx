@@ -344,6 +344,45 @@ export const Default: Story = {
   },
 };
 
+/**
+ * An open Popover above rows with swipe actions. On a touch screen a row
+ * swiped while the Popover is open follows the finger and rests open.
+ */
+export const OverSwipeRows: Story = {
+  tags: ['!autodocs'],
+  render: () => (
+    <VStack gap={4}>
+      <Popover
+        placement="below"
+        label="Settings"
+        width={240}
+        content={<Text>Popover content</Text>}>
+        <Button label="Settings">Settings</Button>
+      </Popover>
+      <div style={{blockSize: 160}} />
+      <List>
+        {['Message 1', 'Message 2', 'Message 3'].map(label => (
+          <ListItem
+            key={label}
+            label={label}
+            onClick={() => {}}
+            swipeActions={{
+              trailing: [
+                {label: 'Archive', onActivate: () => {}, variant: 'neutral'},
+                {
+                  label: 'Delete',
+                  onActivate: () => {},
+                  variant: 'destructive',
+                },
+              ],
+            }}
+          />
+        ))}
+      </List>
+    </VStack>
+  ),
+};
+
 // =============================================================================
 // Filter Panel
 // =============================================================================

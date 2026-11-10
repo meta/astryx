@@ -11,7 +11,8 @@
  *   holds the pointer while the pointer is over it, and no window listener
  *   stays after the press. The context-menu claim takes only a press that
  *   fired `contextmenu`. A claim that cancels the tap cancels its touch's
- *   lift (`touchend`) after the release, and no other
+ *   lift (`touchend`) after the release, and no other. A claim ends when
+ *   another control takes the pointer
  * @position Unit test of packages/core/src/Layer/gestureCounter.ts
  */
 
@@ -355,6 +356,35 @@ describe('claimPress', () => {
     const afterClose = touchEnd();
     trigger.dispatchEvent(afterClose);
     expect(afterClose.defaultPrevented).toBe(false);
+    __resetClickGuardForTest();
+  });
+
+  it('ends when another control takes the pointer, and then neither takes it back nor cancels the tap', () => {
+    const {trigger, layer} = mountLayer();
+    const row = document.createElement('div');
+    document.body.append(row);
+    trigger.dispatchEvent(pointerEvent('pointerdown', 7));
+    claimPress(layer, {cancelsTap: true});
+    expect(captured).toEqual([7]);
+    row.dispatchEvent(pointerEvent('gotpointercapture', 7));
+    row.dispatchEvent(pointerEvent('pointermove', 7, {x: 20, y: 20}));
+    expect(captured).toEqual([7]);
+    row.dispatchEvent(pointerEvent('pointerup', 7, {x: 20, y: 20}));
+    const lift = touchEnd();
+    row.dispatchEvent(lift);
+    expect(lift.defaultPrevented).toBe(false);
+    __resetClickGuardForTest();
+  });
+
+  it('keeps the claim when the layer itself takes the pointer', () => {
+    const {trigger, layer} = mountLayer();
+    trigger.dispatchEvent(pointerEvent('pointerdown', 7));
+    claimPress(layer, {cancelsTap: true});
+    layer.dispatchEvent(pointerEvent('gotpointercapture', 7));
+    trigger.dispatchEvent(pointerEvent('pointerup', 7));
+    const lift = touchEnd();
+    trigger.dispatchEvent(lift);
+    expect(lift.defaultPrevented).toBe(true);
     __resetClickGuardForTest();
   });
 

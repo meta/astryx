@@ -245,6 +245,60 @@ for (const surface of SURFACES) {
   });
 }
 
+// A page control that takes the touch keeps it: the layer does not claim a
+// pan that a swipe row captured.
+test.describe('a swipe row under an open Popover', () => {
+  test.beforeEach(({browserName}) => {
+    test.skip(
+      browserName !== 'chromium',
+      'the row swipe is proven here through CDP touch in Chromium',
+    );
+  });
+
+  test('a row swiped open follows the finger and rests open', async ({
+    page,
+  }) => {
+    await openSurface(page, {
+      name: 'Popover over swipe rows',
+      story: 'core-popover--over-swipe-rows',
+      role: 'button',
+      trigger: 'Settings',
+    });
+    const driver = await touchDriver(page);
+    const label = page.getByText('Message 3', {exact: true});
+    const before = await label.boundingBox();
+    const layerBox = await page
+      .locator('[popover="auto"]:popover-open')
+      .first()
+      .boundingBox();
+    if (before == null || layerBox == null) {
+      throw new Error('the row or the layer has no rendered box');
+    }
+    const start = {
+      x: Math.round(before.x + 200),
+      y: Math.round(before.y + before.height / 2),
+    };
+    expect(
+      start.y > layerBox.y + layerBox.height,
+      'the swipe starts outside the layer',
+    ).toBe(true);
+    await driver.play(
+      drag(
+        start,
+        {x: start.x - 120, y: start.y},
+        {durationMs: 400, restMs: 120},
+      ),
+      {releaseUnread: true},
+    );
+    await page.waitForTimeout(800);
+    const after = await label.boundingBox();
+    expect(
+      before.x - (after?.x ?? before.x),
+      'the row rests open by at least half of a two-entry panel',
+    ).toBeGreaterThanOrEqual(60);
+  });
+});
+
 // An anchored menu owns what a pan outside it does: it closes as the pan
 // begins. DropdownMenu does not do that yet, and the guard leaves it out.
 test.describe('DropdownMenu', () => {
@@ -328,6 +382,31 @@ const OTHER_MENUS: ReadonlyArray<Surface> = [
 
 for (const menu of OTHER_MENUS) {
   test.describe(menu.name, () => {
+    test.beforeEach(({browserName}) => {
+      test.skip(
+        browserName !== 'chromium',
+        'the browser reads a short pan as a tap only in Chromium, through CDP touch',
+      );
+    });
+
+    test('a pan that the browser reads as a tap still closes it', async ({
+      page,
+    }) => {
+      const {driver, outside} = await openSurface(page, menu);
+      await pan(
+        driver,
+        outside,
+        {x: outside.x, y: outside.y - (PAN_PX + 2)},
+        48,
+      );
+      await expect
+        .poll(async () => isLayerOpen(page), {
+          message: 'the pan outside closes the menu',
+          timeout: 2000,
+        })
+        .toBe(false);
+    });
+
     test.fixme('a pan outside: closes as a pan outside begins (FR21 gap)', async ({
       page,
     }) => {

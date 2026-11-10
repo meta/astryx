@@ -123,8 +123,9 @@ export function isPressInFlight(): boolean {
  * pointer is outside the layer, the layer captures it, so a release there
  * lands on the layer. Over the layer the capture lets go, so hover works and a
  * release there is inside anyway. The claim ends at that press's release, or
- * when the layer closes; a later press dismisses as usual. A second claim of
- * the same press for the same layer does nothing.
+ * when the layer closes, or when another control takes the pointer; a later
+ * press dismisses as usual. A second claim of the same press for the same
+ * layer does nothing.
  *
  * `releaseTarget` is the control the press began on, which the caller keeps
  * as the popover's invoker. It holds the pointer while the pointer is over
@@ -237,6 +238,18 @@ export function claimPress(
       state.claimedPress = null;
     }
   };
+  // A control that takes the pointer during the press keeps it, for example
+  // a row that a swipe moves. The claim then ends, and it neither takes the
+  // pointer back nor cancels the tap.
+  const yieldToTaker = (event: PointerEvent) => {
+    if (
+      event.pointerId === pointerId &&
+      event.target !== layer &&
+      event.target !== releaseTarget
+    ) {
+      stop();
+    }
+  };
   const endClaim = (event: PointerEvent) => {
     if (event.pointerId === pointerId) {
       stop();
@@ -261,6 +274,7 @@ export function claimPress(
   layer.addEventListener('toggle', onToggle, true);
   unsubscribes.push(
     subscribeInput(view, 'pointermove', followPointer),
+    subscribeInput(view, 'gotpointercapture', yieldToTaker),
     subscribeInput(view, 'pointerup', endClaim),
     subscribeInput(view, 'pointercancel', endClaim),
     subscribeInput(view, 'scroll', invalidate),
