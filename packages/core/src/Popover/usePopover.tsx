@@ -171,6 +171,19 @@ export interface UsePopoverOptions {
   anchor?: PopoverAnchor;
 
   /**
+   * What the popover does while its anchor is out of view — scrolled out of
+   * the viewport or out of a scrolling panel, or removed.
+   *
+   * - `'hold'`: the popover keeps its place and size until the anchor
+   *   returns.
+   * - `'hide'`: the popover is hidden and takes no pointer input. It stays
+   *   open (no `onHide`) and shows again in place when the anchor returns.
+   *
+   * @default 'hold'
+   */
+  anchorOutOfView?: 'hold' | 'hide';
+
+  /**
    * Callback fired when popover is shown.
    * Wrap in useCallback for stable identity.
    */
@@ -464,6 +477,7 @@ function usePopoverImplementation(
 ): UsePopoverReturn {
   const {
     anchor,
+    anchorOutOfView = 'hold',
     onShow,
     onHide,
     onCloseStart,
@@ -513,6 +527,7 @@ function usePopoverImplementation(
     onShow: handleLayerShow,
     onHide,
     onCloseStart,
+    hidesWithAnchor: anchorOutOfView === 'hide',
   });
 
   // Focus trap for the popover content. Escape stays registered while light

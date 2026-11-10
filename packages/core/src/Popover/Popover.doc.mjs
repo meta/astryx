@@ -46,6 +46,13 @@ export const docs = {
             'The element the popover sits on when it is not the trigger: a ref to any element (a card, a table cell, a chart region) or a function returning one, read again when the page changes. The trigger keeps its toggle and ARIA; the anchor gets neither. With no trigger, the popover opens only through isOpen. While it resolves to nothing, an open popover shows no surface.',
         },
         {
+          name: 'anchorOutOfView',
+          type: "'hold' | 'hide'",
+          description:
+            "What the popover does while its anchor is out of view (scrolled out of the viewport or a scrolling panel, or removed): 'hold' keeps its place until the anchor returns; 'hide' hides it, without closing it, until the anchor returns.",
+          default: "'hold'",
+        },
+        {
           name: 'content',
           type: 'ReactNode',
           description: 'Content to display inside the popover.',
@@ -320,6 +327,13 @@ export const docsZh = {
           type: 'React.RefObject<Element | null> | (() => Element | null)',
           description:
             '弹出框所依附的元素（当它不是触发器时）：任意元素的 ref，或返回元素的函数，页面变化时会重新读取。触发器保留其切换行为和 ARIA；锚点两者都不获得。没有触发器时，弹出框只能通过 isOpen 打开。解析不到元素时，打开的弹出框不显示表面。',
+        },
+        {
+          name: 'anchorOutOfView',
+          type: "'hold' | 'hide'",
+          description:
+            "锚点不在视图中时（滚出视口或滚动面板，或被移除）弹出框的行为：'hold' 保持位置直到锚点返回；'hide' 将其隐藏（不关闭），直到锚点返回。",
+          default: "'hold'",
         },
         {
           name: 'content',
@@ -601,6 +615,8 @@ export const docsDense = {
         anchorRef: 'External ref for popover anchor in sibling mode.',
         anchor:
           'Element the popover sits on when not the trigger: ref or function returning one; no trigger ARIA on it; trigger-less needs isOpen.',
+        anchorOutOfView:
+          "While anchor out of view: 'hold' (default) keeps place; 'hide' hides without closing until it returns.",
         content: 'Content displayed inside popover.',
         placement:
           "Position relative to trigger. Logical: start/end resolve against the popover's inherited direction (RTL mirrors).",
