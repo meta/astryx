@@ -634,6 +634,12 @@ they are separately named.
   full-suite events do. Selection fails closed: when the dependency graph
   cannot be computed, when a changed source path maps to no component, or on
   any fail-closed condition of FR3–FR4, the lane MUST run the full suite.
+  For the interaction lanes, a change to a component folder's unit tests
+  (`*.test.*`), docs (`*.doc.mjs`, `*.md`) or accessibility specs touches no
+  component, unless an interaction spec or proof page imports that file,
+  directly or transitively, in the import graph at the pull request's head;
+  such an import selects as a touched component, and a graph that cannot be
+  computed runs the full suite. FR13's theme sources stay shared.
   Selection changes no required context (FR7) and none of FR16's limits. FR26
   keeps the Lab-only rule, and the WebKit lane keeps its own scope (FR28). An
   escape is a regression in an interaction spec that a selective run did not
@@ -1315,6 +1321,8 @@ time and time to green on specs the change cannot reach, while shared code,
 release checks and a nightly run of `main` keep the full suite.
 
 Rejected: running the full interaction suite on every pull request.
+
+Amended by the same delegated authority (chief ruling 11/09 22:24, refined 11/09 23:19): a component folder's unit tests, docs and accessibility specs select nothing for the interaction lanes unless an interaction spec or proof page imports them.
 
 ## Open questions
 

@@ -355,7 +355,13 @@ describe('the interaction leg count job in ci.yml', () => {
   it('runs beside the Storybook build, behind the gate the lanes share', () => {
     expect(counter.needs).toEqual(['room', 'admission', 'heavy-ci']);
     expect(counter.if).toBe(ci.jobs['pr-interaction'].if);
-    expect(counter.if).toBe(ci.jobs['pr-interaction-webkit'].if);
+    // The WebKit proofs do not run for main's nightly full run.
+    expect(counter.if).toBe(
+      ci.jobs['pr-interaction-webkit'].if.replace(
+        "github.event_name != 'workflow_dispatch' && always()",
+        "(github.event_name != 'workflow_dispatch' || inputs.operation == 'interaction-full' && github.ref == 'refs/heads/main') && always()",
+      ),
+    );
     expect(counter.env).toEqual(ci.jobs['pr-interaction-webkit'].env);
     expect(counter.outputs).toEqual({
       chromium: '${{ steps.matrix.outputs.chromium }}',

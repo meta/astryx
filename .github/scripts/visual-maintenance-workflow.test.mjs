@@ -92,6 +92,7 @@ describe('CI baseline maintenance routing', () => {
     expect(workflow.on.workflow_dispatch.inputs.operation.options).toEqual([
       'capture',
       'release-check',
+      'interaction-full',
     ]);
     expect(visual.name).toBe('Stable visual regression');
     expect(visual['runs-on']).toContain(

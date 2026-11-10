@@ -69,94 +69,6 @@
       "status": "open",
       "group": "F8 Public registries"
     },
-    "packages/core/src/Layer/gestureCounter.ts:claimedPress": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/gestureCounter.ts:clickedGesture": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/gestureCounter.ts:contextMenuGesture": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/gestureCounter.ts:gesture": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/gestureCounter.ts:isListening": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/gestureCounter.ts:pressPointerId": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/gestureCounter.ts:unsubscribePress": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/layerExitCopy.ts:copies": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/layerStack.ts:composingDocuments": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/layerStack.ts:entries": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/layerStack.ts:layerCountByDocument": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/layerStack.ts:nextSeq": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/layerStack.ts:seqByToken": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/layerSurfacePress.ts:surfaces": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/modalOutlet.ts:listeners": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/modalOutlet.ts:outletGroups": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/modalOutlet.ts:outlets": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/outsidePress.ts:outsideDismissals": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/popoverOperations.ts:browserHidesByDocument": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/popoverOperations.ts:browserHidesInFlight": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/popoverOperations.ts:ownOperationsByDocument": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/popoverOperations.ts:settledCallbacksByDocument": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
     "packages/core/src/List/listLayoutUpdates.ts:keptStyles": {
       "status": "open",
       "group": "triage"
@@ -333,7 +245,7 @@
       "status": "open",
       "group": "triage"
     },
-    "packages/core/src/Table/plugins/virtualization/useTableWindow.ts:textContext": {
+    "packages/core/src/virtualization/measure.ts:textContext": {
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
     },
@@ -417,18 +329,6 @@
       "status": "allowed",
       "reason": "Deduplicates an idempotent style insertion; a copy can at most insert the same rules again."
     },
-    "packages/core/src/hooks/modalAnnounce.ts:deferredByScope": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/modalAnnounce.ts:held": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/modalAnnounce.ts:presented": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
     "packages/core/src/hooks/scrollGeometrySubscriptions.ts:listeners": {
       "status": "allowed",
       "reason": "Each copy observes for its own subscribers; a second observer changes no result."
@@ -436,34 +336,6 @@
     "packages/core/src/hooks/scrollOwnerRegistry.ts:owners": {
       "status": "open",
       "group": "triage"
-    },
-    "packages/core/src/hooks/useAnnounce.ts:clearTimers": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/useAnnounce.ts:lastJoined": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/useAnnounce.ts:modalRoute": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/useAnnounce.ts:pendingByRegion": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/useAnnounce.ts:pendingFrames": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/useAnnounce.ts:pendingMessages": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/useAnnounce.ts:regions": {
-      "status": "open",
-      "group": "F5 Focus and announce"
     },
     "packages/core/src/hooks/useEntryAnimation.ts:initialPaintComplete": {
       "status": "open",
@@ -824,10 +696,6 @@
     "packages/core/src/utils/plainDate.ts:dayNumberFormats": {
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
-    },
-    "packages/core/src/utils/pressClaim.ts:watchers": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
     },
     "packages/core/src/utils/pressFeedback.ts:boxHold": {
       "status": "open",
