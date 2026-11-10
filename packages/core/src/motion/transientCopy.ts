@@ -9,8 +9,9 @@
  * @position Motion foundation, internal to core; the copy mechanism the
  *   in-place swap uses (`spec:AST-105` FR8,
  *   `architecture:component-style-authoring` INV7). It also makes the
- *   layer's exit copy. motion/animatedLayout.ts and Layer/layerExitCopy.ts
- *   import it.
+ *   layer's exit copy and the Reduce Motion cross-fade's copy.
+ *   motion/animatedLayout.ts, Layer/layerExitCopy.ts and
+ *   motion/reducedMotionCrossFade.ts import it.
  *
  * A copy takes no part in the page: it is inert and hidden from assistive
  * technology, carries no ids or test ids, joins no form or radio group (a
@@ -32,6 +33,7 @@
  * SYNC: When modified, update:
  * - /packages/core/src/motion/animatedLayout.ts
  * - /packages/core/src/Layer/layerExitCopy.ts
+ * - /packages/core/src/motion/reducedMotionCrossFade.ts
  */
 
 import {

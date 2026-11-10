@@ -147,7 +147,10 @@ not evidence of conformance or violation.
   handoff between sheets, such as the cross-fade
   `design:reduced-motion` DR2 requires; AppShell's old content wrap during a
   side nav collapse or expand (`component:AppShell` FR17); the SideNav rail's
-  old state during a collapse or expand (`component:SideNav` FR6); or one moving preview while a
+  old state during a collapse or expand (`component:SideNav` FR6); the old
+  place of content that a release moves under Reduce Motion, fading out as the
+  content fades in at its new place, such as RefreshControl's list
+  (`design:reduced-motion` DR2); or one moving preview while a
   reorderable item is dragged (`design:ordered-collection-reordering`); it is
   made by one Core mechanism for its kind, rather than by each component, and is removed within 1
   second of the transition ending. Until that shared mechanism exists, a
