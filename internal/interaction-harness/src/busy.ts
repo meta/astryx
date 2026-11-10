@@ -120,10 +120,12 @@ export async function trackControl(
  * every frame. Track it with `trackControl(page, frames, {ahead: true})`, and
  * keep the marker out of its strip too (the top `2 * CONTROL_SIDE + 4` px).
  *
- * A WebKit busy proof dates its frames on the controls' clock. Without the
- * control ahead, a frame stamped late near the first control's turn keeps its
- * lateness. A proof that judges every frame near a turn starts the one ahead
- * too, and passes its frames to `busyWindowProof` as `ahead`.
+ * A busy proof dates a cast's frames on the controls' clock, in either
+ * engine, when the frames carry their engine (`trackMarker` keeps it).
+ * Without the control ahead, a frame stamped late near the first control's
+ * turn keeps its lateness. A proof that judges every frame near a turn
+ * starts the one ahead too, and passes its frames to `busyWindowProof` as
+ * `ahead`.
  */
 export async function startBusyControl(
   page: Page,
@@ -1434,12 +1436,12 @@ export interface BusyProof extends FrameStats {
   readonly window: BusyWindow;
   /**
    * The part of the window judged: inside the margins, up to `settledWithin`,
-   * and from `onScreenFromMs` when that is set. On a WebKit cast dated on the
+   * and from `onScreenFromMs` when that is set. On a cast dated on the
    * controls' clock, it runs from the cast's stamp of the first frame judged
    * to that of the last. So a caller selects the judged part by its stamps.
-   * Frames the display-rate keep left out fall inside it too. Only this part
-   * moves back to the stamps. The summary's times, its stall and its control
-   * read stay on the controls' clock.
+   * In WebKit, frames the display-rate keep left out fall inside it too.
+   * Only this part moves back to the stamps. The summary's times, its stall
+   * and its control read stay on the controls' clock.
    */
   readonly judged: {readonly from: number; readonly to: number};
   /**
@@ -1865,8 +1867,14 @@ function motionStepPx(values: readonly number[]): number {
  * alike. A frame with no reading keeps its stamp's distance from the nearest
  * frame whose stamp agrees with its reading. The dated frames keep the cast's
  * order. Without the control `ahead`, a late frame near the first control's
- * turn keeps its lateness. Chromium casts and casts with no control are
- * judged on their stamps.
+ * turn keeps its lateness. A Chromium cast with a control is dated the same
+ * way. Its cast stamps each frame as it arrives. Under load, the stamps
+ * trail the frames unevenly, so the frame interval read from them is wrong.
+ * Two frames a whole frame apart can carry stamps 2 ms apart. Without the
+ * control `ahead`, such a pair near the first control's turn keeps its
+ * stamps. Only frames that carry their engine, as `trackMarker` reads them,
+ * are dated. Frames built without it, and a cast with no control, are judged
+ * on their stamps.
  *
  * A WebKit proof keeps one dated frame per display interval, the earlier
  * one. A frame with no reading always stays. The proof judges motion on every
@@ -1939,10 +1947,12 @@ export function busyWindowProof(
 export const BUSY_PROOF_LOOKAROUND_MS = 250;
 
 /**
- * The proof `busyWindowProof` returns, and the starvation it throws. A WebKit
- * cast with a control is judged on the controls' clock
- * (`datedOnControlClock`); any other cast on its stamps. WebKit stamps the
- * frame after a delivery gap about 60 ms late, carrying one frame of motion.
+ * The proof `busyWindowProof` returns, and the starvation it throws. A cast
+ * with a control, its frames tagged with their engine, is judged on the
+ * controls' clock (`datedOnControlClock`); any other cast on its stamps.
+ * WebKit stamps the frame after a delivery gap about 60 ms late, carrying one
+ * frame of motion. Chromium stamps each frame as it arrives, unevenly behind
+ * its presentation under load.
  */
 function readBusyWindow(
   tracked: readonly TrackedFrame[],
@@ -1954,9 +1964,8 @@ function readBusyWindow(
   }: NonNullable<Parameters<typeof judgeBusyWindow>[2]> & {
     /**
      * The control started `ahead` (`startBusyControl`), tracked from the same
-     * screencast (`trackControl` with `ahead`). It dates the WebKit frames
-     * that fall near the first control's turns, where that control gives no
-     * time.
+     * screencast (`trackControl` with `ahead`). It dates the frames that
+     * fall near the first control's turns, where that control gives no time.
      */
     ahead?: readonly TrackedFrame[];
     /**
@@ -2026,7 +2035,7 @@ function readBusyWindow(
     (predicts ? (window as BlockedWindow).controlStarts : undefined);
   const dated =
     control != null &&
-    (predicts || control.every(frame => frame.engine === 'webkit'))
+    (predicts || control.every(frame => frame.engine != null))
       ? datedOnControlClock(tracked, control, ahead, starts)
       : null;
   if (dated == null) {
