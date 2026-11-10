@@ -31,6 +31,10 @@ content, documents, native controls) through one consistent API. The app
 itself holds no hand-written native code, builds in a generated native
 project, and installs only the native capabilities it uses.
 
+Two tools work with these packages: the Astryx app, a mobile app for iOS and
+Android for previewing projects and browsing the components, and Astryx Stage,
+the development tool for macOS, Linux, and Windows (FR12).
+
 These packages are the React Native candidate of `spec:AST-082/FR12` for the
 `ios` and `android` platforms. They follow `spec:AST-082`: dependencies under
 FR13, the canary channel under FR15, the one-way read of core under FR16, and
@@ -48,8 +52,7 @@ shared icon names under FR17.
   FR9. Each capability documents its own methods, options, and reasons.
 - The internals of the development runtime in FR12, beyond what an app and the
   CLI depend on.
-- Other packages, such as the native host an app uses to run projects inside
-  it; they are outside the public set this record defines.
+- The Astryx app's design, features, and distribution.
 - Equivalent internal implementations remain valid when they satisfy this
   contract.
 
@@ -188,9 +191,9 @@ shared icon names under FR17.
   not run in Expo Go, and no package requires an Expo runtime library
   (`spec:AST-082/FR13`). Expo's API shapes do not limit the platform's API.
 - **FR12 — Astryx Stage is the contract developers build against.** Astryx
-  Stage is a development runtime, distributed as prebuilt binaries, that runs
-  an app built with these packages headless or in a window for previews,
-  scripted checks, and agent loops.
+  Stage is the development tool for macOS, Linux, and Windows that runs an app
+  built with these packages headless or in a window for previews, scripted
+  checks, and agent loops.
   - Every public platform API has a Stage implementation whose behavior
     matches iOS and Android, or a documented gap.
   - Each capability's documentation states its Stage behavior as the
