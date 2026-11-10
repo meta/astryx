@@ -75,6 +75,8 @@ shared icon names under FR17.
     images), `media` (audio and video playback), `web` (web view and sign-in
     session), `pdf` (document view), and `controls` (native button, text
     field, date pickers, and the swipe-row, drag-snap, and zoom-pager views).
+    From 0.2, the core also provides safe-area insets, and a `navigation`
+    capability provides the native stack and tab hosts (DEC-9).
   - `@astryxdesign/react-native-cli`: the React Native experiment CLI, which
     installs the `astryx-rn` command (FR13).
 - **FR2 — Dependencies point one way.**
@@ -95,6 +97,11 @@ shared icon names under FR17.
     which the platform uses at the version the repository's release gives
     every package (FR14). `@astryxdesign/core` and `@astryxdesign/cli`
     never depend on them (`spec:AST-082/FR14`).
+  - No package of the set depends on a third-party native navigation package
+    (react-native-screens, react-native-safe-area-context, or React
+    Navigation's native packages). Routing uses React Navigation's
+    JavaScript core only, which drives the `navigation` capability's hosts
+    (DEC-9).
   - React Native command-line tools are development dependencies. An app's
     runtime never imports them, and `@astryxdesign/cli` never depends on them.
 - **FR3 — An app opts in to each capability.** Each optional capability
@@ -433,6 +440,20 @@ keeps Astryx Stage matched to them. A missing or divergent path is a defect.
 The library and the platform change together, so they share
 one version and release together. They stay on the canary channel until a
 platform is supported under `spec:AST-082/FR15`.
+
+### DEC-9 — Astryx owns native navigation and insets
+
+**Reference:** `spec:AST-112/DEC-9`
+**Decider:** imdreamrunner, 2026-11-09
+
+Gestures, bars, and safe areas meet in the native stack, so the platform owns
+it: a `navigation` capability holds the native stack and tab hosts, the core
+holds safe-area insets, and React Navigation's JavaScript core only routes.
+Apps and Preview projects then run no third-party native code for navigation.
+
+Rejected: building on react-native-screens and react-native-safe-area-context,
+because their gesture handling couples to the platform's and every host app
+would serve their native code to projects.
 
 ## Open questions
 
