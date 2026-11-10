@@ -17,6 +17,7 @@ import * as inputHold from '../Layer/inputHold';
 import {
   createLiftFromTrigger,
   type LiftFromTriggerOptions,
+  type LiftFromTriggerResult,
   liftCopy,
 } from './liftFromTrigger';
 
@@ -225,6 +226,41 @@ describe('lift', () => {
     expect(lift.isLifted()).toBe(true);
     // Grown about its center by 26 px on its larger side.
     expect(result?.lifted.width).toBeCloseTo(361, 5);
+    lift.dispose();
+  });
+
+  it('calls onLayerShown once the layer shows and before the source lifts into it, with where the source lands', () => {
+    const {source} = renderList();
+    const lift = createLiftFromTrigger();
+    const seen: {
+      layerOpen: boolean;
+      sourceLifted: boolean;
+      placeholder: boolean;
+      lifted: LiftFromTriggerResult;
+    }[] = [];
+    const result = lift.lift(
+      source,
+      options({
+        onLayerShown: lifted => {
+          seen.push({
+            layerOpen:
+              document
+                .querySelector('[data-test-lift]')
+                ?.matches(':popover-open') ?? false,
+            sourceLifted: source.matches(':popover-open'),
+            placeholder:
+              document.querySelector('[data-test-lift-placeholder]') != null,
+            lifted,
+          });
+        },
+      }),
+    );
+    expect(seen).toHaveLength(1);
+    expect(seen[0].layerOpen).toBe(true);
+    expect(seen[0].sourceLifted).toBe(false);
+    expect(seen[0].placeholder).toBe(false);
+    expect(seen[0].lifted).toEqual(result);
+    expect(source.matches(':popover-open')).toBe(true);
     lift.dispose();
   });
 

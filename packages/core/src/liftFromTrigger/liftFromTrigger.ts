@@ -81,6 +81,12 @@ export interface LiftFromTriggerOptions {
    * release then cannot restyle the page before the lift reads it.
    */
   readonly release?: () => void;
+  /**
+   * Called once the layer shows and before the source lifts into it, with
+   * where the source lands. A surface shown here sits above the tint, and its
+   * own reads find the page barely changed. The source lifts above it.
+   */
+  readonly onLayerShown?: (lifted: LiftFromTriggerResult) => void;
   /** The tint, a CSS color resolved where the source is. */
   readonly tint?: string;
   /** The inset an app declares for a bar over an edge (LayerProvider). */
@@ -730,6 +736,17 @@ export function createLiftFromTrigger(): LiftFromTrigger {
       pointerEvents: 'none',
     });
     layer.append(anchor);
+    // The layer first: the source shows above its tint. The popover makes
+    // its `::backdrop` new, so the tint starts clear in the same task.
+    const tints = createMotionEngine(layer, {
+      pseudoElement: '::backdrop',
+      base: {opacity: 1},
+    });
+    layer.showPopover();
+    tints.set({opacity: 0});
+    // A surface shown now reads the page before the source's writes, so its
+    // reads stay cheap.
+    options.onLayerShown?.({source: sourceRect, lifted, viewport, anchor});
     let placeholder: HTMLElement | null = null;
     if (placeholderValues != null) {
       placeholder = doc.createElement(placeholderTag(source));
@@ -779,14 +796,6 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     // stays laid out at its own size, so its content scales as UIKit's
     // snapshot does. Under Reduce Motion it lands at once and fades in.
     const morph = createRectMorph(source);
-    // The layer first: the source shows above its tint. The popover makes
-    // its `::backdrop` new, so the tint starts clear in the same task.
-    const tints = createMotionEngine(layer, {
-      pseudoElement: '::backdrop',
-      base: {opacity: 1},
-    });
-    layer.showPopover();
-    tints.set({opacity: 0});
     source.showPopover();
     const growing = morph.present(
       lerpPath(from, lifted, {box: sourceRect, scale: 'uniform'}),
