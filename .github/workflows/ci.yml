@@ -3553,7 +3553,7 @@ jobs:
         if: github.event_name == 'pull_request' && steps.visual-scope.outputs.has_stable_visual == 'true'
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           path: .head-visual-baseline
           sparse-checkout: .github/visual-baseline
           persist-credentials: false
