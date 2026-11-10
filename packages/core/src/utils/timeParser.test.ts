@@ -81,6 +81,11 @@ describe('createISOTimeString', () => {
     expect(createISOTimeString('14:30.5')).toBeNull();
   });
 
+  it('answers null for a value that is not a string', () => {
+    expect(createISOTimeString(undefined as unknown as string)).toBeNull();
+    expect(createISOTimeString(null as unknown as string)).toBeNull();
+  });
+
   it('rejects an out-of-range time', () => {
     expect(createISOTimeString('24:00')).toBeNull();
     expect(createISOTimeString('14:60')).toBeNull();

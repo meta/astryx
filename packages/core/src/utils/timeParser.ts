@@ -35,6 +35,9 @@ export interface ParsedTime {
  * gives) are accepted; the fraction is dropped.
  */
 export function createISOTimeString(value: string): ISOTimeString | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
   const trimmed = value.trim();
   if (!/^\d{1,2}:\d{1,2}(?::\d{1,2}(?:\.\d+)?)?$/.test(trimmed)) {
     return null;
