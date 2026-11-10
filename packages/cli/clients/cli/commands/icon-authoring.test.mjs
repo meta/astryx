@@ -1537,7 +1537,7 @@ describe('experimental icon new-set: aliases, providers, exclude, peers', () => 
     );
     expect(again.code).toBe(0);
     expect(again.stdout).toContain('Icon set refreshed');
-    expect(again.stdout).not.toContain('New icon set added');
+    expect(again.stdout).not.toContain('Icon set created');
     data = dataOf('outline');
     expect(
       data.icons.some((/** @type {{id: string}} */ each) => each.id === 'meta'),
@@ -1747,7 +1747,9 @@ describe('blind run 4 fixes', () => {
     expect(close).toMatchObject({builtIn: true});
     expect(close.words).toContain('x');
     const text = await runCli(['experimental', 'icon', '--definitions'], pkg);
-    expect(text.stdout).toMatch(/^- close \[built-in\]: /mu);
+    expect(text.stdout).toMatch(
+      /^- close \[built-in(?:, \d+ templates?)?(?:, (?:not )?mapped)?\]: /mu,
+    );
   });
 
   it('suggests an icon by another name its library gives it, and new-set names the typecheck script and a description note', async () => {
@@ -1863,7 +1865,9 @@ describe('blind run 5 fixes', () => {
       './art/check-double.js is not in package.json "files", so it would not be published; set "files" to `["index.js","icon-sets","astryx.integration.mjs","art"]`.',
     );
     const text = await runCli(['experimental', 'icon', '--definitions'], pkg);
-    expect(text.stdout).toMatch(/^- activity \[optional\]: /mu);
+    expect(text.stdout).toMatch(
+      /^- activity \[optional(?:, \d+ templates?)?(?:, (?:not )?mapped)?\]: /mu,
+    );
   });
 });
 
@@ -2107,7 +2111,8 @@ describe('a refresh that first records the source', () => {
       '@acme/glyph-library',
     ]);
     expect(refreshed.code).toBe(0);
-    expect(refreshed.body.data.refreshed).toBe(true);
+    // The set had no icons, so this wrap creates them: no `refreshed`.
+    expect(refreshed.body.data.refreshed).toBeUndefined();
     expect(refreshed.body.data.files).toEqual(
       expect.arrayContaining([
         'icon-sets/glyphs/glyphs.doc.mjs',

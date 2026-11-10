@@ -476,18 +476,27 @@ export const ICON_USE_ORDER_COMMAND =
 /**
  * Installed sets the project's list leaves out: the problem, and the fix that
  * adds them as backups after the list's own. Doctor and `experimental icon
- * use` print the same words.
- * @param {number} installed how many sets are installed
- * @param {string} main the main set as the list writes it
- * @param {string[]} backups the list's backups, in order
- * @param {string[]} unlisted the installed sets the list leaves out
+ * use` print the same words. Every set is named the same way: by its name
+ * when no other installed set has that name, else as `<package>/<set>`.
+ * @param {Array<{package: string, name: string}>} installed every installed set
+ * @param {{package: string, name: string}} main the list's main set
+ * @param {Array<{package: string, name: string}>} backups the list's
+ *   backups, in order
+ * @param {Array<{package: string, name: string}>} unlisted the installed
+ *   sets the list leaves out
  * @returns {{problem: string, command: string, fix: string}}
  */
 export function unlistedIconSets(installed, main, backups, unlisted) {
-  const them = unlisted.length === 1 ? 'it' : 'them';
-  const command = `astryx experimental icon use ${main}${[...backups, ...unlisted].map(each => ` --backup ${each}`).join('')}`;
+  /** @param {{package: string, name: string}} set */
+  const named = set =>
+    installed.filter(each => each.name === set.name).length > 1
+      ? iconSetKey(set)
+      : set.name;
+  const left = unlisted.map(named);
+  const them = left.length === 1 ? 'it' : 'them';
+  const command = `astryx experimental icon use ${named(main)}${[...backups.map(named), ...left].map(each => ` --backup ${each}`).join('')}`;
   return {
-    problem: `${installed} icon sets are installed and ${unlisted.join(', ')} ${unlisted.length === 1 ? 'is' : 'are'} not in your list`,
+    problem: `${installed.length} icon sets are installed and ${left.join(', ')} ${left.length === 1 ? 'is' : 'are'} not in your list`,
     command,
     fix: `Add ${them} as backup with \`${command}\`, or uninstall ${them}.`,
   };
