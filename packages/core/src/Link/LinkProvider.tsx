@@ -49,7 +49,7 @@ export interface LinkProviderProps {
    * The subtree. Astryx links in it that render through `useLinkComponent`,
    * such as Link and Button with `href`, use `component`, unless a link sets
    * its own `as` or a nearer LinkProvider sets another component. A disabled
-   * link does not use it.
+   * Link does not use it.
    */
   children: ReactNode;
 }
