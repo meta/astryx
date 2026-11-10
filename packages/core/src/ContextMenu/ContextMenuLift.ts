@@ -81,8 +81,8 @@ function fillsItsBox(element: Element): boolean {
 
 /**
  * The union of the boxes the trigger shows, in client px. Empty line space
- * below an inline box is not part of it, and a box of a pixel or less (the
- * cursor anchor) does not count.
+ * below an inline box is not part of it. A box of a pixel or less, such as
+ * the cursor anchor, does not count.
  */
 function shownBox(trigger: HTMLElement): DOMRect | null {
   const range = trigger.ownerDocument.createRange();
@@ -111,9 +111,9 @@ function shownBox(trigger: HTMLElement): DOMRect | null {
 const SURFACE_SEARCH_LIMIT = 64;
 
 /**
- * Whether the trigger shows a surface of its own: a near-opaque fill or a
- * picture that covers all it shows, such as a card or a thumbnail. An icon
- * beside a row's text covers part of it, so the row has none.
+ * Whether the trigger shows a surface of its own. That is a near-opaque fill
+ * or a picture that covers all it shows, such as a card or a thumbnail. An
+ * icon beside a row's text covers part of it, so the row has none.
  */
 function showsOwnSurface(trigger: HTMLElement): boolean {
   // Without line boxes to read, the trigger's own box stands in.
