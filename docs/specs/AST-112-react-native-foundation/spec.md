@@ -88,9 +88,7 @@ shared icon names under FR17.
     an import between capabilities.
   - The library reaches an optional capability only through that loader,
     which answers the capability's entry when the app opted it in (FR3) and
-    `null` otherwise. On a binary that records no list of linked
-    capabilities, it answers the entry, and the entry's probes and calls
-    answer `no-module` where its module is missing.
+    `null` otherwise. On a binary that records no list of linked capabilities, it answers the entry; the entry's probes answer false and its calls resolve `no-module` where its module is missing.
   - None of these packages depends on another Astryx package at run time,
     other than these dependencies, the reads of `@astryxdesign/core` that
     `spec:AST-082/FR16` allows, and `@astryxdesign/native` (FR10, OQ2, OQ3),
