@@ -1104,6 +1104,28 @@ test.describe('frame evidence', () => {
     await busyFixture(page);
     const box = page.locator('#box');
     await markElement(box, {mode: 'outline'});
+    const pageNow = () =>
+      page.evaluate(() => performance.timeOrigin + performance.now());
+    // Nothing moves yet, so after its first frame the cast sends none, and
+    // the wait fails at its cap as the cast's starvation. The wait starts
+    // once that frame has arrived. A loaded runner delivers frames late, so
+    // a quiet spell cannot show that no frame is still on its way.
+    const quiet = await startScreencast(page);
+    await expect
+      .poll(() => quiet.frameCount(), {
+        message: 'the cast sends its first frame',
+      })
+      .toBeGreaterThan(0);
+    const still = await waitForCastFrame(quiet, {
+      after: await pageNow(),
+      during: 'the screen held still',
+      timeoutMs: 300,
+    }).catch((error: unknown) => error);
+    await quiet.stop();
+    expect(still).toBeInstanceOf(FrameStarvationError);
+    expect(String(still)).toMatch(
+      /waitForCastFrame: the page drew 0 frames while the screen held still \(\d+ ms\).*: the screen did not change after \d+\.\d, or the page was starved of frames/,
+    );
     const cast = await startScreencast(page);
     await box.evaluate(el =>
       el.animate(
@@ -1111,34 +1133,10 @@ test.describe('frame evidence', () => {
         {duration: 500},
       ),
     );
-    const pageNow = () =>
-      page.evaluate(() => performance.timeOrigin + performance.now());
     const after = await pageNow();
     const at = await waitForCastFrame(cast, {after, during: 'the box moved'});
     expect(at).toBeGreaterThan(after);
-    // Once the box rests, nothing on screen changes, so the cast sends no
-    // frame, and the wait fails at its cap as the cast's starvation. The
-    // frame that shows the box at rest can come after the animation ends. The
-    // screen is still once the cast has sent nothing for 100 ms.
-    await box.evaluate(el =>
-      Promise.all(el.getAnimations().map(a => a.finished)),
-    );
-    await expect
-      .poll(async () => (await pageNow()) - (cast.lastFrameAt() ?? 0), {
-        message: 'the cast goes quiet once the box rests',
-        timeout: 2_000,
-      })
-      .toBeGreaterThan(100);
-    const still = await waitForCastFrame(cast, {
-      after: await pageNow(),
-      during: 'the screen held still',
-      timeoutMs: 300,
-    }).catch((error: unknown) => error);
-    expect(still).toBeInstanceOf(FrameStarvationError);
-    expect(String(still)).toMatch(
-      /waitForCastFrame: the page drew 0 frames while the screen held still \(\d+ ms\).*: the screen did not change after \d+\.\d, or the page was starved of frames/,
-    );
-    // stop() stamps the frame the first wait read with the same time.
+    // stop() stamps the frame the wait read with the same time.
     const frames = await cast.stop();
     expect(frames.some(f => f.t === at)).toBe(true);
   });
@@ -4173,6 +4171,11 @@ test.describe('pseudo-element animations', () => {
   }) => {
     await fixture(page);
     const box = page.locator('#box');
+    // Armed before the 300 ms run starts. A loaded runner can deliver a hold
+    // sent after it once the run has ended.
+    const hold = await armHold(page, box, {
+      judges: {target: box, property: 'opacity', pseudoElement: '::before'},
+    });
     await box.evaluate((el, veil) => {
       const style = document.createElement('style');
       style.textContent = veil;
@@ -4185,9 +4188,7 @@ test.describe('pseudo-element animations', () => {
         {duration: 300, easing: 'linear', pseudoElement: '::before'},
       );
     }, VEIL_STYLE);
-    await holdAnimations(page, box, {
-      judges: {target: box, property: 'opacity', pseudoElement: '::before'},
-    });
+    await hold.held();
     const samples = await sampleCurve(box, [0, 75, 150, 225, 300], {
       pseudoElement: '::before',
     });
@@ -4439,13 +4440,21 @@ test.describe('holding', () => {
   }) => {
     await fixture(page);
     const {box, thumb} = await pressAndTravelFixture(page);
-    await startPressThenTravel(page);
+    await box.evaluate(el =>
+      el.animate([{opacity: 1}, {opacity: 0.6}], {duration: 2_000}),
+    );
+    // The travel starts only after the hold has reached the page. A loaded
+    // runner can deliver a hold sent from the test after any timer the page
+    // set, and then the hold would take the travel.
     await expect(
       holdAnimations(page, box, {
         judges: {target: thumb, property: 'translate'},
       }),
     ).rejects.toThrow(
       /holdAnimations: the hold took no animation of the judged motion \(translate on .*#thumb.*\)\. The judged motion did not run when the hold reached the page .*; it took: div#box opacity/,
+    );
+    await thumb.evaluate(el =>
+      el.animate([{translate: '0px'}, {translate: '20px'}], {duration: 2_000}),
     );
     // The travel was never held: a film of this hold would show the press.
     await expect
@@ -6119,12 +6128,15 @@ test.describe('animation state', () => {
     // A run of the animation the page's frames see, recorded and finished:
     // a later run of it on the same element is a new run.
     const first = await watchAnimations(box);
-    await box.evaluate(el => el.classList.add('blink-long'));
-    expect((await first.started()).map(a => a.name)).toEqual(['blink']);
+    // This call keeps the run in the task that starts it. A loaded runner
+    // can deliver a later call after the 300 ms run has ended and left the
+    // list.
     await box.evaluate(el => {
+      el.classList.add('blink-long');
       (window as unknown as {__first: Animation}).__first =
         el.getAnimations()[0];
     });
+    expect((await first.started()).map(a => a.name)).toEqual(['blink']);
     await waitForRest(box);
     // The same run replayed with play(): still listed, so its start event is
     // never read as one that started and finished between two frames. (The
