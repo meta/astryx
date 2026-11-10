@@ -675,9 +675,12 @@ Record what the page did in a listener of its own, or let the script rest
 before the lift. A runner too loaded to dispatch in time stretches a
 gesture the same way, and the play fails with `TouchPacingError`. When the
 page also drew no frame for longer than `FRAME_STARVATION_MS` across that
-gap, and no page work held the event, it fails with `TouchStarvationError`:
-the runner starved the page, so judge the proof from a run with CI's CPU
-limits. A play whose
+gap, and page work explains under half of its delay, it fails with
+`TouchStarvationError`: the runner starved the page, so judge the proof from a
+run with CI's CPU limits. When the page's listeners or a wait for the main
+thread explain at least half of the late gap's delay but not all of it, the
+larger part decides: the error keeps the page's cause and names the rest as a
+stall. A play whose
 proof reads no release from the lift, such as a pinch's end, passes
 `releaseUnread`.
 

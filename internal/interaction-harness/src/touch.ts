@@ -137,8 +137,9 @@ export interface PlayOptions {
    * throws when the page's release strays further than that share. The error
    * is `TouchLiftStallError` when the play's own `onEvent` held the lift back.
    * It is `TouchPageStallError` when the page's own touch and pointer
-   * listeners held an event back. It is `TouchStarvationError` when the page
-   * drew no frame across the late gap and no page work held the event, else
+   * listeners held an event back, or most of the late gap's delay. It is
+   * `TouchStarvationError` when the page drew no frame across the late gap
+   * and page work explains under half of its delay. Else it is
    * `TouchPacingError` (see `touchPacingFault`). A `'spacing'` play also
    * throws when the page received fewer touch events than it sent; any other
    * play is then not judged.
@@ -408,11 +409,20 @@ export interface TouchPacingFault {
   readonly scriptedGapsMs: readonly number[];
   /**
    * The widest of those gaps when the page's own touch and pointer listeners held its
-   * event back (they were still handling the event before), or null.
+   * event back, or null. They were still handling the event before. When no
+   * gap's delay is explained in full, it can be the late gap. Then the
+   * listeners' time past the scripted gap explains at least half of its
+   * delay, and `stalledMs` gives the rest.
    */
   readonly heldByPage: {
     readonly gapMs: number;
     readonly handlingMs: number;
+    /**
+     * The rest of the gap's delay, ms, when the listeners explain at least
+     * half of it but not all of it. The dispatch stalled that much more
+     * before the page.
+     */
+    readonly stalledMs?: number;
   } | null;
   /** For `'boundary'` and `'hold'`: the threshold crossed, px/s or ms. */
   readonly threshold?: number;
@@ -437,10 +447,15 @@ export interface TouchPacingFault {
    * The widest gap that an event's wait for the main thread accounts for,
    * when the listeners alone do not, or null. The wait ends when the page's
    * listeners begin. Another page task, or a starved runner, held the event.
+   * When no gap's delay is explained in full, it can be the late gap. Then
+   * the wait and the listeners, past the scripted gap, explain at least half
+   * of its delay, and `stalledMs` gives the rest.
    */
   readonly waited?: {
     readonly gapMs: number;
     readonly waitMs: number;
+    /** As for `heldByPage`: the rest of the gap's delay, ms. */
+    readonly stalledMs?: number;
   } | null;
 }
 
@@ -633,6 +648,39 @@ export function readRelease(
 }
 
 /**
+ * The page's time on the events around step `i`'s gap, ms. One is the event
+ * before, until its listeners finished. The other is the step's own touch
+ * event, until its pointer listeners finished (a lift read at its touchend).
+ * Each runs from a stamp. The part before the listeners began is a wait for
+ * the main thread, not listener time.
+ */
+function pageTimes(
+  arrivals: readonly TouchArrival[],
+  i: number,
+): {totalMs: number; handlingMs: number}[] {
+  const terms = [
+    [
+      arrivals[i - 1].stamp,
+      arrivals[i - 1].startedAt,
+      arrivals[i - 1].handledAt,
+    ],
+    [
+      arrivals[i].firstStamp ?? arrivals[i].stamp,
+      arrivals[i].startedAt,
+      arrivals[i].stamp,
+    ],
+  ] as const;
+  return terms.map(([from, began, to]) => {
+    const totalMs = to - from;
+    const handlingMs =
+      began != null && Number.isFinite(began)
+        ? to - Math.max(began, from)
+        : totalMs;
+    return {totalMs, handlingMs};
+  });
+}
+
+/**
  * Reads a paced play's release as the page did and returns its fault, or
  * null. The kinds: `rest`, a resting finger where the script moves; `throw`,
  * a throw where the script rests; `moves`, fewer than two moves. Given
@@ -649,6 +697,9 @@ export function readRelease(
  * spacing cannot tell a page stall from a runner stall, as the wheel path's
  * does (`wheelGapCauses`); the page's handling time can. The fault is the
  * page's when any gap the release reads is.
+ * When no gap is the page's in full, the late gap still can be. Then the
+ * page's time past the scripted gap explains at least half of its excess.
+ * The fault then names the rest as a stall.
  */
 export function touchPacingFault(
   steps: readonly TouchEventStep[],
@@ -691,35 +742,32 @@ export function touchPacingFault(
       : Array.from({length: steps.length - 1}, (_, k) => k + 1);
   const gapsMs = span.map(i => arrivals[i].stamp - arrivals[i - 1].stamp);
   const scriptedGapsMs = span.map(i => steps[i].t - steps[i - 1].t);
+  const lateK = gapsMs.reduce(
+    (best, gap, k) =>
+      gap - scriptedGapsMs[k] > gapsMs[best] - scriptedGapsMs[best] ? k : best,
+    0,
+  );
   let heldByPage: TouchPacingFault['heldByPage'] = null;
   let waited: TouchPacingFault['waited'] = null;
+  // Page time that explains at least half of the late gap's delay but not
+  // all of it. The larger part decides the cause, and the rest is named as a
+  // stall. Another gap's page time does not name the late gap's cause.
+  let partlyHeld: TouchPacingFault['heldByPage'] = null;
+  let partlyWaited: TouchPacingFault['waited'] = null;
   span.forEach((i, k) => {
+    const delayMs = gapsMs[k] - scriptedGapsMs[k];
     const holds = (ms: number) =>
       Number.isFinite(ms) &&
       ms > scriptedGapsMs[k] &&
-      ms + HELD_BACK_MS >= gapsMs[k] - scriptedGapsMs[k];
-    // The event before held this one back, or this step's own pointer
-    // listeners held its touch event (a lift read at its touchend). Each runs
-    // from a stamp to the end of the listeners. The part before the
-    // listeners began is a wait for the main thread, not listener time.
-    const terms = [
-      [
-        arrivals[i - 1].stamp,
-        arrivals[i - 1].startedAt,
-        arrivals[i - 1].handledAt,
-      ],
-      [
-        arrivals[i].firstStamp ?? arrivals[i].stamp,
-        arrivals[i].startedAt,
-        arrivals[i].stamp,
-      ],
-    ] as const;
-    for (const [from, began, to] of terms) {
-      const totalMs = to - from;
-      const handlingMs =
-        began != null && Number.isFinite(began)
-          ? to - Math.max(began, from)
-          : totalMs;
+      ms + HELD_BACK_MS >= delayMs;
+    // The part of a term's time that delayed the next event. The event
+    // before's time inside the scripted gap delays nothing.
+    const holdsMost = (delayingMs: number) =>
+      Number.isFinite(delayingMs) &&
+      delayingMs > 0 &&
+      2 * delayingMs >= delayMs;
+    for (const [t, {totalMs, handlingMs}] of pageTimes(arrivals, i).entries()) {
+      const insideMs = t === 0 ? scriptedGapsMs[k] : 0;
       if (holds(handlingMs)) {
         if (heldByPage == null || handlingMs > heldByPage.handlingMs) {
           heldByPage = {gapMs: gapsMs[k], handlingMs};
@@ -729,14 +777,30 @@ export function touchPacingFault(
         if (waited == null || waitMs > waited.waitMs) {
           waited = {gapMs: gapsMs[k], waitMs};
         }
+      } else if (k === lateK && holdsMost(handlingMs - insideMs)) {
+        if (partlyHeld == null || handlingMs > partlyHeld.handlingMs) {
+          partlyHeld = {
+            gapMs: gapsMs[k],
+            handlingMs,
+            stalledMs: delayMs - (handlingMs - insideMs),
+          };
+        }
+      } else if (k === lateK && holdsMost(totalMs - insideMs)) {
+        const waitMs = totalMs - handlingMs;
+        if (partlyWaited == null || waitMs > partlyWaited.waitMs) {
+          partlyWaited = {
+            gapMs: gapsMs[k],
+            waitMs,
+            stalledMs: delayMs - (totalMs - insideMs),
+          };
+        }
       }
     }
   });
-  const lateK = gapsMs.reduce(
-    (best, gap, k) =>
-      gap - scriptedGapsMs[k] > gapsMs[best] - scriptedGapsMs[best] ? k : best,
-    0,
-  );
+  if (heldByPage == null && waited == null) {
+    heldByPage = partlyHeld;
+    waited = partlyHeld == null ? partlyWaited : null;
+  }
   const late =
     span.length > 0
       ? {
@@ -805,6 +869,13 @@ export function readHold(
   };
 }
 
+/** The part of a gap's delay the page's time leaves to the dispatch, if any. */
+function furtherStall(stalledMs: number | undefined): string {
+  return stalledMs == null
+    ? ''
+    : `, after a further ${stalledMs.toFixed(0)} ms stall before the page`;
+}
+
 function describeFault(fault: TouchPacingFault): string {
   const frames =
     fault.frameGapMs == null
@@ -838,13 +909,15 @@ function describeReading(fault: TouchPacingFault): string {
  * and pointer listeners did not hold the events back: a dispatch stalled
  * before the page. When an event waited for the main thread before the page's
  * listeners began, the error says how long. Another page task, or a starved
- * runner, held it there. A gap with no wait, across which the page drew no
- * frame, is `TouchStarvationError`.
+ * runner, held it there. When that wait explains at least half of the gap's
+ * delay but not all of it, the error also names the rest as a stall. A gap
+ * with no wait, across which the page drew no frame, is
+ * `TouchStarvationError`.
  */
 export class TouchPacingError extends Error {
   constructor(readonly fault: TouchPacingFault) {
     super(
-      `touchDriver: ${describeFault(fault)}: ${fault.waited == null ? 'a dispatch stalled before the page' : `an event waited ${fault.waited.waitMs.toFixed(0)} ms for the main thread before the page's listeners began, so the next reached it ${fault.waited.gapMs.toFixed(0)} ms later: another page task held the thread, or the runner starved it`}`,
+      `touchDriver: ${describeFault(fault)}: ${fault.waited == null ? 'a dispatch stalled before the page' : `an event waited ${fault.waited.waitMs.toFixed(0)} ms for the main thread before the page's listeners began, so the next reached it ${fault.waited.gapMs.toFixed(0)} ms later${furtherStall(fault.waited.stalledMs)}: another page task held the thread, or the runner starved it`}`,
     );
     this.name = 'TouchPacingError';
   }
@@ -856,7 +929,9 @@ export class TouchPacingError extends Error {
  * the event before, and WebKit dispatches the next touch only once the page
  * is free. The handling time runs from when the listeners began, so a wait
  * for the main thread before them is not counted. It is page wall time,
- * which on a starved runner includes a listener's wait for a CPU. Judge a
+ * which on a starved runner includes a listener's wait for a CPU. The
+ * listeners can explain at least half of the gap's delay but not all of it.
+ * Then the error also names the rest as a stall before the page. Judge a
  * page stall from a run with CI's CPU limits: there it is the proof's own
  * failure.
  */
@@ -867,7 +942,7 @@ export class TouchPageStallError extends Error {
     },
   ) {
     super(
-      `touchDriver: the page's own touch and pointer listeners took ${fault.heldByPage.handlingMs.toFixed(0)} ms of page wall time to handle an event, so the next reached it ${fault.heldByPage.gapMs.toFixed(0)} ms later, and ${describeFault(fault)}. On a starved runner that time includes the page's wait for a CPU: judge a page stall from a run with CI's CPU limits`,
+      `touchDriver: the page's own touch and pointer listeners took ${fault.heldByPage.handlingMs.toFixed(0)} ms of page wall time to handle an event, so the next reached it ${fault.heldByPage.gapMs.toFixed(0)} ms later${furtherStall(fault.heldByPage.stalledMs)}, and ${describeFault(fault)}. On a starved runner that time includes the page's wait for a CPU: judge a page stall from a run with CI's CPU limits`,
     );
     this.name = 'TouchPageStallError';
   }
@@ -876,11 +951,13 @@ export class TouchPageStallError extends Error {
 /**
  * A paced play's page read a release that is not the script's, and the
  * runner starved the page. Across the gap that strays furthest, the page drew
- * no frame for longer than `FRAME_STARVATION_MS`. Neither its own listeners
- * nor a page task held the event before it. No pacing reaches a page that
- * draws nothing, so the play cannot judge the component. It fails by name,
- * as a busy proof's `FrameStarvationError` does. Judge the proof from a run
- * with CI's CPU limits.
+ * no frame for longer than `FRAME_STARVATION_MS`. The page's own listeners
+ * and its waits for the main thread explain under half of that gap's delay.
+ * The error names their time past the scripted gap when it is at least
+ * `HELD_BACK_MS`. No pacing
+ * reaches a page that draws nothing, so the play cannot judge the component.
+ * It fails by name, as a busy proof's `FrameStarvationError` does. Judge the
+ * proof from a run with CI's CPU limits.
  */
 export class TouchStarvationError extends Error {
   constructor(
@@ -888,10 +965,16 @@ export class TouchStarvationError extends Error {
       readonly late: NonNullable<TouchPacingFault['late']>;
       /** The longest time the page drew no frame across that gap, ms. */
       readonly starvedMs: number;
+      /**
+       * The page's own time on that gap's events past the scripted gap, ms:
+       * its listeners and the waits for the main thread before them. It is
+       * under half of the gap's delay.
+       */
+      readonly pageMs?: number;
     },
   ) {
     super(
-      `touchDriver: the page drew no frame for ${fault.starvedMs.toFixed(0)} ms across a ${fault.late.gapMs.toFixed(0)} ms gap where the script spaces ${fault.late.scriptedGapMs.toFixed(0)} ms, and ${describeFault(fault)}. Neither the page's listeners nor a page task held the event: the runner starved the page. Judge the proof from a run with CI's CPU limits`,
+      `touchDriver: the page drew no frame for ${fault.starvedMs.toFixed(0)} ms across a ${fault.late.gapMs.toFixed(0)} ms gap where the script spaces ${fault.late.scriptedGapMs.toFixed(0)} ms, and ${describeFault(fault)}. ${(fault.pageMs ?? 0) >= HELD_BACK_MS ? `The page's listeners and a wait for the main thread held the event ${(fault.pageMs ?? 0).toFixed(0)} ms past its scripted time, under half of its delay: the runner starved the page for the rest` : "Neither the page's listeners nor a page task held the event: the runner starved the page"}. Judge the proof from a run with CI's CPU limits`,
     );
     this.name = 'TouchStarvationError';
   }
@@ -981,10 +1064,11 @@ export function liftStallError(
 /**
  * The error a paced play's fault throws. The lift stall comes first, since
  * it is the more specific cause. Then a gap the page's own listeners held is
- * the page's. A starved page drew no frame for longer than
- * `FRAME_STARVATION_MS` across the late gap. With no wait for the main
- * thread, that fault is the starved runner's. Any other gap is a dispatch
- * that stalled before the page.
+ * the page's. The page's time decides when it explains at least half of the
+ * gap's delay, and the error names the rest as a stall. A starved page drew
+ * no frame for longer than `FRAME_STARVATION_MS` across the late gap. With no
+ * wait for the main thread, that fault is the starved runner's. Any other gap
+ * is a dispatch that stalled before the page.
  * `frames` are the times the page drew a frame during the play.
  */
 export function touchPlayError(
@@ -1013,9 +1097,16 @@ export function touchPlayError(
           arrivals[late.index - 1],
           arrivals[late.index],
         ]);
-  return late != null && starvedMs != null && starvedMs > FRAME_STARVATION_MS
-    ? new TouchStarvationError({...fault, late, starvedMs})
-    : new TouchPacingError(fault);
+  if (late == null || starvedMs == null || starvedMs <= FRAME_STARVATION_MS) {
+    return new TouchPacingError(fault);
+  }
+  const pageMs = Math.max(
+    0,
+    ...pageTimes(arrivals, late.index)
+      .map(({totalMs}, t) => totalMs - (t === 0 ? late.scriptedGapMs : 0))
+      .filter(Number.isFinite),
+  );
+  return new TouchStarvationError({...fault, late, starvedMs, pageMs});
 }
 
 /** Records what the page saw of a paced play's touches (WebKit). */

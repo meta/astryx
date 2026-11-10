@@ -18,8 +18,10 @@
  *   the runner's. A scrolling surface's release also reads the interval
  *   before them. A release or a hold on the other side of a play's boundary
  *   from the script's is a fault. Each pacing error names the longest time
- *   the page drew no frame. A late gap that no page work explains, across
- *   which the page drew no frame, is the starved runner's.
+ *   the page drew no frame. A late gap that page work explains under half
+ *   of, across which the page drew no frame, is the starved runner's. When
+ *   page work explains at least half of the late gap, the page's cause
+ *   decides, and the rest is named as a stall.
  * @position Node unit tests beside the harness's browser self-tests.
  *
  * SYNC: When modified, update touch.ts (pacedDeadline, touchPacingFault,
@@ -686,7 +688,13 @@ describe('touchPlayError on a starved runner', () => {
     const heldLift = lateLift.map((a, i) =>
       i === 5 ? {...a, handledAt: a.stamp + 110} : a,
     );
-    expect(errorFor(heldLift, starved)).toBeInstanceOf(TouchPageStallError);
+    const error = errorFor(heldLift, starved);
+    expect(error).toBeInstanceOf(TouchPageStallError);
+    // Explained in full, so no stall is left to name.
+    expect((error as TouchPageStallError).fault.heldByPage).toEqual({
+      gapMs: 120,
+      handlingMs: 110,
+    });
   });
 
   it('keeps a wait for the main thread a TouchPacingError that names the wait, though the page drew nothing', () => {
@@ -698,6 +706,119 @@ describe('touchPlayError on a starved runner', () => {
     expect(error).toBeInstanceOf(TouchPacingError);
     expect(error.message).toMatch(
       /an event waited 100 ms for the main thread before the page's listeners began/,
+    );
+  });
+
+  it("names both causes when the page's listeners explain most of a gap's delay but not all of it", () => {
+    // The last move's listeners ran 80 ms, 64 ms of it past the scripted
+    // 16 ms: most of the lift's 104 ms delay.
+    const mostlyHeld = lateLift.map((a, i) =>
+      i === 5 ? {...a, handledAt: a.stamp + 80} : a,
+    );
+    const error = errorFor(mostlyHeld, starved);
+    expect(error).toBeInstanceOf(TouchPageStallError);
+    expect((error as TouchPageStallError).fault.heldByPage).toEqual({
+      gapMs: 120,
+      handlingMs: 80,
+      stalledMs: 40,
+    });
+    expect(error.message).toMatch(
+      /took 80 ms of page wall time to handle an event, so the next reached it 120 ms later, after a further 40 ms stall before the page/,
+    );
+  });
+
+  it("names both causes when a wait for the main thread explains most of a gap's delay", () => {
+    // A page task held the thread 70 ms before the last move's listeners,
+    // which ran 4 ms. That is 58 ms past the scripted 16 ms, of 104 ms.
+    const mostlyWaited = lateLift.map((a, i) =>
+      i === 5 ? {...a, startedAt: a.stamp + 70, handledAt: a.stamp + 74} : a,
+    );
+    const error = errorFor(mostlyWaited, starved);
+    expect(error).toBeInstanceOf(TouchPacingError);
+    expect(error.message).toMatch(
+      /an event waited 70 ms for the main thread before the page's listeners began, so the next reached it 120 ms later, after a further 46 ms stall before the page/,
+    );
+  });
+
+  it("keeps the starved runner's error when the page's time is under half of the delay, and names that time", () => {
+    // The last move's listeners ran 40 ms, 24 ms of it past the scripted
+    // 16 ms: under half of the lift's 104 ms delay.
+    const partlyHeld = lateLift.map((a, i) =>
+      i === 5 ? {...a, handledAt: a.stamp + 40} : a,
+    );
+    const error = errorFor(partlyHeld, starved);
+    expect(error).toBeInstanceOf(TouchStarvationError);
+    expect(error.message).toMatch(
+      /The page's listeners and a wait for the main thread held the event 24 ms past its scripted time, under half of its delay: the runner starved the page for the rest/,
+    );
+    expect(error.message).not.toMatch(/Neither the page's listeners/);
+  });
+
+  it("counts only the event before's time past the scripted gap toward the late gap's delay", () => {
+    // A press scripted to hold 300 ms reached the page at 900 ms. Its
+    // touch-down's listeners ran 301 ms, so they held the lift 1 ms.
+    const finger = {id: 0, x: 100, y: 50};
+    const press: TouchEventStep[] = [
+      {t: 0, type: 'touchStart', fingers: [finger], changed: [finger]},
+      {t: 300, type: 'touchEnd', fingers: [], changed: [finger]},
+    ];
+    const arrivals: TouchArrival[] = [
+      {stamp: 0, handledAt: 301},
+      {stamp: 900, handledAt: 900},
+    ];
+    const fault = touchPacingFault(press, arrivals, undefined, {
+      boundaries: {holdMs: 500},
+    });
+    if (fault?.kind !== 'hold') {
+      throw new Error('expected the page to read a hold past the boundary');
+    }
+    expect(fault.heldByPage).toBeNull();
+    const error = touchPlayError(press, arrivals, fault, [], [0, 10, 890]);
+    expect(error).toBeInstanceOf(TouchStarvationError);
+    expect(error.message).toMatch(
+      /Neither the page's listeners nor a page task held the event/,
+    );
+  });
+
+  it("names the late gap's own cause, not an earlier gap's page time", () => {
+    // The move before the last reached the page 90 ms after the one before.
+    // The move before it had listeners that ran 50 ms of the 74 ms delay. The
+    // lift's gap strays further, with no page time, and no frame across it.
+    const arrivals = at([0, 16, 32, 48, 64, 154, 274]).map((a, i) =>
+      i === 4 ? {...a, handledAt: a.stamp + 50} : a,
+    );
+    const frames = [0, 16, 32, 48, 64, 80, 96, 112, 128, 144, 150, 290];
+    const error = errorFor(arrivals, frames);
+    expect(error).toBeInstanceOf(TouchStarvationError);
+    expect((error as TouchStarvationError).fault.late.index).toBe(6);
+    expect(error.message).toMatch(
+      /Neither the page's listeners nor a page task held the event/,
+    );
+  });
+
+  it("keeps the starved runner's plain sentence when the page's time ended inside the scripted gap", () => {
+    // A press scripted to hold 300 ms reached the page 400 ms late. Its
+    // touch-down's listeners ran 250 ms, inside the scripted 300 ms, so they
+    // delayed nothing.
+    const finger = {id: 0, x: 100, y: 50};
+    const press: TouchEventStep[] = [
+      {t: 0, type: 'touchStart', fingers: [finger], changed: [finger]},
+      {t: 300, type: 'touchEnd', fingers: [], changed: [finger]},
+    ];
+    const arrivals: TouchArrival[] = [
+      {stamp: 0, handledAt: 250},
+      {stamp: 700, handledAt: 700},
+    ];
+    const fault = touchPacingFault(press, arrivals, undefined, {
+      boundaries: {holdMs: 500},
+    });
+    if (fault?.kind !== 'hold') {
+      throw new Error('expected the page to read a hold past the boundary');
+    }
+    const error = touchPlayError(press, arrivals, fault, [], [0, 10, 690]);
+    expect(error).toBeInstanceOf(TouchStarvationError);
+    expect(error.message).toMatch(
+      /Neither the page's listeners nor a page task held the event/,
     );
   });
 
