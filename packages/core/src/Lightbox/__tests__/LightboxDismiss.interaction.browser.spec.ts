@@ -660,12 +660,24 @@ test(
       ),
       {
         name: 'lightbox-drag-to-dismiss',
+        // The viewer closes at the exit's end, and on a busy machine that can
+        // come before the frame after the lift. So the photo is read without
+        // a wait for it, and a closed viewer reads as closed.
         measure: async () => {
-          const s = await v.photoState();
-          return {
-            scale: +s.scale.toFixed(3),
-            backdrop: +(await v.backdropAlpha()).toFixed(2),
-          };
+          const [scale] = await v.photo.evaluateAll(photos =>
+            photos.map(el => {
+              const value = getComputedStyle(el).scale;
+              return value === 'none' ? 1 : parseFloat(value);
+            }),
+          );
+          const [backdrop] = await v.dialog.evaluateAll(dialogs =>
+            dialogs.map(el =>
+              parseFloat(getComputedStyle(el, '::backdrop').opacity),
+            ),
+          );
+          return scale == null || backdrop == null
+            ? {closed: true}
+            : {scale: +scale.toFixed(3), backdrop: +backdrop.toFixed(2)};
         },
         columns: 4,
         cellScale: 0.35,

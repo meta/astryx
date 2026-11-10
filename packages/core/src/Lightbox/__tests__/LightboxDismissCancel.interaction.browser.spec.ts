@@ -505,13 +505,18 @@ test(
   async ({page}, testInfo) => {
     const v = await openViewer(page);
     const down = {x: v.centre.x, y: v.centre.y + 150};
+    // A storyboard plays the script at its own pace, and WebKit reads each
+    // event at the time it arrives. So a release's velocity is not the
+    // script's there. The drag comes back to 4 pt past the pan's threshold,
+    // short of the 10 pt commit point, so its place alone cancels it.
+    const back = {x: down.x, y: v.centre.y + THRESHOLD + 4};
     const script: TouchScript = drag(v.centre, down, {
       durationMs: 300,
       hz: 20,
     })
       .slice(0, -1)
       .concat(
-        drag(down, {x: down.x, y: down.y - 120}, {durationMs: 150, hz: 20})
+        drag(down, back, {durationMs: 150, hz: 20})
           .slice(1)
           .map(f => ({...f, t: f.t + 320})),
       );
