@@ -320,15 +320,13 @@ function namedThemeFonts(files) {
  * with an `@font-face` rule for each family named in the URL and nothing else,
  * so the URL itself is the evidence. Any other URL proves nothing.
  *
- * @param {string} params the `@import` rule's params
+ * @param {string} specifier an `@import` URL from `doctorStylesheetImports()`
  * @returns {string[]}
  */
-function googleFontsImportFamilies(params) {
-  const match = /^\s*(?:url\(\s*)?(['"]?)([^'")\s]+)\1/iu.exec(params);
-  if (!match) return [];
+function googleFontsImportFamilies(specifier) {
   let url;
   try {
-    url = new URL(match[2]);
+    url = new URL(specifier);
   } catch {
     return [];
   }
@@ -348,18 +346,17 @@ function fontStylesheetEvidence(css) {
   let external = false;
   const root = postcss.parse(css);
   root.walkAtRules(atRule => {
-    if (atRule.name.toLowerCase() === 'import') {
-      external = true;
-      for (const family of googleFontsImportFamilies(atRule.params)) {
-        loaded.add(family.toLowerCase());
-      }
-      return;
-    }
+    if (atRule.name.toLowerCase() === 'import') external = true;
     if (atRule.name.toLowerCase() !== 'font-face') return;
     atRule.walkDecls(/^font-family$/iu, declaration => {
       loaded.add(normalizeFontName(declaration.value).toLowerCase());
     });
   });
+  for (const specifier of doctorStylesheetImports(css)) {
+    for (const family of googleFontsImportFamilies(specifier)) {
+      loaded.add(family.toLowerCase());
+    }
+  }
   return {loaded, external};
 }
 

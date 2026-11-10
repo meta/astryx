@@ -1183,6 +1183,22 @@ describe('app-theme doctor checks', () => {
     expect(result.message).toContain('Ocean Sans');
   });
 
+  it('check 9 still warns for an unquoted Google Fonts import, which browsers drop', async () => {
+    const {dir} = await fixture([
+      {
+        slug: 'ocean',
+        fontFamily: 'Ocean Sans',
+        fontCss:
+          '@import https://fonts.googleapis.com/css2?family=Ocean+Sans;\n',
+      },
+    ]);
+
+    expect(check(await checkAppThemes(dir), 'theme-fonts')).toMatchObject({
+      status: 'warn',
+      message: expect.stringContaining('Ocean Sans'),
+    });
+  });
+
   it('check 9 does not trust a Google Fonts lookalike host', async () => {
     const {dir} = await fixture([
       {
