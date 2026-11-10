@@ -852,9 +852,18 @@ function normalizeAstDestinations<T>(root: T): T {
   return visit(root as TreeValue) as T;
 }
 
-/** A shallow copy that keeps every own property, symbol keys included. */
-function copyNode(node: Record<string, unknown>): Record<string, unknown> {
-  return Object.defineProperties({}, Object.getOwnPropertyDescriptors(node));
+/**
+ * A writable shallow copy of a node, which may be frozen. It keeps every
+ * enumerable own property and every symbol-keyed property.
+ */
+function copyNode(
+  node: Record<string | symbol, unknown>,
+): Record<string, unknown> {
+  const copy: Record<string | symbol, unknown> = {...node};
+  for (const key of Object.getOwnPropertySymbols(node)) {
+    copy[key] = node[key];
+  }
+  return copy;
 }
 
 function restoreCodeInternalProperties(

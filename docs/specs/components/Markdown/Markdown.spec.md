@@ -83,7 +83,7 @@ streaming behavior is the released one.
 - Released default preserved: `yes`, except the default Code block path for `diff` fences (FR29, below), its long-line wrap (below), its headerless layout (below), per-block text direction (below), and `data:` link and image URLs (below)
 - Compatibility class: additive, opt-in public API, with five visible
   default-path rendering changes (the FR29 diff layer, the fenced-code wrap,
-  the headerless layout, per-block text direction, and `data:` URLs, below); existing parser nodes (apart from `data:` URLs, below), DOM (apart from the direction markup below), styling, targets,
+  the headerless layout, per-block text direction, and `data:` URLs, below); existing parser nodes (apart from `data:` URLs and normalized destinations, below), DOM (apart from the direction markup below), styling, targets,
   dollar-delimited text, `components`, and `inlinePlugins` remain unchanged unless
   the caller supplies `plugins`, supplies `components.math`, supplies
   `codeLanguages`, or passes the matching explicit parser option.
@@ -97,6 +97,11 @@ streaming behavior is the released one.
   that is blank once control characters and outer whitespace are removed is an
   empty destination and still renders as text, or the image's alternative-text
   fallback.
+- Normalized destinations (`spec:AST-005/DEC-3`): the parser stores every link
+  and image destination with control characters and outer whitespace removed,
+  from Markdown source, plugin transforms, and Remark plugins alike, so
+  `[a](< b(c) d >)` gives `b(c) d`. A destination without such characters is
+  unchanged.
 - Default-path rendering change for diff fences (FR29), a visible default change
   and not a breaking one: a `diff` fence that rendered as plain text renders as CodeBlock's diff
   layer over plaintext with a `diff` label, and a `diff-<language>` fence —
