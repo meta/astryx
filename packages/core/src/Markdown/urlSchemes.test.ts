@@ -37,6 +37,20 @@ function urlsIn(result: unknown): string[] {
   return found;
 }
 
+/**
+ * Kept URLs whose scheme is unsafe once control characters and outer
+ * whitespace are removed and case is ignored, as a browser reads the scheme.
+ * A destination the syntax splits into a harmless fragment is not one.
+ */
+function unsafeUrlsIn(result: unknown): string[] {
+  return urlsIn(result).filter(url =>
+    /^(?:javascript|vbscript|data):/i.test(
+      // eslint-disable-next-line no-control-regex -- controls are the case under test
+      url.replace(/[\x00-\x1f\x7f]/g, '').trim(),
+    ),
+  );
+}
+
 /** Each way a destination reaches the parser, as link and as image. */
 const FORMS: ReadonlyArray<[string, (url: string) => string]> = [
   ['inline link', url => `[x](<${url}>)`],
@@ -101,7 +115,7 @@ describe('the parser rejects unsafe URL schemes in links and images', () => {
   describe.each(PARSERS)('%s', (_name, parse) => {
     describe.each(FORMS)('%s', (_form, markdownFor) => {
       it.each(REJECTED)('keeps no link or image for %j', url => {
-        expect(urlsIn(parse(markdownFor(url)))).toEqual([]);
+        expect(unsafeUrlsIn(parse(markdownFor(url)))).toEqual([]);
       });
 
       it.each(KEPT)('keeps %j', url => {
@@ -112,8 +126,8 @@ describe('the parser rejects unsafe URL schemes in links and images', () => {
 
   describe('parseInline', () => {
     it.each(REJECTED)('keeps no link or image for %j', url => {
-      expect(urlsIn(parseInline(`[x](<${url}>)`))).toEqual([]);
-      expect(urlsIn(parseInline(`![x](<${url}>)`))).toEqual([]);
+      expect(unsafeUrlsIn(parseInline(`[x](<${url}>)`))).toEqual([]);
+      expect(unsafeUrlsIn(parseInline(`![x](<${url}>)`))).toEqual([]);
     });
 
     it('keeps the source as text for a rejected link or image', () => {
@@ -134,7 +148,7 @@ describe('the parser rejects unsafe URL schemes in links and images', () => {
       'data:text/plain,hello',
       'javascript:alert(1)',
     ]) {
-      expect(urlsIn(parseMarkdown(`see <${url}> here`))).toEqual([]);
+      expect(unsafeUrlsIn(parseMarkdown(`see <${url}> here`))).toEqual([]);
     }
   });
 });

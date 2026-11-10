@@ -837,10 +837,10 @@ describe('Markdown plugin protocol', () => {
     ]);
     const identityReplacement = replaceText('missing', 'unchanged');
     expect(
-      parseMarkdown('![pic](data:image/png;base64,abc)', {
+      parseMarkdown('![pic](https://example.com/pic.png)', {
         plugins: [identityReplacement],
       }),
-    ).toMatchObject([{type: 'image', src: 'data:image/png;base64,abc'}]);
+    ).toMatchObject([{type: 'image', src: 'https://example.com/pic.png'}]);
     expect(
       parseMarkdown('[empty]()', {plugins: [identityReplacement]}),
     ).toMatchObject([
