@@ -664,7 +664,9 @@ Current gaps are observable facts, not current target behavior:
   menu to its Button: a finger held on the trigger opens the menu from the
   pressed box and moves it while the menu is open. Popover with an `anchorRef`
   or render-prop trigger anchors to the caller's control, which a Button scales
-  on press. MultiSelector and ComplexSelector anchor to their own control. A
+  on press. MultiSelector and ComplexSelector anchor to their own control.
+  Ghost and secondary Selector place a list that opens on a press from the
+  trigger's pressed box, so the list sits off by the trigger's press scale. A
   mouse press on a DropdownMenu trigger does not scale it, so that path keeps
   the menu in place.
 - Tooltip currently consumes Escape ahead of an associated Popover, menu, or

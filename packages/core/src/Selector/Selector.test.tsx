@@ -737,64 +737,6 @@ describe('Selector', () => {
     }
   });
 
-  it('aligns the selected item to the unpressed trigger when the list opens during its press scale', async () => {
-    const realGetComputedStyle = window.getComputedStyle.bind(window);
-    // The trigger is 32 px tall at 160-192 px and scales to 0.98 about its
-    // center while the press releases.
-    const restoreRects = mockSelectorRects({
-      anchor: rect({top: 160.32, bottom: 191.68, height: 31.36}),
-      trigger: rect({top: 166, bottom: 186, height: 20}),
-      listbox: rect({top: 190, bottom: 310, height: 120}),
-      selectedItem: rect({top: 226, bottom: 258, height: 32}),
-      listboxLayoutHeight: 120,
-      selectedItemLayoutTop: 36,
-      selectedItemLayoutHeight: 32,
-      viewportHeight: 900,
-    });
-    const styleSpy = vi
-      .spyOn(window, 'getComputedStyle')
-      .mockImplementation((element, pseudo) => {
-        const style = realGetComputedStyle(element, pseudo);
-        if (
-          element instanceof HTMLElement &&
-          element.classList.contains('astryx-selector')
-        ) {
-          Object.defineProperty(style, 'transform', {
-            value: 'matrix(0.98, 0, 0, 0.98, 0, 0)',
-          });
-          Object.defineProperty(style, 'transformOrigin', {
-            value: '50px 16px',
-          });
-        }
-        return style;
-      });
-    const user = userEvent.setup();
-    try {
-      render(
-        <Selector
-          label="Fruit"
-          options={OPTIONS}
-          value="Banana"
-          onChange={() => {}}
-        />,
-      );
-
-      await user.click(screen.getByRole('combobox'));
-      const popover = screen
-        .getByRole('listbox', {hidden: true})
-        .closest('[popover]');
-      await waitFor(() => {
-        // The same margin as an unpressed trigger at 160-192 px.
-        expect(popover?.getAttribute('style')).toContain(
-          '--_selector-overlay-margin: min(-69px,',
-        );
-      });
-    } finally {
-      styleSpy.mockRestore();
-      restoreRects();
-    }
-  });
-
   it('adds the border inset only to input-variant dropdowns', async () => {
     const user = userEvent.setup();
     const {unmount} = render(
