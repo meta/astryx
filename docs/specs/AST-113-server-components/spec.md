@@ -15,6 +15,7 @@ affects_architecture:
     architecture:component-style-authoring,
     architecture:public-component-api,
     architecture:internationalization,
+    architecture:theme-application,
   ]
 affects_families: [family:buttons, family:navigation-destinations]
 affects_contributing: []
@@ -70,9 +71,9 @@ when the component renders as a client component.
 - **FR1 — Presentational paths render on the server.** Under the
   `react-server` condition, a component with a server build MUST render its
   complete markup on the server and reference no client module when its props
-  and the providers around it need no client behavior. Text, Heading, and Kbd
-  MUST reference no client module unless a truncation tooltip or the platform
-  `mod` glyph needs one (table below).
+  and the providers around it need no client behavior. Text and Heading MUST
+  reference no client module unless a truncation tooltip needs one (table
+  below).
 - **FR2 — Client parts hold only what the server cannot.** A client part MUST
   exist only to read React context, hold state or Effects, or handle
   interaction. The server build MUST reference it only when the props or the
@@ -104,14 +105,19 @@ when the component renders as a client component.
 - **FR5 — Directives mark client parts only.** Every client part MUST begin
   with a `'use client'` prologue before any statement. A server module MUST
   NOT carry `'use client'`. Astryx MUST NOT ship a `'use server'` module.
-  - FR5 gap: Text, Heading, and Kbd begin with `'use client'`, so a Server
-    Component that renders them ships their whole client implementation.
-- **FR6 — The first HTML is identical.** For the same props and the same
-  providers, the HTML a page receives MUST be identical whether the component
-  resolved its server or its client build: the same elements, attributes,
-  classes, and text. Hydrating a server-rendered page MUST NOT report a
-  mismatch, and a client part MUST NOT change the markup between the server
-  render and the first client commit.
+  - FR5 gap: Text and Heading begin with `'use client'`, so a Server Component
+    that renders them ships their whole client implementation.
+- **FR6 — The first HTML is identical and final.** For the same props and the
+  same providers, the HTML a page receives MUST be identical whether the
+  component resolved its server or its client build: the same elements,
+  attributes, classes, and text. Hydrating a server-rendered page MUST NOT
+  report a mismatch, and a client part MUST NOT change the markup between the
+  server render and the first client commit. Hydration MUST NOT change
+  anything a person sees: under default props, providers, viewport, and
+  pointer, the layout does not shift, and no content, presentation, or
+  behavior swaps between the server HTML and the first client frame
+  (`spec:AST-013` FR9). A component that cannot meet this has no server build
+  and renders through its client build.
 - **FR7 — Styles render with the markup.** The StyleX output that server
   modules import MUST reach the page with the server-rendered markup, through
   the package stylesheet or a source build (`spec:AST-080` FR1, FR4, FR7). A
@@ -131,8 +137,8 @@ when the component renders as a client component.
   prop. Where a prop accepts a Server Action, the server build MUST pass it
   through.
 - **FR10 — Presentational pages ship no client JavaScript.** A server page
-  that renders Text, Heading, and Kbd with no explicit `maxLines` truncation
-  and no `mod` shortcut MUST ship zero Astryx client JavaScript for them.
+  that renders Text and Heading with no truncation tooltip on an explicit
+  `maxLines` MUST ship zero Astryx client JavaScript for them.
 - **FR11 — Astryx never holds a page.** A server build MUST NOT suspend and
   MUST NOT add a Suspense boundary, and no Astryx component, provider, or
   layout wraps an application subtree in one. A client part MUST NOT suspend
@@ -140,6 +146,25 @@ when the component renders as a client component.
   name, and the content it presents are in that HTML, and the client part
   only adds behavior after hydration. Whether a page streams or waits is the
   application's choice, never a side effect of rendering an Astryx component.
+- **FR12 — Server HTML behaves like the client component before hydration.**
+  Before hydration, the server HTML MUST behave for the person as the client
+  build's HTML does: a link navigates the way the client build's link
+  navigates, a disabled control does not submit a form or navigate, and
+  grouped styling (group corners, elevation, size, and add-on styling) is
+  present. A server build that cannot meet this for a prop or a context MUST
+  route that render to the client build. These cases route to the client
+  build: a link under a LinkProvider; Button and IconButton inside ButtonGroup,
+  InputGroup, Toolbar, or SideNav; a disabled ButtonGroup; and TopNav inside
+  AppShell's drawer.
+  - FR12 gap: in a disabled ButtonGroup, a submit Button renders with
+    `aria-disabled` and no `disabled` attribute, so a click before hydration
+    submits its form, in the client build too.
+- **FR13 — Server pages use the built theme stylesheet.** A server-rendered
+  page MUST load its theme as the built theme stylesheet, so the first paint
+  uses the theme's tokens (`architecture:theme-application` INV4). A runtime
+  theme injects its CSS after JavaScript loads, so the first paint uses the
+  default tokens and the page restyles after hydration, which breaks FR6 and
+  FR7.
 
 ### Client parts
 
@@ -149,7 +174,6 @@ the second column holds. Everything else renders on the server.
 | Component     | Client part references when                                                                                              | Why it needs the client                                                                                                |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
 | Text, Heading | an explicit `maxLines` with the truncation tooltip on                                                                    | measures overflow and shows the full-text tooltip; at `maxLines={0}` it measures nothing and keeps the element mounted |
-| Kbd           | the shortcut contains `mod`                                                                                              | picks ⌘ or Ctrl after hydration; the server and hydration markup agree                                                 |
 | Button        | every server-rendered Button: a context gate                                                                             | reads the size, ButtonGroup, InputGroup, and LinkProvider contexts and installs the shared touch press controller      |
 | Button        | `icon` is set: an icon size scope                                                                                        | the icon slot's default size is a context provider; it adds no DOM                                                     |
 | Button        | `clickAction`, `isLoading`, `tooltip`, a `ref`, a function prop, a component `as`, or a provider that changes its output | the client Button: fire-once actions, the loading spinner and live region, tooltip triggers, refs and handlers         |
@@ -161,7 +185,23 @@ the second column holds. Everything else renders on the server.
 | TopNavItem    | the drawer, a LinkProvider, `onClick`, a `ref`, or a component `as`                                                      | the client TopNavItem: a drawer item closes the drawer; handlers                                                       |
 
 TopNavHeading, TopNavMenu, TopNavMegaMenu, and their items are client modules
-through both builds.
+through both builds. Kbd has no server build: it translates its key labels,
+and on Apple platforms its modifier labels change to glyphs after hydration,
+so it renders through its client build (FR6, OQ3).
+
+### Props and contexts that defeat the saving
+
+Under these props and contexts, a server build loads the full client
+component, so the page ships the same client JavaScript for that instance as a
+client-only render does.
+
+| Component     | Loads the full client component when                                                                                                                                                                              | In an app with a LinkProvider                                                                          |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Text, Heading | never; an explicit `maxLines`, `0` included, with the truncation tooltip on loads only the truncation part, and the Tooltip code when the text overflows                                                          | no effect                                                                                              |
+| Button        | `clickAction`, `isLoading`, `tooltip`, a `ref`, `onClick` or any other function prop, or `as` other than `"a"`; inside ButtonGroup or InputGroup; inside Toolbar, SideNav, or ButtonGroup with no explicit `size` | gated: a Button with `href` loads the client Button, so links save nothing                             |
+| IconButton    | as for Button; a `tooltip`, which most icon-only buttons carry, always loads it                                                                                                                                   | gated: as for Button                                                                                   |
+| TopNav        | a `ref` or a function prop; its copy in AppShell's drawer, so an AppShell page with a drawer loads the full client TopNav; no `label` loads the translator and its message catalog                                | gated: its items load their client components, so a header of links saves only the frame               |
+| TopNavItem    | `onClick`, a `ref`, any other function prop, or `as` other than `"a"`; inside AppShell's drawer                                                                                                                   | gated: an item that is not disabled and has no `as` loads the client TopNavItem, so links save nothing |
 
 ### Platform support
 
@@ -183,7 +223,12 @@ through both builds.
 - `architecture:public-component-api`: no public name, prop, type, or default
   changes (FR3). The `exports` map gains a condition, not an import path.
 - `architecture:internationalization` INV13: TopNav's default label is
-  translated in a client part.
+  translated in a client part. Kbd translates its key labels, so it renders
+  through its client build (OQ3).
+- `architecture:theme-application` INV4: a server-rendered page loads the
+  built theme stylesheet (FR13).
+- `spec:AST-013` FR9: FR6 holds server builds to the same rule, with no visible
+  false state after hydration.
 - `spec:AST-080`: the package stylesheet and source builds carry the styles of
   server modules (FR7).
 - `family:buttons` and `family:navigation-destinations`: every member keeps
@@ -191,17 +236,20 @@ through both builds.
 
 ## Verification
 
-| Contract | Verification                                                                                                                           | Representative states                                                                                                | Mutation or failure expectation                                                                                    |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| FR1, FR2 | Server render tests that load React's `react-server` build and swap each `'use client'` module for a client reference                  | Text, Heading, and Kbd with and without `maxLines` and `mod`; presentational and interactive Button and TopNav props | A hook in a server module throws; a presentational render that references a client part fails                      |
-| FR2, FR8 | `serverSafeComponents.test.ts`: the import-graph walk of each server build                                                             | every server build and its declared client parts                                                                     | An undeclared client module, client-only React API, `react-dom` import, or module state fails the walk             |
-| FR3, FR4 | Export-map and export-name checks                                                                                                      | each entry with a server build; the package root                                                                     | A missing or misordered `react-server` condition, or a name present in only one build, fails                       |
-| FR5      | Directive check over every client part and server module                                                                               | client parts; server modules; the absence of `'use server'`                                                          | A directive after a statement, on a server module, or a `'use server'` module fails                                |
-| FR6      | DOM-parity check: static markup of the server build against the client build                                                           | every variant and size, icon and icon-only, links, disabled, inside each provider, AppShell's modes                  | Any byte of difference fails; a real-browser hydration reports no mismatch                                         |
-| FR7      | Server-rendered fixture page in a real browser before any client chunk loads                                                           | Text, Heading, Kbd, Button, TopNav                                                                                   | An unstyled first paint fails                                                                                      |
-| FR9      | Server render tests that pass functions, refs, and providers                                                                           | `onClick`, render props, `ref`, a component `as`, a Server Action                                                    | A function rendered on the server, or a Server Action dropped, fails                                               |
-| FR10     | Bundle check of a server page in each supported bundler                                                                                | a page of Text, Heading, and Kbd with no truncation tooltip and no `mod`                                             | Any Astryx client JavaScript in the page's bundle fails                                                            |
-| FR11     | Server render tests with a streaming renderer, and a scan of server builds and client parts for `Suspense`, `lazy` and thrown promises | each server-renderable component, server and client part, rendered inside an application Suspense boundary           | an Astryx component that suspends, adds a Suspense boundary, or changes the server HTML when its client part loads |
+| Contract  | Verification                                                                                                                                                              | Representative states                                                                                                           | Mutation or failure expectation                                                                                    |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| FR1, FR2  | Server render tests that load React's `react-server` build and swap each `'use client'` module for a client reference                                                     | Text and Heading with and without `maxLines` and the truncation tooltip; presentational and interactive Button and TopNav props | A hook in a server module throws; a presentational render that references a client part fails                      |
+| FR2, FR8  | `serverSafeComponents.test.ts`: the import-graph walk of each server build                                                                                                | every server build and its declared client parts                                                                                | An undeclared client module, client-only React API, `react-dom` import, or module state fails the walk             |
+| FR3, FR4  | Export-map and export-name checks                                                                                                                                         | each entry with a server build; the package root                                                                                | A missing or misordered `react-server` condition, or a name present in only one build, fails                       |
+| FR5       | Directive check over every client part and server module                                                                                                                  | client parts; server modules; the absence of `'use server'`                                                                     | A directive after a statement, on a server module, or a `'use server'` module fails                                |
+| FR6       | DOM-parity check: static markup of the server build against the client build                                                                                              | every variant and size, icon and icon-only, links, disabled, inside each provider, AppShell's modes                             | Any byte of difference fails; a real-browser hydration reports no mismatch                                         |
+| FR6       | Hydration test: `renderToString` of the server render, then `hydrateRoot` with an `onRecoverableError` handler                                                            | every component with a server build, under default props and providers, and inside each provider that changes its output        | Any recoverable error fails                                                                                        |
+| FR6, FR13 | First-frame visual check in a real browser: the box and text of every visible element in the server HTML, with the built theme stylesheet, against the first client frame | a phone viewport with touch and a desktop viewport with a mouse; default props, providers, and the AppShell modes               | Changed text, or an element that moves, appears, or disappears, fails; a first paint with default tokens fails     |
+| FR12      | Pre-hydration behavior test in a real browser with JavaScript off                                                                                                         | a disabled ButtonGroup's submit Button inside a form; a link under a LinkProvider; Button in ButtonGroup and InputGroup         | A form that submits, a disabled control that navigates, or missing grouped styling fails                           |
+| FR7       | Server-rendered fixture page in a real browser before any client chunk loads                                                                                              | Text, Heading, Button, TopNav                                                                                                   | An unstyled first paint fails                                                                                      |
+| FR9       | Server render tests that pass functions, refs, and providers                                                                                                              | `onClick`, render props, `ref`, a component `as`, a Server Action                                                               | A function rendered on the server, or a Server Action dropped, fails                                               |
+| FR10      | Bundle check of a server page in each supported bundler                                                                                                                   | a page of Text and Heading with no truncation tooltip                                                                           | Any Astryx client JavaScript in the page's bundle fails                                                            |
+| FR11      | Server render tests with a streaming renderer, and a scan of server builds and client parts for `Suspense`, `lazy` and thrown promises                                    | each server-renderable component, server and client part, rendered inside an application Suspense boundary                      | an Astryx component that suspends, adds a Suspense boundary, or changes the server HTML when its client part loads |
 
 ## Decision log
 
@@ -263,3 +311,13 @@ ref, or a component `as`, and every provider, stays a client component (FR9).
 - **OQ2 — How does CI run the two-bundler verification?** (`checkable`)
   Candidates: a fixture app per bundler on every change that touches a server
   build or the `exports` map; or the fixture apps on every release.
+- **OQ3 — How does Kbd render on the server?** (`human-design`) Kbd
+  translates its key labels in client context, and on Apple platforms its
+  modifier labels change to glyphs after hydration, so it renders through its
+  client build. Candidates: server-side translation; or English-only key
+  labels on the server.
+- **OQ4 — Can AppShell render one markup tree?** (`checkable`) AppShell picks
+  its desktop or mobile layout in script after hydration, so it and the TopNav
+  inside it render through their client builds (FR6). Candidate: one markup
+  tree with CSS-only breakpoints and drawer state, which renders both layouts
+  without script. The answer belongs to AppShell's own record.
