@@ -33,7 +33,11 @@ affects_consumer_docs:
 
 ```json
 {
-  "paths": ["packages/core/src/hooks/**"]
+  "paths": [
+    "packages/core/src/hooks/**",
+    "packages/core/src/dragToSnapPoints/createSnapDrag.ts",
+    "packages/core/src/gestures/createPan.ts"
+  ]
 }
 ```
 
