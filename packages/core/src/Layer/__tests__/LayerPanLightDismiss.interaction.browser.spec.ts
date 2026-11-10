@@ -69,10 +69,7 @@ interface PressLog {
   readonly up: Point | null;
 }
 
-/**
- * Makes the document scroll, adds a band at the bottom of the viewport that
- * takes no native pan (`touch-action: none`), and logs every press.
- */
+/** Makes the document scroll, and logs every press. */
 async function preparePage(page: Page) {
   await page.evaluate(() => {
     // Out of flow, so the story keeps its layout.
@@ -80,11 +77,6 @@ async function preparePage(page: Page) {
     spacer.style.cssText =
       'position:absolute;inset-block-start:0;inset-inline-start:0;inline-size:1px;block-size:200vh';
     document.body.append(spacer);
-    const band = document.createElement('div');
-    band.id = 'pan-band';
-    band.style.cssText =
-      'position:fixed;inset-inline:0;inset-block-end:0;block-size:160px;touch-action:none';
-    document.body.append(band);
     const log = {
       types: [] as string[],
       down: null as unknown,
@@ -141,13 +133,53 @@ async function openSurface(
   if (layerBox == null || viewport == null) {
     throw new Error('the layer or the viewport has no size');
   }
-  // A point on the page beside the layer, above the band.
+  // A point on the page beside the layer.
   const outside = {x: 10, y: Math.round(viewport.height - 200)};
   expect(
     outside.x < layerBox.x || outside.y > layerBox.y + layerBox.height,
     'the page point is outside the layer',
   ).toBe(true);
   return {driver, outside};
+}
+
+/**
+ * A 40 px pan that starts while the main thread is busy for 400 ms. The
+ * browser then takes no scroll and sends no pointercancel: the page sees the
+ * press, its moves and its lift once the main thread is free.
+ */
+async function panWhileBusy(page: Page, from: Point) {
+  const cdp = await page.context().newCDPSession(page);
+  await page.evaluate(() => {
+    setTimeout(() => {
+      const end = performance.now() + 400;
+      while (performance.now() < end) {
+        // Holds the main thread.
+      }
+    }, 0);
+  });
+  await page.waitForTimeout(30);
+  let at = Date.now() / 1000;
+  const send = async (
+    type: 'touchStart' | 'touchMove' | 'touchEnd',
+    touchPoints: Point[],
+    step: number,
+  ) => {
+    at += step;
+    return cdp.send('Input.dispatchTouchEvent', {
+      type,
+      touchPoints,
+      timestamp: at,
+    });
+  };
+  await Promise.all([
+    send('touchStart', [from], 0),
+    ...[1, 2, 3, 4].map(async index =>
+      send('touchMove', [{x: from.x, y: from.y - 10 * index}], 0.016),
+    ),
+    send('touchEnd', [], 0.008),
+  ]);
+  await page.waitForTimeout(600);
+  await cdp.detach();
 }
 
 async function pan(driver: TouchDriver, from: Point, to: Point, ms: number) {
@@ -206,11 +238,7 @@ for (const surface of SURFACES) {
 
     test('a 40 px pan with no pointercancel leaves it open', async ({page}) => {
       const {driver, outside} = await openSurface(page, surface);
-      const viewport = page.viewportSize();
-      // On the band, beside the layer.
-      const start = {x: 10, y: Math.round((viewport?.height ?? 0) - 40)};
-      await pan(driver, start, {x: start.x, y: start.y - 40}, 64);
-      await frames(page, 3);
+      await panWhileBusy(page, outside);
       const press = await readPress(page);
       expect(press.types, 'the page saw a lift and no cancel').toContain(
         'pointerup',
@@ -246,21 +274,58 @@ for (const surface of SURFACES) {
 }
 
 // A page control that takes the touch keeps it: the layer does not claim a
-// pan that a swipe row captured.
-test.describe('a swipe row under an open Popover', () => {
+// drag that a resize handle or a swipe row holds.
+test.describe('page controls under an open Popover', () => {
   test.beforeEach(({browserName}) => {
     test.skip(
       browserName !== 'chromium',
-      'the row swipe is proven here through CDP touch in Chromium',
+      'the control drags are proven here through CDP touch in Chromium',
     );
+  });
+
+  test('a resize handle dragged by a finger follows it all the way', async ({
+    page,
+  }) => {
+    await openSurface(page, {
+      name: 'Popover over page controls',
+      story: 'core-popover--over-page-controls',
+      role: 'button',
+      trigger: 'Settings',
+    });
+    const driver = await touchDriver(page);
+    const handle = page.getByRole('separator', {name: 'Resize panel'});
+    const box = await handle.boundingBox();
+    const panel = page.getByRole('region', {name: 'Resizable panel'});
+    const before = (await panel.boundingBox())?.width ?? 0;
+    if (box == null) {
+      throw new Error('the handle has no rendered box');
+    }
+    const start = {
+      x: Math.round(box.x + box.width / 2),
+      y: Math.round(box.y + box.height / 2),
+    };
+    await driver.play(
+      drag(
+        start,
+        {x: start.x + 80, y: start.y},
+        {durationMs: 400, restMs: 120},
+      ),
+      {releaseUnread: true},
+    );
+    await page.waitForTimeout(300);
+    const after = (await panel.boundingBox())?.width ?? 0;
+    expect(
+      after - before,
+      'the panel grows with the 80 px drag',
+    ).toBeGreaterThanOrEqual(70);
   });
 
   test('a row swiped open follows the finger and rests open', async ({
     page,
   }) => {
     await openSurface(page, {
-      name: 'Popover over swipe rows',
-      story: 'core-popover--over-swipe-rows',
+      name: 'Popover over page controls',
+      story: 'core-popover--over-page-controls',
       role: 'button',
       trigger: 'Settings',
     });
@@ -338,10 +403,8 @@ test.describe('DropdownMenu', () => {
   test.fixme('a 40 px pan with no pointercancel: closes as a pan outside begins (FR21 gap)', async ({
     page,
   }) => {
-    const {driver, outside} = await openSurface(page, DROPDOWN_MENU);
-    const viewport = page.viewportSize();
-    const start = {x: outside.x, y: Math.round((viewport?.height ?? 0) - 40)};
-    await pan(driver, start, {x: start.x, y: start.y - 40}, 64);
+    const {outside} = await openSurface(page, DROPDOWN_MENU);
+    await panWhileBusy(page, outside);
     expect(await isLayerOpen(page)).toBe(false);
   });
 });
@@ -505,10 +568,8 @@ test.describe('ContextMenu', () => {
     page,
   }) => {
     // The same FR5 gap: the browser makes no tap, so no outside mousedown.
-    const {driver} = await openContextMenu(page);
-    const viewport = page.viewportSize();
-    const start = {x: 10, y: Math.round((viewport?.height ?? 0) - 40)};
-    await pan(driver, start, {x: start.x, y: start.y - 40}, 64);
+    const {outside} = await openContextMenu(page);
+    await panWhileBusy(page, outside);
     await menuCloses(page);
   });
 });

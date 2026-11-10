@@ -3,13 +3,13 @@
 /**
  * @file scrollView.ts
  * @input An element and its computed styles
- * @output Exports parseTouchAction, rootOverflow, SCROLLABLE_OVERFLOW and
- *   isInsideScrollView: whether a touch on the element lands inside a box the
- *   browser can scroll
+ * @output Exports parseTouchAction, touchActionAllowsPan, rootOverflow,
+ *   SCROLLABLE_OVERFLOW and isInsideScrollView: whether a touch on the
+ *   element lands inside a box the browser can scroll
  * @position The one definition of "inside a scroll view", shared by the
- *   press feedback controller (utils/pressFeedback.ts) and the gesture
- *   core's native-scroll probe (gestures/nativeScroll.ts), so Core's main
- *   entry can ask it without the gesture core
+ *   press feedback controller (utils/pressFeedback.ts), the gesture core's
+ *   native-scroll probe (gestures/nativeScroll.ts) and Layer's outside-press
+ *   watch, so Core's main entry can ask it without the gesture core
  */
 
 import {parentAcrossShadow} from './flatTree';
@@ -48,6 +48,33 @@ export function parseTouchAction(value: string): AllowedPans {
       token => token === 'pan-y' || token === 'pan-up' || token === 'pan-down',
     ),
   };
+}
+
+/**
+ * Whether `touch-action` on `element` and on every box above it leaves a pan
+ * on `axis` to the browser.
+ */
+export function touchActionAllowsPan(
+  element: Element,
+  axis: keyof AllowedPans,
+): boolean {
+  const view = element.ownerDocument.defaultView;
+  if (view == null) {
+    return false;
+  }
+  for (
+    let node: Node | null = element;
+    node != null;
+    node = parentAcrossShadow(node)
+  ) {
+    if (
+      isElement(node) &&
+      !parseTouchAction(view.getComputedStyle(node).touchAction || 'auto')[axis]
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /**

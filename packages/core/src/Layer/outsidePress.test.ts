@@ -6,7 +6,8 @@
  *   watchOutsidePress
  * @output The shared focus-leave test, and the outside-press watch that
  *   closes as a finger outside begins to pan, at a cancel or at a lift. With
- *   onPan, the watch reports only that pan, once, and no press or count
+ *   onPan, the watch reports only that pan, once, and no press or count,
+ *   and no pan that touch-action keeps from the browser
  */
 
 import {fireEvent} from '@testing-library/react';
@@ -396,6 +397,26 @@ describe('watchOutsidePress, reporting pans (onPan)', () => {
     expect(onPan).not.toHaveBeenCalled();
     expect(onOutside).not.toHaveBeenCalled();
     expect(outsideDismissalCount(document)).toBe(before);
+    stop();
+  });
+
+  it('reports no pan on a control that keeps the pan from the browser (touch-action)', () => {
+    const {outside, onPan, stop} = setup();
+    const control = document.createElement('div');
+    outside.append(control);
+    vi.spyOn(window, 'getComputedStyle').mockImplementation(
+      element =>
+        ({
+          touchAction: element === control ? 'pan-y' : 'auto',
+        }) as CSSStyleDeclaration,
+    );
+    fireEvent.pointerDown(control, touch(1, 0, 0));
+    fireEvent.pointerMove(control, touch(1, 40, 0));
+    expect(onPan).not.toHaveBeenCalled();
+    fireEvent.pointerDown(control, touch(2, 0, 0));
+    fireEvent.pointerMove(control, touch(2, 0, 40));
+    expect(onPan).toHaveBeenCalledOnce();
+    vi.restoreAllMocks();
     stop();
   });
 

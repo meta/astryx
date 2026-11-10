@@ -19,6 +19,7 @@ import {UIKIT_PAN} from '../motion/uikit/gestures';
 import {shadowHostOf, shadowRootsOutward} from '../utils/flatTree';
 import {subscribeInput} from '../utils/inputStream';
 import {isElement, isNode} from '../utils/nodeType';
+import {touchActionAllowsPan} from '../utils/scrollView';
 import {sharedWeakMap} from '../utils/sharedRealm';
 
 export interface OutsidePressOptions {
@@ -31,7 +32,10 @@ export interface OutsidePressOptions {
    */
   readonly closesOnPan?: boolean;
   /**
-   * Called as a press outside begins to pan. The watch then judges that
+   * Called as a press outside begins a pan that the browser could take as a
+   * scroll: `touch-action` from the press's target up leaves the pan's axis
+   * to the browser. A pan on a control that takes the touch itself (a
+   * resize handle, a swiped row) is not reported. The watch then judges that
    * press no more, and it calls `onOutside` for no press: an owner whose
    * layer the browser light-dismisses learns only of pans. Ignored with
    * `closesOnPan`.
@@ -131,9 +135,17 @@ export function watchOutsidePress(
       ) >= UIKIT_PAN.hysteresis.value
     ) {
       if (reportPan != null) {
+        const axis =
+          Math.abs(event.clientX - panStart.x) >=
+          Math.abs(event.clientY - panStart.y)
+            ? 'x'
+            : 'y';
+        const target = event.composedPath()[0];
         startedOutside = false;
         panStart = null;
-        reportPan();
+        if (isElement(target) && touchActionAllowsPan(target, axis)) {
+          reportPan();
+        }
         return;
       }
       close();
