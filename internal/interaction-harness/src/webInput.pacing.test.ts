@@ -734,7 +734,7 @@ describe('wheelReleaseHold', () => {
   it('leaves the runner a stray its own stall caused, though the page also held a later step', () => {
     // The runner stamped step 3 100 ms after step 2: 120 px/s, which carries
     // 7.7 px against the 18 px bar. Step 5's listeners then ran 36 ms, which
-    // lengthens the carry to 10.6 px, toward the bar. Read without that hold,
+    // lengthens the carry to 10.3 px, toward the bar. Read without that hold,
     // the release still strays, so the stray is the runner's.
     const {stamps, got} = delivery({3: 84}, {5: 36});
     expect(stamps.slice(2, 8)).toEqual([32, 132, 148, 164, 202, 218]);
