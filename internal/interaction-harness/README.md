@@ -62,7 +62,7 @@ committed: a pull request links or attaches it.
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `scripts.ts`    | Touch scripts as data: `tap`, `drag` (hold, rest), `flick` (exact final-move speed, velocity profiles), `holdThenDrag`, `pinch`, `rotate`, `path`, `merge` (a second finger mid-gesture), `releaseVelocity`, `toTouchEvents`.                                                                                                                                                     |
 | `touch.ts`      | `touchDriver(page).play(script)`: the script as real engine input. `installInputLog` / `readInputLog`: what the page received.                                                                                                                                                                                                                                                    |
-| `frames.ts`     | `startScreencast` (timestamped composited frames), `markElement` (a marker chip or outline), `trackMarker` (marker box per frame), `trackMarkers` (several colors from one decode of each frame), `sampleRects` (per-rAF rects), `frameStats`, `requireFrames`.                                                                                                                   |
+| `frames.ts`     | `startScreencast` (timestamped composited frames), `markElement` (a marker chip or outline), `trackMarker` (marker box per frame), `trackMarkers` (several colors from one decode of each frame, each in its own region if it has one), `sampleRects` (per-rAF rects), `frameStats`, `requireFrames`.                                                                             |
 | `busy.ts`       | `blockMainThread(page, ms)`, which returns the window it held and the span its loop measured, and `busyWindowProof(tracked, window)`: frames presented, frames that moved, longest stall, a verdict; `presented` adds the compositor's own frames.                                                                                                                                |
 | `brightness.ts` | `trackBrightness(page, frames, {x, y})`: a colour channel's mean in a square per frame, as a scalar on `box.x`, for a busy-window proof of a fade or a dim.                                                                                                                                                                                                                       |
 | `webInput.ts`   | `webInputDriver(page)`: `wheel({x, y, dx, dy, ctrl})` and `pen(points)` as real engine input, for proofs across pointers (`spec:AST-100` FR4); `wheel` resolves once the page has the step; read back through the input log.                                                                                                                                                      |
@@ -226,7 +226,18 @@ only before its curve's held tail (keyframes that end in a run of identical
 values, read as `waitForRest` reads them): when the only animation running
 there started while the page waited, or the wait times out with only such
 animations, the page looked too late, and the wait rejects with
-`BusyWindowTooLateError`. With `pseudoElement` (`'::before'` or
+`BusyWindowTooLateError`. A wait that times out with no animation reads the
+page's animation recorder too. A run that counts, began after the call and
+before the wait, and has ended is the action's run: the page received the
+action before the wait, as a late runner can deliver it. That also rejects
+with `BusyWindowTooLateError`, with `startedBeforeWaitMs` and
+`endedBeforeWaitMs`. A run that began before the call is an earlier action's,
+and the wait still finds no start. The call's time maps onto the page's clock
+through its time origin, with 5 ms of slack. A clock that slews further moves
+that line, and only the error's name changes. `blockMainThread` starts the
+recorder passive: the `animate()` wrapper and the CSS events log what starts,
+with no frame loop and no document-wide read. The first call of `curves.ts`
+adopts it as if it started then. With `pseudoElement` (`'::before'` or
 `'::after'`), only that pseudo-element's animations on `during` itself count,
 as `sampleCurve` reads them: a child's animation, such as a switch thumb's
 press, does not start the block. With `property`, only animations that set
@@ -237,7 +248,10 @@ a component can rebuild a running animation on its old clock, and the page sees
 it running before the compositor shows a frame of it. The window names the
 animation it caught (`animation`): when it started and where its curve ends.
 These times are on the real clock, as the window's own are, after a page
-freeze too.
+freeze too. The page waits up to `TARGET_WAIT_MS` (5 s) for `during` to be on
+the page. Past it, the wait fails by name: the element is gone, or it never
+came. An element that leaves the page while the wait looks fails the wait at
+once, with when it left.
 The `verdict` judges the
 frames the screencast delivered, whatever its rate (a loaded machine's can
 deliver one frame in five or six), and tolerates nothing a frozen animation
@@ -315,8 +329,10 @@ sheet's dim held for 155 to 225 ms into a block while the control moved, and
 inside the dialog it moves in step with the sheet. `waitForAnimation` and
 `blockMainThread`'s `during` never count the control's own animation, so on
 a dialog they still wait for the backdrop's. Track a top-layer control from
-the same screencast with `trackControl(page, frames)` (`trackMarker` with
-`CONTROL_RGB`, searching only the top strip it crosses). A control mounted
+the same screencast with `trackControl(page, frames)`, which searches only the
+top strip it crosses. To track the marker and the control from one decode of
+each frame, pass both colors to `trackMarkers(page, frames, {colors:
+[MARKER_RGB, controlColor()]})`: `controlColor()` carries the control's strip. A control mounted
 `within` a dialog moves with it, so track that one with `trackMarker(page,
 frames, {rgb: CONTROL_RGB})`, or track the marker and the control together
 with `trackMarkers(page, frames, {colors: [MARKER_RGB, CONTROL_RGB]})`, which
@@ -397,8 +413,9 @@ moves only its own reading. A frame within 36 px of a turn gets no reading.
 A proof that needs every frame read starts a second control after the first,
 `startBusyControl(page, {ahead: true})`: an `AHEAD_CONTROL_RGB` box in the
 strip below, half a leg (200 ms) ahead. Wherever the first control is near a
-turn, the one ahead is mid-leg. Track it with `trackControl(page, frames,
-{ahead: true})` and read it with its own `controlClock`. `startBusyControl`
+turn, the one ahead is mid-leg. Track it with `controlColor({ahead: true})` in
+the same `trackMarkers` call, or with `trackControl(page, frames, {ahead:
+true})`, and read it with its own `controlClock`. `startBusyControl`
 resolves with each control's `start` on the page clock, where its own time
 is zero. Keep the component's marker out of the top 28 px then.
 
@@ -490,7 +507,11 @@ long, and the error says that instead.
 `waitForRest` fails the same way when it cannot tell. The element held still
 in its last frame, or no frame came after the deadline, and no frame came for
 longer than `FRAME_STARVATION_MS`: it throws `FrameStarvationError`, not
-"still moving".
+"still moving". The same holds when the frame past the deadline shows motion
+after such a gap, since the element may have stopped unseen in it. The error
+then gives the last move. It also holds when the still frames begin just after
+such a gap and are too few at the deadline. An animation whose curve outlasts the
+gap is still moving, and says so.
 
 **No Layout / Paint.** `traceRendering` records a Chromium trace around the
 interaction; `countBetween` counts the steady middle of an animation (its

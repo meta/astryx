@@ -534,7 +534,9 @@ a measured, sourced difference exists.
   first move, only while every scroller under the finger sits at its edge and
   the drag moves toward that edge (FR14), and only the moves the browser would
   rubber-band, never a real scroll; the pan itself still begins at FR17's
-  10 pt, as UIKit's sheet pull does (DEC-18). A toast's swipe MAY cancel its
+  10 pt, as UIKit's sheet pull does (DEC-18). A scroll-edge pan that waits out
+  a tap's wobble before cancelling MUST still cancel before a kept move could
+  commit the native pan (DEC-29). A toast's swipe MAY cancel its
   touch's moves from a first move toward its dismiss edge (`component:Toast`
   FR4).
   A recognizer that is cancelled while its touch is moving, other than by the
@@ -1501,6 +1503,21 @@ stretch, and a reversal hands it back (FR14's one exception).
 
 Rejected: keeping the whole gesture with the content (the strict nested-scroll
 rule).
+
+### DEC-29 — A sheet's pull waits out a tap's wobble
+
+**Reference:** `spec:AST-094/DEC-29`
+**Decider:** Specs consistency ruling, `2026-11-09`, applying DEC-18
+
+Mobile Safari commits a kept first move of 5 px to the native pan (iOS 26.2
+Simulator; a kept move of 4 px commits nothing; the author's earlier Mobile
+Safari 27.0 run committed at 7 px), so BottomSheet cancels from a first move
+that reaches a tap's 5 px wobble. Once the native pan is committed, no later
+cancel stops it, and the sheet's content rubber-bands under the finger while
+the sheet moves beside it. WebKit ends a touch's click when one of its moves is
+cancelled, so waiting out the wobble keeps a tap's click on a control in the
+sheet. The trade-off: a tap that wobbles 5 to 8 px toward the edge loses its
+click.
 
 ## Open questions
 

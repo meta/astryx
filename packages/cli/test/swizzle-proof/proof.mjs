@@ -6,7 +6,8 @@
  * @output The swizzle proof (spec:AST-110 FR7): for each target it ejects
  *   the copy into a clean project, checks its imports and files,
  *   type-checks it, bundles it with the StyleX compiler, and renders it once
- *   on the server. It also decides which targets a change affects.
+ *   on the server, and on request in Chromium. It also decides which targets
+ *   a change affects.
  * @position Shared by the swizzle proof tests; no Vitest import
  */
 
@@ -482,15 +483,15 @@ function hasParentCommit() {
  * Runs one slice of the proof: the targets at `index` of every `count`, in
  * the scope {@link proofScope} chooses. In the affected scope the slice
  * proves the targets whose copy depends on a changed source file.
- * @param {{index: number, count: number, samples: Record<string, Function>, notRendered: Record<string, string>, project: string, all?: boolean}} options
+ * @param {{index: number, count: number, notRendered: Record<string, string>, project: string, all?: boolean, browser?: boolean}} options
  */
 export async function runSlice({
   index,
   count,
-  samples,
   notRendered,
   project,
   all = false,
+  browser = false,
 }) {
   const start = Date.now();
   const base = process.env.SWIZZLE_PROOF_BASE ?? 'HEAD^1';
@@ -565,7 +566,12 @@ export async function runSlice({
   }
   const ejectedAffected = affected.filter(t => ejected.has(t.key));
   const proof = ejectedAffected.length
-    ? await prove(ejectedAffected, {project, samples, notRendered, ejected})
+    ? await prove(ejectedAffected, {
+        project,
+        notRendered,
+        ejected,
+        browser,
+      })
     : {results: [], timings: {}};
   for (const t of affected) {
     if (!ejected.has(t.key))
@@ -585,11 +591,22 @@ export async function runSlice({
  * Proves each target. Each step's failure is recorded on the target, and a
  * target that fails a step skips the later ones.
  * @param {Array<{name: string, pkg: string, key: string}>} targets
- * @param {{project: string, samples: Record<string, Function>}} options
+ * @param {{project: string, samplesFile?: string, notRendered?: Record<string, string>, ejected?: Map<string, any>, browser?: boolean}} options
+ *   `samplesFile` is the module whose `samples` render the targets; by
+ *   default the proof's own samples.mjs.
  */
 export async function prove(
   targets,
-  {project, samples, notRendered = {}, ejected},
+  {
+    project,
+    samplesFile = path.join(
+      REPO,
+      'packages/cli/test/swizzle-proof/samples.mjs',
+    ),
+    notRendered = {},
+    ejected,
+    browser = false,
+  },
 ) {
   const timings = {};
   const time = async (step, run) => {
@@ -676,10 +693,10 @@ export async function prove(
     const entries = path.join(project, 'entries');
     fs.rmSync(entries, {recursive: true, force: true});
     fs.mkdirSync(entries, {recursive: true});
-    const samplesFile = path.join(entries, 'samples.mjs');
+    const samplesEntry = path.join(entries, 'samples.mjs');
     fs.writeFileSync(
-      samplesFile,
-      `export {samples} from ${JSON.stringify(pathToFileURL(path.join(REPO, 'packages/cli/test/swizzle-proof/samples.mjs')).href)};\n`,
+      samplesEntry,
+      `export {samples} from ${JSON.stringify(pathToFileURL(samplesFile).href)};\n`,
     );
     const packages = workspacePackages();
     for (const t of alive()) {
@@ -718,14 +735,39 @@ export async function prove(
           `  }`,
           `  return v;`,
           `}`,
-          `export function render() {`,
+          `export function element() {`,
           `  const make = samples[${JSON.stringify(t.key)}];`,
           `  if (!make && C == null) throw new Error('the copy exports no ${t.name}');`,
-          `  return renderToString(make ? make({C, mod: Copy, React, Core, Pkg}) : React.createElement(C, revive(defaults)));`,
+          `  return make ? make({C, mod: Copy, React, Core, Pkg}) : React.createElement(C, revive(defaults));`,
+          `}`,
+          `export function render() {`,
+          `  return renderToString(element());`,
           `}`,
           '',
         ].join('\n'),
       );
+      if (browser) {
+        // A page that renders the copy in the browser and records each error.
+        fs.writeFileSync(
+          path.join(entries, `${t.key}.page.tsx`),
+          [
+            `import {createRoot} from 'react-dom/client';`,
+            `import {element} from './${t.key}';`,
+            `const errors = (window.__swizzleErrors = []);`,
+            `window.addEventListener('error', event => errors.push(String(event.message)));`,
+            `try {`,
+            `  createRoot(document.getElementById('root')).render(element());`,
+            `} catch (error) {`,
+            `  errors.push(String(error));`,
+            `}`,
+            '',
+          ].join('\n'),
+        );
+        fs.writeFileSync(
+          path.join(entries, `${t.key}.html`),
+          `<!doctype html><html><head><meta charset="utf-8"></head><body><div id="root"></div><script type="module" src="./${t.key}.page.tsx"></script></body></html>`,
+        );
+      }
     }
   });
 
@@ -859,7 +901,107 @@ export async function prove(
     }
   });
 
+  if (browser) await time('browser', () => renderInBrowser());
+
   return {results: [...results.values()], timings};
+
+  /**
+   * Builds each target's page and renders it in Chromium. A page fails when
+   * it reports an error or renders nothing.
+   */
+  async function renderInBrowser() {
+    const out = path.join(project, 'dist-browser');
+    const keys = renderable().map(t => t.key);
+    await batch('browser', keys, list =>
+      vite.build({
+        root: path.join(project, 'entries'),
+        base: './',
+        configFile: false,
+        logLevel: 'silent',
+        plugins: plugins(),
+        resolve,
+        // The React plugin emits the development JSX runtime under a test
+        // run, so the page uses React's development build to match.
+        mode: 'development',
+        define: {'process.env.NODE_ENV': '"development"'},
+        build: {
+          outDir: out,
+          emptyOutDir: false,
+          minify: false,
+          reportCompressedSize: false,
+          rollupOptions: {
+            input: Object.fromEntries(
+              list.map(k => [k, path.join(project, 'entries', `${k}.html`)]),
+            ),
+          },
+        },
+      }),
+    );
+    const {chromium} = requireFromRepo('playwright');
+    const http = await import('node:http');
+    const types = {
+      '.js': 'text/javascript',
+      '.css': 'text/css',
+      '.html': 'text/html',
+    };
+    const server = http
+      .createServer((request, response) => {
+        const file = path.join(
+          out,
+          decodeURIComponent(new URL(request.url, 'http://x').pathname),
+        );
+        if (
+          !file.startsWith(out) ||
+          !fs.existsSync(file) ||
+          fs.statSync(file).isDirectory()
+        ) {
+          response.writeHead(404);
+          response.end();
+          return;
+        }
+        response.writeHead(200, {
+          'content-type':
+            types[path.extname(file)] ?? 'application/octet-stream',
+        });
+        fs.createReadStream(file).pipe(response);
+      })
+      .listen(0);
+    const {port} = /** @type {import('node:net').AddressInfo} */ (
+      server.address()
+    );
+    // A missing browser fails the step: the release check asked for it.
+    const chrome = await chromium.launch();
+    try {
+      for (const t of renderable()) {
+        const page = await chrome.newPage();
+        const pageErrors = [];
+        page.on('pageerror', error => pageErrors.push(String(error.message)));
+        try {
+          await page.goto(`http://localhost:${port}/${t.key}.html`, {
+            waitUntil: 'load',
+            timeout: 15000,
+          });
+          await page.waitForTimeout(300);
+          const state = await page.evaluate(() => ({
+            errors: window.__swizzleErrors ?? ['the page did not run'],
+            empty:
+              (document.getElementById('root')?.childNodes.length ?? 0) === 0,
+          }));
+          const errors = [...pageErrors, ...state.errors];
+          if (errors.length) fail(t.key, 'browser', errors[0]);
+          else if (state.empty)
+            fail(t.key, 'browser', 'the copy rendered nothing');
+        } catch (error) {
+          fail(t.key, 'browser', String(error.message ?? error).split('\n')[0]);
+        } finally {
+          await page.close();
+        }
+      }
+    } finally {
+      await chrome.close();
+      server.close();
+    }
+  }
 }
 
 /** The playground defaults a target's doc declares, or none. */
