@@ -31,6 +31,7 @@ import {
   WHEEL_SCROLL_END_MS,
   WHEEL_SKIP,
 } from '@astryxdesign/interaction-harness';
+import type {WheelRelease} from '@astryxdesign/interaction-harness';
 
 /**
  * Chromium's driver sends each wheel as one notch, `wheelDeltaY` -120
@@ -2212,34 +2213,64 @@ test.describe('where the primary pointer is fine', () => {
   }
 
   /**
-   * The page's log after `deltas`, one wheel each, and a quiet 300 ms, with
-   * each wheel's time as the page received it.
+   * The page's log after `deltas`, a wheel a frame as one trackpad scroll,
+   * and a quiet 300 ms. `wheels` holds each wheel the page received: its
+   * stamp, the clock the gesture host reads, and its deltaX. Awaited wheels
+   * land a round trip apart, which a loaded runner stretches past the scroll's
+   * end. The burst keeps them a frame apart. It fails by name a split, or a
+   * release the page read off the script's at `release`.
    */
-  async function trackpadRun(page: Page, deltas: number[]) {
+  async function trackpadRun(
+    page: Page,
+    deltas: number[],
+    release: WheelRelease,
+  ) {
     const driver = await webInputDriver(page);
     test.skip(!driver.wheels, WHEEL_SKIP);
     const at = await center(page, 'card');
     await page.evaluate(() => {
-      const times: number[] = [];
-      (window as unknown as {__wheelTimes: number[]}).__wheelTimes = times;
-      window.addEventListener('wheel', event => times.push(event.timeStamp), {
-        capture: true,
-        passive: true,
-      });
+      const wheels: [number, number][] = [];
+      (window as unknown as {__wheels: [number, number][]}).__wheels = wheels;
+      window.addEventListener(
+        'wheel',
+        event => wheels.push([event.timeStamp, event.deltaX]),
+        {capture: true, passive: true},
+      );
     });
-    for (const dx of deltas) {
-      await driver.wheel({...at, dx});
-    }
+    await driver.wheelBurst({
+      ...at,
+      steps: deltas.map(dx => ({dx})),
+      maxGapMs: WHEEL_SCROLL_END_MS.horizontal,
+      release,
+    });
     await page.waitForTimeout(300);
     const entries = await page.evaluate(() => window.__wheelLog);
-    const times = await page.evaluate(
-      () => (window as unknown as {__wheelTimes: number[]}).__wheelTimes,
+    const wheels = await page.evaluate(
+      () => (window as unknown as {__wheels: [number, number][]}).__wheels,
     );
     const log = entries.filter(entry => entry.startsWith('pan:'));
     const moves = log
       .filter(entry => /^pan:(changed|ended):/.test(entry))
       .map(entry => Number(entry.split(':')[2]));
-    return {entries, log, moves, times};
+    return {entries, log, moves, wheels};
+  }
+
+  /**
+   * The index of the received wheel that carried sent wheel `k`: the first
+   * whose running deltaX reaches the sent wheels' sum through `k`. WebKit
+   * merges the wheels it holds while the page is busy.
+   */
+  function carrierOf(
+    wheels: ReadonlyArray<readonly [number, number]>,
+    deltas: ReadonlyArray<number>,
+    k: number,
+  ): number {
+    const sent = deltas.slice(0, k + 1).reduce((sum, dx) => sum + dx, 0);
+    let received = 0;
+    return wheels.findIndex(([, dx]) => {
+      received += dx;
+      return received >= sent - 0.01;
+    });
   }
 
   test("keeps a trackpad pan moving at the fingers' speed through the splitter's undecided stretch and lets it go at the lift still moving: no stall (spec:AST-094 FR43)", async ({
@@ -2251,17 +2282,25 @@ test.describe('where the primary pointer is fine', () => {
     // Four steady wheels, four shrinking ones (the lift is read at the
     // fourth, wheel 7), then momentum.
     const lift = 7;
-    const {entries, times} = await trackpadRun(
-      page,
-      [12, 12, 12, 12, 11, 10, 9, 8, 7, 6, 5, 4],
-    );
+    const deltas = [12, 12, 12, 12, 11, 10, 9, 8, 7, 6, 5, 4];
+    // The host reads the fingers' speed at their last steady wheel, wheel 3,
+    // and carries it to the lift. The travel bar below, -56 = -38 - 18, needs
+    // at least 18 px of that carry. The proof also reads the momentum after
+    // the lift, which the host reads wheel by wheel.
+    const {entries, wheels} = await trackpadRun(page, deltas, {
+      readStep: 3,
+      liftStep: lift,
+      carryPx: {min: 18},
+      stepwise: {from: lift + 1},
+    });
+    const times = wheels.map(([time]) => time);
+    const liftAt = carrierOf(wheels, deltas, lift);
+    const fromAt = carrierOf(wheels, deltas, lift - 4);
     // A loaded page can deliver the momentum after a pause of 50 ms or more,
     // and the proof then judges the wheels before it. Each wheel logs itself
-    // after the host handled it. WebKit's injected wheels carry only real
-    // dispatch time, so a harness that cannot keep pace can still stall the
-    // finger phase and fail this proof.
+    // after the host handled it.
     const pause = times.findIndex(
-      (time, i) => i > lift && time - times[i - 1] >= 50,
+      (time, i) => i > liftAt && time - times[i - 1] >= 50,
     );
     const wheelAt = entries.flatMap((entry, i) =>
       entry.startsWith('wheel:') ? [i] : [],
@@ -2287,7 +2326,7 @@ test.describe('where the primary pointer is fine', () => {
     // lets go near 0. The floor is a quarter of the fingers' speed as the page
     // delivered their shrinking wheels, and at most 100 px/s.
     const fingers =
-      ((11 + 10 + 9 + 8) / (times[lift] - times[lift - 4])) * 1000;
+      ((11 + 10 + 9 + 8) / (times[liftAt] - times[fromAt])) * 1000;
     expect(Math.abs(Number(ended[0].split(':')[3]))).toBeGreaterThan(
       Math.min(100, fingers / 4),
     );
@@ -2302,7 +2341,10 @@ test.describe('where the primary pointer is fine', () => {
     // No wheel reached the page, the momentum after the lift included
     // (spec:AST-094 FR43).
     expect(stream.filter(entry => entry.startsWith('wheel:'))).toEqual(
-      Array.from({length: pause < 0 ? 12 : pause}, () => 'wheel:true'),
+      Array.from(
+        {length: pause < 0 ? wheels.length : pause},
+        () => 'wheel:true',
+      ),
     );
   });
 
@@ -2313,7 +2355,15 @@ test.describe('where the primary pointer is fine', () => {
     test.skip(browserName === 'chromium', TRACKPAD_SKIP);
     await trackpadPanPage(page);
     const deltas = [12, 12, 12, 12, 11, 10, 12, 12, 12, 12, 12, 12];
-    const {moves} = await trackpadRun(page, deltas);
+    // The host carries the speed of wheel 3 through the undecided stretch, to
+    // wheel 5, before the fingers carry on. Their six moves after it each
+    // absorb half a move, 36 px in all. So the carry may lead the 21 px they
+    // held by 36 px: 57 px.
+    const {moves} = await trackpadRun(page, deltas, {
+      readStep: 3,
+      liftStep: 5,
+      carryPx: {max: 57},
+    });
     for (const [i, x] of moves.entries()) {
       if (i > 0) {
         expect(x).toBeLessThanOrEqual(moves[i - 1]);

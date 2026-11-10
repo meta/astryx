@@ -79,14 +79,76 @@ export interface WheelBurst {
   readonly ctrl?: boolean;
   /**
    * The gap that ends the proof's component's gesture, ms: the page must
-   * receive each step less than this after the one before (see
-   * `wheelArrivals`). A gap this long or longer splits the run, as Core's
-   * gesture host ends a trackpad scroll after `WHEEL_SCROLL_END_MS`. Then
-   * `wheelBurst` throws `WheelPageStallError` when the page held the gap,
-   * and `WheelPacingError` otherwise. The page holds it while it handles the
-   * step before, or while it draws no frame. Without it, no gap is judged.
+   * stamp each step less than this after the one before (see `wheelStamps`).
+   * A gap this long or longer splits the run, as Core's gesture host ends a
+   * trackpad scroll after `WHEEL_SCROLL_END_MS`. Then `wheelBurst` throws
+   * `WheelPageStallError` when the page held the gap, and `WheelPacingError`
+   * otherwise. The page holds it while it handles the step before, or while
+   * it draws no frame. Without it, no gap is judged.
    */
   readonly maxGapMs?: number;
+  /**
+   * Judges the release the page reads from the steps' stamps, as Core's
+   * gesture host follows a trackpad pan (see `wheelReleaseRead`). A read whose
+   * carried travel crosses the proof's bar throws `WheelPacingError`.
+   */
+  readonly release?: WheelRelease;
+}
+
+/**
+ * Where a burst's release is read, and the carried travel the proof's own bar
+ * allows. Core's gesture host reads the fingers' speed at their last move,
+ * `readStep`. It carries that speed until `liftStep`, which defaults to
+ * `readStep`. `carryPx` bounds that carried travel, as the proof's bar does.
+ * `stepwise` names later steps the host reads one by one, such as the glide
+ * after the lift. `to` defaults to the burst's last step.
+ */
+export interface WheelRelease {
+  readonly readStep: number;
+  readonly liftStep?: number;
+  readonly carryPx: {readonly min?: number; readonly max?: number};
+  readonly stepwise?: {readonly from: number; readonly to?: number};
+}
+
+/**
+ * A wheel stamped this close to the one before reads as merged in Core's
+ * gesture host, ms. It joins the reading of the move before it. The harness
+ * cannot import Core: Core's wheelEnd.harness.test.ts keeps the two equal.
+ */
+export const WHEEL_BUNCHED_MS = 1.5;
+
+/**
+ * A burst's release as the script throws it, on its schedule, and as the
+ * page read it from its stamps (`wheelReleaseRead`). The speeds are what each
+ * carries to the lift, in px/s. The page's is 0 when it read none. The carry
+ * runs from the fingers' last move to the lift, in ms and px.
+ */
+export interface WheelReleaseRead {
+  readonly readStep: number;
+  readonly liftStep: number;
+  readonly carryPx: WheelRelease['carryPx'];
+  readonly scriptPxPerS: number;
+  readonly pagePxPerS: number;
+  readonly scriptCarryMs: number;
+  readonly pageCarryMs: number;
+  readonly scriptCarryPx: number;
+  readonly pageCarryPx: number;
+  readonly sendGapsMs: readonly number[];
+  readonly stampGapsMs: readonly number[];
+  /**
+   * The first wheel that carried several sent steps between `readStep - 1`
+   * and `liftStep`, as those sent steps. Null when none.
+   */
+  readonly merged: readonly [number, number] | null;
+  /**
+   * The first merged step beginning in `stepwise` that the host cannot read
+   * as a merge: the sent steps it carries and its stamp gap, ms. Null when
+   * none.
+   */
+  readonly stepwiseMerge: {
+    readonly steps: readonly [number, number];
+    readonly gapMs: number;
+  } | null;
 }
 
 /**
@@ -102,14 +164,38 @@ export interface WheelBurst {
  */
 export class WheelPacingError extends Error {
   constructor(
-    readonly maxGapMs: number,
+    readonly maxGapMs: number | null,
     readonly receivedGapsMs: readonly number[],
+    readonly release: WheelReleaseRead | null = null,
   ) {
     super(
-      `webInputDriver: the page received the wheel burst with a gap of ${Math.max(...receivedGapsMs).toFixed(0)} ms, at or over its ${maxGapMs} ms (gaps ${receivedGapsMs.map(g => g.toFixed(0)).join(', ')} ms): the dispatch stalled before the page, so the page saw more than one gesture`,
+      release == null
+        ? `webInputDriver: the page stamped the wheel burst with a gap of ${Math.max(...receivedGapsMs).toFixed(0)} ms, at or over its ${maxGapMs} ms (gaps ${receivedGapsMs.map(g => g.toFixed(0)).join(', ')} ms): the dispatch stalled before the page, so the page saw more than one gesture`
+        : releaseMessage(release),
     );
     this.name = 'WheelPacingError';
   }
+}
+
+function releaseMessage(read: WheelReleaseRead): string {
+  const gaps = (values: readonly number[]) =>
+    values.map(g => g.toFixed(0)).join(', ');
+  const {min, max} = read.carryPx;
+  const bar = [
+    min == null ? null : `at least ${min} px`,
+    max == null ? null : `at most ${max} px`,
+  ]
+    .filter(Boolean)
+    .join(' and ');
+  const why = `steps ${read.readStep - 1} to ${read.liftStep} stamped ${gaps(read.stampGapsMs)} ms apart, sent ${gaps(read.sendGapsMs)} ms apart: the dispatch stalled before the page, so the page read another release`;
+  if (read.merged != null) {
+    return `webInputDriver: the page received sent steps ${read.merged[0]} to ${read.merged[1]} as one wheel, inside the steps the release reads, ${read.readStep - 1} to ${read.liftStep}. The gesture host reads such a merge with its own decay, not as the script throws the steps (${why})`;
+  }
+  if (read.stepwiseMerge != null) {
+    const {steps, gapMs} = read.stepwiseMerge;
+    return `webInputDriver: the page received sent steps ${steps[0]} to ${steps[1]} as one wheel, stamped ${gapMs.toFixed(0)} ms after the one before, past the gesture host's ${WHEEL_BUNCHED_MS} ms merge window. The host reads it as one big move where the proof needs each step on its own (${why})`;
+  }
+  return `webInputDriver: the page read a release of ${read.pagePxPerS.toFixed(0)} px/s where the script throws ${read.scriptPxPerS.toFixed(0)} px/s, and carried it ${read.pageCarryMs.toFixed(0)} ms to the lift where the script carries it ${read.scriptCarryMs.toFixed(0)} ms. That moves ${read.pageCarryPx.toFixed(1)} px where the script moves ${read.scriptCarryPx.toFixed(1)} px, past the proof's bar of ${bar} (${why})`;
 }
 
 /**
@@ -155,19 +241,54 @@ export interface WheelPageStall {
 export const HELD_BACK_MS = 20;
 
 /**
- * When each received step of a burst reached the page, ms on the page clock:
- * its `timeStamp` in Chromium, which stamps a step with its dispatch time; in
- * WebKit, when the page's first listener received it. WebKit coalesces the
- * steps it holds while the page's main thread is busy, and the coalesced step
- * keeps the stamp of the step before it, so its stamp cannot show how long the
- * page made it wait.
+ * Each received step's own `timeStamp`, ms on the page clock. Core's gesture
+ * host reads these stamps, so they decide where it splits a scroll. A stamp
+ * in epoch ms maps through the page's time origin, as the host maps it.
+ * WebKit coalesces the steps it holds while the page's main thread is busy.
+ * The coalesced step keeps the stamp of the step before it, and the host
+ * reads it there too. So a hold shows in the gap after it.
  */
-export function wheelArrivals(
-  engine: Engine,
+export function wheelStamps(
   stamps: readonly number[],
-  receivedAt: readonly number[],
-): readonly number[] {
-  return engine === 'webkit' ? receivedAt : stamps;
+  timeOrigin: number,
+): number[] {
+  return stamps.map(stamp => (stamp > 1e12 ? stamp - timeOrigin : stamp));
+}
+
+/**
+ * The sent steps each received step carries, `[first, last]`, or `null`
+ * where its deltas reach no sent step. WebKit coalesces the steps it holds
+ * into one that carries their summed deltas.
+ */
+function carriedSteps(
+  steps: readonly {readonly dx?: number; readonly dy?: number}[],
+  deltas: readonly (readonly [number, number])[],
+): ([number, number] | null)[] {
+  const close = (a: number, b: number) => Math.abs(a - b) < 0.01;
+  // What the page has received after each sent step, if it received them all.
+  const sentSums: [number, number][] = [];
+  let sx = 0;
+  let sy = 0;
+  for (const {dx = 0, dy = 0} of steps) {
+    sx += dx;
+    sy += dy;
+    sentSums.push([sx, sy]);
+  }
+  let rx = 0;
+  let ry = 0;
+  let from = 0;
+  return deltas.map(([dx, dy]) => {
+    rx += dx;
+    ry += dy;
+    for (let j = from; j < sentSums.length; j++) {
+      if (close(sentSums[j][0], rx) && close(sentSums[j][1], ry)) {
+        const carried: [number, number] = [from, j];
+        from = j + 1;
+        return carried;
+      }
+    }
+    return null;
+  });
 }
 
 /**
@@ -185,30 +306,9 @@ export function wheelSendGaps(
   sentAt: readonly number[],
   deltas: readonly (readonly [number, number])[],
 ): (number | null)[] {
-  const close = (a: number, b: number) => Math.abs(a - b) < 0.01;
-  // What the page has received after each sent step, if it received them all.
-  const sentSums: [number, number][] = [];
-  let sx = 0;
-  let sy = 0;
-  for (const {dx = 0, dy = 0} of steps) {
-    sx += dx;
-    sy += dy;
-    sentSums.push([sx, sy]);
-  }
-  let rx = 0;
-  let ry = 0;
-  let from = 0;
-  const lastSent = deltas.map(([dx, dy]) => {
-    rx += dx;
-    ry += dy;
-    for (let j = from; j < sentSums.length; j++) {
-      if (close(sentSums[j][0], rx) && close(sentSums[j][1], ry)) {
-        from = j + 1;
-        return j;
-      }
-    }
-    return null;
-  });
+  const lastSent = carriedSteps(steps, deltas).map(
+    carried => carried?.[1] ?? null,
+  );
   return lastSent.slice(1).map((j, i) => {
     const before = lastSent[i];
     return j == null || before == null || j <= before
@@ -220,15 +320,19 @@ export function wheelSendGaps(
 /**
  * Sorts a burst's gaps of `maxGapMs` or more by cause. A gap that long
  * splits the run, as Core's gesture host ends a wheel gesture at a pause of
- * its end window or more. `stamps` are when the received steps reached the
- * page (`wheelArrivals`). `handledAt` is when the
+ * its end window or more. `stamps` are the received steps' own stamps on
+ * the page clock (`wheelStamps`). `handledAt` is when the
  * page's wheel listeners had finished with each, NaN unseen. For a step whose
  * propagation the page stopped, it is when a task queued at its arrival ran.
  * `sendGapsMs` is how far apart the harness sent the steps behind each gap
- * (`wheelSendGaps`; `null` where unknown). WebKit dispatches a step only once
- * the page's main thread is free. There a gap is the page's when the step
- * reached it within one frame of the listeners finishing the step before. It
- * waited on them. The gap must also be more than a frame wider than the
+ * (`wheelSendGaps`; `null` where unknown). `receivedAt` is when each step
+ * reached the page. WebKit can stamp a step before the page receives it, so
+ * the listeners' own time runs from the arrival. WebKit dispatches a step only
+ * once the page's main thread is free. There a gap is the page's when the step
+ * was stamped within one frame of the listeners finishing the step before.
+ * Their own time inside the gap must also account for its excess over the
+ * send spacing, within a frame. The step then waited on them. The gap must
+ * also be more than a frame wider than the
  * harness's own spacing of those steps. The page can only widen a gap, so one
  * no wider than the send spacing is the dispatch's. That holds even when a
  * starved renderer also held the step, as a runner whose CPU quota holds the
@@ -236,6 +340,8 @@ export function wheelSendGaps(
  * `frames`, the page's frame times, show none across nearly all of it. Then
  * engine or page work held the main thread, or a starved runner held the
  * renderer, not the page's wheel listeners.
+ * A gap whose own send spacing already reaches `maxGapMs` is the dispatch's
+ * whatever the page added: it was over the bound when the steps left.
  * Every other gap is the dispatch's. In Chromium, which stamps a step with
  * its dispatch time, the page cannot move its stamps, so every gap is. Other
  * work between steps that leaves frames running counts as the dispatch's,
@@ -248,6 +354,7 @@ export function wheelGapCauses(
   maxGapMs: number,
   sendGapsMs: readonly (number | null)[] = [],
   frames: readonly number[] = [],
+  receivedAt: readonly number[] = stamps,
 ): {pageStalls: WheelPageStall[]; dispatchStalls: number[]} {
   const pageStalls: WheelPageStall[] = [];
   const dispatchStalls: number[] = [];
@@ -257,12 +364,22 @@ export function wheelGapCauses(
       continue;
     }
     const sendGapMs = sendGapsMs[i - 1];
+    if (sendGapMs != null && sendGapMs >= maxGapMs) {
+      dispatchStalls.push(gapMs);
+      continue;
+    }
     const widened = sendGapMs == null || gapMs > sendGapMs + HELD_BACK_MS;
-    const handlingMs = handledAt[i - 1] - stamps[i - 1];
+    const handlingMs = listenerTimeWithin(
+      stamps[i - 1],
+      stamps[i],
+      receivedAt.slice(0, i),
+      handledAt.slice(0, i),
+    );
     const heldBack =
       engine === 'webkit' &&
       Number.isFinite(handledAt[i - 1]) &&
       stamps[i] - handledAt[i - 1] <= HELD_BACK_MS &&
+      handlingMs + HELD_BACK_MS >= gapMs - (sendGapMs ?? 0) &&
       widened;
     const frameGap =
       engine === 'webkit' && widened
@@ -271,16 +388,204 @@ export function wheelGapCauses(
     if (heldBack) {
       pageStalls.push({gapMs, handlingMs});
     } else if (frameGap != null && frameGap.covered >= gapMs - HELD_BACK_MS) {
-      pageStalls.push({
-        gapMs,
-        handlingMs: Number.isFinite(handlingMs) ? handlingMs : 0,
-        frameGapMs: frameGap.gapMs,
-      });
+      pageStalls.push({gapMs, handlingMs, frameGapMs: frameGap.gapMs});
     } else {
       dispatchStalls.push(gapMs);
     }
   }
   return {pageStalls, dispatchStalls};
+}
+
+/**
+ * How long the page's wheel listeners ran inside `from` to `to`, ms: each
+ * step's span from its arrival to its handling, merged where they overlap.
+ * A step whose handling was never seen adds nothing.
+ */
+function listenerTimeWithin(
+  from: number,
+  to: number,
+  receivedAt: readonly number[],
+  handledAt: readonly number[],
+): number {
+  const spans = receivedAt
+    .map((start, j): [number, number] => [
+      Math.max(start, from),
+      Math.min(handledAt[j], to),
+    ])
+    .filter(([start, end]) => Number.isFinite(end) && end > start)
+    .sort((a, b) => a[0] - b[0]);
+  let total = 0;
+  let reached = from;
+  for (const [start, end] of spans) {
+    if (end > reached) {
+      total += end - Math.max(start, reached);
+      reached = end;
+    }
+  }
+  return total;
+}
+
+/**
+ * Reads a burst's release twice: as the script throws it, on its schedule,
+ * and as Core's gesture host reads it from the steps' stamps. The host reads
+ * the fingers' speed at each move: the travel since the move before, over
+ * the time since. A step stamped within `WHEEL_BUNCHED_MS` of the one before
+ * has no time of its own, so it joins that reading. A joined reading only
+ * raises the speed, and never past the speed before it. After `readStep` the
+ * host holds the shrinking steps and carries the speed on. A held step with
+ * its own time ends the reading a later bunch could join. At `liftStep` the
+ * pan has carried that speed from the last move. A merged wheel between
+ * `readStep - 1` and `liftStep` is one the host reads its own way, so the
+ * read names it. Null when the release lies outside the burst or the
+ * received steps match no sent ones.
+ */
+export function wheelReleaseRead(
+  steps: readonly {readonly dx?: number; readonly dy?: number}[],
+  sentAt: readonly number[],
+  stamps: readonly number[],
+  deltas: readonly (readonly [number, number])[],
+  {readStep, liftStep = readStep, carryPx, stepwise}: WheelRelease,
+  everyMs = 16,
+): WheelReleaseRead | null {
+  if (readStep < 1 || liftStep < readStep || liftStep >= steps.length) {
+    return null;
+  }
+  const {from = Infinity, to = steps.length - 1} = stepwise ?? {};
+  // The stamp of the received step that carries each sent step.
+  const stampOf: number[] = [];
+  let merged: WheelReleaseRead['merged'] = null;
+  let stepwiseMerge: WheelReleaseRead['stepwiseMerge'] = null;
+  // The host's reading, in px and ms: its speed, the speed before it, and
+  // the travel and time it was read over.
+  let speed = 0;
+  let prior = 0;
+  let readFrom = 0;
+  let readSpan = 0;
+  let travel = 0;
+  let held = 0;
+  let base = 0;
+  let lastMove: number | null = null;
+  let carry: {ms: number; px: number; speed: number} | null = null;
+  const carried = carriedSteps(steps, deltas);
+  for (const [i, range] of carried.entries()) {
+    if (range == null) {
+      return null;
+    }
+    const [first, last] = range;
+    const time = stamps[i];
+    for (let j = first; j <= last; j++) {
+      stampOf[j] = time;
+    }
+    const gapMs = i > 0 ? time - stamps[i - 1] : Infinity;
+    const isBunched = gapMs <= WHEEL_BUNCHED_MS;
+    if (
+      merged == null &&
+      last > first &&
+      last >= readStep - 1 &&
+      first <= liftStep
+    ) {
+      merged = range;
+    }
+    // A merge stamped past the host's merge window reads as one big move.
+    if (
+      stepwiseMerge == null &&
+      last > first &&
+      first >= from &&
+      first <= to &&
+      !isBunched
+    ) {
+      stepwiseMerge = {steps: range, gapMs};
+    }
+    if (carry != null) {
+      continue;
+    }
+    const size = Math.hypot(deltas[i][0], deltas[i][1]);
+    if (first <= readStep) {
+      // A move of the fingers.
+      const next = travel + size;
+      if (lastMove != null && isBunched && readSpan > 0) {
+        speed = joinedSpeed(speed, (next - readFrom) / readSpan, prior);
+      } else if (lastMove != null && !isBunched && time > lastMove) {
+        prior = speed;
+        readFrom = travel;
+        readSpan = time - lastMove;
+        speed = (next - travel) / readSpan;
+      }
+      travel = next;
+      lastMove = time;
+      held = 0;
+      base = 0;
+      if (last >= liftStep) {
+        carry = {ms: 0, px: 0, speed};
+      }
+      continue;
+    }
+    const since = time - (lastMove ?? time);
+    if (last >= liftStep) {
+      carry = {ms: since, px: base + speed * since, speed};
+      continue;
+    }
+    // A held step.
+    held += size;
+    if (!isBunched) {
+      readSpan = 0;
+    } else if (readSpan > 0) {
+      const before = speed;
+      speed = joinedSpeed(speed, (travel + held - readFrom) / readSpan, prior);
+      base += (before - speed) * since;
+    }
+  }
+  const window = Array.from(
+    {length: liftStep - readStep + 2},
+    (_, k) => readStep - 1 + k,
+  );
+  // The script throws its steps a schedule apart. A starved send loop strays
+  // from it too, which is the runner's.
+  const {dx = 0, dy = 0} = steps[readStep];
+  const scriptPxPerS = (Math.hypot(dx, dy) / everyMs) * 1000;
+  const scriptCarryMs = (liftStep - readStep) * everyMs;
+  return {
+    readStep,
+    liftStep,
+    carryPx,
+    scriptPxPerS,
+    pagePxPerS: (carry?.speed ?? 0) * 1000,
+    scriptCarryMs,
+    pageCarryMs: carry?.ms ?? 0,
+    scriptCarryPx: (scriptPxPerS * scriptCarryMs) / 1000,
+    pageCarryPx: carry?.px ?? 0,
+    sendGapsMs: window.slice(1).map(j => sentAt[j] - sentAt[j - 1]),
+    stampGapsMs: window.slice(1).map(j => stampOf[j] - stampOf[j - 1]),
+    merged,
+    stepwiseMerge,
+  };
+}
+
+/**
+ * Core's joined reading, held to the speed before the late move. It only
+ * ever raises the current speed.
+ */
+function joinedSpeed(current: number, reading: number, prior: number): number {
+  return Math.max(current, Math.min(reading, prior));
+}
+
+/**
+ * Whether a release read lands on the other side of the proof's bar than the
+ * script's, as a touch play's boundaries do. A merge the read names strays
+ * too. A script outside its own bar is the proof's mistake, not the
+ * dispatch's, so it never strays.
+ */
+export function wheelReleaseStrays(read: WheelReleaseRead): boolean {
+  const {min = -Infinity, max = Infinity} = read.carryPx;
+  const inside = (px: number) => px >= min && px <= max;
+  if (!inside(read.scriptCarryPx)) {
+    return false;
+  }
+  return (
+    read.merged != null ||
+    read.stepwiseMerge != null ||
+    !inside(read.pageCarryPx)
+  );
 }
 
 /**
@@ -332,10 +637,11 @@ export interface WebInputDriver {
    * handles one step when the next arrives, the engine coalesces them, as it
    * does a trackpad's: the page can receive fewer, larger steps with the same
    * total. Returns how many steps the page received and the gaps between
-   * their arrivals (`wheelArrivals`), ms. With `maxGapMs`, a gap that long or
+   * their stamps (`wheelStamps`), ms. With `maxGapMs`, a gap that long or
    * longer throws `WheelPageStallError` when the page held it, and
    * `WheelPacingError` otherwise. The page holds a gap while it handles the
-   * step before, or while it draws no frame.
+   * step before, or while it draws no frame. With `release`, a release the
+   * page read across the proof's bar throws `WheelPacingError` too.
    */
   wheelBurst(burst: WheelBurst): Promise<{
     readonly receivedSteps: number;
@@ -612,7 +918,12 @@ async function untilRunReceived(
   page: Page,
   engine: Engine,
   armed: JSHandle<InputRun>,
-  {steps, maxGapMs}: Pick<WheelBurst, 'steps' | 'maxGapMs'>,
+  {
+    steps,
+    maxGapMs,
+    release,
+    everyMs,
+  }: Pick<WheelBurst, 'steps' | 'maxGapMs' | 'release' | 'everyMs'>,
   sentAt: readonly number[],
 ): Promise<{receivedSteps: number; receivedGapsMs: number[]}> {
   const want = steps.reduce<{dx: number; dy: number}>(
@@ -623,6 +934,7 @@ async function untilRunReceived(
     ([run, total, ms]) =>
       new Promise<{
         stamps: number[];
+        timeOrigin: number;
         receivedAt: number[];
         frames: number[];
         handledAt: number[];
@@ -652,6 +964,7 @@ async function untilRunReceived(
             run.stop();
             resolve({
               stamps: run.stamps.slice(),
+              timeOrigin: performance.timeOrigin,
               receivedAt: run.receivedAt.slice(),
               frames: run.frames.slice(),
               handledAt: run.handledAt.slice(),
@@ -676,22 +989,36 @@ async function untilRunReceived(
       `webInputDriver: the page received ${got.dx}, ${got.dy} px of the run's ${want.dx}, ${want.dy} px within ${WHEEL_DELIVERY_MS} ms (is the point inside the viewport, over the main document?)`,
     );
   }
-  const arrivals = wheelArrivals(engine, got.stamps, got.receivedAt);
-  const receivedGapsMs = arrivals.slice(1).map((t, i) => t - arrivals[i]);
+  const stamps = wheelStamps(got.stamps, got.timeOrigin);
+  const receivedGapsMs = stamps.slice(1).map((t, i) => t - stamps[i]);
   if (maxGapMs != null) {
     const {pageStalls, dispatchStalls} = wheelGapCauses(
       engine,
-      arrivals,
+      stamps,
       got.handledAt,
       maxGapMs,
       wheelSendGaps(steps, sentAt, got.deltas),
       got.frames,
+      got.receivedAt,
     );
     if (pageStalls.length > 0) {
       throw new WheelPageStallError(maxGapMs, pageStalls[0]);
     }
     if (dispatchStalls.length > 0) {
       throw new WheelPacingError(maxGapMs, receivedGapsMs);
+    }
+  }
+  if (release != null) {
+    const read = wheelReleaseRead(
+      steps,
+      sentAt,
+      stamps,
+      got.deltas,
+      release,
+      everyMs,
+    );
+    if (read != null && wheelReleaseStrays(read)) {
+      throw new WheelPacingError(maxGapMs ?? null, receivedGapsMs, read);
     }
   }
   return {receivedSteps: got.stamps.length, receivedGapsMs};
@@ -743,7 +1070,15 @@ async function chromiumWebInput(page: Page): Promise<WebInputDriver> {
       });
       await untilReceived(page, armed);
     },
-    async wheelBurst({x, y, steps, everyMs = 16, ctrl = false, maxGapMs}) {
+    async wheelBurst({
+      x,
+      y,
+      steps,
+      everyMs = 16,
+      ctrl = false,
+      maxGapMs,
+      release,
+    }) {
       const scale = await page.evaluate(
         () => window.devicePixelRatio * (window.visualViewport?.scale ?? 1),
       );
@@ -765,7 +1100,7 @@ async function chromiumWebInput(page: Page): Promise<WebInputDriver> {
         page,
         'chromium',
         armed,
-        {steps, maxGapMs},
+        {steps, maxGapMs, release, everyMs},
         sentAt,
       );
     },
@@ -848,7 +1183,15 @@ async function webkitWebInput(page: Page): Promise<WebInputDriver> {
         }
       }
     },
-    async wheelBurst({x, y, steps, everyMs = 16, ctrl = false, maxGapMs}) {
+    async wheelBurst({
+      x,
+      y,
+      steps,
+      everyMs = 16,
+      ctrl = false,
+      maxGapMs,
+      release,
+    }) {
       if (mobile) {
         throw new Error(`webInputDriver: ${WHEEL_SKIP}`);
       }
@@ -867,7 +1210,7 @@ async function webkitWebInput(page: Page): Promise<WebInputDriver> {
           page,
           'webkit',
           armed,
-          {steps, maxGapMs},
+          {steps, maxGapMs, release, everyMs},
           sentAt,
         );
       } finally {

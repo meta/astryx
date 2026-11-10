@@ -727,14 +727,18 @@ each round trip and resolves once the page has the run's whole delta; where the
 page still handles one step when the next arrives, the engine coalesces them,
 as it does a trackpad's.
 
-WebKit dispatches a step only once the page's main thread is free, and the
-steps it holds meanwhile reach the page coalesced into one, stamped like the
-step before it, so the burst times each WebKit step by when the page's first
-listener received it (`wheelArrivals`). A gap of `maxGapMs` or more splits the
-run, as Core's gesture host ends a wheel gesture at a pause of its end window or
-more. A proof whose component reads the run as one trackpad scroll passes its
-axis's `WHEEL_SCROLL_END_MS`. Three things can split a run. When a step reached
-the page within one frame of its own wheel
+The burst judges each step by its own `timeStamp` (`wheelStamps`): Core's
+gesture host reads those stamps, so they decide where it splits a scroll. A
+run can reach the page with no long gap and still carry one in its stamps.
+WebKit dispatches a step only once the page's main thread is free. The steps it
+holds meanwhile reach the page coalesced into one, stamped like the step before
+it. The host reads that stamp too, so the hold shows in the gap after it. A gap
+of `maxGapMs` or more splits the run, as Core's gesture host ends a wheel
+gesture at a pause of its end window or more. A proof whose component reads the
+run as one trackpad scroll passes its axis's `WHEEL_SCROLL_END_MS`. Three
+things can split a run. A gap the harness itself sent `maxGapMs` or more apart
+is the dispatch's, whatever the page added. When a step reached the page within
+one frame of its own wheel
 listeners finishing the step before, and the gap is more than a frame wider
 than the harness's own spacing of those sends, those listeners held it back:
 the burst throws `WheelPageStallError`, the page split the gesture, and the
@@ -757,6 +761,33 @@ between steps that leaves frames running still counts as the dispatch's stall.
 Chromium stamps a step with its dispatch time, so a page that holds its main
 thread does not widen the gaps there, and every gap of `maxGapMs` or more is a
 `WheelPacingError`.
+
+A proof that reads a trackpad pan's release passes `release: {readStep,
+liftStep, carryPx, stepwise}`. The burst reads that release twice: from the
+script's schedule, and as Core's gesture host reads it from the stamps
+(`wheelReleaseRead`). The host reads the fingers' speed at each move: the
+travel since the move before, over the time since. A step stamped within
+`WHEEL_BUNCHED_MS` (1.5 ms) of the one before joins that reading instead. A
+joined reading only raises the speed, and never past the speed before it.
+After `readStep` the host holds the shrinking steps and carries the speed to
+`liftStep`. A held step with its own time ends the reading. `carryPx` is the
+carried travel the proof's own bar allows, as `{min, max}` px. The burst
+throws `WheelPacingError` when the script's carry lies inside those bounds and
+the page's does not. That is the other side of the bar the proof decides on,
+as a touch play's `boundaries` are. A page that read no speed carries 0 px.
+The burst also throws `WheelPacingError` for a wheel that merged several steps
+between `readStep - 1` and `liftStep`. The host decays such a merge its own
+way, so no reading of the script's steps can say what it read. `stepwise:
+{from, to}` names later steps the host reads one by one, such as the glide
+after a lift. A merge that begins there, stamped past `WHEEL_BUNCHED_MS`,
+reads as one big move, so the burst throws for it too. A script outside its
+own bar is the proof's mistake, never the dispatch's. On 248 logged runs of
+the trackpad-follow proofs, this read matched the host's own travel exactly
+wherever no merge fell inside those steps. It named every run that failed the
+proof. It named no run in CI's WebKit profile, and a fifth of the passing
+runs under a 2-CPU quota with busy loops, all for merges inside those steps.
+Core's wheelEnd.harness.test.ts keeps `WHEEL_BUNCHED_MS` equal to the host's
+merge window.
 
 The WebKit input command is reached through Playwright's in-process server
 object, so it needs a locally launched browser (the default), not `connect()`.

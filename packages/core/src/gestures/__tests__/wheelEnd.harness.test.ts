@@ -6,21 +6,25 @@
  *   scroll, and the interaction harness's wheel scroll pauses and burst judge
  * @output Checks that the harness splits a wheel burst where GestureHost
  *   splits a trackpad scroll. On each axis, a gap of `WHEEL_SCROLL_END_MS`
- *   starts a second gesture. A gap 0.5 ms shorter keeps one.
- * @position Testing. The harness copies the pauses because it cannot import
- *   Core. This test keeps the two equal.
+ *   starts a second gesture. A gap 0.5 ms shorter keeps one. It also checks
+ *   that the harness's merge window, `WHEEL_BUNCHED_MS`, is the host's.
+ * @position Testing. The harness copies these values because it cannot
+ *   import Core. This test keeps the two equal.
  *
  * SYNC: When modified, update
- *   /internal/interaction-harness/src/webInput.ts (`WHEEL_SCROLL_END_MS`).
+ *   /internal/interaction-harness/src/webInput.ts (`WHEEL_SCROLL_END_MS`,
+ *   `WHEEL_BUNCHED_MS`).
  */
 
 import {
+  WHEEL_BUNCHED_MS,
   WHEEL_SCROLL_END_MS,
   wheelGapCauses,
 } from '@astryxdesign/interaction-harness';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {GestureHost} from '../GestureHost';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
+import {isBunched} from '../wheelSegmenter';
 import {ManualClock} from './harness';
 
 type Axis = keyof typeof WHEEL_SCROLL_END_MS;
@@ -110,4 +114,11 @@ describe("the interaction harness's wheel scroll pauses", () => {
       ).toEqual([]);
     });
   }
+});
+
+describe("the interaction harness's wheel merge window", () => {
+  it(`reads a wheel ${WHEEL_BUNCHED_MS} ms after the one before as merged, and one 0.5 ms later as its own, as GestureHost does`, () => {
+    expect(isBunched(WHEEL_BUNCHED_MS)).toBe(true);
+    expect(isBunched(WHEEL_BUNCHED_MS + 0.5)).toBe(false);
+  });
 });
