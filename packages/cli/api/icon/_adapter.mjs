@@ -38,7 +38,10 @@ export {
   setConfigString,
   setConfigValue,
 } from '../../foundation/config/config-writer.mjs';
-export {ICON_USE_ORDER_COMMAND} from '../../foundation/discovery/icon-set-discovery.mjs';
+export {
+  ICON_USE_ORDER_COMMAND,
+  unlistedIconSets,
+} from '../../foundation/discovery/icon-set-discovery.mjs';
 export {
   assertIconExport,
   checkNewDefinition,

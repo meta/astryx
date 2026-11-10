@@ -8,12 +8,12 @@
  * the template's source binds can never map to a project's icon set, so each
  * one gets a note with its fix. An icon the template imports but does not
  * declare never maps either: in a package whose templates declare `icons`,
- * each one is a warning, which fails `--strict`.
+ * each one gets a note too, which `validate` marks `next`.
  *
  * @input A loaded integration (absolute roots) and its package directory.
- * @output One `template_icon_not_imported` note per such key (a note is never
- *   an error or a warning, even under `--strict`), and one
- *   `template_icon_undeclared` warning per undeclared icon.
+ * @output One `template_icon_not_imported` note per such key, and one
+ *   `template_icon_undeclared` note per undeclared icon. A note is never an
+ *   error or a warning, even under `--strict`.
  * @position foundation/discovery; read by `doctor integration validate` (and
  *   so `integration check`) for the package being authored.
  */
@@ -92,14 +92,14 @@ export async function templateIconNotes(loaded, packageDir) {
 }
 
 /**
- * One warning per icon a template imports but does not declare in `icons`.
+ * One note per icon a template imports but does not declare in `icons`.
  * Only a package whose templates declare `icons` gets them: a package that
  * never labels its icons sees no change.
  * @param {any} loaded a loaded integration (absolute roots)
  * @param {string} packageDir
- * @returns {Promise<Array<{code: string, severity: 'warning', message: string}>>}
+ * @returns {Promise<Array<{code: string, message: string}>>}
  */
-export async function templateIconUndeclaredIssues(loaded, packageDir) {
+export async function templateIconUndeclaredNotes(loaded, packageDir) {
   const read = (await readTemplates(loaded, packageDir)).map(each => ({
     ...each,
     declared: each.declared ?? {},
@@ -108,7 +108,6 @@ export async function templateIconUndeclaredIssues(loaded, packageDir) {
   const docOf = new Map(read.map(each => [each.id, each.docPath]));
   return undeclaredTemplateIcons(read).map(({id, key, module}) => ({
     code: TEMPLATE_ICON_UNDECLARED,
-    severity: /** @type {const} */ ('warning'),
     message: `${id} imports icon "${key}" from ${module}, but ${docOf.get(id)} does not declare it in \`icons\`, so it never follows a project's icon set. Add \`${key}: '<definition>'\` to \`icons\` (\`astryx experimental icon --definitions\` lists the definitions).`,
   }));
 }

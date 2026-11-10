@@ -1,10 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `integration check` warns about each icon a template imports but
- * does not declare in its `icons` (`template_icon_undeclared`), in a package
- * whose templates declare `icons`. The warning fails `--strict`. A package
- * that never declares `icons` sees no change.
+ * @file `integration check` notes each icon a template imports but does not
+ * declare in its `icons` (`template_icon_undeclared`), in a package whose
+ * templates declare `icons`. The note is marked `next`: it fails
+ * `--strict --next` and leaves `--strict` as it was. A package that never
+ * declares `icons` sees no change.
  */
 
 import * as fs from 'node:fs';
@@ -68,42 +69,80 @@ async function validated() {
   return (await validateIntegration(undefined, {cwd: dir})).data;
 }
 
+/** @param {any} data */
+function undeclaredNotes(data) {
+  return (data.notes ?? []).filter(
+    (/** @type {any} */ note) => note.code === 'template_icon_undeclared',
+  );
+}
+
 describe('template_icon_undeclared', () => {
-  it('warns about an imported icon the template does not declare, and fails --strict', async () => {
+  it('notes an imported icon the template does not declare, as a next note that leaves --strict passing', async () => {
     writePackage(", icons: {TrashIcon: 'delete'}", SOURCE);
     const data = await validated();
-    const found = data.issues.filter(
-      (/** @type {any} */ issue) => issue.code === 'template_icon_undeclared',
+    expect(JSON.stringify(data.issues)).not.toContain(
+      'template_icon_undeclared',
     );
-    expect(found).toEqual([
+    expect(undeclaredNotes(data)).toEqual([
       {
         code: 'template_icon_undeclared',
-        severity: 'warning',
+        next: true,
         message: expect.stringContaining(
           'templates/acme-bar.tsx imports icon "ScissorsIcon" from @acme/glyphs, but templates/acme-bar.doc.mjs does not declare it',
         ),
       },
     ]);
     const strict = await integrationCheck({cwd: dir, strict: true});
-    expect(JSON.stringify(strict.data.failures)).toContain(
+    expect(JSON.stringify(strict.data.failures)).not.toContain(
       'template_icon_undeclared',
     );
+    const strictNext = await integrationCheck({
+      cwd: dir,
+      strict: true,
+      next: true,
+    });
+    expect(JSON.stringify(strictNext.data.failures)).toContain(
+      'template_icon_undeclared',
+    );
+  }, 60_000);
+
+  it('keeps --strict passing for a package that imports Icon from lucide-react', async () => {
+    writePackage(
+      ", icons: {TrashIcon: 'delete'}",
+      [
+        "import {Icon} from 'lucide-react';",
+        "import {TrashIcon} from '@acme/glyphs';",
+        'export default function AcmeBar() { return <><Icon iconNode={[]} /><TrashIcon /></>; }',
+        '',
+      ].join('\n'),
+    );
+    const data = await validated();
+    expect(undeclaredNotes(data)).toEqual([
+      expect.objectContaining({
+        next: true,
+        message: expect.stringContaining('"Icon" from lucide-react'),
+      }),
+    ]);
+    const strict = await integrationCheck({cwd: dir, strict: true});
+    // The temporary package has no TypeScript, so the doc-type check skips.
+    expect(
+      strict.data.failures.filter(
+        (/** @type {{code: string}} */ each) =>
+          each.code !== 'doc_types_skipped',
+      ),
+    ).toEqual([]);
   }, 60_000);
 
   it('says nothing in a package whose templates declare no icons', async () => {
     writePackage('', SOURCE);
     const data = await validated();
-    expect(JSON.stringify(data.issues)).not.toContain(
-      'template_icon_undeclared',
-    );
+    expect(JSON.stringify(data)).not.toContain('template_icon_undeclared');
   }, 60_000);
 
   it('says nothing when every icon is declared', async () => {
     writePackage(", icons: {TrashIcon: 'delete', ScissorsIcon: 'cut'}", SOURCE);
     const data = await validated();
-    expect(JSON.stringify(data.issues)).not.toContain(
-      'template_icon_undeclared',
-    );
+    expect(JSON.stringify(data)).not.toContain('template_icon_undeclared');
   }, 60_000);
 });
 

@@ -62,7 +62,7 @@ describe('iconUse with backups', () => {
       unlisted: ['@acme/lines/lines'],
     });
     expect(result.data.next).toBe(
-      '2 icon sets are installed and @acme/lines/lines is not in your list: add it as backup with `astryx experimental icon use glyphs --backup @acme/lines/lines`, or uninstall it.',
+      '2 icon sets are installed and @acme/lines/lines is not in your list. Add it as backup with `astryx experimental icon use glyphs --backup @acme/lines/lines`, or uninstall it.',
     );
   });
 

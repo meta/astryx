@@ -9,7 +9,10 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {checkIconSets, runChecks} from './doctor.mjs';
-import {placeholderDeclaration} from '../../foundation/discovery/template-icons.mjs';
+import {
+  mapTemplateIcons,
+  placeholderDeclaration,
+} from '../../foundation/discovery/template-icons.mjs';
 import {
   glyphsData,
   writeIconSetProject,
@@ -88,7 +91,7 @@ describe('icon-sets check', () => {
     });
     expect(check).toMatchObject({status: 'fail'});
     expect(check?.message).toContain(
-      '2 icon sets are installed and @acme/lines/lines is not in experimental.iconSet',
+      '2 icon sets are installed and @acme/lines/lines is not in your list (experimental.iconSet)',
     );
     expect(check?.fix).toContain(
       '`astryx experimental icon use glyphs --backup @acme/lines/lines`',
@@ -194,6 +197,32 @@ describe('icon-placeholders check', () => {
     expect(check?.fix).toContain(
       'replace each use of the placeholder (`MissingIcon`)',
     );
+  });
+
+  it('names the same fixes `astryx template` reports for the placeholder it writes', async () => {
+    const set = /** @type {any} */ ({
+      name: 'glyphs',
+      package: '@acme/glyphs',
+      license: 'MIT',
+      data: {...glyphsData(), module: '@acme/glyphs', map: {close: 'x'}},
+    });
+    const copied = mapTemplateIcons(
+      [
+        "import {PencilGlyph} from '@acme/library';",
+        'export const A = () => <PencilGlyph />;',
+        '',
+      ].join('\n'),
+      {sets: [set], choice: {status: 'selected', set, reason: 'only set'}},
+      {PencilGlyph: 'edit'},
+    );
+    const fixes = copied.icons.placeholder.flatMap(each => each.fixes);
+    expect(fixes).toHaveLength(2);
+    const check = await placeholderCheckOf(
+      {experimental: {iconSet: 'glyphs'}},
+      {'src/page.tsx': copied.source},
+    );
+    expect(check).toMatchObject({status: 'warn'});
+    for (const fix of fixes) expect(check?.fix).toContain(`\`${fix}\``);
   });
 
   it('a commented-out or quoted copy of the placeholder is not a use', async () => {

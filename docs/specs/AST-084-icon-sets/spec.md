@@ -104,9 +104,10 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   `discover`, `search`, `template`, `theme list`, `theme add`, `theme remove`,
   `theme use`, `theme eject`, and `upgrade`) prints "Warning: <package> has 1
   integration issue(s)" to stderr; this CLI does neither. The third is the
-  `template_icon_undeclared` warning (FR10): `integration check` and `verify`
-  give it for a package whose templates declare `icons`, and a CLI without
-  this feature does not. Discover refuses
+  `template_icon_undeclared` note (FR10): `integration check` lists it,
+  marked `next`, for a package whose templates declare `icons`, and a CLI
+  without this feature does not. The note fails nothing under `--strict`.
+  Discover refuses
   `--type icon-set` and ignores `icon-set` catalog items and their fields
   exactly as it does any unknown kind or field. With the opt-in, `icon-set`
   is a discover kind (FR17). `astryx search` never reads icon sets, with or
@@ -259,11 +260,12 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
   field and no rewrite. `integration check` notes each key a template's
   source never imports (`template_icon_not_imported`), never counted or
   failing, under `--strict` or `--next`. In a package whose templates declare
-  `icons`, it warns about each icon a template imports but does not declare
-  (`template_icon_undeclared`), which fails `--strict`: an import from
-  another package whose name ends in `Icon`, or from a module some template
-  in the package declares an icon from. A package whose templates declare no
-  `icons` gets no such warning. Every icon a bundled Core template imports is
+  `icons`, it notes each icon a template imports but does not declare
+  (`template_icon_undeclared`): an import from another package whose name
+  ends in `Icon`, or from a module some template in the package declares an
+  icon from. The note is marked `next` (`architecture:cli-surface` DEC-11):
+  it fails `--strict --next`, and `--strict` does not fail on it. A package
+  whose templates declare no `icons` gets no such note. Every icon a bundled Core template imports is
   declared.
 - **FR11 — Search stays stable.** `astryx search` has no icon domain and no
   `--type icon`, and returns no experimental doc, with or without the opt-in.
@@ -585,7 +587,7 @@ message}`) names each template or namespace doc that sets `stability`, and
   `experimental.iconSets` manifest root, the `icon-set` and `icon-definition`
   descriptor kinds, the `cli/experimental` docs namespace, the `icon-sets`
   and `icon-placeholders` Doctor checks, the icon-set checks, the
-  `template_icon_undeclared` warning, and the `iconSets` and `olderCliNotes`
+  `template_icon_undeclared` next note, and the `iconSets` and `olderCliNotes`
   validate fields.
 - Docs site: the experimental `DOCSITE_ICON_SET` build setting.
 - `contributing:cli-conventions`: `IconSetDoc`, `IconSetData`, and

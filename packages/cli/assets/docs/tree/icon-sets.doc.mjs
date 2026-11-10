@@ -433,7 +433,7 @@ astryx experimental icon use outline --backup brand   # a main set, then a backu
           items: [
             'Add a backup set that has the meaning: `astryx experimental icon use <main> --backup <set>`. `astryx discover --type icon-set` lists the sets your sources offer, with the definitions each maps; install one first.',
             'If you author your main set (its package is yours, not an installed dependency), map the meaning there: `astryx experimental icon map cut <icon> --set <main>`.',
-            'For a built-in meaning (`astryx experimental icon --definitions` marks them), render the theme icon by name instead: `<Icon icon="chevronRight" />`. Every set maps the built-in names, so this needs no import.',
+            'For a built-in meaning (`astryx experimental icon --definitions` marks them), render the theme icon by name instead: `<Icon icon="close" />`. Every set maps the built-in names, so this needs no import.',
             'Otherwise, write your own icon component and pass it where `MissingIcon` was (`astryx docs icons custom-icons`).',
           ],
         },
@@ -449,7 +449,7 @@ astryx experimental icon use outline --backup brand   # a main set, then a backu
       content: [
         {
           type: 'prose',
-          text: "A template follows a project's icon sets only for the icons its `icons` declares. In a package whose templates declare `icons`, `astryx integration check` warns about each icon a template imports but does not declare (`template_icon_undeclared`), and the warning fails `--strict`. It counts an import from another package as an icon when its name ends in `Icon`, or when a template in the package declares an icon from the same module. Add the key with the definition it draws; `astryx experimental icon --definitions` lists the definitions, and `astryx experimental icon new-definition` adds one your set needs.",
+          text: "A template follows a project's icon sets only for the icons its `icons` declares. In a package whose templates declare `icons`, `astryx integration check` notes each icon a template imports but does not declare (`template_icon_undeclared`). The note fails `--strict --next` now, and `--strict` from the next minor release. It counts an import from another package as an icon when its name ends in `Icon`, or when a template in the package declares an icon from the same module. Add the key with the definition it draws; `astryx experimental icon --definitions` lists the definitions, and `astryx experimental icon new-definition` adds one your set needs.",
         },
       ],
     },
@@ -475,7 +475,7 @@ astryx experimental icon use outline --backup brand   # a main set, then a backu
             ],
             [
               "A template descriptor's `icons`",
-              "The icon definition each imported icon draws (`{TrashIcon: 'delete'}`): a named import by the name it imports, a default import by its local name. `astryx template`, shown or copied, then writes the icons from the first set in the list that has each meaning and reports `icons` (status, set, order, mapped, placeholder, kept, sets): every key is mapped, a placeholder when no set has its meaning, or kept with why (a namespace or type-only import, a re-export, an Astryx import or one from a set in the list, no import at all, or an icon that draws no definition and has no match). `integration check` notes a key the template's source never imports (`template_icon_not_imported`), never failing, and warns about an imported icon the package's templates do not declare (`template_icon_undeclared`).",
+              "The icon definition each imported icon draws (`{TrashIcon: 'delete'}`): a named import by the name it imports, a default import by its local name. `astryx template`, shown or copied, then writes the icons from the first set in the list that has each meaning and reports `icons` (status, set, order, mapped, placeholder, kept, sets): every key is mapped, a placeholder when no set has its meaning, or kept with why (a namespace or type-only import, a re-export, an Astryx import or one from a set in the list, no import at all, or an icon that draws no definition and has no match). `integration check` notes a key the template's source never imports (`template_icon_not_imported`), never failing, and notes an imported icon the package's templates do not declare (`template_icon_undeclared`), which fails `--strict --next`.",
             ],
             [
               '`astryx discover`',

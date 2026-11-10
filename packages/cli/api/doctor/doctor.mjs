@@ -109,6 +109,8 @@ import {
   projectHasOwnCli,
   computerIntegrationsOutside,
   findIconPlaceholders,
+  placeholderFixes,
+  unlistedIconSets,
   computerIntegrationsToAdd,
   displayHomePath,
   outsideProject,
@@ -1060,15 +1062,18 @@ export function checkIconSets(ctx) {
   const order = choice.order ?? [];
   const unlisted = sets.filter(set => !order.includes(set));
   if (sets.length > 1 && unlisted.length > 0) {
-    const keys = unlisted.map(set => `${set.package}/${set.name}`);
-    const main = list[0].selector;
-    const backups = list.slice(1).map(each => each.selector);
+    const {problem, fix} = unlistedIconSets(
+      sets.length,
+      list[0].selector,
+      list.slice(1).map(each => each.selector),
+      unlisted.map(set => `${set.package}/${set.name}`),
+    );
     return {
       id,
       label,
       status: 'fail',
-      message: `${sets.length} icon sets are installed and ${keys.join(', ')} ${keys.length === 1 ? 'is' : 'are'} not in experimental.iconSet, so which set a copied template uses is not decided.`,
-      fix: `Add ${keys.length === 1 ? 'it' : 'them'} as backup: \`astryx experimental icon use ${main}${[...backups, ...keys].map(each => ` --backup ${each}`).join('')}\`, or uninstall ${keys.length === 1 ? 'it' : 'them'}.`,
+      message: `${problem} (experimental.iconSet), so which set a copied template uses is not decided.`,
+      fix,
     };
   }
   if (withdrawn.length > 0) {
@@ -1120,12 +1125,13 @@ export function checkIconPlaceholders(ctx) {
     )
     .join(', ');
   const uses = found.reduce((total, each) => total + each.uses, 0);
+  const [mapFix, backupFix] = placeholderFixes(meanings, main);
   return {
     id,
     label,
     status: 'warn',
     message: `${uses} placeholder icon${uses === 1 ? '' : 's'} in copied code: no set in your list has ${meanings.length > 0 ? `"${meanings.join('", "')}"` : 'these icons'}. ${where}.`,
-    fix: `Add a backup set that has each meaning (\`astryx discover --type icon-set\` lists sets and the definitions they map): \`astryx experimental icon use ${main} --backup <set>\`; or, if you author your main set, map it there: \`astryx experimental icon map ${meanings[0] ?? '<definition>'} <icon> --set ${main}\`. Then copy the template again, or replace each use of the placeholder (\`${found[0].local}\`) with the icon \`astryx experimental icon <meaning>\` prints, and delete its declaration. A built-in meaning (\`astryx experimental icon --definitions\` marks them) also renders from the theme by name: \`<Icon icon="<name>" />\`. Otherwise, use your own icon component (\`astryx docs icons custom-icons\`).`,
+    fix: `Add a backup set that has each meaning (\`astryx discover --type icon-set\` lists sets and the definitions they map): \`${backupFix}\`; or, if you author your main set, map it there: \`${mapFix}\`. Then copy the template again, or replace each use of the placeholder (\`${found[0].local}\`) with the icon \`astryx experimental icon <meaning>\` prints, and delete its declaration. A built-in meaning (\`astryx experimental icon --definitions\` marks them) also renders from the theme by name: \`<Icon icon="<name>" />\`. Otherwise, use your own icon component (\`astryx docs icons custom-icons\`).`,
   };
 }
 

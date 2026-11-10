@@ -51,6 +51,9 @@
  *   `showcase_not_standalone` and `template_asset_not_packed`, what a
  *   package's examples need (next minor; a block's `alsoShowcaseFor` names
  *   count as shown);
+ *   `template_icon_undeclared`, an icon a template imports but does not
+ *   declare in `icons`, in a package whose templates declare `icons` (next
+ *   minor);
  *   `cli_peer_version`, the running CLI outside the package's
  *   `@astryxdesign/cli` peer range; and
  *   the package layout findings added after the last minor release, each with

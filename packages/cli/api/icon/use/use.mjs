@@ -20,6 +20,7 @@ import {
   ICON_USE_ORDER_COMMAND,
   refuseOutsideProject,
   setConfigValue,
+  unlistedIconSets,
 } from '../_adapter.mjs';
 import {setsNamed, unusableSet} from '../_records.mjs';
 
@@ -114,6 +115,10 @@ export async function iconUse(
   });
   // Doctor fails a project that installs several sets and leaves one out.
   const unlisted = sets.filter(set => !listed.includes(set)).map(iconSetKey);
+  const left =
+    unlisted.length > 0
+      ? unlistedIconSets(sets.length, selector, backups, unlisted)
+      : null;
   return {
     type: 'icon.use',
     data: {
@@ -128,11 +133,7 @@ export async function iconUse(
       previous: written.previous,
       changed: written.changed,
       unlisted,
-      ...(unlisted.length > 0
-        ? {
-            next: `${sets.length} icon sets are installed and ${unlisted.join(', ')} ${unlisted.length === 1 ? 'is' : 'are'} not in your list: add ${unlisted.length === 1 ? 'it' : 'them'} as backup with \`astryx experimental icon use ${selector}${[...backups, ...unlisted].map(each => ` --backup ${each}`).join('')}\`, or uninstall ${unlisted.length === 1 ? 'it' : 'them'}.`,
-          }
-        : {}),
+      ...(left ? {next: `${left.problem}. ${left.fix}`} : {}),
       ...(warning ? {warning} : {}),
     },
   };

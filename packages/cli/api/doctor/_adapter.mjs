@@ -40,6 +40,8 @@ import {
 import {computerAgentTextSettings} from '../../foundation/env/user-settings.mjs';
 import * as fs from 'node:fs';
 import {placeholderUses} from '../../foundation/discovery/template-icons.mjs';
+export {placeholderFixes} from '../../foundation/discovery/template-icons.mjs';
+export {unlistedIconSets} from '../../foundation/discovery/icon-set-discovery.mjs';
 import {elementPropOrigins} from '../../foundation/discovery/module-exports.mjs';
 import {cssImports} from '../../foundation/render/embedded-imports.mjs';
 import * as path from 'node:path';

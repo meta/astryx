@@ -43,7 +43,7 @@ import {
 import {olderCliNotes} from '../../foundation/discovery/doc-stability.mjs';
 import {
   templateIconNotes,
-  templateIconUndeclaredIssues,
+  templateIconUndeclaredNotes,
 } from '../../foundation/discovery/template-icon-notes.mjs';
 import {integrationDocConsistency} from '../../foundation/discovery/doc-consistency.mjs';
 import {
@@ -557,9 +557,14 @@ async function validateAtPackageDir(
     // with its fix, never an issue (spec:AST-084 FR10).
     const iconNotes = await templateIconNotes(loaded, packageDir);
     if (iconNotes.length > 0) (result.notes ??= []).push(...iconNotes);
-    // An icon a template imports but never declares: a warning, in a package
-    // whose templates declare `icons`.
-    issues.push(...(await templateIconUndeclaredIssues(loaded, packageDir)));
+    // An icon a template imports but never declares, in a package whose
+    // templates declare `icons`: a note until the next minor makes it a
+    // warning.
+    const undeclared = await templateIconUndeclaredNotes(loaded, packageDir);
+    if (undeclared.length > 0)
+      (result.notes ??= []).push(
+        ...undeclared.map(note => ({...note, next: true})),
+      );
   }
 
   return result;
