@@ -594,6 +594,107 @@ const CASES = [
       'reason — absent; only in skip envelopes',
     ],
   },
+  // The experimental copies of the theme commands: the same cases.
+  {
+    name: 'experimental theme add',
+    args: ['experimental', 'theme', 'add', '--list'],
+    skipFieldChecks: true,
+  },
+  {
+    name: 'experimental theme remove',
+    args: ['experimental', 'theme', 'remove', 'does-not-exist'],
+    errorExpected: true,
+    skipFieldChecks: true,
+  },
+  {
+    name: 'experimental theme use',
+    args: ['experimental', 'theme', 'use', 'does-not-exist'],
+    errorExpected: true,
+    skipFieldChecks: true,
+  },
+  {
+    name: 'experimental theme eject',
+    args: ['experimental', 'theme', 'eject', 'does-not-exist'],
+    errorExpected: true,
+    skipFieldChecks: true,
+  },
+  {
+    name: 'experimental theme compile',
+    args: ['experimental', 'theme', 'compile', 'nonexistent.ts'],
+    errorExpected: true,
+    skipFieldChecks: true,
+  },
+  {
+    name: 'experimental theme list',
+    args: ['experimental', 'theme', 'list'],
+    skipFieldChecks: true,
+  },
+  {
+    name: 'experimental theme palette generate',
+    args: ['experimental', 'theme', 'palette', 'generate', 'nonexistent.json'],
+    errorExpected: true,
+    skipFieldChecks: true,
+  },
+  {
+    name: 'experimental theme targets',
+    args: ['experimental', 'theme', 'targets'],
+    jsonFieldAllowlist: [
+      'filter — null when no filter given; not shown',
+      'componentCount — shown in section heading subtitle',
+    ],
+  },
+  {
+    name: 'experimental theme template',
+    args: ['experimental', 'theme', 'template'],
+    cwd: '__TMP__',
+    jsonFieldAllowlist: [
+      'written — stated in status token ([ok] / [skip])',
+      'path — stated in the "[ok] Wrote ..." line',
+      'reason — absent; only in skip envelopes',
+    ],
+  },
+  // The theme editor: refusals before any build, and a list.
+  {
+    name: 'experimental theme new',
+    args: ['experimental', 'theme', 'new', 'Not-Kebab'],
+    errorExpected: true,
+    skipFieldChecks: true,
+  },
+  {
+    name: 'experimental theme set',
+    args: ['experimental', 'theme', 'set', 'does-not-exist', 'corners', 'pill'],
+    errorExpected: true,
+    skipFieldChecks: true,
+  },
+  {
+    name: 'experimental theme reset',
+    args: ['experimental', 'theme', 'reset', 'does-not-exist', 'corners'],
+    errorExpected: true,
+    skipFieldChecks: true,
+  },
+  {
+    name: 'experimental theme show',
+    args: ['experimental', 'theme', 'show', 'does-not-exist'],
+    errorExpected: true,
+    skipFieldChecks: true,
+  },
+  {
+    name: 'experimental theme undo',
+    args: ['experimental', 'theme', 'undo', 'does-not-exist'],
+    errorExpected: true,
+    skipFieldChecks: true,
+  },
+  {
+    name: 'experimental theme preview',
+    args: ['experimental', 'theme', 'preview', 'does-not-exist'],
+    errorExpected: true,
+    skipFieldChecks: true,
+  },
+  {
+    name: 'experimental theme explain',
+    args: ['experimental', 'theme', 'explain', '--list', 'dials'],
+    skipFieldChecks: true,
+  },
   {
     name: 'upgrade',
     args: ['upgrade', '--list'],
