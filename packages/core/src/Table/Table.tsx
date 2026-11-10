@@ -132,10 +132,7 @@ const tableStyles = stylex.create({
 
 const scrollWrapperStyles = stylex.create({
   // A windowed table scrolls inside the height its parent gives it.
-  blockViewport: {
-    height: '100%',
-    minHeight: 0,
-  },
+  blockViewport: {height: '100%', minHeight: 0},
   base: {
     overflowX: 'auto',
     WebkitOverflowScrolling: 'touch',
@@ -223,7 +220,7 @@ function TableScrollWrapper({
       ? undefined
       : (tableName?.label ?? t('@astryx.table.label'));
   const runtime = use(TableRuntimeContext);
-  const hasBlockViewport = runtime?.hasBlockViewport === true;
+  const hasBlockViewport = runtime?.viewportHeight != null;
   const {getViewportProps, getContentProps, state} = useScrollableArea({
     axis: hasBlockViewport ? 'both' : 'inline',
     keyboardAccess: {owner: 'content'},

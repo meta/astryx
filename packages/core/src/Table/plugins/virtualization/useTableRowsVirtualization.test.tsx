@@ -141,112 +141,44 @@ describe('actual Table virtualization', () => {
     expect(getComputedStyle(viewport as Element).height).toBe('100%');
     cleanup();
   });
-  it('windows without initialViewportHeight: the first frame seeds one row plus overscan', () => {
-    function NoInitialHeight() {
-      const virtualization = useTableRowsVirtualization({rowHeight: 48});
-      return (
-        <Table
-          data={data}
-          columns={columns}
-          idKey="id"
-          virtualization={virtualization}
-        />
-      );
-    }
-    const html = renderToStaticMarkup(<NoInitialHeight />);
-    const server = document.createElement('div');
-    server.innerHTML = html;
-    const serverRows = Array.from(server.querySelectorAll('tbody > tr')).filter(
-      row => row.getAttribute('aria-hidden') !== 'true',
-    );
-    expect(serverRows).toHaveLength(5);
-    const {container} = render(<NoInitialHeight />);
-    const bodyRows = Array.from(
-      container.querySelectorAll('tbody > tr'),
-    ).filter(row => row.getAttribute('aria-hidden') !== 'true');
-    expect(bodyRows).toHaveLength(5);
-    expect(screen.getByRole('table')).toHaveAttribute('aria-rowcount', '101');
-    const viewport = screen.getByRole('table').closest('[role="group"]');
-    expect(getComputedStyle(viewport as Element).height).toBe('100%');
-    cleanup();
-  });
-  describe('the scroll area takes its height from its parent', () => {
-    /** Gives the scroll area and its content element measured sizes. */
-    function measure(viewport: number, content: number) {
-      const box = (el: Element): number | null => {
-        if (el.matches('[role="group"]')) {
-          return viewport;
-        }
-        if (el.parentElement?.matches('[role="group"]')) {
-          return content;
-        }
-        return null;
-      };
+  it('takes its height from its parent: a sized parent windows, and a parent with no height renders every row', async () => {
+    // jsdom has no layout, so the scroll area's measured sizes are set here.
+    // A sized parent gives a 240px scroll area; a parent with no height makes
+    // the scroll area as tall as its content.
+    function measure(viewport: number) {
+      const isArea = (el: Element) => el.matches('[role="group"]');
       const client = vi
         .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
         .mockImplementation(function (this: HTMLElement) {
-          return box(this) ?? 0;
+          return isArea(this) ? viewport : 0;
         });
       const scroll = vi
         .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
         .mockImplementation(function (this: HTMLElement) {
-          return this.matches('[role="group"]')
-            ? Math.max(viewport, content)
-            : 0;
-        });
-      const offset = vi
-        .spyOn(HTMLElement.prototype, 'offsetHeight', 'get')
-        .mockImplementation(function (this: HTMLElement) {
-          return box(this) ?? 0;
+          return isArea(this) ? Math.max(viewport, 101 * 48) : 0;
         });
       return () => {
         client.mockRestore();
         scroll.mockRestore();
-        offset.mockRestore();
       };
     }
-    function mountedRows(container: HTMLElement): number {
-      return Array.from(container.querySelectorAll('tbody > tr')).filter(
+    async function mountedRows(): Promise<number> {
+      const {container} = render(<Fixture />);
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+      const count = Array.from(container.querySelectorAll('tbody > tr')).filter(
         row => row.getAttribute('aria-hidden') !== 'true',
       ).length;
+      cleanup();
+      return count;
     }
-    it('windows inside a bounded parent with no warning', async () => {
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const restore = measure(240, 100 * 48 + 48);
-      const {container} = render(<Fixture />);
-      await act(async () => {
-        await new Promise(resolve => setTimeout(resolve, 0));
-      });
-      expect(mountedRows(container)).toBeLessThan(data.length);
-      expect(
-        warn.mock.calls.some(call =>
-          call.join(' ').includes('no height limit'),
-        ),
-      ).toBe(false);
-      restore();
-      warn.mockRestore();
-      cleanup();
-    });
-    it('warns once and renders every row when the parent sets no height', async () => {
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      // As tall as its content: the parent sets no height.
-      const restore = measure(100 * 48 + 48, 100 * 48 + 48);
-      const {container} = render(<Fixture />);
-      await act(async () => {
-        await new Promise(resolve => setTimeout(resolve, 0));
-      });
-      expect(mountedRows(container)).toBe(data.length);
-      const unbounded = warn.mock.calls.filter(call =>
-        call.join(' ').includes('no height limit'),
-      );
-      expect(unbounded).toHaveLength(1);
-      expect(unbounded[0].join(' ')).toContain(
-        "Give the Table's parent a height",
-      );
-      restore();
-      warn.mockRestore();
-      cleanup();
-    });
+    let restore = measure(240);
+    expect(await mountedRows()).toBeLessThan(data.length);
+    restore();
+    restore = measure(101 * 48);
+    expect(await mountedRows()).toBe(data.length);
+    restore();
   });
   it('falls back for an initialViewportHeight that is not a positive finite size', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});

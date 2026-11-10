@@ -4,8 +4,7 @@
 
 /**
  * @file useTableRowsVirtualization.ts
- * @input Positive finite CSS-pixel row pitch and an optional first-frame
- *   viewport height
+ * @input Positive finite CSS-pixel row pitch and first-frame viewport height
  * @output Stable opaque TableVirtualizationCapability and public config type
  * @position Geometry-only opt-in; Table owns data, admission and rendering
  */
@@ -20,22 +19,11 @@ export interface UseTableRowsVirtualizationConfig {
   /** Total body-row pitch, including padding and collapsed borders, in CSS pixels. */
   rowHeight: number;
   /**
-   * Optional: the viewport height in CSS pixels that the first window plans
-   * for, on the server and before the viewport is measured. It does not size
-   * the viewport: the Table scrolls inside the height its parent gives it,
-   * and after mount the measured viewport sets the window.
+   * The viewport height in CSS pixels that the first window plans for, on
+   * the server and before the viewport is measured. It does not size the
+   * Table: the Table takes its height from its parent.
    */
-  initialViewportHeight?: number;
-}
-
-/**
- * The viewport height the first window plans for: the declared one, or one
- * row when none is declared, so the seed is the first row plus overscan.
- */
-export function getSeedViewportHeight(
-  config: Readonly<UseTableRowsVirtualizationConfig>,
-): number {
-  return config.initialViewportHeight ?? config.rowHeight;
+  initialViewportHeight: number;
 }
 
 /** Geometry intent, not a data slice, renderer, scroll handle or plugin. */

@@ -187,12 +187,5 @@ export function createTableRuntime() {
 }
 export type TableRuntime = ReturnType<typeof createTableRuntime>;
 export const TableRuntimeContext = createSharedContext<
-  | (TableRuntime & {
-      /**
-       * A windowed Table's wrapper scrolls in the block axis too, at the
-       * height of its block-sized parent.
-       */
-      hasBlockViewport?: boolean;
-    })
-  | null
+  (TableRuntime & {viewportHeight?: number}) | null
 >('TableRuntimeContext', 1, null);

@@ -242,7 +242,7 @@ export const docs = {
       name: 'virtualization',
       type: 'TableVirtualizationCapability',
       description:
-        'Geometry-only capability from useTableRowsVirtualization({rowHeight, initialViewportHeight?}), positive finite CSS pixels; the Table scrolls inside the height its parent gives it, and initialViewportHeight only sizes the first window. Pass complete flat data and an explicit idKey. Default text truncates; custom renderers, wrapping, structural plugins, incompatible offsets, invalid identity or unrepresentable geometry use full rendering. Logical row positions include the header.',
+        'Geometry-only capability from useTableRowsVirtualization({rowHeight, initialViewportHeight}), both positive finite CSS pixels; the Table scrolls inside the height its parent gives it, and initialViewportHeight only sizes the first window. Pass complete flat data and an explicit idKey. Default text truncates; custom renderers, wrapping, structural plugins, incompatible offsets, invalid identity or unrepresentable geometry use full rendering. Logical row positions include the header.',
     },
     {
       name: 'plugins',
