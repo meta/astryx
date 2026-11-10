@@ -239,14 +239,39 @@ async function untilGrown(page: Page) {
     .toBe(true);
 }
 
+/** Polls until no animation runs on the lift, its trigger or the menu. */
+async function untilSettled(page: Page) {
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => {
+          const roots = [
+            document.querySelector('[data-astryx-context-menu-lift]'),
+            document.querySelector('[data-testid="touch-context-menu"]'),
+            document.querySelector('[role="menu"]')?.closest('[popover]'),
+          ].filter((root): root is Element => root != null);
+          return document.getAnimations().filter(animation => {
+            const target =
+              animation.effect instanceof KeyframeEffect
+                ? animation.effect.target
+                : null;
+            return (
+              target != null &&
+              animation.playState === 'running' &&
+              roots.some(root => root === target || root.contains(target))
+            );
+          }).length;
+        }),
+      {timeout: 4000},
+    )
+    .toBe(0);
+}
+
 async function liftAndSettle(page: Page, {driver, center}: LiftStory) {
   await driver.play(tap(center, {holdMs: menuDisplayMs + 100}));
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
-  // The lift settles within about half a second (Linux WebKit starts a
-  // page's first animations late, so wait for the hold to end, too).
-  await page.waitForTimeout(800);
   await untilGrown(page);
-  await page.waitForTimeout(200);
+  await untilSettled(page);
   return readLift(page);
 }
 
@@ -889,7 +914,13 @@ test('closing returns the card to its place and clears the backdrop', async ({
   const lifted = await liftAndSettle(page, story);
   await page.keyboard.press('Escape');
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeHidden();
-  await page.waitForTimeout(900);
+  await expect
+    .poll(async () => {
+      const lift = await readLift(page);
+      return lift.preview == null && !lift.layerOpen;
+    })
+    .toBe(true);
+  await untilSettled(page);
   const after = await readLift(page);
   const detail = JSON.stringify({lifted, after});
   expect(after.preview, detail).toBeNull();
@@ -928,7 +959,8 @@ test('a tap on the tint while the lift is still growing is swallowed: the menu f
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
   // At once, while the card grows and the menu fades in: a tap on the tint.
   await story.driver.play(tap({x: 12, y: 12}));
-  await page.waitForTimeout(1200);
+  await untilGrown(page);
+  await untilSettled(page);
   const lift = await readLift(page);
   const clicked = await page.evaluate(
     () => (window as unknown as {__clicked?: string[]}).__clicked ?? [],
@@ -1214,7 +1246,7 @@ test('under Reduce Motion closing fades the card out where it is, with no return
   await driver.play(tap(center, {holdMs: menuDisplayMs + 600}));
   const menu = page.getByRole('menu', {name: 'Photo actions'});
   await expect(menu).toBeVisible();
-  await page.waitForTimeout(700);
+  await untilSettled(page);
   const open = await reducedMotionSample(page);
   // A tap on the dim, far from the card and the menu.
   await driver.play(tap({x: 24, y: 24}));

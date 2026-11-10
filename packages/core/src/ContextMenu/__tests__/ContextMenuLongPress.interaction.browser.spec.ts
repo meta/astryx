@@ -1110,6 +1110,34 @@ test('the page does not scroll under the finger that held the menu open, and it 
   expect(await page.evaluate(() => document.body.style.position)).toBe('');
 });
 
+/** Polls until no animation runs on the menu's popover or inside it. */
+async function untilMenuSettled(page: Page) {
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => {
+          const surfaces = Array.from(
+            document.querySelectorAll('[popover]'),
+          ).filter(popover => popover.querySelector('[role="menu"]') != null);
+          return document.getAnimations().filter(animation => {
+            const target =
+              animation.effect instanceof KeyframeEffect
+                ? animation.effect.target
+                : null;
+            return (
+              target != null &&
+              animation.playState === 'running' &&
+              surfaces.some(
+                surface => surface === target || surface.contains(target),
+              )
+            );
+          }).length;
+        }),
+      {timeout: 4000},
+    )
+    .toBe(0);
+}
+
 test('an inline trigger’s menu anchor sits under the finger, on screen and as laid out, and the menu stays put', async ({
   page,
 }) => {
@@ -1164,11 +1192,11 @@ test('an inline trigger’s menu anchor sits under the finger, on screen and as 
     await driver.play(hold(p, menuDisplayMs + 100));
     await expect(menu).toBeVisible();
     const first = await read();
-    await page.waitForTimeout(400);
+    await untilMenuSettled(page);
     const later = await read();
     await page.keyboard.press('Escape');
     await expect(menu).toBeHidden();
-    await page.waitForTimeout(300);
+    await untilMenuSettled(page);
     const detail = JSON.stringify({p, first, later});
     // An inline trigger does not lift: the menu opens at the finger.
     expect(first.lifted, detail).toBe(false);
