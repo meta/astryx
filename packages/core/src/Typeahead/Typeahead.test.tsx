@@ -332,6 +332,49 @@ describe('BaseTypeahead', () => {
     });
   });
 
+  it('reflects size, highlight and selection on the result row target', async () => {
+    const {container} = render(
+      <BaseTypeahead
+        searchSource={fruitSource}
+        value={fruits[0]}
+        onChange={() => {}}
+        debounceMs={0}
+        size="lg"
+      />,
+    );
+    fireEvent.change(screen.getByRole('combobox'), {target: {value: 'a'}});
+
+    await waitFor(() => {
+      expect(
+        container.querySelectorAll('.astryx-typeahead-option').length,
+      ).toBeGreaterThan(1);
+    });
+    const rows = Array.from(
+      container.querySelectorAll<HTMLElement>('.astryx-typeahead-option'),
+    );
+    for (const row of rows) {
+      expect(row).toHaveAttribute('role', 'option');
+      expect(row).toHaveAttribute('data-size', 'lg');
+    }
+    const selected = rows.filter(row => row.dataset.selected === 'selected');
+    expect(selected).toHaveLength(1);
+    expect(selected[0]).toHaveAttribute('aria-selected', 'true');
+    expect(selected[0]).toHaveTextContent('Apple');
+
+    // The highlight the row paints is a state of the same target.
+    fireEvent.keyDown(screen.getByRole('combobox'), {key: 'ArrowDown'});
+    await waitFor(() => {
+      const highlighted = rows.filter(
+        row => row.dataset.highlighted === 'highlighted',
+      );
+      expect(highlighted).toHaveLength(1);
+      expect(highlighted[0]).toHaveAttribute('id');
+      expect(
+        screen.getByRole('combobox').getAttribute('aria-activedescendant'),
+      ).toBe(highlighted[0].id);
+    });
+  });
+
   describe('empty results active descendant (#4059)', () => {
     it('does not set aria-activedescendant when search has 0 results', async () => {
       render(
