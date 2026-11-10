@@ -1115,10 +1115,6 @@
     "defaultMessage": "Clear all",
     "description": "Label on the \"×\" button that removes every token/chip from a Tokenizer input. Imperative verb + determiner \"all\"; short."
   },
-  "@astryx.tokenizer.selectedItems": {
-    "defaultMessage": "Selected items",
-    "description": "Screen-reader-only accessible name for the scrolling row of tokens/chips in a disabled Tokenizer inside an InputGroup. The row becomes a keyboard stop so its tokens can be scrolled into view. Plural noun phrase, no verb."
-  },
   "@astryx.topNav.heading.openMenu": {
     "defaultMessage": "{hasHeading, select, true {{heading}, } other {}}Open menu",
     "description": "Accessible name of the chevron menu button in TopNavHeading. When `hasHeading` is `true`, include the visible product or workspace name `{heading}` unchanged; otherwise use the generic menu action without a separator."

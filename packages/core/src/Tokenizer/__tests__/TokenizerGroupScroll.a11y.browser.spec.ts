@@ -9,7 +9,12 @@
  * @position Tokenizer-in-InputGroup proof of spec:AST-025 FR12 and FR16
  */
 
-import {expect, test, type Locator, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -186,7 +191,7 @@ test('a disabled strip is a named Tab stop only while it overflows', async ({
 
   await expect(overflowing).toHaveAttribute('tabindex', '0');
   await expect(overflowing).toHaveAttribute('role', 'group');
-  await expect(overflowing).toHaveAccessibleName('Selected items');
+  await expect(overflowing).toHaveAccessibleName('Selections');
   await expect(fitting).not.toHaveAttribute('tabindex', /.*/);
   expect(await fadedSides(fitting)).toEqual({left: false, right: false});
 
@@ -286,4 +291,23 @@ test('an enabled strip adds no Tab stop: each remove button brings its token cle
       () => document.activeElement?.closest('.astryx-tokenizer') == null,
     ),
   ).toBe(true);
+});
+
+test("one press on an early token's remove button removes it", async ({
+  page,
+}) => {
+  await mount(page, END_CONTROLS);
+  const strip = strips(page);
+  expect((await scrollRange(strip)).max).toBeGreaterThan(0);
+  const removeButtons = strip.getByRole('button', {name: /^Remove /});
+  await expect(removeButtons).toHaveCount(6);
+  const first = removeButtons.first();
+  const name = await first.getAttribute('aria-label');
+
+  // The strip rests at its inline start, so the first token is in view. One
+  // press must remove it: the field must not move focus, and with it the
+  // strip, before the press releases.
+  await first.click();
+  await expect(removeButtons).toHaveCount(5);
+  await expect(strip.getByRole('button', {name: name ?? ''})).toHaveCount(0);
 });

@@ -2446,10 +2446,11 @@ describe('Tokenizer', () => {
       expect(screen.queryAllByRole('button', {name: /^Remove /})).toHaveLength(
         0,
       );
-      const strip = screen.getByRole('group', {name: 'Selected items'});
-      expect(strip).toBe(
-        getTokenStrip(screen.getByRole('group', {name: 'People'})),
-      );
+      // The strip carries the Tokenizer's own name, as the field does.
+      const [field] = screen.getAllByRole('group', {name: 'People'});
+      const strip = getTokenStrip(field);
+      expect(strip).toHaveAttribute('role', 'group');
+      expect(strip).toHaveAccessibleName('People');
       // It joins the Tab order only while it overflows. jsdom has no layout, so
       // that half is browser evidence: TokenizerGroupScroll.a11y.browser.spec.ts.
       expect(strip).not.toHaveAttribute('tabindex');

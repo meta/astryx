@@ -560,7 +560,7 @@ const styles = stylex.create({
     // A native scrollbar would take most of a 28-32px row. The edge fades
     // show what is out of view instead, and the keyboard reaches it through
     // the remove buttons or, when disabled, through the track itself. Forced
-    // colors restore the platform scrollbar (AST-025 FR12, FR16).
+    // colors restore the platform scrollbar.
     scrollbarWidth: {
       default: 'none',
       // A classic scrollbar at full width takes half the row.
@@ -1063,7 +1063,7 @@ export function Tokenizer<T extends SearchableItem>({
   const {onClick: callerOnClick, ...restWithoutClick} = rest;
   const t = useComponentTranslator();
   const inputGroup = useInputGroup();
-  // A disabled InputGroup disables its members (component:InputGroup FR6).
+  // A disabled InputGroup disables its members.
   const isDisabled =
     isDisabledProp || use(InputGroupInternalContext).isDisabled;
   // The group's fixed-height row owns the size: an explicit larger size (and
@@ -1086,7 +1086,7 @@ export function Tokenizer<T extends SearchableItem>({
   const trackRef = useRef<HTMLDivElement>(null);
 
   // A grouped row scrolls its tokens in a track that adopts the shared scroll
-  // capability (AST-025), which measures the overflow and reports the edges
+  // capability, which measures the overflow and reports the edges
   // that hide tokens. Enabled tokens keep the keyboard path: each has a native
   // remove button, reached with Shift+Tab from the input, and keyboard focus
   // on one brings its token into view (revealFocusedItem). A disabled field
@@ -1097,7 +1097,7 @@ export function Tokenizer<T extends SearchableItem>({
       ? {
           owner: 'viewport',
           role: 'group',
-          label: t('@astryx.tokenizer.selectedItems'),
+          label,
         }
       : {owner: 'content'},
   });
@@ -1469,11 +1469,17 @@ export function Tokenizer<T extends SearchableItem>({
         // the menu returning focus to the token that opened it, keep focus
         // where they put it. A disabled grouped track that takes focus keeps
         // it: it is the keyboard path to its hidden tokens.
+        // In a grouped row, a move to the input also scrolls the strip to its
+        // end before the press releases, so a press on a token's remove
+        // button keeps its focus too.
         if (
           e.target !== inputRef.current &&
           e.target !== trackRef.current &&
           !(
-            readModality() === 'pointer' && findTokenControl(e.target) != null
+            readModality() === 'pointer' &&
+            (findTokenControl(e.target) != null ||
+              (e.target instanceof Node &&
+                trackRef.current?.contains(e.target) === true))
           ) &&
           !isMenuFocusReturnRef.current
         ) {
