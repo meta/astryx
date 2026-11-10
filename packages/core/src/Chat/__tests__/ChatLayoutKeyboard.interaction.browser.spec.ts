@@ -919,7 +919,16 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
       });
       const viewport = page.viewportSize() ?? {width: 402, height: 714};
       await editable.focus();
-      const hold = await armRideHold(page, dock);
+      // The transcript rides the same slide beside the dock, from the same
+      // task. The film seeks only what the hold took, so it takes both.
+      const hold = await armHold(page, dock.locator('xpath=..'), {
+        newOnly: true,
+        count: 2,
+        judges: [
+          {target: dock, property: 'translate'},
+          {target: messages, property: 'translate'},
+        ],
+      });
       await reportAt(page, COVER);
       const {storyboard} = await animationStoryboard(page, {
         name: 'chatlayout-keyboard-show',
@@ -934,12 +943,22 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
         }),
       });
       await storyboard.write(testInfo);
-      const trace = storyboard.frames.map(f => f.data as {dockY: number});
+      const trace = storyboard.frames.map(
+        f => f.data as {dockY: number; messagesY: number},
+      );
       // The dock only ever rises during the show, ending at the cover.
       for (let i = 1; i < trace.length; i += 1) {
         expect(trace[i].dockY).toBeLessThanOrEqual(trace[i - 1].dockY + 0.01);
       }
       expect(trace.at(-1)?.dockY).toBeCloseTo(-lift, 0);
+      // The transcript at its newest message rides with the composer in every
+      // frame.
+      for (const frame of trace) {
+        expect(frame.messagesY, JSON.stringify(trace)).toBeCloseTo(
+          frame.dockY,
+          0,
+        );
+      }
     },
   );
 
