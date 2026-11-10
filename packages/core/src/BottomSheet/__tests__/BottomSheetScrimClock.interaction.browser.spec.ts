@@ -1,44 +1,32 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y release-only
 
 /**
- * @file BottomSheetScrimClock.a11y.browser.spec.ts
- * @input The built BottomSheet Showcase story, on a phone viewport with
+ * @file BottomSheetScrimClock.interaction.browser.spec.ts
+ * @input The built BottomSheet Showcase story, on the suite's phone with
  *   real touch input through the interaction harness
  * @output Real-engine proof that a touch drag's close and the fade that
  *   clears its scrim start at the same time on the document timeline. It
  *   runs in Chromium and in WebKit, which reports the backdrop's fade on the
  *   dialog
- * @position Chromium and WebKit; the Chromium release spec measures the
- *   same pair end to end
+ * @position Chromium and WebKit, in the one-worker interaction suite: the
+ *   close is a real-time flick, so a loaded runner cannot give evidence. The
+ *   Chromium release spec measures the same pair end to end
  */
 
 import {expect, test} from '@astryxdesign/a11y-spec/playwright';
 import {
-  DEFAULT_STORYBOOK_DIR,
-  serveStorybook,
-  type StaticServer,
-} from '@astryxdesign/a11y-spec/storybook';
-import {drag, touchDriver} from '@astryxdesign/interaction-harness';
+  drag,
+  openStory,
+  touchDriver,
+  withStorybook,
+} from '@astryxdesign/interaction-harness';
 
-let storybook: StaticServer;
-test.beforeAll(async () => {
-  storybook = await serveStorybook(
-    process.env.ASTRYX_STORYBOOK_DIR ?? DEFAULT_STORYBOOK_DIR,
-  );
-});
-test.afterAll(async () => {
-  await storybook?.close();
-});
-
-test.use({viewport: {width: 390, height: 844}, hasTouch: true});
+const storybook = withStorybook(test);
 
 test("a touch drag's close and its scrim's fade start together", async ({
   page,
 }) => {
-  await page.goto(
-    `${storybook.origin}/iframe.html?id=core-bottomsheet--showcase&viewMode=story`,
-  );
+  await openStory(page, storybook(), 'core-bottomsheet--showcase');
   await page.getByRole('button', {name: 'Open sheet'}).click();
   const dialog = page.getByRole('dialog', {name: 'Filters'});
   await expect(dialog).toBeVisible();
