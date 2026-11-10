@@ -237,7 +237,10 @@ a component can rebuild a running animation on its old clock, and the page sees
 it running before the compositor shows a frame of it. The window names the
 animation it caught (`animation`): when it started and where its curve ends.
 These times are on the real clock, as the window's own are, after a page
-freeze too.
+freeze too. The page waits up to `TARGET_WAIT_MS` (5 s) for `during` to be on
+the page. Past it, the wait fails by name: the element is gone, or it never
+came. An element that leaves the page while the wait looks fails the wait at
+once, with when it left.
 The `verdict` judges the
 frames the screencast delivered, whatever its rate (a loaded machine's can
 deliver one frame in five or six), and tolerates nothing a frozen animation

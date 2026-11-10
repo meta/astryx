@@ -296,6 +296,21 @@ Wheel.displayName = 'Wheel';
 const MAX_RE_AIMS = 3;
 
 /**
+ * The keys that scroll a focused column. Tab moves focus out of the column,
+ * and ArrowLeft and ArrowRight scroll nothing in it, so a step keeps running
+ * through them.
+ */
+const COLUMN_SCROLL_KEYS: ReadonlySet<string> = new Set([
+  'ArrowUp',
+  'ArrowDown',
+  'PageUp',
+  'PageDown',
+  'Home',
+  'End',
+  ' ',
+]);
+
+/**
  * One snap-scrolling picker column, under a fine pointer.
  *
  * @example
@@ -369,7 +384,7 @@ export function ScrollWheel({
   // The row the wheel's own scroll heads for. A step commits its row at once.
   // So a rest on the way finishes the scroll and commits nothing. A busy page
   // can draw no frame of a step for longer than the quiet period.
-  const steer = useScrollSteer();
+  const steer = useScrollSteer(COLUMN_SCROLL_KEYS);
   // Where the wheel last re-aimed at its steered row, and how often. A rest
   // short of the row again, with no progress since, ends the steer. Then the
   // settle commits the row the column shows, so the two always agree.
