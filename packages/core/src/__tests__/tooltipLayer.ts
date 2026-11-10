@@ -17,6 +17,8 @@ export async function hoverTooltipLayer(
   trigger: HTMLElement,
   text: string,
 ): Promise<HTMLElement> {
+  // A cold import of the tooltip modules would time the first hover out.
+  await import('../Tooltip/AttachedTooltip');
   fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
   fireEvent.mouseEnter(trigger);
   let layer: HTMLElement | undefined;
