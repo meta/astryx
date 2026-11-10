@@ -34,9 +34,9 @@ export interface LinkProviderProps {
   /**
    * The component to use for all link elements in the subtree.
    * It receives the accepted `href`, and a `to` that equals `href` unless the
-   * link passes its own accepted `to`. It also receives the link's `ref`,
-   * `className`, `style`, event handlers, and `children`. A rejected
-   * destination never reaches it.
+   * link passes its own accepted `to`; a native `'a'` receives no `to`. It also
+   * receives the link's `ref`, `className`, `style`, event handlers, and
+   * `children`. A rejected destination never reaches it.
    *
    * @example
    * ```
@@ -46,8 +46,9 @@ export interface LinkProviderProps {
    */
   component: LinkComponentType;
   /**
-   * The subtree. Astryx links inside it render through `component`, unless a
-   * link sets its own `as` or a nearer LinkProvider sets another component.
+   * The subtree. Astryx links in it that render through the shared link
+   * boundary use `component`, unless a link sets its own `as` or a nearer
+   * LinkProvider sets another component. A disabled link does not use it.
    */
   children: ReactNode;
 }

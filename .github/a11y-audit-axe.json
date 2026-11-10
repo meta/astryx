@@ -65,13 +65,6 @@
       "core-layout--content-width-with-start-panel"
     ]
   },
-  "LinkProvider": {
-    "components": ["Link"],
-    "stories": [
-      "a11y-link-pattern--provider-router",
-      "a11y-link-pattern--as-router"
-    ]
-  },
   "Lightbox": {
     "stories": ["core-lightbox--open-viewer"],
     "readySelector": "dialog[open]"

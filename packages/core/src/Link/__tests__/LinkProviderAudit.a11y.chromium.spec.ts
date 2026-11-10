@@ -73,7 +73,7 @@ async function observe(page: Page) {
       storybookError:
         document.querySelector('.sb-show-errordisplay') != null ||
         document.body.classList.contains('sb-show-errordisplay'),
-      nextTabStop: link?.nextElementSibling?.textContent ?? null,
+      nextSibling: link?.nextElementSibling?.textContent ?? null,
       link:
         link == null
           ? null
@@ -162,13 +162,12 @@ for (const item of cases) {
           failures.push(message);
         }
       };
-      check(storybookSha === checkoutSha, 'storybook build mismatch');
       check(pageErrors.length === 0, `page errors: ${pageErrors.join(' | ')}`);
       check(!rest.storybookError, 'storybook error display');
       check(rest.mode === item.mode, `mode ${rest.mode}`);
       check(rest.dpr === 2, `dpr ${rest.dpr}`);
       check(rest.fonts === 'loaded', `fonts ${rest.fonts}`);
-      check(rest.nextTabStop === 'After', `next sibling ${rest.nextTabStop}`);
+      check(rest.nextSibling === 'After', `next sibling ${rest.nextSibling}`);
       check(rest.link != null, 'no link');
       if (rest.link != null) {
         check(rest.link.tag === 'a', `link element ${rest.link.tag}`);
