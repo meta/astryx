@@ -832,6 +832,61 @@ describe('Markdown plugin protocol', () => {
     expect(parseMarkdown('Safe', {plugins: [unsafeDestination]})).toMatchObject(
       [{type: 'paragraph', children: [{type: 'text', content: 'Safe'}]}],
     );
+    const setUrl = (type: 'link' | 'image', url: string) =>
+      createMarkdownPlugin({
+        name: `set-${type}-url`,
+        apiVersion: 1,
+        transform(root) {
+          return {
+            ...root,
+            children: root.children.map(block =>
+              block.type === 'paragraph'
+                ? {
+                    ...block,
+                    children: [
+                      type === 'link'
+                        ? {
+                            type: 'link' as const,
+                            url,
+                            children: [{type: 'text' as const, value: 'go'}],
+                          }
+                        : {type: 'image' as const, url, alt: 'pic'},
+                    ],
+                  }
+                : block,
+            ),
+          };
+        },
+      });
+    expect(
+      parseMarkdown('Safe', {plugins: [setUrl('link', ' \t ')]}),
+    ).toMatchObject([
+      {type: 'paragraph', children: [{type: 'link', href: ''}]},
+    ]);
+    expect(
+      parseMarkdown('Safe', {plugins: [setUrl('link', '  /docs  ')]}),
+    ).toMatchObject([
+      {type: 'paragraph', children: [{type: 'link', href: '/docs'}]},
+    ]);
+    expect(
+      parseMarkdown('Safe', {plugins: [setUrl('image', ' ')]}),
+    ).toMatchObject([
+      {type: 'paragraph', children: [{type: 'image', src: ''}]},
+    ]);
+    {
+      const {container} = render(
+        <Markdown plugins={[setUrl('link', ' \t ')]}>{'Safe'}</Markdown>,
+      );
+      expect(container.querySelector('a')).toBeNull();
+      expect(container.textContent).toContain('go');
+    }
+    {
+      const {container} = render(
+        <Markdown plugins={[setUrl('image', ' ')]}>{'Safe'}</Markdown>,
+      );
+      expect(container.querySelector('img')).toBeNull();
+      expect(container.textContent).toContain('[pic]');
+    }
     for (const node of [
       {
         type: 'link' as const,

@@ -151,6 +151,17 @@ describe('the parser rejects unsafe URL schemes in links and images', () => {
     },
   );
 
+  it('stores a padded destination in its normalized form', () => {
+    expect(urlsIn(parseMarkdown('[x](< https://example.com/x >)'))).toEqual([
+      'https://example.com/x',
+    ]);
+    expect(urlsIn(parseMarkdown('[x][r]\n\n[r]: < /docs >\n'))).toEqual([
+      '/docs',
+    ]);
+    expect(urlsIn(parseMarkdown('![x](< /a.png >)\n'))).toEqual(['/a.png']);
+    expect(urlsIn(parseInline('![x](< /a.png >)'))).toEqual(['/a.png']);
+  });
+
   it('rejects an angle-bracket autolink with an unsafe scheme', () => {
     for (const url of [
       'data:image/png;base64,iVBORw0KGgo=',

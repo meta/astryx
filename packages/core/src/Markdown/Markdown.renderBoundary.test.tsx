@@ -69,6 +69,23 @@ describe('Markdown render boundary — URLs come only from the parser', () => {
     expect(container.querySelector('a')?.getAttribute('href')).toBe(href);
   });
 
+  it('renders a padded destination as the normalized link', () => {
+    const onLinkClick = vi.fn(() => false as const);
+    const {container} = render(
+      <Markdown onLinkClick={onLinkClick}>
+        {'[go](< https://example.com/x >)'}
+      </Markdown>,
+    );
+    const link = container.querySelector('a');
+    expect(link?.getAttribute('href')).toBe('https://example.com/x');
+    expect(link?.getAttribute('target')).toBe('_blank');
+    link?.click();
+    expect(onLinkClick).toHaveBeenCalledWith(
+      'https://example.com/x',
+      expect.anything(),
+    );
+  });
+
   it('renders an accepted image source as an image', () => {
     const {container} = render(
       <Markdown>{'![go](https://example.com/a.png)'}</Markdown>,
