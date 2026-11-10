@@ -261,9 +261,9 @@ function focusLastDescendant(container: HTMLElement): boolean {
   return false;
 }
 
-// Containers of the focus regions currently active, in every document and
-// every copy of Core. A Tab is answered by the innermost region that holds
-// focus, so regions that nest in the DOM never fight over one key press.
+// Every copy of Core shares these focus-region containers. The innermost
+// region that holds focus answers a Tab, so nested regions never both answer
+// one key press.
 const activeRegionContainers = sharedState(
   'hooks/use-focus-trap/active-region-containers',
   1,
