@@ -144,6 +144,8 @@ async function clickThenBlock(
           const deadline = performance.now() + 5000;
           // The glides that counted at the frame before.
           let seen = new Set<Animation>();
+          // The glides of the last frame that had any, for the deadline's message.
+          let lastFound: [Animation, ComputedKeyframe[]][] = [];
           const tick = () => {
             const found: [Animation, ComputedKeyframe[]][] = [];
             for (
@@ -169,18 +171,29 @@ async function clickThenBlock(
                   Number(animation.currentTime ?? 0) >= 16 &&
                   seen.has(animation),
               );
+            const before = seen;
             seen = new Set(found.map(([animation]) => animation));
+            if (found.length > 0) {
+              lastFound = found;
+            }
             if (!ready) {
               if (performance.now() > deadline) {
                 const now = performance.timeOrigin + performance.now();
-                (window as unknown as {busy: unknown}).busy =
+                const named = found.length > 0 ? found : lastFound;
+                const label = (animation: Animation) =>
                   found.length === 0
+                    ? 'gone by the deadline'
+                    : before.has(animation)
+                      ? 'present at the frame before'
+                      : 'new at the frame before';
+                (window as unknown as {busy: unknown}).busy =
+                  named.length === 0
                     ? {busy: {from: now, to: now, spanMs: 0}, glides: []}
                     : {
-                        error: `clickThenBlock: within 5 s of the click, the glides that carry the follower never all ran 16 ms on two frames in a row: ${found
+                        error: `clickThenBlock: within 5 s of the click, the glides that carry the follower never all ran 16 ms on two frames in a row: ${named
                           .map(
                             ([animation]) =>
-                              `${animation.playState} at ${Number(animation.currentTime ?? 0).toFixed(0)} ms, ${seen.has(animation) ? 'present' : 'new'} at the frame before`,
+                              `${animation.playState} at ${Number(animation.currentTime ?? 0).toFixed(0)} ms, ${label(animation)}`,
                           )
                           .join('; ')}`,
                       };
