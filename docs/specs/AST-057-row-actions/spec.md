@@ -631,13 +631,16 @@ entry's revealed panel, or that reaches the confirm point from a resting open
 row; a swipe that starts on the row's content and flicks past the confirm
 point settles open instead. While the row is open or a full swipe is
 confirmed, each uncovered pixel shows the entry that owns it, so no other
-entry's colour shows behind or between entries. The settle keeps the row's
-spring tempo: no faster than the spring, and no added delay after the lift.
+entry's colour shows behind or between entries. Firing an entry paints no
+intermediate frame: the panel and the row never flicker between the swipe and
+the entry's result.
 
 The owner: "a small flick should at least stop around showing just the options
 then a longer more deliberate movement for performing the default action … if
 there are two options we avoid flick to activate and only active the swipe
-action if you deliberately start on the delete and swipe or flick".
+action if you deliberately start on the delete and swipe or flick". On the
+Delete action: "the flickeringb of the delete action is absolutely not
+acceptable".
 
 Rejected: a velocity threshold that fires the outermost entry (a quick flick
 deletes by accident).
