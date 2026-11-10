@@ -41,6 +41,7 @@ import {
   type FrameStats,
   type TrackedFrame,
 } from './frames';
+import {TARGET_WAIT_MS} from './target-wait';
 
 /** The control's colour, apart from the component's marker (`MARKER_RGB`). */
 export const CONTROL_RGB: readonly [number, number, number] = [0, 255, 255];
@@ -121,10 +122,12 @@ export async function trackControl(
  * every frame. Track it with `trackControl(page, frames, {ahead: true})`, and
  * keep the marker out of its strip too (the top `2 * CONTROL_SIDE + 4` px).
  *
- * A WebKit busy proof dates its frames on the controls' clock. Without the
- * control ahead, a frame stamped late near the first control's turn keeps its
- * lateness. A proof that judges every frame near a turn starts the one ahead
- * too, and passes its frames to `busyWindowProof` as `ahead`.
+ * A busy proof dates a cast's frames on the controls' clock, in either
+ * engine, when the frames carry their engine (`trackMarker` keeps it).
+ * Without the control ahead, a frame stamped late near the first control's
+ * turn keeps its lateness. A proof that judges every frame near a turn
+ * starts the one ahead too, and passes its frames to `busyWindowProof` as
+ * `ahead`.
  */
 export async function startBusyControl(
   page: Page,
@@ -765,6 +768,11 @@ export interface BlockedWindow extends BusyWindow {
  * so the block waits one frame more. An animation rebuilt at every frame never
  * qualifies: at the timeout the wait rejects and names that.
  *
+ * The page waits up to `TARGET_WAIT_MS` for `during` to be on the page. Past
+ * it, the wait fails by name: the element is gone, or it never came. An
+ * element that leaves the page while the wait looks runs no animation again.
+ * So the wait fails at once, and names when it left.
+ *
  * It counts only while it still moves: before its curve's held tail (where
  * its keyframes end in a run of identical values, read as `waitForRest`
  * reads it). A block in that tail would judge an animation that has stopped.
@@ -1349,6 +1357,14 @@ export async function blockMainThread(
         // The animations that counted at the frame before, pending ones too.
         let seen = new Set<Animation>();
         const tick = () => {
+          if (!element.isConnected) {
+            reject(
+              new Error(
+                `BusyDuringGone ${JSON.stringify({leftAtMs: realNow() - (deadline - wait)})}`,
+              ),
+            );
+            return;
+          }
           const present = element.getAnimations({subtree: true}).filter(counts);
           const ran = present.filter(
             a =>
@@ -1477,14 +1493,29 @@ export async function blockMainThread(
       calledFrom,
       look: BUSY_PROOF_LOOKAROUND_MS,
     },
+    {timeout: TARGET_WAIT_MS},
   );
   try {
     const [, held] = await Promise.all([defined, waited]);
     return held;
   } catch (error) {
-    const late = /BusyWindowTooLate (\{.*\})/.exec(
-      error instanceof Error ? error.message : String(error),
-    );
+    // `during.evaluate` waits TARGET_WAIT_MS for the element.
+    if (error instanceof Error && error.name === 'TimeoutError') {
+      throw new Error(
+        `blockMainThread: during ${during.toString()} is not on the page after ${TARGET_WAIT_MS} ms: it is gone, or it never came`,
+        {cause: error},
+      );
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    const gone = /BusyDuringGone (\{.*\})/.exec(message);
+    if (gone != null) {
+      const {leftAtMs} = JSON.parse(gone[1]) as {leftAtMs: number};
+      throw new Error(
+        `blockMainThread: during ${during.toString()} left the page ${leftAtMs.toFixed(0)} ms into the wait, before an animation of it ran: it is gone`,
+        {cause: error},
+      );
+    }
+    const late = /BusyWindowTooLate (\{.*\})/.exec(message);
     if (late == null) {
       throw error;
     }
@@ -1522,12 +1553,12 @@ export interface BusyProof extends FrameStats {
   readonly window: BusyWindow;
   /**
    * The part of the window judged: inside the margins, up to `settledWithin`,
-   * and from `onScreenFromMs` when that is set. On a WebKit cast dated on the
+   * and from `onScreenFromMs` when that is set. On a cast dated on the
    * controls' clock, it runs from the cast's stamp of the first frame judged
    * to that of the last. So a caller selects the judged part by its stamps.
-   * Frames the display-rate keep left out fall inside it too. Only this part
-   * moves back to the stamps. The summary's times, its stall and its control
-   * read stay on the controls' clock.
+   * In WebKit, frames the display-rate keep left out fall inside it too.
+   * Only this part moves back to the stamps. The summary's times, its stall
+   * and its control read stay on the controls' clock.
    */
   readonly judged: {readonly from: number; readonly to: number};
   /**
@@ -1883,10 +1914,13 @@ function motionStepPx(values: readonly number[]): number {
  * at the first presented change inside it: WebKit presents a just-started
  * compositor animation late (a sheet's release held on screen for 130 to
  * 300 ms while its timeline ran, and the screencast reaches Node about 0.7 s
- * late on a loaded runner, too late to wait on before blocking). Only a hold
+ * late on a loaded runner, too late to wait on before blocking). Chromium on
+ * a loaded runner does too. A slider's coast first showed 25–111 ms after
+ * its start (median 57 ms), with a catch-up on that first frame. Only a hold
  * at `setBeforeBlock`, the value the page itself last set before the block,
- * is excused. Every frame after that first change is judged, so a freeze
- * later in the block fails.
+ * is excused. Without it, a window with a caught animation takes the value on
+ * the cast's last frame before that animation's start. Every frame after that
+ * first change is judged, so a freeze later in the block fails.
  * An element off screen before the judged part is judged from its first
  * position inside the part, as a card that enters from an edge. The cast's
  * frames before the part must show the screen without it. A main-thread
@@ -1953,8 +1987,14 @@ function motionStepPx(values: readonly number[]): number {
  * alike. A frame with no reading keeps its stamp's distance from the nearest
  * frame whose stamp agrees with its reading. The dated frames keep the cast's
  * order. Without the control `ahead`, a late frame near the first control's
- * turn keeps its lateness. Chromium casts and casts with no control are
- * judged on their stamps.
+ * turn keeps its lateness. A Chromium cast with a control is dated the same
+ * way. Its cast stamps each frame as it arrives. Under load, the stamps
+ * trail the frames unevenly, so the frame interval read from them is wrong.
+ * Two frames a whole frame apart can carry stamps 2 ms apart. Without the
+ * control `ahead`, such a pair near the first control's turn keeps its
+ * stamps. Only frames that carry their engine, as `trackMarker` reads them,
+ * are dated. Frames built without it, and a cast with no control, are judged
+ * on their stamps.
  *
  * A WebKit proof keeps one dated frame per display interval, the earlier
  * one. A frame with no reading always stays. The proof judges motion on every
@@ -2027,10 +2067,12 @@ export function busyWindowProof(
 export const BUSY_PROOF_LOOKAROUND_MS = 250;
 
 /**
- * The proof `busyWindowProof` returns, and the starvation it throws. A WebKit
- * cast with a control is judged on the controls' clock
- * (`datedOnControlClock`); any other cast on its stamps. WebKit stamps the
- * frame after a delivery gap about 60 ms late, carrying one frame of motion.
+ * The proof `busyWindowProof` returns, and the starvation it throws. A cast
+ * with a control, its frames tagged with their engine, is judged on the
+ * controls' clock (`datedOnControlClock`); any other cast on its stamps.
+ * WebKit stamps the frame after a delivery gap about 60 ms late, carrying one
+ * frame of motion. Chromium stamps each frame as it arrives, unevenly behind
+ * its presentation under load.
  */
 function readBusyWindow(
   tracked: readonly TrackedFrame[],
@@ -2042,9 +2084,8 @@ function readBusyWindow(
   }: NonNullable<Parameters<typeof judgeBusyWindow>[2]> & {
     /**
      * The control started `ahead` (`startBusyControl`), tracked from the same
-     * screencast (`trackControl` with `ahead`). It dates the WebKit frames
-     * that fall near the first control's turns, where that control gives no
-     * time.
+     * screencast (`trackControl` with `ahead`). It dates the frames that
+     * fall near the first control's turns, where that control gives no time.
      */
     ahead?: readonly TrackedFrame[];
     /**
@@ -2114,7 +2155,7 @@ function readBusyWindow(
     (predicts ? (window as BlockedWindow).controlStarts : undefined);
   const dated =
     control != null &&
-    (predicts || control.every(frame => frame.engine === 'webkit'))
+    (predicts || control.every(frame => frame.engine != null))
       ? datedOnControlClock(tracked, control, ahead, starts)
       : null;
   if (dated == null) {
@@ -2233,9 +2274,11 @@ function judgeBusyWindow(
      * coordinates: where the box sits at rest, plus the offset the page wrote.
      * A hold that starts before the block and ends at its first presented
      * change can be a late hand-off. It is one only when it holds this value,
-     * where the animation starts. Without it, or when the hold shows another
-     * value, the hold is judged as a stall. An animation can freeze at the
-     * block's start.
+     * where the animation starts. Without it, a window that caught an
+     * animation (`blockMainThread`'s `during`) takes the value on the cast's
+     * last frame before that animation's start. When the hold shows another
+     * value, or no value is known, the hold is judged as a stall. An
+     * animation can freeze at the block's start.
      */
     setBeforeBlock?: number;
     /**
@@ -2462,13 +2505,23 @@ function judgeBusyWindow(
   // up to a step off. A cast with no step is read within a pixel, and a
   // sub-pixel read within half a pixel.
   const matchPx = subpixelStepPx != null ? 0.5 : (readStepPx ?? 1);
+  // Where the animation starts: the value the page set (`setBeforeBlock`).
+  // Without it, the caught animation's start dates it: the value on the
+  // cast's last frame before that start. Unlike the progress replay's
+  // anchor, a frame that shows no element is not skipped. An earlier value
+  // can be stale, so the hold then gets no excuse.
+  const preStart =
+    setBeforeBlock ??
+    (heldCurve == null
+      ? undefined
+      : [...tracked].reverse().find(f => f.t < heldCurve.from)?.box?.[axis]);
   const heldFromBeforeBlock =
-    setBeforeBlock != null &&
+    preStart != null &&
     lead.length > 0 &&
     holdStart > 0 &&
     prior[holdStart].t < window.from &&
     heldFrames >= 2 &&
-    Math.abs(lead[lead.length - 1] - setBeforeBlock) <= matchPx;
+    Math.abs(lead[lead.length - 1] - preStart) <= matchPx;
   // Off screen before the judged part, as a card that enters from an edge:
   // the cast's frames there show the screen without it. Its first position
   // inside the part is then its on-screen start, and judging starts there.

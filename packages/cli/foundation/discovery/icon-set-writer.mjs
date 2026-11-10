@@ -48,6 +48,7 @@ import {
   exportValueKind,
   followedExportNames,
   moduleExportOrigin,
+  staticExportBindings,
 } from './module-exports.mjs';
 
 /** @typedef {import('./icon-set-discovery.mjs').DiscoveredIconSet} DiscoveredIconSet */
@@ -155,7 +156,11 @@ function packageDirOf(cwd) {
  * `selector` names, else the only set.
  * @param {string} cwd
  * @param {string} [selector] a set name
- * @returns {Promise<{packageDir: string, pkg: Record<string, any>, root: string, set: DiscoveredIconSet, sets: DiscoveredIconSet[]}>}
+ * The set's `module` names the package as package.json names it now;
+ * `moduleRenamed` says the data file still names an old name, so a command
+ * writes the data file even when nothing else changes; `moduleUpdate` gives
+ * the old and the new name for the receipt, else null.
+ * @returns {Promise<{packageDir: string, pkg: Record<string, any>, root: string, set: DiscoveredIconSet, sets: DiscoveredIconSet[], moduleRenamed: boolean, moduleUpdate: {previous: string, module: string} | null}>}
  */
 export async function findLocalIconSet(cwd, selector) {
   const packageDir = packageDirOf(cwd);
@@ -199,12 +204,20 @@ export async function findLocalIconSet(cwd, selector) {
     ? found.sets.filter(set => set.name === selector)
     : found.sets;
   if (named.length === 1) {
+    const set = {...named[0], packageDir};
+    const module = moduleInPackage(set.data.module, pkg.name);
+    const moduleUpdate =
+      module !== set.data.module ? {previous: set.data.module, module} : null;
+    const moduleRenamed = moduleUpdate != null;
+    if (moduleRenamed) set.data = {...set.data, module};
     return {
       packageDir,
       pkg,
       root,
-      set: {...named[0], packageDir},
+      set,
       sets: found.sets,
+      moduleRenamed,
+      moduleUpdate,
     };
   }
   const broken = selector
@@ -236,6 +249,22 @@ export async function findLocalIconSet(cwd, selector) {
       reason: 'an icon set in this package',
     })),
   );
+}
+
+/**
+ * The data file's `module` in the package as it is named now. The data file
+ * belongs to the CLI, so after a package rename the next write gives the new
+ * name (`@acme/old/solid` → `@acme/new/solid`). A ./ path, or a package
+ * with no name, is left as it is.
+ * @param {string} module
+ * @param {unknown} name the package.json `name`
+ */
+function moduleInPackage(module, name) {
+  if (typeof name !== 'string' || name === '' || module.startsWith('.')) {
+    return module;
+  }
+  const owner = iconModulePackage(module);
+  return owner === name ? module : `${name}${module.slice(owner.length)}`;
 }
 
 /** The data file's fields, in the order the file is written. */
@@ -608,7 +637,7 @@ const SCREAMING_CASE_RE = /^[A-Z][A-Z0-9_]+$/u;
  * set declares an adapter, also data exports, camelCase included: objects,
  * and plain strings only in a library whose candidates are all strings.
  * Left out: `default`, `Icon`, `…Provider` and `…Context` components, SCREAMING_CASE constants, number and boolean
- * exports, and `exclude`.
+ * exports, packs of other exports ({@link isIconPack}), and `exclude`.
  * @param {string} file
  * @param {{adapter?: boolean, exclude?: string[]}} [options] `exclude`: export
  *   names that are not icons
@@ -618,7 +647,9 @@ function iconCandidates(file, {adapter = false, exclude = []} = {}) {
   const skipped = new Set(exclude);
   /** @type {Array<{name: string, adapt: boolean, scalar: string | null}>} */
   const out = [];
-  for (const name of followedExportNames(file)) {
+  const names = followedExportNames(file);
+  const exported = new Set(names);
+  for (const name of names) {
     if (name === 'default' || name === 'Icon' || skipped.has(name)) continue;
     // A context provider or context (`LucideProvider`) is a component that
     // draws nothing.
@@ -631,7 +662,8 @@ function iconCandidates(file, {adapter = false, exclude = []} = {}) {
     } else if (
       adapter &&
       kind === 'data' &&
-      /^[A-Za-z][A-Za-z0-9]*$/u.test(name)
+      /^[A-Za-z][A-Za-z0-9]*$/u.test(name) &&
+      !isIconPack(file, name, exported)
     ) {
       const scalar = exportScalarType(file, name);
       // A number or a boolean draws nothing; a string may be SVG markup.
@@ -644,6 +676,20 @@ function iconCandidates(file, {adapter = false, exclude = []} = {}) {
   return out.some(each => each.scalar == null)
     ? out.filter(each => each.scalar == null)
     : out;
+}
+
+/**
+ * Whether a data export is a pack: an object whose keys are all other
+ * exports of the module, such as `fas` in a library that also exports
+ * `faXmark` and `faHouse`. A pack holds icons but draws nothing.
+ * @param {string} file
+ * @param {string} name
+ * @param {Set<string>} exported every export name of the module
+ */
+function isIconPack(file, name, exported) {
+  const bindings = staticExportBindings(file, name);
+  if (bindings == null || bindings.size < 2) return false;
+  return [...bindings.keys()].every(key => key !== name && exported.has(key));
 }
 
 /**
@@ -1868,10 +1914,11 @@ export function generatedNamesOf(packageDir, generated, from, source) {
  * differently; and a refresh changes only the icons its module supplies.
  * @param {string} packageDir
  * @param {string} generated
- * @returns {Map<string, {module: string, source: string}>}
+ * @returns {Map<string, {module: string, source: string, adapt: boolean}>}
+ *   `adapt`: the set's adapter turns the export into a component
  */
 export function generatedOrigins(packageDir, generated) {
-  /** @type {Map<string, {module: string, source: string}>} */
+  /** @type {Map<string, {module: string, source: string, adapt: boolean}>} */
   const origins = new Map();
   const file = path.join(packageDir, generated);
   if (!fs.existsSync(file)) return origins;
@@ -1898,6 +1945,7 @@ export function generatedOrigins(packageDir, generated) {
       origins.set(reexport[2] ?? reexport[1], {
         module: fromRoot(reexport[3]),
         source: reexport[1],
+        adapt: false,
       });
       continue;
     }
@@ -1908,6 +1956,7 @@ export function generatedOrigins(packageDir, generated) {
       origins.set(adapted[2], {
         module: fromRoot(adapted[3]),
         source: adapted[1],
+        adapt: true,
       });
       continue;
     }
@@ -1918,6 +1967,7 @@ export function generatedOrigins(packageDir, generated) {
       origins.set(adaptedDefault[1], {
         module: fromRoot(adaptedDefault[2]),
         source: 'default',
+        adapt: true,
       });
     }
   }

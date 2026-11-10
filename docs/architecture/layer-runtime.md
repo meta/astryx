@@ -147,6 +147,11 @@ can flip across either axis. Centered placements also gain span fallbacks so the
 surface can move along the alignment axis near viewport edges. Clearance is
 applied to both edges of the placement axis so a flip retains the gap.
 
+Known limitation: a trigger inside SVG `<foreignObject>` cannot be a CSS
+anchor in Chromium, so an anchored surface for it opens at the viewport corner.
+Place the trigger in an HTML layer over the SVG, positioned at the node's
+coordinates, and keep the SVG for shapes, edges, and labels.
+
 #### Viewport inset
 
 Anchor mode owns the viewport inset (`spec:AST-059`). Every anchor-mode layer
