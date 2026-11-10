@@ -52,15 +52,21 @@ const STRONG_RTL = new RegExp(
  * Bidi_Class `AL`, so they stay strong; NKo and Adlam digits are `R`, so
  * they do too.
  */
-const WEAK_RTL_CHARACTER =
-  /[\u0600-\u0605\u0609\u060A\u0660-\u0669\u066A-\u066C\u06DD\u06F0-\u06F9\u0890\u0891\u08E2\u{1091F}\u{10B39}-\u{10B3F}\u{10D30}-\u{10D39}\u{10D40}-\u{10D49}\u{10D6E}\u{10E60}-\u{10E7E}\u{10ED0}-\u{10ED8}\u{1EEF0}\u{1EEF1}]/u;
+const WEAK_NUMBER_OR_NEUTRAL =
+  /[0-9\u0600-\u0605\u0609\u060A\u0660-\u0669\u066A-\u066C\u06DD\u06F0-\u06F9\u0890\u0891\u08E2\uFF10-\uFF19\u{1091F}\u{10B39}-\u{10B3F}\u{10D30}-\u{10D39}\u{10D40}-\u{10D49}\u{10D6E}\u{10E60}-\u{10E7E}\u{10ED0}-\u{10ED8}\u{1CCF0}-\u{1CCF9}\u{1D7CE}-\u{1D7FF}\u{1EEF0}\u{1EEF1}\u{1FBF0}-\u{1FBF9}]/u;
 
 /**
  * Bidi_Class `L`: every other letter, the letter numbers (`\p{Letter}` does
- * not include them), and the left-to-right mark. Digits, punctuation and
- * symbols are not here, so the scan skips them.
+ * not include them), the left-to-right mark, and the decimal digits.
+ *
+ * Most scripts' digits are `L` — Devanagari, Bengali, Tamil, Thai and the
+ * rest — so a line opening with them reads left-to-right. The digits that
+ * are not are read before this: the European ones are `EN` and the
+ * Arabic-Indic ones `AN`, both in the weak set above, and NKo's and Adlam's
+ * are `R`, matched as their own scripts. Punctuation and symbols are not
+ * here, so the scan passes over them.
  */
-const STRONG_LTR = new RegExp(String.raw`[\p{Letter}\p{Nl}\u200E]`, 'u');
+const STRONG_LTR = new RegExp(String.raw`[\p{Letter}\p{Nl}\p{Nd}\u200E]`, 'u');
 
 /**
  * Bidi_Class `NSM`: a combining mark takes the direction of its base
@@ -86,7 +92,10 @@ export function hasStrongRightToLeft(text: string): boolean {
  */
 export function firstStrongDirection(text: string): 'ltr' | 'rtl' | null {
   for (const character of text) {
-    if (COMBINING_MARK.test(character) || WEAK_RTL_CHARACTER.test(character)) {
+    if (
+      COMBINING_MARK.test(character) ||
+      WEAK_NUMBER_OR_NEUTRAL.test(character)
+    ) {
       continue;
     }
     if (STRONG_RTL.test(character)) {
