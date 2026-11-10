@@ -34,6 +34,25 @@ describe('status phrases', () => {
     ]);
   });
 
+  it('warns on each example phrase INV32 lists', () => {
+    const examples = [
+      ['The build has not started.', 'has not started'],
+      ['There is no code yet.', 'no code yet'],
+      ['No module exists yet.', 'no module exists'],
+      ['The sorter is not built.', 'not built'],
+      ['Paging is not yet implemented.', 'not yet implemented'],
+      ['Paging is follow-up work.', 'follow-up work'],
+      ['Table is the first consumer.', 'first consumer'],
+      ['Table is the first adopter.', 'first adopter'],
+      ['The adoption order is fixed.', 'adoption order'],
+      ['Table adopts it first.', 'adopts it first'],
+      ['The engine lands before the adapter.', 'lands before'],
+      ['Sorting ships in phase 1.', 'phase 1'],
+    ];
+    for (const [line, phrase] of examples)
+      expect(phrases(record(line))).toEqual([phrase]);
+  });
+
   it('matches whole words only', () => {
     expect(
       phrases(record('The firstconsumer field and preadoption order.')),
@@ -44,7 +63,10 @@ describe('status phrases', () => {
     expect(
       phrases(record('**Status:** in progress', '', 'Rows window.')),
     ).toEqual([]);
-    expect(phrases(record('Status: not built yet'))).toEqual([]);
+  });
+
+  it('warns on build status inside the Status line', () => {
+    expect(phrases(record('Status: not built yet'))).toEqual(['not built']);
   });
 
   it('allows one in-progress statement, and warns on a second status line', () => {
@@ -71,6 +93,18 @@ describe('status phrases', () => {
         ),
       ),
     ).toEqual(['in progress']);
+  });
+
+  it('counts only a Status line or a standalone in-progress line as the status line', () => {
+    expect(
+      phrases(
+        record(
+          'Status: in progress',
+          '',
+          'One status line, such as `Status: in progress`, may say the record is still in progress. Plans carry progress.',
+        ),
+      ),
+    ).toEqual([]);
   });
 
   it('does not count a state of the system as a status line', () => {
@@ -100,6 +134,27 @@ describe('status phrases', () => {
     ).toEqual([]);
   });
 
+  it('stays silent inside a quote or code span that wraps across lines', () => {
+    expect(
+      phrases(
+        record(
+          '- **build status** is a statement of what is built so far: "the build',
+          '  has not started", "no code',
+          '  yet", or `no module',
+          '  exists`.',
+        ),
+      ),
+    ).toEqual([]);
+  });
+
+  it('does not carry an open quote past a blank line', () => {
+    expect(
+      phrases(
+        record('A stray " opens here.', '', 'The build has not started.'),
+      ),
+    ).toEqual(['has not started']);
+  });
+
   it('ignores frontmatter', () => {
     expect(
       phrases('---\nsummary: no code yet\n---\n\n# Record\n\nRows window.\n'),
@@ -108,13 +163,25 @@ describe('status phrases', () => {
 });
 
 describe('gap sections', () => {
-  it('stays silent on a line that names a claim and states the mismatch', () => {
+  it('warns on build status in a gap line that also states the mismatch', () => {
     expect(
       phrases(
         record(
           '## Known gaps',
           '',
           '- FR7 gap: Table windows only inside its own viewport, so a page scroll mounts every row; not built yet.',
+        ),
+      ),
+    ).toEqual(['not built']);
+  });
+
+  it('stays silent on a gap line that states only the mismatch', () => {
+    expect(
+      phrases(
+        record(
+          '## Known gaps',
+          '',
+          '- FR7 gap: Table windows only inside its own viewport, so a page scroll mounts every row.',
         ),
       ),
     ).toEqual([]);
@@ -149,10 +216,10 @@ describe('gap sections', () => {
           'Selector adopts first.',
         ),
       ),
-    ).toEqual(['no code yet', 'not built yet', 'adopts first']);
+    ).toEqual(['no code yet', 'not built', 'adopts first']);
   });
 
-  it('ends the gap section at the next heading of the same or higher level', () => {
+  it('warns on build status in every section alike', () => {
     expect(
       phrases(
         record(
@@ -165,7 +232,7 @@ describe('gap sections', () => {
           '- FR2 gap: the menu closes on scroll, so a reader loses the selection; no module exists.',
         ),
       ),
-    ).toEqual(['no module exists']);
+    ).toEqual(['no module exists', 'no module exists']);
   });
 });
 
