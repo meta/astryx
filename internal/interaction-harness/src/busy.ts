@@ -35,10 +35,11 @@ import {
   FRAME_STARVATION_MS,
   FrameStarvationError,
   frameStats,
-  trackMarker,
+  trackMarkers,
   type CastFrame,
   type FrameShortfall,
   type FrameStats,
+  type MarkerColor,
   type TrackedFrame,
 } from './frames';
 import {TARGET_WAIT_MS} from './target-wait';
@@ -68,16 +69,15 @@ const AHEAD_TOP = CONTROL_SIDE + 4;
 const AHEAD_MS = CONTROL_LEG_MS / 2;
 
 /**
- * The control in each frame (`startBusyControl`'s box): `trackMarker` with
- * `CONTROL_RGB`, searching only the strip the box crosses. With `ahead`, the
- * control ahead, with `AHEAD_CONTROL_RGB` in its own strip.
+ * The control's colour and the strip its box crosses (`startBusyControl`),
+ * for `trackMarkers`. A proof then finds its marker and the control in one
+ * decode of each frame. With `ahead`, the control ahead, with
+ * `AHEAD_CONTROL_RGB` in its own strip.
  */
-export async function trackControl(
-  page: Page,
-  frames: readonly CastFrame[],
-  {ahead = false}: {ahead?: boolean} = {},
-): Promise<TrackedFrame[]> {
-  return trackMarker(page, frames, {
+export function controlColor({
+  ahead = false,
+}: {ahead?: boolean} = {}): MarkerColor {
+  return {
     rgb: ahead ? AHEAD_CONTROL_RGB : CONTROL_RGB,
     region: {
       x: 0,
@@ -85,7 +85,24 @@ export async function trackControl(
       width: CONTROL_SIDE + CONTROL_TRAVEL + 4,
       height: CONTROL_SIDE + 4,
     },
+  };
+}
+
+/**
+ * The control in each frame (`startBusyControl`'s box), searched only in the
+ * strip the box crosses (`controlColor`). With `ahead`, the control ahead. A
+ * proof that also tracks its marker passes both colours to one
+ * `trackMarkers` call instead, so each frame is decoded once.
+ */
+export async function trackControl(
+  page: Page,
+  frames: readonly CastFrame[],
+  {ahead = false}: {ahead?: boolean} = {},
+): Promise<TrackedFrame[]> {
+  const [tracked] = await trackMarkers(page, frames, {
+    colors: [controlColor({ahead})],
   });
+  return tracked;
 }
 
 /**
@@ -93,9 +110,11 @@ export async function trackControl(
  * page's top-left corner whose transform moves it back and forth along the top
  * edge (`CONTROL_TRAVEL` px every 400 ms, linear) for as long as the page
  * runs. It shows what the compositor presented in a busy window on this
- * machine, so a proof can judge a component against it rather than against a
- * frame rate: track it from the same screencast (`trackMarker(page, frames,
- * {rgb: CONTROL_RGB})`) and pass it to `busyWindowProof` as `control`.
+ * machine. A proof can then judge a component against it rather than against
+ * a frame rate. Track it from the same screencast and pass it to
+ * `busyWindowProof` as `control`. `trackMarkers` with the marker's colour and
+ * `controlColor()` finds both in one decode of each frame; `trackControl`
+ * reads the control alone.
  *
  * The box is a manual popover, so it shows in the top layer, above a modal
  * dialog the page opened before it; `raise()` shows it again on top of one
@@ -119,8 +138,9 @@ export async function trackControl(
  * `AHEAD_CONTROL_RGB`, in the strip below, half a leg (200 ms) ahead.
  * `controlClock` reads no frame within `CONTROL_EDGE` px of a turn. Wherever
  * the first control is there, the one ahead is mid-leg, so the two read
- * every frame. Track it with `trackControl(page, frames, {ahead: true})`, and
- * keep the marker out of its strip too (the top `2 * CONTROL_SIDE + 4` px).
+ * every frame. Track it with `controlColor({ahead: true})` in the same
+ * `trackMarkers` call, or with `trackControl(page, frames, {ahead: true})`.
+ * Keep the marker out of its strip too (the top `2 * CONTROL_SIDE + 4` px).
  *
  * A busy proof dates a cast's frames on the controls' clock, in either
  * engine, when the frames carry their engine (`trackMarker` keeps it).
