@@ -107,11 +107,26 @@ async function axeCounts(page) {
   });
 }
 
-/** Blocks every request except the local server and the allowed font hosts. */
+/** A font host that accepts a connection but never answers must not stall the page load. */
+const FONT_TIMEOUT_MS = 3000;
+
+/** Blocks every request and socket except the local server and the allowed font hosts. */
 async function localOnly(context, origin) {
-  await context.route('**/*', route =>
-    isAllowedRequest(route.request().url(), origin) ? route.continue() : route.abort(),
-  );
+  await context.route('**/*', async route => {
+    const url = route.request().url();
+    if (url.startsWith(origin)) return route.continue();
+    if (!isAllowedRequest(url, origin)) return route.abort();
+    try {
+      await route.fulfill({response: await route.fetch({timeout: FONT_TIMEOUT_MS})});
+    } catch {
+      await route.abort().catch(() => {});
+    }
+  });
+  const socketOrigin = origin.replace(/^http/, 'ws');
+  await context.routeWebSocket(/.*/, socket => {
+    if (socket.url().startsWith(socketOrigin)) socket.connectToServer();
+    else socket.close();
+  });
 }
 
 /** A context that reaches only allowed hosts and fails fast like the probe steps. */

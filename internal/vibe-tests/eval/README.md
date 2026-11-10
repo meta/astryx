@@ -68,14 +68,17 @@ lists it but leaves it out of the pass rates.
 
 ## Grading
 
-The grader is deterministic and has no LLM judge. A result passes only if all
-four checks hold:
+The grader is deterministic and has no LLM judge. It checks behavior that a
+browser can observe: roles, names, text, focus and real input. Visual details in
+a prompt, such as a destructive button style, are not graded; the screenshots
+and axe counts show them. A result passes only if all four checks hold:
 
 - `tsc -b` exits 0. The arm's own command decides this, not a parsed log.
 - `vite build` exits 0 and writes `dist/index.html`.
 - The task probe passes in headless Chromium against the built app, served from
-  127.0.0.1. Requests to other hosts are blocked, except font files from Google
-  Fonts, so each arm renders with its own theme font.
+  127.0.0.1. Requests and WebSockets to other hosts are blocked, except font
+  files from Google Fonts (with a 3-second limit), so each arm renders with its
+  own theme font.
 - The page throws no uncaught error, at desktop or phone size.
 
 The grader also records screenshots (desktop 1280×800 before and after the
