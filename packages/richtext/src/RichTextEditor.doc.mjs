@@ -241,6 +241,11 @@ export const docs = {
       {
         guidance: true,
         description:
+          'In a code block, Tab and Shift+Tab indent and outdent every line the selection touches, by the indent the block already uses: a tab when one of its lines starts with a tab, otherwise the fewest spaces an indented line starts with (2 to 8), otherwise 2 spaces. The selection stays on the same characters, and each press is one undo step. Escape then Tab still moves focus out of the editor.',
+      },
+      {
+        guidance: true,
+        description:
           'Backspace at the very start of a code block turns it into a paragraph holding its lines, each on its own line, with the caret at its start. The code never merges into the block above, so a heading above keeps its own text. Backspace anywhere else in a code block deletes as usual.',
       },
       {

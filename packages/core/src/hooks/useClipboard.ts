@@ -99,7 +99,7 @@ export function useClipboard(
  * component needs to report a failed write.
  */
 export interface UseClipboardCopyOptions extends UseClipboardOptions {
-  /** Message announced to the polite live region when a write fails. */
+  /** Message announced to the assertive live region when a write fails. */
   announceFailure?: string;
   /**
    * Called once with the rejection when a write fails. `copy` still resolves
@@ -165,7 +165,8 @@ export function useClipboardCopy(
           setIsFailed(false);
         }, resetAfterMs);
         if (announceFailure) {
-          announce(announceFailure);
+          // A failure is an error, so screen readers hear it at once.
+          announce(announceFailure, 'assertive');
         }
         onError?.(error);
         return false;

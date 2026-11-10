@@ -6,8 +6,9 @@
  * @input Built Lightbox stories (LTR and the RTL story global) and real
  *   Chromium/WebKit keyboard input
  * @output Browser evidence that the gallery's Left/Right arrow keys move in
- *   the direction of the matching on-screen button, in both directions, and
- *   that Tab and Shift+Tab wrap inside the open viewer at both ends
+ *   the direction of the matching on-screen button, in both directions, that
+ *   Tab and Shift+Tab wrap inside the open viewer at both ends, and that the
+ *   zoom keys work and are announced inside the open viewer
  * @position Cross-browser proof for Lightbox's direction-aware gallery keys
  *   (design:bidirectionality DR6, DR11)
  */
@@ -136,4 +137,33 @@ test('Tab and Shift+Tab wrap inside an open single image, zoomed or not', async 
   await page.locator('dialog[open] [tabindex="0"]').first().focus();
   await page.keyboard.press('+');
   await expectTabWrapsInside(page);
+});
+
+test('+ zooms and is announced inside the viewer, and 0 returns to the fitted size', async ({
+  page,
+}) => {
+  // A local picture stands in for the remote photo, so the zoom has a size.
+  await page.route(/picsum\.photos/, async route =>
+    route.fulfill({
+      contentType: 'image/svg+xml',
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800"><rect width="1200" height="800" fill="#5b7f6a"/></svg>',
+    }),
+  );
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-lightbox--with-zoom&viewMode=story`,
+  );
+  await page.getByRole('button', {name: 'Open with zoom'}).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  const zoom = dialog.getByRole('button', {name: 'Zoom'});
+  await expect(zoom).toHaveAttribute('aria-pressed', 'false');
+
+  await page.keyboard.press('+');
+  await expect(zoom).toHaveAttribute('aria-pressed', 'true');
+  await expect(
+    page.locator('dialog[open] > [data-astryx-modal-live-region="polite"]'),
+  ).toContainText('Zoomed in');
+
+  await page.keyboard.press('0');
+  await expect(zoom).toHaveAttribute('aria-pressed', 'false');
 });

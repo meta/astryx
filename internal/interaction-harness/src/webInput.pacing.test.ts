@@ -99,6 +99,32 @@ describe('wheelGapCauses', () => {
     ).toEqual({pageStalls: [], dispatchStalls: [152]});
   });
 
+  it('gives a WebKit gap to the page, naming its frame gap, when the page drew no frame across it with its listeners idle', () => {
+    // The listeners took 1 ms; the page then drew no frame from 20 to 380,
+    // across the 360 ms gap between the steps.
+    const frames = [4, 20, 380, 396];
+    expect(
+      wheelGapCauses('webkit', [16, 376], [17, 377], 100, [16], frames),
+    ).toEqual({
+      pageStalls: [{gapMs: 360, handlingMs: 1, frameGapMs: 360}],
+      dispatchStalls: [],
+    });
+    // With frames running through the same gap, it is the dispatch's.
+    const running = Array.from({length: 26}, (_, k) => 4 + 16 * k);
+    expect(
+      wheelGapCauses('webkit', [16, 376], [17, 377], 100, [16], running),
+    ).toEqual({pageStalls: [], dispatchStalls: [360]});
+    // A gap no wider than the harness's own send spacing stays the
+    // dispatch's, frames or not.
+    expect(
+      wheelGapCauses('webkit', [16, 376], [17, 377], 100, [360], frames),
+    ).toEqual({pageStalls: [], dispatchStalls: [360]});
+    // Chromium's stamps are its dispatch's.
+    expect(
+      wheelGapCauses('chromium', [16, 376], [17, 377], 100, [16], frames),
+    ).toEqual({pageStalls: [], dispatchStalls: [360]});
+  });
+
   it('counts a step whose handling was never seen as the dispatch\u2019s', () => {
     expect(wheelGapCauses('webkit', [0, 150], [Number.NaN, 151], 100)).toEqual({
       pageStalls: [],
