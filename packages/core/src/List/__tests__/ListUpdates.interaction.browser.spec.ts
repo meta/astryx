@@ -892,8 +892,12 @@ test('a change with a row swiped open lays the page out no more often than the s
         );
         const from = performance.timeOrigin + performance.now();
         button?.click();
+        // The third frame's callback runs once the second frame has laid
+        // out, so the window holds both frames' work.
         await new Promise<void>(resolve => {
-          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          );
         });
         return {from, to: performance.timeOrigin + performance.now()};
       });
