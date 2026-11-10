@@ -11,7 +11,7 @@
  * SYNC: When TransferList.tsx behavior changes, update these tests.
  */
 
-import {useMemo, useState} from 'react';
+import {Suspense, startTransition, use, useMemo, useState} from 'react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {
   act,
@@ -346,6 +346,46 @@ describe('TransferList', () => {
   });
 
   describe('transfers and filtering', () => {
+    it('adds to the committed value when React discards a render', async () => {
+      // A transition that suspends for good: React renders the new props, then
+      // keeps the committed tree and never commits that render.
+      const pending = new Promise<never>(() => {});
+      function Pending(): null {
+        use(pending);
+        return null;
+      }
+      const onChange = vi.fn();
+      function Screen({
+        value,
+        isPending,
+      }: {
+        value: readonly string[];
+        isPending: boolean;
+      }) {
+        return (
+          <Suspense fallback={null}>
+            <TransferList
+              label="Columns"
+              selectedLabel="Selected columns"
+              availableLabel="Available columns"
+              options={OPTIONS}
+              value={value}
+              onChange={onChange}
+            />
+            {isPending ? <Pending /> : null}
+          </Suspense>
+        );
+      }
+      const {rerender} = render(<Screen value={['name']} isPending={false} />);
+      await act(async () => {
+        startTransition(() => {
+          rerender(<Screen value={['name', 'status']} isPending />);
+        });
+      });
+      fireEvent.click(screen.getByRole('button', {name: 'Add Owner'}));
+      expect(onChange).toHaveBeenLastCalledWith(['name', 'owner']);
+    });
+
     it('appends an added value and preserves selected order when removing', async () => {
       const user = userEvent.setup();
       const onValueChange = vi.fn();

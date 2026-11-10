@@ -31,6 +31,7 @@ parent_component: component:Table
 references:
   [
     architecture:component-theming-surface,
+    architecture:list-windowing,
     architecture:interaction-modality,
     architecture:public-component-api,
     architecture:react-component-runtime,
@@ -47,10 +48,10 @@ references:
 
 | Area                    | Contract                                                                                                                                                                                                                               |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | `useTableRowsVirtualization({rowHeight, viewportHeight})` returns an opaque `TableVirtualizationCapability` for `Table.virtualization`; Table retains data, columns, explicit stable identity and plugins.                             |
+| Public contract         | `useTableRowsVirtualization({rowHeight, initialViewportHeight})` returns an opaque `TableVirtualizationCapability` for `Table.virtualization`; Table retains data, columns, explicit stable identity and plugins.                      |
 | Behavior                | Fixed-height flat-row windowing with four internal overscan rows per side, at most one retained focused row, native table semantics and parent-owned pre-cell planning.                                                                |
 | End-user impact         | Mounted rows preserve selection, controls, focus and truthful full-table positions; unmounted rows are not promised virtual-cursor discovery.                                                                                          |
-| Builder impact          | Callers choose total row pitch and bounded viewport height in CSS pixels and accept constrained single-line content; unsupported content falls back to full rendering.                                                                 |
+| Builder impact          | Callers choose the total row pitch in CSS pixels, give the Table's parent a height, and accept constrained single-line content; unsupported content falls back to full rendering.                                                      |
 | Compatibility/readiness | Additive, unreleased capability; legacy output remains unchanged without opt-in. Module and parent contract decisions are complete; implementation and numerical verification remain separate release requirements.                    |
 | Review checks           | Reject render-then-hide, independent keys or scroll owners, invalid native structure, silent clipping/drift, lost focus, unbounded retention, window-relative metadata and unmeasured budget claims.                                   |
 | Governing rules         | `component:Table` owns identity, context, admission, render planning, viewport and logical appearance. `spec:AST-025` FR18/FR19 constrain scrolling; `spec:AST-002` and runtime/accessibility architecture constrain API and evidence. |
@@ -75,13 +76,14 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 **Owns**
 
-- Fixed-height capability, visible range, internal overscan and gap geometry.
-- Bounded retained-focus participation, anchor policy and virtualized accessibility outcomes.
+- Fixed-height capability and Table's admission into the shared list window.
+- Table's retained-focus participation and virtualized accessibility outcomes.
 - Supported flat-row composition, fixed-height admission and performance targets.
 
 **Does not own / non-goals**
 
 - Data, columns, canonical identity, rendering mode, row kind, whole-row ownership, pre-cell render plan, viewport and logical appearance metadata: `component:Table`.
+- The visible range, internal overscan, gap geometry, the first-visible-key anchor math, the focus-island retention and the offset and measurement helpers: the shared windowing module, `architecture:list-windowing`. This module supplies Table's pitch and admission to it.
 - Fetching, loading presentation, selection, activation, sort/filter state, navigation, route restoration or arbitrary imperative row navigation: their module or product owners.
 - Tree/grouped/detail rows, expanded panels, custom row anatomy, paginated global-offset data, variable-height or column virtualization in v1.
 - A new theme target, public ScrollableArea wrapper, external-root mode, overscan setting or `scrollToRow` API.
@@ -89,17 +91,19 @@ Consumer migration instructions belong in consumer docs and release notes.
 ## Public API and concepts
 
 The hook returns an opaque `TableVirtualizationCapability` from `rowHeight` and
-`viewportHeight`, never data or identity. Table consumes it with its existing
+`initialViewportHeight`, never data or identity. The initial height only
+seeds the first window; it sizes no element. The Table's scroll area takes its
+height from its parent, and after mount the measured viewport sets the window. The hook reads the measured height of the Table's scroll area and never defines it. Table consumes it with its existing
 `data`, `columns`, `idKey` and `plugins` and owns types/runtime admission.
 
-| Concept       | Values or states                                              | Meaning                                                       | Default               | Owner                             | Stability          |
-| ------------- | ------------------------------------------------------------- | ------------------------------------------------------------- | --------------------- | --------------------------------- | ------------------ |
-| Geometry      | Positive finite CSS-pixel `rowHeight` and `viewportHeight`    | Total body-row pitch and bounded Table viewport height        | Both required         | This module                       | Stable; unreleased |
-| Capability    | Opaque Table-compatible value                                 | Carries geometry intent, not sliced props or an engine handle | Absent without opt-in | This module; parent consumption   | Stable; unreleased |
-| Identity/data | Ordered mutable-compatible `T[]`; valid explicit `idKey`      | One complete logical dataset and parent-resolved key source   | Required for opt-in   | `component:Table`                 | Parent dependency  |
-| Range         | Half-open contiguous logical interval                         | Viewport-intersecting rows before overscan                    | Derived               | This module                       | Stable; unreleased |
-| Focus island  | Absent or one retained product-row subtree                    | Preserves the focused row outside the ordinary window         | Absent                | This module; existing focus owner | Stable; unreleased |
-| Metadata      | Logical index/count, header count, parity and final-row state | One source for distinct ARIA and visible numbering            | Derived               | `component:Table`                 | Parent dependency  |
+| Concept       | Values or states                                                  | Meaning                                                              | Default               | Owner                                               | Stability          |
+| ------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------- | --------------------- | --------------------------------------------------- | ------------------ |
+| Geometry      | Positive finite CSS-pixel `rowHeight` and `initialViewportHeight` | Total body-row pitch; the viewport height the first window plans for | Both required         | This module                                         | Stable; unreleased |
+| Capability    | Opaque Table-compatible value                                     | Carries geometry intent, not sliced props or an engine handle        | Absent without opt-in | This module; parent consumption                     | Stable; unreleased |
+| Identity/data | Ordered mutable-compatible `T[]`; valid explicit `idKey`          | One complete logical dataset and parent-resolved key source          | Required for opt-in   | `component:Table`                                   | Parent dependency  |
+| Range         | Half-open contiguous logical interval                             | Viewport-intersecting rows before overscan                           | Derived               | `architecture:list-windowing`                       | Stable; unreleased |
+| Focus island  | Absent or one retained product-row subtree                        | Preserves the focused row outside the ordinary window                | Absent                | `architecture:list-windowing`; existing focus owner | Stable; unreleased |
+| Metadata      | Logical index/count, header count, parity and final-row state     | One source for distinct ARIA and visible numbering                   | Derived               | `component:Table`                                   | Parent dependency  |
 
 ## Behavioral contract
 
@@ -117,7 +121,7 @@ browser, accessibility and performance verification remain release requirements.
 | FR7  | A focused row leaving the window remains in the same keyed body-child sequence with its original subtree. Real focus departure, removal or return releases the island; focus transfer replaces it without retaining a second row. Scrolling alone never moves focus or reveals the island.                                                                                                                                                                                                                                                       | Existing focus owner; DEC-4           | Required for release |
 | FR8  | Order/data/height changes preserve the first-visible canonical key and fractional row offset, not the active or focused key. A removed anchor resolves to the first surviving successor in old order, then predecessor, then start; the result clamps to the new extent. Appending does not follow the tail.                                                                                                                                                                                                                                     | Controlled data; DEC-4                | Required for release |
 | FR9  | Flat selection, sort/filter controls, sticky columns, context menus and row indexing preserve their existing owners. Activation and infinite loading compose only with joint parent/module admission and verification; active state does not retain rows, and loading uses an after-table sentinel beyond the full loaded extent.                                                                                                                                                                                                                | Parent FR17/FR18; independent modules | Required for release |
-| FR10 | Server and first client use the same seed `[0, min(N, ceil(viewportHeight/rowHeight)+4))` and gaps from the same validated inputs. There is no initial-count API, full-render-then-collapse or empty-then-repair. Unmeasurable client geometry retains the seed or last valid range.                                                                                                                                                                                                                                                             | SSR; runtime architecture             | Required for release |
+| FR10 | Server and first client use the same seed `[0, min(N, ceil(initialViewportHeight/rowHeight)+4))` and gaps from the same validated inputs. There is no initial-count API, full-render-then-collapse or empty-then-repair. Unmeasurable client geometry retains the seed or last valid range.                                                                                                                                                                                                                                                      | SSR; runtime architecture             | Required for release |
 | FR11 | Viewport and content invalidation use the parent's both-axis geometry/pooled resize path with inline `contain`, block `allow`, one viewport scroll subscription and at most one pending range frame. Stable no-op renders do not reconnect resources or reset scroll; replaced nodes and stale work cannot publish geometry.                                                                                                                                                                                                                     | Parent FR19; runtime lifetime         | Required for release |
 | FR12 | V1 has no public imperative scrolling API. Internal anchor or focus coordination remains distinct from activation, navigation and fetching; native viewport scrolling remains available.                                                                                                                                                                                                                                                                                                                                                         | Public responsibility; DEC-1          | Required for release |
 | FR13 | Bounded renderer/DOM counts and the PR targets gate completion. Offscreen content is not constructed and then hidden, discarded or sliced; identity validation is not counted as offscreen cell rendering.                                                                                                                                                                                                                                                                                                                                       | Parent FR18; performance              | Required for release |
@@ -129,7 +133,7 @@ browser, accessibility and performance verification remain release requirements.
 
 - **ORD1 — Logical inputs.** Caller sort/filter owners establish Table data; parent identity, rendering mode, row kind and ownership resolve before windowing.
 - **ORD2 — Admission.** Parent validates capability geometry, identity, flat compatibility and fixed content before invoking product cell renderers. Children mode remains an unchanged no-op.
-- **ORD3 — Range.** Body-relative scroll geometry accounts for headers/chrome and sticky occlusion once; range intersection is clamped, expanded by four rows per side and combined with one focus island.
+- **ORD3 — Range.** Body-relative scroll geometry accounts for headers/chrome and sticky occlusion once; range intersection is clamped, expanded by four rows per side and combined with one focus island. The shared windowing module (`architecture:list-windowing`) computes the range, the island and the anchor from that geometry.
 - **ORD4 — Rendering.** Parent BaseTable performs the pre-cell plan, renders gaps and keyed product rows in logical order, and runs existing sequential element transforms only on mounted product rows.
 - **ORD5 — Metadata/paint.** Parent logical indices/counts drive ARIA, row numbering, parity and final-row appearance before paint; selection and activation retain their respective state owners.
 - **ORD6 — Change/fallback.** Anchor reconciliation and range publication use the same current inputs; disabled virtualization releases resources/gaps/constraints, preserves unrelated plugins and fully renders compatible content with one deduplicated development diagnostic per condition. Recovery requires a changed valid admission input, not repeated retry of a violating configuration.
@@ -142,7 +146,7 @@ browser, accessibility and performance verification remain release requirements.
 - **PR4 — Shared lifetime.** Parent shared viewport/content observation also serves sticky state; no independent virtualizer detector or second viewport is installed. Unmount, disablement and node replacement release owned subscriptions, queued frames, island elements and obsolete snapshots without silencing shared subscribers.
 - **PR5 — Timing targets.** The p95 range-plus-commit target is 4 ms; p95 no-op is 2 ms. At 60 Hz, p95 whole-frame work is at most 16.7 ms with at most 1% missed frames and no persistent blank windows. Core cold render at 100k rows, including key validation, is at most 250 ms. Supported-plugin incremental p95 scroll overhead is at most 2 ms.
 - **PR6 — Memory targets.** Additional identity bookkeeping is at most 32 MiB at 100k rows, excluding caller data. Fixed-viewport mounted heap at 100k is at most the 1k case plus 8 MiB. After 20 mount/unmount and viewport-replacement cycles, controlled-GC retained growth plateaus within 1 MiB and no instance node, listener or frame survives.
-- **PR7 — Evidence.** Targets are release requirements, not measured results. Verification records environment/build/browser versions, corpus, viewport/pitch/column count, p50/p95/max and operation counts at 1k/10k/100k, core and supported combinations; timing and memory results remain outside this record.
+- **PR7 — Evidence.** Targets are release requirements, not measured results. Timing targets gate on the release check's 4-core-ubuntu runner, where the timing proof runs alone in its contract leg on one worker; release checks on ubuntu-latest, including the scheduled monitoring runs, report timing without gating. Count, work and memory targets gate on every runner. The gating timing values are the PR5 targets; isolated runs on that runner stay at least 25% inside every one of them, and a single-machine measurement is a non-gating reference. Verification records environment/build/browser versions, corpus, viewport/pitch/column count, p50/p95/max and operation counts at 1k/10k/100k, core and supported combinations; per-release timing and memory results remain outside this record.
 
 ## Accessibility contract
 
@@ -242,8 +246,10 @@ Rejected: a parallel public scroll wrapper/detector or a subjective smoothness v
 
 ## Open questions
 
-None. The normative contract is complete. Implementation and release verification
-remain separate from contract approval.
+The normative contract is complete. Implementation and release verification
+remain separate from contract approval. One open item:
+
+- **OQ1 — Tighter timing gates.** Gating timing values move toward the worst isolated run plus 25% once isolated samples span both 4-core-ubuntu host types (AMD EPYC 9V74 and 7763); the missed-frame target stays 1% while the measured worst is zero.
 
 ## Content boundary
 

@@ -330,3 +330,30 @@ export const WithHook: Story = {
     );
   },
 };
+
+/**
+ * The gallery viewer, open when the page loads, so a page-level
+ * accessibility check reaches the open viewer.
+ */
+export const OpenViewer: Story = {
+  name: 'Open Viewer',
+  // Kept off the docs page because the viewer opens on load.
+  tags: ['!autodocs'],
+  render: () => {
+    const [isOpen, setIsOpen] = useState(true);
+    const [index, setIndex] = useState(0);
+    return (
+      <>
+        <button onClick={() => setIsOpen(true)}>Open viewer</button>
+        <Lightbox
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          media={GALLERY_MEDIA}
+          index={index}
+          onIndexChange={setIndex}
+          hasZoom
+        />
+      </>
+    );
+  },
+};

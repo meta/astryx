@@ -244,6 +244,18 @@ export const ReadOnly: Story = {
   },
 };
 
+/** A disabled editor and toolbar with formatted content. */
+export const Disabled: Story = {
+  args: {
+    label: 'Notes',
+    isDisabled: true,
+    toolbar: <RichTextEditorToolbar />,
+    defaultValue: markdownToEditorStateJSON(
+      'A **disabled** editor keeps its *formatted* text.\n',
+    ),
+  },
+};
+
 /** A disabled editor whose content holds a link. */
 export const DisabledWithLink: Story = {
   name: 'Disabled with a link',
