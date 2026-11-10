@@ -721,8 +721,17 @@ jobs:
           # takes most of that at a fraction of the highest level's time.
           compression-level: 6
 
+      # The built API surface the data tests read for public-hook coverage.
+      # A package the dependency build above skips is listed as not built.
+      - name: Write the docsite's API surface
+        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        run: node scripts/api-report/cli.mjs --surface .api-surface-docsite
+
       - name: test-docsite (data tests)
         if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        env:
+          # Relative to the repository root.
+          ASTRYX_API_SURFACE: .api-surface-docsite
         run: pnpm -F @astryxdesign/docsite test
 
       # A docsite-only change skips test-node, and the registry generator

@@ -314,6 +314,33 @@ export function formatCoverageReport(packageName, coverage, blocks) {
   return lines.join('\n');
 }
 
+const SURFACE_HINT = 'node scripts/api-report/cli.mjs --surface <dir>';
+
+/**
+ * The built API surface the hook coverage reads: `ASTRYX_API_SURFACE`, a
+ * directory relative to the repository root that holds `surface.json`. In CI a
+ * missing or unreadable surface is an error, so the coverage cannot stop
+ * silently; elsewhere the hook coverage is skipped with a note.
+ *
+ * @param {{env: Record<string, string | undefined>, repoRoot: string}} input
+ * @returns {{dir: string} | {skip: string}}
+ */
+export function resolveApiSurface({env, repoRoot}) {
+  const value = env.ASTRYX_API_SURFACE;
+  const dir = value ? path.resolve(repoRoot, value) : null;
+  if (dir && fs.existsSync(path.join(dir, 'surface.json'))) return {dir};
+  if (env.CI === 'true') {
+    throw new Error(
+      `ASTRYX_API_SURFACE is required in CI: build it with ${SURFACE_HINT}`,
+    );
+  }
+  return {
+    skip: value
+      ? `Hook coverage skipped: ${value} holds no surface.json; build it with ${SURFACE_HINT}.`
+      : `Hook coverage skipped: set ASTRYX_API_SURFACE to a directory that ${SURFACE_HINT} wrote.`,
+  };
+}
+
 /**
  * Hook names that an API report lists in its Hooks sections, sorted and
  * listed once each.

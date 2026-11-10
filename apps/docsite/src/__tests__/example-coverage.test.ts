@@ -23,6 +23,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import docsiteConfig from '../../astryx.config.mjs';
@@ -32,6 +33,7 @@ import {
   formatCoverageReport,
   resolveTemplatesRoot,
   readReportedHooks,
+  resolveApiSurface,
   pairHookExampleCoverage,
   formatHookCoverageReport,
 } from '../lib/exampleCoverage.mjs';
@@ -116,23 +118,19 @@ describe('example coverage (report-only)', () => {
   }, 120_000);
 
   it('reports public hooks with no hook doc or no example block', async () => {
-    // The hook list comes from the built API surface; without one there is
-    // nothing to list.
-    const surfaceDir = process.env.ASTRYX_API_SURFACE;
-    if (!surfaceDir) {
-      process.stdout.write(
-        'Hook coverage skipped: set ASTRYX_API_SURFACE to a directory that `node scripts/api-report/cli.mjs --surface <dir>` wrote.\n',
-      );
+    // The hook list comes from the built API surface.
+    const surface = resolveApiSurface({env: process.env, repoRoot: REPO_ROOT});
+    if ('skip' in surface) {
+      process.stdout.write(`${surface.skip}\n`);
       return;
     }
-    const repoRoot = path.resolve(import.meta.dirname, '../../../..');
     const inventories = await inventoryAllPackages();
     // A block in any package can be the example for a hook.
     const allBlocks = inventories.flatMap(inventory => inventory.blocks);
     for (const inventory of inventories) {
       const reportPath = path.join(
-        surfaceDir,
-        path.relative(repoRoot, inventory.packageDir),
+        surface.dir,
+        path.relative(REPO_ROOT, inventory.packageDir),
         'api-report.md',
       );
       if (!fs.existsSync(reportPath)) {
@@ -156,6 +154,52 @@ describe('example coverage (report-only)', () => {
       );
     }
   }, 120_000);
+
+  describe('the API surface for hook coverage', () => {
+    const withSurface = () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'api-surface-'));
+      fs.mkdirSync(path.join(root, '.surface'));
+      fs.writeFileSync(path.join(root, '.surface/surface.json'), '{}');
+      return root;
+    };
+
+    it('fails in CI when the surface is unset or unreadable', () => {
+      const root = withSurface();
+      try {
+        for (const env of [
+          {CI: 'true'},
+          {CI: 'true', ASTRYX_API_SURFACE: '.missing'},
+        ]) {
+          expect(() => resolveApiSurface({env, repoRoot: root})).toThrow(
+            'ASTRYX_API_SURFACE is required in CI: build it with node scripts/api-report/cli.mjs --surface <dir>',
+          );
+        }
+      } finally {
+        fs.rmSync(root, {recursive: true, force: true});
+      }
+    });
+
+    it('reads a surface relative to the repository root', () => {
+      const root = withSurface();
+      try {
+        expect(
+          resolveApiSurface({
+            env: {CI: 'true', ASTRYX_API_SURFACE: '.surface'},
+            repoRoot: root,
+          }),
+        ).toEqual({dir: path.join(root, '.surface')});
+      } finally {
+        fs.rmSync(root, {recursive: true, force: true});
+      }
+    });
+
+    it('skips with a note outside CI', () => {
+      const result = resolveApiSurface({env: {}, repoRoot: os.tmpdir()});
+      expect(result).toEqual({
+        skip: expect.stringContaining('Hook coverage skipped'),
+      });
+    });
+  });
 
   it('reads hook names only from Hooks sections, once each', () => {
     const report = [

@@ -414,6 +414,7 @@ describe('Node-tooling CI routing', () => {
     for (const name of [
       'Build docsite workspace dependencies',
       'Build the docsite',
+      "Write the docsite's API surface",
       'test-docsite (data tests)',
     ]) {
       expect(step(ci.jobs['docsite-build'], name).if).toContain(TOOLING_FALSE);
