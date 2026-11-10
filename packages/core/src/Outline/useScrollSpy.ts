@@ -249,9 +249,11 @@ export function useScrollSpy({
    * (meaning the viewport).
    */
   const getScrollRoot = useCallback((): HTMLElement | null => {
+    const root = rootRef.current;
     return (
       scrollContainerRef?.current ??
-      (rootRef.current == null ? null : scrollingAncestor(rootRef.current))
+      // `<html>` scrolls the viewport, so the walk stops at `<body>`.
+      (root == null ? null : scrollingAncestor(root, root.ownerDocument.body))
     );
   }, [rootRef, scrollContainerRef]);
 
