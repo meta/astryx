@@ -9,6 +9,7 @@ import {
   themeListCopySources,
 } from './list.mjs';
 import {renderThemeModule} from '../../../foundation/config/theme-state.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
@@ -44,7 +45,7 @@ export default {type: 'theme', name: '${slug}', displayName: 'Ocean', descriptio
 }
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-theme-list-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-theme-list-'));
   fs.writeFileSync(
     path.join(tmpDir, 'package.json'),
     JSON.stringify({

@@ -135,6 +135,8 @@ function runs(
           force_full_component_audits: 'true',
         },
       },
+      // A release check runs its accessibility specs in one leg.
+      legs: {outputs: {count: '1', runs: 'true', leg: '1'}},
     },
     (value, prefix) => String(value ?? '').startsWith(prefix),
   );

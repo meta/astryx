@@ -4,12 +4,15 @@
  * @file flatTree.ts
  * @input A DOM node
  * @output Exports parentAcrossShadow, containsAlongFlatTree, which walks it,
- *   and deepActiveElement
+ *   deepActiveElement, shadowHostOf, a shadow root's host, and
+ *   shadowRootsOutward
  * @position The flat-tree parent the browser scrolls and dispatches
- *   through, shared by the gesture host's native-scroll probe, the
- *   selection lock (which the press feedback controller uses without the
- *   gesture system) and the Layer module's input hold
+ *   through. The gesture host's native-scroll probe, the outside-press watch,
+ *   the selection lock and the Layer module's input hold share it. The press
+ *   feedback controller uses the selection lock without the gesture system
  */
+
+import {isShadowRoot} from './nodeType';
 
 /** The node's parent, crossing out of shadow roots. */
 export function parentAcrossShadow(node: Node): Node | null {
@@ -20,7 +23,7 @@ export function parentAcrossShadow(node: Node): Node | null {
     return slot;
   }
   if (node.parentNode != null) {
-    return node.parentNode instanceof ShadowRoot
+    return isShadowRoot(node.parentNode)
       ? node.parentNode.host
       : node.parentNode;
   }
@@ -49,4 +52,30 @@ export function deepActiveElement(
     active = active.shadowRoot.activeElement;
   }
   return active;
+}
+
+/**
+ * The host of a shadow root, open or closed and from any window, and null for
+ * any other node.
+ */
+export function shadowHostOf(node: Node): Element | null {
+  return isShadowRoot(node) ? node.host : null;
+}
+
+/**
+ * The shadow roots from `node` out to its document, innermost first, each with
+ * its host. Empty when `node` is not a shadow root.
+ */
+export function shadowRootsOutward(
+  node: Node,
+): {readonly root: ShadowRoot; readonly host: Element}[] {
+  const roots: {readonly root: ShadowRoot; readonly host: Element}[] = [];
+  for (
+    let at: Node = node, host = shadowHostOf(at);
+    host != null;
+    at = host.getRootNode(), host = shadowHostOf(at)
+  ) {
+    roots.push({root: at as ShadowRoot, host});
+  }
+  return roots;
 }

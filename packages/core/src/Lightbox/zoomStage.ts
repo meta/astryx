@@ -3,17 +3,18 @@
 /**
  * @file zoomStage.ts
  * @input The stage's size, the photo's fitted box and pixel size, a
- *   transform (offset from the fitted box, and scale), and finger positions
+ *   transform (offset from the fitted box, and scale), and pointer positions
  * @output The zoom stage's pure geometry: zoom limits, resting places, a
  *   drag's rubber band and a pinch's overshoot. Also the transform that keeps
- *   a point in place
- * @position Pure math for Lightbox's touch zoom. No DOM and no React.
+ *   a point in place, and the keyboard's zoom
+ * @position Pure math under useZoomCore and useZoomStage; no DOM, no React.
  *
- * The model is a zooming UIScrollView in a photo viewer. Its constants come
- * from motion/uikit/zoomMedia.ts and motion/uikit/scroll.ts.
- * SYNC: When modified, update zoomStage.test.ts.
+ * The model is a zooming UIScrollView; its constants come from motion/uikit.
+ * SYNC: When modified, update zoomStage.test.ts, useZoomCore.ts and
+ * useZoomStage.ts.
  */
 
+import {resolveSnapPoint} from '../motion/resolveSnapPoint';
 import {rubberBandClamp, rubberBandUnclamp} from '../motion/rubberBand';
 import {zoomMedia} from '../motion/uikit/zoomMedia';
 
@@ -57,7 +58,10 @@ export const IDENTITY: ZoomTransform = {x: 0, y: 0, scale: 1};
 /** Within this of the fitted size the photo counts as not zoomed. */
 export const ZOOMED_EPSILON = 0.001;
 
-/** Lightbox's zoom step: a double tap zooms at least this many times. */
+/**
+ * Lightbox's zoom step. A double tap zooms at least this many times, and a
+ * double-click and the keyboard zoom this many times.
+ */
 export const ZOOM_STEP = 2;
 
 /**
@@ -157,8 +161,8 @@ export function restingTransform(
 }
 
 /**
- * The scale a pinch shows for its own scale `scale`: 1:1 inside the
- * limits, giving way past them (`zoomMedia.overshoot.limitFactor`).
+ * The scale a pinch shows for its own scale `scale`. It is 1:1 inside the
+ * limits and gives way past them (`zoomMedia.overshoot.limitFactor`).
  */
 export function overshootScale(geometry: ZoomGeometry, scale: number): number {
   const f = zoomMedia.overshoot.limitFactor;
@@ -216,7 +220,7 @@ export function transformKeepingPoint(
 }
 
 /**
- * Where a drag shows the photo: `raw` is where the finger's travel would put
+ * Where a drag shows the photo: `raw` is where the pointer's travel would put
  * it with no edges. Past an edge it gives way with UIScrollView's rubber band
  * over the stage's size on that axis. On an axis where the photo is smaller
  * than the stage, it stays centred, as a scroll view whose content fits does
@@ -240,7 +244,7 @@ export function draggedTransform(
   };
 }
 
-/** The finger-travel position behind a shown one: `draggedTransform` undone. */
+/** The pointer-travel position behind a shown one: `draggedTransform` undone. */
 export function rawForDragged(
   geometry: ZoomGeometry,
   shown: ZoomTransform,
@@ -307,6 +311,33 @@ export function releaseTarget(
   );
 }
 
+/**
+ * Where a zoom key goes from `from`. Enter, Space or `+` zooms `ZOOM_STEP`
+ * times about the stage's centre, or back to the fitted size when zoomed.
+ */
+export function releasedZoomTarget(
+  geometry: ZoomGeometry,
+  from: ZoomTransform,
+): ZoomTransform {
+  return doubleClickTarget(geometry, from, {
+    x: geometry.width / 2,
+    y: geometry.height / 2,
+  });
+}
+
+/**
+ * Where a double-click at `point` goes from `from`. It zooms `ZOOM_STEP`
+ * times about the clicked point, kept inside the stage, or goes back to the
+ * fitted size when zoomed.
+ */
+export function doubleClickTarget(
+  geometry: ZoomGeometry,
+  from: ZoomTransform,
+  point: StagePoint,
+): ZoomTransform {
+  return doubleTapTarget({...geometry, doubleTapScale: ZOOM_STEP}, from, point);
+}
+
 /** The resting transform after panning by (dx, dy): a keyboard step. */
 export function pannedBy(
   geometry: ZoomGeometry,
@@ -355,4 +386,87 @@ export function transformForResize(
     y: after.height / 2 - after.fit.y - v * after.fit.height * scale,
     scale,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Drag to dismiss (Photos)
+
+/**
+ * The photo under a drag to dismiss, from its fitted size. Its centre follows
+ * the pointer (dx, dy). It shrinks about that centre by
+ * `zoomMedia.dismiss.scalePerTravelSquared` × the downward travel².
+ */
+export function dismissTransform(
+  geometry: ZoomGeometry,
+  dx: number,
+  dy: number,
+): ZoomTransform {
+  const travel = Math.max(0, dy);
+  const scale = Math.max(
+    0,
+    1 - zoomMedia.dismiss.scalePerTravelSquared * travel * travel,
+  );
+  return {
+    x: dx + ((1 - scale) * geometry.fit.width) / 2,
+    y: dy + ((1 - scale) * geometry.fit.height) / 2,
+    scale,
+  };
+}
+
+/** The backdrop's opacity at a drag's downward travel (pt). */
+export function dismissBackdropAlpha(travel: number): number {
+  const t = Math.max(0, travel);
+  return Math.min(
+    1,
+    Math.max(0, 1 - zoomMedia.dismiss.backdropAlphaPerTravelSquared * t * t),
+  );
+}
+
+/** The controls' and neighbouring photos' opacity at a drag's travel (pt). */
+export function dismissChromeAlpha(travel: number): number {
+  const {chromeAlphaPerPoint, chromeFadeStart} = zoomMedia.dismiss;
+  return Math.min(
+    1,
+    Math.max(0, 1 - chromeAlphaPerPoint * (travel - chromeFadeStart)),
+  );
+}
+
+/**
+ * Whether a released drag to dismiss dismisses, decided once at the lift by
+ * Core's release rule (`resolveSnapPoint`). The release lands at the fitted
+ * place or, past the commit point, gone: their midpoint is
+ * `zoomMedia.dismiss.cancelTravel`. It is judged at the travel plus where its
+ * velocity would coast (`zoomMedia.dismiss.projectionRate`), and a release
+ * moving back toward where the drag began cancels. A short flick down closes;
+ * a short pull lifted still springs back.
+ */
+export function dismissCommits(travel: number, velocityY: number): boolean {
+  const {cancelTravel, projectionRate} = zoomMedia.dismiss;
+  const release = resolveSnapPoint({
+    points: [0, 2 * cancelTravel],
+    position: travel,
+    velocity: velocityY,
+    // No flick rule: the projection alone decides.
+    flickThreshold: Number.POSITIVE_INFINITY,
+    // The projection that coasts at this deceleration rate.
+    projection: {seconds: projectionRate / (1 - projectionRate) / 1000},
+    start: 0,
+  });
+  return release.index === 1;
+}
+
+/**
+ * Where a dismissed photo goes with no thumbnail to return to: straight on
+ * down until its top passes `bottom`, in stage px. That is the screen's
+ * bottom edge, which a stage that only hugs the photo sits well above. By
+ * default it is the stage's own bottom.
+ */
+export function dismissExitY(
+  geometry: ZoomGeometry,
+  shown: ZoomTransform,
+  bottom: number = geometry.height,
+): number {
+  return (
+    Math.max(shown.y, Math.max(bottom, geometry.height) - geometry.fit.y) + 1
+  );
 }

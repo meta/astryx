@@ -2,18 +2,30 @@
 
 /**
  * @file zoomStage.test.ts
- * @input vitest, the zoom stage geometry and the UIKit zoom constants
+ * @input vitest, the zoom stage geometry, the UIKit zoom constants and
+ *   Lightbox's record
  * @output Checks the zoom stage against UIKit's measured zooming and
- *   Lightbox's double tap. It covers the overshoot, the maximum zoom, the
- *   point kept in place, resting places, a drag's rubber band and a resize
+ *   Lightbox's own zoom. It covers the overshoot, the maximum zoom, both
+ *   double taps and resting places. It also covers a drag's rubber band, a
+ *   resize, Photos' drag to dismiss, its springs in the record and the
+ *   keyboard's zoom
  * @position Testing; zoomStage.ts without a browser
  */
 
+import {readFileSync} from 'node:fs';
+import {resolve} from 'node:path';
 import {describe, expect, it} from 'vitest';
 import {rubberBand} from '../motion/rubberBand';
+import {zoomMedia} from '../motion/uikit/zoomMedia';
 import {
   IDENTITY,
   ZOOM_STEP,
+  dismissBackdropAlpha,
+  dismissChromeAlpha,
+  dismissCommits,
+  dismissExitY,
+  dismissTransform,
+  doubleClickTarget,
   doubleTapScaleFor,
   doubleTapTarget,
   draggedTransform,
@@ -24,6 +36,7 @@ import {
   pinchScaleFor,
   rawForDragged,
   releaseTarget,
+  releasedZoomTarget,
   restRange,
   restingTransform,
   transformForResize,
@@ -312,5 +325,167 @@ describe('a resize while zoomed (rotation)', () => {
     const before = landscape();
     const after = landscape({width: 500});
     expect(transformForResize(before, after, IDENTITY)).toEqual(IDENTITY);
+  });
+});
+
+describe('the double-click: 2× about the clicked point', () => {
+  const g = landscape();
+  it('zooms 2× and keeps the clicked photo point under the pointer', () => {
+    // Aspect fill would zoom this photo about 3.3×.
+    expect(g.doubleTapScale).toBeGreaterThan(3);
+    const fitted = {...IDENTITY, scale: g.minScale};
+    const target = doubleClickTarget(g, fitted, {x: 134, y: 437});
+    expect(target.scale).toBe(ZOOM_STEP);
+    expect(shown(g, target, 134, 134).x).toBeCloseTo(134, 9);
+  });
+  it('returns to the fitted size when zoomed', () => {
+    const fitted = {...IDENTITY, scale: g.minScale};
+    const zoomed = doubleClickTarget(g, fitted, {x: 134, y: 437});
+    expect(doubleClickTarget(g, zoomed, {x: 50, y: 50})).toEqual(
+      restingTransform(g, fitted),
+    );
+  });
+});
+
+describe("Photos' drag to dismiss (iOS 26.2)", () => {
+  // Photos, a 3000 × 2000 photo at its fitted size dragged down: travel →
+  // photo scale, backdrop alpha, neighbours' and controls' alpha.
+  const measured = [
+    {travel: 25, scale: 0.997, backdrop: 1.0, chrome: 0.96},
+    {travel: 65, scale: 0.978, backdrop: 0.95, chrome: 0.76},
+    {travel: 105, scale: 0.942, backdrop: 0.86, chrome: 0.52},
+    {travel: 145, scale: 0.899, backdrop: 0.71, chrome: 0.33},
+  ];
+
+  it('shrinks the photo about its centre, which follows the finger', () => {
+    const geometry = landscape();
+    for (const row of measured) {
+      const t = dismissTransform(geometry, 12, row.travel);
+      expect(t.scale).toBeCloseTo(row.scale, 2);
+      // The fitted box's centre moved by exactly the finger's travel.
+      const centre = shown(geometry, t, 201, 134);
+      expect(centre.x).toBeCloseTo(geometry.fit.x + 201 + 12, 6);
+      expect(centre.y).toBeCloseTo(geometry.fit.y + 134 + row.travel, 6);
+    }
+    // Above where the drag started, the photo follows without shrinking.
+    expect(dismissTransform(geometry, 0, -30)).toEqual({
+      x: 0,
+      y: -30,
+      scale: 1,
+    });
+  });
+
+  it('fades the backdrop and, faster, the controls', () => {
+    for (const row of measured) {
+      expect(dismissBackdropAlpha(row.travel)).toBeCloseTo(row.backdrop, 1);
+      expect(
+        Math.abs(dismissChromeAlpha(row.travel) - row.chrome),
+      ).toBeLessThan(0.02);
+    }
+    expect(dismissBackdropAlpha(-10)).toBe(1);
+    expect(dismissChromeAlpha(0)).toBe(1);
+    expect(dismissChromeAlpha(1000)).toBe(0);
+  });
+
+  it('dismisses on any release unless moving up or back at the start', () => {
+    // Pulls of 20, 40 and 60 pt held still, then lifted, dismiss. So do a
+    // 60 pt flick and a slow downward release.
+    expect(dismissCommits(20, 0)).toBe(true);
+    expect(dismissCommits(60, 1500)).toBe(true);
+    expect(dismissCommits(100, 40)).toBe(true);
+    // A pull flicked back up cancels, as does one brought back to ~5 pt.
+    expect(dismissCommits(150, -800)).toBe(false);
+    expect(dismissCommits(5, 0)).toBe(false);
+    expect(zoomMedia.dismiss.cancelTravel).toBeGreaterThan(5);
+    expect(zoomMedia.dismiss.cancelTravel).toBeLessThan(20);
+  });
+
+  it('dismisses a short flick down: its projected travel reaches the commit point (spec:AST-094 FR36)', () => {
+    // An 18 px flick reaches the stage as about 8 pt past the pan's begin
+    // threshold. That is short of the commit point, but its velocity carries
+    // it on.
+    expect(dismissCommits(8, 600)).toBe(true);
+    // The same travel lifted still springs back: nothing projects it on.
+    expect(dismissCommits(8, 0)).toBe(false);
+    // Moving back up cancels, however far it came.
+    expect(dismissCommits(8, -600)).toBe(false);
+  });
+
+  it('decides the release at the commit point itself, and cancels one moving back toward the start', () => {
+    // Exactly at the commit point and held still, the release stays: only
+    // past it does a still pull dismiss.
+    expect(dismissCommits(zoomMedia.dismiss.cancelTravel, 0)).toBe(false);
+    expect(dismissCommits(zoomMedia.dismiss.cancelTravel + 0.01, 0)).toBe(true);
+    // Above where the drag began, a release moving down moves back toward
+    // the start, so it springs back however fast it moves.
+    expect(dismissCommits(-5, 2000)).toBe(false);
+  });
+
+  it('sends a dismissed photo below the screen when the stage only hugs it', () => {
+    const geometry = landscape();
+    const t = dismissTransform(geometry, 0, 100);
+    // The screen's bottom 300 px below the stage's.
+    const bottom = geometry.height + 300;
+    const exit = dismissExitY(geometry, t, bottom);
+    expect(geometry.fit.y + exit).toBeGreaterThan(bottom);
+  });
+
+  it('sends a dismissed photo below the stage with no thumbnail to return to', () => {
+    const geometry = landscape();
+    const t = dismissTransform(geometry, 0, 100);
+    const exit = dismissExitY(geometry, t);
+    expect(geometry.fit.y + exit).toBeGreaterThan(geometry.height);
+    expect(exit).toBeGreaterThan(t.y);
+  });
+
+  it("lists each spring the dismissal plays in Lightbox's record, with its value", () => {
+    // A gesture-driven exit may play a measured spring that its component's
+    // motion table lists with its platform source.
+    const record = readFileSync(
+      resolve(
+        __dirname,
+        '../../../../docs/specs/components/Lightbox/Lightbox.spec.md',
+      ),
+      'utf8',
+    ).split('\n');
+    const {dismissPositionSpring, dismissSizeSpring} = zoomMedia.dismiss;
+    for (const [name, spring] of Object.entries({
+      dismissPositionSpring,
+      dismissSizeSpring,
+    })) {
+      const row = record.find(line =>
+        line.startsWith(`| \`zoomMedia.dismiss.${name}\``),
+      );
+      expect(row, name).toBeDefined();
+      expect(row).toContain(`stiffness ${spring.stiffness.toFixed(2)}`);
+      expect(row).toContain(`damping ${spring.damping.toFixed(2)}`);
+    }
+  });
+});
+
+describe("the keyboard's zoom", () => {
+  const g = landscape();
+  const centre = {x: g.width / 2, y: g.height / 2};
+  it('zooms 2x about the centre, whatever aspect fill would give', () => {
+    // Aspect fill would zoom this photo about 3.3x.
+    expect(g.doubleTapScale).toBeGreaterThan(3);
+    const target = releasedZoomTarget(g, {...IDENTITY, scale: g.minScale});
+    expect(target.scale).toBe(2);
+    // The stage's centre shows the photo's centre, as before.
+    const middle = shown(g, target, g.fit.width / 2, g.fit.height / 2);
+    expect(middle.x).toBeCloseTo(centre.x, 9);
+    expect(middle.y).toBeCloseTo(centre.y, 9);
+  });
+  it('returns to the fitted size when zoomed', () => {
+    const zoomed = releasedZoomTarget(g, {...IDENTITY, scale: g.minScale});
+    expect(releasedZoomTarget(g, zoomed)).toEqual(
+      restingTransform(g, {...IDENTITY, scale: g.minScale}),
+    );
+  });
+  it('stays inside the limits', () => {
+    const small = landscape({maxScale: 1.5});
+    expect(
+      releasedZoomTarget(small, {...IDENTITY, scale: small.minScale}).scale,
+    ).toBe(1.5);
   });
 });

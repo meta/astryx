@@ -26,6 +26,7 @@ import {
 } from './cli-self-docs.mjs';
 import {routeSegment} from './docs-section-key.mjs';
 import {formatCliCommand} from '../env/package-manager.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const SLOW = 60_000;
 
@@ -37,7 +38,7 @@ afterAll(() => {
 
 /** Write `files` (relative path -> content) under a fresh directory. */
 function writeTree(/** @type {Record<string, string>} */ files) {
-  const root = fs.mkdtempSync(path.join(process.cwd(), '.astryx-cli-docs-'));
+  const root = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-cli-docs-'));
   tmpRoots.push(root);
   for (const [rel, content] of Object.entries(files)) {
     const file = path.join(root, rel);

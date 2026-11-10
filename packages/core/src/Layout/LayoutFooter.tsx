@@ -127,12 +127,12 @@ export interface LayoutFooterProps extends BaseProps<HTMLDivElement> {
  *
  * @example
  * ```
- * <LayoutContainer variant="card">
+ * <Card>
  *   <Layout
  *     content={<LayoutContent>...</LayoutContent>}
  *     footer={<LayoutFooter hasDivider>Actions</LayoutFooter>}
  *   />
- * </LayoutContainer>
+ * </Card>
  * ```
  */
 export function LayoutFooter({
@@ -158,7 +158,6 @@ export function LayoutFooter({
       ref={ref}
       role={role}
       aria-label={label}
-      data-divider={resolvedHasDivider || undefined}
       {...mergeProps(
         themeProps('layout-footer'),
         stylex.props(
@@ -172,7 +171,8 @@ export function LayoutFooter({
         className,
         style,
       )}
-      {...props}>
+      {...props}
+      data-divider={resolvedHasDivider || undefined}>
       <div
         {...stylex.props(
           styles.inner,

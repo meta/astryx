@@ -194,11 +194,24 @@ const styles = stylex.create({
     // `.astryx-avatar-fallback` class target (font size through its size
     // variant, `.astryx-avatar-fallback.<size>`), so the defaults here are
     // plain values with no internal-var seam. See Avatar.doc.mjs theming.
+    // Primary text: secondary text on the neutral tint falls below 4.5:1 in
+    // dark mode.
     backgroundColor: colorVars['--color-neutral'],
-    color: colorVars['--color-text-secondary'],
+    color: colorVars['--color-text-primary'],
     fontFamily: typographyVars['--font-family-body'],
     fontWeight: fontWeightVars['--font-weight-medium'],
     textTransform: 'uppercase',
+  },
+  // Generated content with empty alternative text draws the initials. They are
+  // part of the picture, not text of the control. On a link or button, visible
+  // text that the name does not contain fails Label in Name.
+  initials: {
+    '::before': {
+      content: stylex.firstThatWorks(
+        'attr(data-initials) / ""',
+        'attr(data-initials)',
+      ),
+    },
   },
   // After `fallback` on a lone Avatar: in forced colors its initials and
   // default icon take the color around them, which the browser forces to
@@ -209,7 +222,7 @@ const styles = stylex.create({
   // only CanvasText is sure to read on it.
   loneFallback: {
     color: {
-      default: colorVars['--color-text-secondary'],
+      default: colorVars['--color-text-primary'],
       '@media (forced-colors: active)': 'currentColor',
     },
   },
@@ -804,12 +817,13 @@ export function Avatar({
               themeProps('avatar-fallback', {size: resolvedSize}),
               stylex.props(
                 styles.fallback,
+                styles.initials,
                 avatarGroup == null && styles.loneFallback,
                 dynamicStyles.fontSize(numericSize),
               ),
-            )}>
-            {initials}
-          </div>
+            )}
+            data-initials={initials}
+          />
         )}
         {showIcon && (
           <div

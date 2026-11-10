@@ -285,7 +285,12 @@ describe('componentRegistry', () => {
       'ChartTooltip',
     ]);
     expect(components['@astryxdesign/richtext'].map(comp => comp.name)).toEqual(
-      ['RichTextEditor'],
+      [
+        'RichTextEditor',
+        'RichTextEditorAutoLinkPlugin',
+        'RichTextEditorToolbar',
+        'RichTextView',
+      ],
     );
     expect(components['@astryxdesign/vega'].map(comp => comp.name)).toEqual([
       'VegaChart',

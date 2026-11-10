@@ -148,7 +148,7 @@ guidance owns the process used to propose and test APIs.
   secondary text, and the caller's `aria-label`, `aria-labelledby`, and
   `aria-describedby` reach it. Other DOM, data, style, class, and event inputs
   stay on the root unless the component's record names another element
-  (DEC-2).
+  (DEC-3).
 - **INV6 — Styling inputs combine.** `xstyle`, `className`, and `style` compose in
   their documented order instead of replacing one another. A family record may
   declare an exception to root styling inputs for its members, stating the
@@ -178,7 +178,9 @@ guidance owns the process used to propose and test APIs.
   calls it internal. Privacy requires removing the export or moving the capability
   behind a non-exported boundary. Core's `./internal/*` subpaths are the one
   exception: reachable, but reserved for Core and Lab, undocumented, versioned
-  in lockstep with Core, limited by lint to those two packages, and outside
+  in lockstep with Core, limited by lint to those two packages, and imported
+  by a swizzled copy only for an exported StyleX module whose identity is its
+  path (`spec:AST-110` FR1), and outside
   the compatibility promise (`spec:AST-017` FR21).
 - **INV13 — Public deltas route to their authority owner.** Every public API update
   and every public behavior change follows the result and disposition defined by
@@ -265,9 +267,21 @@ guidance owns the process used to propose and test APIs.
   written. The owner exports only ready-made styles that read the attribute, the
   props or writer that set it, and the runtime readers its package needs, such
   as a `closest` or `matches` helper or a getter; it never exports the raw name
-  or a selector. Every other file in that package spreads those exports and
+  or a selector. A plain-TS owner,
+  `packages/core/src/privateAttributes/<name>.ts`, may export its name and
+  selector text to its `.stylex.ts` sibling and to the theme engine in
+  `packages/core/src/theme/`; no other file imports it, and `.stylex.ts` owners
+  still never export them. When a plain-TS owner exists, its `.stylex.ts`
+  sibling is not an owner: it writes the attribute's selectors only as literals
+  for its own `stylex.create` calls, because StyleX resolves a selector only
+  where it is written, and it never exports them or sets the attribute. Every
+  other file in that package spreads those exports and
   never writes the attribute or its selector, and no package imports another
-  package's owner module through an internal path. StyleX merges styles one
+  package's owner module through an internal path. An owner module whose
+  attribute marks an element its package does not render may write its
+  selector once in an injected rule instead of `stylex.create`; Core may
+  re-export only that module's writer to Lab through an internal entry, and
+  the attribute name and selector stay private to the owner. StyleX merges styles one
   whole property at a time, so an owner style carries every condition of each
   property it sets, its rest state and pointer states included, and a caller
   does not set those properties again on the same element. Outside the owner
@@ -277,7 +291,9 @@ guidance owns the process used to propose and test APIs.
   sit in its baseline, which only shrinks. Tests may name a private attribute,
   because they assert the DOM a component renders. A private attribute appears
   in no public export, `.doc.mjs`, or Changeset, carries no compatibility
-  promise, and may change in any release. The public data attributes are
+  promise, and may change in any release. A data attribute outside the
+  `data-astryx-*` namespace is public too, and is added only when a current
+  record names it (DEC-2). The public `data-astryx-*` attributes are
   `data-astryx-theme`, the theme scope (`spec:AST-066` FR6);
   `data-astryx-media`, the media-surface scope that theme compilation emits;
   `data-astryx-aspect-ratio-override` (`component:AspectRatio` FR3);
@@ -402,7 +418,34 @@ the system already names.
 
 Rejected: component-local names for shared concepts.
 
-### DEC-2 — The interactive element owns its name
+### DEC-2 — A data attribute outside the private `data-astryx-*` namespace is public surface
+
+**Reference:** `architecture:public-component-api/DEC-2`
+**Decider:** `cixzhang`, `2026-11-09`
+
+The owner said: "New data attributes are public facing and shoudln't be used
+for internal only concerns without a clear spec that by passes this rule", and
+"main reason to be careful of data attributes is we generate them for themes".
+Theme compilation writes selectors on data attributes (the `data-astryx-*`
+scopes and attributes that mirror props, such as `data-size` and
+`data-variant`), so a data attribute a component renders can be read or
+targeted by a theme and becomes public surface. A component therefore adds a
+new data attribute only when a current record names it and states why; an
+internal-only concern uses a private `data-astryx-*` attribute under INV23 or no
+attribute at all.
+
+For a per-instance dynamic style, the first choice is a StyleX dynamic style
+(`stylex.create` with a function): it sets a generated custom property inline
+on that instance (`--x-<property>`, or a hashed name under a pseudo-element or
+condition). That property is private by this rule: no theme value, record, or
+document names it, and it may change in any release. The owner said, on
+Avatar's initials: "We should make this the agent's first choice for these
+types of dynamic styles."
+
+Rejected: adding a data attribute for an internal concern without a record
+that names it.
+
+### DEC-3 — The interactive element owns its name
 
 **Decider:** pending
 
@@ -427,7 +470,7 @@ which keeps the same prop landing on different elements across components.
 | INV2, DEC-1             | Public-API review against the system vocabulary                                                                                                                             | A public prop names a concept the system already names, such as a distance, depth, or press motion, with a new term, or uses `lift` for a layout distance                                                                                                                                                                                                                                                                                                                               |
 | INV3, INV4              | Historical API review benchmark and `spec:AST-002` evidence                                                                                                                 | A prop combines unrelated axes or exposes a derivable implementation choice; a new interaction-behavior prop that is not a `<thing>Behavior` closed union, carries an input word where its values can name the behavior, splits one behavior across per-input props, or, as a new prop, defaults to anything but the shipped behavior                                                                                                                                                   |
 | INV5, INV6, INV7        | BaseProps/passthrough lint and representative runtime tests                                                                                                                 | Consumer ARIA/data/style/events are dropped, clobber component semantics, or fail to compose                                                                                                                                                                                                                                                                                                                                                                                            |
-| INV5 (naming), DEC-2    | Accessibility-tree tests on an interactive ListItem with a description, a Selector trigger, and an interactive Avatar, each with caller `aria-label` and `aria-describedby` | A caller naming attribute on the root, a row button whose name includes its description, or a description not linked to the focused element                                                                                                                                                                                                                                                                                                                                             |
+| INV5 (naming), DEC-3    | Accessibility-tree tests on an interactive ListItem with a description, a Selector trigger, and an interactive Avatar, each with caller `aria-label` and `aria-describedby` | A caller naming attribute on the root, a row button whose name includes its description, or a description not linked to the focused element                                                                                                                                                                                                                                                                                                                                             |
 | INV9                    | Published-surface, Changeset, migration, and public-type checks                                                                                                             | A released API changes without explicit compatibility evidence                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | INV11                   | Public-API admission review plus owning theming/component tests                                                                                                             | A public semantic custom property exposes derivable or unsupported implementation detail                                                                                                                                                                                                                                                                                                                                                                                                |
 | INV12, INV13            | Generated declaration/export/behavior inventory plus canonical-owner mapping                                                                                                | A reachable supporting type or behavior outside `./internal/*` is called internal, or mechanical evidence is treated as permission to accept it                                                                                                                                                                                                                                                                                                                                         |
@@ -448,6 +491,10 @@ which keeps the same prop landing on different elements across components.
 
 Known verification gaps:
 
+- INV23 gap: nothing checks data attributes outside `data-astryx-*` yet; the
+  lint and its verification row see only `data-astryx-*` names, and existing
+  attributes outside that namespace, such as ToastViewport's `data-toast-id`,
+  have no inventory.
 - INV2, INV3: shipped props that predate the behavior-prop rule keep their
   names until a minor renames them under INV9. This list is a partial
   inventory; known deviations include Tooltip and HoverCard `focusTrigger`,

@@ -80,6 +80,10 @@ import {
 } from '../AppShell/useCloseMobileDrawerOnActivate';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {isRenderable} from '../utils/isRenderable';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 // =============================================================================
 // Props
 // =============================================================================
@@ -555,6 +559,9 @@ function BreadcrumbMenuTrigger({
     // The popup's own role="menu" is the exposed semantics; a modal dialog
     // wrapper would announce an unnamed dialog around the menu.
     role: 'none',
+    // The entrance runs on the surface: an anchored layer lays out again on
+    // each frame its own style animates.
+    xstyle: layerAnimations.below,
   });
 
   const closeMenu = useCallback(() => {
@@ -736,7 +743,7 @@ function BreadcrumbMenuTrigger({
         {
           placement: 'below',
           alignment: 'start',
-          xstyle: [menuStyles.popover, layerAnimations.below],
+          xstyle: menuStyles.popover,
         },
       )}
     </>
