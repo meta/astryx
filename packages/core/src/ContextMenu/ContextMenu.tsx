@@ -31,6 +31,8 @@
  * The trigger wrapper is a `div` by default; `triggerAs` makes it an inline
  * `span`, so a reference inside prose can own a context menu without
  * breaking the text flow.
+ * `ContextMenuForTrigger` runs this menu on a trigger its caller renders.
+ * Table cells use it to load the menu after their content.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/ContextMenu/ContextMenu.doc.mjs
@@ -38,6 +40,7 @@
  * - /packages/core/src/ContextMenu/index.ts
  * - /apps/storybook/stories/ContextMenu.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/ContextMenu/ (showcase blocks)
+ * - /packages/core/src/ContextMenu/ContextMenuTrigger.tsx (trigger and anchor)
  */
 
 import React, {
@@ -52,9 +55,9 @@ import React, {
 } from 'react';
 import type {ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {Button} from '../Button';
-import {Heading} from '../Heading';
-import {Icon} from '../Icon';
+import {Button} from '../Button/Button';
+import {Heading} from '../Heading/Heading';
+import {Icon} from '../Icon/Icon';
 import {useLayerInternal} from '../Layer/useLayer';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
@@ -91,7 +94,8 @@ import {
   easeVars,
   shadowVars,
 } from '../theme/tokens.stylex';
-import {mergeProps, rtlStyles} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
+import {rtlStyles} from '../utils/rtlStyles';
 import type {BaseProps} from '../BaseProps';
 import type {StyleXStyles} from '../theme/types';
 import {themeProps} from '../utils/themeProps';
@@ -103,6 +107,13 @@ import type {
 } from '../DropdownMenu/DropdownMenu';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {
+  ContextMenuTrigger,
+  contextMenuPoint,
+  longPressPoint,
+  type TriggerPoint,
+} from './ContextMenuTrigger';
 import {
   useAdaptivePresentation,
   type AdaptivePresentation,
@@ -121,29 +132,6 @@ const LazyMenuBottomSheet = lazy(async () =>
   })),
 );
 const styles = stylex.create({
-  // Trigger wrapper: suppress the iOS long-press callout/selection so the
-  // long-press opens our context menu instead of the native text/callout UI.
-  // `position: relative` establishes the containing block for the absolutely
-  // positioned cursor anchor below, so the anchor point tracks the trigger
-  // (and scrolls with it) instead of the page.
-  trigger: {
-    position: 'relative',
-    WebkitTouchCallout: 'none',
-    WebkitUserSelect: 'none',
-    userSelect: 'none',
-  },
-  // 1px anchor placed at the cursor point within the trigger. The menu is
-  // anchored to this element, so it sits under the cursor yet is positioned
-  // relative to the trigger's context — it follows the content on scroll and
-  // the browser can auto-flip it against the viewport edges. It owns a box
-  // because WebKit counts an empty anchor box as clipped, and the default
-  // `position-visibility: anchors-visible` then hides the menu.
-  cursorAnchor: {
-    position: 'absolute',
-    width: '1px',
-    height: '1px',
-    pointerEvents: 'none',
-  },
   menu: {
     boxSizing: 'border-box',
     display: 'flex',
@@ -311,6 +299,40 @@ interface ContextMenuCompoundProps extends ContextMenuBaseProps {
 
 export type ContextMenuProps = ContextMenuDataProps | ContextMenuCompoundProps;
 
+/**
+ * The trigger's event handlers, published by `ContextMenuForTrigger` for the
+ * trigger element its caller renders.
+ */
+export interface ContextMenuTriggerHandlers {
+  onContextMenu: (event: React.MouseEvent<HTMLElement>) => void;
+  /** Opens the menu as a long press at this viewport point does. */
+  openFromLongPress: (point: {x: number; y: number}) => void;
+  /** Opens the menu for an invocation held at this point in the trigger. */
+  openAtTriggerPoint: (point: TriggerPoint) => void;
+  onTouchStart: (event: React.TouchEvent<HTMLElement>) => void;
+  onTouchMove: (event: React.TouchEvent<HTMLElement>) => void;
+  onTouchEnd: (event: React.TouchEvent<HTMLElement>) => void;
+  onTouchCancel: (event: React.TouchEvent<HTMLElement>) => void;
+}
+
+/**
+ * A trigger that the caller renders. It has the right-click target and the
+ * 1px cursor anchor inside it. Its callback receives the trigger's handlers
+ * while the menu is mounted, and `null` after the menu unmounts.
+ */
+export interface ContextMenuExternalTrigger {
+  triggerRef: React.RefObject<HTMLElement | null>;
+  anchorRef: React.RefObject<HTMLSpanElement | null>;
+  onHandlersChange: (handlers: ContextMenuTriggerHandlers | null) => void;
+}
+
+export type ContextMenuForTriggerProps = Omit<
+  ContextMenuDataProps,
+  'children' | 'ref' | 'triggerAs' | 'triggerXstyle'
+> & {
+  trigger: ContextMenuExternalTrigger;
+};
+
 // =============================================================================
 // ContextMenu
 // =============================================================================
@@ -338,28 +360,51 @@ export type ContextMenuProps = ContextMenuDataProps | ContextMenuCompoundProps;
  * </ContextMenu>
  * ```
  */
-export function ContextMenu({
-  children,
-  menuWidth,
-  size = 'md',
-  label: labelFromProps,
-  isDisabled = false,
-  onOpenChange,
-  presentation = 'popover',
-  triggerAs = 'div',
-  ref,
-  className,
-  style,
-  xstyle,
-  triggerXstyle,
-  onContextMenu: onContextMenuProp,
-  onTouchStart: onTouchStartProp,
-  onTouchMove: onTouchMoveProp,
-  onTouchEnd: onTouchEndProp,
-  onTouchCancel: onTouchCancelProp,
-  'data-testid': testId,
-  ...rest
-}: ContextMenuProps) {
+export function ContextMenu(props: ContextMenuProps): ReactNode {
+  return useContextMenuElement(props, null);
+}
+
+ContextMenu.displayName = 'ContextMenu';
+
+/**
+ * Internal. `ContextMenu` without its own trigger. The menu opens from the
+ * trigger and cursor anchor in `trigger`. The caller renders them and keeps
+ * them mounted, so its content survives while this component loads lazily.
+ * Until it mounts, the trigger has no handlers. The caller decides what an
+ * early invocation does.
+ */
+export function ContextMenuForTrigger({
+  trigger,
+  ...props
+}: ContextMenuForTriggerProps): ReactNode {
+  return useContextMenuElement({...props, children: null}, trigger);
+}
+
+function useContextMenuElement(
+  {
+    children,
+    menuWidth,
+    size = 'md',
+    label: labelFromProps,
+    isDisabled = false,
+    onOpenChange,
+    presentation = 'popover',
+    triggerAs = 'div',
+    ref,
+    className,
+    style,
+    xstyle,
+    triggerXstyle,
+    onContextMenu: onContextMenuProp,
+    onTouchStart: onTouchStartProp,
+    onTouchMove: onTouchMoveProp,
+    onTouchEnd: onTouchEndProp,
+    onTouchCancel: onTouchCancelProp,
+    'data-testid': testId,
+    ...rest
+  }: ContextMenuProps,
+  externalTrigger: ContextMenuExternalTrigger | null,
+): ReactNode {
   const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.contextMenu.label');
   const backLabel = t('@astryx.dropdownMenu.back');
@@ -385,6 +430,8 @@ export function ContextMenu({
   // anchor element so the menu is positioned relative to the trigger context
   // — it scrolls with the content instead of sitting at a fixed viewport point.
   const positionRef = useRef({x: 0, y: 0});
+  // With an external trigger these mirror its elements (see the layout effect
+  // below the handlers).
   const cursorAnchorRef = useRef<HTMLSpanElement>(null);
   const triggerRef = useRef<HTMLElement>(null);
   // Element focused before the menu opened, restored when it closes so focus
@@ -637,42 +684,36 @@ export function ContextMenu({
     [layer, updateOpenState, usesBottomSheet],
   );
 
-  // The box the cursor anchor's offsets are measured from: the trigger, which
-  // is its containing block.
-  const getAnchorBaseRect = useCallback(
-    (): DOMRect | undefined => triggerRef.current?.getBoundingClientRect(),
-    [],
-  );
-
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
       if (isDisabled) {
         return;
       }
       e.preventDefault();
-      const rect = getAnchorBaseRect();
-      // A keyboard-initiated contextmenu (Shift+F10 / the Menu key) fires a
-      // `contextmenu` event whose coordinates are (0, 0) in several browsers.
-      // Detect that and anchor the menu to the trigger's bottom-left instead,
-      // so the menu is reachable without a pointer (menus-8).
-      const isKeyboardInvoked =
-        e.clientX === 0 && e.clientY === 0 && e.detail === 0;
-      // Convert the viewport cursor point into the trigger's local space so
-      // the anchor lives inside the (scrollable) trigger context.
-      const localX = isKeyboardInvoked || !rect ? 0 : e.clientX - rect.left;
-      const localY =
-        isKeyboardInvoked || !rect ? (rect?.height ?? 0) : e.clientY - rect.top;
+      // The anchor lives inside the trigger, so it scrolls with the trigger.
+      const point = contextMenuPoint(e, triggerRef.current);
       // A finger's long press reaches here as a pointer `contextmenu` where
       // the browser sends one (Chromium); its compatibility mousedown then
       // belongs to the opening press. A mouse or the keyboard opens without
       // one, so every later mousedown is a press outside.
-      openingGestureRef.current =
-        (e.nativeEvent as Partial<PointerEvent>).pointerType === 'touch'
-          ? currentGesture()
-          : null;
-      openAtLocalPoint(localX, localY, e.currentTarget as HTMLElement);
+      openingGestureRef.current = point.isTouch ? currentGesture() : null;
+      openAtLocalPoint(point.x, point.y, e.currentTarget as HTMLElement);
     },
-    [isDisabled, openAtLocalPoint, getAnchorBaseRect],
+    [isDisabled, openAtLocalPoint],
+  );
+
+  // An invocation that a caller's trigger held, at the point in the trigger
+  // where it arrived. The trigger is the focus element, because the held
+  // event no longer has a current target.
+  const openAtTriggerPoint = useCallback(
+    (point: TriggerPoint) => {
+      if (isDisabled) {
+        return;
+      }
+      openingGestureRef.current = point.isTouch ? currentGesture() : null;
+      openAtLocalPoint(point.x, point.y, triggerRef.current);
+    },
+    [isDisabled, openAtLocalPoint],
   );
 
   // Touch long-press invocation (menus-8). iOS Safari never synthesizes a
@@ -681,6 +722,13 @@ export function ContextMenu({
   // held long enough (see useLongPress for timer/move-cancel/cleanup logic).
   // The hook also returns the imperative start/moveTo/cancel API the menu press
   // model drives; only its four touch handlers belong on the trigger element.
+  const openFromLongPress = useCallback(
+    (point: {x: number; y: number}) =>
+      // The finger is still down: the compatibility mousedown iOS sends
+      // mid-hold, or Chromium as it lifts, belongs to this press.
+      openAtTriggerPoint(longPressPoint(point, triggerRef.current)),
+    [openAtTriggerPoint],
+  );
   const {
     onTouchStart: handleLongPressTouchStart,
     onTouchMove: handleLongPressTouchMove,
@@ -688,20 +736,7 @@ export function ContextMenu({
     onTouchCancel: handleLongPressTouchCancel,
   } = useLongPress({
     disabled: isDisabled,
-    onLongPress: useCallback(
-      (point: {x: number; y: number}) => {
-        const rect = getAnchorBaseRect();
-        // The finger is still down: the compatibility mousedown iOS sends
-        // mid-hold, or Chromium as it lifts, belongs to this press.
-        openingGestureRef.current = currentGesture();
-        openAtLocalPoint(
-          rect ? point.x - rect.left : point.x,
-          rect ? point.y - rect.top : point.y,
-          triggerRef.current,
-        );
-      },
-      [openAtLocalPoint, getAnchorBaseRect],
-    ),
+    onLongPress: openFromLongPress,
   });
 
   // ContextMenu owns invocation and long-press cleanup. Consumer handlers are
@@ -873,60 +908,99 @@ export function ContextMenu({
       renderedMenu
     );
 
-  // An inline trigger (`span`) lets prose own a context menu without
-  // breaking its flow.
-  const TriggerElement = triggerAs === 'div' ? 'div' : 'span';
+  const mergedTriggerRef = useMergedRefs(ref, triggerRef);
+  const mergedAnchorRef = useMergedRefs(cursorAnchorRef, layer.ref);
+
+  const triggerHandlers = useMemo<ContextMenuTriggerHandlers>(
+    () => ({
+      onContextMenu: handleTriggerContextMenu,
+      openFromLongPress,
+      openAtTriggerPoint,
+      onTouchStart: handleTriggerTouchStart,
+      onTouchMove: handleTriggerTouchMove,
+      onTouchEnd: handleTriggerTouchEnd,
+      onTouchCancel: handleTriggerTouchCancel,
+    }),
+    [
+      handleTriggerContextMenu,
+      openFromLongPress,
+      openAtTriggerPoint,
+      handleTriggerTouchStart,
+      handleTriggerTouchMove,
+      handleTriggerTouchEnd,
+      handleTriggerTouchCancel,
+    ],
+  );
+  const layerAnchorRef = layer.ref;
+  // Syncs the menu's popover anchoring with the caller's DOM: the layer
+  // anchors to the caller's cursor anchor, and the open handlers measure the
+  // caller's trigger. It runs before the next Effect publishes the handlers,
+  // so a trigger that replays a held invocation finds both in place.
+  useIsomorphicLayoutEffect(() => {
+    if (externalTrigger == null) {
+      return;
+    }
+    triggerRef.current = externalTrigger.triggerRef.current;
+    cursorAnchorRef.current = externalTrigger.anchorRef.current;
+    layerAnchorRef(externalTrigger.anchorRef.current);
+    return () => {
+      layerAnchorRef(null);
+      triggerRef.current = null;
+      cursorAnchorRef.current = null;
+    };
+  }, [externalTrigger, layerAnchorRef]);
+  // Syncs the caller's trigger element with this menu: it receives the
+  // trigger handlers while the menu is mounted, and none after unmount.
+  useIsomorphicLayoutEffect(() => {
+    if (externalTrigger == null) {
+      return;
+    }
+    const {onHandlersChange} = externalTrigger;
+    onHandlersChange(triggerHandlers);
+    return () => {
+      onHandlersChange(null);
+    };
+  }, [externalTrigger, triggerHandlers]);
+
+  const menuSurface = usesBottomSheet ? (
+    <Suspense fallback={null}>
+      <LazyMenuBottomSheet
+        isOpen={isOpen}
+        onOpenChange={updateOpenState}
+        label={sheetLabel}>
+        {renderedBottomSheetContent}
+      </LazyMenuBottomSheet>
+    </Suspense>
+  ) : (
+    layer.render(<LayerDepthProvider>{renderedMenu}</LayerDepthProvider>, {
+      placement: 'below',
+      alignment: 'start',
+      xstyle: [popoverXstyle, layerAnimations.below],
+    })
+  );
+
+  if (externalTrigger != null) {
+    return menuSurface;
+  }
 
   return (
     <>
-      <TriggerElement
-        ref={useMergedRefs(ref, triggerRef)}
+      <ContextMenuTrigger
+        as={triggerAs}
+        ref={mergedTriggerRef}
+        anchorRef={mergedAnchorRef}
+        anchorPoint={positionRef.current}
+        xstyle={triggerXstyle}
         {...triggerProps}
         onContextMenu={handleTriggerContextMenu}
         onTouchStart={handleTriggerTouchStart}
         onTouchMove={handleTriggerTouchMove}
         onTouchEnd={handleTriggerTouchEnd}
         onTouchCancel={handleTriggerTouchCancel}
-        data-testid={testId}
-        {...stylex.props(
-          styles.trigger,
-          ...(triggerXstyle
-            ? Array.isArray(triggerXstyle)
-              ? triggerXstyle
-              : [triggerXstyle]
-            : []),
-        )}>
+        data-testid={testId}>
         {children}
-        <span
-          ref={useMergedRefs(cursorAnchorRef, layer.ref)}
-          aria-hidden="true"
-          {...mergeProps(stylex.props(styles.cursorAnchor), {
-            style: {
-              left: `${positionRef.current.x}px`,
-              top: `${positionRef.current.y}px`,
-            },
-          })}
-        />
-      </TriggerElement>
-
-      {usesBottomSheet ? (
-        <Suspense fallback={null}>
-          <LazyMenuBottomSheet
-            isOpen={isOpen}
-            onOpenChange={updateOpenState}
-            label={sheetLabel}>
-            {renderedBottomSheetContent}
-          </LazyMenuBottomSheet>
-        </Suspense>
-      ) : (
-        layer.render(<LayerDepthProvider>{renderedMenu}</LayerDepthProvider>, {
-          placement: 'below',
-          alignment: 'start',
-          xstyle: [popoverXstyle, layerAnimations.below],
-        })
-      )}
+      </ContextMenuTrigger>
+      {menuSurface}
     </>
   );
 }
-
-ContextMenu.displayName = 'ContextMenu';

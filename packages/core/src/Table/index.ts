@@ -55,7 +55,7 @@ export {useTableRowIndex} from './plugins/rowIndex';
 export {useTableRowStatus} from './plugins/rowStatus';
 export {useTableRowExpansion} from './plugins/rowExpansion';
 export {useTableTreeData, useTableTreeState} from './plugins/tree';
-export {resolveContextActions} from './tableContextMenu';
+export {resolveContextActions} from './tableContextActions';
 export {
   useTableFiltering,
   useTableFilterState,
