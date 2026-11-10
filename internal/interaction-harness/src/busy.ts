@@ -2159,7 +2159,7 @@ function readBusyWindow(
       ? datedOnControlClock(tracked, control, ahead, starts)
       : null;
   if (dated == null) {
-    const read = judgeBusyWindow(tracked, window, options);
+    const read = judgeWithHold(tracked, window, options);
     return read.fallback == null ? read : fallBack(read.fallback);
   }
   const webkit = control?.every(frame => frame.engine === 'webkit') === true;
@@ -2167,7 +2167,7 @@ function readBusyWindow(
   const unread = new Set(
     shown.tracked.filter(frame => !shown.readTimes.has(frame.t)),
   );
-  const read = judgeBusyWindow(
+  const read = judgeWithHold(
     shown.tracked,
     window,
     {...options, control: shown.control},
@@ -2315,6 +2315,11 @@ function judgeBusyWindow(
   drawn: readonly TrackedFrame[] = tracked,
   /** The frames dated from another frame's reading (`datedOnControlClock`). */
   unread: ReadonlySet<TrackedFrame> = new Set(),
+  /**
+   * Judge from the first change after the hold that first showed at this
+   * epoch ms, as if the hold began before the block (`holdAcrossStart`).
+   */
+  excusedHoldFrom: number | null = null,
 ): {
   proof: BusyProof;
   starvation: FrameShortfall | null;
@@ -2330,6 +2335,18 @@ function judgeBusyWindow(
   cast: {frames: number; longestGapMs: number};
   /** Why the replay could not predict the frames: the caller judges again. */
   fallback?: string;
+  /**
+   * A hold at the position the page set, first shown after the block began.
+   * No frame came for longer than `FRAME_STARVATION_MS` before it. The times
+   * of the last frame before the block and of the hold's first frame, epoch
+   * ms.
+   */
+  holdAcrossStart?: {before: number; from: number};
+  /**
+   * Only the hold decided the verdict, and the proof could not place it
+   * (`judgeWithHold`): the run could not be judged.
+   */
+  holdUnplaced?: boolean;
 } {
   let end = window.to - marginMs;
   if (settledWithin != null && settledWithinSteps != null) {
@@ -2522,6 +2539,32 @@ function judgeBusyWindow(
     prior[holdStart].t < window.from &&
     heldFrames >= 2 &&
     Math.abs(lead[lead.length - 1] - preStart) <= matchPx;
+  // A hold at that position can first show after the block began, with no
+  // frame for longer than `FRAME_STARVATION_MS` before it. It may have begun
+  // before the block: only a frame in that gap shows which. On a loaded
+  // runner the late hand-off puts such a hold near the block's start.
+  const shownAt = (f: TrackedFrame) => f.box?.[axis] ?? Number.NaN;
+  const drawnShown = drawn.filter(f => f.box != null);
+  const lastBefore = [...drawnShown].reverse().find(f => f.t < window.from);
+  const holdFirst = drawnShown.find(f => f.t >= window.from && f.t <= inner.to);
+  const holdNext =
+    holdFirst == null
+      ? undefined
+      : drawnShown.find(f => f.t > holdFirst.t && f.t <= inner.to);
+  const holdAcrossStart =
+    excusedHoldFrom == null &&
+    control != null &&
+    preStart != null &&
+    movedBefore &&
+    !heldFromBeforeBlock &&
+    lastBefore != null &&
+    holdFirst != null &&
+    holdNext != null &&
+    holdFirst.t - lastBefore.t > FRAME_STARVATION_MS &&
+    Math.abs(shownAt(holdFirst) - preStart) <= matchPx &&
+    Math.abs(shownAt(holdNext) - shownAt(holdFirst)) <= epsilon
+      ? {before: lastBefore.t, from: holdFirst.t}
+      : undefined;
   // Off screen before the judged part, as a card that enters from an edge:
   // the cast's frames there show the screen without it. Its first position
   // inside the part is then its on-screen start, and judging starts there.
@@ -2539,11 +2582,13 @@ function judgeBusyWindow(
       ? firstShown.t
       : null;
   const onScreenFrom =
-    prior.length > 0 &&
-    (!movedBefore || heldFromBeforeBlock) &&
-    inWindow.length > 0
-      ? inWindow[0]
-      : entersAt;
+    excusedHoldFrom != null
+      ? (inWindow.find(t => t > excusedHoldFrom) ?? entersAt)
+      : prior.length > 0 &&
+          (!movedBefore || heldFromBeforeBlock) &&
+          inWindow.length > 0
+        ? inWindow[0]
+        : entersAt;
   const judged = {from: onScreenFrom ?? inner.from, to: inner.to};
   const changes = inWindow.filter(t => t > judged.from || onScreenFrom == null);
   const edges = [judged.from, ...changes, judged.to];
@@ -3130,7 +3175,77 @@ function judgeBusyWindow(
     controlRead != null &&
     (controlRead.movedWith < controlRead.moved ||
       controlRead.componentStallMs > controlRead.longestStallMs);
-  return {proof, starvation, unjudged, componentFailed, cast};
+  return {
+    proof,
+    starvation,
+    unjudged,
+    componentFailed,
+    cast,
+    ...(holdAcrossStart == null ? {} : {holdAcrossStart}),
+  };
+}
+
+/**
+ * `judgeBusyWindow`, with a hold that may have begun before the block
+ * (`holdAcrossStart`) judged both ways. A component that fails either way
+ * fails. When only the hold decides the verdict, the gap before it decides
+ * the run: it proves nothing, and reads as starved.
+ */
+function judgeWithHold(
+  ...args: Parameters<typeof judgeBusyWindow>
+): ReturnType<typeof judgeBusyWindow> {
+  const read = judgeBusyWindow(...args);
+  const hold = read.holdAcrossStart;
+  if (
+    hold == null ||
+    read.proof.verdict.pass ||
+    (read.starvation != null && !read.componentFailed)
+  ) {
+    return read;
+  }
+  const [tracked, window, options, drawn, unread] = args;
+  let excused: ReturnType<typeof judgeBusyWindow> | null;
+  try {
+    excused = judgeBusyWindow(
+      tracked,
+      window,
+      options,
+      drawn,
+      unread,
+      hold.from,
+    );
+  } catch (error) {
+    if (!(error instanceof BusyWindowTooLateError)) {
+      throw error;
+    }
+    excused = null;
+  }
+  // A replay that cannot read the part after the hold leaves the red it gave
+  // the whole window. The cast-step rule never judges that window again.
+  if (excused?.fallback != null) {
+    return read;
+  }
+  if (excused?.componentFailed === true) {
+    return read;
+  }
+  const left = excused?.proof.control;
+  const fromEnd =
+    left == null || left.moved === 0
+      ? "Judged from the hold's end, no frame was left to judge"
+      : `Judged from the hold's end, the component moved on ${left.movedWith} of the control's ${left.moved} frames`;
+  return {
+    ...read,
+    componentFailed: false,
+    holdUnplaced: true,
+    starvation: {
+      by: 'busyWindowProof',
+      during: `the hold at the position the page set reached the screen, from ${(window.from - hold.before).toFixed(0)} ms before the block began to ${(hold.from - window.from).toFixed(0)} ms after`,
+      frames: 0,
+      min: 1,
+      longestGapMs: hold.from - hold.before,
+      cause: `the hold may have begun before the block, as a late hand-off's does, and no frame shows which. The cast drew ${read.cast.frames} frames in the block, and the control moved on ${read.proof.control?.moved ?? 0} of them. ${fromEnd}, so the run proves nothing about the motion`,
+    },
+  };
 }
 
 /**
@@ -3180,7 +3295,9 @@ export interface PooledBusyProof {
   /**
    * Whether each run was judged. A run whose control moved on fewer than
    * `minRunFrames` frames is too little to judge, and so is a run that began
-   * too late (`late`). The pool leaves both out.
+   * too late (`late`). So is a run whose hold the cast could not place (see
+   * `busyWindowProof`). The pool leaves all three out, and its summary names
+   * the reason for each.
    */
   readonly judged: readonly boolean[];
   /**
@@ -3203,7 +3320,8 @@ export interface PooledBusyProof {
  * default) is too little to judge: the machine starved it. The summary names
  * it, and the pool leaves it out, so it never counts as a pass. A run whose
  * window throws `BusyWindowTooLateError` is left out the same way: its block
- * began after its motion had settled.
+ * began after its motion had settled. So is a run whose hold no frame could
+ * place before or after the block's start (see `busyWindowProof`).
  * The judged runs are judged as one long window is:
  * - at least `minJudgedRuns` runs are judged (by default, half the runs,
  *   rounded up);
@@ -3258,21 +3376,20 @@ export function pooledBusyProof(
   }
   const late: (BusyWindowTooLateError | null)[] = [];
   const failedRuns: boolean[] = [];
+  const unplaced: (FrameShortfall | null)[] = [];
   const runCasts: ({frames: number; longestGapMs: number} | null)[] = [];
   const proofs = runs.map(run => {
     try {
-      const {proof, componentFailed, cast} = readBusyWindow(
-        run.tracked,
-        run.window,
-        {
+      const {proof, componentFailed, cast, holdUnplaced, starvation} =
+        readBusyWindow(run.tracked, run.window, {
           ...windowOptions,
           control: run.control,
           ahead: run.ahead,
           controlStarts: run.controlStarts,
-        },
-      );
+        });
       late.push(null);
       failedRuns.push(componentFailed);
+      unplaced.push(holdUnplaced === true ? starvation : null);
       runCasts.push(cast);
       return proof;
     } catch (error) {
@@ -3281,6 +3398,7 @@ export function pooledBusyProof(
       }
       late.push(error);
       failedRuns.push(false);
+      unplaced.push(null);
       runCasts.push(null);
       return null;
     }
@@ -3288,7 +3406,17 @@ export function pooledBusyProof(
   const reads = proofs.map(proof =>
     proof == null ? null : (proof.control as BusyControlRead),
   );
-  const judged = reads.map(read => read != null && read.moved >= minRunFrames);
+  const judged = reads.map(
+    (read, i) =>
+      read != null && read.moved >= minRunFrames && unplaced[i] == null,
+  );
+  const holdsUnplaced = unplaced.filter(
+    (why): why is FrameShortfall => why != null,
+  );
+  const unplacedNote =
+    holdsUnplaced.length === 0
+      ? ''
+      : `; ${holdsUnplaced.length} had a hold no frame could place (no frame for up to ${Math.max(...holdsUnplaced.map(why => why.longestGapMs)).toFixed(1)} ms across the block's start)`;
   const judgedReads = reads.filter(
     (read, i): read is BusyControlRead => judged[i] && read != null,
   );
@@ -3304,7 +3432,7 @@ export function pooledBusyProof(
   const failures: string[] = [];
   if (judgedReads.length < minJudgedRuns && lateRuns > 0) {
     failures.push(
-      `${judgedReads.length} of ${runs.length} runs judged, under ${minJudgedRuns}: ${lateRuns} began too late for their motion, and the compositor presented too little in any other to judge`,
+      `${judgedReads.length} of ${runs.length} runs judged, under ${minJudgedRuns}: ${lateRuns} began too late for their motion${unplacedNote}, and the compositor presented too little in any other to judge`,
     );
   }
   // Too few control frames or judged runs is too little to judge. A judged
@@ -3357,16 +3485,25 @@ export function pooledBusyProof(
         cast != null && (tooFewRuns || judged[i]),
     );
     const frames = casts.reduce((sum, cast) => sum + cast.frames, 0);
-    const longestGapMs = Math.max(...casts.map(cast => cast.longestGapMs));
+    const longestGapMs = Math.max(
+      ...casts.map(cast => cast.longestGapMs),
+      ...(tooFewRuns ? holdsUnplaced.map(why => why.longestGapMs) : []),
+    );
     throw new FrameStarvationError(
       tooFewRuns
         ? {
             by: 'pooledBusyProof',
-            during: `${runs.length} blocks held the main thread, and ${judgedReads.length} of them had enough control frames to judge`,
+            during: `${runs.length} blocks held the main thread, and ${judgedReads.length} of them ${holdsUnplaced.length === 0 ? 'had enough control frames to judge' : 'were judged'}${unplacedNote}`,
             frames,
             min: minJudgedRuns,
             longestGapMs,
-            cause: `${judgedReads.length} of ${runs.length} runs judged, under ${minJudgedRuns}, and the control moved on ${moved} frames over them: the compositor presented too little in the others to judge, so the pool proves nothing about the motion`,
+            cause: `${judgedReads.length} of ${runs.length} runs judged, under ${minJudgedRuns}, and the control moved on ${moved} frames over them: ${
+              holdsUnplaced.length === 0
+                ? 'the compositor presented too little in the others to judge'
+                : holdsUnplaced.length === runs.length - judgedReads.length
+                  ? 'the cast could not place the hold in the others'
+                  : `the cast could not place the hold in ${holdsUnplaced.length} of the others, and the compositor presented too little in the rest to judge`
+            }, so the pool proves nothing about the motion`,
           }
         : {
             by: 'pooledBusyProof',
@@ -3395,7 +3532,9 @@ export function pooledBusyProof(
           ? `; run ${i + 1}: too late to judge: ${late[i]?.message ?? ''}`
           : judged[i]
             ? `; run ${i + 1}: ${proof.summary}`
-            : `; run ${i + 1}: too little to judge, the control moved on ${reads[i]?.moved ?? 0} frames, under ${minRunFrames}: ${proof.summary}`,
+            : unplaced[i] != null
+              ? `; run ${i + 1}: its hold could not be placed: ${unplaced[i]?.during}, and no frame came for ${unplaced[i]?.longestGapMs.toFixed(1)} ms: ${proof.summary}`
+              : `; run ${i + 1}: too little to judge, the control moved on ${reads[i]?.moved ?? 0} frames, under ${minRunFrames}: ${proof.summary}`,
       )
       .join('');
   return {

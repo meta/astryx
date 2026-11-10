@@ -299,6 +299,13 @@ animation late too: a slider's coast first showed 25–111 ms after its start.
 An animation frozen at the block's
 start holds a position of its own, and is judged as a stall. Every frame after
 its first change is judged, so a freeze later in the block still fails.
+No frame may come for longer than `FRAME_STARVATION_MS` across the block's
+start. When a hold at the position the page set first shows after that gap,
+the cast cannot place the hold. A component that fails either way still fails.
+When it passes judged from the hold's end, only the gap decides. The proof then
+throws `FrameStarvationError`. It names the gap, the cast's frames and the
+control's moves in the block, and that judgment from the hold's end. A pooled
+proof leaves the run out of its judged runs.
 An element off screen before the block, such as a card that enters from an
 edge, is judged from its first position inside the block. The cast's frames
 before the block must show the screen without it. A main-thread entrance

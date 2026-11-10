@@ -12,15 +12,18 @@
  *   of a block too short to judge alone are judged pooled: the control over
  *   all of them, each run's stall against that run's control. A held
  *   animation is judged up to its curve's end. A stall before that end still
- *   fails, and a curve that ends too soon is named.
+ *   fails, and a curve that ends too soon is named. A hold that first shows
+ *   after the block began, with no frame across its start, reads as starved.
  * @position Unit test of ./busy's control judgment; the frames are
- *   busy.test.ts's fixtures, and the browser proof with a real compositor
- *   control is in harness.interaction.browser.spec.ts.
+ *   busy.test.ts's fixtures and busy.webkithold.fixture.ts, and the browser
+ *   proof with a real compositor control is in
+ *   harness.interaction.browser.spec.ts.
  */
 
 import {describe, expect, it} from 'vitest';
 import {busyWindowProof, BusyWindowTooLateError, pooledBusyProof} from './busy';
 import {FrameStarvationError, type TrackedFrame} from './frames';
+import * as webkitHold from './busy.webkithold.fixture';
 
 const FRAME = 1000 / 60;
 const BLOCK = {from: 1000, to: 1700};
@@ -1049,6 +1052,86 @@ describe('a hold that starts before the block', () => {
     expect(proof.onScreenFromMs).toBeNull();
   });
 
+  // A loaded runner: the hold reaches the screen 10 ms after the block
+  // began. The cast drew no frame from 70 ms before the block to 30 ms after
+  // it.
+  const lateHold = ({freezeAfterFirst = false} = {}) => {
+    let y = 0;
+    let changed = false;
+    return moving().map(f => {
+      if (f.t < BLOCK.from + 10) {
+        y += 3;
+      } else if (f.t >= holdTo && (!freezeAfterFirst || !changed)) {
+        y += 3;
+        changed = true;
+      }
+      return {...f, box: {...f.box!, y}} as TrackedFrame;
+    });
+  };
+  const castGap = (f: TrackedFrame) =>
+    f.t <= BLOCK.from - 70 || f.t >= BLOCK.from + 30;
+  const lateHeld = lateHold().find(f => f.t >= BLOCK.from + 10)!.box!.y;
+  const gapControl = asControl(moving().filter(castGap));
+
+  it('throws FrameStarvationError when no frame came across the block start and the hold first shows after it', () => {
+    expect(() =>
+      busyWindowProof(lateHold().filter(castGap), BLOCK, {
+        axis: 'y',
+        control: gapControl,
+        setBeforeBlock: lateHeld,
+      }),
+    ).toThrow(
+      /busyWindowProof: the page drew 0 frames while the hold at the position the page set reached the screen, from 83 ms before the block began to 33 ms after, where the proof needs 1\. No frame came for 116\.7 ms: the hold may have begun before the block, as a late hand-off's does, and no frame shows which\. The cast drew \d+ frames in the block, and the control moved on \d+ of them\. Judged from the hold's end, (the component moved on (\d+) of the control's \2 frames|no frame was left to judge), so the run proves nothing about the motion/,
+    );
+  });
+
+  it('is not excused when frames came across the block start and the hold first shows after it', () => {
+    const proof = busyWindowProof(lateHold(), BLOCK, {
+      axis: 'y',
+      control,
+      setBeforeBlock: lateHeld,
+    });
+    expect(proof.verdict.pass, proof.summary).toBe(false);
+    expect(proof.onScreenFromMs).toBeNull();
+  });
+
+  it('still fails when no frame came across the block start and the element freezes after its hold', () => {
+    const proof = busyWindowProof(
+      lateHold({freezeAfterFirst: true}).filter(castGap),
+      BLOCK,
+      {axis: 'y', control: gapControl, setBeforeBlock: lateHeld},
+    );
+    expect(proof.verdict.pass, proof.summary).toBe(false);
+  });
+
+  it('leaves a run whose hold it cannot place out of a pool', () => {
+    // The sheet, moved so that it holds where the late hold does.
+    const shifted = sheet().map(
+      f =>
+        ({
+          ...f,
+          box: {...f.box!, y: f.box!.y + lateHeld - released},
+        }) as TrackedFrame,
+    );
+    const pooled = pooledBusyProof(
+      [
+        {
+          tracked: lateHold().filter(castGap),
+          control: gapControl,
+          window: BLOCK,
+        },
+        {tracked: shifted, control, window: BLOCK},
+        {tracked: shifted, control, window: BLOCK},
+      ],
+      {axis: 'y', setBeforeBlock: lateHeld, minRunFrames: 2},
+    );
+    expect(pooled.judged).toEqual([false, true, true]);
+    expect(pooled.verdict.failures, pooled.summary).toEqual([]);
+    expect(pooled.summary).toMatch(
+      /; run 1: its hold could not be placed: the hold at the position the page set reached the screen, from 83 ms before the block began to 33 ms after, and no frame came for 116\.7 ms: /,
+    );
+  });
+
   // A window that caught the animation (`blockMainThread`'s `during`) knows
   // its start. The position on the cast's last frame before that start then
   // stands for the position the page set.
@@ -1186,4 +1269,154 @@ describe('a hold that starts before the block', () => {
     expect(byStart.summary).toBe(named.summary);
     expect(plain.verdict.pass, plain.summary).toBe(false);
   });
+});
+
+describe('a WebKit hold presented after the block began, recorded', () => {
+  const origin = 100_000;
+  type Run = (typeof webkitHold.runs)[number];
+  const windowOf = (run: Run) => ({
+    from: origin + run.block.from,
+    to: origin + run.block.to,
+    animation: {
+      from: origin + run.animation.from,
+      to: origin + run.animation.to,
+      holds: false,
+    },
+  });
+  const proofOf = (
+    run: Run,
+    tracked: ReadonlyArray<readonly [number, number]> = run.tracked,
+    control: ReadonlyArray<readonly [number, number]> = run.control,
+  ) =>
+    busyWindowProof(
+      tracked.map(
+        ([t, y]) =>
+          ({
+            t: origin + t,
+            box: {x: 20, y, width: 80, height: 80},
+            pixels: 100,
+            step: webkitHold.step,
+            engine: 'webkit',
+          }) as TrackedFrame,
+      ),
+      windowOf(run),
+      {
+        axis: 'y',
+        control: control.map(
+          ([t, x]) =>
+            ({
+              t: origin + t,
+              box: {x, y: 0, width: 12, height: 12},
+              pixels: 100,
+              engine: 'webkit',
+            }) as TrackedFrame,
+        ),
+        setBeforeBlock: run.setBeforeBlock,
+      },
+    );
+  /** The run's first frame at the hold, inside the block. */
+  const holdFirst = (run: Run) =>
+    run.tracked.findIndex(([t, y]) => t >= 0 && y === 142);
+
+  it.each(webkitHold.runs.map((run, i) => [i + 1, run] as const))(
+    'run %i reads as starved: no frame came across the block start',
+    (_, run) => {
+      expect(() => proofOf(run)).toThrow(
+        /the hold at the position the page set reached the screen, from \d+ ms before the block began to \d+ ms after/,
+      );
+    },
+  );
+
+  /**
+   * The run with one frame of the motion added `beforeMs` before the hold's
+   * first frame. A control frame at the same time reads between its
+   * neighbours.
+   */
+  const withFrame = (run: Run, beforeMs: number) => {
+    const k = holdFirst(run);
+    const [t1, y1] = run.tracked[k];
+    const [t0, y0] = run.tracked[k - 1];
+    const [, x0] = run.control[k - 1];
+    const [, x1] = run.control[k];
+    const at = t1 - beforeMs;
+    const share = (at - t0) / (t1 - t0);
+    const tracked = [...run.tracked];
+    tracked.splice(k, 0, [
+      at,
+      Math.round((y0 + (y1 - y0) * share) / 2) * 2 - 4,
+    ]);
+    const control = [...run.control];
+    control.splice(k, 0, [at, Math.round(x0 + (x1 - x0) * share)]);
+    return proofOf(run, tracked, control);
+  };
+
+  it.each(webkitHold.runs.map((run, i) => [i + 1, run] as const))(
+    'run %i with a frame of the motion 90 ms before the hold still cannot place it',
+    (_, run) => {
+      expect(() => withFrame(run, 90)).toThrow(
+        /the hold at the position the page set reached the screen/,
+      );
+    },
+  );
+
+  it.each(webkitHold.runs.map((run, i) => [i + 1, run] as const))(
+    'run %i with a frame of the motion 45 ms before the hold places it after the block began: a component red',
+    (_, run) => {
+      const proof = withFrame(run, 45);
+      expect(proof.verdict.pass, proof.summary).toBe(false);
+    },
+  );
+
+  it('leaves both runs out of a pool when each is under the control floor too', () => {
+    // Each run loses its second frame in the block, and that frame of its
+    // control. The control then moves on fewer frames than one run needs.
+    const runOf = (run: Run) => {
+      const k = holdFirst(run) + 1;
+      const drop = <T>(frames: ReadonlyArray<T>) =>
+        frames.filter((_, i) => i !== k);
+      return {
+        tracked: drop(run.tracked).map(
+          ([t, y]) =>
+            ({
+              t: origin + t,
+              box: {x: 20, y, width: 80, height: 80},
+              pixels: 100,
+              step: webkitHold.step,
+              engine: 'webkit',
+            }) as TrackedFrame,
+        ),
+        control: drop(run.control).map(
+          ([t, x]) =>
+            ({
+              t: origin + t,
+              box: {x, y: 0, width: 12, height: 12},
+              pixels: 100,
+              engine: 'webkit',
+            }) as TrackedFrame,
+        ),
+        window: windowOf(run),
+      };
+    };
+    expect(() =>
+      pooledBusyProof(webkitHold.runs.map(runOf), {
+        axis: 'y',
+        setBeforeBlock: 140.5,
+        minRunFrames: 2,
+      }),
+    ).toThrow(
+      /pooledBusyProof: the page drew \d+ frames while 2 blocks held the main thread, and 0 of them were judged; 2 had a hold no frame could place \(no frame for up to \d+\.\d ms across the block's start\), where the proof needs 1\. No frame came for \d+\.\d ms: 0 of 2 runs judged, under 1, and the control moved on 0 frames over them: the cast could not place the hold in the others, so the pool proves nothing about the motion/,
+    );
+  });
+
+  it.each(webkitHold.runs.map((run, i) => [i + 1, run] as const))(
+    'run %i with the box frozen at the hold to its end is a component red',
+    (_, run) => {
+      const k = holdFirst(run);
+      const tracked = run.tracked.map(([t, y], i) =>
+        i >= k ? ([t, 142] as const) : ([t, y] as const),
+      );
+      const proof = proofOf(run, tracked);
+      expect(proof.verdict.pass, proof.summary).toBe(false);
+    },
+  );
 });

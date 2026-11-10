@@ -528,6 +528,83 @@ describe('busyWindowProof with a predicted move', () => {
     );
   });
 
+  it('keeps the replay red when it cannot read the part after a hold the cast cannot place', () => {
+    // Moving until 50 ms before the block, held at 150 px until 150 ms in,
+    // then on to 300 px by 650 ms in. The cast draws no frame from 60 ms
+    // before the block to 30 ms in. After the hold it trails the replay by
+    // 100 ms, so only the part after the hold disagrees with the replay.
+    const held = 150;
+    const replayAt = (t: number) =>
+      t < FROM - 50
+        ? held - 0.3 * (FROM - 50 - t)
+        : Math.min(held + 0.3 * Math.max(0, t - FROM - 150), held + 150);
+    const castAt = (t: number) =>
+      t < FROM + 250 && t > FROM - 60 ? held : replayAt(t < FROM ? t : t - 100);
+    const shown = (t: number) => t <= FROM - 60 || t >= FROM + 30;
+    const proof = busyWindowProof(
+      frames(castAt).filter(f => shown(f.t)),
+      window(replayAt),
+      {
+        ...options,
+        control: control.filter(f => shown(f.t)),
+        ahead: ahead.filter(f => shown(f.t)),
+        setBeforeBlock: held,
+      },
+    );
+    expect(proof.verdict.pass, proof.summary).toBe(false);
+    expect(proof.summary).not.toMatch(/no prediction/);
+  });
+
+  it('keeps the replay red for a cast the cast-step rule would pass, when the replay cannot read the part after the hold', () => {
+    // The replay passes 150 px 33 ms into the block, moves 40 px in the next
+    // two frames, then slows. The cast holds at 150 px for its first two
+    // frames in the block, after none from 60 ms before it. Then it moves a
+    // px a frame, then faster, and ends where the replay ends.
+    const held = 150;
+    const replayAt = (t: number) => {
+      const at = t - FROM;
+      if (at <= 100 / 3) {
+        return held - 0.3 * (100 / 3 - at);
+      }
+      if (at <= 200 / 3) {
+        return held + 1.2 * (at - 100 / 3);
+      }
+      return held + 40 + 0.15 * (at - 200 / 3);
+    };
+    const end = replayAt(FROM + 900);
+    const castAt = (t: number) => {
+      const at = t - FROM;
+      if (at <= -60) {
+        return replayAt(t);
+      }
+      if (at <= 51) {
+        return held;
+      }
+      const frame = Math.round((at - 50) / FRAME);
+      return frame <= 4
+        ? held + frame
+        : held + 4 + ((end - held - 4) * (at - 116.7)) / 783.3;
+    };
+    const shown = (t: number) => t <= FROM - 60 || t >= FROM + 30;
+    const tracked = frames(castAt).filter(f => shown(f.t));
+    const trimmed = {
+      ...options,
+      control: control.filter(f => shown(f.t)),
+      ahead: ahead.filter(f => shown(f.t)),
+      setBeforeBlock: held,
+    };
+    const {geometry: _replay, ...curve} = window(replayAt).animation!;
+    const withoutReplay: BlockedWindow = {
+      ...window(replayAt),
+      animation: curve,
+    };
+    const castStep = busyWindowProof(tracked, withoutReplay, trimmed);
+    expect(castStep.verdict.failures, castStep.summary).toEqual([]);
+    const proof = busyWindowProof(tracked, window(replayAt), trimmed);
+    expect(proof.verdict.pass, proof.summary).toBe(false);
+    expect(proof.summary).not.toMatch(/no prediction/);
+  });
+
   it('keeps the cast-step rule for a window with no replay', () => {
     const at = curve(t => (t < FROM + 100 ? 0.4 : 3));
     const {animation: _animation, ...plain} = window(at);

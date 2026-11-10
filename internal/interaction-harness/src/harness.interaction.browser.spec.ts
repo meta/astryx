@@ -2095,13 +2095,14 @@ test.describe('frame evidence', () => {
     const box = page.locator('#box');
     await markElement(box, {mode: 'outline'});
     const control = await startBusyControl(page);
-    // On the compositor: a move, a 300 ms hold (as WebKit holds a sheet's
-    // just-started release on screen), then a move; or one jump inside the
-    // block and nothing after it. `heldAt` is the hold's offset, the position
-    // the page set last.
+    // On the compositor: a move, a 600 ms hold, then a move. The hold stands
+    // for WebKit holding a sheet's just-started release on screen. The other
+    // curve jumps once inside the block and then stays. `heldAt` is the
+    // hold's offset, the position the page set last.
     const run = async (
       keyframes: Keyframe[],
       options: KeyframeAnimationOptions,
+      blockAtMs: number,
       heldAt?: number,
     ) => {
       const cast = await startScreencast(page);
@@ -2113,10 +2114,9 @@ test.describe('frame evidence', () => {
         },
         [keyframes, options] as const,
       );
-      // The block starts inside the hold, which began before it.
       const window = await blockMainThread(page, 600, {
         during: box,
-        minProgressMs: 700,
+        minProgressMs: blockAtMs,
       });
       await page.waitForTimeout(150);
       const frames = await cast.stop();
@@ -2132,14 +2132,18 @@ test.describe('frame evidence', () => {
       });
     };
     // Held at a half pixel: WebKit's 2 px cast reads it up to a step off.
+    // The block starts 400 ms into the hold. WebKit on a loaded runner
+    // presents a just-started curve 130 to 300 ms late, so the hold still
+    // reaches the screen before the block.
     const held = await run(
       [
         {transform: 'translateY(0px)', offset: 0},
         {transform: 'translateY(100.5px)', offset: 0.3},
-        {transform: 'translateY(100.5px)', offset: 0.45},
+        {transform: 'translateY(100.5px)', offset: 0.6},
         {transform: 'translateY(560px)', offset: 1},
       ],
       {duration: 2000, easing: 'linear'},
+      1000,
       100.5,
     );
     expect(held.verdict.failures, held.summary).toEqual([]);
@@ -2153,6 +2157,7 @@ test.describe('frame evidence', () => {
         {transform: 'translateY(50px)', offset: 1},
       ],
       {duration: 1600, easing: 'linear'},
+      700,
     );
     expect(jumpThenFreeze.verdict.pass, jumpThenFreeze.summary).toBe(false);
     await control.remove();
