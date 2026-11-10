@@ -31,6 +31,7 @@ import {
   installTimerGate,
   openStory,
   releaseAnimations,
+  requireFrames,
   tap,
   thawTimers,
   touchDriver,
@@ -56,6 +57,8 @@ const CONTENT_TOUCH_DELAY_MS = scroll.delaysContentTouchesMs;
 const HOLD_MS = 400;
 /** Two frames at 60 Hz: "in the frame the finger lands", with dispatch slack. */
 const SAME_FRAME_MS = 34;
+/** How long after its due time the release may end: a few frames. */
+const RELEASE_SLACK_MS = 80;
 
 const BUTTONS = 'core-press-feedback-touch--buttons';
 const SCROLLER = 'core-press-feedback-touch--buttons-in-scroller';
@@ -132,11 +135,96 @@ test('outside a scroller, a finger’s press highlights in the frame it lands, a
   page,
 }) => {
   const opened = await openSurface(page, BUTTONS, secondaryButton);
+  // The page stamps the press attribute's `fading` write and its removal as
+  // the press controller makes them. A mutation record comes later, on a
+  // busy page. Between the two, it records each frame's time and keeps the
+  // release animations. A busy page starts them late, and the release then
+  // waits for their end (utils/pressFeedback.ts). Their end is read at the
+  // removal: it cancels them, which clears their start times. As in the press
+  // controller, a release animation is a finite CSS animation. It runs on the
+  // button, or on a part that no nested press owner holds.
+  await opened.surface.evaluate(el => {
+    const release = {
+      fadingAt: null as number | null,
+      leftAt: null as number | null,
+      frames: [] as number[],
+      endsAt: Number.NEGATIVE_INFINITY,
+    };
+    (window as unknown as {__release: typeof release}).__release = release;
+    const animations = new Set<Animation>();
+    const keepAnimations = () => {
+      for (const animation of el.getAnimations({subtree: true})) {
+        const target = (animation.effect as KeyframeEffect | null)?.target;
+        if (
+          'animationName' in animation &&
+          target != null &&
+          (target === el || target.closest('[data-astryx-pressable]') === el) &&
+          Number.isFinite(Number(animation.effect?.getComputedTiming().endTime))
+        ) {
+          animations.add(animation);
+        }
+      }
+    };
+    const sample = (t: number) => {
+      release.frames.push(t);
+      if (release.leftAt == null) {
+        keepAnimations();
+        requestAnimationFrame(sample);
+      }
+    };
+    const set = el.setAttribute.bind(el);
+    el.setAttribute = (name, value) => {
+      set(name, value);
+      if (
+        name === 'data-astryx-press' &&
+        value === 'fading' &&
+        release.fadingAt == null
+      ) {
+        release.fadingAt = performance.now();
+        requestAnimationFrame(sample);
+      }
+    };
+    const remove = el.removeAttribute.bind(el);
+    el.removeAttribute = name => {
+      const calledAt = performance.now();
+      if (
+        name === 'data-astryx-press' &&
+        release.fadingAt != null &&
+        release.leftAt == null
+      ) {
+        keepAnimations();
+        for (const animation of animations) {
+          if (animation.startTime != null) {
+            release.endsAt = Math.max(
+              release.endsAt,
+              Number(animation.startTime) +
+                Number(animation.effect?.getComputedTiming().endTime),
+            );
+          }
+        }
+        release.leftAt = calledAt;
+      }
+      remove(name);
+    };
+  });
   await opened.driver.play(tap(opened.center, {holdMs: 300}));
   await expect
     .poll(async () => opened.surface.getAttribute('data-astryx-press'))
     .toBeNull();
   const entries = await opened.log();
+  const release = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __release: {
+            fadingAt: number | null;
+            leftAt: number | null;
+            frames: number[];
+            endsAt: number | null;
+          };
+        }
+      ).__release,
+  );
   const down = first(entries, 'pointerdown');
   const on = first(entries, 'press', 'on');
   const up = first(entries, 'pointerup');
@@ -152,10 +240,37 @@ test('outside a scroller, a finger’s press highlights in the frame it lands, a
   expect(on[1] - down[1]).toBeLessThan(SAME_FRAME_MS);
   expect(fading[1] - up[1]).toBeLessThan(SAME_FRAME_MS);
   // The attribute leaves when the shared release clock, the theme's exit
-  // duration, runs out.
+  // duration, runs out. That clock starts at the `fading` write. When the
+  // release animation started late, the release is due at its end instead.
   const releaseMs = await exitMsOf(opened.surface);
-  expect(gone[1] - fading[1]).toBeGreaterThanOrEqual(releaseMs - 5);
-  expect(gone[1] - fading[1]).toBeLessThan(releaseMs + 80);
+  const {fadingAt, leftAt} = release;
+  expect(fadingAt != null && leftAt != null, JSON.stringify(release)).toBe(
+    true,
+  );
+  if (fadingAt == null || leftAt == null) {
+    return;
+  }
+  expect(leftAt - fadingAt).toBeGreaterThanOrEqual(releaseMs - 5);
+  const dueAt = Math.max(
+    fadingAt + releaseMs,
+    release.endsAt ?? Number.NEGATIVE_INFINITY,
+  );
+  // The page ends the release in a frame after it is due. When it ended
+  // late, a page that drew no frame in the slack was starved of frames, and
+  // fails here by name.
+  if (leftAt - dueAt >= RELEASE_SLACK_MS) {
+    requireFrames(
+      release.frames.map(t => ({t})),
+      {
+        min: 1,
+        during: `the ${RELEASE_SLACK_MS} ms after the release was due`,
+        where: frame => frame.t > dueAt && frame.t <= dueAt + RELEASE_SLACK_MS,
+      },
+    );
+  }
+  expect(leftAt - dueAt, JSON.stringify(release)).toBeLessThan(
+    RELEASE_SLACK_MS,
+  );
   // WebKit synthesises a click only from its own tap path, not from a raw
   // touch sequence (harness README, engine limits); Chromium does from both.
   if (opened.driver.engine === 'chromium') {
