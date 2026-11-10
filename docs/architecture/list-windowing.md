@@ -186,6 +186,12 @@ later owner decision.
 
 Rejected: adding those options to Table's public API now.
 
+The owner added: "We can keep it required", "It just needs a rename and to
+remove it from affecting the actual height of the table", and "mainly because i
+dont want the virtualization hook to define the height. It does need to read
+the height". So `initialViewportHeight` stays required, and the hook reads the
+measured height of Table's scroll area and never defines it.
+
 ## Open questions
 
 - **OQ1 — Is the windowing module public (a hook) or internal only?** Not
