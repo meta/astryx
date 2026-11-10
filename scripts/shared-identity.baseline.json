@@ -333,7 +333,7 @@
       "status": "open",
       "group": "triage"
     },
-    "packages/core/src/Table/plugins/virtualization/useTableWindow.ts:textContext": {
+    "packages/core/src/virtualization/measure.ts:textContext": {
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
     },
@@ -409,10 +409,6 @@
       "status": "open",
       "group": "F13 Shared id sequences"
     },
-    "packages/core/src/gestures/pageHold.ts:holdsByDocument": {
-      "status": "open",
-      "group": "F3 Scroll lock"
-    },
     "packages/core/src/gestures/touchActionRule.ts:markedRoots": {
       "status": "allowed",
       "reason": "Deduplicates an idempotent style insertion; a copy can at most insert the same rules again."
@@ -432,26 +428,6 @@
     "packages/core/src/hooks/modalAnnounce.ts:presented": {
       "status": "open",
       "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/rootScrollStyles.ts:claims": {
-      "status": "open",
-      "group": "F3 Scroll lock"
-    },
-    "packages/core/src/hooks/rootScrollStyles.ts:held": {
-      "status": "open",
-      "group": "F3 Scroll lock"
-    },
-    "packages/core/src/hooks/rootScrollStyles.ts:lockCount": {
-      "status": "open",
-      "group": "F3 Scroll lock"
-    },
-    "packages/core/src/hooks/rootScrollStyles.ts:lockListeners": {
-      "status": "open",
-      "group": "F3 Scroll lock"
-    },
-    "packages/core/src/hooks/rootScrollStyles.ts:nextClaimId": {
-      "status": "open",
-      "group": "F3 Scroll lock"
     },
     "packages/core/src/hooks/scrollGeometrySubscriptions.ts:listeners": {
       "status": "allowed",
@@ -512,14 +488,6 @@
     "packages/core/src/hooks/useOverflow.ts:pendingMeasures": {
       "status": "open",
       "group": "triage"
-    },
-    "packages/core/src/hooks/useScrollLock.ts:activeLock": {
-      "status": "open",
-      "group": "F3 Scroll lock"
-    },
-    "packages/core/src/hooks/useScrollLock.ts:lockCount": {
-      "status": "open",
-      "group": "F3 Scroll lock"
     },
     "packages/core/src/i18n/resolve.ts:formatterCache": {
       "status": "allowed",
@@ -916,10 +884,6 @@
     "packages/core/src/utils/rowMotion.ts:motions": {
       "status": "open",
       "group": "triage"
-    },
-    "packages/core/src/utils/selectionLock.ts:locks": {
-      "status": "open",
-      "group": "F3 Scroll lock"
     },
     "packages/core/src/utils/sharedMutationObserver.ts:observers": {
       "status": "allowed",
