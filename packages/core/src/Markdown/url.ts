@@ -9,7 +9,7 @@
 
 import {sanitizeUrl} from '../utils/safeUrl';
 
-/** Schemes Markdown never keeps as a parsed link or image, or renders as an image. */
+/** Schemes Markdown never keeps or renders as a link or an image. */
 const BLOCKED_SCHEME_PATTERN = /^(?:javascript:|data:|vbscript:)/i;
 
 function normalizeMarkdownUrl(url: string): string {
@@ -26,16 +26,25 @@ function hasBlockedScheme(normalized: string): boolean {
  * Whether the parser keeps a link or image destination. It rejects every
  * `javascript:`, `vbscript:`, and `data:` URL, after the parser decodes the
  * destination and after this step removes control characters and outer
- * whitespace and ignores case. The renderer's image check uses the same rule.
+ * whitespace and ignores case. The renderer's link and image checks use the
+ * same rule.
  */
 export function isSafeMarkdownParserUrl(url: string): boolean {
   return !hasBlockedScheme(normalizeMarkdownUrl(url));
 }
 
-/** Navigation and image rendering deliberately have different policies. */
+/**
+ * A link destination the renderer can use, or null. It applies the shared
+ * navigation rule and also rejects every `data:` URL, so a tree that does not
+ * come from the parser cannot carry one either.
+ */
 export function sanitizeMarkdownLinkUrl(url: string): string | null {
   const normalized = sanitizeUrl(url);
-  return normalized === '' ? null : normalized;
+  return normalized === null ||
+    normalized === '' ||
+    hasBlockedScheme(normalized)
+    ? null
+    : normalized;
 }
 
 export function sanitizeMarkdownUrl(url: string): string | null {

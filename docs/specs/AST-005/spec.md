@@ -25,7 +25,17 @@ affects_consumer_docs:
 {
   "scope": "global",
   "triggers": {
-    "navigation": ["FR2", "FR3", "FR4", "FR6", "FR7", "FR8", "DEC-1", "DEC-2"]
+    "navigation": [
+      "FR2",
+      "FR3",
+      "FR4",
+      "FR6",
+      "FR7",
+      "FR8",
+      "DEC-1",
+      "DEC-2",
+      "DEC-3"
+    ]
   }
 }
 ```
@@ -72,6 +82,8 @@ itself establish implementation or exact-head verification.
   destination beginning with `javascript:`, `vbscript:`, or `data:text/html`
   MUST NOT become executable navigation. The check applies before query, hash,
   target, modifier-key, or pointer-button differences can select another sink.
+  Markdown's parsed and rendered links and images also block every `data:` URL,
+  of any media type (DEC-3).
 - **FR4 — Ordinary destinations keep working.** Relative paths, same-document
   fragments, protocol-relative URLs, and ordinary schemes such as `http:`,
   `https:`, `mailto:`, `tel:`, and safe custom schemes MUST retain their existing
@@ -157,13 +169,13 @@ the shared rule rather than reproduce a scheme list in every prop row.
 
 ## Verification
 
-| Contract           | Verification                                                 | Representative states                                                                                                                                       | Mutation or failure expectation                                                                                                                         |
-| ------------------ | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR2, FR3, FR4, FR8 | Shared predicate and Markdown parser/render suites           | mixed case; embedded controls; relative/hash; http(s); mailto/tel; safe custom schemes; downloads; blocked schemes                                          | Removing normalization or changing one blocked prefix makes the navigation matrices disagree                                                            |
-| FR5, FR6, FR7      | `useLinkComponent` integration tests and framework SSR tests | native anchor; provider; `as`; safe/rejected `href` and `to` in either combination; structured `pathname`/`href`/`protocol`; accepted object identity       | A rejected destination invokes the router, including with `undefined` or a safe fallback; accepted destinations lose identity or precedence; SSR throws |
-| FR1, FR3, FR5, FR6 | `useClickableContainer` integration tests                    | plain click; `_blank`; Cmd/Ctrl-click; middle-click; delegated interactive ref                                                                              | A blocked value reaches `window.open`/`window.location`, or an ordinary navigation path stops working                                                   |
-| FR1, IR1, IR3      | Family membership and source-usage audit                     | every current `useLinkComponent`, `useClickableContainer`, Markdown, and direct native-anchor destination owner                                             | A new caller-controlled navigation sink ships outside the family or duplicates a local rule                                                             |
-| Browser contract   | Real Chromium probe                                          | all blocked prefixes on native anchors; custom-router stand-in; imperative same-tab/new-tab; modified and middle click; accepted destinations and downloads | Script executes, blocked navigation occurs, a rejected destination gains link activation, or ordinary browser affordances regress                       |
+| Contract           | Verification                                                 | Representative states                                                                                                                                              | Mutation or failure expectation                                                                                                                         |
+| ------------------ | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR2, FR3, FR4, FR8 | Shared predicate and Markdown parser/render suites           | mixed case; embedded controls; relative/hash; http(s); mailto/tel; safe custom schemes; downloads; blocked schemes; every `data:` URL in Markdown links and images | Removing normalization or changing one blocked prefix makes the navigation matrices disagree                                                            |
+| FR5, FR6, FR7      | `useLinkComponent` integration tests and framework SSR tests | native anchor; provider; `as`; safe/rejected `href` and `to` in either combination; structured `pathname`/`href`/`protocol`; accepted object identity              | A rejected destination invokes the router, including with `undefined` or a safe fallback; accepted destinations lose identity or precedence; SSR throws |
+| FR1, FR3, FR5, FR6 | `useClickableContainer` integration tests                    | plain click; `_blank`; Cmd/Ctrl-click; middle-click; delegated interactive ref                                                                                     | A blocked value reaches `window.open`/`window.location`, or an ordinary navigation path stops working                                                   |
+| FR1, IR1, IR3      | Family membership and source-usage audit                     | every current `useLinkComponent`, `useClickableContainer`, Markdown, and direct native-anchor destination owner                                                    | A new caller-controlled navigation sink ships outside the family or duplicates a local rule                                                             |
+| Browser contract   | Real Chromium probe                                          | all blocked prefixes on native anchors; custom-router stand-in; imperative same-tab/new-tab; modified and middle click; accepted destinations and downloads        | Script executes, blocked navigation occurs, a rejected destination gains link activation, or ordinary browser affordances regress                       |
 
 ### Completion criteria
 
@@ -210,6 +222,20 @@ Rejected: one undifferentiated “safe URL” boolean for every URL-shaped value
 That hides material differences between navigating a document and embedding or
 fetching a resource, and would accidentally broaden or narrow unrelated public
 behavior.
+
+### DEC-3 — Markdown blocks every data: URL in links and images
+
+**Reference:** `spec:AST-005/DEC-3`
+**Decider:** `cixzhang`, `2026-11-10`
+
+Markdown's parser and renderer block every `data:` URL, of any media type, in a
+link or an image, in addition to the shared navigation rule. The parser's
+public tree then carries no `data:` URL for a custom renderer, and `<Markdown>`
+renders none. For Markdown links this is stricter than the shared navigation
+matrix that DEC-2 names; the shared rule for every other member is unchanged.
+
+Rejected: blocking `data:` only in Markdown images, which leaves a `data:` link
+in the parser's public tree.
 
 ## Open questions
 
