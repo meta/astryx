@@ -69,14 +69,12 @@ shared icon names under FR17.
     plug into, the generic capabilities (storage, secure storage, files,
     network, cookies, permissions, haptics, clipboard, client identity), the
     gesture owner, gesture root, touch shield, presentation, menu, and
-    action-sheet hosts, system symbols, and system materials. Its optional
+    action-sheet hosts, system symbols, system materials, and safe-area
+    insets. Its optional
     capabilities are opt-in modules (FR3), each with its own entry (FR5):
     `camera` (camera view, live code scanning, and code decoding from still
     images), `media` (audio and video playback), `web` (web view and sign-in
-    session), `pdf` (document view), and `controls` (native button, text
-    field, date pickers, and the swipe-row, drag-snap, and zoom-pager views).
-    From 0.2, the core also provides safe-area insets, and a `navigation`
-    capability provides the native stack and tab hosts (DEC-9).
+    session), `pdf` (document view), `controls` (native button, text field, date pickers, and the swipe-row, drag-snap, and zoom-pager views), and `navigation` (the native stack and tab hosts, DEC-9).
   - `@astryxdesign/react-native-cli`: the React Native experiment CLI, which
     installs the `astryx-rn` command (FR13).
 - **FR2 — Dependencies point one way.**
@@ -97,11 +95,14 @@ shared icon names under FR17.
     which the platform uses at the version the repository's release gives
     every package (FR14). `@astryxdesign/core` and `@astryxdesign/cli`
     never depend on them (`spec:AST-082/FR14`).
-  - No package of the set depends on a third-party native navigation package
-    (react-native-screens, react-native-safe-area-context, or React
-    Navigation's native packages). Routing uses React Navigation's
-    JavaScript core only, which drives the `navigation` capability's hosts
-    (DEC-9).
+  - No package of the set depends on react-native-screens,
+    react-native-safe-area-context, or a navigation package that ships native
+    code or requires either of them (DEC-9).
+  - The `navigation` hosts are platform views that any router drives. React
+    Navigation's JavaScript core (`@react-navigation/core`) is an optional
+    integration under `spec:AST-082/FR13`: an app that routes with it
+    depends on it itself, and neither the library nor the platform depends
+    on it.
   - React Native command-line tools are development dependencies. An app's
     runtime never imports them, and `@astryxdesign/cli` never depends on them.
 - **FR3 — An app opts in to each capability.** Each optional capability
@@ -153,8 +154,7 @@ shared icon names under FR17.
     absent, older, and current shapes, event emitters, and a Jest setup file.
     It is public and documented.
   - On the platform, `.` is the core and exports no capability's objects or
-    views; `./camera`,
-    `./media`, `./web`, `./pdf`, and `./controls` are the capabilities' entries.
+    views; `./camera`, `./media`, `./web`, `./pdf`, `./controls`, and `./navigation` are the capabilities' entries.
   - `./host` holds the plumbing the library and the capabilities need, such
     as the library's hosts. It has the status `spec:AST-017` FR21 gives
     Core's `./internal/*`: reserved for Astryx's own packages, undocumented
@@ -324,15 +324,14 @@ shared icon names under FR17.
   code lives in the platform package of `spec:AST-112` (FR4), and
   `@astryxdesign/native` stays the single cross-platform contracts package.
 - The package-boundary check gains the FR2 rules: no import from the library in
-  the platform, no import of a capability from the platform's core outside its loader or from another capability, and no dependency on these packages from core or the
-  CLI.
+  the platform, no import of a capability from the platform's core outside its loader or from another capability, no dependency on react-native-screens, react-native-safe-area-context, or a navigation package that ships native code or requires either, and no dependency on these packages from core or the CLI.
 
 ## Verification
 
 | Contract | Verification                                                                                                                                                                            | Representative states                                                                                                                                            | Mutation or failure expectation                                                                                                                                                                                                                                                                               |
 | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | FR1      | Package manifest check of names and entries; the canary release's package list                                                                                                          | each package in the public set; each capability entry                                                                                                            | A package missing from the set, a set package missing from the canary release, or a capability without its entry                                                                                                                                                                                              |
-| FR2      | Package-boundary, source, and dependency check                                                                                                                                          | the platform's source and tests; the core and each capability; each package's dependencies                                                                       | An import from the library in the platform, a capability import in the core outside its loader, an import between capabilities, or a dependency on a third-party native navigation package                                                                                                                    |
+| FR2      | Package-boundary, source, and dependency check                                                                                                                                          | the platform's source and tests; the core and each capability; each package's dependencies                                                                       | An import from the library in the platform, a capability import in the core outside its loader, an import between capabilities, or a dependency on react-native-screens, react-native-safe-area-context, or a navigation package that ships native code or requires either                                    |
 | FR3      | Built app with the core only, compared with one per opted-in capability: binary symbols and the merged manifest; unit tests of each capability's `isAvailable()` and a call's reason    | a capability's native module, frameworks, dependencies, permissions; an opted-out capability; a missing module of an opted-in one; a binary that records no list | An app that did not opt a capability in links any of its native code or declarations, `isAvailable()` answers true for it, a call resolves a reason other than `not-linked`, or a missing module of an opted-in capability, or one on a binary that records no list, resolves a reason other than `no-module` |
 | FR4      | `npm pack` file lists; a generated sample app's project from configuration with a capability list                                                                                       | the library's files; the sample's iOS and Android projects; a default and an overridden usage description                                                        | The library ships native code, the package manifests declare a permission, the sample needs a manual native edit, the generated project lacks the core's declarations, or it writes a usage description other than the default or the app's override                                                          |
 | FR5      | `exports` map and public-entry name check; package-boundary check of `./host` imports                                                                                                   | `.`, `./testing`, `./host`, `./app.plugin.js`                                                                                                                    | A private name on `.`, a deep import resolving, or an app importing `./host`                                                                                                                                                                                                                                  |
@@ -449,11 +448,10 @@ platform is supported under `spec:AST-082/FR15`.
 Gestures, bars, and safe areas meet in the native stack, so the platform owns
 it: a `navigation` capability holds the native stack and tab hosts, the core
 holds safe-area insets, and React Navigation's JavaScript core only routes.
-Apps and Preview projects then run no third-party native code for navigation.
+Apps, and the projects the Astryx app previews, then run no third-party native code for navigation.
 
 Rejected: building on react-native-screens and react-native-safe-area-context,
-because their gesture handling couples to the platform's and every host app
-would serve their native code to projects.
+because their gesture handling couples to the platform's and the Astryx app would serve their native code to the projects it previews.
 
 ## Open questions
 
