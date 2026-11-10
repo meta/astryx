@@ -53,8 +53,9 @@
  *   count as shown);
  *   `template_icon_undeclared`, an icon a template imports but does not
  *   declare in `icons`, in a package whose templates declare `icons` (next
- *   minor; an import that matches an icon by its name only is listed in
- *   `templateIcons` as not checked instead);
+ *   minor; an import that matches an icon by its name only, a generic
+ *   renderer, and an import the template does not use as an icon are listed
+ *   in `templateIcons` as not checked instead);
  *   `cli_peer_version`, the running CLI outside the package's
  *   `@astryxdesign/cli` peer range; and
  *   the package layout findings added after the last minor release, each with

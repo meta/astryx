@@ -248,13 +248,17 @@ describe('undeclaredTemplateIcons', () => {
     });
   });
 
-  it('counts an import from an icon module only when it renders as a childless element or passes as a value', () => {
+  it('counts an import from an icon module only when it renders as a childless element or passes as a value, never as a call argument or a spread', () => {
     expect(
       undeclaredTemplateIcons([
         {
           id: 'a',
           source: [
-            "import {Trash, Cut, Copy, Pin, Glyph, makeGlyph, Provider, Wrap} from 'glyphs';",
+            "import {Trash, Cut, Copy, Pin, Glyph, makeGlyph, Provider, Wrap, icons, Bag, Box} from 'glyphs';",
+            'const names = Object.keys(icons);',
+            'const all = {...icons};',
+            'const set = new Set(Bag);',
+            'const sized = [...Box];',
             'interface P { icon: Glyph }',
             "const Made = makeGlyph('made');",
             'const list = [Pin];',
@@ -275,6 +279,9 @@ describe('undeclaredTemplateIcons', () => {
         {id: 'a', key: 'makeGlyph', module: 'glyphs', why: 'use'},
         {id: 'a', key: 'Provider', module: 'glyphs', why: 'use'},
         {id: 'a', key: 'Wrap', module: 'glyphs', why: 'use'},
+        {id: 'a', key: 'icons', module: 'glyphs', why: 'use'},
+        {id: 'a', key: 'Bag', module: 'glyphs', why: 'use'},
+        {id: 'a', key: 'Box', module: 'glyphs', why: 'use'},
       ],
     });
   });

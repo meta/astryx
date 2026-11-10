@@ -611,9 +611,6 @@ const VALUE_POSITIONS = new Set([
   'LogicalExpression',
   'ReturnStatement',
   'ArrowFunctionExpression',
-  'CallExpression',
-  'NewExpression',
-  'SpreadElement',
   'TSAsExpression',
   'TSSatisfiesExpression',
   'TSNonNullExpression',
@@ -637,8 +634,9 @@ function isChildless(element) {
  * The local names a template uses as an icon: it renders the name as a
  * childless JSX element that passes no icon-choosing prop (`<Trash />`), or it
  * passes the name as a value (`icon={Trash}`, `[Trash]`, `{icon: Trash}`). A
- * type position, the callee of a call, a member access, and an element with
- * children are not icon uses.
+ * type position, a call or its arguments, a spread, a member access, and an
+ * element with children are not icon uses: a record of every icon passes
+ * through those too.
  * @param {any} ast
  * @returns {Set<string>}
  */
@@ -660,12 +658,6 @@ function iconUses(ast) {
     }
     if (node.type !== 'Identifier' || !parent) return;
     if (!VALUE_POSITIONS.has(parent.type) || !isReference(node, parent, key)) {
-      return;
-    }
-    if (
-      (parent.type === 'CallExpression' || parent.type === 'NewExpression') &&
-      key === 'callee'
-    ) {
       return;
     }
     if (parent.type === 'VariableDeclarator' && key !== 'init') return;

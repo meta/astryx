@@ -960,7 +960,9 @@ export async function validateIntegration(pkg, options = {}) {
             },
           }
         : {}),
-      // Template icon imports matched by name only: listed, never failed on.
+      // Template icon imports the check cannot judge (a name-only match, a
+      // generic renderer, or an import not used as an icon): listed, never
+      // failed on.
       ...(result.found && result.templateIconsUnchecked
         ? {
             templateIcons: {
