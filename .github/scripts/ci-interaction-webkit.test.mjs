@@ -85,7 +85,13 @@ describe('WebKit interaction proof routing', () => {
   });
 
   it('always reports, behind the same pull-request gate as the Chromium proofs', () => {
-    expect(webkit.if).toBe(chromium.if);
+    // The Chromium proofs also run for main's nightly full run.
+    expect(chromium.if).toBe(
+      webkit.if.replace(
+        "github.event_name != 'workflow_dispatch' && always()",
+        "(github.event_name != 'workflow_dispatch' || inputs.operation == 'interaction-full' && github.ref == 'refs/heads/main') && always()",
+      ),
+    );
     expect(ungated(webkit.if)).toBe(
       "github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true'",
     );
@@ -95,6 +101,7 @@ describe('WebKit interaction proof routing', () => {
       'admission',
       'heavy-ci',
       'build-storybook',
+      'interaction-legs',
     ]);
   });
 
@@ -126,6 +133,7 @@ describe('WebKit interaction proof routing', () => {
       "Require this pull request's Storybook build",
       'Skip the WebKit proofs outside their scope',
       'Leave the proofs to the other legs',
+      'Require a leg for every share',
     ]);
     // Every step after the leg count also waits for this leg to have a share.
     const counted = webkit.steps.indexOf(
@@ -149,6 +157,10 @@ describe('WebKit interaction proof routing', () => {
     }
     expect(step(webkit, 'Leave the proofs to the other legs').if).toBe(
       `${applies} && steps.legs.outputs.runs != 'true'`,
+    );
+    // A leg whose own count needs more legs than started fails.
+    expect(step(webkit, 'Require a leg for every share').if).toBe(
+      "steps.scope.outputs.applies == 'true' && fromJSON(steps.legs.outputs.count || '0') > strategy.job-total",
     );
   });
 

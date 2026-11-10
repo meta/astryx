@@ -39,6 +39,7 @@ import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation
 import {MENU_PRESS_LONG_PRESS_MS} from '../hooks/useMenuPress';
 import {MENU_PRESS_SETTLE_MS} from '../hooks/menuPressGesture';
 import {isInHeldLayer} from '../Layer/inputHold';
+import {runPopoverOperation} from '../Layer/popoverOperations';
 import {TOUCH_QUERY} from '../utils/touchPresentation';
 import {UIKIT_GESTURES} from '../motion/uikit/gestures';
 
@@ -300,11 +301,12 @@ describe('DropdownMenu', () => {
     const heading = screen.getByRole('heading', {name: 'Project actions'});
     expect(heading).toHaveStyle({marginInlineStart: 'var(--spacing-3)'});
     // The menu's content element takes the sheet's content padding itself,
-    // with no wrapper: 16px above the first row, 4px at the sides.
+    // with no wrapper: nothing above the first row but the band the sheet
+    // keeps under its grab bar, 4px at the sides.
     const content = heading.closest('.astryx-dropdown-menu');
     expect(content?.parentElement?.closest('.astryx-section')).toBeNull();
     expect(content).toHaveStyle({
-      paddingTop: 'var(--spacing-4)',
+      paddingTop: '0px',
       paddingInline: 'var(--spacing-1)',
     });
     // The root heading stands alone, with no row wrapper.
@@ -3524,6 +3526,108 @@ describe('DropdownMenu press model', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  describe('the press that opens the menu', () => {
+    let captured: Element[] = [];
+
+    beforeEach(() => {
+      captured = [];
+      HTMLElement.prototype.setPointerCapture = function (this: HTMLElement) {
+        captured.push(this);
+      };
+      HTMLElement.prototype.hasPointerCapture = () => false;
+      HTMLElement.prototype.releasePointerCapture = () => {};
+    });
+
+    afterEach(() => {
+      fireEvent.pointerUp(document.body, mouse);
+      delete (HTMLElement.prototype as Partial<HTMLElement>).setPointerCapture;
+      delete (HTMLElement.prototype as Partial<HTMLElement>).hasPointerCapture;
+      delete (HTMLElement.prototype as Partial<HTMLElement>)
+        .releasePointerCapture;
+    });
+
+    const layerOfMenu = () =>
+      screen.getByRole('menu', {hidden: true}).closest('[popover]');
+
+    it('a mouse press on the trigger claims that press, the trigger keeps the pointer, and it is the invoker until the release', () => {
+      vi.useFakeTimers();
+      try {
+        const trigger = renderMenu();
+        fireEvent.pointerDown(trigger, mouse);
+        expect(trigger).toHaveAttribute('aria-expanded', 'true');
+        // The pointer is over the trigger, so its own pointerup and click
+        // still reach it. The claim is the layer's, for a pointer outside.
+        expect(layerOfMenu()).not.toBeNull();
+        expect(captured).toEqual([trigger]);
+        expect(trigger).toHaveAttribute('popovertarget');
+        fireEvent.pointerUp(document.body, mouse);
+        act(() => {
+          vi.advanceTimersByTime(0);
+        });
+        expect(trigger).not.toHaveAttribute('popovertarget');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('a show that waits for another popover operation keeps the trigger as the invoker while the press is down, and claims nothing', async () => {
+      const trigger = renderMenu();
+      // The press lands inside another layer's show or hide, so the show
+      // waits for that operation and replays after it. The press model has
+      // ended that press, so a settled release outside must still close it.
+      runPopoverOperation(document, () => {
+        fireEvent.pointerDown(trigger, mouse);
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      expect(captured).toEqual([]);
+      expect(trigger).toHaveAttribute('popovertarget');
+    });
+
+    it('a show replayed after the press ended claims nothing', async () => {
+      const trigger = renderMenu();
+      runPopoverOperation(document, () => {
+        fireEvent.pointerDown(trigger, mouse);
+        fireEvent.pointerUp(trigger, mouse);
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      expect(captured).toEqual([]);
+      expect(trigger).not.toHaveAttribute('popovertarget');
+    });
+
+    it('a held finger’s open keeps the trigger as the invoker and claims nothing', () => {
+      vi.useFakeTimers();
+      try {
+        const trigger = renderMenu();
+        fireEvent.pointerDown(trigger, touch);
+        act(() => {
+          vi.advanceTimersByTime(500);
+        });
+        expect(trigger).toHaveAttribute('aria-expanded', 'true');
+        expect(trigger).toHaveAttribute('popovertarget');
+        expect(captured).toEqual([]);
+        fireEvent.pointerUp(trigger, touch);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('a keyboard open neither holds the invoker nor claims a press', async () => {
+      const user = userEvent.setup();
+      const trigger = renderMenu();
+      trigger.focus();
+      await user.keyboard('{Enter}');
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      expect(trigger).not.toHaveAttribute('popovertarget');
+      expect(captured).toEqual([]);
+    });
   });
 
   it('a tap on the trigger still opens through its click', () => {

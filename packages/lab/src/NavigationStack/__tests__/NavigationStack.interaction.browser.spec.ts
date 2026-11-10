@@ -43,21 +43,21 @@ import {
   MARKER_RGB,
   openStory,
   releaseAnimations,
-  requireFrames,
   sampleCurve,
   sampleRects,
+  seekAnimations,
   startBusyControl,
   startScreencast,
   thawPage,
   toTouchEvents,
   touchArrivalsFrom,
   touchDriver,
-  TouchPacingError,
   touchPacingFault,
-  TouchPageStallError,
+  touchPlayError,
   touchStoryboard,
   traceRendering,
   trackMarker,
+  trackMarkers,
   waitForRest,
   watchAnimations,
   withStorybook,
@@ -189,20 +189,18 @@ interface BarFrame {
 }
 
 /**
- * Starts sampling, every frame, each card's and bar's x relative to the
- * stack and the back button's effective opacities. The returned function
- * stops and returns them. A layer's x is its computed `translate`: the cards
- * and bars sit at the stack's leading edge, checked when the trace starts. So
- * a frame reads no layout. Under load, WebKit can evaluate two layers that
- * share one clock at two times in one frame, as far apart as their reads.
- * This holds for boxes and translates alike. So each card is read right
- * before its bar. `animating` says which frames an animation drives.
+ * Installs the page's reader of each card's and bar's x relative to the
+ * stack and the back button's effective opacities. A layer's x is its
+ * computed `translate`: the cards and bars sit at the stack's leading edge,
+ * checked here. So a read needs no layout. Under load, WebKit can evaluate
+ * two layers that share one clock at two times in one frame, as far apart as
+ * their reads. This holds for boxes and translates alike. So each card is
+ * read right before its bar. `animating` says which reads an animation
+ * drives.
  */
-async function traceBars(page: Page): Promise<() => Promise<BarFrame[]>> {
+async function installBarReader(page: Page): Promise<void> {
   await page.evaluate(() => {
-    const w = window as unknown as {__bars: unknown[]; __barsStop: boolean};
-    w.__bars = [];
-    w.__barsStop = false;
+    const w = window as unknown as {__readBarFrame: (t: number) => unknown};
     const stack = document.querySelector('[data-testid="navigation-stack"]');
     const effective = (element: Element) => {
       let opacity = 1;
@@ -260,12 +258,11 @@ async function traceBars(page: Page): Promise<() => Promise<BarFrame[]>> {
         throw new Error(`a layer sits ${offset} px from the stack's edge`);
       }
     }
-    const t0 = performance.now();
-    const tick = () => {
+    w.__readBarFrame = t => {
       const button = document.querySelector('[data-navigation-back]');
       const chevron = button?.firstElementChild ?? null;
-      w.__bars.push({
-        t: performance.now() - t0,
+      return {
+        t,
         ...readLayers(),
         back:
           button == null || chevron == null
@@ -278,7 +275,28 @@ async function traceBars(page: Page): Promise<() => Promise<BarFrame[]>> {
         ].some(element =>
           element.getAnimations().some(a => a.playState === 'running'),
         ),
-      });
+      };
+    };
+  });
+}
+
+/**
+ * Starts sampling the layers every frame (`installBarReader`). The returned
+ * function stops and returns the frames.
+ */
+async function traceBars(page: Page): Promise<() => Promise<BarFrame[]>> {
+  await installBarReader(page);
+  await page.evaluate(() => {
+    const w = window as unknown as {
+      __bars: unknown[];
+      __barsStop: boolean;
+      __readBarFrame: (t: number) => unknown;
+    };
+    w.__bars = [];
+    w.__barsStop = false;
+    const t0 = performance.now();
+    const tick = () => {
+      w.__bars.push(w.__readBarFrame(performance.now() - t0));
       if (!w.__barsStop) {
         requestAnimationFrame(tick);
       }
@@ -293,13 +311,24 @@ async function traceBars(page: Page): Promise<() => Promise<BarFrame[]>> {
     }) as Promise<BarFrame[]>;
 }
 
-/** The first frame at which `key`'s card has left where it started. */
-const firstMove = (frames: BarFrame[], key: string) => {
-  const start = frames.find(f => f.cards[key] != null)?.cards[key];
-  return frames.find(
-    f => f.cards[key] != null && Math.abs(f.cards[key] - (start ?? 0)) > 0.5,
-  );
-};
+/**
+ * The layers read once (`installBarReader`), labelled with the held
+ * timeline time `t`: every held animation sits at `t`, whenever each read
+ * runs.
+ */
+async function readBarsAt(page: Page, t: number): Promise<BarFrame> {
+  return page.evaluate(
+    ms =>
+      (
+        window as unknown as {__readBarFrame: (t: number) => unknown}
+      ).__readBarFrame(ms),
+    t,
+  ) as Promise<BarFrame>;
+}
+
+/** The bar `installBarReader` reads for `key`: the last one marked with it. */
+const bar = (page: Page, key: string) =>
+  page.locator(`[data-navigation-bar="${key}"]`).last();
 
 /**
  * The time (ms) at which the screens' push or pop spring (critically damped,
@@ -552,19 +581,40 @@ test('a push follows UIKit’s push spring, the card underneath at 0.3 of its sp
 test('a push’s bar: the new bar slides in with its screen, the covered one rides its parallax, the chevron fades in a beat later', async ({
   page,
 }) => {
-  const {driver, width} = await openStack(page, 'settings');
-  const stop = await traceBars(page);
-  await driver.tap(await rowCenter(page, 'General'));
-  await page.waitForTimeout(900);
-  const frames = await stop();
-  const start = firstMove(frames, 'screen-General');
-  expect(start, 'the push started').toBeDefined();
-  const during = requireFrames(frames, {
-    min: 6,
-    during: 'the pushed screen slides in',
-    where: f =>
-      start != null && f.t >= start.t && f.cards['screen-General'] > 0.5,
+  const {driver, stack, width} = await openStack(page, 'settings');
+  await installBarReader(page);
+  // Every layer of the push is held, then read at one timeline time. A busy
+  // runner can draw too few live frames to see the push at all.
+  const hold = await armHold(page, stack, {
+    judges: [
+      {target: card(page, 'screen-General'), property: 'translate'},
+      {target: card(page, 'root'), property: 'translate'},
+      {target: bar(page, 'screen-General'), property: 'translate'},
+      {target: bar(page, 'root'), property: 'translate'},
+      {
+        target: page.locator('[data-navigation-back] > *').first(),
+        property: 'opacity',
+      },
+    ],
+    count: 5,
+    newOnly: true,
   });
+  await driver.tap(await rowCenter(page, 'General'));
+  await hold.held();
+  const frames: BarFrame[] = [];
+  for (let i = 0; i <= 36; i++) {
+    frames.push(await readBarsAt(page, await seekAnimations(page, i * 16.667)));
+  }
+  await releaseAnimations(page, {finish: true});
+  // The push is over once its screen is at rest.
+  await waitForRest(card(page, 'screen-General'));
+  const during = frames.filter(f => (f.cards['screen-General'] ?? 0) > 0.5);
+  // The held course shows the pushed screen moving, in enough samples to
+  // judge.
+  expect(
+    during.length,
+    JSON.stringify(frames.map(f => [f.t, f.cards])),
+  ).toBeGreaterThanOrEqual(6);
   for (const f of during) {
     // UIKit's bar copy is part of its screen: it moves with the card (one
     // clock and spring). It stays within 1 % of the width, as engines sample
@@ -943,13 +993,29 @@ test('a fast swipe that rests before the lift springs back: a still finger never
   expect(Math.abs(await translateX(top))).toBeLessThan(0.5);
 });
 
-test('a flick from near the edge finishes the pop', async ({page}) => {
+/**
+ * A flick from near the leading edge. Given `busyLiftMs`, a page pointerup
+ * listener works that long, as a busy app's: WebKit stamps the lift's
+ * touchend after it. The pop must finish.
+ */
+async function flickFromTheEdge(page: Page, busyLiftMs?: number) {
   const {driver, left, topTitle} = await openStack(page, 'pushed', {
     standalone: true,
   });
+  if (busyLiftMs != null) {
+    await page.evaluate(spin => {
+      addEventListener('pointerup', () => {
+        const end = performance.now() + spin;
+        while (performance.now() < end) {
+          // The listener's own work.
+        }
+      });
+    }, busyLiftMs);
+  }
   // ~60 px of travel at ~1200 px/s: p + 0.35·v is well past half.
   const script = flick({x: left + 6, y: 400}, {velocity: {x: 1200, y: 0}});
-  const run = await armInputRun(page, TOUCH_INPUT_TYPES);
+  // With the page's frames, so a starved runner's late move reads as such.
+  const run = await armInputRun(page, TOUCH_INPUT_TYPES, {frames: true});
   // The page reads the release from when the moves arrive: pace on spacing.
   await driver.play(script, {pacing: 'spacing'});
   await waitForRest(card(page, 'screen-General'));
@@ -958,8 +1024,9 @@ test('a flick from near the edge finishes the pop', async ({page}) => {
   } catch (error) {
     // A starved runner delivers the moves late, so the page reads a release
     // far from the script's. Past half of it, the run did not deliver the
-    // flick this test describes. It fails by name, as the page's when its own
-    // listeners held a move.
+    // flick this test describes. It fails by name. It is the page's when its
+    // own listeners held a move. It is the starved runner's when the page drew
+    // no frame across the late gap.
     const record = await run.evaluate(recorded => {
       recorded.stop();
       return {
@@ -967,20 +1034,27 @@ test('a flick from near the edge finishes the pop', async ({page}) => {
         pointerTypes: recorded.pointerTypes.slice(),
         stamps: recorded.stamps.slice(),
         handledAt: recorded.handledAt.slice(),
+        frames: recorded.frames.slice(),
       };
     });
-    const fault = touchPacingFault(
-      toTouchEvents(script),
-      touchArrivalsFrom(record),
-      0.5,
-    );
+    const steps = toTouchEvents(script);
+    const arrivals = touchArrivalsFrom(record);
+    const fault = touchPacingFault(steps, arrivals, 0.5);
     if (fault != null) {
-      throw fault.heldByPage == null
-        ? new TouchPacingError(fault)
-        : new TouchPageStallError({...fault, heldByPage: fault.heldByPage});
+      throw touchPlayError(steps, arrivals, fault, [], record.frames);
     }
     throw error;
   }
+}
+
+test('a flick from near the edge finishes the pop', async ({page}) => {
+  await flickFromTheEdge(page);
+});
+
+test('a flick from near the edge finishes the pop when a page pointerup listener holds its lift', async ({
+  page,
+}) => {
+  await flickFromTheEdge(page, 50);
 });
 
 test('in a browser tab the leading screen edge stays the browser’s', async ({
@@ -1095,8 +1169,9 @@ test('a push keeps advancing every frame while the main thread is blocked', asyn
   const [push] = await watch.started({minProgressMs: 16});
   await page.waitForTimeout(150);
   const castFrames = await cast.stop();
-  const tracked = await trackMarker(page, castFrames);
-  const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
+  const [tracked, control] = await trackMarkers(page, castFrames, {
+    colors: [MARKER_RGB, CONTROL_RGB],
+  });
   const proof = busyWindowProof(
     tracked,
     {from: block.from, to: Math.min(block.to, push.to)},
@@ -1483,21 +1558,52 @@ test.describe('the bars ride with their screens, as UIKit’s', () => {
   test('a programmatic pop rides the revealed bar in from its parallax and the leaving one out', async ({
     page,
   }) => {
-    const {driver, width} = await openStack(page, 'settings');
+    const {driver, stack, width} = await openStack(page, 'settings');
     await driver.tap(await rowCenter(page, 'General'));
     await waitForRest(card(page, 'screen-General'));
-    const stop = await traceBars(page);
-    await page.locator('[data-navigation-back]').click();
-    await page.waitForTimeout(900);
-    const frames = await stop();
-    const moving = requireFrames(frames, {
-      min: 6,
-      during: 'the popped screen and the revealed one move',
-      where: f =>
+    await installBarReader(page);
+    // The pointer comes to rest on the button first, so the hold cannot take
+    // a hover run in place of the pop.
+    const back = page.locator('[data-navigation-back]');
+    await back.hover();
+    await waitForRest(back);
+    // Every layer of the pop is held, then read at one timeline time. Two
+    // reads in one live frame can fall on two engine times on a busy runner.
+    // A split read looks like layers out of step.
+    const hold = await armHold(page, stack, {
+      judges: [
+        {target: card(page, 'screen-General'), property: 'translate'},
+        {target: card(page, 'root'), property: 'translate'},
+        {target: bar(page, 'screen-General'), property: 'translate'},
+        {target: bar(page, 'root'), property: 'translate'},
+        {target: back.locator(':scope > *').first(), property: 'opacity'},
+      ],
+      count: 5,
+      newOnly: true,
+    });
+    await back.click();
+    await hold.held();
+    const frames: BarFrame[] = [];
+    for (let i = 0; i <= 36; i++) {
+      frames.push(
+        await readBarsAt(page, await seekAnimations(page, i * 16.667)),
+      );
+    }
+    await releaseAnimations(page, {finish: true});
+    // The pop is over once its back button leaves, within the 900 ms the
+    // live trace gave it.
+    await expect(back).toHaveCount(0, {timeout: 900});
+    const moving = frames.filter(
+      f =>
         f.cards['screen-General'] != null &&
         f.cards['screen-General'] > 0.5 &&
         f.cards.root < -0.5,
-    });
+    );
+    // The held course shows both screens moving, in enough samples to judge.
+    expect(
+      moving.length,
+      JSON.stringify(frames.map(f => [f.t, f.cards])),
+    ).toBeGreaterThanOrEqual(6);
     for (const f of moving) {
       expect(
         Math.abs(f.bars['screen-General'] - f.cards['screen-General']),
@@ -1516,7 +1622,6 @@ test.describe('the bars ride with their screens, as UIKit’s', () => {
         JSON.stringify({ms: Math.round(ms), ...f.back}),
       ).toBeLessThan(0.1);
     }
-    expect(frames.at(-1)?.back ?? null).toBeNull();
   });
 
   test('a back swipe holds the revealed bar still while the top one follows the finger', async ({

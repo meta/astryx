@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/cli",
-  "version": "0.7.12",
+  "version": "0.7.13",
   "displayName": "CLI",
   "description": "Scaffold projects, browse templates, generate themes, and get agent-ready docs from the command line.",
   "author": "Meta Open Source",

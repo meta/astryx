@@ -155,6 +155,7 @@ const LAB_ONLY_NAMES = [
   'reducedMotionFade',
   'useTouchHitArea',
   'touchHitAreaStyles',
+  'measureLogicalScrollAxis',
 ];
 
 /** The inputs matching `pattern` that put bytes in `bytes`. */
@@ -201,6 +202,9 @@ const GESTURE_USERS = new Set([
   // ButtonGroup: a finger's or a pen's press, tracked across its buttons
   // under the touch presentation.
   'ButtonGroup',
+  // ToggleButton: through ToggleButtonGroup, whose toggles' press is tracked
+  // across them for a finger and a pen under the touch presentation.
+  'ToggleButton',
   // Through AlertDialog: Tokenizer's bottom sheet confirms with an alert, and
   // PowerSearch and Table's filtering render a Tokenizer. Both also reach
   // TimeInput's wheels: PowerSearch's edit popover and Table's filtering.
