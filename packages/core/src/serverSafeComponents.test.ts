@@ -653,7 +653,7 @@ describe('RSC server/client boundary (#823)', () => {
     expect(
       stale.join('\n'),
       `\nThese components import no client-only surface, so the directive pins them\n` +
-        `to the client bundle for nothing. Remove it (source file *and* index.ts):\n`,
+        `to the client bundle for nothing. Remove it from the source file:\n`,
     ).toBe('');
   });
 
@@ -673,6 +673,129 @@ describe('RSC server/client boundary (#823)', () => {
       `\nThese components ship without 'use client', so they are server modules —\n` +
         `but they reach a client-only surface. Either drop the client dependency or\n` +
         `restore the directive. scripts/check-use-client.mjs cannot see this:\n`,
+    ).toBe('');
+  });
+});
+
+/** Every `index.ts` barrel under `SRC_DIR`, the package root entry included. */
+function indexBarrels(): string[] {
+  const found: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, {withFileTypes: true})) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (entry.name === 'index.ts' || entry.name === 'index.tsx') {
+        found.push(full);
+      }
+    }
+  };
+  walk(SRC_DIR);
+  return found;
+}
+
+/**
+ * True when every statement of the module is erased or only forwards
+ * bindings: imports, re-exports, interfaces and type aliases. Such a module
+ * runs no code of its own.
+ */
+function isPassThrough(file: string): boolean {
+  const sourceFile = ts.createSourceFile(
+    file,
+    readFileSync(file, 'utf-8'),
+    ts.ScriptTarget.ESNext,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  return sourceFile.statements.every(
+    statement =>
+      ts.isImportDeclaration(statement) ||
+      ts.isExportDeclaration(statement) ||
+      ts.isInterfaceDeclaration(statement) ||
+      ts.isTypeAliasDeclaration(statement) ||
+      (ts.isExpressionStatement(statement) &&
+        ts.isStringLiteral(statement.expression)),
+  );
+}
+
+/**
+ * Walk the server module graph from `entry`. A `'use client'` module is a
+ * client reference on the server, so the walk stops there. Every other module
+ * runs on the server and must not reach a React API that React's server build
+ * omits.
+ */
+function findServerGraphViolations(
+  entry: string,
+): {reason: string; file: string; via: string}[] {
+  const problems: {reason: string; file: string; via: string}[] = [];
+  const visited = new Set<string>();
+  const queue: [string, string[]][] = [[entry, [relative(SRC_DIR, entry)]]];
+  while (queue.length > 0) {
+    const [file, via] = queue.pop()!;
+    if (visited.has(file) || !/\.(tsx?|jsx?|mjs)$/.test(file)) {
+      continue;
+    }
+    visited.add(file);
+    const info = parseModule(file);
+    if (info.hasUseClient) {
+      continue;
+    }
+    const chain = via.join(' -> ');
+    if (info.clientAPIs.length > 0) {
+      const apis = [...new Set(info.clientAPIs)].join(', ');
+      problems.push({
+        reason: `imports ${apis} from react`,
+        file: info.rel,
+        via: chain,
+      });
+    }
+    if (info.reactDom.length > 0) {
+      problems.push({
+        reason: `imports ${info.reactDom.join(', ')}`,
+        file: info.rel,
+        via: chain,
+      });
+    }
+    const targets = [
+      ...info.imports.map(imp => imp.target),
+      ...info.reExports.map(r => r.target),
+      ...info.starReExports,
+    ];
+    for (const target of targets) {
+      queue.push([target, [...via, relative(SRC_DIR, target)]]);
+    }
+  }
+  return problems;
+}
+
+describe('RSC boundary of barrels and the package root', () => {
+  const ROOT_ENTRY = join(SRC_DIR, 'index.ts');
+
+  it('keeps every pass-through barrel free of "use client"', () => {
+    const marked = indexBarrels()
+      .filter(isPassThrough)
+      .filter(file => parseModule(file).hasUseClient)
+      .map(file => `  ${relative(SRC_DIR, file)}`);
+    expect(
+      marked.join('\n'),
+      `\nA barrel runs no code, so its directive only turns every module it\n` +
+        `re-exports into a client reference — server-safe ones included. Each\n` +
+        `module carries its own directive. Remove it from:\n`,
+    ).toBe('');
+  });
+
+  it('runs the package root as a server module', () => {
+    expect(isPassThrough(ROOT_ENTRY)).toBe(true);
+    expect(parseModule(ROOT_ENTRY).hasUseClient).toBe(false);
+  });
+
+  it('reaches client-only React APIs only through "use client" modules', () => {
+    const problems = findServerGraphViolations(ROOT_ENTRY);
+    expect(
+      format(problems),
+      `\nA root import inside a Server Component runs these modules on the\n` +
+        `server, where React's server build omits the APIs below. Add 'use client'\n` +
+        `to the module or move the client-only code out of it:\n`,
     ).toBe('');
   });
 });
