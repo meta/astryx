@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] A swizzled overlay and the package's overlays now share one page scroll lock: closing one keeps the page locked while the other is still open, and the page's own overflow comes back after the last one closes. Before, each copy kept its own count and saved styles, so closing a package Dialog over an open swizzled Drawer (or the reverse) let the page scroll behind the open overlay. Text-selection locks and page touch holds are shared the same way. No API changes.
+[fix] Two loads of Core's scroll-lock modules on one page now share one page scroll lock: closing the overlay that opened first no longer unlocks the page while the other overlay is still open. Text-selection locks, which a swizzled copy carries, are shared the same way, so a copy's release no longer restores a selection lock the package still holds. No API changes.
 
 @cixzhang
