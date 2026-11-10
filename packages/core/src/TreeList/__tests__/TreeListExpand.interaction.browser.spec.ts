@@ -350,9 +350,11 @@ function callbackGaps(frames: ReadonlyArray<Frame>, i: number): string {
 /**
  * Judges `excess` (how far a frame breaks a bound, px) on every frame. A
  * frame that read late may break it by the moving row's travel over that
- * time. That travel is the row's `travel` from the frame before to the frame
- * after, at their pace. A fault in the late frame moves neither of them. The
- * proof names such a frame. A larger excess fails there too.
+ * time. The frames before and after it give the pace, and a fault in the
+ * late frame moves neither of them. `travel` is that travel where a late read
+ * widens the excess, and negative where it can only shrink it, which gets
+ * no allowance. The proof names such a frame. A larger excess fails there
+ * too.
  */
 function judgeFrames(
   frames: ReadonlyArray<Frame>,
@@ -374,7 +376,7 @@ function judgeFrames(
     const lateBy = late.get(frame) ?? 0;
     const allowance =
       lateBy > 0 && before != null && after != null
-        ? (Math.abs(travel(before, after)) * lateBy) /
+        ? (Math.max(0, travel(before, after)) * lateBy) /
           (after.callbackAt - before.callbackAt)
         : 0;
     const detail = `frame ${i}, ${callbackGaps(frames, i)}: ${JSON.stringify(frame)}`;
@@ -590,6 +592,8 @@ test('expand under a finger: the rows below glide while the group fades in, and 
   // shows. A blank band between them is the flicker.
   judgeFrames(moving, late, {
     excess: frame => blankBands([frame])[0] - BAND_ALLOWANCE,
+    // A late read finds the rows below further along: lower in an expand,
+    // which widens a band, higher in a collapse.
     travel: (before, after) => after.belowTop - before.belowTop,
     what: 'a blank band',
   });
@@ -665,6 +669,8 @@ test('collapse under a finger: the group fades out as the rows below glide up, w
   }
   judgeFrames(frames, late, {
     excess: frame => blankBands([frame])[0] - 1.5,
+    // A late read finds the rows below further along: lower in an expand,
+    // which widens a band, higher in a collapse.
     travel: (before, after) => after.belowTop - before.belowTop,
     what: 'a blank band',
   });
@@ -802,7 +808,9 @@ test('the guide lines beside a group show and hide with it: none runs past the l
     });
     judgeFrames(phase, late, {
       excess: frame => frame.guideBottom - frame.lastBottom - BAND_ALLOWANCE,
-      travel: (before, after) => after.lastBottom - before.lastBottom,
+      // A late read finds the last row further along than the guide's clip:
+      // higher in a collapse, which widens an overrun, lower in an expand.
+      travel: (before, after) => before.lastBottom - after.lastBottom,
       what: 'a guide line past the last row',
     });
   }
