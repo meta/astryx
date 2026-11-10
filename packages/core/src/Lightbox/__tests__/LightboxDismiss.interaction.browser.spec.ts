@@ -21,6 +21,7 @@ import {
 } from '@astryxdesign/a11y-spec/playwright';
 import {
   type ActiveAnimation,
+  armHold,
   blockMainThread,
   type BusyRun,
   type BusyWindow,
@@ -463,6 +464,9 @@ test('the dismissal keeps changing the screen every frame while the main thread 
   const runs: BusyRun[] = [];
   const windows: BusyWindow[] = [];
   const closed: boolean[] = [];
+  // The backdrop's level on the cast while the finger rests before each lift:
+  // the value the page itself set at the drag's end.
+  const beforeLift: (number | null)[] = [];
   let closest = Number.POSITIVE_INFINITY;
   for (let run = 0; run < DISMISS_RUNS; run += 1) {
     const v = await openViewer(page);
@@ -477,12 +481,15 @@ test('the dismissal keeps changing the screen every frame while the main thread 
     // compositor presented while the main thread spun, on this machine.
     await startBusyControl(page);
     const cast = await startScreencast(page);
-    await v.driver.play(pullDown(v.centre, 60));
-    // Blocked inside the page once the dismissal runs on the compositor.
-    const block = await blockMainThread(page, 400, {
+    // Blocked inside the page once the dismissal runs on the compositor. The
+    // page already waits when the lift starts the dismissal, so a busy
+    // machine's round trip does not start the block later in the fade.
+    const blocking = blockMainThread(page, 400, {
       during: v.photo,
       minProgressMs: 16,
     });
+    const played = await v.driver.play(pullDown(v.centre, 60));
+    const block = await blocking;
     // A few frames after the block, so the screencast holds its end.
     await frames(page, 6);
     const castFrames = await cast.stop();
@@ -490,6 +497,15 @@ test('the dismissal keeps changing the screen every frame while the main thread 
       ...probe,
       size: 8,
     });
+    const lift =
+      played.find(e => e.type === 'touchEnd')?.dispatchedAt ?? Number.NaN;
+    const lastMove =
+      played.filter(e => e.type === 'touchMove').at(-1)?.dispatchedAt ??
+      Number.NaN;
+    beforeLift.push(
+      tracked.filter(f => f.box != null && f.t >= lastMove && f.t < lift).at(-1)
+        ?.box?.x ?? null,
+    );
     const final = tracked.at(-1)?.box?.x ?? 0;
     const settled =
       tracked.find(
@@ -517,12 +533,28 @@ test('the dismissal keeps changing the screen every frame while the main thread 
       ),
     );
   }
+  // Every drag ends at the same travel, so the page sets one backdrop level
+  // before each lift.
+  const setBeforeBlock = beforeLift[0];
+  expect(
+    setBeforeBlock,
+    'a frame shows the rest before the lift',
+  ).not.toBeNull();
+  beforeLift.forEach((level, i) => {
+    expect(level, `run ${i + 1}: the backdrop's level before the lift`).toBe(
+      setBeforeBlock,
+    );
+  });
   // A change of the backdrop's brightness counts, in 8-bit levels. So
   // judging stops where the fade's step between the closest two frames shown
   // falls below one level. A shown level is rounded, so half a level is added.
   const proof = pooledBusyProof(runs, {
     axis: 'x',
     settledWithin: wholeStepsUntil(closest) + 0.5,
+    // WebKit presents a just-started compositor fade late, so the backdrop can
+    // hold the page's own last level into the block. A hold at any other
+    // level is a freeze.
+    setBeforeBlock: setBeforeBlock ?? undefined,
     // A run whose control moved on fewer than two frames is too little to
     // judge. At least two of the four runs must be judged.
     minRunFrames: 2,
@@ -532,7 +564,7 @@ test('the dismissal keeps changing the screen every frame while the main thread 
     'busy-main-thread/lightbox-dismiss',
     {
       [`${testInfo.project.name}.json`]: JSON.stringify(
-        {windows, proof},
+        {windows, beforeLift, proof},
         null,
         1,
       ),
@@ -574,11 +606,14 @@ test('under Reduce Motion the dismissal fades the photo out in place', async ({
 }) => {
   await page.emulateMedia({reducedMotion: 'reduce'});
   const v = await openViewer(page);
-  await v.driver.play(pullDown(v.centre, 110));
-  await waitForAnimation(v.photo);
-  const held = await holdAnimations(page, v.photo, {
+  // The fade runs 200 ms and the viewer closes at its end. A hold sent from
+  // here after the lift can arrive after the fade ends on a busy machine. So
+  // the page holds the fade itself as it starts.
+  const hold = await armHold(page, v.photo, {
     judges: {target: v.photo, property: 'opacity'},
   });
+  await v.driver.play(pullDown(v.centre, 110));
+  const held = await hold.held();
   const samples = await sampleCurve(v.photo, [0, 50]);
   await releaseAnimations(page);
   // Under reduced motion, a fade of 200 ms or less.

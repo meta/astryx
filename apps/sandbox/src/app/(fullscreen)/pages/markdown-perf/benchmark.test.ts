@@ -20,6 +20,14 @@ describe('Markdown performance fixture', () => {
   it('formats missing, zero, positive, and negative baseline changes', () => {
     expect(formatBenchmarkChange(null, 10)).toBe('—');
     expect(formatBenchmarkChange(10, null)).toBe('—');
+  });
+
+  it('shows a caller-supplied empty label when there is no baseline or no value', () => {
+    const labels = {noBaseline: 'no baseline', noValue: 'baseline saved'};
+    expect(formatBenchmarkChange(10, null, labels)).toBe('no baseline');
+    expect(formatBenchmarkChange(null, null, labels)).toBe('no baseline');
+    expect(formatBenchmarkChange(null, 10, labels)).toBe('baseline saved');
+    expect(formatBenchmarkChange(12, 10, labels)).toBe('+20.0%');
     expect(formatBenchmarkChange(0, 0)).toBe('0.0%');
     expect(formatBenchmarkChange(1, 0)).toBe('new');
     expect(formatBenchmarkChange(110, 100)).toBe('+10.0%');

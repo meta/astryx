@@ -143,7 +143,8 @@ describe('CommentPin', () => {
     expect(pin).toHaveAttribute('data-unread', 'unread');
     expect(pin).not.toHaveAttribute('data-grouped');
     expect(container.querySelector('.astryx-status-dot')).not.toBeNull();
-    expect(pin).toHaveTextContent(/^AL$/);
+    expect(pin.textContent).toBe('');
+    expect(pin.querySelector('[data-initials="AL"]')).not.toBeNull();
   });
 
   it.each([

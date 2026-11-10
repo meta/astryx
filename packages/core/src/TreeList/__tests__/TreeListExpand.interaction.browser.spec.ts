@@ -28,12 +28,15 @@ import {
   releaseAnimations,
   requireFrames,
   seekAnimations,
+  startBusyControl,
   startCompositorTrace,
   startScreencast,
   touchDriver,
   trackMarker,
   withStorybook,
   writeEvidence,
+  type Box,
+  type CastFrame,
   type HeldAnimation,
 } from '@astryxdesign/interaction-harness';
 import {expectReducedMotionCrossFade} from '../../List/__tests__/reducedMotion';
@@ -411,6 +414,125 @@ async function seekThroughGlide(
  */
 const RECORDED_GLIDE_MS = 1200;
 
+/** How long the page is held past a glide's end, ms. */
+const TAIL_BLOCK_MS = 500;
+
+/** A pixel darker than this, on a 0 to 255 grey, is ink. */
+const INK_BELOW = 230;
+
+/**
+ * How many ink pixels of each frame inside `box`, and of `rest`, have no ink
+ * within one pixel in the other. A motion drawn within half a pixel of its
+ * end matches, as does text a layer draws a shade lighter. Two frames of one
+ * scene count 0 in both engines. Frames are decoded in a scratch page, as
+ * trackMarker decodes them.
+ */
+async function inkOffRest(
+  page: Page,
+  frames: ReadonlyArray<CastFrame>,
+  rest: CastFrame,
+  box: Box,
+): Promise<number[]> {
+  const scratch = await page.context().newPage();
+  try {
+    const counts: number[] = [];
+    for (let i = 0; i < frames.length; i += 12) {
+      counts.push(
+        ...(await scratch.evaluate(
+          async ({items, base, area, below}) => {
+            const inkOf = async (frame: typeof base) => {
+              const blob = await (
+                await fetch(`data:image/${frame.format};base64,${frame.data}`)
+              ).blob();
+              const bitmap = await createImageBitmap(blob);
+              const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+              const context = canvas.getContext('2d');
+              if (context == null) {
+                throw new Error('no 2d context');
+              }
+              context.drawImage(bitmap, 0, 0);
+              const scale = bitmap.width / frame.viewportWidth;
+              const {data, width, height} = context.getImageData(
+                Math.floor(area.x * scale),
+                Math.floor(area.y * scale),
+                Math.ceil(area.width * scale),
+                Math.ceil(area.height * scale),
+              );
+              const ink = new Uint8Array(width * height);
+              for (let p = 0; p < ink.length; p += 1) {
+                const grey =
+                  (data[p * 4] + data[p * 4 + 1] + data[p * 4 + 2]) / 3;
+                ink[p] = grey < below ? 1 : 0;
+              }
+              return {ink, width, height};
+            };
+            // Ink in `a` with no ink in `b` within one pixel.
+            const missing = (
+              a: Uint8Array,
+              b: Uint8Array,
+              width: number,
+              height: number,
+            ) => {
+              let count = 0;
+              for (let y = 0; y < height; y += 1) {
+                for (let x = 0; x < width; x += 1) {
+                  if (a[y * width + x] === 0) {
+                    continue;
+                  }
+                  let isNear = false;
+                  for (let dy = -1; dy <= 1 && !isNear; dy += 1) {
+                    for (let dx = -1; dx <= 1 && !isNear; dx += 1) {
+                      const ny = y + dy;
+                      const nx = x + dx;
+                      isNear =
+                        ny >= 0 &&
+                        ny < height &&
+                        nx >= 0 &&
+                        nx < width &&
+                        b[ny * width + nx] === 1;
+                    }
+                  }
+                  if (!isNear) {
+                    count += 1;
+                  }
+                }
+              }
+              return count;
+            };
+            const at = await inkOf(base);
+            const out: number[] = [];
+            for (const item of items) {
+              const {ink} = await inkOf(item);
+              out.push(
+                missing(ink, at.ink, at.width, at.height) +
+                  missing(at.ink, ink, at.width, at.height),
+              );
+            }
+            return out;
+          },
+          {
+            items: frames.slice(i, i + 12).map(f => ({
+              data: f.data,
+              format: f.format,
+              viewportWidth: f.viewportWidth,
+            })),
+            base: {
+              data: rest.data,
+              format: rest.format,
+              viewportWidth: rest.viewportWidth,
+            },
+            area: box,
+            below: INK_BELOW,
+          },
+        )),
+      );
+    }
+    return counts;
+  } finally {
+    await scratch.close();
+  }
+}
+
 /** Sets the glide's duration where the tree reads it, as a theme does. */
 const lengthenGlide = async (page: Page, ms: number) =>
   page
@@ -608,6 +730,67 @@ test('collapse under a finger: the group fades out as the rows below glide up, w
   }
   await releaseAnimations(page, {finish: true});
   await expect(group).toHaveCount(0);
+});
+
+test('collapse under a finger: a long task over the end of the glide draws the tree as it rests, its leaving rows and chevron included', async ({
+  page,
+}) => {
+  await open(page);
+  await tapToggle(page);
+  await expect(parts(page).child).toBeVisible();
+  await treeAtRest(page);
+  await lengthenGlide(page, RECORDED_GLIDE_MS);
+  const {below, group} = parts(page);
+  // The compositor's own box keeps frames coming while the page is held.
+  const control = await startBusyControl(page);
+  const cast = await startScreencast(page);
+  await expect
+    .poll(() => cast.frameCount(), {
+      message: 'the screencast delivers frames',
+      timeout: 5000,
+    })
+    .toBeGreaterThan(0);
+  // The page holds its main thread from nine tenths of the glide to past its
+  // end, like a long task as a collapse ends.
+  const blocked = blockMainThread(page, TAIL_BLOCK_MS, {
+    during: below,
+    minProgressMs: RECORDED_GLIDE_MS * 0.9,
+  });
+  await tapToggle(page);
+  const block = await blocked;
+  await treeAtRest(page);
+  await expect(group).toHaveCount(0);
+  // One more frame once the tree rests, while the control still moves.
+  const atRest = cast.frameCount();
+  await expect
+    .poll(() => cast.frameCount(), {
+      message: 'a frame of the tree at rest',
+      timeout: 5000,
+    })
+    .toBeGreaterThan(atRest);
+  const frames = await cast.stop();
+  await control.remove();
+  // The glide ends at most a tenth of it after the block begins. Each frame
+  // two frames past that, while the page is held, is judged.
+  const ended = block.from + RECORDED_GLIDE_MS * 0.1 + 34;
+  const held = requireFrames(frames, {
+    min: 3,
+    during: 'the page is held past the end of the glide',
+    where: frame => frame.t > ended && frame.t < block.to,
+  });
+  // Each held frame draws the tree as its frame at rest does: the rows below
+  // at their place, no leaving row, the chevron turned.
+  const box = await page.locator('[role="tree"]').boundingBox();
+  if (box == null) {
+    throw new Error('the tree has no box');
+  }
+  const off = await inkOffRest(page, held, frames[frames.length - 1], box);
+  for (const [index, count] of off.entries()) {
+    expect(
+      count,
+      JSON.stringify({frame: Math.round(held[index].t - block.from), off}),
+    ).toBe(0);
+  }
 });
 
 test('collapse under a finger: no row of the tree paints past its bottom edge onto the content after it', async ({

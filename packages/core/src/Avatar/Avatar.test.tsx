@@ -9,6 +9,25 @@ import {colorVars} from '../theme/tokens.stylex';
 import {Avatar} from './Avatar';
 import {AvatarStatusDot} from './AvatarStatusDot';
 import {AvatarGroup} from '../AvatarGroup';
+import {rulesDeclaredFor} from '../__tests__/pressState';
+
+/** The initials an avatar draws, from the attribute its generated content reads. */
+function initialsIn(el: Element): string {
+  return (
+    el.querySelector('[data-initials]')?.getAttribute('data-initials') ?? ''
+  );
+}
+
+/** The element that draws the given initials. */
+function initialsElement(initials: string): HTMLElement {
+  const el = document.querySelector<HTMLElement>(
+    `[data-initials="${initials}"]`,
+  );
+  if (el == null) {
+    throw new Error(`No avatar draws the initials ${initials}`);
+  }
+  return el;
+}
 
 describe('Avatar', () => {
   it('exposes role="img" with the name as accessible name', () => {
@@ -43,7 +62,7 @@ describe('Avatar', () => {
 
   it('renders fallback initials at the proportional size via a StyleX class, not an inline property', () => {
     render(<Avatar name="Ada Lovelace" size="sm" data-testid="a" />);
-    const initials = screen.getByText('AL');
+    const initials = initialsElement('AL');
     // The default proportional size (sm = 24 × 0.4 = 9.6px) is fed to StyleX as
     // a dynamic value: StyleX applies `font-size` through a class and sets only
     // the computed value inline (as a custom property). Because the property
@@ -59,9 +78,7 @@ describe('Avatar', () => {
     // The background is themed directly on `.astryx-avatar-fallback`, so both
     // the initials and the default-icon fallback must carry the class.
     const {rerender} = render(<Avatar name="Ada Lovelace" />);
-    expect(screen.getByText('AL').className).toContain(
-      'astryx-avatar-fallback',
-    );
+    expect(initialsElement('AL').className).toContain('astryx-avatar-fallback');
 
     rerender(<Avatar />);
     const icon = document.querySelector('.astryx-avatar-fallback');
@@ -81,7 +98,7 @@ describe('Avatar', () => {
       },
     });
     render(<Avatar name="Ada Lovelace" />);
-    const initials = screen.getByText('AL');
+    const initials = initialsElement('AL');
     const classesOf = (style: stylex.StyleXStyles) =>
       (stylex.props(style).className ?? '')
         .split(' ')
@@ -105,7 +122,7 @@ describe('Avatar', () => {
         <Avatar name="Grace Hopper" />
       </AvatarGroup>,
     );
-    const initials = screen.getByText('AL');
+    const initials = initialsElement('AL');
     const classes = (stylex.props(probe.ink).className ?? '')
       .split(' ')
       .filter(cls => cls !== '' && !cls.includes('__'));
@@ -138,17 +155,17 @@ describe('Avatar', () => {
 
   it('does not split an emoji surrogate pair when generating initials', () => {
     render(<Avatar name="😀 Ada" data-testid="avatar" />);
-    expect(screen.getByTestId('avatar')).toHaveTextContent('😀A');
+    expect(initialsIn(screen.getByTestId('avatar'))).toBe('😀A');
   });
 
   it('preserves a complete character when generating initials', () => {
     render(<Avatar name="🇬🇧 Ada" data-testid="avatar" />);
-    expect(screen.getByTestId('avatar')).toHaveTextContent('🇬🇧A');
+    expect(initialsIn(screen.getByTestId('avatar'))).toBe('🇬🇧A');
   });
 
   it('keeps a ZWJ family emoji intact when generating initials', () => {
     render(<Avatar name="👨‍👩‍👧‍👦 Ada" data-testid="avatar" />);
-    expect(screen.getByTestId('avatar')).toHaveTextContent('👨‍👩‍👧‍👦A');
+    expect(initialsIn(screen.getByTestId('avatar'))).toBe('👨‍👩‍👧‍👦A');
   });
 
   describe('initials come from letters, digits and emoji, not punctuation', () => {
@@ -168,16 +185,62 @@ describe('Avatar', () => {
       ['Ada (😀)', 'A😀'],
     ])('%s renders %s', (name, expected) => {
       render(<Avatar name={name} data-testid="avatar" />);
-      expect(screen.getByTestId('avatar').textContent).toBe(expected);
+      expect(initialsIn(screen.getByTestId('avatar'))).toBe(expected);
     });
 
     it('falls through to the default icon when no word yields an initial', () => {
       render(<Avatar name="- ()" data-testid="a" />);
       const el = screen.getByTestId('a');
       expect(el.querySelector('svg')).not.toBeNull();
-      expect(el).toHaveTextContent('');
+      expect(initialsIn(el)).toBe('');
       // The name still names the avatar.
       expect(screen.getByRole('img', {name: '- ()'})).toBeInTheDocument();
+    });
+  });
+
+  describe('initials are part of the picture, not text of the control', () => {
+    // An interactive avatar is named by the person's name. Initials as text
+    // would be a visible label that the name does not contain (WCAG 2.5.3
+    // Label in Name), so they are drawn as generated content instead.
+    it.each([
+      ['static', {}, 'img'],
+      ['link', {href: '/ada'}, 'link'],
+      ['button', {onClick: () => {}}, 'button'],
+    ] as const)(
+      'a %s avatar has no text content and is named by the person',
+      (_root, rootProps, role) => {
+        render(<Avatar name="Ada Lovelace" data-testid="a" {...rootProps} />);
+        const root = screen.getByTestId('a');
+        expect(root.textContent).toBe('');
+        expect(screen.getByRole(role, {name: 'Ada Lovelace'})).toBe(root);
+        expect(initialsIn(root)).toBe('AL');
+      },
+    );
+
+    it('draws the initials with empty alternative text', () => {
+      render(<Avatar name="Ada Lovelace" onClick={() => {}} />);
+      const before = rulesDeclaredFor(initialsElement('AL')).filter(rule =>
+        rule.slice(0, rule.indexOf('{')).includes('::before'),
+      );
+      expect(before.some(rule => rule.includes('attr(data-initials)'))).toBe(
+        true,
+      );
+      expect(before.some(rule => rule.includes('/ ""'))).toBe(true);
+    });
+
+    it('keeps the photo path free of initials', () => {
+      render(
+        <Avatar
+          name="Ada Lovelace"
+          src="https://example.com/ada.jpg"
+          onClick={() => {}}
+          data-testid="a"
+        />,
+      );
+      const root = screen.getByTestId('a');
+      expect(root.querySelector('img')).toHaveAttribute('alt', '');
+      expect(initialsIn(root)).toBe('');
+      expect(screen.getByRole('button', {name: 'Ada Lovelace'})).toBe(root);
     });
   });
 
@@ -189,7 +252,7 @@ describe('Avatar', () => {
     fireEvent.error(wrapper.querySelector('img')!);
     // Broken image falls back to initials.
     expect(wrapper.querySelector('img')).toBeNull();
-    expect(wrapper).toHaveTextContent('A');
+    expect(initialsIn(wrapper)).toBe('A');
 
     // A different src must get a fresh load attempt, not the stale error.
     rerender(<Avatar name="Ada" src="https://example.com/ada.jpg" />);
@@ -224,7 +287,7 @@ describe('Avatar', () => {
       );
       const avatar = screen.getByRole('img', {name: 'Ada Lovelace, Busy'});
       expect(avatar).toBeInTheDocument();
-      expect(avatar).toHaveTextContent('AL');
+      expect(initialsIn(avatar)).toBe('AL');
     });
 
     it('composes the status label with alt when alt overrides name', () => {
@@ -456,7 +519,7 @@ describe('Avatar', () => {
       render(<Avatar name="   " data-testid="a" />);
       const el = screen.getByTestId('a');
       expect(el.querySelector('svg')).not.toBeNull();
-      expect(el).toHaveTextContent('');
+      expect(initialsIn(el)).toBe('');
     });
 
     it('is decorative rather than a role="img" with a blank name', () => {
