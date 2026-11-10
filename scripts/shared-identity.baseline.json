@@ -65,10 +65,6 @@
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
     },
-    "packages/core/src/Icon/globalIconRegistry.tsx:globalRegistry": {
-      "status": "open",
-      "group": "F8 Public registries"
-    },
     "packages/core/src/List/listLayoutUpdates.ts:keptStyles": {
       "status": "open",
       "group": "triage"
@@ -492,10 +488,6 @@
     "packages/core/src/theme/statusRoleDerivation.ts:coreCache": {
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
-    },
-    "packages/core/src/theme/themeRegistry.ts:themeRegistry": {
-      "status": "open",
-      "group": "F8 Public registries"
     },
     "packages/core/src/theme/useTheme.ts:rootModeAttrListeners": {
       "status": "allowed",
