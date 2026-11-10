@@ -8,6 +8,7 @@
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 vi.mock('../../foundation/discovery/template-conflict-release.mjs', () => ({
   expandedTemplateConflictSchemaActive: () => true,
@@ -149,7 +150,7 @@ const PASSAGE =
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-template-conflicts-'),
+    path.join(REPO_ROOT, '.astryx-template-conflicts-'),
   );
   // The fixture is a package with its own TypeScript config, scoped to its
   // own files. Without one, the prop check reads the repository's root

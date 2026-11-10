@@ -7,7 +7,10 @@
 #   weekday at about 06:30 Pacific, before the 08:00 release cut: main's
 #   visual/a11y/RTL result, fixed forward on failure (DEC-7, FR24);
 # - deploy.yml's full unit run, about hourly: every unit suite of every
-#   package, on that exact commit, never cancelled by a push (FR21).
+#   package, on that exact commit, never cancelled by a push (FR21);
+# - ci.yml's full Chromium interaction run, once a day in the 09:00 UTC hour:
+#   every interaction spec on main's tip, which a pull request's selective
+#   run may leave out (FR31).
 #
 # A check covers every merge up to its commit. A push dispatches at once when
 # its lane's window has passed, and a quarter-hourly schedule picks up the tip
@@ -43,7 +46,7 @@ jobs:
       # The guardian's issue when a unit run did not complete.
       issues: write
     steps:
-      - name: Dispatch main's release-check and full unit run for its tip
+      - name: Dispatch main's release-check, full unit run and nightly interaction run for its tip
         uses: actions/github-script@v9
         env:
           SHA: ${{ github.sha }}
@@ -91,6 +94,9 @@ jobs:
               return data.workflow_runs;
             };
             const byBot = runs => runs.filter(run => run.actor?.login === BOT);
+            // ci.yml names main's nightly full interaction run; it is no
+            // release-check.
+            const interactionRun = run => /^Interaction proofs of /.test(run.display_title ?? '');
             // Whether a lane is due for the tip. A cancelled run was replaced
             // while waiting, or stopped by a release re-check of main's tip,
             // which is itself a full check. A release-check that checked out a newer commit
@@ -140,7 +146,7 @@ jobs:
             };
             const allChecks = await dispatchedRuns('ci.yml');
             const allUnits = await dispatchedRuns('deploy.yml');
-            const checks = byBot(allChecks);
+            const checks = byBot(allChecks).filter(run => !interactionRun(run));
             const units = byBot(allUnits);
             let heavy = await due(checks, 'release-check', HEAVY_WINDOW_MINUTES, true);
             // A person's run of main's tip covers it too.
@@ -197,6 +203,20 @@ jobs:
                 ref: 'main',
                 inputs: {operation: 'release-check', 'release-branch': 'main', 'expected-head': tip},
               });
+            }
+
+            // Main's nightly full Chromium interaction run (FR31): once a day,
+            // in the 09:00 UTC hour, for the tip. It has its own concurrency
+            // group in ci.yml, so it waits for nothing here.
+            const INTERACTION_HOUR_UTC = 9;
+            const now = new Date(Date.now());
+            if (now.getUTCHours() === INTERACTION_HOUR_UTC) {
+              const today = now.toISOString().slice(0, 10);
+              const ranToday = byBot(allChecks).some(run => interactionRun(run) && run.conclusion !== 'cancelled' && run.created_at.slice(0, 10) === today);
+              if (!ranToday) {
+                core.notice(`Main's nightly full interaction run starts for ${short}.`);
+                await github.rest.actions.createWorkflowDispatch({...context.repo, workflow_id: 'ci.yml', ref: 'main', inputs: {operation: 'interaction-full'}});
+              }
             }
             // A release-check always brings a full unit run of the same commit,
             // so a release cut from it has both: this one, or one a person

@@ -14,6 +14,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {requireNatively} from '../../test-utils/native-require.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const require = requireNatively(import.meta.url);
 /** @type {typeof import('./component.mjs')} */
@@ -108,7 +109,7 @@ function scaffold() {
 }
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-component-links-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-component-links-'));
 });
 
 afterEach(() => {

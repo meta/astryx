@@ -22,14 +22,13 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  BUSY_PROOF_LOOKAROUND_MS,
   castStoryboard,
   animationStoryboard,
   armHold,
   blockMainThread,
-  busyWindowProof,
   compareCurve,
   cubicBezier,
-  controlClock,
   countBetween,
   advanceFrozenPage,
   drag,
@@ -55,11 +54,16 @@ import {
   trackControl,
   trackMarker,
   waitForRest,
-  watchAnimations,
   withStorybook,
   writeEvidence,
+  pageTimesOnControls,
+  pooledBusyProof,
+  FrameStarvationError,
+  trackBrightness,
+  type BusyRun,
   type CastFrame,
   type TouchDriver,
+  type TrackedFrame,
   CONTROL_SIDE,
   holdInputUntil,
   LiftPlacementError,
@@ -68,6 +72,30 @@ import {
 import {BROWSER_CLICK_WAIT_MS} from '../../utils/browserClickWait';
 import {CLICK_GUARD_WINDOW_MS} from '../../utils/clickGuard';
 import {PROMOTION_LINGER_MS} from '../../motion/animator';
+
+import {WEBKIT_LATE_STAMPS} from './Switch.webkitLateStamps.fixture';
+
+/** How close to its end colour the fade is when its block ends: the cast's noise, red units. */
+const FADE_SETTLED = 6;
+/** Where judging the fade stops, red units from its end (see its proof). */
+const FADE_TAIL = 16;
+/** The track-colour proof's pool (`pooledBusyProof`) options. */
+const FADE_PROOF = {
+  axis: 'x',
+  settledWithin: FADE_TAIL,
+  minRunFrames: 2,
+  minJudgedRuns: 2,
+} as const;
+/**
+ * How long the toggle proof blocks the main thread, ms. The travel rests
+ * about 330 ms into the block, so its last frames in the block show it at rest.
+ */
+const TOGGLE_BLOCK_MS = 400;
+/**
+ * Where judging the toggle's travel stops, px from rest: the harness's
+ * two-step tail rule on the sub-pixel read's 0.05 px steps (see its proof).
+ */
+const TOGGLE_TAIL = 0.4;
 
 const storybook = withStorybook(test);
 
@@ -2204,25 +2232,96 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
    */
   const WHOLE_MARKER_PX = Math.ceil((MARKER_PX * THUMB_OFF) / THUMB_ON) - 2;
 
-  /** How long each busy-window control takes to cross and come back, ms. */
-  const CONTROL_CYCLE_MS = 800;
-
   /** One 60 Hz frame, ms. */
   const FRAME_60_MS = 1000 / 60;
 
   /**
-   * The lift's turn back of the thumb, page ms. `call` is when it was made,
-   * and `inLiftTask` whether the lift's own task made it. `commit` is when the
-   * page's next frame began to run. `release` is when the release's travel
-   * came, if before that frame. `frames` are its keyframes, `[ms, x px from
-   * the on side's rest]`.
+   * A translate curve of the thumb, page ms. `made` is when it was made,
+   * `start` when the browser started it, and `end` when it stopped. `frames`
+   * are its keyframes, `[ms, x px from the rest of the side the switch was
+   * on]`.
    */
-  interface Retarget {
-    call: number;
-    inLiftTask: boolean;
-    commit: number | null;
-    release: number | null;
+  interface ThumbCurve {
+    made: number;
+    start: number | null;
+    end: number | null;
     frames: [number, number][];
+  }
+
+  /** The thumb's curves, and when the page saw the second lift, page ms. */
+  interface ThumbRecord {
+    armed: boolean;
+    lift: number | null;
+    curves: ThumbCurve[];
+  }
+
+  /** A critically damped spring fitted to a curve's keyframes, x in px. */
+  interface SpringFit {
+    start: number;
+    residual: number;
+    x(at: number): number;
+    v(at: number): number;
+  }
+
+  /** A frame that no curve the page made shows at that frame's time. */
+  class UnprescribedFrameError extends Error {
+    override name = 'UnprescribedFrameError';
+  }
+
+  /** A curve's keyframes, `[ms, x]`, at `ms`, as the browser plays them. */
+  function keyframeAt(frames: number[][], ms: number): number {
+    if (ms <= frames[0][0]) {
+      return frames[0][1];
+    }
+    for (let i = 1; i < frames.length; i++) {
+      const [[m0, x0], [m1, x1]] = [frames[i - 1], frames[i]];
+      if (ms <= m1) {
+        return m1 > m0 ? x0 + ((x1 - x0) * (ms - m0)) / (m1 - m0) : x1;
+      }
+    }
+    return frames[frames.length - 1][1];
+  }
+
+  /**
+   * Fits `spring` (critically damped) toward `target` to `frames`, timed from
+   * `start`, page ms. x − target = (a + b·t)·e^(−ωt) is linear in a and b.
+   */
+  function fitSpring(
+    frames: number[][],
+    spring: {response: number},
+    target: number,
+    start: number,
+  ): SpringFit {
+    const omega = (2 * Math.PI) / spring.response;
+    let [s11, s12, s22, y1, y2] = [0, 0, 0, 0, 0];
+    for (const [ms, x] of frames) {
+      const t = ms / 1000;
+      const e = Math.exp(-omega * t);
+      s11 += e * e;
+      s12 += t * e * e;
+      s22 += t * t * e * e;
+      y1 += e * (x - target);
+      y2 += t * e * (x - target);
+    }
+    const det = s11 * s22 - s12 * s12;
+    const a = (y1 * s22 - y2 * s12) / det;
+    const b = (s11 * y2 - s12 * y1) / det;
+    const x = (at: number) => {
+      const t = Math.max(0, at - start) / 1000;
+      return target + (a + b * t) * Math.exp(-omega * t);
+    };
+    const v = (at: number) => {
+      const t = Math.max(0, at - start) / 1000;
+      return (b - omega * (a + b * t)) * Math.exp(-omega * t);
+    };
+    return {
+      start,
+      x,
+      v,
+      residual: Math.max(
+        ...frames.map(([ms, value]) => Math.abs(x(start + ms) - value)),
+      ),
+    };
   }
 
   /** How long after the thaw the page handles the second lift, ms. */
@@ -2260,29 +2359,10 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     castFrames: Parameters<typeof trackMarker>[1],
     starts: [number, number],
   ): Promise<ClockedFrame[]> {
-    const readers = [
-      {
-        clock: controlClock(await trackControl(page, castFrames)),
-        origin: starts[0],
-      },
-      {
-        clock: controlClock(
-          await trackControl(page, castFrames, {ahead: true}),
-        ),
-        origin: starts[1],
-      },
-    ];
-    const pageTime = (stamp: number): number | null => {
-      for (const {clock, origin} of readers) {
-        const ms = clock.get(stamp);
-        if (ms != null) {
-          // The stamp only picks the control's cycle.
-          const cycles = Math.round((stamp - origin - ms) / CONTROL_CYCLE_MS);
-          return origin + ms + cycles * CONTROL_CYCLE_MS;
-        }
-      }
-      return null;
-    };
+    const pageTime = pageTimesOnControls(await trackControl(page, castFrames), {
+      ahead: await trackControl(page, castFrames, {ahead: true}),
+      controlStarts: starts,
+    });
     const tracked = await trackMarker(page, castFrames);
     const shown = tracked.filter(
       (f): f is typeof f & {box: NonNullable<typeof f.box>} =>
@@ -2298,7 +2378,7 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
         dropsBefore += 1;
         continue;
       }
-      const at = pageTime(f.t);
+      const at = pageTime.get(f.t);
       if (at != null) {
         clocked.push([at, f.box.x + f.box.width / 2, dropsBefore]);
         dropsBefore = 0;
@@ -2329,7 +2409,7 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
       );
   }
 
-  test("P14 · a second tap whose lift the page handles 100 ms after the thaw turns the thumb back on its tracking spring; only the frame that shows a late commit may skip, by the curves' gap (spec:AST-094 FR6)", async ({
+  test('P14 · a second tap whose lift the page handles 100 ms after the thaw turns the thumb back from where the screen stands, and every frame shows a curve the page made (spec:AST-094 FR6)', async ({
     page,
     browserName,
   }) => {
@@ -2337,58 +2417,63 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
       browserName !== 'chromium',
       'screencast frame evidence is Chromium-only in Playwright (WebKit: checked on the iOS simulator instead)',
     );
-    // The page notes the lift's turn back: the thumb's first translate
-    // curve after the second lift. It notes whether the lift's own task made
-    // it, when the page's next frame began to run, and the curve's keyframes.
-    // Until that frame commits it, the screen keeps the travel it replaces
-    // (spec:AST-094 FR6).
+    // The page notes every translate curve of the thumb: when it was made,
+    // when the browser started it, and its keyframes. It notes the second
+    // lift too. The marks use the page's clocks from before the freeze and the
+    // timer gate replaced them, so they read real time from `origin`.
     await page.addInitScript(() => {
       const animate = Element.prototype.animate;
+      const startTime = Object.getOwnPropertyDescriptor(
+        Animation.prototype,
+        'startTime',
+      );
+      const startOf = startTime?.get;
+      // A start the page sets is noted when it is set: a curve can end before
+      // a later frame reads it.
+      const recorded = new WeakMap<Animation, ThumbCurve>();
+      if (startTime?.get != null && startTime.set != null) {
+        const {get, set} = startTime;
+        Object.defineProperty(Animation.prototype, 'startTime', {
+          configurable: true,
+          get(this: Animation): number | null {
+            return get.call(this) as number | null;
+          },
+          set(this: Animation, value: number | null) {
+            set.call(this, value);
+            const curve = recorded.get(this);
+            if (curve != null && value != null) {
+              curve.start = value;
+            }
+          },
+        });
+      }
       const now = performance.now.bind(performance);
       const frame = requestAnimationFrame.bind(window);
-      const later = setTimeout.bind(window);
-      const w = window as unknown as {__retarget?: Retarget | null};
-      let lifted = false;
-      let liftTask = false;
+      const w = window as unknown as {__thumb?: ThumbRecord};
+      const record: ThumbRecord = {armed: false, lift: null, curves: []};
+      w.__thumb = record;
       const onLift = () => {
-        if (w.__retarget !== null || liftTask) {
-          return;
+        if (record.armed && record.lift == null) {
+          record.lift = now();
         }
-        lifted = true;
-        liftTask = true;
-        // A task queued here runs once the lift's own task ends.
-        later(() => {
-          liftTask = false;
-        }, 0);
       };
       addEventListener('pointerup', onLift, {capture: true, passive: true});
       addEventListener('touchend', onLift, {capture: true, passive: true});
       Element.prototype.animate = function (keyframes, options) {
         const animation = animate.call(this, keyframes, options);
         if (
-          !lifted ||
           !this.classList.contains('astryx-switch-thumb') ||
           !Array.isArray(keyframes) ||
           !keyframes.some(k => 'translate' in k)
         ) {
           return animation;
         }
-        const turned = w.__retarget;
-        if (turned != null) {
-          // The release's travel, if it comes before the frame that commits
-          // the turn back.
-          if (turned.commit == null && turned.release == null) {
-            turned.release = now();
-          }
-          return animation;
-        }
         const effect = animation.effect as KeyframeEffect;
         const duration = Number(effect.getTiming().duration);
-        const retarget: Retarget = {
-          call: now(),
-          inLiftTask: liftTask,
-          commit: null,
-          release: null,
+        const curve: ThumbCurve = {
+          made: now(),
+          start: null,
+          end: null,
           frames: effect
             .getKeyframes()
             .map(k => [
@@ -2396,10 +2481,32 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
               Number.parseFloat(String(k.translate)),
             ]),
         };
-        w.__retarget = retarget;
-        frame(() => {
-          retarget.commit = now();
-        });
+        record.curves.push(curve);
+        recorded.set(animation, curve);
+        const readStart = (left: number) =>
+          frame(() => {
+            const at = startOf?.call(animation);
+            if (at != null) {
+              curve.start = Number(at);
+            } else if (left > 0) {
+              readStart(left - 1);
+            }
+          });
+        readStart(60);
+        animation.ready.then(
+          () => {
+            const at = startOf?.call(animation);
+            if (at != null) {
+              curve.start ??= Number(at);
+            }
+          },
+          () => {},
+        );
+        const ended = () => {
+          curve.end ??= now();
+        };
+        animation.addEventListener('cancel', ended);
+        animation.addEventListener('finish', ended);
         return animation;
       };
     });
@@ -2431,7 +2538,10 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     const second = await driver.press(center);
     const hold = await holdInputUntil(page, {afterResumeMs: LATE_LIFT_MS});
     await page.evaluate(() => {
-      (window as unknown as {__retarget?: Retarget | null}).__retarget = null;
+      const record = (window as unknown as {__thumb?: ThumbRecord}).__thumb;
+      if (record != null) {
+        record.armed = true;
+      }
     });
     const beforeThaw = Date.now();
     await thawPage(page);
@@ -2502,132 +2612,162 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
         where: frame => frame.t >= movedAt - FRAME_60_MS,
       },
     );
-    // The lift is a drag step of its own. It turns the running travel back:
-    // a retarget, on the model's clock (spec:AST-094 FR6).
-    const retarget = await page.evaluate(
-      () => (window as unknown as {__retarget?: Retarget | null}).__retarget,
+    // A retarget starts at the frame that commits it, from the value on
+    // screen there (spec:AST-094 FR6). The proof reads the curves the page
+    // made and checks every presented frame against them.
+    const thumbRecord = await page.evaluate(
+      () => (window as unknown as {__thumb?: ThumbRecord}).__thumb,
     );
-    if (retarget?.commit == null) {
+    if (thumbRecord?.lift == null) {
+      throw new Error('the page saw no second lift');
+    }
+    const liftMark = thumbRecord.lift;
+    const travelCurve = thumbRecord.curves
+      .filter(curve => curve.made < liftMark && curve.start != null)
+      .at(-1);
+    if (travelCurve?.start == null) {
+      throw new Error('the travel has no started curve');
+    }
+    const after = thumbRecord.curves.filter(curve => curve.made >= liftMark);
+    // The page's marks come after the held lift on the real clock. A mark on
+    // the frozen page clock reads the frozen span earlier.
+    expect(
+      origin + (after[0]?.made ?? Number.POSITIVE_INFINITY),
+      'the first curve after the lift comes after the held lift on the real clock',
+    ).toBeGreaterThan(liftAt - CLOCK_SKEW_MS);
+    const liftPage = liftAt - origin;
+    // A curve read from the rest of the side the switch was on, x px from the
+    // on side's rest at `at`, page ms. Before its start it shows its first
+    // keyframe.
+    interface ShownCurve {
+      start: number;
+      end: number | null;
+      x(at: number): number;
+    }
+    const asShown = (
+      curve: ThumbCurve,
+      startsAt: number,
+      shift: number,
+    ): ShownCurve => {
+      const frames = curve.frames.map(([ms, x]) => [ms, x + shift]);
+      return {
+        start: startsAt,
+        end: curve.end,
+        x: at => keyframeAt(frames, at - startsAt),
+      };
+    };
+    const travelShift =
+      Math.abs(
+        travelCurve.frames[travelCurve.frames.length - 1][1] - TRAVEL_PX,
+      ) < 0.5
+        ? -TRAVEL_PX
+        : 0;
+    const travelFit = fitSpring(
+      travelCurve.frames
+        .filter(([ms]) => ms < 2000)
+        .map(([ms, x]) => [ms, x + travelShift]),
+      TRAVEL,
+      0,
+      travelCurve.start,
+    );
+    expect(travelFit.residual, 'the travel plays TRAVEL').toBeLessThan(0.5);
+    // The curves the browser started after the lift, in the order they were
+    // made. A curve read from the other side's rest takes the reading that
+    // meets the curve before it.
+    const sequence: ShownCurve[] = [
+      asShown(travelCurve, travelCurve.start, travelShift),
+    ];
+    const turns: {curve: ThumbCurve; shift: number}[] = [];
+    for (const curve of after) {
+      if (curve.start == null) {
+        continue;
+      }
+      const startsAt = curve.start;
+      const before = sequence[sequence.length - 1];
+      const shift = [0, -TRAVEL_PX].reduce((a, b) =>
+        Math.abs(curve.frames[0][1] + b - before.x(startsAt)) <
+        Math.abs(curve.frames[0][1] + a - before.x(startsAt))
+          ? b
+          : a,
+      );
+      expect(
+        startsAt,
+        'a curve after the lift starts after the held lift',
+      ).toBeGreaterThan(liftPage - CLOCK_SKEW_MS);
+      sequence.push(asShown(curve, startsAt, shift));
+      turns.push({curve, shift});
+    }
+    if (turns.length === 0) {
       throw new Error('the late lift sent the travel back on no new curve');
     }
-    // Any delay to the commit is then the browser's, which the record allows.
-    expect(
-      retarget.inLiftTask,
-      'the lift turns the thumb back in the task that handles it',
-    ).toBe(true);
-    // The page took its marks with its clocks from before the freeze and the
-    // timer gate. So they read real time from `origin`. The turn back comes
-    // after the held lift, in its task. A mark on the frozen page clock reads
-    // the frozen span earlier.
-    const madeAt = origin + retarget.call;
-    expect(
-      madeAt,
-      'the turn back comes after the held lift on the real clock',
-    ).toBeGreaterThan(liftAt - CLOCK_SKEW_MS);
-    // The curves the record prescribes, x in px from the on side's rest. The
-    // travel plays TRAVEL from the off side's rest. The lift is a drag step of
-    // its own: it turns the thumb back on TRACKING, from where it stood, at
-    // the travel's speed there.
-    const travelX = (s: number) =>
-      -TRAVEL_PX * (1 - springStep(TRAVEL, s * 1000));
-    const speedAt = (x: (s: number) => number, s: number) =>
-      (x(s + 0.0005) - x(s - 0.0005)) / 0.001;
-    const towardOff =
-      (spring: typeof TRAVEL, from: number, speed: number) => (s: number) =>
-        from +
-        (-TRAVEL_PX - from) *
-          springStep(
-            {...spring, initialVelocity: speed / (-TRAVEL_PX - from)},
-            s * 1000,
-          );
-    const turnsFrom = retarget.frames[0][1];
-    let [early, late] = [0, 2];
-    for (let i = 0; i < 50; i++) {
-      const mid = (early + late) / 2;
-      if (travelX(mid) < turnsFrom) {
-        early = mid;
-      } else {
-        late = mid;
+    // Each presented frame shows the newest curve the compositor has, at the
+    // frame's own time. That is the travel, a curve started after the lift,
+    // or the off side's rest after the last one ends. The curves replace one
+    // another only in order.
+    const lastEnd = sequence[sequence.length - 1].end;
+    const showsAt: number[] = [];
+    let index = 0;
+    for (const [t, x] of samples) {
+      const at = t - origin;
+      const onX = x - rest - TRAVEL_PX;
+      const valueOf = (i: number) =>
+        i < sequence.length ? sequence[i].x(at) : -TRAVEL_PX;
+      const candidates = [...Array(sequence.length + 1).keys()].filter(
+        i =>
+          i >= index &&
+          (i === 0 ||
+            (i === sequence.length
+              ? lastEnd != null && at >= lastEnd - FRAME_60_MS
+              : sequence[i].start <= at + 1)),
+      );
+      const match = candidates.find(i => Math.abs(valueOf(i) - onX) <= 1);
+      if (match == null) {
+        throw new UnprescribedFrameError(
+          `the frame at ${at.toFixed(1)} ms shows ${onX} px, which no curve the page made shows then: ${candidates.map(i => valueOf(i).toFixed(2)).join(', ')} px`,
+        );
       }
+      index = match;
+      showsAt.push(match);
     }
-    const turn = towardOff(TRACKING, turnsFrom, speedAt(travelX, late));
-    const strays = Math.max(
-      ...retarget.frames.map(([ms, x]) => Math.abs(x - turn(ms / 1000))),
-    );
-    expect(
-      strays,
-      'the lift turns the thumb back on the tracking spring, from where it stood, at its speed',
-    ).toBeLessThan(0.5);
-    // steps[i] is the step into samples[i + 1]. Until the commit, the screen
-    // shows the travel. The frame that shows the commit is the first, from
-    // one frame before the page's, that falls more than 1 px behind it. A
-    // starved compositor can show it some frames late. The commit lands no
-    // later than that frame.
-    const commitAt = origin + retarget.commit;
-    const steps = frameSteps(samples);
-    const shows =
-      samples.findIndex(
-        ([t, x]) =>
-          t >= commitAt - FRAME_60_MS &&
-          x - rest < TRAVEL_PX + travelX(late + (t - madeAt) / 1000) - 1,
-      ) - 1;
-    const shownAt = shows >= 0 ? samples[shows + 1][0] : commitAt;
-    const delay = (shownAt - madeAt) / 1000;
-    const travelAtCommit = travelX(late + delay);
-    // The commit shows the newest curve made before it. When the browser's
-    // click comes first, the release's travel replaces the turn back. It plays
-    // TRAVEL toward the off side's rest, from the turn back's place and speed.
-    let shownAtCommit = turn(delay);
-    if (retarget.release != null) {
-      const released = (retarget.release - retarget.call) / 1000;
-      shownAtCommit = towardOff(
-        TRAVEL,
-        turn(released),
-        speedAt(turn, released),
-      )(delay - released);
-    }
-    // How far apart the two curves are when the screen shows the commit.
-    const apartPx = Math.abs(travelAtCommit - shownAtCommit);
-    // The farthest the turn back can carry the thumb: from where the travel
-    // stood at the commit, at its speed there.
-    const carry = towardOff(
-      TRACKING,
-      travelAtCommit,
-      speedAt(travelX, late + delay),
-    );
-    let reachPx = travelAtCommit;
-    for (let t = 0; t < 1; t += 0.001) {
-      reachPx = Math.max(reachPx, carry(t));
-    }
-    // A commit that lands late shows the turn back that far in. So the frame
-    // that shows it may step by how far apart the two curves are then, plus
-    // 4 px. Every other frame moves the thumb less than 4 px from the one
-    // before, on the compositor's clock.
-    const farthest = Math.max(...samples.map(([, x]) => x)) - rest;
-    const reach = TRAVEL_PX + reachPx;
-    test.info().annotations.push({
-      type: 'late retarget',
-      description: `committed ${(retarget.commit - retarget.call).toFixed(1)} ms after its call, shown ${(delay * 1000).toFixed(1)} ms after it${retarget.release == null ? '' : `, released ${(retarget.release - retarget.call).toFixed(1)} ms after it`}; both curves ${apartPx.toFixed(2)} px apart; the frame that shows it steps ${shows < 0 ? 'none' : steps[shows].toFixed(2)} px; the thumb reached ${farthest} px of ${reach.toFixed(2)} px`,
-    });
-    expect(
-      Math.max(...steps.filter((_, i) => i !== shows)),
-      JSON.stringify(samples),
-    ).toBeLessThan(4);
-    if (shows >= 0) {
+    // Each turn back that the frames show starts within 1 px of the newest
+    // curve the browser started before it. It plays TRACKING or TRAVEL, to
+    // the off side.
+    for (let i = 1; i < sequence.length; i++) {
+      if (!showsAt.includes(i)) {
+        continue;
+      }
       expect(
-        steps[shows],
-        `the frame that shows the turn back, ${(delay * 1000).toFixed(1)} ms after its call, both curves ${apartPx.toFixed(2)} px apart: ${JSON.stringify(samples)}`,
-      ).toBeLessThan(apartPx + 4);
+        Math.abs(
+          sequence[i].x(sequence[i].start) -
+            sequence[i - 1].x(sequence[i].start),
+        ),
+        'a turn back starts where the screen stood',
+      ).toBeLessThanOrEqual(1);
+      const {curve, shift} = turns[i - 1];
+      const frames = curve.frames
+        .filter(([ms]) => ms < 2000)
+        .map(([ms, x]) => [ms, x + shift]);
+      expect(
+        Math.abs(frames[frames.length - 1][1] + TRAVEL_PX),
+        'a curve after the lift turns the thumb back to the off side',
+      ).toBeLessThan(0.5);
+      const residual = Math.min(
+        ...[TRACKING, TRAVEL].map(
+          spring =>
+            fitSpring(frames, spring, -TRAVEL_PX, sequence[i].start).residual,
+        ),
+      );
+      expect(residual, 'the turn back plays TRACKING or TRAVEL').toBeLessThan(
+        0.5,
+      );
     }
-    // It turned around mid-travel. The screen keeps the travel until the
-    // retarget commits, and then turns back (spec:AST-094 FR6). The thumb
-    // never shows past the farthest a turn back carries it. The frames read x
-    // from the off side's rest, TRAVEL_PX before the on side's.
+    const farthest = Math.max(...samples.map(([, x]) => x)) - rest;
+    test.info().annotations.push({
+      type: 'turn back',
+      description: `${turns.length} curve(s) started after the lift; the thumb reached ${farthest} px; the largest frame step ${Math.max(...frameSteps(samples)).toFixed(2)} px`,
+    });
+    // It turned around mid-travel.
     expect(farthest).toBeGreaterThan(1);
-    expect(
-      farthest,
-      `the thumb reached ${farthest} px; a turn back at the commit reaches ${reach.toFixed(2)} px`,
-    ).toBeLessThanOrEqual(reach + 1);
   });
 
   test('a tap whose first frame the page commits late (its main thread busy for 100 ms after the lift) starts the travel from rest on that frame, not partway into its curve', async ({
@@ -2777,136 +2917,174 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
   }, testInfo) => {
     test.skip(
       browserName !== 'chromium',
-      'screencast frame evidence is Chromium-only in Playwright (WebKit: checked on the iOS simulator instead)',
+      "WebKit's JPEG cast holds color in 2 by 2 pixel blocks, so it cannot read the thumb's sub-pixel travel",
     );
-    const {driver, input, thumb, center} = await openSwitch(page);
-    await markElement(thumb, {size: 6, inset: 2});
-    // The block starts in the page once the travel is one frame into its
-    // curve, from a task queued in that frame. So it holds the same part of
-    // the travel whatever the page's own timing. The lift starts at
-    // touch-down, and a round trip from here would start the block late.
-    await page.evaluate(() => {
-      const w = window as unknown as {
-        __block?: {from: number; to: number; spins: number};
-        __travel?: {from: number; to: number};
-      };
-      const input = document.querySelector('#storybook-root [role="switch"]')!;
-      const thumb = document.querySelector<HTMLElement>(
-        '#storybook-root .astryx-switch-thumb',
-      )!;
-      const onScreen = () =>
-        thumb
-          .getAnimations()
-          .filter(
-            a =>
-              a.playState === 'running' &&
-              !a.pending &&
-              Number(a.currentTime ?? 0) >= 16 &&
-              (a.effect as KeyframeEffect)
-                .getKeyframes()
-                .some(k => 'translate' in k),
-          )
-          .at(-1);
-      const whenOnScreen = (run: () => void) => {
-        const tick = () => {
-          if (onScreen() == null) {
-            requestAnimationFrame(tick);
-          } else {
-            setTimeout(run, 0);
-          }
-        };
-        requestAnimationFrame(tick);
-      };
-      input.addEventListener(
-        'change',
-        () =>
-          whenOnScreen(() => {
-            const travel = onScreen();
-            if (travel?.startTime != null) {
-              const effect = travel.effect as KeyframeEffect;
-              const from = performance.timeOrigin + Number(travel.startTime);
-              const ends = effect
-                .getKeyframes()
-                .map(k => k.computedOffset)
-                .filter(o => o < 1);
-              w.__travel = {
-                from,
-                to:
-                  from +
-                  Number(effect.getComputedTiming().activeDuration) *
-                    Math.max(...ends),
-              };
-            }
-            const from = performance.timeOrigin + performance.now();
-            const end = performance.now() + 700;
-            let spins = 0;
-            while (performance.now() < end) {
-              spins++;
-            }
-            w.__block = {
-              from,
-              to: performance.timeOrigin + performance.now(),
-              spins,
-            };
-          }),
-        {once: true},
+    const {driver, input, thumb, center} = await openSwitch(page, undefined, {
+      belowControls: true,
+    });
+    // The marker sits on the thumb's transform origin, its centre, at either
+    // width (16 px off, 20 px on). So neither the lift nor the width change at
+    // the value change moves the marker's centre, and the proof reads that.
+    await markElement(thumb, {size: 6});
+    await page.addStyleTag({
+      content:
+        '#storybook-root .astryx-switch-thumb [data-harness-marker-chip] { left: calc(50% - 3px) !important; top: calc(50% - 3px) !important }',
+    });
+    // The harness's busy-window control: a box the compositor moves along the
+    // top edge, in the same screencast. Each travel is judged against what the
+    // compositor presented in its block, not against a frame rate. Under a CPU
+    // quota the compositor presents fewer frames in a block, the control's too.
+    const control = await startBusyControl(page);
+    // A travel lasts 0.3 s, so one block leaves few frames to judge. The proof
+    // pools four runs, on and off twice, and judges them as one longer window.
+    // On a loaded machine a run can be starved; the others still count, and
+    // each direction keeps at least one judged run.
+    const runs: BusyRun[] = [];
+    const evidence: unknown[] = [];
+    const directions = [true, false, true, false];
+    const landings: {inBlock: boolean; gap: number}[] = [];
+    for (const on of directions) {
+      const cast = await startScreencast(page);
+      // The page waits for the travel one frame into its curve, not for the
+      // lift's scale, and blocks from a task queued in that frame. So the
+      // block holds the same part of the travel whatever the page's timing.
+      const held = blockMainThread(page, TOGGLE_BLOCK_MS, {
+        during: thumb,
+        property: 'translate',
+      });
+      await driver.play(tap(center, {holdMs: 50}));
+      if (on) {
+        await expect(input).toBeChecked();
+      } else {
+        await expect(input).not.toBeChecked();
+      }
+      const block = await held;
+      const travel = block.animation;
+      if (travel == null) {
+        throw new Error('the block caught no forward travel');
+      }
+      // The landing compares the block's last frame with one after it. The
+      // busy control keeps the cast drawing. Frames reach the test late under
+      // load, so wait 150 ms and two more frames, for a second at most.
+      const seen = cast.frameCount();
+      await page.waitForTimeout(150);
+      for (
+        let waited = 150;
+        cast.frameCount() < seen + 2 && waited < 1000;
+        waited += 16
+      ) {
+        await page.waitForTimeout(16);
+      }
+      const castFrames = await cast.stop();
+      // Only the frames the proof reads are decoded.
+      const read = castFrames.filter(
+        f =>
+          f.t >= block.from - BUSY_PROOF_LOOKAROUND_MS &&
+          f.t <= block.to + BUSY_PROOF_LOOKAROUND_MS,
       );
+      const tracked = (await trackMarker(page, read, {subpixel: true})).map(
+        f =>
+          f.box == null
+            ? f
+            : {...f, box: {...f.box, x: f.box.x + f.box.width / 2}},
+      );
+      runs.push({
+        tracked,
+        control: await trackControl(page, read),
+        window: {from: block.from, to: Math.min(block.to, travel.to)},
+      });
+      evidence.push({
+        on,
+        block,
+        travel,
+        frames: tracked.map(f => ({
+          t: +(f.t - block.from).toFixed(1),
+          x: f.box?.x ?? null,
+          w: f.box?.width ?? null,
+        })),
+      });
+      // It lands while the thread is still blocked: the last frame the block
+      // presented shows the thumb at the rest it keeps.
+      const shown = tracked.filter(f => f.box != null);
+      const rest = shown.at(-1);
+      if (rest?.box == null || rest.t <= block.to) {
+        throw new FrameStarvationError({
+          during: 'the thumb rested after the block',
+          frames: 0,
+          min: 1,
+          longestGapMs: Math.max(
+            0,
+            ...read.slice(1).map((frame, i) => frame.t - read[i].t),
+          ),
+        });
+      }
+      const last = shown.filter(f => f.t < block.to).at(-1);
+      landings.push({
+        inBlock: (last?.t ?? 0) > block.from,
+        gap: Math.abs((last?.box?.x ?? 0) - rest.box.x),
+      });
+    }
+    await control.remove();
+    // The read places the marker under a pixel, in 0.05 px steps. The
+    // harness's tail rule stops judging once the travel moves under two steps
+    // a frame. On UISwitch's 0.3 s spring, the thumb's 16 px travel does so
+    // 0.39 px from rest, 268 ms in. One presented frame cannot show the travel moving,
+    // so a run whose control moved on fewer than two frames is too little to
+    // judge. At least two runs must count.
+    const proof = pooledBusyProof(runs, {
+      axis: 'x',
+      settledWithin: TOGGLE_TAIL,
+      minRunFrames: 2,
+      minJudgedRuns: 2,
     });
-    const cast = await startScreencast(page);
-    await driver.play(tap(center, {holdMs: 50}));
-    await expect(input).toBeChecked();
-    await page.waitForFunction(
-      () => (window as unknown as {__block?: unknown}).__block != null,
-    );
-    const {block, travel} = await page.evaluate(() => {
-      const w = window as unknown as {
-        __block: {from: number; to: number; spins: number};
-        __travel: {from: number; to: number};
-      };
-      return {block: w.__block, travel: w.__travel};
-    });
-    expect(travel, 'the travel was running when the block began').toBeDefined();
-    await page.waitForTimeout(150);
-    const castFrames = await cast.stop();
-    const tracked = await trackMarker(page, castFrames);
-    const proof = busyWindowProof(
-      tracked,
-      {from: block.from, to: Math.min(block.to, travel.to)},
-      // The screencast places the marker to the whole px. On UISwitch's 0.3 s
-      // spring, the 13 px travel moves under 1 px per frame once 4.3 px remain
-      // (110 ms). From there a frame can show no change while the thumb moves,
-      // so it is judged until then.
-      {axis: 'x', settledWithin: 4.5},
-    );
     await writeEvidence(
       'busy-main-thread/switch-toggle',
       {
         [`${testInfo.project.name}.json`]: JSON.stringify(
-          {
-            block,
-            travel,
-            proof,
-            frames: tracked.map(f => ({
-              t: +(f.t - block.from).toFixed(1),
-              x: f.box?.x ?? null,
-              w: f.box?.width ?? null,
-            })),
-          },
+          {runs: evidence, summary: proof.summary},
           null,
           1,
         ),
       },
       testInfo,
     );
-    expect(proof.monotonic).toBe(true);
-    // The travel is 13 px: past its first half it moves less than a
-    // screencast pixel per frame, so not every frame changes...
-    expect(proof.changed).toBeGreaterThanOrEqual(Math.floor(proof.frames / 2));
-    // ...but most of it happened while the main thread was held.
-    const held = tracked.filter(
-      f => f.t >= block.from && f.t <= block.to && f.box != null,
-    );
-    expect(held.at(-1)!.box!.x - held[0].box!.x).toBeGreaterThanOrEqual(8);
+    test.info().annotations.push({
+      type: 'busy window',
+      description: proof.summary,
+    });
+    // The travel moves on every frame the control moves on, and in each run
+    // it stalls no longer than the control.
+    expect(proof.verdict.failures, proof.summary).toEqual([]);
+    // The proof claims the travel both ways, so a run each way is judged.
+    const judged = directions.filter((_, i) => proof.judged[i]);
+    expect(
+      judged.includes(true) && judged.includes(false),
+      `the judged runs cover both directions. ${proof.summary}`,
+    ).toBe(true);
+    proof.runs.forEach((run, i) => {
+      // A run the pool leaves out is named in the summary and never passes.
+      if (!proof.judged[i] || run == null) {
+        return;
+      }
+      // It never steps back...
+      expect(run.monotonic, `run ${i + 1}: ${run.summary}`).toBe(true);
+      // ...it lands inside its block...
+      expect(
+        landings[i].inBlock,
+        `run ${i + 1}: the block presented a frame. ${run.summary}`,
+      ).toBe(true);
+      expect(
+        landings[i].gap,
+        `run ${i + 1}: the block's last frame shows the thumb ${landings[i].gap.toFixed(2)} px from its rest, past the ${TOGGLE_TAIL} px tail. ${run.summary}`,
+      ).toBeLessThan(TOGGLE_TAIL);
+      // ...and each run's own block shows it at a new position.
+      const read = run.control;
+      const moved = (read?.movedWith ?? 0) - (read?.belowStep ?? 0);
+      expect(
+        moved,
+        `run ${i + 1}: the travel showed a new position on ${moved} frames in its block. ${run.summary}`,
+      ).toBeGreaterThanOrEqual(1);
+    });
   });
 
   test('P10 · the touch press keeps fading out on every frame while the main thread is blocked', async ({
@@ -3055,17 +3233,19 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
 
   test('P10 · the track colour keeps fading in while the main thread is blocked', async ({
     page,
-    browserName,
   }, testInfo) => {
-    test.skip(
-      browserName !== 'chromium',
-      'screencast frame evidence is Chromium-only in Playwright (WebKit: checked on the iOS simulator instead)',
-    );
-    const {driver, input, onLayer, center} = await openSwitch(page);
-    // Hide the thumb (its animations still run) so the whole track shows
-    // its colour.
+    const {
+      driver,
+      input,
+      center,
+      onLayer: track,
+    } = await openSwitch(page, undefined, {belowControls: true});
+    // Hide the thumb and the press layer (their animations still run), so
+    // the probe reads the colour fade alone. The track then rests before the
+    // fade, and a fade that reaches the screen late is judged from there.
     await page.addStyleTag({
-      content: '#storybook-root .astryx-switch-thumb { visibility: hidden }',
+      content:
+        '#storybook-root .astryx-switch-thumb, #storybook-root .astryx-switch::before { visibility: hidden }',
     });
     const box = await page
       .locator('#storybook-root .astryx-switch')
@@ -3074,45 +3254,217 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     if (box == null) {
       throw new Error('no track');
     }
-    const cast = await startScreencast(page);
-    const watch = await watchAnimations(onLayer);
-    await driver.play(tap(center, {holdMs: 50}));
-    await expect(input).toBeChecked();
-    await watch.started({minProgressMs: 16});
-    const block = await blockMainThread(page, 700);
-    await page.waitForTimeout(150);
-    const castFrames = await cast.stop();
-    const luma = await sampleLuma(page, castFrames, {
-      x: box.x + 4,
-      y: box.y + 4,
-      width: box.width - 8,
-      height: box.height - 8,
-    });
+    // The track's colour on a flat part of it, away from its rounded ends:
+    // JPEG noise on an edge reads as change.
+    const probe = {x: box.x + box.width / 2 - 4, y: box.y + box.height / 2 - 4};
+    const starts = await startControls(page);
+    // A fade gives few frames in one block. The proof pools two runs, in and
+    // then out, and judges them as one longer window.
+    const runs: BusyRun[] = [];
+    const evidence: unknown[] = [];
+    const landings: {inBlock: boolean; gap: number}[] = [];
+    for (const on of [true, false]) {
+      const cast = await startScreencast(page);
+      // The page waits for the track's own fade one frame into its curve, and
+      // blocks from a task queued in that frame. A round trip from here would
+      // start it late on a loaded runner, after most of the fade.
+      const held = blockMainThread(page, 700, {
+        during: track,
+        pseudoElement: '::after',
+      });
+      await driver.play(tap(center, {holdMs: 50}));
+      if (on) {
+        await expect(input).toBeChecked();
+      } else {
+        await expect(input).not.toBeChecked();
+      }
+      const block = await held;
+      const fade = block.animation;
+      if (fade == null) {
+        throw new Error('the block caught no forward fade');
+      }
+      // The landing compares the block's last frame with one after it. The
+      // busy control keeps the cast drawing. Frames reach the test late under
+      // load, so wait 150 ms and two more frames, for a second at most.
+      const seen = cast.frameCount();
+      await page.waitForTimeout(150);
+      for (
+        let waited = 150;
+        cast.frameCount() < seen + 2 && waited < 1000;
+        waited += 16
+      ) {
+        await page.waitForTimeout(16);
+      }
+      const castFrames = await cast.stop();
+      // Only the frames the proof reads are decoded.
+      const read = castFrames.filter(
+        f =>
+          f.t >= block.from - BUSY_PROOF_LOOKAROUND_MS &&
+          f.t <= block.to + BUSY_PROOF_LOOKAROUND_MS,
+      );
+      // The red channel's mean in an 8 px square: a scalar on x. With both
+      // controls, a WebKit proof judges each frame at its time on the
+      // controls' clock, at display rate.
+      const control = await trackControl(page, read);
+      const ahead = await trackControl(page, read, {ahead: true});
+      const colour = await trackBrightness(page, read, {...probe, size: 8});
+      runs.push({
+        tracked: colour,
+        control,
+        ahead,
+        controlStarts: starts,
+        window: {from: block.from, to: Math.min(block.to, fade.to)},
+      });
+      // The landing reads each frame at its own time on the controls' clock.
+      // A frame with no reading there is left out of it.
+      const pageTime = pageTimesOnControls(control, {
+        ahead,
+        controlStarts: starts,
+      });
+      const tracked = colour
+        .flatMap(frame => {
+          const at = pageTime.get(frame.t);
+          return at == null ? [] : [{...frame, t: at}];
+        })
+        .sort((a, b) => a.t - b.t);
+      evidence.push({
+        on,
+        block,
+        fade,
+        frames: tracked.map(f => ({
+          t: +(f.t - block.from).toFixed(1),
+          red: +(f.box?.x ?? 0).toFixed(1),
+        })),
+      });
+      // It lands while the thread is still blocked: the last frame the block
+      // presented shows the colour the track keeps.
+      const rest = tracked.at(-1);
+      if (rest?.box == null || rest.t <= block.to) {
+        throw new FrameStarvationError({
+          during: 'the track rested after the block',
+          frames: 0,
+          min: 1,
+          longestGapMs: Math.max(
+            0,
+            ...read.slice(1).map((frame, i) => frame.t - read[i].t),
+          ),
+        });
+      }
+      const last = tracked.filter(f => f.t < block.to).at(-1);
+      landings.push({
+        inBlock: (last?.t ?? 0) > block.from,
+        gap: Math.abs((last?.box?.x ?? 0) - rest.box.x),
+      });
+    }
+    // The harness's tail rule for a curve, on a brightness channel: judging
+    // stops once the fade moves under two levels a frame. A loaded cast can
+    // then show no change between two frames. On the well springs, critically
+    // damped over the track's 166-level red span, that is 16 levels from rest
+    // for wellOn and 9 for wellOff. The pool takes one bound, the larger.
+    const proof = pooledBusyProof(runs, FADE_PROOF);
     await writeEvidence(
       'busy-main-thread/switch-track-colour',
       {
         [`${testInfo.project.name}.json`]: JSON.stringify(
-          {
-            block,
-            frames: luma.map(f => ({
-              t: +(f.t - block.from).toFixed(1),
-              luma: +f.luma.toFixed(1),
-            })),
-          },
+          {runs: evidence, summary: proof.summary},
           null,
           1,
         ),
       },
       testInfo,
     );
-    const off = luma[0].luma;
-    const on = luma.at(-1)!.luma;
-    const held = luma.filter(
-      f => f.t >= block.from + 20 && f.t <= block.to - 20,
-    );
-    expect(held.length).toBeGreaterThan(20);
-    // Most of the fade happened while the main thread was held.
-    expect(held[0].luma - held.at(-1)!.luma).toBeGreaterThan(0.5 * (off - on));
+    test.info().annotations.push({
+      type: 'busy window',
+      description: proof.summary,
+    });
+    // The colour changes on every frame the control moves on, and in each run
+    // it stalls no longer than the control.
+    expect(proof.verdict.failures, proof.summary).toEqual([]);
+    // Each judged run lands inside its block.
+    proof.runs.forEach((run, i) => {
+      if (!proof.judged[i] || run == null) {
+        return;
+      }
+      expect(
+        landings[i].inBlock,
+        `run ${i + 1}: the block presented a frame. ${run.summary}`,
+      ).toBe(true);
+      expect(
+        landings[i].gap,
+        `run ${i + 1}: the block's last frame shows the colour ${landings[i].gap.toFixed(1)} levels from its end. ${run.summary}`,
+      ).toBeLessThan(FADE_SETTLED);
+    });
+    proof.runs.forEach((run, i) => {
+      if (!proof.judged[i] || run == null) {
+        return;
+      }
+      expect(run.monotonic, `run ${i + 1}: ${run.summary}`).toBe(true);
+      const read = run.control;
+      const moved = (read?.movedWith ?? 0) - (read?.belowStep ?? 0);
+      expect(
+        moved,
+        `run ${i + 1}: the colour showed a new value on ${moved} frames in its block. ${run.summary}`,
+      ).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  test("P10 · on two WebKit casts that stamped frames late, the track colour proof judges each frame at its time on the control's clock, at display rate", () => {
+    WEBKIT_LATE_STAMPS.forEach((recorded, cast) => {
+      // Tagged as WebKit's frames, the harness dates them. The cast recorded
+      // one control and not its start, so the harness counts from the origin
+      // its stamps agree with.
+      const runs = (engine?: 'webkit'): BusyRun[] =>
+        recorded.map(run => ({
+          tracked: run.colour.map(([t, red]) => ({
+            t,
+            box: {x: red, y: 0, width: 1, height: 1},
+            pixels: 1,
+            ...(engine == null ? {} : {engine}),
+          })),
+          control: run.control.map(([t, x]) => ({
+            t,
+            box:
+              x == null
+                ? null
+                : {x, y: 0, width: CONTROL_SIDE, height: CONTROL_SIDE},
+            pixels: x == null ? 0 : CONTROL_SIDE * CONTROL_SIDE,
+            ...(engine == null ? {} : {engine}),
+          })),
+          window: run.window,
+        }));
+      // By the cast's stamps, as each run was judged live: it fails.
+      expect(
+        pooledBusyProof(runs(), FADE_PROOF).verdict.failures,
+        `cast ${cast + 1}, by its stamps`,
+      ).not.toEqual([]);
+      // At each frame's own time on the control's clock, every frame kept, it
+      // still fails. A frame drawn 6 to 9 ms after the one before shows no
+      // step of the fade's slow tail.
+      const onReadings = runs().map(run => {
+        const pageTime = pageTimesOnControls(run.control);
+        const timed = (frames: ReadonlyArray<TrackedFrame>): TrackedFrame[] =>
+          frames
+            .flatMap(frame => {
+              const at = pageTime.get(frame.t);
+              return at == null ? [] : [{...frame, t: at}];
+            })
+            .sort((a, b) => a.t - b.t);
+        return {
+          ...run,
+          tracked: timed(run.tracked),
+          control: timed(run.control),
+        };
+      });
+      expect(
+        pooledBusyProof(onReadings, FADE_PROOF).verdict.failures,
+        `cast ${cast + 1}, on the control's clock`,
+      ).not.toEqual([]);
+      const proof = pooledBusyProof(runs('webkit'), FADE_PROOF);
+      expect(
+        proof.verdict.failures,
+        `cast ${cast + 1}, dated by the harness: ${proof.summary}`,
+      ).toEqual([]);
+    });
   });
 
   test('P10 · a change does no Layout or Paint per frame', async ({

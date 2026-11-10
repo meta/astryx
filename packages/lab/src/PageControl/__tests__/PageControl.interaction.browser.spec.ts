@@ -1053,6 +1053,19 @@ test('a windowed control slides one slot 50 ms after the change, on a critically
     });
   }
   expect(startedAt - changedAt).toBeLessThan(120);
+  // A critically damped spring reaches the next slot without passing it. The
+  // slide's own keyframes show that, and a loaded runner cannot change them.
+  const keyXs = curve.xs.map(([, x]) => x);
+  for (let i = 1; i < keyXs.length; i++) {
+    expect(
+      keyXs[i],
+      "the slide's keyframes never turn back",
+    ).toBeLessThanOrEqual(keyXs[i - 1] + 0.01);
+  }
+  expect(
+    Math.min(...keyXs),
+    "the slide's keyframes never pass the next slot",
+  ).toBeGreaterThanOrEqual(-19 * PITCH - 0.01);
   // Monotonic to the next slot, settled within ~0.35 s of starting.
   const xs = trace.filter(s => s.t >= startedAt).map(s => s.x);
   for (let i = 1; i < xs.length; i++) {

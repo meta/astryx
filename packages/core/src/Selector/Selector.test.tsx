@@ -644,6 +644,56 @@ describe('Selector', () => {
     }
   });
 
+  it.each([
+    ['below its anchor', 'marginBlockEnd'],
+    ['already flipped above its anchor', 'marginBlockStart'],
+  ])(
+    "keeps the overlay out of the layer's viewport gutter, the layer %s",
+    async (_, gutterMargin) => {
+      const restoreRects = mockSelectorRects();
+      // The layer keeps a 16 px gutter from the viewport's block end.
+      const realGetComputedStyle = window.getComputedStyle.bind(window);
+      const styleSpy = vi
+        .spyOn(window, 'getComputedStyle')
+        .mockImplementation((element, pseudo) => {
+          const style = realGetComputedStyle(element, pseudo);
+          if (
+            element instanceof HTMLElement &&
+            element.hasAttribute('popover')
+          ) {
+            Object.defineProperty(style, gutterMargin, {value: '16px'});
+          }
+          return style;
+        });
+      const user = userEvent.setup();
+      try {
+        render(
+          <Selector
+            label="Fruit"
+            options={OPTIONS}
+            value="Banana"
+            onChange={() => {}}
+          />,
+        );
+
+        await user.click(screen.getByRole('combobox'));
+        const popover = screen
+          .getByRole('listbox', {hidden: true})
+          .closest('[popover]');
+        // 16 px higher than without the gutter (110 px), so the list ends at
+        // the gutter in the 200 px viewport.
+        await waitFor(() => {
+          expect(popover?.getAttribute('style')).toContain(
+            '--_selector-overlay-margin: min(-126px,',
+          );
+        });
+      } finally {
+        styleSpy.mockRestore();
+        restoreRects();
+      }
+    },
+  );
+
   it('aligns the selected item using untransformed layout geometry', async () => {
     const restoreRects = mockSelectorRects({
       anchor: rect({top: 160, bottom: 192, height: 32}),

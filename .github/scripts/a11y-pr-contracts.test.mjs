@@ -1259,6 +1259,44 @@ describe('repository specs', () => {
     expect(files.length).toBeGreaterThan(100);
   });
 
+  it('runs the reorder-grip pinch spec only for the grips it renders', () => {
+    const file =
+      'packages/lab/src/__tests__/ReorderGripPinchZoom.a11y.chromium.spec.ts';
+    const routing = parseRouting(
+      fs.readFileSync(path.join(root, file), 'utf8'),
+    );
+    const selects = changedPaths =>
+      selectSpecs({
+        specs: [{file, routing}],
+        isPullRequest: true,
+        changedPaths,
+        components: [],
+        title: '',
+      }).length > 0;
+    for (const changed of [
+      'packages/lab/src/ListInput/ListInput.tsx',
+      'packages/lab/src/TransferList/TransferList.tsx',
+      'packages/core/src/List/listReorderEngine.tsx',
+      'packages/core/src/internal/reorder.ts',
+      'packages/core/src/reorderable/createReorderable.ts',
+      'packages/core/src/gestures/GestureHost.ts',
+      'packages/core/src/gestures/LongPressGestureRecognizer.ts',
+      'packages/core/src/motion/uikit/reorder.ts',
+      'apps/storybook/stories/TransferListA11y.stories.tsx',
+      'apps/storybook/stories/ListInput.stories.tsx',
+    ]) {
+      expect(selects([changed]), changed).toBe(true);
+    }
+    for (const changed of [
+      'packages/lab/src/Tokenizer/Tokenizer.tsx',
+      'packages/core/src/Drawer/Drawer.tsx',
+      'packages/core/src/hooks/useScrollableArea.ts',
+      'apps/storybook/stories/SideNav.stories.tsx',
+    ]) {
+      expect(selects([changed]), changed).toBe(false);
+    }
+  });
+
   it('gives every spec valid routing lines', () => {
     for (const file of files) {
       expect(
