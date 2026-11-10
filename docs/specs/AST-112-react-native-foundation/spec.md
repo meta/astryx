@@ -218,8 +218,9 @@ test | sweep`.
     contract whichever released shape OQ5 settles.
   - `@astryxdesign/cli` contains no React Native commands, so a web project
     installs nothing for them.
-- **FR14 — One React Native release train.** All the packages in FR1 except the experiment CLI carry the
-  same version and release together, in a release group separate from core's.
+- **FR14 — One React Native release train.** All the packages in FR1 except
+  the experiment CLI carry the same version and release together, in a release
+  group separate from core's.
   Each package requires the others at exactly that version. The platform
   core's loader refuses a capability package of another version and reports
   both versions, so packages from two releases never run together.
