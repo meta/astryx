@@ -22,6 +22,7 @@ import {
   isValidElement,
   use,
   useEffect,
+  useId,
   useRef,
   useState,
   useTransition,
@@ -30,7 +31,10 @@ import {
 import type {BaseProps} from '../BaseProps';
 import type {Elevation, SizeValue} from '../utils/types';
 import * as stylex from '@stylexjs/stylex';
-import {useTooltip} from '../Tooltip/useTooltip';
+import {TooltipPresentInterestContext} from '../Tooltip/tooltipPresentInterest';
+import {useDeferredTooltipInterest} from '../hooks/useDeferredTooltipInterest';
+import {attachedTooltipModule} from '../utils/attachedTooltipModule';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {
   colorVars,
   sizeVars,
@@ -776,15 +780,16 @@ export function Button({
   // (credit @AKnassa, #4879), which is exactly the bug this PR fixes.
   const renderAsLink = href != null && !isTrueDisabled;
 
-  // Attach tooltip behavior via the hook rather than wrapping the button in a
-  // <Tooltip> element. The hook adds hover/focus triggers to the button itself,
-  // so no extra DOM node is inserted — the button stays a direct child of its
-  // container (no layout shift, and edge-compensation markers remain
-  // discoverable through the container's direct-child `:has()` selector).
-  const tooltipHook = useTooltip({
-    placement: 'above',
-    isEnabled: tooltip != null,
-  });
+  // The tooltip attaches to the button itself, with no wrapper element, so the
+  // button stays a direct child of its container (no layout shift, and the
+  // container's direct-child `:has()` selectors still find its markers). Its
+  // module loads on demand; the first hover, tap or focus mounts it.
+  const tooltipInterest = useDeferredTooltipInterest(
+    tooltip != null,
+    attachedTooltipModule,
+  );
+  const tooltipDescriptionId = useId();
+  const tooltipAnchorRef = useRef<HTMLElement | null>(null);
 
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     // The ref guard dedupes fire-once actions. Interruptible callers skip it so
@@ -956,26 +961,49 @@ export function Button({
     accessibleName != null &&
     tooltip.trim() === accessibleName.trim();
 
-  // When a tooltip is attached via the hook, point aria-describedby at the
-  // tooltip content (composing with any consumer-provided value).
+  // The description is Button's own hidden copy of the tooltip text, after any
+  // caller value. The tooltip layer is not referenced, so a screen reader
+  // reads the text once, before and after the layer loads.
   const describedByProp =
     tooltip != null && !isTooltipName
       ? {
           'aria-describedby':
-            [props['aria-describedby'], tooltipHook.describedBy]
+            [props['aria-describedby'], tooltipDescriptionId]
               .filter(Boolean)
               .join(' ') || undefined,
         }
       : null;
+  // A closed manual popover beside the element, where the tooltip layer
+  // renders: a group's edge rules skip popovers, so the button keeps its place
+  // among its siblings, and the text stays out of the button's own content.
+  const tooltipDescription =
+    tooltip && !isTooltipName ? (
+      <span id={tooltipDescriptionId} popover="manual">
+        {tooltip}
+      </span>
+    ) : null;
+  const tooltipTriggerProps =
+    tooltip != null
+      ? {
+          onPointerEnter: composeEventHandlers(
+            tooltipInterest.onPointerEnter,
+            props.onPointerEnter,
+          ),
+          onPointerLeave: composeEventHandlers(
+            tooltipInterest.onPointerLeave,
+            props.onPointerLeave,
+          ),
+          onPointerDown: composeEventHandlers(
+            tooltipInterest.onPointerDown,
+            props.onPointerDown,
+          ),
+          onFocus: composeEventHandlers(tooltipInterest.onFocus, props.onFocus),
+          onBlur: composeEventHandlers(tooltipInterest.onBlur, props.onBlur),
+        }
+      : null;
 
-  // Merge the consumer ref with the tooltip hook's trigger ref so both point at
-  // the same element. useMergedRefs tolerates undefined, so this is a no-op for
-  // the tooltip side when no tooltip is set.
-  const mergedButtonRef = useMergedRefs(
-    ref,
-    tooltip != null ? tooltipHook.ref : undefined,
-    hitAreaRef,
-  );
+  // The tooltip's anchor is the same element as the consumer ref.
+  const mergedButtonRef = useMergedRefs(ref, tooltipAnchorRef, hitAreaRef);
 
   let element: ReactNode;
 
@@ -995,6 +1023,7 @@ export function Button({
         {...props}
         {...ariaLabelProp}
         {...describedByProp}
+        {...tooltipTriggerProps}
         {...edgeCompAttr}
         // A caller's own busy or disabled state is kept, so a component that
         // hands these props to a Button (a caller-rendered trigger) is heard.
@@ -1020,6 +1049,7 @@ export function Button({
         {...(isTrueDisabled ? {name: undefined} : null)}
         {...ariaLabelProp}
         {...describedByProp}
+        {...tooltipTriggerProps}
         {...edgeCompAttr}
         // A caller's own busy or disabled state is kept, so a component that
         // hands these props to a Button (a caller-rendered trigger) is heard.
@@ -1033,10 +1063,20 @@ export function Button({
   }
 
   if (tooltip) {
+    const AttachedTooltip = tooltipInterest.loadedModule?.AttachedTooltip;
     return (
       <>
         {element}
-        {tooltipHook.renderTooltip(tooltip)}
+        {tooltipDescription}
+        {tooltipInterest.isWanted && AttachedTooltip != null && (
+          <TooltipPresentInterestContext value={tooltipInterest.interestRef}>
+            <AttachedTooltip
+              anchorRef={tooltipAnchorRef}
+              content={tooltip}
+              placement="above"
+            />
+          </TooltipPresentInterestContext>
+        )}
       </>
     );
   }
