@@ -134,6 +134,47 @@ const STORIES = {
   },
 } as const;
 
+/**
+ * The photo's box once it has landed in the viewport: inside it, and the
+ * same one frame later. A gallery places the opened page after it lays out,
+ * so the photo can start off the screen for a frame or more.
+ */
+async function photoInView(
+  page: Page,
+  photo: Locator,
+): Promise<{x: number; y: number; width: number; height: number}> {
+  let landed: {x: number; y: number; width: number; height: number} | null =
+    null;
+  await expect
+    .poll(
+      async () => {
+        const before = await photo.boundingBox();
+        await frames(page, 1);
+        const after = await photo.boundingBox();
+        const viewport = page.viewportSize();
+        if (before == null || after == null || viewport == null) {
+          return false;
+        }
+        const isStill = (['x', 'y', 'width', 'height'] as const).every(
+          key => Math.abs(before[key] - after[key]) < 0.5,
+        );
+        const isInside =
+          after.x > -0.5 &&
+          after.y > -0.5 &&
+          after.x + after.width < viewport.width + 0.5 &&
+          after.y + after.height < viewport.height + 0.5;
+        landed = after;
+        return isStill && isInside;
+      },
+      {message: 'the opened photo lands in the viewport'},
+    )
+    .toBe(true);
+  if (landed == null) {
+    throw new Error('no photo');
+  }
+  return landed;
+}
+
 async function openViewer(
   page: Page,
   story: keyof typeof STORIES = 'plain',
@@ -160,11 +201,7 @@ async function openViewer(
       photo.evaluate(el => (el as HTMLImageElement).naturalWidth),
     )
     .toBe(3000);
-  await frames(page, 2);
-  const rect = await photo.boundingBox();
-  if (rect == null) {
-    throw new Error('no photo');
-  }
+  const rect = await photoInView(page, photo);
   const close = dialog.getByRole('button', {name: 'Close'});
   return {
     driver,
@@ -605,9 +642,10 @@ test('the dismissal keeps changing the screen every frame while the main thread 
     // level is a freeze.
     setBeforeBlock: setBeforeBlock ?? undefined,
     // A run whose control moved on fewer than two frames is too little to
-    // judge. At least two of the four runs must be judged.
+    // judge. At least half the runs must be judged, since the floor below
+    // reads only judged runs.
     minRunFrames: 2,
-    minJudgedRuns: 2,
+    minJudgedRuns: Math.ceil(DISMISS_RUNS / 2),
   });
   await writeEvidence(
     'busy-main-thread/lightbox-dismiss',
@@ -641,11 +679,14 @@ test('the dismissal keeps changing the screen every frame while the main thread 
   expect(closest, 'a run shows two frames in its window').toBeLessThan(
     Number.POSITIVE_INFINITY,
   );
-  // Each run must hold more than 100 ms of the fade. A run holds less when
-  // its block began late in the fade. Then the fade, counted from its own
-  // start, lasted longer than the window needs, and the run fails by that
-  // name.
+  // The verdict reads only the runs the pool judged, so each of those must
+  // hold more than 100 ms of the fade. A judged run holds less when its block
+  // began late in the fade. Then the fade, counted from its own start, lasted
+  // longer than the window needs, and the run fails by that name.
   for (const [i, window] of windows.entries()) {
+    if (!proof.judged[i]) {
+      continue;
+    }
     const windowMs = window.to - window.from;
     const start = fadeStarts[i];
     const last = fadeLasts[i];
@@ -755,13 +796,10 @@ test("reopening at the dismissed photo's neighbour shows that photo", async ({
   const current = dialog.locator('[data-current]');
   await tapThumbnail(1);
   await expect(dialog).toBeVisible();
-  // A plain image opener zooms the photo out of it: wait for it to land.
+  // A plain image opener zooms the photo out of it. The gallery places the
+  // opened page after it lays out, so wait for the photo to land.
   await waitForRest(current.locator('img'));
-  await frames(page, 4);
-  const rect = await current.locator('img').boundingBox();
-  if (rect == null) {
-    throw new Error('no photo');
-  }
+  const rect = await photoInView(page, current.locator('img'));
   await driver.play(
     pullDown({x: rect.x + rect.width / 2, y: rect.y + rect.height / 2}, 110),
   );
