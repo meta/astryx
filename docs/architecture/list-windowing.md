@@ -14,6 +14,8 @@ applies_to:
     packages/core/src/Selector/,
     packages/core/src/Table/,
     packages/core/src/Chat/,
+    packages/core/src/virtualization/,
+    packages/core/src/internal/virtualization.ts,
   ]
 verified_by: [scripts/check-knowledge.mjs]
 deciding_specs: []
@@ -23,15 +25,15 @@ deciding_specs: []
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                   |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Governing contract      | None. Each consumer's record owns what a person sees and hears in its long list; this record owns only which module computes the window.                                   |
-| System behavior         | One shared internal windowing module owns long-list windowing in Core. The module is not public API (INV1, INV2).                                                          |
-| End-user impact         | None yet: the module does not exist, and Selector renders every option. Once it ships, people opening a long list wait less, and every windowed list behaves the same way. |
-| Builder impact          | A Core component that windows a long list calls the one module instead of building its own. No public windowing hook exists while OQ1 is open.                             |
-| Compatibility/readiness | Additive and internal. Spec only: no module exists yet (Current-state impact). Table's approved virtualization hook keeps its public shape.                                |
-| Review checks           | Reject a second windowing implementation in Core, a public export of the module, or a change to Table's public virtualization shape made to adopt it.                      |
-| Governing rules         | DEC-1.                                                                                                                                                                     |
+| Area                    | Contract                                                                                                                                                                  |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Governing contract      | None. Each consumer's record owns what a person sees and hears in its long list; this record owns only which module computes the window.                                  |
+| System behavior         | One shared internal windowing module owns long-list windowing in Core. The module is not public API (INV1, INV2).                                                         |
+| End-user impact         | A long Table windows through the module. Selector renders every option and Chat renders every message until they adopt it; then every windowed list behaves the same way. |
+| Builder impact          | A Core component that windows a long list calls the one module instead of building its own. No public windowing hook exists while OQ1 is open.                            |
+| Compatibility/readiness | Additive and internal. The module is `packages/core/src/virtualization/` (Current-state impact). Table's approved virtualization hook keeps its public shape.             |
+| Review checks           | Reject a second windowing implementation in Core, a public export of the module, or a change to Table's public virtualization shape made to adopt it.                     |
+| Governing rules         | DEC-1.                                                                                                                                                                    |
 
 This table is a review projection; the body below is authoritative.
 
@@ -74,10 +76,10 @@ Consumers:
 
 ## Current-state impact
 
-- **No module exists yet.** Selector renders every option when it opens.
-  Table's virtualization hook is specified in
-  `module:Table/useTableRowsVirtualization` but not built; Chat renders every
-  message.
+- **The module is `packages/core/src/virtualization/`.** Other packages reach
+  it only through `@astryxdesign/core/internal/virtualization`. Table's row
+  virtualization, behind `module:Table/useTableRowsVirtualization`, uses it.
+  Selector renders every option when it opens, and Chat renders every message.
 
 ## Change coupling
 
@@ -87,12 +89,13 @@ windowing symbol.
 
 ## Owning code
 
+- `packages/core/src/virtualization/` — the module.
+- `packages/core/src/internal/virtualization.ts` — its private entry for other
+  packages.
 - `module:Table/useTableRowsVirtualization` — Table's public virtualization
-  hook, a consumer; it has no code yet (Current-state impact).
+  hook, a consumer.
 - `packages/core/src/Selector/` — a consumer.
 - `packages/core/src/Chat/` — a consumer.
-
-The module itself has no path yet (Current-state impact).
 
 ## Deciding specs
 
@@ -112,8 +115,8 @@ only. The module stays private while OQ1 is open.
 
 ## Verification
 
-| Invariant | Evidence                                                                                                           | Failure signal                                                             |
-| --------- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
-| INV1      | Review of each Core list that windows (evidence gap: no module or automated check exists yet)                      | A Core component keeps its own windowing implementation beside the module  |
-| INV2      | Public export review of every package entry point (evidence gap: no module exists yet)                             | The module, or a type only it uses, is reachable from a public entry point |
-| INV3      | The public-API report for `useTableRowsVirtualization` and each consumer (evidence gap: the hook is not built yet) | Adopting the module changes a consumer's public props, types, or exports   |
+| Invariant | Evidence                                                                                                        | Failure signal                                                             |
+| --------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| INV1      | `packages/core/src/virtualization/useListWindow.test.tsx`; review of each Core list that windows                | A Core component keeps its own windowing implementation beside the module  |
+| INV2      | Public export review of every package entry point; the module is exported only from `./internal/virtualization` | The module, or a type only it uses, is reachable from a public entry point |
+| INV3      | The public-API report (`packages/core/api-report.md`) for `useTableRowsVirtualization` and each consumer        | Adopting the module changes a consumer's public props, types, or exports   |
