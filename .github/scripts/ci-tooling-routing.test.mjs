@@ -715,7 +715,8 @@ describe('Node-tooling CI routing', () => {
       );
       stub('pnpm', `echo "$*" >> "${root}/pnpm.log"`);
       stub('node', 'exit 0');
-      fs.mkdirSync(path.join(root, 'packages/themes/neutral'), {
+      // The step's script runs in the merge base's worktree.
+      fs.mkdirSync(path.join(root, '.size-base/packages/themes/neutral'), {
         recursive: true,
       });
       execFileSync('bash', ['-e', '-c', start.run], {
@@ -759,8 +760,11 @@ describe('Node-tooling CI routing', () => {
       // them the CLI's base report falls back to its committed report, and
       // a stale committed report reads as added rows the pull request never
       // made.
-      expect(runBaseBuild({needApi: true, changed})).toContain(
-        '-F @astryxdesign/cli sync:api-types',
+      const builds = runBaseBuild({needApi: true, changed});
+      expect(builds).toContain('-F @astryxdesign/cli sync:api-types');
+      // A theme still builds only when its own directory changes.
+      expect(builds.includes('-F ./packages/themes/neutral/ build')).toBe(
+        changed.includes('packages/themes/neutral'),
       );
     },
   );
