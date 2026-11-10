@@ -1023,6 +1023,10 @@
     "defaultMessage": "{label}, {badge}",
     "description": "Screen-reader name of a bottom tab bar item that shows a badge (\"Library, 3\"). {label} is the tab's visible name; {badge} is the badge's count or its own label (\"3 unread\"). Translators may reorder the two or change the separator."
   },
+  "@astryx.tabBar.more": {
+    "defaultMessage": "More",
+    "description": "Label of the bottom tab bar's More tab, shown under its icon when an app has more than five tabs, and the screen-reader name of the list it opens (the remaining tabs). As iOS's \"More\" tab: a short word, not \"Show more\"."
+  },
   "@astryx.tabList.label": {
     "defaultMessage": "Tabs",
     "description": "Screen-reader-only fallback name for a horizontal tab bar. Plural noun; \"Tabs\" here = UI tab panels, not browser tabs or the Tab key."

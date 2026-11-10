@@ -168,6 +168,25 @@ function expectLandsOnHalf(speed: number, release: DownwardRelease) {
   }
 }
 
+/**
+ * The slowest release, in whole px/s, from which Core's release rule lands on
+ * half for every speed up to `fastest`. The play takes it as a boundary. A
+ * page that read the release below it did not receive the soft flick. The
+ * play then fails by name, before the proof judges the landing.
+ */
+function halfFrom(fastest: number, release: DownwardRelease): number {
+  if (landingOf(fastest, release) !== 'half') {
+    throw new Error(
+      `the script's ${fastest.toFixed(0)} px/s lands on ${landingOf(fastest, release)}, so it proves no soft flick`,
+    );
+  }
+  let slowest = Math.floor(fastest);
+  while (slowest > 0 && landingOf(slowest - 1, release) === 'half') {
+    slowest -= 1;
+  }
+  return slowest;
+}
+
 // The settle's timing, from the theme the story renders in: `--ease-standard`
 // is the default cubic-bezier(0.24, 1, 0.4, 1), and `--duration-medium` is the
 // neutral theme's motion `medium` (300 ms; the base theme's is 410 ms).
@@ -307,14 +326,20 @@ test('a softer downward flick from the tall detent lands on the half detent', as
     hz: 120,
   });
   expect(releaseVelocity(script).y).toBeCloseTo(1200, -1);
-  const played = await driver.play(script, {pacing: 'spacing'});
-  // The release the page read decides the landing, so the proof asks Core's
-  // release rule where that release lands.
-  expectLandsOnHalf(pageRelease(script, played), {
+  const release = {
     travel: travelOf(script),
     half: halfTop - tallTop,
     closed: screenHeight - tallTop,
+  };
+  // Below the speed where the landing leaves half, the page did not receive
+  // the soft flick. The play then fails by name.
+  const played = await driver.play(script, {
+    pacing: 'spacing',
+    boundaries: {releasePxPerS: halfFrom(releaseVelocity(script).y, release)},
   });
+  // The release the page read decides the landing, so the proof asks Core's
+  // release rule where that release lands.
+  expectLandsOnHalf(pageRelease(script, played), release);
   await waitForRest(sheet);
   await expect(page.getByRole('dialog', {name: 'Nearby places'})).toBeVisible();
   expect(await sheetTop(sheet)).toBeCloseTo(halfTop, 0);
@@ -335,22 +360,24 @@ test('a softer flick with one early move 70 ms late still lands on the half dete
     durationMs: 80,
     hz: 120,
   });
+  const release = {
+    travel: travelOf(script),
+    half: halfTop - tallTop,
+    closed: screenHeight - tallTop,
+  };
   // The move after this step reaches the page 70 ms late, as a stalled
   // dispatch delivers it. The last two moves keep their spacing.
   const late = toTouchEvents(script).length - 5;
   const played = await driver.play(script, {
     pacing: 'spacing',
+    boundaries: {releasePxPerS: halfFrom(releaseVelocity(script).y, release)},
     onEvent: async (_, index) => {
       if (index === late) {
         await new Promise(resolve => setTimeout(resolve, 70));
       }
     },
   });
-  expectLandsOnHalf(pageRelease(script, played), {
-    travel: travelOf(script),
-    half: halfTop - tallTop,
-    closed: screenHeight - tallTop,
-  });
+  expectLandsOnHalf(pageRelease(script, played), release);
   await waitForRest(sheet);
   await expect(page.getByRole('dialog', {name: 'Nearby places'})).toBeVisible();
   expect(await sheetTop(sheet)).toBeCloseTo(halfTop, 0);
@@ -371,6 +398,10 @@ test("the release check asks Core's rule with the sheet's arguments", () => {
   expect(landingOf(1100, short)).toBe('half');
   // 8 px is within Core's drag slop, so 1,100 px/s is no flick there.
   expect(landingOf(1100, {travel: 8, half: 300, closed: 650})).toBe('tall');
+  // The boundary a soft flick's play takes: from 540 px/s the projection
+  // reaches nearer half. On 32 px only a flick, from 1,008 px/s, lands there.
+  expect(halfFrom(1200, long)).toBe(540);
+  expect(halfFrom(1100, short)).toBe(1008);
 });
 
 test('the settle lands on the detent, its curve recorded frame by frame', async ({

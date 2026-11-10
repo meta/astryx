@@ -28,7 +28,10 @@
  */
 
 import type {CDPSession, Locator, Page} from '@playwright/test';
+import {FRAME_STARVATION_MS} from './frame-starvation';
 import {webkitPageSession} from './touch';
+
+export {FRAME_STARVATION_MS} from './frame-starvation';
 
 export interface CastFrame {
   /** Presentation time, epoch ms (the compositor's frame timestamp). */
@@ -878,12 +881,6 @@ export function frameStats(
     last: inside[inside.length - 1]?.value ?? null,
   };
 }
-
-/**
- * A gap between two frames the page drew, ms, past which the page counts as
- * starved: about three frames at 60 Hz.
- */
-export const FRAME_STARVATION_MS = 50;
 
 const framesDrawn = (count: number) =>
   `${count} ${count === 1 ? 'frame' : 'frames'}`;
