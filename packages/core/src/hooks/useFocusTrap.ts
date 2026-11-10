@@ -560,14 +560,36 @@ interface InternalFocusTrapOptions extends UseFocusTrapOptions {
    * falls back to the element focused at activation.
    */
   getRestoreTarget?: () => HTMLElement | null;
+  /**
+   * Where focus goes on deactivation when the restore target is gone (no
+   * longer connected), read at deactivation. Without it, focus is left where
+   * the browser puts it.
+   */
+  getRestoreFallback?: () => HTMLElement | null;
+  /**
+   * Moves focus to the element the trap restores to on deactivation, in
+   * place of `element.focus()`, so the caller knows which focus is the
+   * return.
+   */
+  restoreFocusTo?: (element: HTMLElement) => void;
 }
 
 export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
   options: InternalFocusTrapOptions,
 ): UseFocusTrapReturn<T> {
-  const {isActive, onEscape, getRestoreTarget} = options;
+  const {
+    isActive,
+    onEscape,
+    getRestoreTarget,
+    getRestoreFallback,
+    restoreFocusTo,
+  } = options;
   const getRestoreTargetRef = useRef(getRestoreTarget);
   getRestoreTargetRef.current = getRestoreTarget;
+  const getRestoreFallbackRef = useRef(getRestoreFallback);
+  getRestoreFallbackRef.current = getRestoreFallback;
+  const restoreFocusToRef = useRef(restoreFocusTo);
+  restoreFocusToRef.current = restoreFocusTo;
 
   const containerRef = useRef<T | null>(null);
 
@@ -659,6 +681,15 @@ export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
     };
     doc.addEventListener('focusin', markFocusInside, true);
 
+    const restoreFocus = (element: HTMLElement) => {
+      const restoreTo = restoreFocusToRef.current;
+      if (restoreTo == null) {
+        element.focus();
+      } else {
+        restoreTo(element);
+      }
+    };
+
     return () => {
       doc.removeEventListener('focusin', markFocusInside, true);
 
@@ -670,12 +701,23 @@ export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
         return;
       }
 
+      // The page itself is no place to return to: an opener removed before
+      // the overlay opened leaves the body as the element focused then.
+      const isPage =
+        previouslyFocused === doc.body ||
+        previouslyFocused === doc.documentElement;
       if (
         previouslyFocused != null &&
         previouslyFocused.isConnected &&
-        typeof previouslyFocused.focus === 'function'
+        typeof previouslyFocused.focus === 'function' &&
+        !(isPage && getRestoreFallbackRef.current != null)
       ) {
-        previouslyFocused.focus();
+        restoreFocus(previouslyFocused);
+        return;
+      }
+      const fallback = getRestoreFallbackRef.current?.();
+      if (fallback != null && fallback.isConnected) {
+        restoreFocus(fallback);
       }
     };
   }, [isActive]);

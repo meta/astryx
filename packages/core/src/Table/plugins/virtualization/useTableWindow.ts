@@ -344,7 +344,7 @@ export function useTableWindow<T>({
     calculateListWindow({
       rowCount: data.length,
       rowHeight: config.rowHeight,
-      viewportHeight: config.viewportHeight,
+      viewportHeight: config.initialViewportHeight,
       scrollTop: 0,
       startOffset: 0,
       isMeasured: false,
@@ -404,7 +404,7 @@ export function useTableWindow<T>({
     : last != null && last.config === config
       ? last.geometry
       : {
-          viewportHeight: config?.viewportHeight ?? 0,
+          viewportHeight: config?.initialViewportHeight ?? 0,
           scrollTop: 0,
           bodyOffset: 0,
           isMeasured: false,
@@ -414,7 +414,7 @@ export function useTableWindow<T>({
     (last.data !== data ||
       last.keys !== keys ||
       last.config.rowHeight !== config?.rowHeight ||
-      last.config.viewportHeight !== config?.viewportHeight);
+      last.config.initialViewportHeight !== config?.initialViewportHeight);
   const anchorScroll =
     canWindow && !isRejected && hasChangedInputs && config && last
       ? reconcileListAnchor({
