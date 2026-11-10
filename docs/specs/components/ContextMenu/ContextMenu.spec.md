@@ -36,15 +36,15 @@ system_specs: [spec:AST-094, spec:AST-107]
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                                                                                       |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Public contract         | None changes. ContextMenu takes caller `children` as the Trigger area, data-driven `items` or compound `menuContent`, `label`, `presentation`, `isDisabled`, and `triggerAs`.                                                                                                  |
-| Behavior                | Right-click, Shift+F10 or the Menu key, and a touch long press open a menu at the cursor (or the trigger's bottom-left from the keyboard), or a bottom sheet; rows follow DropdownMenu's rows and press model.                                                                 |
-| End-user impact         | People reach a region's actions by mouse, keyboard, or a held finger; a sub-menu drills in on a phone. A touch-opened menu does not yet grow from the finger or lift its trigger; mouse and keyboard opens keep today's look.                                                  |
-| Builder impact          | Builders wrap any region, including an inline reference in prose (`triggerAs="span"`).                                                                                                                                                                                         |
-| Compatibility/readiness | Records shipped behavior; no API change; a disabled row gains `tabindex="-1"`; the released behavior under a finger moves as `spec:AST-094` FR25 lists, with `presentation="popover"` keeping it. The touch grow and trigger lift (FR5) are listed under Current-state impact. |
-| Review checks           | Reject a trigger that gains a role or `aria-haspopup`, a menu that bypasses the shared Escape stack, a `context-menu` target moved off the painted surface, or a second open-state owner.                                                                                      |
-| Governing rules         | `spec:AST-107` FR8; `spec:AST-094` FR26–FR35; `module:DropdownMenu/useMenuPress`; `family:overlay-dismissal`; `architecture:component-theming-surface`; `architecture:layer-runtime`.                                                                                          |
+| Area                    | Contract                                                                                                                                                                                                                                                                         |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | None changes. ContextMenu takes caller `children` as the Trigger area, data-driven `items` or compound `menuContent`, `label`, `presentation`, `isDisabled`, and `triggerAs`.                                                                                                    |
+| Behavior                | Right-click, Shift+F10 or the Menu key, and a touch long press open a menu at the cursor (or the trigger's bottom-left from the keyboard), or a bottom sheet; rows follow DropdownMenu's rows and press model.                                                                   |
+| End-user impact         | People reach a region's actions by mouse, keyboard, or a held finger; a sub-menu drills in on a phone. A held finger lifts a block trigger above a tinted page, with the menu beside it; the menu does not yet grow from the finger. Mouse and keyboard opens keep today's look. |
+| Builder impact          | Builders wrap any region, including an inline reference in prose (`triggerAs="span"`).                                                                                                                                                                                           |
+| Compatibility/readiness | Records shipped behavior; no API change; a disabled row gains `tabindex="-1"`; the released behavior under a finger moves as `spec:AST-094` FR25 lists, with `presentation="popover"` keeping it. The touch grow (FR5) is listed under Current-state impact.                     |
+| Review checks           | Reject a trigger that gains a role or `aria-haspopup`, a menu that bypasses the shared Escape stack, a `context-menu` target moved off the painted surface, or a second open-state owner.                                                                                        |
+| Governing rules         | `spec:AST-107` FR8; `spec:AST-094` FR26–FR35; `module:DropdownMenu/useMenuPress`; `family:overlay-dismissal`; `architecture:component-theming-surface`; `architecture:layer-runtime`.                                                                                            |
 
 This table is a review projection; the body below is authoritative.
 
@@ -275,11 +275,11 @@ anchor is positioning infrastructure rather than consumer anatomy.
 - **No headless factory (FR10).** No headless context menu ships, so ContextMenu
   owns its invocation, open state, and outside-press listener itself, against
   `spec:AST-107` FR8.
-- **Touch grow and lift (FR5).** A touch-opened menu keeps the layer's own
-  entrance and exit instead of growing from the finger, and a block trigger is
-  not lifted over a tinted page; a pen press outside closes it at the press. All
-  are against `spec:AST-094` FR31, FR32, and FR33. A menu opened by mouse or
-  keyboard already keeps its released appearance and motion.
+- **Touch grow (FR5).** A touch-opened menu fades in beside the lifted trigger
+  instead of growing from the finger, and it closes on the layer's own exit; a
+  pen press outside closes it at the press. Both are against `spec:AST-094`
+  FR31 and FR32. A menu opened by mouse or keyboard already keeps its released
+  appearance and motion.
 - **Touch-open focus indicator.** A touch open focuses the menu itself, and
   the menu draws no focus outline in any color mode, forced colors included.
   `architecture:interaction-modality` INV1 hides the focus indicator after
@@ -307,7 +307,7 @@ Rejected: styling a block `div` as inline because it remains invalid inside a
 Rejected: `display: contents` because a box-less wrapper has no rect for pointer
 or keyboard anchoring.
 
-### DEC-2 — The lift adds four elements while open, each with one job
+### DEC-2 — The lift adds three elements while open, each with one job
 
 **Reference:** `component:ContextMenu/DEC-2`
 
@@ -315,29 +315,28 @@ or keyboard anchoring.
 
 A touch-opened menu on a block trigger lifts the trigger itself above the
 tinted page (`spec:AST-094` FR33) through the one lift module
-(`architecture:layer-runtime` INV15). While the menu is up, the page has four
+(`architecture:layer-runtime` INV15). While the menu is up, the page has three
 elements more than under a fine pointer, within the open-layer allowance of
 `spec:AST-017` FR60 and DEC-29, and each has one job:
 
 - the lift layer covers the viewport from the top layer, takes the page's
   touches and paints the tint (DD1) as its `::backdrop`;
-- the shadow, a box in the layer, follows the trigger's lift as one
-  compositor animation (an animated `::backdrop` of the trigger would restyle
-  and lay out the page on every frame);
 - an empty box in the layer, at the lifted rect, is what the menu is placed
   against (anchor positioning follows transforms, so the trigger's own cursor
   anchor would move with the lifted trigger);
 - an empty placeholder after the trigger holds the trigger's spot, so the
   page does not move while the trigger is in the top layer.
 
-None of the four is themeable or part of the anatomy, none is mounted at rest,
+The lifted trigger casts no shadow (owner direction, 2026-11-09). None of the
+three is themeable or part of the anatomy, none is mounted at rest,
 and no content is mounted twice: the trigger lifts itself, with no copy. The
 input hold's shield joins while the lift grows, and the layer runtime's exit
 copy while the menu closes. A menu opened by mouse or keyboard adds none of
 them.
 
 Rejected: a copy of the trigger above the tint, because it mounts the
-trigger's content twice and its count grows with the trigger.
+trigger's content twice and its count grows with the trigger. Rejected: a
+shadow under the lifted trigger, because it made the lift look worse.
 
 ## Open questions
 

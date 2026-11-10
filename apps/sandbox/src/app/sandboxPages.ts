@@ -176,6 +176,12 @@ export const categories: SandboxCategory[] = [
         description:
           'Every built-in Text type at the default size, on a bare page that scrolls',
       },
+      {
+        name: 'ContextMenu in Place',
+        href: '/pages/context-menu-lift/',
+        description:
+          'ContextMenus on list rows, cards, table cells and pictures, at the page edges and in clipping boxes, on a bare page that scrolls',
+      },
     ],
   },
   {

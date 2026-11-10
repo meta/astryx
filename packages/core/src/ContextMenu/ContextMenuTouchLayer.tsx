@@ -7,7 +7,8 @@
  * @input ContextMenu's touch layer (ContextMenuTouch.ts), the gesture
  *   foundation and the UIKit context-menu constants
  * @output ContextMenuTouchLayer: renders nothing; runs the trigger's press
- *   recognizer and press feedback while ContextMenu is under the touch model
+ *   recognizer, its press feedback and the lift while ContextMenu is under
+ *   the touch model
  * @position Rendered by ContextMenu while the touch model applies
  *
  * SYNC: When modified, update /packages/core/src/ContextMenu/ContextMenu.tsx
@@ -19,8 +20,10 @@ import {getGestureHost} from '../gestures/GestureHost';
 import {isTerminal} from '../gestures/GestureRecognizer';
 import {playHaptic} from '../gestures/haptics';
 import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
+import type {LiftFromTriggerResult} from '../liftFromTrigger/liftFromTrigger';
 import {contextMenu} from '../motion/uikit/contextMenu';
 import {isElement} from '../utils/nodeType';
+import {useContextMenuLift} from './ContextMenuLift';
 import {
   ContextMenuPressRecognizer,
   useContextMenuPressFeedback,
@@ -38,6 +41,15 @@ export interface ContextMenuTouchHandle {
   release(): void;
   /** Whether the recognizer is timing a finger on the trigger. */
   isTracking(): boolean;
+  /**
+   * Lifts the trigger from where the press feedback left it, above a tinted
+   * page. Returns where it landed, or null without the popover API.
+   */
+  lift(): LiftFromTriggerResult | null;
+  /** The menu's entrance beside the lifted trigger. */
+  enterMenu(menu: HTMLElement): void;
+  /** The lifted trigger returns to its place. */
+  drop(): void;
 }
 
 export interface ContextMenuTouchLayerProps {
@@ -62,6 +74,8 @@ export interface ContextMenuTouchLayerProps {
   onCommit?: () => void;
   /** The press ended with no menu: what mounted at the commit can go. */
   onCancel?: () => void;
+  /** A finger lifted on the lift's tint, where it went down. */
+  onBackdropTap: () => void;
 }
 
 /**
@@ -101,6 +115,7 @@ export function ContextMenuTouchLayer({
   onOpen,
   onCommit,
   onCancel,
+  onBackdropTap,
 }: ContextMenuTouchLayerProps): null {
   // Whether the recognizer follows a finger or a pen now. It is set below,
   // where the recognizer exists.
@@ -124,6 +139,7 @@ export function ContextMenuTouchLayer({
   const onCancelRef = useRef(onCancel);
   onCancelRef.current = onCancel;
   const hasPressOpenedRef = useRef(false);
+  const lift = useContextMenuLift(triggerRef, onBackdropTap);
 
   // The gesture hook follows the element behind the ref, so a `triggerAs`
   // swap moves the recognizer to the new node.
@@ -203,8 +219,32 @@ export function ContextMenuTouchLayer({
     () => ({
       release: () => feedbackRef.current.release(),
       isTracking: () => recognizer.numberOfTouches > 0,
+      lift: () => {
+        const trigger = triggerRef.current;
+        if (trigger == null) {
+          return null;
+        }
+        // The lift grows on from the rect the press feedback left. The
+        // feedback lets go once the lift has read the page, before it
+        // writes, so the page restyles once for both.
+        const pressed = trigger.getBoundingClientRect();
+        const lifted = lift.lift(
+          {
+            x: pressed.left,
+            y: pressed.top,
+            width: pressed.width,
+            height: pressed.height,
+          },
+          () => feedbackRef.current.letGo(),
+        );
+        // A lift that did not happen lets go too.
+        feedbackRef.current.letGo();
+        return lifted;
+      },
+      enterMenu: menu => lift.enterMenu(menu),
+      drop: () => lift.drop(),
     }),
-    [recognizer],
+    [lift, recognizer, triggerRef],
   );
 
   return null;

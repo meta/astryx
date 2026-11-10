@@ -128,6 +128,25 @@ beforeEach(() => {
   };
 });
 
+/**
+ * How many times the menu's popover was shown. A touch-opened menu also shows
+ * the lift layer, the hold's shield inside it and the lifted trigger.
+ */
+const menuShows = () =>
+  vi
+    .mocked(HTMLElement.prototype.showPopover)
+    .mock.contexts.filter(
+      el => (el as HTMLElement).querySelector('[role="menu"]') != null,
+    ).length;
+
+/** How many times the menu's popover was hidden. */
+const menuHides = () =>
+  vi
+    .mocked(HTMLElement.prototype.hidePopover)
+    .mock.contexts.filter(
+      el => (el as HTMLElement).querySelector('[role="menu"]') != null,
+    ).length;
+
 /** Opens the menu: its layer mounts at the first open (ContextMenu.tsx). */
 function openMenu() {
   fireEvent.contextMenu(screen.getByText('Right-click me'));
@@ -885,9 +904,139 @@ describe.each([
       const press = finger(trigger);
       press.down();
       advance(contextMenu.press.menuDisplayMs - 1);
-      expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+      expect(menuShows()).toBe(0);
       advance(1);
-      expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+      expect(menuShows()).toBe(1);
+      press.up();
+    });
+
+    it('lifts the block trigger itself, no copy, and closes when a finger lifts on the tint where it went down', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <ContextMenu
+          items={[{label: 'Item 1'}]}
+          data-testid="ctx"
+          onOpenChange={onOpenChange}>
+          <div>Long-press me</div>
+        </ContextMenu>,
+      );
+      const press = finger(screen.getByTestId('ctx'));
+      press.down();
+      advance(contextMenu.press.menuDisplayMs);
+      press.up();
+      expect(onOpenChange).toHaveBeenLastCalledWith(true);
+      // The trigger is in the top layer itself, and an empty placeholder
+      // after it holds its spot.
+      const trigger = screen.getByTestId('ctx');
+      expect(trigger.getAttribute('popover')).toBe('manual');
+      expect(
+        trigger.nextElementSibling?.hasAttribute(
+          'data-astryx-context-menu-lift-placeholder',
+        ),
+      ).toBe(true);
+      // No shadow box.
+      expect(
+        document.querySelector('[data-astryx-context-menu-lift-shadow]'),
+      ).toBeNull();
+      const tint = document.querySelector('[data-astryx-context-menu-lift]');
+      if (tint == null) {
+        throw new Error('no lift layer');
+      }
+      // While the lift grows, the hold keeps touches off the tint.
+      await act(async () => {
+        vi.advanceTimersByTime(1000);
+      });
+      // A lift there of a finger that went down elsewhere is not a tap there.
+      fireEvent.pointerUp(tint, {
+        isPrimary: true,
+        pointerId: 7,
+        pointerType: 'touch',
+      });
+      expect(onOpenChange).toHaveBeenLastCalledWith(true);
+      fireEvent.pointerDown(tint, {
+        isPrimary: true,
+        pointerId: 8,
+        pointerType: 'touch',
+      });
+      fireEvent.pointerUp(tint, {
+        isPrimary: true,
+        pointerId: 8,
+        pointerType: 'touch',
+      });
+      expect(onOpenChange).toHaveBeenLastCalledWith(false);
+    });
+
+    it('leaves no timer of the lift behind when it unmounts while the lift is still growing', () => {
+      const pressAndUnmount = (triggerAs?: 'span') => {
+        const view = render(
+          <ContextMenu
+            items={[{label: 'Item 1'}]}
+            data-testid="ctx"
+            triggerAs={triggerAs}>
+            <div>Long-press me</div>
+          </ContextMenu>,
+        );
+        const press = finger(screen.getByTestId('ctx'));
+        press.down();
+        advance(contextMenu.press.menuDisplayMs);
+        press.up();
+        // The menu's own focus move (one frame) is not the lift's.
+        advance(20);
+        const isLifted =
+          document.querySelector('[data-astryx-context-menu-lift]') != null;
+        const running = vi.getTimerCount();
+        view.unmount();
+        return {isLifted, running, left: vi.getTimerCount()};
+      };
+      // An inline trigger does not lift: what its unmount leaves is the
+      // gesture host's click guard, which outlives any one component.
+      const inline = pressAndUnmount('span');
+      const block = pressAndUnmount();
+      expect(inline.isLifted).toBe(false);
+      expect(block.isLifted).toBe(true);
+      expect(block.running).toBeGreaterThan(inline.running);
+      expect(block.left).toBe(inline.left);
+      expect(
+        document.querySelector('[data-astryx-context-menu-lift]'),
+      ).toBeNull();
+    });
+
+    it('mounts nothing of the lift at rest, and the lift layer only while lifted', async () => {
+      render(
+        <ContextMenu items={[{label: 'Item 1'}]} data-testid="ctx">
+          <div>Long-press me</div>
+        </ContextMenu>,
+      );
+      expect(
+        document.querySelector('[data-astryx-context-menu-lift]'),
+      ).toBeNull();
+      const press = finger(screen.getByTestId('ctx'));
+      press.down();
+      advance(contextMenu.press.menuDisplayMs);
+      press.up();
+      const layer = document.querySelector<HTMLElement>(
+        '[data-astryx-context-menu-lift]',
+      );
+      expect(layer).not.toBeNull();
+      // While the lift grows, the hold's shield is the layer's second child.
+      // Once it has grown, the box the menu is placed against is the layer's
+      // only content: the trigger lifts itself.
+      expect(layer?.children).toHaveLength(2);
+      await act(async () => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(layer?.children).toHaveLength(1);
+    });
+
+    it('keeps an inline trigger’s menu at the finger: no lift', () => {
+      const trigger = renderMenu({triggerAs: 'span'});
+      const press = finger(trigger);
+      press.down();
+      advance(contextMenu.press.menuDisplayMs);
+      expect(menuShows()).toBe(1);
+      expect(
+        document.querySelector('[data-astryx-context-menu-lift]'),
+      ).toBeNull();
       press.up();
     });
 
@@ -899,9 +1048,9 @@ describe.each([
       expect(screen.queryByRole('menu', {hidden: true})).toBeNull();
       advance(1);
       const menu = screen.getByRole('menu', {hidden: true});
-      expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+      expect(menuShows()).toBe(0);
       advance(contextMenu.press.menuDisplayMs - contextMenu.press.commitMs);
-      expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+      expect(menuShows()).toBe(1);
       expect(screen.getByRole('menu', {hidden: true})).toBe(menu);
       press.up();
     });
@@ -915,7 +1064,7 @@ describe.each([
       act(() => {
         press.up();
       });
-      expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+      expect(menuShows()).toBe(1);
       expect(screen.getByRole('menu', {hidden: true})).toBe(menu);
     });
 
@@ -956,7 +1105,7 @@ describe.each([
         });
         advance(contextMenu.press.menuDisplayMs);
         expect(screen.queryByRole('menu', {hidden: true})).toBeNull();
-        expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+        expect(menuShows()).toBe(0);
       },
     );
 
@@ -984,12 +1133,12 @@ describe.each([
       const press = finger(trigger);
       press.down();
       advance(529);
-      expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+      expect(menuShows()).toBe(0);
       // A first open mounts the menu's layer, which shows it as it attaches.
       act(() => {
         press.up();
       });
-      expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+      expect(menuShows()).toBe(1);
     });
 
     it('opens nothing for a drag past the tolerance after the commit, before the menu', () => {
@@ -1001,7 +1150,7 @@ describe.each([
       advance(500);
       press.up();
       advance(100);
-      expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+      expect(menuShows()).toBe(0);
     });
 
     it('keeps the menu open as the finger lifts: the lift sends no click or compatibility mouse events', () => {
@@ -1024,9 +1173,9 @@ describe.each([
       press.down();
       expect(onTouchStart).toHaveBeenCalledTimes(1);
       advance(contextMenu.press.menuDisplayMs - 1);
-      expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+      expect(menuShows()).toBe(0);
       advance(1);
-      expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+      expect(menuShows()).toBe(1);
       press.up();
     });
 
@@ -1041,7 +1190,7 @@ describe.each([
       press.up();
       expect(onTouchEnd).toHaveBeenCalledTimes(1);
       advance(1000);
-      expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+      expect(menuShows()).toBe(0);
     });
 
     it('moves the recognizer to the new trigger when triggerAs swaps it: a hold on the new node opens the menu', () => {
@@ -1061,7 +1210,7 @@ describe.each([
       const press = finger(screen.getByTestId('ctx'));
       press.down();
       advance(contextMenu.press.menuDisplayMs);
-      expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+      expect(menuShows()).toBe(1);
       press.up();
     });
 
@@ -1073,7 +1222,7 @@ describe.each([
       const lift = press.up();
       expect(lift.defaultPrevented).toBe(false);
       advance(1000);
-      expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+      expect(menuShows()).toBe(0);
     });
 
     it('cancels when the finger drifts past the tolerance on one axis (11.5 px)', () => {
@@ -1083,7 +1232,7 @@ describe.each([
       advance(50);
       press.moveTo(20, 31.6);
       advance(1000);
-      expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+      expect(menuShows()).toBe(0);
       press.up();
     });
 
@@ -1094,7 +1243,7 @@ describe.each([
       advance(50);
       press.moveTo(31, 31); // 15.6 px away, 11 px on each axis
       advance(contextMenu.press.menuDisplayMs);
-      expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+      expect(menuShows()).toBe(1);
       press.up();
     });
 
@@ -1106,7 +1255,7 @@ describe.each([
       advance(100);
       dispatchTouch('touchstart', trigger, [second], [first, second]);
       advance(1000);
-      expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+      expect(menuShows()).toBe(0);
       dispatchTouch('touchend', trigger, [first, second], []);
     });
 
@@ -1124,9 +1273,9 @@ describe.each([
       });
       trigger.dispatchEvent(native);
       expect(native.defaultPrevented).toBe(true);
-      expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+      expect(menuShows()).toBe(0);
       advance(contextMenu.press.menuDisplayMs - 380);
-      expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+      expect(menuShows()).toBe(1);
       press.up();
     });
 
@@ -1152,7 +1301,7 @@ describe.each([
         advance(1);
         // At the commit, before the menu shows.
         expect(vibrate).toHaveBeenCalledTimes(1);
-        expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+        expect(menuShows()).toBe(0);
         expect(vibrate).toHaveBeenCalledWith([
           ...HAPTIC_VIBRATION_PATTERNS[contextMenu.commitHaptic].value,
         ]);
@@ -1163,7 +1312,7 @@ describe.each([
       }
     });
 
-    it('leaves the page free to scroll while a menu a finger opened is up; a touch outside closes it as it begins to pan', () => {
+    it('leaves the page free to scroll while a menu a finger opened is up; a touch outside closes it as it begins to pan', async () => {
       const trigger = renderMenu();
       const press = finger(trigger);
       press.down();
@@ -1172,24 +1321,29 @@ describe.each([
       act(() => {
         press.up();
       });
-      expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+      expect(menuShows()).toBe(1);
       expect(document.body.style.position).toBe('');
+      // The trigger lifted. While it grows, the hold keeps new touches off
+      // the page.
+      await act(async () => {
+        vi.advanceTimersByTime(1000);
+      });
       const outside = {pointerType: 'touch', pointerId: 9, clientX: 200};
       act(() => {
         fireEvent.pointerDown(document.body, {...outside, clientY: 200});
         fireEvent.pointerMove(document.body, {...outside, clientY: 195});
       });
-      expect(HTMLElement.prototype.hidePopover).not.toHaveBeenCalled();
+      expect(menuHides()).toBe(0);
       act(() => {
         fireEvent.pointerMove(document.body, {...outside, clientY: 180});
       });
-      expect(HTMLElement.prototype.hidePopover).toHaveBeenCalled();
+      expect(menuHides()).toBe(1);
     });
 
     it('leaves the page alone for a menu a right-click opened', () => {
       const trigger = renderMenu();
       fireEvent.contextMenu(trigger, {clientX: 20, clientY: 20});
-      expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+      expect(menuShows()).toBe(1);
       expect(document.body.style.position).toBe('');
     });
 
@@ -1211,8 +1365,7 @@ describe.each([
 
     it('keeps today’s menu with presentation="popover": a held finger opens it at 500 ms through today’s long press, with no growth and no scroll lock', () => {
       const trigger = renderMenu({presentation: 'popover'});
-      const shows = () =>
-        vi.mocked(HTMLElement.prototype.showPopover).mock.calls.length;
+      const shows = menuShows;
       expect(trigger).not.toHaveAttribute('data-astryx-pressable');
       const press = finger(trigger);
       press.down();
@@ -1232,8 +1385,7 @@ describe.each([
 
     it('with presentation="popover", a drift past 10 px or a lift before 500 ms opens nothing (today’s long press)', () => {
       const trigger = renderMenu({presentation: 'popover'});
-      const shows = () =>
-        vi.mocked(HTMLElement.prototype.showPopover).mock.calls.length;
+      const shows = menuShows;
       let press = finger(trigger);
       press.down();
       advance(300);
@@ -1253,7 +1405,7 @@ describe.each([
       const press = finger(trigger);
       press.down();
       advance(1000);
-      expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+      expect(menuShows()).toBe(0);
       press.up();
     });
     /** A menu with two rows, held open by a finger that is still down. */
@@ -1276,7 +1428,7 @@ describe.each([
       dispatchPointer('pointerdown', trigger, {pointerId: 7, x: 20, y: 20});
       dispatchTouch('touchstart', trigger, [contact], [contact]);
       advance(contextMenu.press.menuDisplayMs);
-      expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+      expect(menuShows()).toBe(1);
       const row = (name: string) =>
         screen.getByRole('menuitem', {hidden: true, name});
       const slide = (target: EventTarget, x: number, y: number) => {
@@ -1354,7 +1506,7 @@ describe.each([
         dispatchPointer('pointerup', trigger, {pointerId: 7, x: 20, y: 20});
         dispatchTouch('touchend', trigger, [contact], []);
       });
-      expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+      expect(menuShows()).toBe(1);
       // A later move of that pointer id is no press of this menu's.
       const row = screen.getByRole('menuitem', {hidden: true, name: 'Share'});
       dispatchPointer('pointermove', row, {pointerId: 7, x: 20, y: 60});
@@ -1405,9 +1557,9 @@ describe('ContextMenu under a fine pointer: the touch model costs nothing', () =
     press.down();
     expect(onTouchStart).toHaveBeenCalledTimes(1);
     advance(499);
-    expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+    expect(menuShows()).toBe(0);
     advance(1);
-    expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+    expect(menuShows()).toBe(1);
     expect(trigger.style.getPropertyValue('scale')).toBe('');
     expect(document.body.style.overflow).not.toBe('hidden');
     advance(20);
@@ -1428,7 +1580,7 @@ describe('ContextMenu under a fine pointer: the touch model costs nothing', () =
     const press = finger(trigger);
     press.down();
     advance(500);
-    expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+    expect(menuShows()).toBe(1);
     const row = screen.getByRole('menuitem', {name: 'Item 1', hidden: true});
     const box = row.getBoundingClientRect();
     press.moveTo(box.left + 4, box.top + 4);
@@ -1445,7 +1597,7 @@ describe('ContextMenu under a fine pointer: the touch model costs nothing', () =
     );
     const trigger = screen.getByTestId('ctx');
     fireEvent.contextMenu(trigger, {clientX: 20, clientY: 20, detail: 1});
-    expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+    expect(menuShows()).toBe(1);
     advance(20);
     expect(
       screen.getByRole('menuitem', {name: 'Item 1', hidden: true}),
@@ -1476,8 +1628,7 @@ describe('ContextMenu: the primary pointer alone picks a finger’s rules (spec:
   });
 
   it('opens for the same held finger at 735 ms where the primary pointer is coarse, and at 500 ms where it is fine', () => {
-    const shows = () =>
-      vi.mocked(HTMLElement.prototype.showPopover).mock.calls.length;
+    const shows = menuShows;
     const renderTrigger = () => {
       const view = render(
         <ContextMenu items={[{label: 'Item 1'}]} data-testid="ctx">

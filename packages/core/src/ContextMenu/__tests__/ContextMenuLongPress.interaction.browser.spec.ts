@@ -422,7 +422,23 @@ test('under Reduce Motion the card does not grow, and the menu still opens at 73
   const shown = await menuShownAt(page);
   const decided = await menuShownTimerAt(page);
   expect(scales).toEqual([1, 1, 1]);
-  expect(await trigger.evaluate(el => el.getAnimations().length)).toBe(0);
+  // No growth played on it. The lift's own entrance only fades under Reduce
+  // Motion.
+  expect(
+    await trigger.evaluate(
+      el =>
+        el
+          .getAnimations()
+          .filter(
+            animation =>
+              new Set(
+                (animation.effect as KeyframeEffect | null)
+                  ?.getKeyframes()
+                  .map(frame => String(frame.scale)),
+              ).size > 1,
+          ).length,
+    ),
+  ).toBe(0);
   expect(shown, 'the menu never showed').not.toBeNull();
   expect(
     decided,
@@ -672,69 +688,6 @@ test('a finger that slides on past the menu leaves it open with no row lit, sele
     'No action yet',
   );
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
-});
-
-test('the menu’s anchor sits under the finger, on screen and as laid out, while the trigger is grown, and the menu stays put', async ({
-  page,
-}) => {
-  const {driver, trigger} = await openTouchStory(page);
-  const box = await trigger.boundingBox();
-  if (box == null) {
-    throw new Error('no trigger');
-  }
-  const menu = page.getByRole('menu', {name: 'Photo actions'});
-  // The cursor anchor (the trigger's last child), on screen and as laid out
-  // (engines differ on which one anchor positioning reads), and the menu.
-  const read = async () =>
-    trigger.evaluate(el => {
-      const anchor = el.lastElementChild as HTMLElement | null;
-      const box = el.getBoundingClientRect();
-      const host = el as HTMLElement;
-      const left = box.left + (box.width - host.offsetWidth) / 2;
-      const top = box.top + (box.height - host.offsetHeight) / 2;
-      const onScreen = anchor?.getBoundingClientRect();
-      const list = document
-        .querySelector('[role="menu"]')
-        ?.getBoundingClientRect();
-      return {
-        onScreen: onScreen == null ? null : {x: onScreen.x, y: onScreen.y},
-        laidOut:
-          anchor == null
-            ? null
-            : {
-                x: left + host.clientLeft + anchor.offsetLeft,
-                y: top + host.clientTop + anchor.offsetTop,
-              },
-        menu: list == null ? null : {x: list.x, y: list.y},
-      };
-    });
-  // The middle of the card and near its far corner, where an anchor placed
-  // in the grown trigger's scaled coordinates would land furthest off.
-  for (const [fx, fy] of [
-    [0.5, 0.5],
-    [0.9, 0.85],
-  ] as const) {
-    const p = {
-      x: Math.round(box.x + box.width * fx),
-      y: Math.round(box.y + box.height * fy),
-    };
-    await driver.play(hold(p, menuDisplayMs + 100));
-    await expect(menu).toBeVisible();
-    const first = await read();
-    await page.waitForTimeout(400);
-    const later = await read();
-    await page.keyboard.press('Escape');
-    await expect(menu).toBeHidden();
-    // Let the trigger return to its size before the next press.
-    await page.waitForTimeout(1200);
-    const detail = JSON.stringify({p, first, later});
-    expect(first.onScreen?.x, detail).toBeCloseTo(p.x, 0);
-    expect(first.onScreen?.y, detail).toBeCloseTo(p.y, 0);
-    expect(first.laidOut?.x, detail).toBeCloseTo(p.x, 0);
-    expect(first.laidOut?.y, detail).toBeCloseTo(p.y, 0);
-    expect(later.menu?.x, detail).toBeCloseTo(first.menu?.x ?? NaN, 0);
-    expect(later.menu?.y, detail).toBeCloseTo(first.menu?.y ?? NaN, 0);
-  }
 });
 
 test('a drag past the tolerance after the commit opens nothing', async ({
@@ -1096,6 +1049,30 @@ test('the press feedback does no Layout or Paint per frame', async ({
 });
 
 /** The story with somewhere to scroll below it, and its trigger's center. */
+/**
+ * Until the lift has grown: the layer runtime's hold, which keeps new touches
+ * off the lift layer while it grows, has ended.
+ */
+async function untilLiftGrown(page: Page) {
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => {
+          const layer = document.querySelector(
+            '[data-astryx-context-menu-lift]',
+          );
+          return (
+            layer != null &&
+            ![...layer.children].some(child =>
+              child.matches('div[popover]:popover-open'),
+            )
+          );
+        }),
+      {timeout: 4000},
+    )
+    .toBe(true);
+}
+
 async function openScrollableStory(page: Page) {
   const story = await openTouchStory(page);
   await page.evaluate(() => {
@@ -1133,14 +1110,89 @@ test('the page does not scroll under the finger that held the menu open, and it 
   expect(await page.evaluate(() => document.body.style.position)).toBe('');
 });
 
-test('a new finger that pans outside the open menu closes it, and the page scrolls', async ({
+test('an inline trigger’s menu anchor sits under the finger, on screen and as laid out, and the menu stays put', async ({
+  page,
+}) => {
+  await openStory(page, storybook(), 'core-contextmenu--inline-trigger');
+  const driver = await touchDriver(page);
+  // The reference's trigger: the inline wrapper around its link.
+  const trigger = page.getByText('T123').locator('xpath=..');
+  await expect(trigger).toHaveAttribute('data-astryx-pressable', '', {
+    timeout: 10_000,
+  });
+  const box = await trigger.boundingBox();
+  if (box == null) {
+    throw new Error('no trigger');
+  }
+  const menu = page.getByRole('menu', {name: 'Task actions'});
+  // The cursor anchor (the trigger's last child), on screen and as laid out
+  // (engines differ on which one anchor positioning reads), and the menu.
+  const read = async () =>
+    trigger.evaluate(el => {
+      const anchor = el.lastElementChild as HTMLElement | null;
+      const box = el.getBoundingClientRect();
+      const host = el as HTMLElement;
+      const left = box.left + (box.width - host.offsetWidth) / 2;
+      const top = box.top + (box.height - host.offsetHeight) / 2;
+      const onScreen = anchor?.getBoundingClientRect();
+      const list = document
+        .querySelector('[role="menu"]')
+        ?.getBoundingClientRect();
+      return {
+        onScreen: onScreen == null ? null : {x: onScreen.x, y: onScreen.y},
+        laidOut:
+          anchor == null
+            ? null
+            : {
+                x: left + host.clientLeft + anchor.offsetLeft,
+                y: top + host.clientTop + anchor.offsetTop,
+              },
+        menu: list == null ? null : {x: list.x, y: list.y},
+        lifted:
+          document.querySelector('[data-astryx-context-menu-lift]') != null,
+      };
+    });
+  // The middle of the link and near its far corner.
+  for (const [fx, fy] of [
+    [0.5, 0.5],
+    [0.9, 0.85],
+  ] as const) {
+    const p = {
+      x: Math.round(box.x + box.width * fx),
+      y: Math.round(box.y + box.height * fy),
+    };
+    await driver.play(hold(p, menuDisplayMs + 100));
+    await expect(menu).toBeVisible();
+    const first = await read();
+    await page.waitForTimeout(400);
+    const later = await read();
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+    await page.waitForTimeout(300);
+    const detail = JSON.stringify({p, first, later});
+    // An inline trigger does not lift: the menu opens at the finger.
+    expect(first.lifted, detail).toBe(false);
+    expect(first.onScreen?.x, detail).toBeCloseTo(p.x, 0);
+    expect(first.onScreen?.y, detail).toBeCloseTo(p.y, 0);
+    // `offsetLeft` and `offsetTop` are whole pixels, and a line of text sits
+    // at a fraction of one: the laid-out read is within a pixel.
+    expect(Math.abs((first.laidOut?.x ?? NaN) - p.x), detail).toBeLessThan(1);
+    expect(Math.abs((first.laidOut?.y ?? NaN) - p.y), detail).toBeLessThan(1);
+    expect(later.menu?.x, detail).toBeCloseTo(first.menu?.x ?? NaN, 0);
+    expect(later.menu?.y, detail).toBeCloseTo(first.menu?.y ?? NaN, 0);
+  }
+});
+
+test('a new finger that pans outside the open menu closes it, and the next pan scrolls the page', async ({
   page,
 }) => {
   const {driver, center, top} = await openScrollableStory(page);
   await driver.play(hold(center, menuDisplayMs + 50));
   const menu = page.getByRole('menu', {name: 'Photo actions'});
   await expect(menu).toBeVisible();
-  const before = await top();
+  // The trigger lifted. While it grows, the layer runtime's hold keeps new
+  // touches off its tint.
+  await untilLiftGrown(page);
   // The menu opens at the finger. So the new finger lands beside the menu's
   // box, at the first point below or above it with room for the pan.
   const box = await menu.boundingBox();
@@ -1165,8 +1217,15 @@ test('a new finger that pans outside the open menu closes it, and the page scrol
     drag(outside, {x: outside.x, y: outside.y - 120}, {durationMs: 300}),
   );
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeHidden();
-  // WebKit scrolls nothing from an injected touch (README: engine limits).
+  // The tint took that pan. Once the trigger is back, nothing locks the
+  // page: the next pan scrolls it. WebKit scrolls nothing from an injected
+  // touch (README: engine limits).
+  await expect(page.locator('[data-astryx-context-menu-lift]')).toHaveCount(0);
   if (driver.drivesNativeGestures) {
+    const before = await top();
+    await driver.play(
+      drag(outside, {x: outside.x, y: outside.y - 120}, {durationMs: 300}),
+    );
     expect(await top()).toBeLessThan(before);
   }
 });

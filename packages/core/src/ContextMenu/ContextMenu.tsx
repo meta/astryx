@@ -5,8 +5,9 @@
  * @file ContextMenu.tsx
  * @input Uses React, StyleX, useLayer, shared layer dismissal, BottomSheet,
  *   useListFocus, the presentation resolver (usePresentation), useLongPress,
- *   and the touch layer (ContextMenuTouchLayer)
- * @output Exports ContextMenu with cursor-popover and touch-sheet presentations
+ *   and the touch layer (ContextMenuTouchLayer, with the lift)
+ * @output Exports ContextMenu with cursor-popover, touch-lift and touch-sheet
+ *   presentations
  * @position Core implementation; consumed by index.ts
  *
  * Right-click context menu positioned at the cursor. The cursor point is
@@ -34,6 +35,9 @@
  * The trigger wrapper is a `div` by default; `triggerAs` makes it an inline
  * `span`, so a reference inside prose can own a context menu without
  * breaking the text flow.
+ * When a held finger opens the menu on a block trigger, the trigger lifts
+ * above a tinted page (ContextMenuLift.ts). The menu sits beside it
+ * (`contextMenu.lift`).
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/ContextMenu/ContextMenu.doc.mjs
@@ -41,6 +45,7 @@
  * - /packages/core/src/ContextMenu/ContextMenuTouch.ts (the touch layer's one import site)
  * - /packages/core/src/ContextMenu/contextMenuPress.ts (touch timeline)
  * - /packages/core/src/ContextMenu/contextMenuPressFeedback.ts (press feedback)
+ * - /packages/core/src/ContextMenu/ContextMenuLift.ts (the lift)
  * - /packages/core/src/ContextMenu/index.ts
  * - /apps/storybook/stories/ContextMenu.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/ContextMenu/ (showcase blocks)
@@ -61,6 +66,14 @@ import {Button} from '../Button';
 import {Heading} from '../Heading';
 import {Icon} from '../Icon';
 import {useLayerInternal} from '../Layer/useLayer';
+import {addAnchorName, removeAnchorName} from '../Layer/anchorName';
+import type {LiftFromTriggerResult} from '../liftFromTrigger/liftFromTrigger';
+import {
+  surfacePlacement,
+  type SurfacePlacement,
+} from '../liftFromTrigger/liftFromTriggerGeometry';
+import {contextMenu} from '../motion/uikit/contextMenu';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {currentGesture} from '../Layer/gestureCounter';
@@ -448,10 +461,21 @@ export function ContextMenu({
   // The mounted touch layer, for its press feedback and whether it times a
   // finger.
   const touchHandleRef = useRef<ContextMenuTouchHandle | null>(null);
+  // While a finger's menu is up on a lifted trigger: where the trigger
+  // landed, and the menu's side and alignment against it.
+  const liftRef = useRef<LiftFromTriggerResult | null>(null);
+  const [liftPlacement, setLiftPlacement] = useState<SurfacePlacement | null>(
+    null,
+  );
   // The menu closed: a finger's menu is over, and the trigger returns with
   // the close itself (run by every close handler below).
   const endTouchOpen = useCallback(() => {
     touchHandleRef.current?.release();
+    if (liftRef.current != null) {
+      liftRef.current = null;
+      touchHandleRef.current?.drop();
+      setLiftPlacement(null);
+    }
   }, []);
 
   const updateOpenState = useCallback(
@@ -800,16 +824,84 @@ export function ContextMenu({
   });
   const {continueGesture} = menuPress;
 
+  // Opens the menu beside the lifted trigger. The layer's anchor is the
+  // lift's own box at the lifted rect: an anchor inside the trigger would
+  // move with the trigger's lift. The menu renders below first, and once
+  // shown its height picks the side (the layout effect below), before the
+  // frame paints. It fades in.
+  const openLifted = useCallback(
+    (lifted: LiftFromTriggerResult) => {
+      liftRef.current = lifted;
+      setLiftPlacement(
+        surfacePlacement(
+          lifted.lifted,
+          0,
+          lifted.viewport,
+          contextMenu.lift.menuGap,
+        ),
+      );
+      triggerFocusRef.current =
+        document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : triggerRef.current;
+      focusOnShowRef.current = 'menu';
+      layer.show();
+      // The show names the cursor anchor inside the trigger. The lift's box
+      // takes the name in the same task, so the menu's first frame is placed
+      // against it.
+      const cursorAnchor = cursorAnchorRef.current;
+      if (cursorAnchor != null) {
+        removeAnchorName(cursorAnchor, layer.anchorId);
+      }
+      addAnchorName(lifted.anchor, layer.anchorId);
+      const menu = listRef.current?.closest<HTMLElement>('[popover]');
+      if (menu != null) {
+        touchHandleRef.current?.enterMenu(menu);
+      }
+    },
+    [layer, listRef],
+  );
+  useIsomorphicLayoutEffect(() => {
+    const lifted = liftRef.current;
+    const menu = listRef.current?.closest<HTMLElement>('[popover]');
+    if (lifted == null || liftPlacement == null || menu == null) {
+      return;
+    }
+    const placement = surfacePlacement(
+      lifted.lifted,
+      menu.offsetHeight,
+      lifted.viewport,
+      contextMenu.lift.menuGap,
+    );
+    if (
+      placement.side !== liftPlacement.side ||
+      placement.alignment !== liftPlacement.alignment
+    ) {
+      setLiftPlacement(placement);
+    }
+  }, [liftPlacement, listRef]);
+
   // Touch invocation. Under the touch model, the touch layer runs UIKit's long
   // press and asks for the menu here, at the client point where the finger
   // landed.
   const openFromFinger = useCallback(
     (point: {x: number; y: number}, held: ContextMenuHeldPointer | null) => {
-      const local = toTriggerLocal(point);
       // The finger is still down: its lift belongs to the press that opened
       // the menu, so it does not close it.
       openingGestureRef.current = currentGesture();
-      openAtLocalPoint(local.x, local.y, triggerRef.current, 'menu');
+      // UIKit's presentation under a finger: a block trigger lifts above a
+      // tinted page, and the menu sits beside it. An inline trigger and the
+      // sheet keep the menu where the finger landed.
+      const lifted =
+        triggerAs !== 'span' && !usesBottomSheet
+          ? (touchHandleRef.current?.lift() ?? null)
+          : null;
+      if (lifted != null) {
+        openLifted(lifted);
+      } else {
+        const local = toTriggerLocal(point);
+        openAtLocalPoint(local.x, local.y, triggerRef.current, 'menu');
+      }
       // A finger still down goes on into the menu as its opening press: it
       // slides onto an item, and its lift selects it. A lift over no item
       // leaves the menu open.
@@ -817,7 +909,14 @@ export function ContextMenu({
         continueGesture({...held, time: Date.now()});
       }
     },
-    [continueGesture, openAtLocalPoint, toTriggerLocal],
+    [
+      continueGesture,
+      openAtLocalPoint,
+      openLifted,
+      toTriggerLocal,
+      triggerAs,
+      usesBottomSheet,
+    ],
   );
 
   // Today's long press for a finger outside the touch model: under a fine
@@ -1061,6 +1160,7 @@ export function ContextMenu({
           onOpen={openFromFinger}
           onCommit={prepareMenu}
           onCancel={layer.releasePrepared}
+          onBackdropTap={closeMenu}
         />
       ) : null}
 
@@ -1074,11 +1174,24 @@ export function ContextMenu({
           </LazyMenuBottomSheet>
         </Suspense>
       ) : (
-        layer.render(<LayerDepthProvider>{renderedMenu}</LayerDepthProvider>, {
-          placement: 'below',
-          alignment: 'start',
-          xstyle: [popoverXstyle, layerAnimations.below],
-        })
+        layer.render(
+          <LayerDepthProvider>{renderedMenu}</LayerDepthProvider>,
+          liftPlacement != null
+            ? {
+                // With no room on either side, the layer runtime's own
+                // fallback places it.
+                placement: liftPlacement.side === 'above' ? 'above' : 'below',
+                alignment: liftPlacement.alignment,
+                offset: contextMenu.lift.menuGap,
+                // The lift fades the menu in.
+                xstyle: [popoverXstyle],
+              }
+            : {
+                placement: 'below',
+                alignment: 'start',
+                xstyle: [popoverXstyle, layerAnimations.below],
+              },
+        )
       )}
     </>
   );

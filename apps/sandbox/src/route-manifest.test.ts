@@ -84,6 +84,9 @@ describe('Sandbox static export contract', () => {
       routes.find(item => item.route === '/pages/text-types/'),
     ).toMatchObject({group: 'raw'});
     expect(
+      routes.find(item => item.route === '/pages/context-menu-lift/'),
+    ).toMatchObject({group: 'raw'});
+    expect(
       routes.find(item => item.route === '/templates/work-item-detail/'),
     ).toMatchObject({group: 'fullscreen'});
     expect(

@@ -4,7 +4,7 @@
  * @file contextMenu.ts
  * @input Measurements of UIContextMenuInteraction on iOS 26.2
  * @output `contextMenu`: UIContextMenuInteraction's touch timeline, drift
- *   tolerance, held scale and commit haptic
+ *   tolerance, held scale, commit haptic and lifted preview
  * @position The context-menu domain of the UIKit constants table. Only
  *   ContextMenu's own modules import it. The table's barrel does not
  *   re-export it.
@@ -114,4 +114,38 @@ export const contextMenu = {
    *   0.6 s; a press lifted at 0.25 s does not grow either
    */
   reducedMotionFeedback: false,
+  /**
+   * The lifted preview. When the menu shows under a finger, the view lifts
+   * out of the page above a tint. The menu sits beside it.
+   */
+  lift: {
+    /**
+     * The preview grows to this factor at most.
+     * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+     *   iPhone 17 Pro, settled platter frames, Oct 23 2026. A 60 × 60 pt icon
+     *   lifts to 69 × 69 (1.15).
+     */
+    maxScale: 1.15,
+    /**
+     * Below `maxScale`, the preview grows by this many points on its larger
+     * side.
+     * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+     *   iPhone 17 Pro, settled platter frames, Oct 23 2026. A 200 × 120 pt
+     *   card lifts to 226 × 135.67 (1.13).
+     * @source GUESS — the larger side (only landscape-shaped previews were
+     *   measured)
+     * @measure M-CM9
+     */
+    scaleUpPoints: 26,
+    /**
+     * The gap between the lifted preview and its menu. The menu goes below
+     * the preview when it fits above the bottom gutter, else above.
+     * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+     *   iPhone 17 Pro, settled platter and menu frames, Oct 23 2026. Cards
+     *   sat at the top, middle, bottom and both sides. The gap was 16 pt
+     *   either side. The middle card's menu went below, the bottom card's
+     *   above.
+     */
+    menuGap: 16,
+  },
 } as const;

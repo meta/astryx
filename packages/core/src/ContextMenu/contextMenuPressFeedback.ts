@@ -7,8 +7,9 @@
  * @input UIKit's context-menu springs, the context-menu constants, the
  *   compositor animator, the presses ContextMenu's recognizer takes, and the
  *   press state core's press machine writes
- * @output useContextMenuPressFeedback: hold and release, from ContextMenu's
- *   menu; the growth follows the recognizer's finger, or a pen's press mark
+ * @output useContextMenuPressFeedback: hold, release and let go, from
+ *   ContextMenu. The growth follows the recognizer's finger, or a pen's
+ *   press mark
  * @position The press feedback of ContextMenu's touch invocation
  *
  * SYNC: When modified, update /packages/core/src/ContextMenu/ContextMenu.tsx
@@ -59,6 +60,12 @@ export interface ContextMenuPressFeedback {
    * box. So a trigger that still grows would carry the open menu with it.
    */
   hold(): void;
+  /**
+   * The lift takes the trigger: the feedback lets go of it at once, its
+   * scale and compositing layer included. The lift grows on from the rect
+   * the press left.
+   */
+  letGo(): void;
 }
 
 /** A press feedback with no recognizer to ask grows at every "on". */
@@ -353,5 +360,19 @@ export function useContextMenuPressFeedback(
     isShown,
   );
 
-  return {begin, release, end, hold};
+  const letGo = useCallback(() => {
+    stopOnset();
+    isHeldRef.current = false;
+    const animator = animatorRef.current;
+    animatorRef.current = null;
+    const element = animator?.element;
+    // A new press makes a new animator.
+    animator?.dispose();
+    if (element != null && isGrownRef.current) {
+      isGrownRef.current = false;
+      element.style.removeProperty('scale');
+    }
+  }, [stopOnset]);
+
+  return {begin, release, end, hold, letGo};
 }
