@@ -156,7 +156,11 @@ function packageDirOf(cwd) {
  * `selector` names, else the only set.
  * @param {string} cwd
  * @param {string} [selector] a set name
- * @returns {Promise<{packageDir: string, pkg: Record<string, any>, root: string, set: DiscoveredIconSet, sets: DiscoveredIconSet[]}>}
+ * The set's `module` names the package as package.json names it now;
+ * `moduleRenamed` says the data file still names an old name, so a command
+ * writes the data file even when nothing else changes; `moduleUpdate` gives
+ * the old and the new name for the receipt, else null.
+ * @returns {Promise<{packageDir: string, pkg: Record<string, any>, root: string, set: DiscoveredIconSet, sets: DiscoveredIconSet[], moduleRenamed: boolean, moduleUpdate: {previous: string, module: string} | null}>}
  */
 export async function findLocalIconSet(cwd, selector) {
   const packageDir = packageDirOf(cwd);
@@ -200,12 +204,20 @@ export async function findLocalIconSet(cwd, selector) {
     ? found.sets.filter(set => set.name === selector)
     : found.sets;
   if (named.length === 1) {
+    const set = {...named[0], packageDir};
+    const module = moduleInPackage(set.data.module, pkg.name);
+    const moduleUpdate =
+      module !== set.data.module ? {previous: set.data.module, module} : null;
+    const moduleRenamed = moduleUpdate != null;
+    if (moduleRenamed) set.data = {...set.data, module};
     return {
       packageDir,
       pkg,
       root,
-      set: {...named[0], packageDir},
+      set,
       sets: found.sets,
+      moduleRenamed,
+      moduleUpdate,
     };
   }
   const broken = selector
@@ -237,6 +249,22 @@ export async function findLocalIconSet(cwd, selector) {
       reason: 'an icon set in this package',
     })),
   );
+}
+
+/**
+ * The data file's `module` in the package as it is named now. The data file
+ * belongs to the CLI, so after a package rename the next write gives the new
+ * name (`@acme/old/solid` → `@acme/new/solid`). A ./ path, or a package
+ * with no name, is left as it is.
+ * @param {string} module
+ * @param {unknown} name the package.json `name`
+ */
+function moduleInPackage(module, name) {
+  if (typeof name !== 'string' || name === '' || module.startsWith('.')) {
+    return module;
+  }
+  const owner = iconModulePackage(module);
+  return owner === name ? module : `${name}${module.slice(owner.length)}`;
 }
 
 /** The data file's fields, in the order the file is written. */

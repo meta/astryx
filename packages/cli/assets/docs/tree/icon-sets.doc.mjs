@@ -61,7 +61,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: "`outline.doc.mjs` is the descriptor: name, display name and description (`--display-name`, `--description`), and `license`, the SPDX license of the artwork (it starts as your package's own). `outline.icons.json` starts with no icons and an empty `map`; its `module` is your package name. `outline.generated.js` is the set's generated module, with its declaration file `outline.generated.d.ts`: the CLI writes both, and every icon and the theme map are exports of it. Every field is in {@link schema:icon-set-doc} and {@link schema:icon-set-data}.",
+          text: "`outline.doc.mjs` is the descriptor: name, display name and description (`--display-name`, `--description`), and `license`, the SPDX license of the artwork (it starts as your package's own). `outline.icons.json` starts with no icons and an empty `map`; its `module` is your package name. After you rename the package, the next command that writes the data file (`new-set` on the existing set, with or without `--from`, `add`, `map`, or `new-definition --icon`) writes the new name and keeps any subpath (`@acme/old-icons/outline` becomes `@acme/new-icons/outline`), and its receipt says so. `outline.generated.js` is the set's generated module, with its declaration file `outline.generated.d.ts`: the CLI writes both, and every icon and the theme map are exports of it. Every field is in {@link schema:icon-set-doc} and {@link schema:icon-set-data}.",
         },
         {
           type: 'prose',

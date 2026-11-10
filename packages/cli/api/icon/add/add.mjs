@@ -395,6 +395,8 @@ export async function iconAdd(exportName, options) {
       map,
       icons,
     };
+    const dataChanged =
+      JSON.stringify(next) !== JSON.stringify(set.data) || where.moduleRenamed;
     /** @type {string[]} */
     const files = [];
     // Every write happens inside this try, so any failure undoes the ones
@@ -422,7 +424,7 @@ export async function iconAdd(exportName, options) {
             .join('/'),
         );
       }
-      if (JSON.stringify(next) !== JSON.stringify(set.data)) {
+      if (dataChanged) {
         writeIconSetData(set, next, {
           extraDefinitions: created ? [created.name] : [],
         });
@@ -442,10 +444,12 @@ export async function iconAdd(exportName, options) {
       }
       throw error;
     }
-    const changed =
+    // A renamed package's new name alone is not an added icon.
+    const added =
       JSON.stringify(next) !== JSON.stringify(set.data) ||
       created != null ||
       generatedChanged;
+    const changed = dataChanged || added;
     // A ./ file publishes only when package.json `files` lists it; the
     // author adds it (architecture:cli-surface INV16).
     const note =
@@ -466,6 +470,8 @@ export async function iconAdd(exportName, options) {
         ...(created ? {newDefinition: created.name} : {}),
         files,
         changed,
+        added,
+        ...(where.moduleUpdate ? {moduleUpdate: where.moduleUpdate} : {}),
         ...(note ? {note} : {}),
       },
     };
@@ -774,7 +780,8 @@ async function addVariantForAll({cwd, from, selector, variant}) {
   const files = [];
   const written = writeGeneratedIcons(packageDir, generated, next, toWrite);
   files.push(...written.files);
-  const dataChanged = JSON.stringify(next) !== JSON.stringify(set.data);
+  const dataChanged =
+    JSON.stringify(next) !== JSON.stringify(set.data) || where.moduleRenamed;
   if (dataChanged) {
     try {
       writeIconSetData(set, next);
@@ -798,6 +805,7 @@ async function addVariantForAll({cwd, from, selector, variant}) {
       missing,
       files,
       changed: dataChanged || written.changed,
+      ...(where.moduleUpdate ? {moduleUpdate: where.moduleUpdate} : {}),
     },
   };
 }
