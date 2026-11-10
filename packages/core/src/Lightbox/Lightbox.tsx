@@ -445,9 +445,12 @@ const styles = stylex.create({
     // The clamp draws an ellipsis on its last line. The place shows nothing.
     visibility: 'hidden',
     // The lines are generated, so the caption's text and its ranges hold
-    // none of them.
+    // none of them. Each line is a no-break space, and the place shows as
+    // many as the caption does. An open caption scrolls once it passes 60 %
+    // of the viewport, and then the place is not shown. 240 lines cover that
+    // at a 10px line in a window 4,000px tall.
     '::before': {
-      content: 'attr(data-lines)',
+      content: `"${'\\A0\\A'.repeat(239)}\\A0"`,
     },
   },
   // The place shows one line box for each line the caption shows. Layout
@@ -633,16 +636,6 @@ const KEYBOARD_PAN_OFFSETS: Record<string, [number, number]> = {
 /** The height of a video's native controls, px: no browser reports it. */
 const VIDEO_CONTROLS_BAND = 48;
 
-/**
- * The toggle's place generates these lines of a no-break space, and shows
- * as many as the caption does. They never change, so a measurement changes
- * no node. An open caption scrolls once it passes 60 % of the viewport, and
- * then the place is not shown. 240 lines cover that at a 10px line in a
- * window 4,000px tall.
- */
-const CAPTION_PLACE_LINES = Array.from({length: 240}, () => '\u00a0').join(
-  '\n',
-);
 /**
  * A fullscreen overlay for viewing images and videos at full resolution.
  *
@@ -1310,6 +1303,9 @@ export function Lightbox({
 
   const isZoomTarget = hasZoom && !isVideo;
 
+  // The current page's caption band. The drag to close fades it with the
+  // viewer's controls.
+  const currentCaptionBandRef = useRef<HTMLDivElement | null>(null);
   const dismissFades = useCallback((): {
     backdrop: Animator | null;
     chrome: Animator[];
@@ -1320,14 +1316,16 @@ export function Lightbox({
       return {backdrop: null, chrome: []};
     }
     // A caption in a band fades as the band, which carries its backing.
-    const chrome: HTMLElement[] = [];
+    const band = currentCaptionBandRef.current;
+    const chrome: HTMLElement[] = band == null ? [] : [band];
     for (const element of container.querySelectorAll<HTMLElement>(
-      '[data-lightbox-chrome], [data-lightbox-page]:not([data-current]), [data-lightbox-caption-band], [data-lightbox-caption]',
+      '[data-lightbox-chrome], [data-lightbox-page]:not([data-current]), [data-lightbox-caption]',
     )) {
       if (
         element.parentElement?.closest(
-          '[data-lightbox-page]:not([data-current]), [data-lightbox-caption-band]',
-        ) == null
+          '[data-lightbox-page]:not([data-current])',
+        ) == null &&
+        band?.contains(element) !== true
       ) {
         chrome.push(element);
       }
@@ -1946,7 +1944,6 @@ export function Lightbox({
                   )}>
                   <div
                     ref={imageWrapperRef}
-                    data-lightbox-viewport=""
                     {...(isWrapperZoomButton ? zoomButtonProps : undefined)}
                     {...stylex.props(
                       styles.imageWrapper,
@@ -2030,7 +2027,11 @@ export function Lightbox({
                             </div>
                             {hasCaptionBand && (
                               <div
-                                data-lightbox-caption-band=""
+                                ref={
+                                  i === index
+                                    ? currentCaptionBandRef
+                                    : undefined
+                                }
                                 {...stylex.props(
                                   styles.captionBand,
                                   !isRenderable(mediaArray[i].caption) &&
@@ -2097,7 +2098,6 @@ export function Lightbox({
                                                   captionShownLines,
                                                 ),
                                             )}
-                                            data-lines={CAPTION_PLACE_LINES}
                                           />
                                           {mediaArray[i].caption}
                                         </div>

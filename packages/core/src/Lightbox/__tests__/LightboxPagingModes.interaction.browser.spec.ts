@@ -121,7 +121,7 @@ async function openGallery(
   await expect(dialog).toBeVisible();
   // The pager's viewport. In a gallery the keyboard's zoom button is the
   // current page's photo box inside it.
-  const viewport = dialog.locator('[data-lightbox-viewport]');
+  const viewport = dialog.locator('[data-lightbox-media] > :first-child');
   const track = viewport.locator(':scope > div').first();
   await expect
     .poll(async () =>

@@ -125,7 +125,7 @@ async function openGallery(
   await expect(dialog).toBeVisible();
   // The pager's viewport. In a gallery the keyboard's zoom button is the
   // current page's photo box inside it.
-  const viewport = dialog.locator('[data-lightbox-viewport]');
+  const viewport = dialog.locator('[data-lightbox-media] > :first-child');
   const track = viewport.locator(':scope > div').first();
   await expect
     .poll(async () =>
@@ -1771,7 +1771,9 @@ for (const viewport of [
     const opening = await openReads();
     await dialog.getByRole('button', {name: 'Next'}).click();
     await expect(dialog.getByText('2 / 4')).toBeVisible();
-    await waitForRest(dialog.locator('[data-lightbox-viewport] > div').first());
+    await waitForRest(
+      dialog.locator('[data-lightbox-media] > :first-child > div').first(),
+    );
     await frames(page, 2);
     const backReads = await logCaptionReadsInTask(page, 'keydown');
     await page.keyboard.press('ArrowLeft');
@@ -1848,7 +1850,9 @@ test("the caption toggle's width comes from its own delivery, never from a read 
   await expect(dialog.getByRole('button', {name: 'more'})).toBeVisible();
   await dialog.getByRole('button', {name: 'Next'}).click();
   await expect(dialog.getByText('2 / 4')).toBeVisible();
-  await waitForRest(dialog.locator('[data-lightbox-viewport] > div').first());
+  await waitForRest(
+    dialog.locator('[data-lightbox-media] > :first-child > div').first(),
+  );
   await frames(page, 2);
   // Back onto the clamped first caption, whose toggle mounts hidden and is
   // shown by the band's delivery.
@@ -2032,7 +2036,9 @@ test('no caption read follows a write in the same resize delivery, from opening 
   await frames(page, 2);
   await dialog.getByRole('button', {name: 'Next'}).click();
   await expect(dialog.getByText('2 / 4')).toBeVisible();
-  await waitForRest(dialog.locator('[data-lightbox-viewport] > div').first());
+  await waitForRest(
+    dialog.locator('[data-lightbox-media] > :first-child > div').first(),
+  );
   await frames(page, 2);
   await page.keyboard.press('ArrowLeft');
   await expect(dialog.getByText('1 / 4')).toBeVisible();
