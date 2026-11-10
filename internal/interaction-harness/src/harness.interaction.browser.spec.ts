@@ -314,9 +314,26 @@ test.describe('touch input', () => {
     );
     // One take: a fresh page, the script played, and the harness's record of
     // when each step left (`dispatchedAt`) and when its dispatch was answered.
-    // A control timer runs in the test process beside it.
-    const take = async () => {
+    // A control timer runs in the test process beside it. With `holdsPage`,
+    // the page keeps its main thread busy for 40 ms after each move.
+    const take = async (holdsPage = false) => {
       await fixture(page);
+      if (holdsPage) {
+        await page.evaluate(() => {
+          addEventListener(
+            'touchmove',
+            () => {
+              setTimeout(() => {
+                const end = performance.now() + 40;
+                while (performance.now() < end) {
+                  // the page's main thread is busy
+                }
+              });
+            },
+            {passive: true},
+          );
+        });
+      }
       const driver = await touchDriver(page);
       const answeredAt: number[] = [];
       // Taken before the harness reads its own clock to schedule the script.
@@ -372,132 +389,167 @@ test.describe('touch input', () => {
     // the dispatch (it answers only once the page has the event), so a driver
     // that holds the moves and sends them in a burst fails.
     //
-    // This take watches every step (`onEvent`), so the test records when
+    // Each take watches every step (`onEvent`), so the test records when
     // WebKit answered each step's dispatch.
     //
     // The pacing is bounded from above too. A WebKit play keeps each gap, less
     // ANSWER_SLACK_MS, after WebKit answered the step before (`pacedDeadline`),
     // so a stall stretches the gesture. A move must leave no more than 2 ms
-    // after that paced deadline, and a step's send must not outlast the
-    // spacing to the next. A harness that sends each step at twice its time
-    // leaves every move later than that. One whose send is that slow stretches
-    // the next gap by the send, less ANSWER_SLACK_MS. A runner whose CPU quota
-    // stalls the test process also wakes the harness late, or holds a send.
-    // A chain of 4 ms control timers then wakes late too: when the harness
-    // woke, or while it sent. A control timer wakes no more than 4 ms less
-    // late than the harness in the same stall. So a move is the runner's when
-    // the control woke more than 2 ms late, and the move was at most 4 ms
-    // later. The test names such a move and does not fail. Harness code
-    // that holds the process delays the control timers too, but the process
-    // runs through that delay. So a control wake counts only when the process
-    // ran for less than half of how late the wake was. A take fails when more
-    // than half its moves are off pace while the control woke on time.
-    const {played, answeredAt, playStart, wakes, log} = await take();
-    const {moves} = checkInput(log);
-    const sentAt = played.map(step => step.dispatchedAt);
-    const moveSteps = played.flatMap((step, i) =>
-      step.type === 'touchMove' ? [i] : [],
-    );
-    expect(moveSteps).toHaveLength(moves.length);
-    const timeOrigin = await page.evaluate(() => performance.timeOrigin);
-    for (const [m, i] of moveSteps.entries()) {
-      // Against the clock before play() started, not the start event's
-      // send, which can itself leave late. Date.now() counts whole
-      // milliseconds, hence the 1 ms.
-      expect(sentAt[i] - playStart).toBeGreaterThanOrEqual(played[i].t - 1);
-      // 2 ms of rounding between the two processes' clocks.
-      expect(timeOrigin + moves[m].timeStamp).toBeGreaterThanOrEqual(
-        sentAt[i] - 2,
+    // after that paced deadline. A harness that sends each step at twice its
+    // time leaves every move later than that. A runner whose CPU quota stalls
+    // the test process also wakes the harness late, or holds its work in a
+    // send. A chain of 4 ms control timers then wakes late too: when the
+    // harness woke, or while it sent. A control timer wakes no more than 4 ms
+    // less late than the harness in the same stall. So a move is the runner's
+    // when the control woke more than 2 ms late, and the move was at most 4 ms
+    // later. The test names such a move and does not fail. Harness code that
+    // holds the process delays the control timers too, but the process runs
+    // through that delay. So a control wake counts only when the process ran
+    // for less than half of how late the wake was.
+    //
+    // A send is the engine's command and the harness's own work around it.
+    // The harness's own part must not outlast the spacing to the next step.
+    // A harness that works that long in each send stretches the next gap by
+    // it. The command's own time is WebKit's round trip through its UI and web
+    // processes. A loaded runner can starve those processes while the test
+    // process and the page run on time, so neither control measures it. So
+    // the test names a move after a slow command and does not count it. A
+    // take fails when more than half its moves are off pace while the control
+    // woke on time.
+    const judge = async ({
+      played,
+      answeredAt,
+      playStart,
+      wakes,
+      log,
+    }: Awaited<ReturnType<typeof take>>) => {
+      const {moves} = checkInput(log);
+      const sentAt = played.map(step => step.dispatchedAt);
+      const moveSteps = played.flatMap((step, i) =>
+        step.type === 'touchMove' ? [i] : [],
       );
-      expect(timeOrigin + moves[m].timeStamp).toBeLessThanOrEqual(
-        answeredAt[i] + 2,
-      );
-      if (m > 0) {
-        expect(moves[m].timeStamp).toBeGreaterThanOrEqual(
-          moves[m - 1].timeStamp,
+      expect(moveSteps).toHaveLength(moves.length);
+      const timeOrigin = await page.evaluate(() => performance.timeOrigin);
+      for (const [m, i] of moveSteps.entries()) {
+        // Against the clock before play() started, not the start event's
+        // send, which can itself leave late. Date.now() counts whole
+        // milliseconds, hence the 1 ms.
+        expect(sentAt[i] - playStart).toBeGreaterThanOrEqual(played[i].t - 1);
+        // 2 ms of rounding between the two processes' clocks.
+        expect(timeOrigin + moves[m].timeStamp).toBeGreaterThanOrEqual(
+          sentAt[i] - 2,
         );
+        expect(timeOrigin + moves[m].timeStamp).toBeLessThanOrEqual(
+          answeredAt[i] + 2,
+        );
+        if (m > 0) {
+          expect(moves[m].timeStamp).toBeGreaterThanOrEqual(
+            moves[m - 1].timeStamp,
+          );
+        }
       }
-    }
-    // How late the control woke between two times, ms. With no wake in that
-    // span, the first wake after it. A wake whose process ran for half its
-    // delay or more counts as on time. The test process itself held it, not
-    // the runner.
-    const controlLateMs = (from: number, to: number) => {
-      const within = wakes.filter(wake => wake.at >= from && wake.at <= to);
-      const next = wakes.find(wake => wake.at > to);
-      return Math.max(
-        0,
-        ...(within.length > 0 ? within : next == null ? [] : [next]).map(
-          wake => (wake.ranMs < wake.lateMs / 2 ? wake.lateMs : 0),
-        ),
+      // How late the control woke between two times, ms. With no wake in that
+      // span, the first wake after it. A wake whose process ran for half its
+      // delay or more counts as on time. The test process itself held it, not
+      // the runner.
+      const controlLateMs = (from: number, to: number) => {
+        const within = wakes.filter(wake => wake.at >= from && wake.at <= to);
+        const next = wakes.find(wake => wake.at > to);
+        return Math.max(
+          0,
+          ...(within.length > 0 ? within : next == null ? [] : [next]).map(
+            wake => (wake.ranMs < wake.lateMs / 2 ? wake.lateMs : 0),
+          ),
+        );
+      };
+      // Each move's paced deadline, from the latest the play clock can have
+      // started (the start event's send) and WebKit's answer to the step
+      // before. Both come from the clock the play paces on, which reads a
+      // fraction of a millisecond, as do the control's wakes and the commands.
+      const pacedSent = played.map(step => step.pacedSentAt);
+      const pacedReturned = played.map(step => step.pacedReturnedAt);
+      const commandMs = played.map(
+        step => step.commandReturnedAt - step.commandSentAt,
       );
-    };
-    // Each move's paced deadline, from the latest the play clock can have
-    // started (the start event's send) and WebKit's answer to the step
-    // before. Both come from the clock the play paces on, which reads a
-    // fraction of a millisecond, as do the control's wakes.
-    const pacedSent = played.map(step => step.pacedSentAt);
-    const pacedReturned = played.map(step => step.pacedReturnedAt);
-    const offPace = moveSteps.flatMap((i, move) => {
-      const spacing = played[i].t - played[i - 1].t;
-      const deadline = Math.max(
-        pacedSent[0] + played[i].t,
-        pacedReturned[i - 1] + spacing - ANSWER_SLACK_MS,
-      );
-      const lateMs = pacedSent[i] - deadline;
-      const sendMs = pacedReturned[i - 1] - pacedSent[i - 1];
-      return [
-        // The control wakes that a stall ending at the harness's own wake
-        // delayed too.
-        ...(lateMs > 2
-          ? [
-              {
-                move,
-                why: 'left late',
-                ms: lateMs,
-                runnerMs: controlLateMs(pacedSent[i] - 2, pacedSent[i] + 8),
-              },
-            ]
-          : []),
-        ...(sendMs > spacing
-          ? [
-              {
-                move,
-                why: 'followed a slow send',
-                ms: sendMs - ANSWER_SLACK_MS,
-                runnerMs: controlLateMs(
-                  pacedSent[i - 1],
-                  pacedReturned[i - 1] + 4,
-                ),
-              },
-            ]
-          : []),
-      ];
-    });
-    const byRunner = (move: (typeof offPace)[number]) =>
-      move.runnerMs > 2 && move.ms <= move.runnerMs + 4;
-    const runner = offPace.filter(byRunner);
-    const harness = offPace.filter(move => !byRunner(move));
-    // A move can be off pace for both reasons: it counts once.
-    const countMoves = (list: typeof offPace) =>
-      new Set(list.map(entry => entry.move)).size;
-    const describe = (list: typeof offPace) =>
-      list
-        .map(
-          move =>
-            `${move.why} by ${Math.round(move.ms)} ms (control ${Math.round(move.runnerMs)} ms late)`,
-        )
-        .join(', ');
-    if (runner.length > 0) {
-      testInfo.annotations.push({
-        type: 'touch-runner-late',
-        description: `${countMoves(runner)} of ${moves.length} moves were off pace while the runner woke a control timer as late: ${describe(runner)}`,
+      const slowCommands: {move: number; ms: number}[] = [];
+      const offPace = moveSteps.flatMap((i, move) => {
+        const spacing = played[i].t - played[i - 1].t;
+        const deadline = Math.max(
+          pacedSent[0] + played[i].t,
+          pacedReturned[i - 1] + spacing - ANSWER_SLACK_MS,
+        );
+        const lateMs = pacedSent[i] - deadline;
+        const sendMs = pacedReturned[i - 1] - pacedSent[i - 1];
+        const ownSendMs = sendMs - commandMs[i - 1];
+        if (sendMs > spacing && ownSendMs <= spacing) {
+          slowCommands.push({move, ms: commandMs[i - 1]});
+        }
+        return [
+          // The control wakes that a stall ending at the harness's own wake
+          // delayed too.
+          ...(lateMs > 2
+            ? [
+                {
+                  move,
+                  why: 'left late',
+                  ms: lateMs,
+                  runnerMs: controlLateMs(pacedSent[i] - 2, pacedSent[i] + 8),
+                },
+              ]
+            : []),
+          ...(ownSendMs > spacing
+            ? [
+                {
+                  move,
+                  why: 'followed a slow send',
+                  ms: ownSendMs,
+                  runnerMs: controlLateMs(
+                    pacedSent[i - 1],
+                    pacedReturned[i - 1] + 4,
+                  ),
+                },
+              ]
+            : []),
+        ];
       });
-    }
-    expect(
-      countMoves(harness),
-      `touch pacing: ${countMoves(harness)} of ${moves.length} moves off pace while the control woke on time: ${describe(harness)}`,
-    ).toBeLessThanOrEqual(moves.length / 2);
+      const byRunner = (move: (typeof offPace)[number]) =>
+        move.runnerMs > 2 && move.ms <= move.runnerMs + 4;
+      const runner = offPace.filter(byRunner);
+      const harness = offPace.filter(move => !byRunner(move));
+      // A move can be off pace for both reasons: it counts once.
+      const countMoves = (list: typeof offPace) =>
+        new Set(list.map(entry => entry.move)).size;
+      const describe = (list: typeof offPace) =>
+        list
+          .map(
+            move =>
+              `${move.why} by ${Math.round(move.ms)} ms (control ${Math.round(move.runnerMs)} ms late)`,
+          )
+          .join(', ');
+      if (runner.length > 0) {
+        testInfo.annotations.push({
+          type: 'touch-runner-late',
+          description: `${countMoves(runner)} of ${moves.length} moves were off pace while the runner woke a control timer as late: ${describe(runner)}`,
+        });
+      }
+      if (slowCommands.length > 0) {
+        testInfo.annotations.push({
+          type: 'touch-engine-slow',
+          description: `${slowCommands.length} of ${moves.length} moves followed a slow engine command: ${slowCommands.map(command => `${Math.round(command.ms)} ms`).join(', ')}`,
+        });
+      }
+      expect(
+        countMoves(harness),
+        `touch pacing: ${countMoves(harness)} of ${moves.length} moves off pace while the control woke on time: ${describe(harness)}`,
+      ).toBeLessThanOrEqual(moves.length / 2);
+      return {moves: moves.length, slowCommands: slowCommands.length};
+    };
+    await judge(await take());
+    // The second take holds the page after each move, so WebKit answers the
+    // next command only once the page is free. Each command is slow, and the
+    // harness's own part of each send is not.
+    const held = await judge(await take(true));
+    expect(held.slowCommands).toBeGreaterThan(held.moves / 2);
   });
 
   test("a page whose pointer listener holds its main thread changes a paced flick's release itself: TouchPageStallError, never the runner's", async ({

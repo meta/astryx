@@ -205,6 +205,12 @@ export interface PlayedEvent extends TouchEventStep {
   readonly pacedSentAt: number;
   /** When the dispatch command returned, on that same clock, ms. */
   readonly pacedReturnedAt: number;
+  /**
+   * When the engine's command alone left and returned, on that same clock,
+   * ms. The rest of the send is the harness's own work.
+   */
+  readonly commandSentAt: number;
+  readonly commandReturnedAt: number;
   /** The timestamp handed to the engine, epoch ms (Chromium only). */
   readonly timestamp: number | null;
   /**
@@ -1065,10 +1071,25 @@ export function longestFrameGap(
   return Math.max(0, ...gaps.map(gap => gap.to - gap.from));
 }
 
+/** When an engine command left and returned, on the pacing clock, ms. */
+interface CommandTimes {
+  readonly sentAt: number;
+  readonly returnedAt: number;
+}
+
+/** Runs one engine command and reads when it left and returned. */
+async function timeCommand(
+  send: () => Promise<unknown>,
+): Promise<CommandTimes> {
+  const sentAt = performance.now();
+  await send();
+  return {sentAt, returnedAt: performance.now()};
+}
+
 async function playSteps(
   script: TouchScript,
   options: PlayOptions,
-  dispatch: (step: TouchEventStep, timestamp: number) => Promise<void>,
+  dispatch: (step: TouchEventStep, timestamp: number) => Promise<CommandTimes>,
   stampFor: (t: number) => number,
   probe: TouchArrivalProbe | null,
 ): Promise<PlayedEvent[]> {
@@ -1106,7 +1127,7 @@ async function playSteps(
     const timestamp = stampFor(step.t);
     const dispatchedAt = Date.now();
     const sentAt = performance.now();
-    await dispatch(step, timestamp);
+    const command = await dispatch(step, timestamp);
     const answered = performance.now();
     previous = {sentAt, returnedAt: answered};
     played.push({
@@ -1115,6 +1136,8 @@ async function playSteps(
       returnedAt: Date.now(),
       pacedSentAt: sentAt,
       pacedReturnedAt: answered,
+      commandSentAt: command.sentAt,
+      commandReturnedAt: command.returnedAt,
       timestamp,
     });
     const watched = performance.now();
@@ -1193,22 +1216,23 @@ async function chromiumDriver(page: Page): Promise<TouchDriver> {
       return playSteps(
         script,
         options,
-        async (step, timestamp) => {
+        (step, timestamp) =>
           // A start or move lists every finger down (CDP presses the new ones).
           // An end lists the fingers that lift: that releases exactly those
           // while the rest stay down and keep moving; the last lift lists none.
           // (A move that omits a finger does not release it.)
-          await cdp.send('Input.dispatchTouchEvent', {
-            type: step.type,
-            touchPoints:
-              step.type !== 'touchEnd'
-                ? touchPoints(step.fingers)
-                : step.fingers.length > 0
-                  ? touchPoints(step.changed)
-                  : [],
-            timestamp: timestamp / 1000,
-          });
-        },
+          timeCommand(() =>
+            cdp.send('Input.dispatchTouchEvent', {
+              type: step.type,
+              touchPoints:
+                step.type !== 'touchEnd'
+                  ? touchPoints(step.fingers)
+                  : step.fingers.length > 0
+                    ? touchPoints(step.changed)
+                    : [],
+              timestamp: timestamp / 1000,
+            }),
+          ),
         t => base + t,
         null,
       );
@@ -1393,14 +1417,15 @@ async function webkitDriver(page: Page): Promise<TouchDriver> {
       return playSteps(
         script,
         options,
-        async step => {
-          await session.send('Input.dispatchTouchEvent', {
-            type: step.type,
-            touchPoints: points(
-              step.type === 'touchMove' ? step.fingers : step.changed,
-            ),
-          });
-        },
+        step =>
+          timeCommand(() =>
+            session.send('Input.dispatchTouchEvent', {
+              type: step.type,
+              touchPoints: points(
+                step.type === 'touchMove' ? step.fingers : step.changed,
+              ),
+            }),
+          ),
         () => Date.now(),
         touchArrivalProbe(page),
       ).then(played => played.map(p => ({...p, timestamp: null})));
