@@ -7,8 +7,9 @@ shadcn/ui?**
 The eval measures the delivered result in a real browser. It does not score
 code style, unlike the static scores of the older nightly pipeline in `../src`.
 
-This folder has the arms, the tasks and the deterministic grader. It does not
-start agents yet. `--self-test` proves the grader on every task.
+A run starts one fresh agent per task, arm and repetition, grades each result
+with a deterministic grader, and reports pass rates with intervals under a hard
+cost cap. `--self-test` proves the grader on every task without an agent.
 
 ## Arms
 
@@ -37,6 +38,27 @@ folder outside the repository and checks itself:
 
 If any control is wrong, the run stops.
 
+## Agents
+
+Each run copies the arm into a new folder outside the repository and starts one
+fresh agent there. The agent gets the same prompt in every arm. Only the library
+name changes. The agent never sees the probes, the reference solutions or other
+runs.
+
+- Harness: Claude Code in bare mode (`claude -p --bare`). It loads no user
+  settings, plugins, hooks, MCP servers or memory files. Web tools and
+  sub-agents are off.
+- Model: one model for every arm, given with `--model` and recorded in
+  `meta.json`. A run that reports another model fails as `model-mismatch`.
+- Project instructions: bare mode reads no memory files, so the runner passes
+  the arm's root `AGENTS.md` or `CLAUDE.md`, if the arm's own setup wrote one.
+  Today only `astryx init` writes one.
+
+After the agent stops, the runner reads its transcript. A path that reaches the
+home folder, the repository or another run, or any use of a web tool or a
+sub-agent, is a violation, and the run fails as `integrity`. Other outside paths
+are warnings to review.
+
 ## Grading
 
 The grader is deterministic and has no LLM judge. A result passes only if all
@@ -51,6 +73,19 @@ four checks hold:
 The grader also records screenshots (desktop 1280×800 before and after the
 probe, phone 390×844), axe WCAG 2 A/AA counts and console errors. Those are
 evidence only and never change pass or fail.
+
+## Statistics and cost
+
+Each task runs `--reps` times per arm (default 3). The report gives each arm's
+pass rate with a 95% Wilson interval, the difference between the arms with a
+Newcombe interval, and passes per task. A difference whose interval contains 0
+is noise.
+
+`--budget-usd` is a hard total. A run starts only if the money spent, plus the
+per-run cap (`--run-budget-usd`) of every run in flight, plus its own cap, stays
+within the total. Otherwise it waits for a run in flight to finish, and it is
+recorded as `skipped-budget` only when it cannot fit with nothing in flight. The
+agent itself also stops at the per-run cap.
 
 ## Tasks
 
@@ -68,6 +103,24 @@ A task set is a folder under `tasks/`. Each task has three parts:
 
 `renderPrompt` in `lib/tasks.mjs` builds the one prompt every arm gets. Only
 the library name changes.
+
+## Running
+
+```bash
+# Free: check the controls, probes and references.
+node internal/vibe-tests/eval/run.mjs --self-test
+
+# 5 tasks × 2 arms × 3 reps = 30 agent runs.
+node internal/vibe-tests/eval/run.mjs --model <model-id> --budget-usd 15
+
+# Rebuild the report from saved records.
+node internal/vibe-tests/eval/run.mjs --report-only <run directory>
+```
+
+A run writes `meta.json` (inputs, versions, control results), one record per
+agent run in `records/`, each run's transcript, final `App.tsx` and screenshots
+in `runs/`, and `summary.json`, `report.md` and `report.html`. Set
+`VIBE_EVAL_AGENT_BIN` to use another `claude` binary.
 
 ## Self-test
 
@@ -97,5 +150,10 @@ what the eval measures, so compare results only within one arm version.
 
 - Chromium only. WebKit and real touch devices are not covered.
 - Remote fonts are blocked, so screenshots can use fallback fonts.
+- One agent harness. Results describe that harness and model, not agents in
+  general.
+- This folder writes its own record schema (`schemaVersion: 1` in `meta.json`).
+  It does not write the execution-provenance sidecars in
+  `../docs/execution-provenance.md`, which describe the older pipeline.
 - The `pilot` task set is small. It shows that the pipeline works and gives
   wide intervals. A comparison needs a larger fixed set.

@@ -4,7 +4,7 @@
  * @file Arm bases, their controls, and per-run workspaces outside the repo.
  * @input an arm descriptor and a run directory
  * @output an installed, control-checked base and fresh copies of it
- * @position Called by run.mjs before it grades anything
+ * @position Called by run.mjs before any agent starts
  */
 
 import {spawn} from 'node:child_process';
