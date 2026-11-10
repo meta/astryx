@@ -687,12 +687,13 @@ An anchored layer follows its anchor only through CSS anchor positioning
 (`position-anchor`, `position-area`, `anchor()` and `@position-try`). No script
 moves a layer to keep it on its anchor: no scroll, resize, observer or
 animation-frame handler writes a layer's `top`, `left`, `inset`, `translate`
-or `transform` from a measured anchor or layer rectangle. The runtime's reads
-that DEC-7 keeps choose among the layer's CSS options or hold it in place; they
-do not write coordinates. Three uses stay outside this rule because none of
-them follows an anchor: fixed mode's coordinates, which a caller sets once from
+or `transform` from a measured anchor or layer rectangle. The out-of-view hold and the re-pick that DEC-7 keeps choose among the
+layer's CSS options or hold it in place, and write no coordinates. Four uses stay
+outside this rule because none of them follows an anchor: fixed mode's coordinates, which a caller sets once from
 an event such as a context-menu press; a one-time entrance or exit transform
-that plays and ends; and the reduced fallback for browsers without anchor
+that plays and ends; the software keyboard's lift (FR9, DEC-6), which writes an
+inset to keep a layer clear of the keyboard, not to follow its anchor; and the
+reduced fallback for browsers without anchor
 positioning, which has no anchored geometry (`spec:AST-003` FR22).
 
 The owner, on popover scroll jank: "We should avoid repositioning layers to
