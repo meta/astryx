@@ -782,10 +782,12 @@ way, so no reading of the script's steps can say what it read. `stepwise:
 after a lift. A merge that begins there, stamped past `WHEEL_BUNCHED_MS`,
 reads as one big move, so the burst throws for it too. Before it names the
 runner, the burst gives the page-hold test that splits a burst to the steps
-the release reads, and to the wait behind any merge there. A hold the page's
-own listeners caused, or one across which it drew no frame, throws
-`WheelPageStallError` instead. The page's cause must outlast a frame, since a
-frame of slack is the dispatch's. A script outside its own bar is the proof's
+the release reads. It then reads the release again with each such hold's
+excess over its send spacing taken out. A hold explains the stray only when
+that read no longer strays, and the burst then throws `WheelPageStallError`.
+A stray that the read keeps stays the runner's. A merge there whose wait the
+page held is the page's. The page's cause must outlast a frame, since a frame
+of slack is the dispatch's. A script outside its own bar is the proof's
 mistake, never the dispatch's. On 248 logged runs of
 the trackpad-follow proofs, this read matched the host's own travel exactly
 wherever no merge fell inside those steps. It named every run that failed the

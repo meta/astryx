@@ -665,55 +665,112 @@ describe('WheelPacingError with a release read', () => {
 });
 
 describe('wheelReleaseHold', () => {
-  /** A delivery on pace: each step arrives at its stamp, handled in 1 ms. */
-  function onPace() {
-    const stamps = SENT.slice();
+  const FRAMES = Array.from({length: 24}, (_, k) => 8 + 16 * k);
+
+  /**
+   * A delivery on pace, each step handled in 1 ms. `late` adds ms to the gap
+   * before a received step. `held` makes the page's listeners on a step run
+   * that long, which holds the next step back.
+   */
+  function delivery(
+    late: Record<number, number> = {},
+    held: Record<number, number> = {},
+  ) {
+    const stamps: number[] = [];
+    const handledAt: number[] = [];
+    SENT.forEach((sent, i) => {
+      const gapMs =
+        i === 0 ? 0 : Math.max(16, (held[i - 1] ?? 0) + 2) + (late[i] ?? 0);
+      stamps.push(i === 0 ? 0 : stamps[i - 1] + gapMs);
+      handledAt.push(stamps[i] + (held[i] ?? 1));
+    });
     return {
       stamps,
       got: {
         receivedAt: stamps.slice(),
-        handledAt: stamps.map(t => t + 1),
-        frames: Array.from({length: 20}, (_, k) => 8 + 16 * k),
+        handledAt,
+        frames: FRAMES,
         deltas: DELTAS,
       },
     };
   }
 
-  it('gives the page a gap inside the read that its own listeners held', () => {
-    // Step 4's listeners took 60 ms; step 5 was stamped 2 ms after they
-    // finished.
-    const {stamps, got} = onPace();
-    got.handledAt[4] = 124;
-    for (let i = 5; i < stamps.length; i++) {
-      stamps[i] += 46;
-      got.receivedAt[i] = stamps[i];
-      got.handledAt[i] = stamps[i] + 1;
-    }
+  it('gives the page a stray its own listeners caused by holding a step the release reads', () => {
+    // Step 2's listeners ran 60 ms and held step 3 back. The read slows to
+    // 194 px/s and carries 12.4 px, short of the 18 px bar. Without that
+    // hold the read is on pace.
+    const {stamps, got} = delivery({}, {2: 60});
+    const read = wheelReleaseRead(
+      RELEASE_STEPS,
+      SENT,
+      stamps,
+      DELTAS,
+      RELEASE,
+    )!;
+    expect(wheelReleaseStrays(read)).toBe(true);
     expect(
       wheelReleaseHold('webkit', RELEASE, RELEASE_STEPS, SENT, stamps, got),
     ).toEqual({gapMs: 62, handlingMs: 60});
   });
 
-  it('gives the page a gap inside the read across which it drew no frame', () => {
-    const {stamps, got} = onPace();
-    for (let i = 5; i < stamps.length; i++) {
-      stamps[i] += 100;
-      got.receivedAt[i] = stamps[i];
-      got.handledAt[i] = stamps[i] + 1;
-    }
-    got.frames = [8, 56, 180, 196, 212, 228, 244, 260, 276];
+  it('gives the page a stray from a gap inside the read across which it drew no frame', () => {
+    // Step 3 came 116 ms after step 2 with the listeners idle, and the page
+    // drew no frame from 24 to 168.
+    const {stamps, got} = delivery({3: 100});
+    got.frames = [8, 24, ...FRAMES.filter(t => t >= 160)];
+    const read = wheelReleaseRead(
+      RELEASE_STEPS,
+      SENT,
+      stamps,
+      DELTAS,
+      RELEASE,
+    )!;
+    expect(wheelReleaseStrays(read)).toBe(true);
     expect(
       wheelReleaseHold('webkit', RELEASE, RELEASE_STEPS, SENT, stamps, got),
-    ).toEqual({gapMs: 116, handlingMs: 1, frameGapMs: 124});
+    ).toEqual({gapMs: 116, handlingMs: 1, frameGapMs: 144});
+  });
+
+  it('leaves the runner a stray its own stall caused, though the page also held a later step', () => {
+    // The runner stamped step 3 100 ms after step 2: 120 px/s, which carries
+    // 7.7 px against the 18 px bar. Step 5's listeners then ran 36 ms, which
+    // lengthens the carry to 10.6 px, toward the bar. Read without that hold,
+    // the release still strays, so the stray is the runner's.
+    const {stamps, got} = delivery({3: 84}, {5: 36});
+    expect(stamps.slice(2, 8)).toEqual([32, 132, 148, 164, 202, 218]);
+    const read = wheelReleaseRead(
+      RELEASE_STEPS,
+      SENT,
+      stamps,
+      DELTAS,
+      RELEASE,
+    )!;
+    expect(read.pageCarryPx).toBeCloseTo(10.32, 2);
+    expect(wheelReleaseStrays(read)).toBe(true);
+    expect(
+      wheelReleaseHold('webkit', RELEASE, RELEASE_STEPS, SENT, stamps, got),
+    ).toBeNull();
+  });
+
+  it('gives the page a stray its hold caused, beside a runner delay too small to stray alone', () => {
+    // The runner stamped step 6 10 ms late; the read alone stays inside the
+    // bar. Step 2's listeners held step 3 back 46 ms, which strays.
+    const {stamps, got} = delivery({6: 10}, {2: 60});
+    const read = wheelReleaseRead(
+      RELEASE_STEPS,
+      SENT,
+      stamps,
+      DELTAS,
+      RELEASE,
+    )!;
+    expect(wheelReleaseStrays(read)).toBe(true);
+    expect(
+      wheelReleaseHold('webkit', RELEASE, RELEASE_STEPS, SENT, stamps, got),
+    ).toEqual({gapMs: 62, handlingMs: 60});
   });
 
   it('leaves the runner a late step the page did not hold: listeners idle, frames running', () => {
-    const {stamps, got} = onPace();
-    for (let i = 5; i < stamps.length; i++) {
-      stamps[i] += 100;
-      got.receivedAt[i] = stamps[i];
-      got.handledAt[i] = stamps[i] + 1;
-    }
+    const {stamps, got} = delivery({3: 100});
     expect(
       wheelReleaseHold('webkit', RELEASE, RELEASE_STEPS, SENT, stamps, got),
     ).toBeNull();
@@ -734,15 +791,17 @@ describe('wheelReleaseHold', () => {
       wheelReleaseHold('webkit', RELEASE, RELEASE_STEPS, SENT, stamps, {
         receivedAt,
         handledAt,
-        frames: Array.from({length: 20}, (_, k) => 8 + 16 * k),
+        frames: FRAMES,
         deltas: merged,
       }),
     ).toEqual({gapMs: 66, handlingMs: 64});
   });
 
-  it('gives the page a logged hold whose listeners ran 30 ms of a 69 ms gap', () => {
-    // Logged under load: step 1's listeners ran until 52, and step 2 was
-    // stamped at 69, where the script spaces them 19 ms.
+  it('leaves the runner a logged merge in the read, though the page held the step before it', () => {
+    // Logged under load: step 1's listeners ran 30 ms of a 69 ms gap before
+    // step 2. Steps 3 and 4 then arrived as one wheel, which the read names.
+    // Read without the hold, the merge still strays, and its own wait was
+    // 1 ms.
     const deltas = [12, 12, 12, 23, 10, 9, 8, 7, 6, 5, 4].map(
       (dx): [number, number] => [dx, 0],
     );
@@ -760,7 +819,7 @@ describe('wheelReleaseHold', () => {
           deltas,
         },
       ),
-    ).toEqual({gapMs: 69, handlingMs: 30});
+    ).toBeNull();
   });
 
   it('leaves the runner a logged gap that only a frame of slack could pin on the page', () => {
@@ -788,20 +847,21 @@ describe('wheelReleaseHold', () => {
 
   it('judges only the steps the release reads, and only in WebKit', () => {
     // Step 9's listeners held step 10, after the lift.
-    const {stamps, got} = onPace();
-    got.handledAt[9] = 204;
-    for (let i = 10; i < stamps.length; i++) {
-      stamps[i] += 50;
-      got.receivedAt[i] = stamps[i];
-      got.handledAt[i] = stamps[i] + 1;
-    }
+    const {stamps, got} = delivery({}, {9: 50});
     expect(
       wheelReleaseHold('webkit', RELEASE, RELEASE_STEPS, SENT, stamps, got),
     ).toBeNull();
     // Chromium stamps a step at dispatch: the page cannot hold its stamps.
-    got.handledAt[4] = 124;
+    const before = delivery({}, {2: 60});
     expect(
-      wheelReleaseHold('chromium', RELEASE, RELEASE_STEPS, SENT, stamps, got),
+      wheelReleaseHold(
+        'chromium',
+        RELEASE,
+        RELEASE_STEPS,
+        SENT,
+        before.stamps,
+        before.got,
+      ),
     ).toBeNull();
   });
 });

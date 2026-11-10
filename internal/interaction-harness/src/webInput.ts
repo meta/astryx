@@ -90,7 +90,9 @@ export interface WheelBurst {
   /**
    * Judges the release the page reads from the steps' stamps, as Core's
    * gesture host follows a trackpad pan (see `wheelReleaseRead`). A read whose
-   * carried travel crosses the proof's bar throws `WheelPacingError`.
+   * carried travel crosses the proof's bar throws `WheelPacingError`. It
+   * throws `WheelPageStallError` instead when the page's own hold explains the
+   * stray (see `wheelReleaseHold`).
    */
   readonly release?: WheelRelease;
 }
@@ -206,7 +208,8 @@ function releaseMessage(read: WheelReleaseRead): string {
  * times are page wall time. On a starved runner they include the page's wait
  * for a CPU, and a renderer held from outside draws no frame either. Judge a
  * page stall from a run with CI's CPU limits: there it is the proof's own
- * failure.
+ * failure. A release check throws it too, when the page's own hold inside
+ * the steps the release reads explains a stray release.
  */
 export class WheelPageStallError extends Error {
   constructor(
@@ -450,17 +453,20 @@ function pageHoldAt(
 }
 
 /**
- * Whether the page held a step inside the steps a release reads, from
- * `readStep - 1` to `liftStep`. Each gap there gets the page-hold test that
- * splits a burst, whatever its length. A merged step there also gets it over
- * its own wait, from its stamp to its arrival. WebKit holds such steps while
- * the page's main thread is busy, then stamps them like the step before. The
- * first hold found, or null when the page held none. The page's cause must
- * outlast a frame here too, as in `pageHoldAt`.
+ * The page's own hold that explains a stray release, or null when the
+ * runner's delivery does. Each gap from `readStep - 1` to `liftStep` gets the
+ * page-hold test that splits a burst, whatever its length. The release is
+ * then read again with each hold's excess over its send spacing taken out of
+ * the later stamps. The page's hold explains the stray only when that read no
+ * longer strays. A merged step there also gets the test over its own wait,
+ * from its stamp to its arrival. WebKit holds such steps while the page's
+ * main thread is busy, then stamps them like the step before. A merge the
+ * page held is the page's. The page's cause must outlast a frame, as in
+ * `pageHoldAt`.
  */
 export function wheelReleaseHold(
   engine: Engine,
-  read: Pick<WheelReleaseRead, 'readStep' | 'liftStep'>,
+  release: WheelRelease,
   steps: readonly {readonly dx?: number; readonly dy?: number}[],
   sentAt: readonly number[],
   stamps: readonly number[],
@@ -470,32 +476,38 @@ export function wheelReleaseHold(
     readonly frames: readonly number[];
     readonly deltas: readonly (readonly [number, number])[];
   },
+  everyMs = 16,
 ): WheelPageStall | null {
   if (engine !== 'webkit') {
     return null;
   }
+  const {readStep, liftStep = readStep} = release;
   const carried = carriedSteps(steps, got.deltas);
   const sendGapsMs = wheelSendGaps(steps, sentAt, got.deltas);
+  const holds: {index: number; excessMs: number; stall: WheelPageStall}[] = [];
   for (const [i, range] of carried.entries()) {
     if (
       i === 0 ||
       range == null ||
-      range[1] < read.readStep - 1 ||
-      range[0] > read.liftStep
+      range[1] < readStep - 1 ||
+      range[0] > liftStep
     ) {
       continue;
     }
+    const sendGapMs = sendGapsMs[i - 1];
     const hold = pageHoldAt(
       engine,
       i,
       stamps,
       got.handledAt,
-      sendGapsMs[i - 1],
+      sendGapMs,
       got.frames,
       got.receivedAt,
     );
     if (hold != null) {
-      return hold;
+      const excessMs = Math.max(0, hold.gapMs - (sendGapMs ?? everyMs));
+      holds.push({index: i, excessMs, stall: hold});
+      continue;
     }
     const waitMs = got.receivedAt[i] - stamps[i];
     if (range[1] === range[0] || waitMs <= HELD_BACK_MS) {
@@ -519,7 +531,25 @@ export function wheelReleaseHold(
       return {gapMs: waitMs, handlingMs, frameGapMs: frameGap.gapMs};
     }
   }
-  return null;
+  if (holds.length === 0) {
+    return null;
+  }
+  const withoutHolds = stamps.map(
+    (stamp, i) =>
+      stamp -
+      holds
+        .filter(hold => hold.index <= i)
+        .reduce((sum, hold) => sum + hold.excessMs, 0),
+  );
+  const read = wheelReleaseRead(
+    steps,
+    sentAt,
+    withoutHolds,
+    got.deltas,
+    release,
+    everyMs,
+  );
+  return read == null || !wheelReleaseStrays(read) ? holds[0].stall : null;
 }
 
 /**
@@ -767,7 +797,8 @@ export interface WebInputDriver {
    * longer throws `WheelPageStallError` when the page held it, and
    * `WheelPacingError` otherwise. The page holds a gap while it handles the
    * step before, or while it draws no frame. With `release`, a release the
-   * page read across the proof's bar throws `WheelPacingError` too.
+   * page read across the proof's bar throws `WheelPacingError` too. It throws
+   * `WheelPageStallError` when the page's own hold explains that release.
    */
   wheelBurst(burst: WheelBurst): Promise<{
     readonly receivedSteps: number;
@@ -1144,7 +1175,15 @@ async function untilRunReceived(
       everyMs,
     );
     if (read != null && wheelReleaseStrays(read)) {
-      const hold = wheelReleaseHold(engine, read, steps, sentAt, stamps, got);
+      const hold = wheelReleaseHold(
+        engine,
+        release,
+        steps,
+        sentAt,
+        stamps,
+        got,
+        everyMs,
+      );
       if (hold != null) {
         throw new WheelPageStallError(maxGapMs ?? null, hold, read);
       }
