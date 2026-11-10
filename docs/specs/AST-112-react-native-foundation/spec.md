@@ -108,7 +108,7 @@ shared icon names under FR17.
     platform's hosts or drawn by the library (DEC-9).
   - The package takes no third-party navigation dependency, a router,
     react-native-screens, and react-native-safe-area-context included: its
-    only peer dependencies outside Astryx are React and React Native. A React
+    only peer dependencies outside Astryx are React and React Native. The one exception is the optional peers of the deprecated `./navigation-legacy` entry (FR5). A React
     Navigation adapter may exist as a separate optional package, never as a
     dependency of the set; it drives the platform's `navigation` hosts and
     depends on no package that ships native navigation code,
@@ -168,6 +168,13 @@ shared icon names under FR17.
   - `./camera`, `./media`, `./web`, `./pdf`, `./controls`, and
     `./navigation` are the optional capabilities' entries; `./navigation` also
     holds the Astryx router and its navigators (FR2).
+  - `./navigation-legacy` is a deprecated entry that binds React Navigation's
+    navigators. Its peer dependencies on React Navigation,
+    react-native-screens, react-native-safe-area-context, and
+    `@callstack/liquid-glass` are optional, so an app that does not import it
+    installs none of them, and no other entry imports it. It is outside the
+    compatibility promise and leaves the package under the deprecation rule
+    below.
   - `./testing` is the testing surface: mocks of every native module in its
     absent, older, and current shapes, event emitters, and a Jest setup file.
     It is public and documented.
@@ -351,7 +358,7 @@ shared icon names under FR17.
 | FR2      | Package-boundary, source, and dependency check                                                                                                                                          | the platform's source and tests; the library and platform layers; the core and each capability; the package's dependencies                                       | An import from the library in the platform, a capability import in the core outside its loader, an import between capabilities, a dependency on a third-party navigation package (react-native-screens and react-native-safe-area-context included), or a peer dependency outside Astryx other than React and React Native |
 | FR3      | Built app with the core only, compared with one per opted-in capability: binary symbols and the merged manifest; unit tests of each capability's `isAvailable()` and a call's reason    | a capability's native module, frameworks, dependencies, permissions; an opted-out capability; a missing module of an opted-in one; a binary that records no list | An app that did not opt a capability in links any of its native code or declarations, `isAvailable()` answers true for it, a call resolves a reason other than `not-linked`, or a missing module of an opted-in capability, or one on a binary that records no list, resolves a reason other than `no-module`              |
 | FR4      | `npm pack` file list; a generated sample app's project from configuration with a capability list                                                                                        | the package's files; the sample's iOS and Android projects; a default and an overridden usage description                                                        | Native code outside the platform layer, the package manifests declare a permission, the sample needs a manual native edit, the generated project lacks the core's declarations, or it writes a usage description other than the default or the app's override                                                              |
-| FR5      | `exports` map and public-entry name check; package-boundary check of the internal entries' imports                                                                                      | `.`, `./storage`, `./network`, each capability entry, `./testing`, the internal entries, `./app.plugin.js`                                                       | A private name on `.`, a deep import resolving, an app importing an internal entry, or a router or optional capability exported from `.`                                                                                                                                                                                   |
+| FR5      | `exports` map and public-entry name check; package-boundary check of the internal entries' imports                                                                                      | `.`, `./storage`, `./network`, each capability entry, `./navigation-legacy`, `./testing`, the internal entries, `./app.plugin.js`                                | A private name on `.`, a deep import resolving, an app importing an internal entry, or a router or optional capability exported from `.`                                                                                                                                                                                   |
 | FR6      | Unit tests of every asynchronous call through `./testing` mocks                                                                                                                         | absent, older, and current module; a missing option; a native throw; cancel                                                                                      | A call rejects, or answers a reason outside its set                                                                                                                                                                                                                                                                        |
 | FR7      | Unit tests of each capability's probes, permissions, and hook cleanup                                                                                                                   | an older binary; a view mounted without permission; unmount                                                                                                      | A silent no-op, a prompt on mount, or work that outlives its component                                                                                                                                                                                                                                                     |
 | FR8      | Spec rules check in the platform                                                                                                                                                        | a new method; a component spec; a platform-only member                                                                                                           | A changed shipped method, a missing header, or a new method without `status`                                                                                                                                                                                                                                               |
@@ -469,7 +476,7 @@ platform's `navigation` capability holds the native stack and tab containers
 with their transitions and gestures, the core holds safe-area insets, and
 every bar, header, button, and search field is the system's, through the
 platform's hosts, or drawn by the library. The packages take no third-party
-navigation dependency, and apps, and the projects the Astryx app previews,
+navigation dependency outside one deprecated entry, and apps, and the projects the Astryx app previews,
 run no third-party native code for navigation.
 
 Rejected: building on React Navigation, react-native-screens, and
