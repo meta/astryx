@@ -25,6 +25,8 @@
 
 ## Scope
 
+Components: <!-- the components and modules this PR changes, comma-separated -->
+
 - [ ] One defect is restored.
 - [ ] Separable contradictory or unsettled tagalongs were removed or split.
 - [ ] No new public API, visual representation, default, or interaction model is hidden under the bug-fix label.

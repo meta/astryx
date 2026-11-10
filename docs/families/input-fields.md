@@ -371,8 +371,8 @@ DEC-6 does not require unrelated components to add a new floor.
   options available while input `isLoading` is true, but current empty/no-result
   presentation still treats that flag as option-source pending and neither
   component has the explicit source-pending API required by AST-001.
-- **Transition Action coverage:** current TextInput and FileInput clear
-  affordances call `onChange` without `changeAction`, and FileInput does not
+- **Transition Action coverage:** the current FileInput clear affordance
+  calls `onChange` without `changeAction`, and FileInput does not
   explicitly hold the proposed controlled files as an optimistic value while
   its Action is pending. Other exposed clear paths inspected on current main
   route through their ordinary Action pipeline. These are conformance gaps

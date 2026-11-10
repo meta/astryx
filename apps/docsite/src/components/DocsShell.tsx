@@ -25,8 +25,9 @@ import type {
   DocsNavEntry,
   DocsNavItem,
   DocsNavPackage,
-  DocsNavTopic,
 } from './docsNav';
+import {docsSidebarGroups} from './docsSidebarData';
+import {DocsSidebarItems} from './DocsSidebarItems';
 
 interface DocsShellProps {
   children: React.ReactNode;
@@ -50,17 +51,6 @@ function CanaryCategoryMarker() {
     </span>
   );
 }
-
-/** Foundations: tokens first, then alphabetical */
-const foundationsSort = (a: DocsNavTopic, b: DocsNavTopic) => {
-  if (a.topic === 'tokens') {
-    return -1;
-  }
-  if (b.topic === 'tokens') {
-    return 1;
-  }
-  return a.title.localeCompare(b.title);
-};
 
 // ── Shell ──────────────────────────────────────────────────────────────
 
@@ -106,14 +96,9 @@ export function DocsShell({children, nav}: DocsShellProps) {
   const libraryPackages = packages.filter(p => !isTheme(p) && !p.canaryOnly);
   const canaryPackages = packages.filter(p => !isTheme(p) && p.canaryOnly);
 
-  // Classify doc topics by category (from data). Getting Started is promoted
-  // to a top-level nav item, so it is excluded from the Guide section.
-  const guideTopics = docTopics
-    .filter(d => d.category === 'guide' && d.topic !== 'getting-started')
-    .sort((a, b) => a.title.localeCompare(b.title));
-  const foundationTopics = docTopics
-    .filter(d => d.category === 'foundations')
-    .sort(foundationsSort);
+  // Classify doc topics by category (from data).
+  const {guide: guideItems, foundations: foundationItems} =
+    docsSidebarGroups(docTopics);
 
   // True for the /components index AND every /components/[name] detail page.
   // On these routes we hide every non-Components section so the sidebar is
@@ -196,14 +181,7 @@ export function DocsShell({children, nav}: DocsShellProps) {
                 <SideNavItem
                   label="Guide"
                   collapsible={{defaultIsCollapsed: false}}>
-                  {guideTopics.map(d => (
-                    <SideNavItem
-                      key={d.topic}
-                      label={d.title}
-                      href={`/docs/${d.topic}`}
-                      isSelected={pathname === `/docs/${d.topic}`}
-                    />
-                  ))}
+                  <DocsSidebarItems items={guideItems} pathname={pathname} />
                 </SideNavItem>
               </SideNavSection>
 
@@ -212,14 +190,10 @@ export function DocsShell({children, nav}: DocsShellProps) {
                 <SideNavItem
                   label="Foundations"
                   collapsible={{defaultIsCollapsed: false}}>
-                  {foundationTopics.map(d => (
-                    <SideNavItem
-                      key={d.topic}
-                      label={d.title}
-                      href={`/docs/${d.topic}`}
-                      isSelected={pathname === `/docs/${d.topic}`}
-                    />
-                  ))}
+                  <DocsSidebarItems
+                    items={foundationItems}
+                    pathname={pathname}
+                  />
                 </SideNavItem>
               </SideNavSection>
 

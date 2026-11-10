@@ -302,6 +302,8 @@ jobs:
           mkdir -p "$TRUSTED_POLICY/scripts/release" "$TRUSTED_POLICY/scripts/lib"
           git show "origin/$RELEASE_BRANCH:scripts/release/active-release.mjs" \
             > "$TRUSTED_POLICY/scripts/release/active-release.mjs"
+          git show "origin/$RELEASE_BRANCH:scripts/release/release-paths.mjs" \
+            > "$TRUSTED_POLICY/scripts/release/release-paths.mjs"
           git show "origin/$RELEASE_BRANCH:scripts/lib/workspace-globs.mjs" \
             > "$TRUSTED_POLICY/scripts/lib/workspace-globs.mjs"
           VALIDATOR="$TRUSTED_POLICY/scripts/release/active-release.mjs"
@@ -372,26 +374,30 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      - name: Fetch release refs, base, and trusted release policy
+      - name: Fetch release refs, base, main, and trusted release policy
         run: |
           git fetch origin '+refs/heads/release/v*:refs/remotes/origin/release/v*'
-          git fetch origin "${{ github.base_ref }}" --depth=50
+          git fetch origin "${{ github.base_ref }}" --depth=200
+          git fetch origin 'main:refs/remotes/origin/main'
           TRUSTED_POLICY="$RUNNER_TEMP/release-policy"
           mkdir -p "$TRUSTED_POLICY/scripts/release" "$TRUSTED_POLICY/scripts/lib"
           git show "origin/${{ github.base_ref }}:scripts/release/active-release.mjs" \
             > "$TRUSTED_POLICY/scripts/release/active-release.mjs"
+          git show "origin/${{ github.base_ref }}:scripts/release/release-paths.mjs" \
+            > "$TRUSTED_POLICY/scripts/release/release-paths.mjs"
           git show "origin/${{ github.base_ref }}:scripts/lib/workspace-globs.mjs" \
             > "$TRUSTED_POLICY/scripts/lib/workspace-globs.mjs"
 
       - name: Setup Node and pnpm
         uses: ./.github/actions/setup
 
-      - name: Require generated-only release bookkeeping
+      - name: Require generated release bookkeeping or a proven test repair
         run: |
           node "$RUNNER_TEMP/release-policy/scripts/release/active-release.mjs" validate-diff \
             --root "$GITHUB_WORKSPACE" \
             --base "origin/${{ github.base_ref }}" \
-            --head "${{ github.event.pull_request.head.sha }}"
+            --head "${{ github.event.pull_request.head.sha }}" \
+            --main-ref origin/main
 
       - name: Validate branch, head, plan, versions, and Changeset consumption
         run: |
@@ -471,6 +477,8 @@ jobs:
           mkdir -p "$TRUSTED_POLICY/scripts/release" "$TRUSTED_POLICY/scripts/lib"
           git show origin/main:scripts/release/active-release.mjs \
             > "$TRUSTED_POLICY/scripts/release/active-release.mjs"
+          git show origin/main:scripts/release/release-paths.mjs \
+            > "$TRUSTED_POLICY/scripts/release/release-paths.mjs"
           git show origin/main:scripts/lib/workspace-globs.mjs \
             > "$TRUSTED_POLICY/scripts/lib/workspace-globs.mjs"
 
@@ -2589,6 +2597,8 @@ jobs:
           paths: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|\.github/scripts/(stale-head-hint|merge-base)\.sh$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
+          # A Lab-only change still runs each interaction spec it edits.
+          lab-only-specs: '\.interaction\.browser\.spec\.ts$'
 
       - name: Decide the WebKit proofs' scope
         id: scope-webkit
@@ -2597,6 +2607,8 @@ jobs:
           paths: '^(packages/[^/]+/src/[^/]+/|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$|\.github/scripts/(stale-head-hint|merge-base)\.sh$)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
+          # A Lab-only change still runs each interaction spec it edits.
+          lab-only-specs: '\.interaction\.browser\.spec\.ts$'
           # Lists the changed files, so the planner adds a changed spec.
           component-audit: 'true'
 
@@ -2617,7 +2629,12 @@ jobs:
         id: count-chromium
         if: steps.scope-chromium.outputs.applies == 'true'
         continue-on-error: true
+        env:
+          LAB_SPECS: ${{ steps.scope-chromium.outputs.lab_specs_path }}
         run: |
+          # A Lab-only change runs only the interaction specs it edits.
+          FILTERS=()
+          if [ -n "${LAB_SPECS:-}" ]; then mapfile -t LAB < "$LAB_SPECS"; FILTERS=(-- "${LAB[@]}"); fi
           git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" legs \
             --listed "$RUNNER_TEMP/interaction-legs/listed.txt" --source .test-scope \
@@ -2625,7 +2642,8 @@ jobs:
             --key interaction-chromium --fallback-key interaction-webkit \
             --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
             --setup-seconds 90 --max-seconds 600 \
-            --leg 1 --max-legs 10
+            --leg 1 --max-legs 10 \
+            "${FILTERS[@]}"
 
       - name: Count the WebKit legs
         id: count-webkit
@@ -2633,6 +2651,7 @@ jobs:
         continue-on-error: true
         env:
           CHANGED_FILES: ${{ steps.scope-webkit.outputs.changed_files_path }}
+          LAB_SPECS: ${{ steps.scope-webkit.outputs.lab_specs_path }}
         run: |
           if [ "${WEBKIT_ALL_SPECS:-}" = true ]; then SPEC_PATHS=(packages/ internal/); else read -ra SPEC_PATHS <<< "$WEBKIT_SPEC_PATHS"; fi
           # With every spec planned, the changed files add nothing. Leave them
@@ -2641,11 +2660,16 @@ jobs:
           if [ "${WEBKIT_ALL_SPECS:-}" = true ]; then CHANGED=(); fi
           git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"
           selected="$RUNNER_TEMP/interaction-legs/selected.txt"
-          node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" select \
-            --listed "$RUNNER_TEMP/interaction-legs/listed.txt" \
-            "${CHANGED[@]}" \
-            --shared "$WEBKIT_SHARED_PATHS" \
-            -- "${SPEC_PATHS[@]}" > "$selected"
+          # A Lab-only change runs only the interaction specs it edits.
+          if [ -n "${LAB_SPECS:-}" ]; then
+            cp "$LAB_SPECS" "$selected"
+          else
+            node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" select \
+              --listed "$RUNNER_TEMP/interaction-legs/listed.txt" \
+              "${CHANGED[@]}" \
+              --shared "$WEBKIT_SHARED_PATHS" \
+              -- "${SPEC_PATHS[@]}" > "$selected"
+          fi
           if [ ! -s "$selected" ]; then
             echo "No WebKit interaction proof covers this change: it touches no shared touch code, no interaction spec, and no component folder that holds one."
             printf 'count=0\nruns=false\nleg=%s\n' "1" >> "$GITHUB_OUTPUT"
@@ -2742,6 +2766,8 @@ jobs:
           paths: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|\.github/scripts/(stale-head-hint|merge-base)\.sh$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
+          # A Lab-only change still runs each interaction spec it edits.
+          lab-only-specs: '\.interaction\.browser\.spec\.ts$'
 
       - name: Require this pull request's Storybook build
         if: steps.scope.outputs.applies == 'true' && needs.build-storybook.result != 'success'
@@ -2778,7 +2804,12 @@ jobs:
       - name: Count this run's legs
         id: legs
         if: steps.scope.outputs.applies == 'true'
+        env:
+          LAB_SPECS: ${{ steps.scope.outputs.lab_specs_path }}
         run: |
+          # A Lab-only change runs only the interaction specs it edits.
+          FILTERS=()
+          if [ -n "${LAB_SPECS:-}" ]; then mapfile -t LAB < "$LAB_SPECS"; FILTERS=(-- "${LAB[@]}"); fi
           git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" legs \
             --listed "$RUNNER_TEMP/interaction-legs/listed.txt" --source .test-scope \
@@ -2786,7 +2817,8 @@ jobs:
             --key interaction-chromium --fallback-key interaction-webkit \
             --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
             --setup-seconds 90 --max-seconds 600 \
-            --leg ${{ matrix.leg }} --max-legs 10
+            --leg ${{ matrix.leg }} --max-legs 10 \
+            "${FILTERS[@]}"
 
       - name: Require a leg for every share
         if: steps.scope.outputs.applies == 'true' && fromJSON(steps.legs.outputs.count || '0') > strategy.job-total
@@ -2864,13 +2896,19 @@ jobs:
       - name: Plan this leg's interaction proofs
         id: plan
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
+        env:
+          LAB_SPECS: ${{ steps.scope.outputs.lab_specs_path }}
         run: |
+          # A Lab-only change runs only the interaction specs it edits.
+          FILTERS=()
+          if [ -n "${LAB_SPECS:-}" ]; then mapfile -t LAB < "$LAB_SPECS"; FILTERS=(-- "${LAB[@]}"); fi
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" plan \
             --key interaction-chromium --fallback-key interaction-webkit --tests "$RUNNER_TEMP/interaction-legs/tests.json" \
             --config playwright.interaction.config.ts --project chromium \
             --leg ${{ steps.legs.outputs.leg }} --of ${{ steps.legs.outputs.count }} \
             --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
-            --out "$RUNNER_TEMP/interaction-leg.txt"
+            --out "$RUNNER_TEMP/interaction-leg.txt" \
+            "${FILTERS[@]}"
 
       - name: Run interaction proofs
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true' && steps.plan.outputs.files != '0'
@@ -2992,6 +3030,8 @@ jobs:
           paths: '^(packages/[^/]+/src/[^/]+/|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$|\.github/scripts/(stale-head-hint|merge-base)\.sh$)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
+          # A Lab-only change still runs each interaction spec it edits.
+          lab-only-specs: '\.interaction\.browser\.spec\.ts$'
           # Lists the changed files, so the planner adds a changed spec.
           component-audit: 'true'
 
@@ -3034,6 +3074,7 @@ jobs:
         if: steps.scope.outputs.applies == 'true'
         env:
           CHANGED_FILES: ${{ steps.scope.outputs.changed_files_path }}
+          LAB_SPECS: ${{ steps.scope.outputs.lab_specs_path }}
         run: |
           if [ "${WEBKIT_ALL_SPECS:-}" = true ]; then SPEC_PATHS=(packages/ internal/); else read -ra SPEC_PATHS <<< "$WEBKIT_SPEC_PATHS"; fi
           # With every spec planned, the changed files add nothing. Leave them
@@ -3042,11 +3083,16 @@ jobs:
           if [ "${WEBKIT_ALL_SPECS:-}" = true ]; then CHANGED=(); fi
           git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"
           selected="$RUNNER_TEMP/interaction-legs/selected.txt"
-          node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" select \
-            --listed "$RUNNER_TEMP/interaction-legs/listed.txt" \
-            "${CHANGED[@]}" \
-            --shared "$WEBKIT_SHARED_PATHS" \
-            -- "${SPEC_PATHS[@]}" > "$selected"
+          # A Lab-only change runs only the interaction specs it edits.
+          if [ -n "${LAB_SPECS:-}" ]; then
+            cp "$LAB_SPECS" "$selected"
+          else
+            node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" select \
+              --listed "$RUNNER_TEMP/interaction-legs/listed.txt" \
+              "${CHANGED[@]}" \
+              --shared "$WEBKIT_SHARED_PATHS" \
+              -- "${SPEC_PATHS[@]}" > "$selected"
+          fi
           if [ ! -s "$selected" ]; then
             echo "No WebKit interaction proof covers this change: it touches no shared touch code, no interaction spec, and no component folder that holds one."
             printf 'count=0\nruns=false\nleg=%s\n' "${{ matrix.leg }}" >> "$GITHUB_OUTPUT"
@@ -4663,9 +4709,17 @@ jobs:
           outside-pull-request: skip
           component-audit: 'true'
 
+      # Out of scope the run still writes its record, so merge-guard reads
+      # "nothing owed" rather than a missing record.
       - name: Skip the dependent audits outside their scope
         if: steps.scope.outputs.applies != 'true'
-        run: echo "No package source changed; no dependent audit to run."
+        env:
+          ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          echo "No package source changed; no dependent audit to run."
+          printf '{"head": "%s", "attempt": %s, "owed": [], "ran": [], "deferred": [], "complete": true}\n' \
+            "$ASTRYX_HEAD_SHA" "$RUN_ATTEMPT" > "$RUNNER_TEMP/a11y-dependent-audits.json"
 
       # The planner, the primitive list, the import graph and the recorded
       # times all come from the merge commit.
@@ -4707,13 +4761,16 @@ jobs:
           fi
           node .github/scripts/a11y-dependent-audits.mjs "${changes[@]}" --out "$RUNNER_TEMP/a11y-dependent-audits.json" --attempt "$RUN_ATTEMPT"
 
+      # Every run of this job uploads its record. A run that planned audits
+      # but wrote no record fails here, not later at the merge.
       - name: Upload the dependent-audit record
-        if: steps.plan.outcome == 'success'
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           # One record per attempt: merge-guard reads the latest attempt's.
           name: a11y-dependent-audits-record-${{ github.run_attempt }}
           path: ${{ runner.temp }}/a11y-dependent-audits.json
+          if-no-files-found: error
           retention-days: 30
 
   # Each leg runs its share of the plan at the head that built the Storybook.

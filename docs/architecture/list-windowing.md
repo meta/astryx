@@ -6,8 +6,8 @@ id: architecture:list-windowing
 authority: current
 archive_reason: null
 superseded_by: null
-approved_by: humbertovirtudes
-approved_at: 2026-11-08
+approved_by: cixzhang
+approved_at: 2026-11-06
 owners: [cixzhang]
 applies_to:
   [
@@ -23,15 +23,15 @@ deciding_specs: []
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Governing contract      | None. Each consumer's record owns what a person sees and hears in its long list; this record owns only which module computes the window.                                                |
-| System behavior         | One shared internal windowing module owns long-list windowing in Core. Table virtualization is its first consumer, then Selector, then Chat. The module is not public API (INV1, INV2). |
-| End-user impact         | None yet: the module does not exist, and Selector renders every option. Once it ships, people opening a long list wait less, and every windowed list behaves the same way.              |
-| Builder impact          | A Core component that windows a long list calls the one module instead of building its own. No public windowing hook exists while OQ1 is open.                                          |
-| Compatibility/readiness | Additive and internal. Spec only: no module exists yet (Current-state impact). Table's approved virtualization hook keeps its public shape.                                             |
-| Review checks           | Reject a second windowing implementation in Core, a public export of the module, or a change to Table's public virtualization shape made to adopt it.                                   |
-| Governing rules         | DEC-1.                                                                                                                                                                                  |
+| Area                    | Contract                                                                                                                                                                   |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Governing contract      | None. Each consumer's record owns what a person sees and hears in its long list; this record owns only which module computes the window.                                   |
+| System behavior         | One shared internal windowing module owns long-list windowing in Core. The module is not public API (INV1, INV2).                                                          |
+| End-user impact         | None yet: the module does not exist, and Selector renders every option. Once it ships, people opening a long list wait less, and every windowed list behaves the same way. |
+| Builder impact          | A Core component that windows a long list calls the one module instead of building its own. No public windowing hook exists while OQ1 is open.                             |
+| Compatibility/readiness | Additive and internal. Spec only: no module exists yet (Current-state impact). Table's approved virtualization hook keeps its public shape.                                |
+| Review checks           | Reject a second windowing implementation in Core, a public export of the module, or a change to Table's public virtualization shape made to adopt it.                      |
+| Governing rules         | DEC-1.                                                                                                                                                                     |
 
 This table is a review projection; the body below is authoritative.
 
@@ -49,11 +49,11 @@ windowing module computes which rows render and where the scroll range ends.
 Each consumer keeps its own records for when it windows, what it renders, and
 how it exposes the full list to assistive technology.
 
-Consumers, in adoption order:
+Consumers:
 
-1. Table's row virtualization, behind `module:Table/useTableRowsVirtualization`.
-2. Selector's option list.
-3. Chat's message list.
+- Table's row virtualization, behind `module:Table/useTableRowsVirtualization`.
+- Selector's option list.
+- Chat's message list.
 
 ## Boundaries and invariants
 
@@ -88,9 +88,9 @@ windowing symbol.
 ## Owning code
 
 - `module:Table/useTableRowsVirtualization` — Table's public virtualization
-  hook, the first consumer; it has no code yet (Current-state impact).
-- `packages/core/src/Selector/` — the second consumer.
-- `packages/core/src/Chat/` — the third consumer.
+  hook, a consumer; it has no code yet (Current-state impact).
+- `packages/core/src/Selector/` — a consumer.
+- `packages/core/src/Chat/` — a consumer.
 
 The module itself has no path yet (Current-state impact).
 
@@ -99,11 +99,11 @@ The module itself has no path yet (Current-state impact).
 ### DEC-1 — One shared private windowing module
 
 **Reference:** `architecture:list-windowing/DEC-1`
-**Decider:** `humbertovirtudes`, `2026-11-08`
+**Decider:** `cixzhang`, `2026-11-06`
+**Contributor:** `humbertovirtudes`, `2026-11-08`
 
 One shared private windowing module owns long-list windowing in Core; spec
-only. Table virtualization adopts it first, then Selector and Chat. The module
-stays private while OQ1 is open.
+only. The module stays private while OQ1 is open.
 
 ## Open questions
 
