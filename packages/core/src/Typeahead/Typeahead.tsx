@@ -89,6 +89,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Typeahead/Typeahead.generated';
+import {useAnnounce} from '../hooks/useAnnounce';
 
 registerEnglishFallback(english);
 export type {
@@ -621,6 +622,38 @@ export function Typeahead<T extends SearchableItem>({
     input?.focus();
   }, [onChange]);
 
+  // Backspace or Delete on the selected token. With a clear button, it clears
+  // the value as that button does and says so in the shared live region.
+  // Without one, it starts editing, as a click does.
+  const announce = useAnnounce();
+  const handleTokenKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLElement>) => {
+      if (e.key !== 'Backspace' && e.key !== 'Delete') {
+        return;
+      }
+      if (isDisabled || !value) {
+        return;
+      }
+      e.preventDefault();
+      if (hasClear) {
+        const label = value.label;
+        handleClear();
+        announce(t('@astryx.typeahead.selectionCleared', {label}));
+      } else {
+        handleEnterEditMode();
+      }
+    },
+    [
+      announce,
+      handleClear,
+      handleEnterEditMode,
+      hasClear,
+      isDisabled,
+      t,
+      value,
+    ],
+  );
+
   // Handle Escape during edit mode — restore token
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -732,6 +765,7 @@ export function Typeahead<T extends SearchableItem>({
                   label={value.label}
                   size={size}
                   onClick={handleEnterEditMode}
+                  onKeyDown={handleTokenKeyDown}
                   isDisabled={isDisabled}
                   aria-labelledby={joinAriaIDs(
                     inputLabelledBy ?? fieldLabelId,
