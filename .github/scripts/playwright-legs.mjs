@@ -7,13 +7,16 @@
  *   about equal running time, from the per-file times a CI run recorded
  *   (spec:AST-030 FR13).
  * @input `select`: the listed spec files, the changed files, the shared-code
- *   pattern and the suite's own path filters. `legs`: the suite's times key,
+ *   pattern and the suite's own path filters. `select-chromium`: the listed
+ *   files, the changed files, the lane's scope, the classifier's full-suite
+ *   decision, a source tree for the import graph and the selection file. `legs`: the suite's times key,
  *   its path filters, the changed files, a leg's setup time and time limit. `plan`: the suite's times key, its
  *   config and project, this leg and the leg count, and any Playwright path
  *   filters; `.github/playwright-leg-durations.json`. `record`: CI job logs
  *   of the list reporter.
  * @output `select`: the path filters and spec files a WebKit run covers, one
- *   per line. `legs`: `count=<legs>`, `runs=<true|false>` and the `leg=<i>` this
+ *   per line. `select-chromium`: the Chromium run's selection as JSON, and its
+ *   summary. `legs`: `count=<legs>`, `runs=<true|false>` and the `leg=<i>` this
  *   leg plans, for `$GITHUB_OUTPUT`.
  *   `plan`: this leg's spec files, one per line, for Playwright's
  *   `--test-list`, and `files=<count>` for `$GITHUB_OUTPUT`. `record`: the
@@ -33,8 +36,12 @@ import {
   splitByDuration,
 } from '../../scripts/lib/duration-split.mjs';
 import {
+  componentFolderOf,
+  importerGraph,
   isComponentPath,
   listedFiles,
+  proofImporters,
+  renderingFolders,
   specOwners,
 } from './a11y-pr-contracts.mjs';
 
@@ -68,7 +75,12 @@ export function planLegs(files, durations, legs) {
  * left before it is full; null while a whole leg of room remains, and null
  * past the ceiling, which `legsFitMessage` reports.
  */
-export function nearCeilingMessage({seconds, setupSeconds, maxSeconds, maxLegs}) {
+export function nearCeilingMessage({
+  seconds,
+  setupSeconds,
+  maxSeconds,
+  maxLegs,
+}) {
   const needed = legsNeeded({seconds, setupSeconds, maxSeconds});
   if (needed !== maxLegs) return null;
   const room = Math.round(maxLegs * (maxSeconds - setupSeconds) - seconds);
@@ -313,6 +325,96 @@ export function selectProofs({listed, changed, shared, filters}) {
   for (const file of changed) if (isInteractionSpec(file)) out.add(file);
   for (const file of folderSpecs(listed, changed)) out.add(file);
   return [...out];
+}
+
+/** What a proof's page loads: the specs, the stories they open, the preview. */
+export const isProofPage = file =>
+  isInteractionSpec(file) ||
+  /\.stories\.[cm]?[jt]sx?$/.test(file) ||
+  file === 'apps/storybook/.storybook/preview.tsx';
+
+/**
+ * What a Chromium interaction run covers for a pull request (spec:AST-030
+ * FR31): `{full: true, reason}` for the whole suite, or `{full: false, specs,
+ * touched, dependents}`. It runs every interaction spec the change adds or
+ * edits, every spec that loads a changed file through its own imports, and
+ * every spec in the component folders the change touches and in the folders
+ * that render them through value imports. A story maps to no component, so a
+ * changed story runs the whole suite. The lane's scope leaves out a
+ * component folder's unit tests, docs, records and accessibility specs, and
+ * `ci-interaction-scope.test.mjs` keeps every proof page from loading one. It
+ * fails closed: an unknown change, a
+ * missing import graph or proof import map, a full-suite classification, a
+ * shared path, a listed shared primitive, or a changed path that maps to no
+ * one component runs the whole suite.
+ * @param {object} options
+ * @param {string[]} options.listed every file of the tree
+ * @param {string[] | null} options.changed the changed files
+ * @param {RegExp} options.scope the lane's paths; other changes add nothing
+ * @param {boolean} options.fullSuite the classifier found shared
+ *   infrastructure or could not decide
+ * @param {boolean} [options.everySpec] the release interaction check
+ * @param {Map<string, Set<string>> | null} options.importers the import graph
+ * @param {Map<string, Set<string>> | null} options.proofs each file a proof
+ *   loads, to the proofs that load it (`proofImporters`)
+ * @param {{shared: string[], edges: {from: string, specs: string[]}[]}} options.selection
+ * @param {string[]} options.primitives shared primitives, as `<pkg>/<Folder>`
+ */
+export function chromiumSelection({
+  listed,
+  changed,
+  scope,
+  fullSuite,
+  everySpec = false,
+  importers,
+  proofs,
+  selection,
+  primitives,
+}) {
+  const full = reason => ({full: true, reason});
+  if (everySpec) return full('the release interaction check runs every spec');
+  if (fullSuite)
+    return full('the change touches shared infrastructure or is undecided');
+  if (changed == null) return full('the changed files are unknown');
+  if (importers == null) return full('the import graph could not be computed');
+  if (proofs == null) return full("the proofs' imports could not be followed");
+  const present = new Set(listed);
+  const specs = new Set();
+  const touched = new Set();
+  const relevant = changed.filter(file => scope.test(file));
+  for (const file of relevant) {
+    const loaders = [...(proofs.get(file) ?? [])];
+    for (const loader of loaders)
+      if (isInteractionSpec(loader)) specs.add(loader);
+    if (isInteractionSpec(file)) {
+      if (present.has(file)) specs.add(file);
+      continue;
+    }
+    if (selection.shared.some(prefix => file.startsWith(prefix)))
+      return full(`${file} is shared code`);
+    const folder = componentFolderOf(file);
+    if (folder == null) return full(`${file} maps to no component`);
+    if (primitives.includes(folder))
+      return full(`${file} is in the shared primitive ${folder}`);
+    touched.add(folder);
+  }
+  const dependents = renderingFolders(importers, [...touched]).map(
+    ({folder}) => folder,
+  );
+  const folders = new Set([...touched, ...dependents]);
+  for (const file of listed)
+    if (isInteractionSpec(file) && folders.has(componentFolderOf(file)))
+      specs.add(file);
+  // An escape's missed edge: a change under `from` runs `specs` too.
+  for (const edge of selection.edges)
+    if (relevant.some(file => file.startsWith(edge.from)))
+      for (const spec of edge.specs) if (present.has(spec)) specs.add(spec);
+  return {
+    full: false,
+    specs: [...specs].sort(),
+    touched: [...touched].sort(),
+    dependents,
+  };
 }
 
 // A suite with one unnamed project prints no `[project]`.
@@ -569,6 +671,80 @@ function select(args) {
   for (const line of selected) console.log(line);
 }
 
+/**
+ * Reads a file from a checkout, or from its commit when a sparse checkout
+ * leaves the file out.
+ * @param {string} root
+ */
+export function checkoutReader(root) {
+  return file =>
+    fs.existsSync(path.join(root, file))
+      ? fs.readFileSync(path.join(root, file), 'utf8')
+      : execFileSync('git', ['-C', root, 'show', `HEAD:${file}`], {
+          encoding: 'utf8',
+          maxBuffer: 1 << 26,
+        });
+}
+
+function selectChromium(args) {
+  const listedFile = option(args, '--listed');
+  const scope = option(args, '--scope');
+  const selectionFile = option(args, '--selection');
+  const primitivesFile = option(args, '--primitives');
+  const out = option(args, '--out');
+  if (!listedFile || !scope || !selectionFile || !primitivesFile || !out)
+    throw new Error(
+      'usage: select-chromium --listed <file> --scope <pattern> --selection <file> --primitives <file> --out <file> [--changed <file>] [--root <dir>] [--full-suite true|false] [--every-spec true|false]',
+    );
+  const lines = file =>
+    fs.readFileSync(file, 'utf8').split('\n').filter(Boolean);
+  const changedFile = option(args, '--changed');
+  const root = option(args, '--root');
+  const listed = lines(listedFile);
+  let importers = null;
+  let proofs = null;
+  try {
+    if (root) importers = importerGraph(root);
+  } catch (error) {
+    console.error(`The import graph could not be computed: ${error.message}`);
+  }
+  if (importers != null && importers.size === 0) importers = null;
+  try {
+    if (root)
+      proofs = proofImporters({
+        root,
+        listed,
+        isProof: isProofPage,
+        read: checkoutReader(root),
+      });
+  } catch (error) {
+    console.error(
+      `The proofs' imports could not be followed: ${error.message}`,
+    );
+  }
+  const result = chromiumSelection({
+    listed,
+    changed:
+      changedFile && fs.existsSync(changedFile) ? lines(changedFile) : null,
+    scope: new RegExp(scope),
+    fullSuite: option(args, '--full-suite') !== 'false',
+    everySpec: option(args, '--every-spec') === 'true',
+    importers,
+    proofs,
+    selection: JSON.parse(fs.readFileSync(selectionFile, 'utf8')),
+    primitives: JSON.parse(fs.readFileSync(primitivesFile, 'utf8')).primitives,
+  });
+  fs.writeFileSync(out, `${JSON.stringify(result, null, 2)}\n`);
+  if (result.full)
+    console.log(`Chromium selection: the full suite (${result.reason}).`);
+  else {
+    console.log(
+      `Chromium selection: ${result.specs.length} spec file(s) for ${result.touched.length} touched and ${result.dependents.length} dependent component folder(s).`,
+    );
+    for (const spec of result.specs) console.log(`  ${spec}`);
+  }
+}
+
 function record(args) {
   const key = option(args, '--key');
   const project = option(args, '--project');
@@ -616,11 +792,14 @@ if (
   const [command, ...args] = process.argv.slice(2);
   try {
     if (command === 'select') select(args);
+    else if (command === 'select-chromium') selectChromium(args);
     else if (command === 'legs') legs(args);
     else if (command === 'plan') plan(args);
     else if (command === 'record') record(args);
     else
-      throw new Error('usage: playwright-legs.mjs select|legs|plan|record ...');
+      throw new Error(
+        'usage: playwright-legs.mjs select|select-chromium|legs|plan|record ...',
+      );
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;

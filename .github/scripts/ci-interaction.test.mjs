@@ -46,8 +46,9 @@ describe('interaction proof routing', () => {
   it('always reports, so the join never reads a missing result', () => {
     // Behind the pull-request gate (spec:AST-030 FR17).
     expect(proofs.if).toMatch(/^\$\{\{ \(github\.event_name != 'pull_request'/);
+    // Main's nightly full run starts them too (spec:AST-030 FR31).
     expect(ungated(proofs.if)).toBe(
-      "github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true'",
+      "(github.event_name != 'workflow_dispatch' || inputs.operation == 'interaction-full' && github.ref == 'refs/heads/main') && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true'",
     );
     // Admission too: the Storybook build starts beside it (spec:AST-030 FR16).
     expect(proofs.needs).toEqual([
@@ -118,8 +119,10 @@ describe('interaction proof routing', () => {
   });
 
   it('skips merge-group runs and heads cut before the proofs existed', () => {
+    // Outside a pull request only main's nightly full run plans the proofs.
     expect(decide().with).toMatchObject({
-      'outside-pull-request': 'skip',
+      'outside-pull-request':
+        "${{ inputs.operation == 'interaction-full' && 'run' || 'skip' }}",
       'requires-head-file': 'playwright.interaction.config.ts',
     });
   });

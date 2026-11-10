@@ -48,6 +48,7 @@ nested `AGENTS.md`.
   follow the normal contribution flow and are never asked to author specs;
   maintainers own missing authority.
 - Before adding a new `data-*` attribute to a component, treat it as public API: themes generate selectors on data attributes. Add one only when a current record names it and says why ([`architecture:public-component-api`](docs/architecture/public-component-api.md) DEC-2). For a dynamic per-instance style, first use a StyleX dynamic style (`stylex.create({x: (v) => ({...})})`), which sets a private CSS variable; never add a data attribute just to feed CSS. For any other internal-only concern, use a private `data-astryx-*` attribute under INV23, or no attribute.
+- Layers: anchored layers follow their anchor through CSS anchor positioning only; script never moves a layer to follow its anchor ([`architecture:layer-runtime`](docs/architecture/layer-runtime.md) INV21). A press scales only the trigger's own visual; a layer renders outside it and anchors to the untransformed box (INV22).
 - Cross-component work: read the relevant contract under `docs/families/`,
   applicable design spec under `docs/design/`, and current architecture under
   `docs/architecture/`.
@@ -55,10 +56,11 @@ nested `AGENTS.md`.
 - Writing or reviewing any knowledge record: run the rubric in
   `docs/contributing/spec-writing.md` over the record and put its results in
   the pull request description under `## Writing rubric results`. A record
-  describes the system in the present tense; proposals, history, pull
-  requests, and research stay out of it. When reviewing, read the record
-  against the reported results; a record pull request without them is
-  incomplete, so ask for them before reviewing the content.
+  describes the system in the present tense; proposals, history, pull requests,
+  research, and project status (what is built so far, what goes first) stay out
+  of it. When reviewing, read the record against the reported results; a record
+  pull request without them is incomplete, so ask for them before reviewing the
+  content.
 - Integration contribution work: read `docs/specs/AST-039/spec.md`. Every new
   discoverable item owns a strongly typed, same-stem `.doc.mjs`; root manifests
   locate directories and never catalog their items. No catalog file (like
@@ -186,7 +188,7 @@ Documentation lives in two places:
 
 <!-- STYLEX-CAPS:START -->
 
-[StyleX v0.19.0 CSS Support]|Use CSS-native solutions. Don't build JS workarounds for supported features.
+[StyleX v0.19.1 CSS Support]|Use CSS-native solutions. Don't build JS workarounds for supported features.
 |AT-RULES: @media, @supports, @container (+named), @starting-style, @scope — YES
 |AT-RULES: @layer, @property (explicit) — NO (compiles but invalid CSS output)
 |PSEUDO-CLS: :hover, :focus, :focus-visible, :focus-within, :active, :disabled — YES
