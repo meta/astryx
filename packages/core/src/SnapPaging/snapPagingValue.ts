@@ -177,10 +177,11 @@ export function snapPages(
   element: HTMLElement,
   shown: number,
   end: number,
+  isHeld = false,
 ): SnapPages {
   const stops: number[] = [];
   const owners: Element[][] = [];
-  for (const {item, stop} of itemStops(element, shown, end)) {
+  for (const {item, stop} of itemStops(element, shown, end, isHeld)) {
     if (stops.length === 0 || stop > stops[stops.length - 1] + 0.5) {
       stops.push(stop);
       owners.push([item]);
@@ -200,10 +201,39 @@ export function snapPages(
   return {stops: n > 0 ? stops : [0], skipped: []};
 }
 
+/**
+ * How far the row's items reach, start to end. A held row's items carry the
+ * paging's translate, so each rect takes its own item's translate off, read
+ * right after it. The span is then the layout's, whenever each rect was read.
+ */
+export function itemsSpan(element: HTMLElement, isHeld = false): number {
+  const items = Array.from(element.children).filter(
+    (child): child is HTMLElement => child instanceof HTMLElement,
+  );
+  if (items.length === 0) {
+    return 0;
+  }
+  // A rect is on screen, scaled with the row; a translate is in the row's own
+  // pixels. So each rect takes the scale off before its translate.
+  const scale = rowScale(element, element.getBoundingClientRect());
+  let start = Infinity;
+  let end = -Infinity;
+  for (const item of items) {
+    const rect = item.getBoundingClientRect();
+    const held = isHeld
+      ? Number.parseFloat(getComputedStyle(item).translate) || 0
+      : 0;
+    start = Math.min(start, rect.left / scale - held);
+    end = Math.max(end, rect.right / scale - held);
+  }
+  return end - start;
+}
+
 function itemStops(
   element: HTMLElement,
   shown: number,
   end: number,
+  isHeld: boolean,
 ): {item: Element; stop: number}[] {
   const rtl = isRtlElement(element);
   const box = element.getBoundingClientRect();
@@ -218,8 +248,14 @@ function itemStops(
     ) || 0;
   return Array.from(element.children, item => {
     const rect = item.getBoundingClientRect();
+    // A held row's children carry the paging's translate. The rect shows the
+    // translate at the time of its read, so the next read takes it off.
+    const held = isHeld
+      ? Number.parseFloat(getComputedStyle(item).translate) || 0
+      : 0;
     const fromEdge =
-      (rtl ? box.right - rect.right : rect.left - box.left) / scale;
+      (rtl ? box.right - rect.right : rect.left - box.left) / scale +
+      (rtl ? held : -held);
     return {
       item,
       stop: Math.min(Math.max(fromEdge - border + shown - padding, 0), end),
