@@ -9,6 +9,8 @@
  */
 
 export {createMotionEngine} from '../animator';
+export {progressCurve} from '../progress';
+export {createRectMorph, edgeGrowPath, lerpPath} from '../rectMorph';
 export {solveSpring, toSpring} from '../spring';
 export {registerSpringsTable, springs} from '../uikit/springs';
 export {motionRoleOf} from '../roles';

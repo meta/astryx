@@ -5,17 +5,18 @@
 /**
  * @file ListContext.tsx
  * @input Layer-scoped React context
- * @output Exports ListContext for sharing density, dividers, the row edge
- *   treatment, and marker style between List and ListItem, and
- *   ListMarkerScope, which sets the marker for the items inside it, or a
- *   task item's checkbox in its place, and whether their List has a marker
- *   gutter whose outside counters keep the ordinary themed text inset
- * @position Internal context; consumed by List.tsx and ListItem.tsx
+ * @output Exports ListContext, which shares density, dividers, the row edge
+ *   treatment, marker style and a reorderable List's reorder with ListItem.
+ *   Also exports ListMarkerScope, which sets the marker for the items inside
+ *   it, or a task item's checkbox in its place. It also says whether their
+ *   List has a marker gutter whose outside counters keep the themed inset
+ * @position Internal context. Consumed by List.tsx and ListItem.tsx
  */
 
 import {use, useMemo, type ReactNode} from 'react';
 import {createLayerScopedContext} from '../Layer/layerScopedContext';
 import type {AnimatedLayout} from '../hooks/useAnimatedLayout';
+import type {ListReorderContextValue} from './listReorderContext';
 
 export type ListDensity = 'compact' | 'balanced' | 'spacious';
 export type ListMarkerStyle = 'none' | 'disc' | 'decimal' | 'circle';
@@ -76,6 +77,11 @@ export interface ListContextValue {
    * The list's `animatedLayout` handle, for its rows.
    */
   animatedLayout?: AnimatedLayout;
+  /**
+   * A reorderable List's reorder (`List reorderable`); internal. Its rows end
+   * with the handle it carries (List/listReorderContext.ts).
+   */
+  reorder?: ListReorderContextValue | null;
 }
 
 export const ListContext = createLayerScopedContext<ListContextValue | null>(

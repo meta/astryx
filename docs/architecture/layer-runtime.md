@@ -663,7 +663,8 @@ be updated only as that work ships.
 INV14 and INV15 are not met yet, and `spec:AST-003` does not cover them. The
 runtime owns the shared exit copy (INV13, `placeLayerExitCopy`) and the shared
 presentation hold (`Layer/presentationHold.ts`), which Popover uses for its
-sheet and anchored presentations; no runtime backdrop tint or lift module
+sheet and anchored presentations, and the one lift-from-trigger module exists
+(INV15, `packages/core/src/liftFromTrigger/`); no runtime backdrop tint
 exists, and Dialog, Drawer, BottomSheet, Lightbox, MobileNav, ToastViewport,
 and Selector each build their own top-layer mounting, exit, backdrop, or
 presentation hold.

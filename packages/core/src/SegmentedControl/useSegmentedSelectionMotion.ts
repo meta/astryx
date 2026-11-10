@@ -41,7 +41,8 @@ import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {titleOfSegment} from '../privateAttributes/segmentTitle.stylex';
 import {mapProgress, mapRange} from '../motion/progress';
-import {easedProgress, readThemeTiming} from '../motion/themeTiming';
+import {easedProgress} from '../motion/progress';
+import {readThemeTiming} from '../motion/themeTiming';
 import {useSegmentedTouchTracking} from './useSegmentedTouchTracking';
 
 /** The segments, in DOM order. */

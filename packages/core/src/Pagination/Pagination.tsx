@@ -212,14 +212,14 @@ const styles = stylex.create({
     alignItems: 'center',
     justifyContent: 'center',
     minWidth: sizeVars['--size-element-md'],
-    height: sizeVars['--size-element-md'],
+    minHeight: sizeVars['--size-element-md'],
     color: colorVars['--color-text-secondary'],
     fontSize: typeScaleVars['--text-label-size'],
     userSelect: 'none',
   },
   ellipsisSm: {
     minWidth: sizeVars['--size-element-sm'],
-    height: sizeVars['--size-element-sm'],
+    minHeight: sizeVars['--size-element-sm'],
     fontSize: typeScaleVars['--text-supporting-size'],
   },
   infoText: {

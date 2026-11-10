@@ -137,6 +137,7 @@ async function decide({
     SCOPE_OUTSIDE_PR: inputs['outside-pull-request'] ?? 'run',
     SCOPE_HEAD_FILE: inputs['requires-head-file'] ?? '',
     SCOPE_COMPONENT_AUDIT: inputs['component-audit'] ?? 'false',
+    SCOPE_LAB_ONLY_SPECS: inputs['lab-only-specs'] ?? '',
   };
   const saved = {...process.env};
   Object.assign(process.env, env);
@@ -177,10 +178,12 @@ describe('per-job scope step', () => {
         'has_rtl_components',
         'has_rtl_harness',
         'lab_only',
+        'lab_specs_path',
         'release_bump',
         'spec_only',
         'tooling_only',
         'touches',
+        'truncated',
         'vitest_full_suite',
       ].sort(),
     );
@@ -322,6 +325,57 @@ describe('per-job scope step', () => {
     expect(mixed.outputs).toMatchObject({lab_only: 'false', applies: 'true'});
   });
 
+  it('still runs a changed interaction spec on the Lab-only lane, alone (spec:AST-030 FR26)', async () => {
+    const spec =
+      'packages/lab/src/NavigationStack/__tests__/NavigationStack.interaction.browser.spec.ts';
+    const inputs = {
+      paths: INTERACTION_PATHS,
+      'lab-only-specs': '\\.interaction\\.browser\\.spec\\.ts$',
+      'requires-head-file': 'playwright.interaction.config.ts',
+    };
+    const headFiles = ['playwright.interaction.config.ts'];
+    const {outputs} = await decide({files: changed(spec), inputs, headFiles});
+    expect(outputs).toMatchObject({lab_only: 'true', applies: 'true'});
+    expect(fs.readFileSync(outputs.lab_specs_path, 'utf8')).toBe(`${spec}\n`);
+    // Lab source beside the spec adds nothing: only the spec runs.
+    const both = await decide({
+      files: changed(
+        'packages/lab/src/NavigationStack/NavigationStack.tsx',
+        spec,
+      ),
+      inputs,
+      headFiles,
+    });
+    expect(both.outputs.applies).toBe('true');
+    expect(fs.readFileSync(both.outputs.lab_specs_path, 'utf8')).toBe(
+      `${spec}\n`,
+    );
+    // Lab source alone runs none.
+    const source = await decide({
+      files: changed('packages/lab/src/NavigationStack/NavigationStack.tsx'),
+      inputs,
+      headFiles,
+    });
+    expect(source.outputs).toMatchObject({
+      lab_only: 'true',
+      applies: 'false',
+      lab_specs_path: '',
+    });
+    // A deleted spec has nothing to run.
+    const removed = await decide({
+      files: [{filename: spec, status: 'removed'}],
+      inputs,
+      headFiles,
+    });
+    expect(removed.outputs).toMatchObject({
+      applies: 'false',
+      lab_specs_path: '',
+    });
+    // A head cut before the interaction config still skips.
+    const old = await decide({files: changed(spec), inputs});
+    expect(old.outputs.applies).toBe('false');
+  });
+
   it('reports no Lab-only lane when the base classifier predates it', async () => {
     const old = fs
       .readFileSync(path.join(root, '.github/scripts/change-scope.cjs'), 'utf8')
@@ -379,11 +433,15 @@ describe('per-job scope step', () => {
         missingBase: ['scripts/component-packages.cjs'],
       },
     ],
-  ])('puts everything in scope when %s', async (_, options) => {
+  ])('puts everything in scope when %s', async (name, options) => {
     const {outputs, messages} = await decide({
       ...options,
       inputs: {paths: INTERACTION_PATHS},
     });
+    // Only a truncated file list is one a re-run cannot decide.
+    expect(outputs.truncated).toBe(
+      name === 'GitHub truncates the file list' ? 'true' : 'false',
+    );
     expect(outputs).toMatchObject({
       spec_only: 'false',
       docsite_only: 'false',
@@ -832,5 +890,44 @@ describe('the temporary policy folder', () => {
     );
     expect(result.listed).toBe(true);
     expect(left).toEqual([]);
+  });
+});
+
+describe('the contract job on a pull request GitHub truncates', () => {
+  it('lists every file and runs, never fails, on an undecided scope', async () => {
+    const ci = yaml.parse(
+      fs.readFileSync(
+        path.join(import.meta.dirname, '../workflows/ci.yml'),
+        'utf8',
+      ),
+    );
+    const job = ci.jobs['pr-component-a11y-contracts'];
+    const scopeStep = job.steps.find(step => step.id === 'scope');
+    const {outputs} = await decide({
+      files: Array.from({length: 3001}, (_, i) => ({
+        filename: `packages/core/src/Button/file${i}.tsx`,
+        status: 'modified',
+      })),
+      inputs: scopeStep.with,
+    });
+    expect(outputs).toMatchObject({applies: 'true', decided: 'false'});
+    expect(outputs.changed_files_path ?? '').toBe('');
+    // The workflow's own conditions, read against these outputs.
+    const holds = condition =>
+      Function(
+        'outputs',
+        `return (${condition
+          .replace(
+            /steps\.scope\.outputs\.(\w+)/g,
+            (_, key) => `(outputs.${key} ?? '')`,
+          )
+          .replace(/ == /g, ' === ')
+          .replace(/ != /g, ' !== ')});`,
+      )(outputs);
+    const step = name => job.steps.find(candidate => candidate.name === name);
+    expect(holds(step('Require the changed-file list').if)).toBe(false);
+    expect(holds(step('List every file when the scope is undecided').if)).toBe(
+      true,
+    );
   });
 });

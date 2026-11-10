@@ -30,6 +30,7 @@ roles through `resolveMotion`.
 | `uikit/sheet.ts`                                 | UISheetPresentationController: the flick speed, how near a detent counts as on it, how far ahead a release is projected, and the speed below which it is not.        |
 | `uikit/switch.ts`                                | UISwitch on iOS 26.2: geometry, the lift, settle, travel and tracking springs, the flip distance, the track colour.                                                  |
 | `uikit/datePicker.ts`                            | UIDatePicker: the rules it adds to its wheels.                                                                                                                       |
+| `uikit/reorder.ts`                               | UITableView edit-mode reorder: the reorder control's claim and the edge autoscroll (the glides play `springs.settle`).                                               |
 | `android/keyboard.ts`                            | Android's software keyboard (Chrome with Gboard): its slides' durations and curves (no theme's) and when they start against Chrome's report and a blur.              |
 | `uikit/zoomMedia.ts`                             | UIScrollView zooming for a photo viewer: overshoot past the limits, double-tap and maximum zoom.                                                                     |
 | `roles.ts`                                       | The internal motion roles: the springs, durations and curves `spec:AST-094` FR4 names, registered by the shared tables, and a role's CSS form read back.             |
@@ -45,9 +46,12 @@ roles through `resolveMotion`.
 | `resolveSnapPoint.ts`                            | Release policy: the snap point a release lands on (flick, back-out cancel, step limit), on `selectSnapPoint`. Internal.                                              |
 | `bezier.ts`                                      | Cubic-bézier timing functions (Core Animation's named curves).                                                                                                       |
 | `animator.ts`                                    | Compositor animator: springs, coasts and any closed-form curve compiled to Web Animations, read back analytically.                                                   |
+| `morphPath.ts`                                   | The rect an element shows at each progress of a grow-out presentation: a straight line, a popover’s edge growth, and the curves that put it there.                   |
+| `rectMorph.ts`                                   | Grow out of a source rect and shrink back into it along a path: present and dismiss, each continuing the other from the rect on screen.                              |
 | `progress.ts`                                    | A spring's progress, one curve mapped from another (companions, clamped ranges), the velocity that continues a motion.                                               |
 | `presentation.ts`                                | Where each moving element is drawn relative to where the engine hit-tests it, reported by the animator while translate runs; read by the gesture host at touch-down. |
 | `reducedMotionPlan.ts`                           | The animator's Reduce Motion planner: what one call becomes, a cross-fade whose travel lands while transparent or at once.                                           |
+| `opacityFloor.ts`                                | The lowest opacity a compositor entrance fades in from: Chromium skips drawing a layer at exactly 0 as its animation starts.                                         |
 | `__tests__/animator.interaction.browser.spec.ts` | Browser proofs on the interaction harness (Chromium and WebKit): busy main thread, end state through a block, no Layout / Paint, seeked curves, a dialog's backdrop. |
 
 Component-specific values (a sheet's detents, a switch's geometry, a context

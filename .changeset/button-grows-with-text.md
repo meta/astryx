@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] A labelled `Button`'s size is now a minimum height: a label larger than the element size grows the button, so the label stays inside it. At the default text size Buttons keep their size, and icon-only buttons keep their fixed square. A caller `height` override no longer brings a labelled Button below its size; override `minHeight` instead. A theme or caller block padding on a labelled Button now counts toward its height, so it can make the button taller than its size.
+[fix] A labelled `Button` grows with its label when the text size grows: its height is its size, or one line of its label when that is taller, so the label stays inside the button. At the default text size Buttons render exactly as before, a caller's `height` still applies, and icon-only buttons keep their fixed square.
 
 @cixzhang
