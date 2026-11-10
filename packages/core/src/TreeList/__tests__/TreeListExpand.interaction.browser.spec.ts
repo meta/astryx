@@ -1245,7 +1245,19 @@ test('the rows below keep moving on every frame while the main thread is blocked
     {[`${testInfo.project.name}.json`]: JSON.stringify(proof, null, 1)},
     testInfo,
   );
-
+  // The frames the compositor presented in the judged part. A machine that
+  // starves the compositor of frames fails here by name, not on the stall
+  // bound below.
+  requireFrames(
+    (presented.length > 0 ? presented : tracked.map(frame => frame.t)).map(
+      t => ({t}),
+    ),
+    {
+      min: 8,
+      during: 'the block, in its judged part',
+      where: ({t}) => t >= proof.judged.from && t <= proof.judged.to,
+    },
+  );
   // Frames kept coming through the block, each one further down.
   expect(proof.changed, JSON.stringify(proof)).toBeGreaterThanOrEqual(3);
   expect(proof.monotonic, JSON.stringify(proof)).toBe(true);
