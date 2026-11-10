@@ -100,7 +100,7 @@ const PRIORITY_COLOR: Record<
 const allTasks: TaskRow[] = [
   {
     id: '1',
-    taskId: 'T235040469',
+    taskId: 'TASK-1001',
     title: 'Update user interface',
     subtitle: 'Update payment gateway integration',
     status: 'in_progress',
@@ -115,7 +115,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '2',
-    taskId: 'T235040470',
+    taskId: 'TASK-1002',
     title: 'Use Projects to organize work for features or releases',
     subtitle: '',
     status: 'in_progress',
@@ -130,7 +130,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '3',
-    taskId: 'T235040471',
+    taskId: 'TASK-1003',
     title: 'Use Cycles to focus work over n-weeks',
     subtitle: '',
     status: 'in_progress',
@@ -145,7 +145,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '4',
-    taskId: 'T235040472',
+    taskId: 'TASK-1004',
     title: 'Testing code',
     subtitle: 'Update payment gateway integration',
     status: 'todo',
@@ -160,7 +160,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '5',
-    taskId: 'T235040473',
+    taskId: 'TASK-1005',
     title: 'Update backend code',
     subtitle: 'Update payment gateway integration',
     status: 'todo',
@@ -175,7 +175,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '6',
-    taskId: 'T235040474',
+    taskId: 'TASK-1006',
     title: 'Update front end code',
     subtitle: 'Update payment gateway integration',
     status: 'todo',
@@ -190,7 +190,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '7',
-    taskId: 'T235040475',
+    taskId: 'TASK-1007',
     title: 'Update payment gateway integration',
     subtitle: '',
     status: 'todo',
@@ -205,7 +205,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '8',
-    taskId: 'T235040476',
+    taskId: 'TASK-1008',
     title: 'Update payment gateway backend code',
     subtitle: '',
     status: 'todo',
@@ -220,7 +220,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '9',
-    taskId: 'T235040477',
+    taskId: 'TASK-1009',
     title: 'Invite your teammates',
     subtitle: '',
     status: 'todo',
@@ -235,7 +235,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '10',
-    taskId: 'T235040478',
+    taskId: 'TASK-1010',
     title: 'Next steps',
     subtitle: '',
     status: 'todo',
@@ -250,7 +250,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '11',
-    taskId: 'T235040479',
+    taskId: 'TASK-1011',
     title: 'Welcome to Linear',
     subtitle: '',
     status: 'backlog',
@@ -265,7 +265,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '12',
-    taskId: 'T235040480',
+    taskId: 'TASK-1012',
     title: 'Connect GitHub or GitLab',
     subtitle: '',
     status: 'backlog',
@@ -280,7 +280,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '13',
-    taskId: 'T235040481',
+    taskId: 'TASK-1013',
     title: 'Customize settings',
     subtitle: '',
     status: 'backlog',
@@ -295,7 +295,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '14',
-    taskId: 'T235040482',
+    taskId: 'TASK-1014',
     title: 'Try 3 ways to navigate: Command menu, keyboard or mouse',
     subtitle: '',
     status: 'done',
@@ -310,7 +310,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '15',
-    taskId: 'T235040483',
+    taskId: 'TASK-1015',
     title: 'Connect to Slack',
     subtitle: '',
     status: 'done',
@@ -325,7 +325,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '16',
-    taskId: 'T235040484',
+    taskId: 'TASK-1016',
     title: 'Migrate database schema to v2',
     subtitle: 'Payment gateway integration',
     status: 'in_progress',
@@ -340,7 +340,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '17',
-    taskId: 'T235040485',
+    taskId: 'TASK-1017',
     title: 'Write integration tests for checkout flow',
     subtitle: '',
     status: 'in_progress',
@@ -355,7 +355,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '18',
-    taskId: 'T235040486',
+    taskId: 'TASK-1018',
     title: 'Set up CI/CD pipeline for staging',
     subtitle: '',
     status: 'in_progress',
@@ -370,7 +370,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '19',
-    taskId: 'T235040487',
+    taskId: 'TASK-1019',
     title: 'Add rate limiting to public API endpoints',
     subtitle: '',
     status: 'todo',
@@ -385,7 +385,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '20',
-    taskId: 'T235040488',
+    taskId: 'TASK-1020',
     title: 'Refactor auth middleware to support OAuth2',
     subtitle: '',
     status: 'todo',
@@ -400,7 +400,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '21',
-    taskId: 'T235040489',
+    taskId: 'TASK-1021',
     title: 'Design error pages for 404 and 500',
     subtitle: '',
     status: 'todo',
@@ -415,7 +415,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '22',
-    taskId: 'T235040490',
+    taskId: 'TASK-1022',
     title: 'Audit third-party dependencies for vulnerabilities',
     subtitle: '',
     status: 'todo',
@@ -430,7 +430,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '23',
-    taskId: 'T235040491',
+    taskId: 'TASK-1023',
     title: 'Implement webhook retry logic with exponential backoff',
     subtitle: 'Payment gateway integration',
     status: 'todo',
@@ -445,7 +445,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '24',
-    taskId: 'T235040492',
+    taskId: 'TASK-1024',
     title: 'Add dark mode support to dashboard',
     subtitle: '',
     status: 'backlog',
@@ -460,7 +460,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '25',
-    taskId: 'T235040493',
+    taskId: 'TASK-1025',
     title: 'Create onboarding flow for new team members',
     subtitle: '',
     status: 'backlog',
@@ -475,7 +475,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '26',
-    taskId: 'T235040494',
+    taskId: 'TASK-1026',
     title: 'Set up error tracking with Sentry',
     subtitle: '',
     status: 'backlog',
@@ -490,7 +490,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '27',
-    taskId: 'T235040495',
+    taskId: 'TASK-1027',
     title: 'Improve search performance with indexing',
     subtitle: '',
     status: 'backlog',
@@ -505,7 +505,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '28',
-    taskId: 'T235040496',
+    taskId: 'TASK-1028',
     title: 'Write API documentation for v2 endpoints',
     subtitle: '',
     status: 'done',
@@ -520,7 +520,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '29',
-    taskId: 'T235040497',
+    taskId: 'TASK-1029',
     title: 'Set up staging environment',
     subtitle: '',
     status: 'done',
@@ -535,7 +535,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '30',
-    taskId: 'T235040498',
+    taskId: 'TASK-1030',
     title: 'Fix flaky end-to-end tests in CI',
     subtitle: '',
     status: 'done',
