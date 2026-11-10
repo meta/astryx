@@ -10,7 +10,7 @@
  */
 
 import {readFileSync} from 'node:fs';
-import {describe, it, expect, vi} from 'vitest';
+import {afterEach, describe, it, expect, vi} from 'vitest';
 import {
   render,
   screen,
@@ -1067,5 +1067,135 @@ describe('Button pressed state (touch)', () => {
     // A finger on a touch screen beside a mouse, and the mouse itself, see
     // what they always saw.
     expect(keepsPressOutsideCoarse(button, '::before')).toBe(true);
+  });
+});
+
+// The on-demand tooltip (shared by the description and mount cases below).
+const tooltipRestorers: (() => void)[] = [];
+afterEach(() => {
+  for (const restore of tooltipRestorers.splice(0)) {
+    restore();
+  }
+});
+
+function withPopover() {
+  const proto = window.HTMLElement.prototype;
+  const original = {
+    showPopover: proto.showPopover,
+    hidePopover: proto.hidePopover,
+  };
+  const showPopover = vi.fn();
+  proto.showPopover = showPopover;
+  proto.hidePopover = vi.fn();
+  tooltipRestorers.push(() => {
+    proto.showPopover = original.showPopover;
+    proto.hidePopover = original.hidePopover;
+  });
+  return showPopover;
+}
+
+async function settle() {
+  await act(async () => {
+    await new Promise(resolve => setTimeout(resolve, 50));
+  });
+}
+
+function describedByIds(element: HTMLElement): string[] {
+  return (element.getAttribute('aria-describedby') ?? '')
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+describe('Button tooltip description (FR12)', () => {
+  it('describes the button by its hidden copy before any interaction', async () => {
+    render(<Button label="Save" tooltip="Save your changes" />);
+    await settle();
+    const button = screen.getByRole('button', {name: 'Save'});
+    expect(button).toHaveAccessibleDescription('Save your changes');
+    expect(document.querySelector('[role="tooltip"]')).toBeNull();
+    const [id] = describedByIds(button);
+    expect(document.getElementById(id)).toHaveAttribute('popover', 'manual');
+  });
+
+  it('keeps the hidden copy as the only target after the tooltip mounts', async () => {
+    withPopover();
+    render(
+      <Button
+        label="Save"
+        tooltip="Save your changes"
+        aria-describedby="hint"
+      />,
+    );
+    await settle();
+    const button = screen.getByRole('button', {name: 'Save'});
+    const before = describedByIds(button);
+    fireEvent.pointerEnter(button, {pointerType: 'mouse'});
+    await waitFor(
+      () => expect(document.querySelector('[role="tooltip"]')).not.toBeNull(),
+      {timeout: 8000},
+    );
+    const after = describedByIds(button);
+    expect(after).toEqual(before);
+    expect(after).toHaveLength(2);
+    expect(after[0]).toBe('hint');
+    const tooltipLayer = document.querySelector('[role="tooltip"]');
+    expect(after).not.toContain(tooltipLayer?.id);
+  }, 15000);
+
+  it('follows a change of the tooltip text', async () => {
+    const {rerender} = render(<Button label="Save" tooltip="First" />);
+    const button = screen.getByRole('button', {name: 'Save'});
+    expect(button).toHaveAccessibleDescription('First');
+    rerender(<Button label="Save" tooltip="Second" />);
+    expect(button).toHaveAccessibleDescription('Second');
+  });
+
+  it('adds no hidden copy when the tooltip repeats the name', async () => {
+    render(<Button label="Close" tooltip="Close" />);
+    const button = screen.getByRole('button', {name: 'Close'});
+    expect(button).not.toHaveAttribute('aria-describedby');
+    expect(document.querySelector('span[popover]')).toBeNull();
+  });
+});
+
+describe('Button tooltip mount on the first interaction', () => {
+  it('the first hover mounts the tooltip and opens it after the delay', async () => {
+    const showPopover = withPopover();
+    render(<Button label="Save" tooltip="Save your changes" />);
+    await settle();
+    const button = screen.getByRole('button', {name: 'Save'});
+    fireEvent.pointerEnter(button, {pointerType: 'mouse'});
+    await waitFor(() => expect(showPopover).toHaveBeenCalled(), {
+      timeout: 8000,
+    });
+  }, 15000);
+
+  it('keyboard focus mounts the tooltip', async () => {
+    withPopover();
+    render(<Button label="Save" tooltip="Save your changes" />);
+    await settle();
+    const button = screen.getByRole('button', {name: 'Save'});
+    await userEvent.tab();
+    expect(document.activeElement).toBe(button);
+    // Whether focus opens it follows :focus-visible, which the browser
+    // specs check; jsdom does not model it.
+    await waitFor(
+      () => expect(document.querySelector('[role="tooltip"]')).not.toBeNull(),
+      {timeout: 8000},
+    );
+  }, 15000);
+
+  it('a pointer that leaves before the tooltip mounts opens nothing', async () => {
+    const showPopover = withPopover();
+    render(<Button label="Save" tooltip="Save your changes" />);
+    await settle();
+    const button = screen.getByRole('button', {name: 'Save'});
+    fireEvent.pointerEnter(button, {pointerType: 'mouse'});
+    fireEvent.pointerLeave(button, {pointerType: 'mouse'});
+    fireEvent.mouseLeave(button);
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    });
+    expect(showPopover).not.toHaveBeenCalled();
   });
 });
