@@ -49,6 +49,36 @@ describe('the layer runtime, shared by the package and a swizzled copy', () => {
     offPkg();
   });
 
+  it("removes the document's listeners when the other load closes the last layer", async () => {
+    const pkg = await load(async () => import('./layerStack'));
+    const copy = await load(async () => import('./layerStack'));
+    const added = vi.spyOn(document, 'addEventListener');
+    const removed = vi.spyOn(document, 'removeEventListener');
+    const offPkg = pkg.registerLayer({
+      token: {},
+      depth: 0,
+      behavior: 'close',
+      dismiss: () => {},
+    });
+    const offCopy = copy.registerLayer({
+      token: {},
+      depth: 1,
+      behavior: 'close',
+      dismiss: () => {},
+    });
+    // The package opened the document's first layer; the copy closes its last.
+    offPkg();
+    offCopy();
+    const keydownListeners = (spy: typeof added) =>
+      spy.mock.calls
+        .filter(([type]) => type === 'keydown')
+        .map(([, listener]) => listener);
+    expect(keydownListeners(added)).toHaveLength(1);
+    expect(keydownListeners(removed)).toEqual(keydownListeners(added));
+    added.mockRestore();
+    removed.mockRestore();
+  });
+
   it('reads one gesture counter from both loads', async () => {
     const pkg = await load(async () => import('./gestureCounter'));
     const copy = await load(async () => import('./gestureCounter'));
