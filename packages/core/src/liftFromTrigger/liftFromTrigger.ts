@@ -176,6 +176,34 @@ export interface LiftedCopy {
   drop(): void;
 }
 
+/**
+ * The border box's size as laid out, from the computed style, to the
+ * fraction of a pixel. Null when the style holds no used size in px, as for
+ * an inline box. `offsetWidth` and `offsetHeight` round.
+ */
+function layoutSize(
+  computed: CSSStyleDeclaration,
+  axis: 'width' | 'height',
+): number | null {
+  const value = computed.getPropertyValue(axis);
+  const size = value.endsWith('px') ? Number.parseFloat(value) : Number.NaN;
+  if (!Number.isFinite(size)) {
+    return null;
+  }
+  if (computed.boxSizing === 'border-box') {
+    return size;
+  }
+  const sides = axis === 'width' ? ['left', 'right'] : ['top', 'bottom'];
+  let extra = 0;
+  for (const side of sides) {
+    extra +=
+      (Number.parseFloat(computed.getPropertyValue(`padding-${side}`)) || 0) +
+      (Number.parseFloat(computed.getPropertyValue(`border-${side}-width`)) ||
+        0);
+  }
+  return size + extra;
+}
+
 type SavedStyle = [property: string, value: string, priority: string][];
 
 interface LiftedSurface {
@@ -626,11 +654,14 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     }
     // The lift reads everything before it writes to the page, so the page
     // restyles and lays out once for it.
-    // The source as laid out (a scale on it, the press feedback's, is about
-    // its center).
+    // The source as laid out. A scale on it, the press feedback's, is about
+    // its center. The size keeps the fraction of a pixel: a source pinned
+    // narrower than its layout wraps its text.
     const shown = source.getBoundingClientRect();
-    const width = source.offsetWidth || shown.width;
-    const height = source.offsetHeight || shown.height;
+    const width =
+      layoutSize(computed, 'width') ?? (source.offsetWidth || shown.width);
+    const height =
+      layoutSize(computed, 'height') ?? (source.offsetHeight || shown.height);
     const sourceRect: MorphRect = {
       x: shown.left + (shown.width - width) / 2,
       y: shown.top + (shown.height - height) / 2,

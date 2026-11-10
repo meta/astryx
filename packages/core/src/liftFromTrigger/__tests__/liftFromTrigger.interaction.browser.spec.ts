@@ -136,6 +136,33 @@ test('a row lifts itself into the top layer at its lifted rect while one placeho
   await page.evaluate(() => window.__lift.dispose());
 });
 
+test('a source a fraction of a pixel wide lifts at that width, so its content keeps its lines', async ({
+  page,
+}) => {
+  await open(page);
+  const lines = async () =>
+    page.evaluate(() => {
+      const top = (id: string) =>
+        (document.getElementById(id) as HTMLElement).getBoundingClientRect()
+          .top;
+      const chip = document.getElementById('chip') as HTMLElement;
+      return {
+        sameLine: Math.abs(top('chip-a') - top('chip-b')) < 0.5,
+        laidOut: getComputedStyle(chip).width,
+        pinned: chip.style.width,
+      };
+    });
+  const rest = await lines();
+  // The lift pins the source in the call that lifts it.
+  await page.evaluate(() => window.__lift.lift('chip', 0.3));
+  const lifted = await lines();
+  const detail = JSON.stringify({rest, lifted});
+  expect(rest.sameLine, detail).toBe(true);
+  // Pinned at its layout width, not the rounded one: both halves still fit.
+  expect(lifted.pinned, detail).toBe(rest.laidOut);
+  expect(lifted.sameLine, detail).toBe(true);
+});
+
 test('a lifted list item leaves its list valid: an li holds its spot, so the list keeps only li children, at the item\u2019s size whatever the page styles an li with', async ({
   page,
 }) => {

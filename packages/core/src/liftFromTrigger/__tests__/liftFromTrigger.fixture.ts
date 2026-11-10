@@ -77,6 +77,7 @@ document.body.innerHTML = `
     </ul>
   </div>
   <button id="page" style="position: absolute; left: 20px; top: 640px; width: 335px; height: 120px">page</button>
+  <div id="chip" style="position: absolute; left: 20px; top: 40px; width: 100.4px; line-height: 20px; background: rgb(255, 255, 255)"><span id="chip-a" style="display: inline-block; width: 50.2px; height: 20px"></span><span id="chip-b" style="display: inline-block; width: 50.2px; height: 20px"></span></div>
   <div id="menu" popover="manual"><div role="menu" aria-label="Actions">Menu</div></div>
   <button id="thumb" type="button" style="position: absolute; left: 280px; top: 20px; width: 80px; height: 80px; padding: 0; border: 0; border-radius: 10px; overflow: hidden"><img alt="A photo" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='120'%3E%3Crect width='160' height='120' fill='rgb(0,140,0)'/%3E%3C/svg%3E" style="display: block; width: 100%; height: 100%; object-fit: cover"></button>
   <div id="viewer" style="display: none; position: fixed; inset: 0; isolation: isolate; background: rgba(0, 0, 0, 0.8)">
