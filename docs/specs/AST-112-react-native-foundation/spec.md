@@ -164,19 +164,20 @@ shared icon names under FR17.
     vocabulary. It holds no router and no optional capability's objects or
     views.
   - `./storage` (storage, secure storage, files) and `./network` (network,
-    cookies, client identity) hold the rest of the core.
+    cookies, client identity, and the installers below) hold the rest of the
+    core.
   - `./theme`, `./styles`, and `./i18n` hold the theme objects, the style
     helpers, and the strings.
   - `./camera`, `./media`, `./web`, `./pdf`, and `./controls` are the optional
     capabilities' entries. `./navigation` is reserved for the `navigation`
     capability and the Astryx router and its navigators (FR2): the name is
     held, and the package exports the entry only once it holds them.
-  - No entry installs a global when it is imported (DEC-10). The platform
-    core exports two installer functions: one installs
-    `crypto.getRandomValues` and `crypto.randomUUID` from the system's secure
-    random generator where the runtime lacks them, and installs nothing when
-    that generator is absent; the other installs `fetch`'s `redirect: 'error'`
-    and `redirect: 'manual'` modes. An app that wants these globals calls the
+  - No entry installs a global when it is imported (DEC-10). `./network`
+    exports two installer functions: one installs `crypto.getRandomValues`
+    and `crypto.randomUUID` from the system's secure random generator where
+    the runtime lacks them, and installs nothing when that generator is
+    absent; the other installs `fetch`'s `redirect: 'error'` and
+    `redirect: 'manual'` modes. An app that wants these globals calls the
     installers itself. The package's own code relies on none of these globals.
   - The Astryx app's preview host calls both installers before a previewed
     project's code runs, so a project in preview has these globals without
