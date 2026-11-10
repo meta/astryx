@@ -182,7 +182,7 @@ Consumer migration instructions belong in consumer docs and release notes.
   (FR7) shows that name on hover and focus.
   The initials are drawn by generated content from a private per-instance CSS
   variable, so they stay out of the accessible name; Avatar renders no public
-  attribute for them (`architecture:public-component-api` DEC-2).
+  attribute for them.
 - **AR2 — Status reaches assistive technology.** Because a `role="img"` root
   prunes its descendants, the status label is composed into the avatar's own
   name (FR5).
