@@ -678,6 +678,30 @@ passes.
 Rejected: CSS alone (the tooltip stays off-screen at the edge), and a re-pick
 in every scroll frame (the layer bounces mid-scroll).
 
+### DEC-9 — Script never moves a layer to follow its anchor
+
+**Reference:** `spec:AST-059/DEC-9`
+**Decider:** `cixzhang`, `2026-11-10`
+
+An anchored layer follows its anchor only through CSS anchor positioning
+(`position-anchor`, `position-area`, `anchor()` and `@position-try`). No script
+moves a layer to keep it on its anchor: no scroll, resize, observer or
+animation-frame handler writes a layer's `top`, `left`, `inset`, `translate`
+or `transform` from a measured anchor or layer rectangle. The runtime's reads
+that DEC-7 keeps choose among the layer's CSS options or hold it in place; they
+do not write coordinates. Three uses stay outside this rule because none of
+them follows an anchor: fixed mode's coordinates, which a caller sets once from
+an event such as a context-menu press; a one-time entrance or exit transform
+that plays and ends; and the reduced fallback for browsers without anchor
+positioning, which has no anchored geometry (`spec:AST-003` FR22).
+
+The owner, on popover scroll jank: "We should avoid repositioning layers to
+meet the anchor manually in js and ban such strategies in speed since we keep
+seeing this happen".
+
+Rejected: script positioning as a fallback for CSS anchor positioning in
+supported browsers (it lags the scroll by a frame and forces layout).
+
 ## Open questions
 
 None. Every decision above is the owner's.

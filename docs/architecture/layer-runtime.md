@@ -637,6 +637,12 @@ layers use Layer rendering without joining Escape/platform dismissal.
   A trigger carries its CSS anchor name only while its layer is shown; a closed trigger is not an anchor, so a surface that moves around it keeps its transform animation off the main thread.
   A layer that animates out through a CSS transition or keyframe animation it declares for its closed state counts as shown until those animations end; an animation a script starts is not tracked.
 
+- **INV21 — Script never moves a layer to follow its anchor.** An anchored
+  layer follows its anchor through CSS anchor positioning only; no script
+  writes a layer's position from a measured rectangle to keep it on its anchor.
+  Fixed mode's one-time coordinates, a one-time entrance or exit transform, and
+  the reduced browser fallback do not follow an anchor (`spec:AST-059` DEC-9).
+
 This record does not make future eligible-owner, branch-association, global-host,
 or browser-support requirements current. It does not own component focus entry or
 return, modal semantics, channel admission policy, public controlled/uncontrolled
@@ -644,7 +650,8 @@ APIs, visual treatment, or theming anatomy.
 
 ## Current gaps and accepted change
 
-Current gaps are observable facts, not current target behavior:
+- INV21 gap: the source check and the scroll trace are not built.
+  Current gaps are observable facts, not current target behavior:
 
 - Tooltip currently consumes Escape ahead of an associated Popover, menu, or
   Dialog instead of acting as passive information.
@@ -831,6 +838,9 @@ caps, the fallback order and its anchor-visibility condition, and the
 app-declared inset. Its DEC-7 and DEC-8 govern the anchor-clear list and the
 one check after a scroll stops.
 
+`spec:AST-059` DEC-9 governs INV21: script never moves a layer to follow its
+anchor.
+
 `spec:AST-003` is accepted but unimplemented. It defines the approved next
 runtime and must move to `shipped` before its requirements are incorporated into
 this current architecture record.
@@ -854,6 +864,7 @@ this current architecture record.
 | INV17        | One runtime suite over every kind of layer root: a `useLayer` layer, inline and portaled, and the Dialog, Drawer, Lightbox, MobileNav, BottomSheetPanel, and ToastViewport content roots, each inside a plain `onClick` wrapper and a Core clickable container; nested layers                                                                                                                                                                                                                                                                                                                             | A click inside a layer root that reaches an ancestor bubble-phase handler, a caller's wrapper included; an outer layer's handler that receives an inner layer's press; or a document listener or light dismiss that no longer receives it                                                                                                                                                                                    |
 | INV18        | `useLayer.test.tsx` (a closed trigger has no anchor-name, and the trigger of a shown or fading layer does) and `TooltipClosedTriggerAnchor.interaction.browser.spec.ts` in Chromium and WebKit                                                                                                                                                                                                                                                                                                                                                                                                            | A closed trigger with an anchor-name, a shown or fading layer placed away from its anchor, or a surface around a closed trigger that stops while the main thread is busy                                                                                                                                                                                                                                                     |
 | INV18        | `useLayer.test.tsx`: a closed state that declares a discrete `display` transition or a keyframe animation keeps the trigger's anchor name until those animations end, read from the closed state's style; a layer whose closed state declares neither is not read for animations at the close                                                                                                                                                                                                                                                                                                             | A layer with such a closed-state exit placed away from its anchor while it fades, or an animation read on the close of a layer whose closed state declares no exit                                                                                                                                                                                                                                                           |
+| INV21        | A source check over Core for a scroll, resize, observer or animation-frame handler that writes a layer's `top`, `left`, `inset`, `translate` or `transform` from a measured rectangle; a performance trace of a page scroll with an open Popover, counting script position writes                                                                                                                                                                                                                                                                                                                         |
 
 Current unit coverage proves emitted styles, reducers, state transitions, and DOM
 placement. Native Popover, `<dialog>`, focus, top-layer ordering, and rendered
