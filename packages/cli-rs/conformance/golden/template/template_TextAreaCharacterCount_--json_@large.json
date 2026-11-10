@@ -6,7 +6,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"TextAreaCharacterCount\",\n    \"description\": \"Textareas with maxLength and a live character counter. The counter turns red when the limit is exceeded.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"TextArea\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useState} from 'react';\\nimport {TextArea} from '@astryxdesign/core/TextArea';\\n\\nexport default function TextAreaCharacterCount() {\\n  const [value, setValue] = useState(\\n    'Excited to announce that our team just shipped the new dashboard! Check it out and let us know what you think.',\\n  );\\n\\n  return (\\n    <div style={{width: 400}}>\\n      <TextArea\\n        label=\\\"Status update\\\"\\n        value={value}\\n        onChange={setValue}\\n        placeholder=\\\"What's on your mind?\\\"\\n        maxLength={280}\\n        rows={3}\\n      />\\n    </div>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

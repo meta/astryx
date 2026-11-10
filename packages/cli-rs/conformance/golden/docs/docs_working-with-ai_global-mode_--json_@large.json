@@ -7,7 +7,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"id\": \"global-mode\",\n    \"title\": \"In global mode\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"In global mode: your global install keeps one Astryx skill in your home folder, linked into the folders agent tools read, so agents outside any project know Astryx is there; inside a project, its own agent docs come first. See `astryx docs global` and `astryx docs global/computer-agent-guide`.\"\n      }\n    ],\n    \"links\": {\n      \"up\": \"astryx docs working-with-ai --index\",\n      \"previous\": \"astryx docs working-with-ai mcp-server\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

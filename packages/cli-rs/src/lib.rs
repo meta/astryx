@@ -11,3 +11,4 @@ pub mod js;
 pub mod json;
 pub mod route;
 pub mod text;
+pub mod ts7;

@@ -1,0 +1,616 @@
+{
+ "root": "/tmp/astryx-ts7-oracle/proj",
+ "args": [
+  "--api",
+  "--cwd",
+  "/tmp/astryx-ts7-oracle/proj"
+ ],
+ "exchanges": [
+  {
+   "method": "initialize",
+   "request": "null",
+   "response": "{\"useCaseSensitiveFileNames\":true,\"currentDirectory\":\"/tmp/astryx-ts7-oracle/proj\"}"
+  },
+  {
+   "method": "updateSnapshot",
+   "request": "{\"openProjects\":[\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\"]}",
+   "response": "{\"snapshot\":1,\"projects\":[{\"id\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"configFileName\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"rootFiles\":[\"/tmp/astryx-ts7-oracle/proj/src/Button.ts\",\"/tmp/astryx-ts7-oracle/proj/src/index.ts\"],\"compilerOptions\":{\"jsx\":1,\"lib\":[\"lib.es2022.d.ts\"],\"module\":99,\"moduleResolution\":100,\"noEmit\":true,\"strict\":true,\"target\":9,\"configFilePath\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\"}}]}"
+  },
+  {
+   "method": "getSourceFileNames",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\"}",
+   "response": "[\"<tslib>/lib.es5.d.ts\",\"<tslib>/lib.es2015.d.ts\",\"<tslib>/lib.es2016.d.ts\",\"<tslib>/lib.es2017.d.ts\",\"<tslib>/lib.es2018.d.ts\",\"<tslib>/lib.es2019.d.ts\",\"<tslib>/lib.es2020.d.ts\",\"<tslib>/lib.es2021.d.ts\",\"<tslib>/lib.es2022.d.ts\",\"<tslib>/lib.es2015.core.d.ts\",\"<tslib>/lib.es2015.collection.d.ts\",\"<tslib>/lib.es2015.generator.d.ts\",\"<tslib>/lib.es2015.iterable.d.ts\",\"<tslib>/lib.es2015.promise.d.ts\",\"<tslib>/lib.es2015.proxy.d.ts\",\"<tslib>/lib.es2015.reflect.d.ts\",\"<tslib>/lib.es2015.symbol.d.ts\",\"<tslib>/lib.es2015.symbol.wellknown.d.ts\",\"<tslib>/lib.es2016.array.include.d.ts\",\"<tslib>/lib.es2016.intl.d.ts\",\"<tslib>/lib.es2017.arraybuffer.d.ts\",\"<tslib>/lib.es2017.date.d.ts\",\"<tslib>/lib.es2017.object.d.ts\",\"<tslib>/lib.es2017.sharedmemory.d.ts\",\"<tslib>/lib.es2017.string.d.ts\",\"<tslib>/lib.es2017.intl.d.ts\",\"<tslib>/lib.es2017.typedarrays.d.ts\",\"<tslib>/lib.es2018.asyncgenerator.d.ts\",\"<tslib>/lib.es2018.asynciterable.d.ts\",\"<tslib>/lib.es2018.intl.d.ts\",\"<tslib>/lib.es2018.promise.d.ts\",\"<tslib>/lib.es2018.regexp.d.ts\",\"<tslib>/lib.es2019.array.d.ts\",\"<tslib>/lib.es2019.object.d.ts\",\"<tslib>/lib.es2019.string.d.ts\",\"<tslib>/lib.es2019.symbol.d.ts\",\"<tslib>/lib.es2019.intl.d.ts\",\"<tslib>/lib.es2020.bigint.d.ts\",\"<tslib>/lib.es2020.date.d.ts\",\"<tslib>/lib.es2020.promise.d.ts\",\"<tslib>/lib.es2020.sharedmemory.d.ts\",\"<tslib>/lib.es2020.string.d.ts\",\"<tslib>/lib.es2020.symbol.wellknown.d.ts\",\"<tslib>/lib.es2020.intl.d.ts\",\"<tslib>/lib.es2020.number.d.ts\",\"<tslib>/lib.es2021.promise.d.ts\",\"<tslib>/lib.es2021.string.d.ts\",\"<tslib>/lib.es2021.weakref.d.ts\",\"<tslib>/lib.es2021.intl.d.ts\",\"<tslib>/lib.es2022.array.d.ts\",\"<tslib>/lib.es2022.error.d.ts\",\"<tslib>/lib.es2022.intl.d.ts\",\"<tslib>/lib.es2022.object.d.ts\",\"<tslib>/lib.es2022.string.d.ts\",\"<tslib>/lib.es2022.regexp.d.ts\",\"<tslib>/lib.decorators.d.ts\",\"<tslib>/lib.decorators.legacy.d.ts\",\"/tmp/astryx-ts7-oracle/proj/src/Button.ts\",\"/tmp/astryx-ts7-oracle/proj/src/index.ts\"]"
+  },
+  {
+   "method": "getSourceFile",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"file\":\"/tmp/astryx-ts7-oracle/proj/src/Button.ts\"}",
+   "responseBase64": "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"
+  },
+  {
+   "method": "getSymbolAtPosition",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"file\":\"/tmp/astryx-ts7-oracle/proj/src/Button.ts\",\"position\":44}",
+   "response": "{\"id\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"name\":\"ButtonProps\",\"flags\":64,\"checkFlags\":0,\"declarations\":[\"3.265./tmp/astryx-ts7-oracle/proj/src/Button.ts\"],\"parent\":2}"
+  },
+  {
+   "method": "getDeclaredTypeOfSymbol",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"symbol\":1}",
+   "response": "{\"id\":86,\"flags\":1048576,\"objectFlags\":2,\"value\":null,\"isThisType\":false,\"symbol\":1}"
+  },
+  {
+   "method": "typeToString",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"type\":86}",
+   "response": "\"ButtonProps\""
+  },
+  {
+   "method": "getPropertiesOfType",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"type\":86}",
+   "response": "[{\"id\":3,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"name\":\"label\",\"flags\":4,\"checkFlags\":0,\"declarations\":[\"8.172./tmp/astryx-ts7-oracle/proj/src/Button.ts\"],\"valueDeclaration\":\"8.172./tmp/astryx-ts7-oracle/proj/src/Button.ts\",\"parent\":1},{\"id\":4,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"name\":\"size\",\"flags\":16777220,\"checkFlags\":0,\"declarations\":[\"14.172./tmp/astryx-ts7-oracle/proj/src/Button.ts\"],\"valueDeclaration\":\"14.172./tmp/astryx-ts7-oracle/proj/src/Button.ts\",\"parent\":1},{\"id\":5,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"name\":\"onPress\",\"flags\":16777220,\"checkFlags\":0,\"declarations\":[\"25.172./tmp/astryx-ts7-oracle/proj/src/Button.ts\"],\"valueDeclaration\":\"25.172./tmp/astryx-ts7-oracle/proj/src/Button.ts\",\"parent\":1},{\"id\":6,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"name\":\"tone\",\"flags\":4,\"checkFlags\":0,\"declarations\":[\"38.172./tmp/astryx-ts7-oracle/proj/src/Button.ts\"],\"valueDeclaration\":\"38.172./tmp/astryx-ts7-oracle/proj/src/Button.ts\",\"parent\":1}]"
+  },
+  {
+   "method": "getTypeOfSymbol",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"symbol\":3}",
+   "response": "{\"id\":14,\"flags\":32,\"objectFlags\":0,\"value\":null,\"isThisType\":false,\"intrinsicName\":\"string\"}"
+  },
+  {
+   "method": "typeToString",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"type\":14}",
+   "response": "\"string\""
+  },
+  {
+   "method": "getDocumentationComment",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"symbol\":3}",
+   "response": "\"The label.\""
+  },
+  {
+   "method": "getTypeOfSymbol",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"symbol\":4}",
+   "response": "{\"id\":94,\"flags\":134217728,\"objectFlags\":0,\"value\":null,\"isThisType\":false}"
+  },
+  {
+   "method": "typeToString",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"type\":94}",
+   "response": "\"\\\"lg\\\" | \\\"md\\\" | \\\"sm\\\" | undefined\""
+  },
+  {
+   "method": "getDocumentationComment",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"symbol\":4}",
+   "response": "\"\""
+  },
+  {
+   "method": "getTypeOfSymbol",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"symbol\":5}",
+   "response": "{\"id\":96,\"flags\":134217728,\"objectFlags\":0,\"value\":null,\"isThisType\":false}"
+  },
+  {
+   "method": "typeToString",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"type\":96}",
+   "response": "\"((event: { x: number; }) => void) | undefined\""
+  },
+  {
+   "method": "getDocumentationComment",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"symbol\":5}",
+   "response": "\"\""
+  },
+  {
+   "method": "getTypeOfSymbol",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"symbol\":6}",
+   "response": "{\"id\":102,\"flags\":134217728,\"objectFlags\":0,\"value\":null,\"isThisType\":false,\"aliasSymbol\":9}"
+  },
+  {
+   "method": "typeToString",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"type\":102}",
+   "response": "\"Tone\""
+  },
+  {
+   "method": "getDocumentationComment",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"symbol\":6}",
+   "response": "\"\""
+  },
+  {
+   "method": "getJsDocTags",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"symbol\":1}",
+   "response": "[]"
+  },
+  {
+   "method": "getSymbolAtLocation",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"location\":\"58.79./tmp/astryx-ts7-oracle/proj/src/Button.ts\"}",
+   "response": "{\"id\":10,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"name\":\"Button\",\"flags\":16,\"checkFlags\":0,\"declarations\":[\"55.263./tmp/astryx-ts7-oracle/proj/src/Button.ts\"],\"valueDeclaration\":\"55.263./tmp/astryx-ts7-oracle/proj/src/Button.ts\",\"parent\":2}"
+  },
+  {
+   "method": "getTypeAtLocation",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"location\":\"58.79./tmp/astryx-ts7-oracle/proj/src/Button.ts\"}",
+   "response": "{\"id\":103,\"flags\":1048576,\"objectFlags\":16,\"value\":null,\"isThisType\":false,\"symbol\":10}"
+  },
+  {
+   "method": "getSignaturesOfType",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"type\":103,\"kind\":0}",
+   "response": "[{\"id\":6,\"flags\":0,\"declaration\":\"55.263./tmp/astryx-ts7-oracle/proj/src/Button.ts\",\"parameters\":[11]}]"
+  },
+  {
+   "method": "getReturnTypeOfSignature",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"signature\":6}",
+   "response": "{\"id\":14,\"flags\":32,\"objectFlags\":0,\"value\":null,\"isThisType\":false,\"intrinsicName\":\"string\"}"
+  },
+  {
+   "method": "getParameterType",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"signature\":6,\"index\":0}",
+   "response": "{\"id\":86,\"flags\":1048576,\"objectFlags\":2097154,\"value\":null,\"isThisType\":false,\"symbol\":1}"
+  },
+  {
+   "method": "getTypeOfSymbol",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"symbol\":10}",
+   "response": "{\"id\":103,\"flags\":1048576,\"objectFlags\":2097168,\"value\":null,\"isThisType\":false,\"symbol\":10}"
+  },
+  {
+   "method": "getSemanticDiagnostics",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"file\":\"/tmp/astryx-ts7-oracle/proj/src/Button.ts\"}",
+   "response": "[{\"fileName\":\"/tmp/astryx-ts7-oracle/proj/src/Button.ts\",\"pos\":341,\"end\":347,\"code\":2322,\"category\":1,\"text\":\"Type 'string' is not assignable to type 'number'.\"}]"
+  },
+  {
+   "method": "getSemanticDiagnostics",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"file\":\"/tmp/astryx-ts7-oracle/proj/src/index.ts\"}",
+   "response": "[{\"fileName\":\"/tmp/astryx-ts7-oracle/proj/src/index.ts\",\"pos\":77,\"end\":88,\"code\":2307,\"category\":1,\"text\":\"Cannot find module './nowhere' or its corresponding type declarations.\"}]"
+  },
+  {
+   "method": "getSyntacticDiagnostics",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"file\":\"/tmp/astryx-ts7-oracle/proj/src/index.ts\"}",
+   "response": "[]"
+  },
+  {
+   "method": "getSourceFile",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"file\":\"/tmp/astryx-ts7-oracle/proj/src/index.ts\"}",
+   "responseBase64": "AAAABUz2UX0e/QTY/mihms5G2S4AAAAALAAAAIQAAABSAQAAmgEAAJ0BAAAAAAAAfgAAAH4AAACmAAAApgAAAM4AAAAJAAAADwAAABYAAAAhAAAAKgAAADIAAAA+AAAARQAAAE4AAABXAAAAZwAAAGgAAABqAAAAcQAAAHQAAAB1AAAAZXhwb3J0IHsgQnV0dG9uLCB0eXBlIEJ1dHRvblByb3BzIH0gZnJvbSAnLi9CdXR0b24nOwppbXBvcnQgeyBNaXNzaW5nIH0gZnJvbSAnLi9ub3doZXJlJzsKZXhwb3J0IGNvbnN0IHg6IE1pc3NpbmcgPSAxIGFzIGFueTsKL3RtcC9hc3RyeXgtdHM3LW9yYWNsZS9wcm9qL3NyYy9pbmRleC50cy90bXAvYXN0cnl4LXRzNy1vcmFjbGUvcHJvai9zcmMvaW5kZXgudHMAAAAAAgAAAAQAAAAAAAAAAwAAAP///////////////wAAAAD//////////wMAAAAKAAAAAAABAA4AAAAAAAEAFAAAAAAAAACSChEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMwEAAAAAAAB+AAAAAAAAAAAAAAAAAACAAAAAAP////8AAAAAfQAAAB4AAAABAAAAAwAAAAAAAAAXAQAAAAAAADQAAAALAAAAAgAAAAYAAAAAAAAAGAEAAAYAAAAjAAAACgAAAAMAAAABAAAAACAAAP////8IAAAAIQAAAAAAAAAEAAAAAgAAAAAAAAAaAQAACAAAAA8AAAAIAAAABQAAAAIAAAAAIAAATwAAAAgAAAAPAAAAAAAAAAYAAAAGAABAACAAABoBAAAQAAAAIQAAAAAAAAAFAAAAAgAAAQAgAABPAAAAFQAAACEAAAAAAAAACAAAAAgAAEAAIAAACgAAACgAAAAzAAAAAAAAAAMAAAAwAACAACAAABEBAAA0AAAAWQAAABIAAAACAAAABgAAAAAAAAASAQAAOwAAAEcAAAARAAAACwAAAAIAAAAAAAAAFAEAADsAAABHAAAAAAAAAAwAAAABAAAAAAAAAP////89AAAARQAAAAAAAAANAAAAAQAAAAAAAAAVAQAAPQAAAEUAAAAAAAAADgAAAAIAAAAAAAAATwAAAD0AAABFAAAAAAAAAA8AAAAMAABAAAAAAAoAAABMAAAAWAAAAAAAAAALAAAAOAAAgAAAAAD0AAAAWQAAAH0AAAAAAAAAAgAAAAMAAAAAAAAA/////1kAAABgAAAAFQAAABIAAAABAAAAAAAAAF4AAABZAAAAYAAAAAAAAAATAAAAAAAAAAAAAAAGAQAAYAAAAHwAAAAAAAAAEgAAAAEAAAACAAAA/////2YAAAB8AAAAAAAAABUAAAABAAAAAAAAAAUBAABmAAAAfAAAAAAAAAAWAAAADQAAAAAAAABPAAAAZgAAAGgAAAAZAAAAFwAAABAAAEAAAAAAuAAAAGkAAABxAAAAGwAAABcAAAABAAAAAAAAAE8AAABpAAAAcQAAAAAAAAAZAAAAEgAAQAAAAADrAAAAcwAAAHwAAAAAAAAAFwAAAAMAAAAAAAAACAAAAHMAAAB1AAAAHQAAABsAAABAAACAAAAAAIQAAAB4AAAAfAAAAAAAAAAbAAAAAAAAAAAAAAABAAAAfQAAAH4AAAAAAAAAAQAAAAAAAAAAAAAA"
+  },
+  {
+   "method": "getSymbolAtLocation",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"location\":\"1.307./tmp/astryx-ts7-oracle/proj/src/index.ts\"}",
+   "response": "{\"id\":14,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"name\":\"\\\"/tmp/astryx-ts7-oracle/proj/src/index\\\"\",\"flags\":512,\"checkFlags\":0,\"declarations\":[\"1.307./tmp/astryx-ts7-oracle/proj/src/index.ts\"],\"valueDeclaration\":\"1.307./tmp/astryx-ts7-oracle/proj/src/index.ts\"}"
+  },
+  {
+   "method": "getExportsOfModule",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"symbol\":14}",
+   "response": "[{\"id\":15,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"name\":\"Button\",\"flags\":2097152,\"checkFlags\":0,\"declarations\":[\"6.282./tmp/astryx-ts7-oracle/proj/src/index.ts\"],\"parent\":14},{\"id\":16,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"name\":\"ButtonProps\",\"flags\":2097152,\"checkFlags\":0,\"declarations\":[\"8.282./tmp/astryx-ts7-oracle/proj/src/index.ts\"],\"parent\":14},{\"id\":17,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"name\":\"x\",\"flags\":2,\"checkFlags\":0,\"declarations\":[\"23.261./tmp/astryx-ts7-oracle/proj/src/index.ts\"],\"valueDeclaration\":\"23.261./tmp/astryx-ts7-oracle/proj/src/index.ts\",\"parent\":14}]"
+  },
+  {
+   "method": "getSymbolsAtPositions",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"file\":\"/tmp/astryx-ts7-oracle/proj/src/index.ts\",\"positions\":[0,10,30]}",
+   "response": "[null,{\"id\":15,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"name\":\"Button\",\"flags\":2097152,\"checkFlags\":0,\"declarations\":[\"6.282./tmp/astryx-ts7-oracle/proj/src/index.ts\"],\"parent\":14},{\"id\":16,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\",\"name\":\"ButtonProps\",\"flags\":2097152,\"checkFlags\":0,\"declarations\":[\"8.282./tmp/astryx-ts7-oracle/proj/src/index.ts\"],\"parent\":14}]"
+  },
+  {
+   "method": "getStringType",
+   "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/tsconfig.json\"}",
+   "response": "{\"id\":14,\"flags\":32,\"objectFlags\":0,\"value\":null,\"isThisType\":false,\"intrinsicName\":\"string\"}"
+  },
+  {
+   "method": "release",
+   "request": "{\"snapshot\":1}",
+   "response": "true"
+  }
+ ],
+ "virtual": {
+  "exchanges": [
+   {
+    "method": "initialize",
+    "request": "null",
+    "response": "{\"useCaseSensitiveFileNames\":true,\"currentDirectory\":\"/tmp/astryx-ts7-oracle/proj\"}"
+   },
+   {
+    "method": "updateSnapshot",
+    "request": "{\"openProjects\":[\"/tmp/astryx-ts7-oracle/proj/__astryx.tsconfig.json\"]}",
+    "response": "{\"snapshot\":1,\"projects\":[{\"id\":\"/tmp/astryx-ts7-oracle/proj/__astryx.tsconfig.json\",\"configFileName\":\"/tmp/astryx-ts7-oracle/proj/__astryx.tsconfig.json\",\"rootFiles\":[\"/tmp/astryx-ts7-oracle/proj/src/Button.ts\"],\"compilerOptions\":{\"lib\":[\"lib.es2022.d.ts\"],\"noEmit\":true,\"strict\":true,\"configFilePath\":\"/tmp/astryx-ts7-oracle/proj/__astryx.tsconfig.json\"}}]}"
+   },
+   {
+    "method": "getTypeAtPosition",
+    "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/__astryx.tsconfig.json\",\"file\":\"/tmp/astryx-ts7-oracle/proj/src/Button.ts\",\"position\":380}",
+    "response": "{\"id\":96,\"flags\":134217728,\"objectFlags\":0,\"value\":null,\"isThisType\":false}"
+   },
+   {
+    "method": "typeToString",
+    "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/__astryx.tsconfig.json\",\"type\":96}",
+    "response": "\"\\\"lg\\\" | \\\"md\\\" | \\\"sm\\\" | undefined\""
+   },
+   {
+    "method": "getSemanticDiagnostics",
+    "request": "{\"snapshot\":1,\"project\":\"/tmp/astryx-ts7-oracle/proj/__astryx.tsconfig.json\",\"file\":\"/tmp/astryx-ts7-oracle/proj/src/Button.ts\"}",
+    "response": "[{\"fileName\":\"/tmp/astryx-ts7-oracle/proj/src/Button.ts\",\"pos\":341,\"end\":347,\"code\":2322,\"category\":1,\"text\":\"Type 'string' is not assignable to type 'number'.\"}]"
+   },
+   {
+    "method": "release",
+    "request": "{\"snapshot\":1}",
+    "response": "true"
+   }
+  ],
+  "calls": [
+   {
+    "name": "fileExists",
+    "arg": "\"/package.json\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "fileExists",
+    "arg": "\"/tmp/astryx-ts7-oracle/package.json\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "fileExists",
+    "arg": "\"/tmp/astryx-ts7-oracle/proj/package.json\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "fileExists",
+    "arg": "\"/tmp/astryx-ts7-oracle/proj/src/Button.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "fileExists",
+    "arg": "\"/tmp/astryx-ts7-oracle/proj/src/package.json\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "fileExists",
+    "arg": "\"/tmp/package.json\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"/tmp/astryx-ts7-oracle/proj/__astryx.tsconfig.json\"",
+    "type": 2,
+    "payload": "{\"content\":\"{\\\"compilerOptions\\\":{\\\"strict\\\":true,\\\"noEmit\\\":true,\\\"lib\\\":[\\\"es2022\\\"]},\\\"files\\\":[\\\"/tmp/astryx-ts7-oracle/proj/src/Button.ts\\\"]}\"}"
+   },
+   {
+    "name": "readFile",
+    "arg": "\"/tmp/astryx-ts7-oracle/proj/src/Button.ts\"",
+    "type": 2,
+    "payload": "{\"content\":\"/** Props for a button. */\\nexport interface ButtonProps {\\n  /** The label. */\\n  label: string;\\n  size?: 'sm' | 'md' | 'lg';\\n  onPress?: (event: { x: number }) => void;\\n  tone: Tone;\\n}\\n\\nexport type Tone = 'neutral' | 'accent';\\n\\nexport function Button(props: ButtonProps): string {\\n  return props.label + (props.size ?? 'md');\\n}\\n\\nexport const broken: number = 'not a number';\\n\\ntype __astryx_0 = ButtonProps['size'];\\n\"}"
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.decorators.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.decorators.legacy.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2015.collection.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2015.core.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2015.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2015.generator.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2015.iterable.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2015.promise.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2015.proxy.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2015.reflect.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2015.symbol.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2015.symbol.wellknown.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2016.array.include.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2016.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2016.intl.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2017.arraybuffer.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2017.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2017.date.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2017.intl.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2017.object.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2017.sharedmemory.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2017.string.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2017.typedarrays.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2018.asyncgenerator.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2018.asynciterable.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2018.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2018.intl.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2018.promise.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2018.regexp.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2019.array.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2019.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2019.intl.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2019.object.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2019.string.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2019.symbol.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2020.bigint.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2020.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2020.date.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2020.intl.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2020.number.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2020.promise.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2020.sharedmemory.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2020.string.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2020.symbol.wellknown.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2021.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2021.intl.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2021.promise.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2021.string.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2021.weakref.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2022.array.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2022.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2022.error.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2022.intl.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2022.object.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2022.regexp.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es2022.string.d.ts\"",
+    "type": 2,
+    "payload": ""
+   },
+   {
+    "name": "readFile",
+    "arg": "\"<tslib>/lib.es5.d.ts\"",
+    "type": 2,
+    "payload": ""
+   }
+  ]
+ }
+}

@@ -322,10 +322,11 @@ const RUNNERS = {
     sites: ['builtinGuideFiles'],
   },
   'foundation/discovery/project-typescript.mjs': {
-    runs: "the project's own typescript, for the author checks that read source and docs with it, and its package.json for the version of one they cannot use; beside TypeScript 7, which has no compiler API, the TypeScript 6 API package @typescript/typescript6",
+    runs: "the project's own typescript's package.json, to see that the project uses TypeScript, and the CLI's own TypeScript 7 (typescript-native), whose API runs its native compiler as a child process, for the author checks that read source and docs",
     sites: [
-      'require(<computed>)',
-      'require(typescript)',
+      'require(typescript-native/package.json)',
+      'require(typescript-native/unstable/ast)',
+      'require(typescript-native/unstable/sync)',
       'require(typescript/package.json)',
     ],
   },

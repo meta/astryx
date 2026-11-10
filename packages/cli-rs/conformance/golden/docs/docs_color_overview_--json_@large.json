@@ -7,7 +7,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Overview\",\n    \"category\": \"foundations\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Colors are semantic: tokens describe purpose, not appearance. Every color adapts automatically between light and dark modes via CSS light-dark(). Themes override the resolved values, so your code never references raw hex colors.\"\n      }\n    ],\n    \"id\": \"overview\",\n    \"links\": {\n      \"up\": \"astryx docs color --index\",\n      \"next\": \"astryx docs color surface-colors\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

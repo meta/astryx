@@ -7,7 +7,7 @@
   "brief"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nDateInput(onChange: (value: ISODateString|undefined) => void, changeAction: (value: ISODateString|undefined) => void|Promise<void>, size: sm|md|lg, status: {type: warning|error|success, message?: string}, statusVariant: attached|detached|tooltip, numberOfMonths: 1|2, format: date|date_long|date_weekday|system_date|((value: ISODateString) => string), presentation: popover|bottom-sheet|native|adaptive-bottom-sheet|adaptive-native, nativePicker: touch|always|never)  <- from '@astryxdesign/core/DateInput'\n  DateInput lets the user type or pick a date from a calendar popover. Use it f...\n  Targets: astryx-date-input preferred attrs: data-size, data-status, data-disabled variants: size, status states: disabled | astryx-date-input-toggle-icon preferred attrs: data-state states: state\n  label: string, isLabelHidden, description, isOptional, isRequired, isDisabled, disabledMessage, value, isLoading, min, max, dateConstraints, placeholder, labelTooltip, hasClear, weekStartsOn, calendar, width, containerXstyle, containerClassName, containerStyle, controlXstyle, controlClassName, controlStyle\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

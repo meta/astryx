@@ -5,7 +5,7 @@
   "ChatToolCallsToolCallsWithNodes"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {ChatToolCalls} from '@astryxdesign/core/Chat';\nimport {Stack} from '@astryxdesign/core/Layout';\n\nexport default function ChatToolCallsSimple() {\n  return (\n    <Stack direction=\"vertical\" gap={4}>\n      <ChatToolCalls\n        calls={[\n          {\n            name: 'bash',\n            target: 'git status',\n            status: 'complete',\n            duration: '1.2s',\n          },\n        ]}\n      />\n      <ChatToolCalls\n        defaultIsExpanded\n        calls={[\n          {\n            name: 'read',\n            target: 'src/components/DataGrid.tsx',\n            status: 'complete',\n            duration: '30ms',\n          },\n          {\n            name: 'edit',\n            target: 'src/components/DataGrid.tsx',\n            status: 'complete',\n            duration: '85ms',\n            additions: 24,\n            deletions: 8,\n          },\n          {\n            name: 'edit',\n            target: 'src/components/DataGrid.test.tsx',\n            status: 'complete',\n            duration: '60ms',\n            additions: 45,\n          },\n        ]}\n      />\n    </Stack>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

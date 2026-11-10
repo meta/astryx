@@ -5,7 +5,7 @@
   "EmojiPickerShowcase"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\n/**\n * @input The picked emoji, kept in local state\n * @output An inline emoji picker in a Card, naming the last pick\n * @position Lab EmojiPicker's docsite showcase and copyable CLI block\n */\n\nimport {useState} from 'react';\nimport {Card} from '@astryxdesign/core/Card';\nimport {HStack, VStack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\nimport {EmojiPicker, type EmojiOption} from '@astryxdesign/lab';\n\nexport default function EmojiPickerShowcase() {\n  const [picked, setPicked] = useState<EmojiOption | null>(null);\n\n  return (\n    <VStack gap={3} width={352}>\n      <HStack gap={2} align=\"center\">\n        <Text type=\"label\">Picked:</Text>\n        <Text type=\"body\" color=\"secondary\">\n          {picked == null ? 'Nothing yet' : `${picked.emoji} ${picked.name}`}\n        </Text>\n      </HStack>\n      <Card padding={0} width=\"100%\">\n        <EmojiPicker onSelect={(_, option) => setPicked(option)} />\n      </Card>\n    </VStack>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/lab\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -7,7 +7,7 @@
   "brief"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/lab\n\nListInput(getItemStatus: (item: T, index: number) => InputStatus|undefined, getFieldStatus: (item: T, columnKey: string, index: number) => InputStatus|undefined)  <- from '@astryxdesign/lab'\n  ListInput edits a compact, ordered collection of records with consistent fiel...\n  Targets: astryx-list-input preferred attrs: data-state, data-reorderable variants: state, reorderable\n  columns: ListInputColumn<T>[], createItem: () => T, getItemKey: (item: T) => React.Key, onChange: (next: T[], change: ListInputChange<T>) => void, value: T[], label: string, itemName, description, status, reorderable, isDisabled, isLoading, maxItems, isLabelHidden, isOptional, isRequired\n  import {createReorderable} from '@astryxdesign/core';\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

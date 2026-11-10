@@ -5,7 +5,7 @@
   "KbdMenuShortcuts"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Kbd} from '@astryxdesign/core/Kbd';\nimport {Card} from '@astryxdesign/core/Card';\nimport {List, ListItem} from '@astryxdesign/core/List';\n\nconst menuItems = [\n  {label: 'Cut', keys: 'mod+x'},\n  {label: 'Copy', keys: 'mod+c'},\n  {label: 'Paste', keys: 'mod+v'},\n  {label: 'Undo', keys: 'mod+z'},\n  {label: 'Redo', keys: 'mod+shift+z'},\n] as const;\n\nexport default function KbdMenuShortcuts() {\n  return (\n    <Card padding={0}>\n      <List density=\"compact\">\n        {menuItems.map(item => (\n          <ListItem\n            key={item.label}\n            label={item.label}\n            endContent={<Kbd keys={item.keys} />}\n          />\n        ))}\n      </List>\n    </Card>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

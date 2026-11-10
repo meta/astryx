@@ -7,7 +7,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Building a Theme Family\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Use family mode when an app switches among one base theme and its selected descendants. The build writes one keyed CSS file containing every member, plus one keyed JavaScript module and one declaration file, beside the root source.\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"bash\",\n        \"code\": \"astryx theme build --family \\\\\\n  ./src/themes/ocean.mjs \\\\\\n  ./src/themes/ocean-calm.mjs \\\\\\n  ./src/themes/ocean-calm-deep.mjs \\\\\\n  --family-key ocean-family\",\n        \"label\": \"Build one family\"\n      },\n      {\n        \"type\": \"prose\",\n        \"text\": \"The family stylesheet eagerly downloads every selected member so first paint is complete. Switching members changes only the theme identity; it does not add, remove, or reorder stylesheets.\"\n      }\n    ],\n    \"id\": \"building-a-theme-family\",\n    \"links\": {\n      \"up\": \"astryx docs author-a-theme --index\",\n      \"previous\": \"astryx docs author-a-theme icon-registry\",\n      \"next\": \"astryx docs author-a-theme token-utilities\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

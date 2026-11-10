@@ -7,7 +7,7 @@
   "brief"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nBaseTypeahead(value: T|null, onChange: (item: T|null) => void, size: sm|md|lg, anchorRef: RefObject<HTMLElement|null>)  <- from '@astryxdesign/core/Typeahead'\n  Composable combobox engine providing a bare input, search, keyboard navigatio...\n  searchSource: SearchSource<T>, renderItem, placeholder, hasEntriesOnFocus, maxMenuItems, menuWidth, minQueryLength, emptySearchText, isDisabled, isFocusableDisabled, hasAutoFocus, debounceMs, inputXStyle, xstyle, inputTabIndex, onKeyDown, onChangeQuery, onOpenChange, inputId, ariaDescribedBy, ariaLabelledBy\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

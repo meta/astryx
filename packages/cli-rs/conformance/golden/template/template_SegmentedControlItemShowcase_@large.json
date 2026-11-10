@@ -5,7 +5,7 @@
   "SegmentedControlItemShowcase"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {\n  SegmentedControl,\n  SegmentedControlItem,\n} from '@astryxdesign/core/SegmentedControl';\nimport {Center} from '@astryxdesign/core/Center';\nimport {Icon} from '@astryxdesign/core/Icon';\n\nexport default function SegmentedControlItemShowcase() {\n  const [view, setView] = useState('board');\n\n  return (\n    <Center>\n      <SegmentedControl value={view} onChange={setView} label=\"View mode\">\n        <SegmentedControlItem\n          value=\"board\"\n          label=\"Board\"\n          icon={<Icon icon=\"viewColumns\" />}\n        />\n        <SegmentedControlItem\n          value=\"list\"\n          label=\"List\"\n          icon={<Icon icon=\"menu\" />}\n        />\n        <SegmentedControlItem\n          value=\"timeline\"\n          label=\"Timeline\"\n          icon={<Icon icon=\"calendar\" />}\n        />\n        <SegmentedControlItem\n          value=\"chart\"\n          label=\"Chart\"\n          icon={<Icon icon=\"arrowsUpDown\" />}\n          isDisabled\n        />\n      </SegmentedControl>\n    </Center>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

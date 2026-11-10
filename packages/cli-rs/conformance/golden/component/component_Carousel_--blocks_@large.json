@@ -6,7 +6,7 @@
   "--blocks"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nShowcase\n\ndisplayName: Carousel\ndescription: A horizontal carousel of cards with scroll-snap and navigation buttons. Scroll or click the arrows to browse.\n\nExamples\n\nname:        CarouselCards\ndescription: A horizontally scrollable row of cards with snap scrolling enabled. Use for feature grids, product lists, or any set of cards that overflows the available width. The carousel adds fade edges and navigation buttons automatically.\n\nname:        CarouselSnap\ndescription: Scroll-snap carousel with navigation buttons and team member cards. Each card snaps to the start edge on scroll. Use when items should be viewed one at a time rather than as a continuous strip.\n\nname:        CarouselSnapPaging\ndescription: Onboarding cards in a Carousel with hasSnap={useSnapPaging()}: under a finger or a trackpad swipe, each flick moves one view and rests on a card's start edge. A switch picks one view or one card per flick through the hook's pages option.\n\nRelated: 1 blocks that use Carousel\n\n- ChatComposerDrawerAttachments\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -5,7 +5,7 @@
   "LayoutContentBasic"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {\n  Layout,\n  LayoutContent,\n  LayoutHeader,\n  Card,\n  VStack,\n} from '@astryxdesign/core/Layout';\nimport {Center} from '@astryxdesign/core/Center';\nimport {Text, Heading} from '@astryxdesign/core/Text';\n\nexport default function LayoutContentBasic() {\n  return (\n    <Center width={400}>\n      <Layout\n        style={{width: '100%'}}\n        height=\"fill\"\n        header={\n          <LayoutHeader hasDivider>\n            <Card variant=\"muted\" />\n          </LayoutHeader>\n        }\n        content={\n          <LayoutContent role=\"main\">\n            <VStack gap={3}>\n              <Heading level={5}>Main Content</Heading>\n              <Text type=\"body\" color=\"secondary\">\n                LayoutContent fills the remaining space and scrolls when its\n                content overflows, while the header stays fixed.\n              </Text>\n            </VStack>\n          </LayoutContent>\n        }\n      />\n    </Center>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

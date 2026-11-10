@@ -8,7 +8,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.list\",\n  \"data\": {\n    \"detail\": \"names\",\n    \"components\": {\n      \"DropdownMenu\": [\n        {\n          \"name\": \"DropdownMenu\",\n          \"package\": \"@astryxdesign/core\"\n        },\n        {\n          \"name\": \"DropdownMenuCheckboxItem\",\n          \"package\": \"@astryxdesign/core\"\n        },\n        {\n          \"name\": \"DropdownMenuDivider\",\n          \"package\": \"@astryxdesign/core\"\n        },\n        {\n          \"name\": \"DropdownMenuGroup\",\n          \"package\": \"@astryxdesign/core\"\n        },\n        {\n          \"name\": \"DropdownMenuItem\",\n          \"package\": \"@astryxdesign/core\"\n        },\n        {\n          \"name\": \"DropdownMenuRadioGroup\",\n          \"package\": \"@astryxdesign/core\"\n        },\n        {\n          \"name\": \"DropdownMenuRadioItem\",\n          \"package\": \"@astryxdesign/core\"\n        },\n        {\n          \"name\": \"DropdownMenuSubMenu\",\n          \"package\": \"@astryxdesign/core\"\n        }\n      ]\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

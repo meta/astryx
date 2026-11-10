@@ -5,7 +5,7 @@
   "ItemWithMetadata"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Badge} from '@astryxdesign/core/Badge';\nimport {Icon} from '@astryxdesign/core/Icon';\nimport {Item} from '@astryxdesign/core/Item';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\nexport default function ItemWithMetadata() {\n  return (\n    <Stack gap={0}>\n      <Item\n        startContent={<Icon icon=\"check\" size=\"sm\" color=\"success\" />}\n        label=\"Build passed\"\n        description=\"Production deploy completed\"\n        endContent={<Text color=\"secondary\">2m ago</Text>}\n      />\n      <Item\n        startContent={<Icon icon=\"warning\" size=\"sm\" color=\"warning\" />}\n        label=\"High memory usage\"\n        description=\"Worker pool is above the warning threshold\"\n        endContent={<Badge label=\"Warning\" variant=\"warning\" />}\n        isHighlighted\n      />\n      <Item\n        startContent={<Icon icon=\"error\" size=\"sm\" color=\"error\" />}\n        label=\"Sync failed\"\n        description=\"Retry after checking service credentials\"\n        endContent={<Badge label=\"Action\" variant=\"error\" />}\n        isSelected\n      />\n    </Stack>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

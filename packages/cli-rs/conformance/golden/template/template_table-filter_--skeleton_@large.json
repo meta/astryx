@@ -6,7 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# table-filter - Flat row collection built around progressive filtering: a token bar that escalates into full query syntax, saved views that persist a filter set, column and grouping options, and a resizable detail pane.\n# Components: AspectRatio, Avatar, Badge, Bookmark, BottomSheet, ComplexSelector, Dialog, Divider, EmptyState, IconButton, Item, Layout, List, MetadataList, MultiSelector, OverflowList, Popover, PowerSearch, ProgressBar, RadioList, ResizeHandle, Section, Selector, Skeleton, Slider, SlidersHorizontal, StatusDot, Tab, TabList, Table, TextInput, ToggleButton, Token, VisuallyHidden\n\n<Text />\n<HStack gap={3}>\n  <AspectRatio />\n  <Icon />\n  <VStack gap={0}>\n    <Text />\n    <Text />\n  </VStack>\n</HStack>\n<Text />\n<HStack gap={2}>\n  <Avatar />\n  <Text />\n</HStack>\n<HStack gap={2}>\n  <StatusDot variant={meta.dot} />\n  <Text />\n</HStack>\n<Text />\n<Text />\n<Text />\n<Text />\n<ToggleButton />\n<Selector />\n<ToggleButton />\n<MultiSelector />\n<ComplexSelector />\n<VStack gap={4}>\n  <VStack gap={0}>\n    <Text />\n    <Text />\n  </VStack>\n  <VStack gap={1}>\n    <Slider width=\"100%\" />\n    <Text />\n    ...\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

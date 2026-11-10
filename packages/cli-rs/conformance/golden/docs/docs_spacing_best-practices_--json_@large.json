@@ -7,7 +7,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Best Practices\",\n    \"category\": \"foundations\",\n    \"content\": [\n      {\n        \"type\": \"list\",\n        \"style\": \"do\",\n        \"items\": [\n          \"Use component gap props when available; they handle automatic spacing compensation.\",\n          \"Stick to the scale for consistency. If a value isn't on the scale, reconsider the design.\",\n          \"Use smaller steps (0.5–2) for tight internal spacing and larger steps (4–8) for section gaps.\"\n        ]\n      },\n      {\n        \"type\": \"list\",\n        \"style\": \"dont\",\n        \"items\": [\n          \"Use arbitrary pixel values outside the scale.\",\n          \"Mix spacing tokens with raw px/rem values in the same component.\"\n        ]\n      }\n    ],\n    \"id\": \"best-practices\",\n    \"links\": {\n      \"up\": \"astryx docs spacing --index\",\n      \"previous\": \"astryx docs spacing usage\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

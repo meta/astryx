@@ -7,7 +7,7 @@
   "brief"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nSegmentedControl(size: sm|md|lg, layout: hug|fill)  <- from '@astryxdesign/core/SegmentedControl'\n  A segmented button group that allows users to make a single selection from a ...\n  Derived: borderRadius -> --_segmented-control-radius; padding -> --_segmented-control-padding\n  Targets: astryx-segmented-control preferred attrs: data-size variants: size | astryx-segmented-control-item preferred attrs: data-size, data-selected, data-disabled variants: size states: selected, disabled\n  children: ReactNode, label: string, onChange: (value: string) => void, value: string, isDisabled, disabledMessage, xstyle\n  \n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

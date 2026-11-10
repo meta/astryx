@@ -4,7 +4,7 @@
 use super::prop_drift::{decls, fl, is_inter, is_union, of_, sf_, sk, some, text_of, tf, types_of};
 use super::type_match::aliased;
 use super::Ts;
-use boa_engine::JsValue;
+use super::JsValue;
 
 /// `isErrorType(ts, type)`.
 pub fn is_error_type(t: &mut Ts, ty: &JsValue) -> bool {
@@ -49,45 +49,77 @@ pub fn is_deferred(t: &mut Ts, checker: &JsValue, ty: &JsValue, deep: bool, dept
     parts.iter().any(|u| is_deferred(t, checker, u, deep, depth + 1))
 }
 
-fn value_in(t: &mut Ts, checker: &JsValue, parameter: &JsValue, mapper: &JsValue, depth: usize) -> Option<JsValue> {
-    if !some(mapper) {
-        return Some(parameter.clone());
+/// `aliasValue(ts, type, declaration)`: the argument the mapped type's
+/// alias gives the type parameter declared at `declaration`.
+fn alias_value(t: &mut Ts, ty: &JsValue, declaration: &JsValue) -> Option<JsValue> {
+    let alias_sym = t.get(ty, "aliasSymbol");
+    let ds = t.get(&alias_sym, "declarations");
+    let alias = t.items(&ds).into_iter().find(|d| t.is("isTypeAliasDeclaration", d))?;
+    let tps = t.get(&alias, "typeParameters");
+    let i = t.items(&tps).iter().position(|p| t.same(p, declaration))?;
+    let args = t.get(ty, "aliasTypeArguments");
+    let v = t.get_i(&args, i);
+    if some(&v) {
+        Some(v)
+    } else {
+        None
     }
-    if depth > 32 {
-        return None;
+}
+
+/// `openWithoutValue(ts, checker, type, declaration)`.
+fn open_without_value(t: &mut Ts, checker: &JsValue, ty: &JsValue, declaration: &JsValue) -> bool {
+    let parent = t.get(declaration, "parent");
+    if t.is("isTypeAliasDeclaration", &parent) {
+        let props = t.m(checker, "getPropertiesOfType", &[ty.clone()]);
+        let infos = t.m(checker, "getIndexInfosOfType", &[ty.clone()]);
+        t.items(&props).is_empty() && t.items(&infos).is_empty()
+    } else {
+        true
     }
-    let m1 = t.get(mapper, "mapper1");
-    let m2 = t.get(mapper, "mapper2");
-    if some(&m1) && some(&m2) {
-        let first = value_in(t, checker, parameter, &m1, depth + 1)?;
-        if t.same(&first, parameter) || fl(t, &first, "flags") & tf(t, "TypeParameter") != 0 {
-            return value_in(t, checker, &first, &m2, depth + 1);
+}
+
+/// Is a type parameter, declared at `declaration`, open where the props are read?
+fn parameter_open(t: &mut Ts, checker: &JsValue, ty: &JsValue, declaration: &JsValue) -> bool {
+    match alias_value(t, ty, declaration) {
+        Some(v) => is_deferred(t, checker, &v, true, 0),
+        None => open_without_value(t, checker, ty, declaration),
+    }
+}
+
+/// `constraintFromTypeParameter(ts, checker, type)`.
+fn constraint_from_type_parameter(t: &mut Ts, checker: &JsValue, ty: &JsValue) -> bool {
+    let decl = t.get(ty, "declaration");
+    let tp = t.get(&decl, "typeParameter");
+    let constraint = t.get(&tp, "constraint");
+    if !some(&constraint) {
+        return false;
+    }
+    fn visit(t: &mut Ts, checker: &JsValue, ty: &JsValue, node: &JsValue, open: &mut bool) {
+        if *open {
+            return;
         }
-        return if is_deferred(t, checker, &first, true, 0) { None } else { Some(first) };
-    }
-    let has_source = mapper.as_object().map(|o| o.has_property(boa_engine::js_string!("source"), t.ctx).unwrap_or(false)).unwrap_or(false);
-    if has_source {
-        let s = t.get(mapper, "source");
-        return Some(if t.same(&s, parameter) { t.get(mapper, "target") } else { parameter.clone() });
-    }
-    let sources = t.get(mapper, "sources");
-    if sources.as_object().map(|o| o.is_array()).unwrap_or(false) {
-        let items = t.items(&sources);
-        let Some(i) = items.iter().position(|x| t.same(x, parameter)) else { return Some(parameter.clone()) };
-        let targets = t.get(mapper, "targets");
-        let target = t.get_i(&targets, i);
-        if target.as_object().map(|o| o.is_callable()).unwrap_or(false) {
-            let o = target.as_object().unwrap().clone();
-            return o.call(&JsValue::undefined(), &[], t.ctx).ok();
+        let symbol = if t.is("isTypeReferenceNode", node) {
+            let tn = t.get(node, "typeName");
+            t.m(checker, "getSymbolAtLocation", &[tn])
+        } else {
+            JsValue::undefined()
+        };
+        let declaration = if some(&symbol) && fl(t, &symbol, "flags") & sf_(t, "TypeParameter") != 0 {
+            decls(t, &symbol).first().cloned()
+        } else {
+            None
+        };
+        if let Some(d) = declaration {
+            *open = parameter_open(t, checker, ty, &d);
+            return;
         }
-        return if some(&target) { Some(target) } else { None };
+        for c in t.children(node) {
+            visit(t, checker, ty, &c, open);
+        }
     }
-    let func = t.get(mapper, "func");
-    if func.as_object().map(|o| o.is_callable()).unwrap_or(false) {
-        let o = func.as_object().unwrap().clone();
-        return o.call(&JsValue::undefined(), &[parameter.clone()], t.ctx).ok();
-    }
-    None
+    let mut open = false;
+    visit(t, checker, ty, &constraint, &mut open);
+    open
 }
 
 fn renamed_by_type_parameter(t: &mut Ts, checker: &JsValue, ty: &JsValue) -> bool {
@@ -116,15 +148,8 @@ fn renamed_by_type_parameter(t: &mut Ts, checker: &JsValue, ty: &JsValue) -> boo
             let cp = t.get(clause, "pos");
             let in_clause = t.same(&dsf, &csf) && t.n(&dp) >= t.n(&cp) && t.end(&d) <= t.end(clause);
             let own_param = t.get(decl, "typeParameter");
-            if !t.same(&d, &own_param) && !in_clause {
-                let declared = t.m(checker, "getDeclaredTypeOfSymbol", &[symbol.clone()]);
-                let mapper = t.get(ty, "mapper");
-                let value = value_in(t, checker, &declared, &mapper, 0);
-                match value {
-                    None => return true,
-                    Some(v) if !some(&v) || is_deferred(t, checker, &v, true, 0) => return true,
-                    _ => {}
-                }
+            if !t.same(&d, &own_param) && !in_clause && parameter_open(t, checker, ty, &d) {
+                return true;
             }
         }
         for c in t.children(node) {
@@ -160,8 +185,7 @@ pub fn names_from_type_parameter(t: &mut Ts, checker: &JsValue, ty: &JsValue, de
         return false;
     }
     t.m(checker, "getPropertiesOfType", &[ty.clone()]);
-    let ct = t.get(ty, "constraintType");
-    (some(&ct) && is_deferred(t, checker, &ct, false, 0)) || renamed_by_type_parameter(t, checker, ty)
+    constraint_from_type_parameter(t, checker, ty) || renamed_by_type_parameter(t, checker, ty)
 }
 
 fn key_accepts(t: &mut Ts, checker: &JsValue, key: &JsValue, name: &str) -> bool {
@@ -172,9 +196,41 @@ fn key_accepts(t: &mut Ts, checker: &JsValue, key: &JsValue, name: &str) -> bool
     if f & tf(t, "TemplateLiteral") == 0 {
         return false;
     }
-    let n = t.str(name);
-    let lit = t.m(checker, "getStringLiteralType", &[n]);
-    t.m(checker, "isTypeAssignableTo", &[lit, key.clone()]).to_boolean()
+    let _ = checker;
+    // TypeScript 7 has no literal-type factory: match the template.
+    let spans: Vec<String> = types_of(t, key)
+        .iter()
+        .map(|span| {
+            if fl(t, span, "flags") & tf(t, "Number") != 0 {
+                return r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?".to_string();
+            }
+            let sym = t.get(span, "symbol");
+            let en = t.get(&sym, "escapedName");
+            match t.s(&en).as_str() {
+                "Uppercase" => "[^a-z]*".into(),
+                "Lowercase" => "[^A-Z]*".into(),
+                "Capitalize" => r"(?:[^a-z][\s\S]*)?".into(),
+                "Uncapitalize" => r"(?:[^A-Z][\s\S]*)?".into(),
+                _ => r"[\s\S]*".into(),
+            }
+        })
+        .collect();
+    let texts = t.get(key, "texts");
+    let mut pattern = String::from("^");
+    for (i, text) in t.items(&texts).iter().enumerate() {
+        let text = t.s(text);
+        for c in text.chars() {
+            if ".*+?^${}()|[]\\".contains(c) {
+                pattern.push('\\');
+            }
+            pattern.push(c);
+        }
+        if let Some(sp) = spans.get(i) {
+            pattern.push_str(sp);
+        }
+    }
+    pattern.push('$');
+    regress::Regex::new(&pattern).map(|re| re.find(name).is_some()).unwrap_or(false)
 }
 
 /// `indexesFor(ts, checker, types, name)`: each signature's `info`.

@@ -6,7 +6,7 @@
   "pick-a-path"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Pick a path\n\nPath                     | Good for                                                                                           | Build step?                             \n------------------------ | -------------------------------------------------------------------------------------------------- | ----------------------------------------\nPlain CSS                | Most apps. Style with className, xstyle, or any CSS library.                                       | None.                                   \nTailwind                 | Apps on Tailwind v4. A CSS bridge maps utility classes to design tokens.                           | None beyond Tailwind's own.             \nStyleX for your own code | Your own `stylex.create()` styles and swizzled (ejected) components. Astryx itself stays prebuilt. | Yes — a StyleX plugin for your own code.\n\nAll three load the same prebuilt Astryx stylesheets, resolve to the same design tokens, and support theming and dark mode. None of them compiles Astryx package source. You can mix them in one app.\n\nUp: npx @astryxdesign/cli@0.7.12 docs styling-overview --index\nNext: npx @astryxdesign/cli@0.7.12 docs styling-overview plain\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -5,7 +5,7 @@
   "AlertDialogDeleteConfirmation"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {\n  AlertDialog,\n  useImperativeAlertDialog,\n} from '@astryxdesign/core/AlertDialog';\n\n// Remove isInline for production — alert dialogs should be modal.\nexport default function AlertDialogDeleteConfirmation() {\n  const alert = useImperativeAlertDialog();\n\n  const alertProps = {\n    title: 'Delete item?',\n    description:\n      'This action cannot be undone. The item and all its data will be permanently removed.',\n    actionLabel: 'Delete',\n  } as const;\n\n  return (\n    <>\n      <AlertDialog\n        isOpen\n        isInline\n        onOpenChange={() => {}}\n        {...alertProps}\n        onAction={() =>\n          alert.show({...alertProps, onAction: () => alert.hide()})\n        }\n      />\n      {alert.element}\n    </>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -6,7 +6,7 @@
   "--zh"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# LayoutPanel\n\n用于导航、设置或检查器面板的侧边栏。\n\n**Import:** `import {LayoutPanel} from '@astryxdesign/core/Layout';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | 面板内容。 |\n| `hasDivider` | `boolean` | `false` | 朝向内容一侧边缘的分隔线：在 start 插槽中位于行内结束边，在 end 插槽中位于行内起始边。不设置此项且未设置 padding 时，面板与内容共用一个间距。Layout 的 defaultHasDividers 不适用。旁边的 ResizeHandle 自带分隔线时，请保持为 false。 |\n| `padding` | `0 \\| 0.5 \\| 1 \\| 1.5 \\| 2 \\| 3 \\| 4 \\| 5 \\| 6 \\| 8 \\| 10` | - | 使用间距比例设置四边的内边距，替换自动内边距以及与内容共用的间距。0 表示全出血。 |\n| `isScrollable` | `boolean` | `true` | 启用可滚动溢出。 |\n| `label` | `string` | - | 地标元素的无障碍标签。区域滚动时，它也为滚动区域命名；未提供时使用已翻译的“Content”（内容）。 |\n| `role` | `AriaRole` | - | ARIA 地标角色。 |\n| `width` | `number \\| string` | - | 面板宽度。数字按像素处理，字符串按原样使用。提供 resizable 时忽略，宽度由 hook 控制。放在接收 useResizable 区域 props 的 ResizeHandle 旁边、以 width={region.size} 渲染时，区域折叠期间面板为 inert，折叠时面板内的焦点移到手柄上。 |\n| `resizable` | `ResizableRegion \\| ResizableProps` | - | useResizable() 的返回值或其 props。提供时面板宽度由 hook 驱动，应在面板旁放置 ResizeHandle。其中携带区域的轴向（'horizontal' \\| 'vertical'），必须与相邻 ResizeHandle 的 direction 一致。使用 hook 自身返回的值时，面板从朝向其 ResizeHandle 的边缘滑动关闭和打开；手动构造的对象不会滑动。两种情况下，折叠时面板内的焦点都会移到其 ResizeHandle 上，折叠期间面板为 inert。 |\n| `ref` | `React.Ref<HTMLDivElement>` | - | 转发到面板元素的 ref。 |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

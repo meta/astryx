@@ -7,7 +7,7 @@
   "src/theme"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Refusing to overwrite existing file src/theme/matchaTheme.ts. Re-run with --overwrite (or -f) to replace it.\n",
  "exit": 1,

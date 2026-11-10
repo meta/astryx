@@ -6,7 +6,7 @@
   "--zh"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# RadioListItem\n\n单个单选选项，包含标签、描述和内容插槽。在粗指针（触摸）下，已启用选项的目标通过不可见的点击区域向 44 px 扩展。它不小于所在行，与相邻控件较近时止于间距的一半；行尺寸不变。该点击区域是行的 `::after`，因此请用子元素装饰行。\n\n**Import:** `import {RadioListItem} from '@astryxdesign/core/RadioList';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `label` | `ReactNode` | - | 单选选项的主标签。富内容标签可包含链接或按钮，它们保留自身行为且不会选中该选项。标签文本用于命名单选框；仅当可见文本缺失时使用 aria-label，否则覆盖值必须保留全部可见文字。 **(required)** |\n| `aria-label` | `string` | - | 单选框的纯文本无障碍名称，应用于控件本身而非整行。它会覆盖由标签推导出的名称。仅当富标签没有可见文本时才完全替代；否则必须保留全部可见文字。 |\n| `value` | `string` | - | 此单选选项的值。 **(required)** |\n| `description` | `ReactNode` | - | 显示在标签下方的次要内容。链接和按钮保留自身的点击行为——整行仅将非交互区域的点击委派给单选框。 |\n| `align` | `'center' \\| 'start' \\| 'first-line'` | `'center'` | 起始和结束内容相对于标签的垂直对齐方式，原样传递给 Item。`first-line` 让小标记（单选按钮）与换行标签的第一行保持水平。参见 Item.align。 |\n| `isDisabled` | `boolean` | `false` | 是否禁用此单个单选选项。 |\n| `startContent` | `ReactNode` | - | 在单选圆圈前渲染的内容。 |\n| `endContent` | `ReactNode` | - | 在标签后渲染的内容。 |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -7,7 +7,7 @@ use super::type_match::{aliased, judge_type, union_members, JudgeCtx, Verdict};
 use super::unresolved::{unresolved_reference, Unresolved};
 use super::Ts;
 use crate::discovery::nodepath as np;
-use boa_engine::JsValue;
+use super::JsValue;
 use std::cell::RefCell;
 
 pub struct CodeProp {
@@ -165,10 +165,8 @@ fn copies_type(t: &mut Ts, checker: &JsValue, symbol: &JsValue, declaration: &Js
     if t.same(&declared, &ty) {
         return true;
     }
-    let lk = t.get(symbol, "links");
-    let links = if some(&lk) { lk } else { symbol.clone() };
-    let target = t.get(&links, "target");
-    if !t.same(&own, &target) {
+    // `CheckFlags.Instantiated`: a copy of another symbol for a type argument.
+    if fl(t, symbol, "checkFlags") & 1 == 0 {
         return false;
     }
     let nt = tff(t, "NoTruncation") as f64;
@@ -528,25 +526,26 @@ pub fn read_code_props(t: &mut Ts, program: &JsValue, checker: &JsValue, source_
         None => vec![],
     };
     let optional_flag = sf_(t, "Optional");
-    let mut by_name: Vec<(String, Vec<JsValue>, usize)> = Vec::new();
+    let mut by_name: Vec<(String, Vec<JsValue>, usize, Vec<JsValue>)> = Vec::new();
     for m in &members {
         let ps = t.m(checker, "getPropertiesOfType", &[m.clone()]);
         for p in t.items(&ps) {
             let n = name_of(t, &p);
             let o = fl(t, &p, "flags") & optional_flag != 0;
-            match by_name.iter_mut().find(|(k, _, _)| *k == n) {
+            match by_name.iter_mut().find(|(k, _, _, _)| *k == n) {
                 Some(e) => {
                     e.1.push(p);
+                    e.3.push(m.clone());
                     if o {
                         e.2 += 1;
                     }
                 }
-                None => by_name.push((n, vec![p], o as usize)),
+                None => by_name.push((n, vec![p], o as usize, vec![m.clone()])),
             }
         }
     }
     if fills_all {
-        for (n, _, _) in &by_name {
+        for (n, _, _, _) in &by_name {
             defaulted.push(n.clone());
         }
     }
@@ -566,7 +565,7 @@ pub fn read_code_props(t: &mut Ts, program: &JsValue, checker: &JsValue, source_
     }
     let mut origins = None;
     let mut props = Vec::new();
-    for (name, symbols, optional) in by_name {
+    for (name, symbols, optional, containers) in by_name {
         let mut declarations: Vec<JsValue> = Vec::new();
         for s in &symbols {
             declarations.extend(decls(t, s));
@@ -574,7 +573,7 @@ pub fn read_code_props(t: &mut Ts, program: &JsValue, checker: &JsValue, source_
         let own_decls: Vec<JsValue> = declarations.iter().filter(|d| is_own(&file_of(t, d))).cloned().collect();
         let built = if declarations.is_empty() {
             let o = origins.get_or_insert_with(|| mapped_prop_origin(t, checker, is_own, &starts));
-            let found: Vec<Option<&'static str>> = symbols.iter().map(|s| Some(o.origin(t, s))).collect();
+            let found: Vec<Option<&'static str>> = symbols.iter().zip(&containers).map(|(s, c)| Some(o.origin(t, s, c))).collect();
             strongest(&found)
         } else {
             None

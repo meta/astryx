@@ -7,7 +7,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Checking Your Setup\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Paste this into your AI before writing any component code. If your AI can't answer these questions, it'll know to install the agent docs first.\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"text\",\n        \"code\": \"Before writing any Astryx code, check your knowledge:\\n\\n1. What is the correct import path for Button?\\n2. How do you make a Dialog non-dismissible?\\n3. What prop does Selector use for its items?\\n\\nIf you don't know all three, run `astryx init --features agents` to generate agent docs, then read the generated file.\",\n        \"label\": \"Paste this into your AI\"\n      }\n    ],\n    \"id\": \"checking-your-setup\",\n    \"links\": {\n      \"up\": \"astryx docs working-with-ai --index\",\n      \"previous\": \"astryx docs working-with-ai cursor-setup\",\n      \"next\": \"astryx docs working-with-ai the-astryx-pattern\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

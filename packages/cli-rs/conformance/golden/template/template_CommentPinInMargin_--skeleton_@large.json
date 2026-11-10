@@ -6,7 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/lab\n\n# CommentPinInMargin - A caller-positioned CommentPin in a document margin. The host maps its anchor to the pin's logical bottom-start corner and owns the surrounding layout; the pin owns its compact interactive surface. Activating the pin toggles its selected state.\n# Components: Card, CommentPin\n\n<Card padding={0} width={520}>\n  <VStack gap={3}>\n    <Text />\n    <Text />\n    <Text />\n  </VStack>\n  <CommentPin />\n</Card>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

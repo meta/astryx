@@ -48,15 +48,20 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {folderSourceFor} from './component-discovery.mjs';
 import {loadComponentDoc} from './component-loader.mjs';
-import {readPackageTsconfig} from './package-tsconfig.mjs';
+import {openPackageProject} from './package-tsconfig.mjs';
 import {
+  nativeTypeScriptFailedReason,
+  nativeTypeScriptVersion,
+  openTypeScript,
   resolveProjectTypeScript,
   TYPESCRIPT_FIX,
-  unusableTypeScriptReason,
 } from './project-typescript.mjs';
-import {keepSourceFiles} from './source-file-cache.mjs';
+import {
+  adaptProject,
+  CheckFlags,
+  TypeFormatFlags,
+} from './typescript-checker.mjs';
 import {judgeType} from './type-match.mjs';
-import {typeTextTooOld} from './type-text.mjs';
 import {
   unresolvedGlobals,
   unresolvedReference,
@@ -111,7 +116,6 @@ import {
  * @property {string} [typescript] the version of the compiler that read the props
  * @property {number} components how many documented prop tables were compared
  * @property {number} typesCompared how many documented prop types were judged
- * @property {string} [typesSkipped] why no prop type was judged
  * @property {PropDriftFinding[]} findings
  * @property {PropDriftUnchecked[]} unchecked documented components whose props
  *   could not be read from the source
@@ -438,8 +442,8 @@ function readCodeProps(
   // never matches a documented type anyway, and printing it whole can take
   // gigabytes.
   const flags =
-    ts.TypeFormatFlags.UseSingleQuotesForStringLiteralType |
-    ts.TypeFormatFlags.UseAliasDefinedOutsideCurrentScope;
+    TypeFormatFlags.UseSingleQuotesForStringLiteralType |
+    TypeFormatFlags.UseAliasDefinedOutsideCurrentScope;
 
   // `defaultProps` the package sets (a class's static field, one assigned to a
   // function, or the wrapped component's through up to two layers of `memo`
@@ -469,23 +473,28 @@ function readCodeProps(
       : [],
   );
 
-  /** @type {Map<string, {symbols: any[], optional: number}>} */
+  /** @type {Map<string, {symbols: any[], containers: any[], optional: number}>} */
   const byName = new Map();
   for (const member of members) {
     for (const prop of checker.getPropertiesOfType(member)) {
-      const entry = byName.get(prop.name) ?? {symbols: [], optional: 0};
+      const entry = byName.get(prop.name) ?? {
+        symbols: [],
+        containers: [],
+        optional: 0,
+      };
       entry.symbols.push(prop);
+      entry.containers.push(member);
       if (prop.flags & ts.SymbolFlags.Optional) entry.optional++;
       byName.set(prop.name, entry);
     }
   }
   if (fillsAll) for (const name of byName.keys()) defaulted.add(name);
 
-  /** @type {((prop: any) => string) | undefined} */
+  /** @type {((prop: any, container: any) => string) | undefined} */
   let origin;
   // Read from the component's declaration, its props parameter's, and the
   // wrapped component's for `memo` and `lazy`.
-  const originOf = (/** @type {any} */ prop) =>
+  const originOf = (/** @type {any} */ prop, /** @type {any} */ container) =>
     (origin ??= mappedPropOrigin(ts, checker, isOwnFile, [
       symbol.valueDeclaration ?? symbol.declarations?.[0],
       ...[
@@ -495,8 +504,8 @@ function readCodeProps(
         (/** @type {any} */ signature) =>
           signature.getParameters()[0]?.valueDeclaration,
       ),
-    ]))(prop);
-  for (const [name, {symbols, optional}] of byName) {
+    ]))(prop, container);
+  for (const [name, {symbols, containers, optional}] of byName) {
     const declarations = symbols.flatMap(
       /** @param {any} s */ s => s.declarations ?? [],
     );
@@ -506,7 +515,9 @@ function readCodeProps(
     // A prop no declaration names, one a mapped type builds, is the
     // package's own when its key comes from the package's own source.
     const built =
-      declarations.length === 0 ? strongest(symbols.map(originOf)) : null;
+      declarations.length === 0
+        ? strongest(symbols.map((s, i) => originOf(s, containers[i])))
+        : null;
     // Optional when a caller may leave it out: an overload that takes no
     // props, or a member of the props type that does not require it.
     const required =
@@ -586,7 +597,7 @@ function readCodeProps(
               checker.typeToString(
                 part,
                 at,
-                flags | ts.TypeFormatFlags.InTypeAlias,
+                flags | TypeFormatFlags.InTypeAlias,
               ),
             );
           }
@@ -788,10 +799,11 @@ function copiesType(ts, checker, symbol, declaration, location) {
   const declared = checker.getTypeOfSymbolAtLocation(own, location);
   /** @param {any} t */
   const print = t =>
-    checker.typeToString(t, location, ts.TypeFormatFlags.NoTruncation);
+    checker.typeToString(t, location, TypeFormatFlags.NoTruncation);
   return (
     declared === type ||
-    (own === (symbol.links ?? symbol).target && print(type) === print(declared))
+    ((symbol.checkFlags & CheckFlags.Instantiated) !== 0 &&
+      print(type) === print(declared))
   );
 }
 
@@ -1055,7 +1067,7 @@ function fieldTypeText(ts, checker, reached, exactOptional, location) {
           checker.typeToString(
             t,
             location,
-            ts.TypeFormatFlags.UseSingleQuotesForStringLiteralType,
+            TypeFormatFlags.UseSingleQuotesForStringLiteralType,
           ),
         ),
     ),
@@ -1108,7 +1120,7 @@ function namesFromTypeParameter(ts, checker, type, depth) {
   // The keys, which the compiler works out when it reads the members.
   checker.getPropertiesOfType(type);
   return (
-    (!!type.constraintType && isDeferred(ts, checker, type.constraintType)) ||
+    constraintFromTypeParameter(ts, checker, type) ||
     renamedByTypeParameter(ts, checker, type)
   );
 }
@@ -1148,14 +1160,14 @@ function renamedByTypeParameter(ts, checker, type) {
       !inClause
     ) {
       // Its value where the props are read, through the instantiation.
-      const value = valueIn(
-        ts,
-        checker,
-        checker.getDeclaredTypeOfSymbol(symbol),
-        type.mapper,
-        0,
-      );
-      if (!value || isDeferred(ts, checker, value, true)) return true;
+      const value = aliasValue(ts, type, declaration);
+      if (
+        value
+          ? isDeferred(ts, checker, value, true)
+          : openWithoutValue(ts, checker, type, declaration)
+      ) {
+        return true;
+      }
     }
     return !!ts.forEachChild(
       node,
@@ -1166,38 +1178,76 @@ function renamedByTypeParameter(ts, checker, type) {
 }
 
 /**
- * The value an instantiation gives a type parameter, as the compiler's own
- * mappers give it, through each mapper one combines; null when that takes
- * more than following parameters (a value made from one, or a mapper of
- * another form), which counts as open.
+ * The value an instantiation gives a type parameter: the argument of the
+ * alias the mapped type was instantiated through (`Partial<P>` gives `T`
+ * the value `P`), or null when the parameter is not that alias's, which
+ * counts as open. TypeScript 7's API does not expose an instantiation's
+ * mapper; the alias and its arguments are what it keeps.
  * @param {any} ts
- * @param {any} checker
- * @param {any} parameter
- * @param {any} mapper
- * @param {number} depth
+ * @param {any} type a mapped type
+ * @param {any} declaration the type parameter's declaration
  * @returns {any}
  */
-function valueIn(ts, checker, parameter, mapper, depth) {
-  if (!mapper) return parameter;
-  if (depth > 32) return null;
-  if (mapper.mapper1 && mapper.mapper2) {
-    const first = valueIn(ts, checker, parameter, mapper.mapper1, depth + 1);
-    if (!first) return null;
-    if (first === parameter || first.flags & ts.TypeFlags.TypeParameter) {
-      return valueIn(ts, checker, first, mapper.mapper2, depth + 1);
+function aliasValue(ts, type, declaration) {
+  const alias = type.aliasSymbol?.declarations?.find(
+    ts.isTypeAliasDeclaration,
+  );
+  const i = (alias?.typeParameters ?? []).indexOf(declaration);
+  return i < 0 ? null : (type.aliasTypeArguments?.[i] ?? null);
+}
+
+/**
+ * Whether a type parameter whose value the mapped type's alias does not
+ * show is open. Another alias's parameter (`Pick`'s `K` inside `Omit`, a
+ * member of an alias's intersection, an alias another passes on) is open
+ * when the mapping shows no members, as the compiler can name none; a
+ * component's own parameter is open.
+ * @param {any} ts
+ * @param {any} checker
+ * @param {any} type a mapped type
+ * @param {any} declaration the type parameter's declaration
+ */
+function openWithoutValue(ts, checker, type, declaration) {
+  return ts.isTypeAliasDeclaration(declaration.parent)
+    ? checker.getPropertiesOfType(type).length === 0 &&
+        checker.getIndexInfosOfType(type).length === 0
+    : true;
+}
+
+/**
+ * Do a mapped type's keys come from a type parameter still open where the
+ * props are read: its constraint (`K in keyof T`) names one whose value is
+ * deferred?
+ * @param {any} ts
+ * @param {any} checker
+ * @param {any} type a mapped type
+ * @returns {boolean}
+ */
+function constraintFromTypeParameter(ts, checker, type) {
+  const constraint = type.declaration?.typeParameter?.constraint;
+  if (!constraint) return false;
+  let open = false;
+  /** @type {(node: any) => void} */
+  const visit = node => {
+    if (open) return;
+    const symbol = ts.isTypeReferenceNode(node)
+      ? checker.getSymbolAtLocation(node.typeName)
+      : undefined;
+    const declaration =
+      symbol && symbol.flags & ts.SymbolFlags.TypeParameter
+        ? symbol.declarations?.[0]
+        : undefined;
+    if (declaration) {
+      const value = aliasValue(ts, type, declaration);
+      open = value
+        ? isDeferred(ts, checker, value, true)
+        : openWithoutValue(ts, checker, type, declaration);
+      return;
     }
-    return isDeferred(ts, checker, first, true) ? null : first;
-  }
-  if ('source' in mapper) {
-    return mapper.source === parameter ? mapper.target : parameter;
-  }
-  if (Array.isArray(mapper.sources)) {
-    const i = mapper.sources.indexOf(parameter);
-    if (i < 0) return parameter;
-    const target = mapper.targets?.[i];
-    return typeof target === 'function' ? target() : (target ?? null);
-  }
-  return typeof mapper.func === 'function' ? mapper.func(parameter) : null;
+    ts.forEachChild(node, visit);
+  };
+  visit(constraint);
+  return open;
 }
 
 /**
@@ -1333,7 +1383,8 @@ const strongest = found =>
  * @param {any} checker
  * @param {(file: string) => boolean} isOwnFile
  * @param {any[]} starts
- * @returns {(prop: any) => string}
+ * @returns {(prop: any, container: any) => string} `container`: the type
+ *   that holds the prop
  */
 function mappedPropOrigin(ts, checker, isOwnFile, starts) {
   /** @type {Map<any, Map<any, any>[]>} each mapping, with its type arguments */
@@ -1404,14 +1455,17 @@ function mappedPropOrigin(ts, checker, isOwnFile, starts) {
       visit(child, env, depth + 1),
     );
   };
-  /** @type {(node: any, key: string, env: Map<any, any>, depth: number) => string | null} */
+  /**
+   * `key` null: any key.
+   * @type {(node: any, key: string | null, env: Map<any, any>, depth: number) => string | null}
+   */
   const keyOrigin = (node, key, env, depth) => {
     if (!node || depth > 40) return 'unknown';
     const next = (/** @type {any} */ inner) =>
       keyOrigin(inner, key, env, depth + 1);
     if (ts.isParenthesizedTypeNode(node)) return next(node.type);
     if (ts.isLiteralTypeNode(node)) {
-      return node.literal.text === key ? where(node) : null;
+      return key === null || node.literal.text === key ? where(node) : null;
     }
     if (ts.isUnionTypeNode(node)) return strongest(node.types.map(next));
     if (ts.isConditionalTypeNode(node)) {
@@ -1423,11 +1477,16 @@ function mappedPropOrigin(ts, checker, isOwnFile, starts) {
     ) {
       const of =
         ts.isTypeReferenceNode(node.type) && env.get(target(node.type));
-      const prop = checker.getPropertyOfType(
-        checker.getTypeFromTypeNode(of ? of.node : node.type),
-        key,
-      );
-      return prop ? propOrigin(prop, depth + 1) : null;
+      const keyed = checker.getTypeFromTypeNode(of ? of.node : node.type);
+      if (key === null) {
+        return strongest(
+          checker
+            .getPropertiesOfType(keyed)
+            .map((/** @type {any} */ p) => propOrigin(p, depth + 1, keyed)),
+        );
+      }
+      const prop = checker.getPropertyOfType(keyed, key);
+      return prop ? propOrigin(prop, depth + 1, keyed) : null;
     }
     if (ts.isArrayTypeNode(node)) return next(node.elementType);
     if (ts.isTupleTypeNode(node)) return strongest(node.elements.map(next));
@@ -1475,12 +1534,12 @@ function mappedPropOrigin(ts, checker, isOwnFile, starts) {
   /**
    * Where a value's literal keys are written: its declared type, or the
    * literals its initializer writes, through `as const` and other bindings.
-   * @type {(node: any, key: string, depth: number) => string | null}
+   * @type {(node: any, key: string | null, depth: number) => string | null}
    */
   const valueOrigin = (node, key, depth) => {
     if (!node || depth > 40) return 'unknown';
     if (ts.isStringLiteralLike(node) || ts.isNumericLiteral(node)) {
-      return node.text === key ? where(node) : null;
+      return key === null || node.text === key ? where(node) : null;
     }
     if (ts.isArrayLiteralExpression(node)) {
       return strongest(
@@ -1506,8 +1565,33 @@ function mappedPropOrigin(ts, checker, isOwnFile, starts) {
     }
     return 'unknown';
   };
-  /** @type {(prop: any, depth: number) => string | null} */
-  const propOrigin = (prop, depth) => {
+  /** @type {Map<any, Map<any, Map<string, string | null>>>} */
+  const answers = new Map();
+  /**
+   * A mapping's answer for a key under one set of type arguments, read
+   * once: one that reaches itself again (`Partial<Record<K, V>>` reads
+   * `Record`'s key through `keyof`) adds nothing.
+   * @type {(mapping: any, env: Map<any, any>, key: string | null, depth: number) => string | null}
+   */
+  const mappingOrigin = (mapping, env, key, depth) => {
+    let byEnv = answers.get(mapping);
+    if (!byEnv) answers.set(mapping, (byEnv = new Map()));
+    let byKey = byEnv.get(env);
+    if (!byKey) byEnv.set(env, (byKey = new Map()));
+    const id = key ?? '\0';
+    if (byKey.has(id)) return byKey.get(id) ?? null;
+    byKey.set(id, null);
+    const answer = keyOrigin(mapping.typeParameter.constraint, key, env, depth);
+    byKey.set(id, answer);
+    return answer;
+  };
+  /**
+   * Where a prop the type `container` holds comes from: its declarations,
+   * or the mapped type in `container` that builds it (each member of a
+   * union or intersection that holds it answers).
+   * @type {(prop: any, depth: number, container?: any) => string | null}
+   */
+  const propOrigin = (prop, depth, container) => {
     if (depth > 40) return 'unknown';
     const declarations = prop.declarations ?? [];
     if (declarations.length > 0) {
@@ -1515,35 +1599,50 @@ function mappedPropOrigin(ts, checker, isOwnFile, starts) {
         ? 'own'
         : 'foreign';
     }
-    const links = prop.links ?? prop;
-    if (links.syntheticOrigin)
-      return propOrigin(links.syntheticOrigin, depth + 1);
-    if (links.containingType) {
+    if (!container) return 'unknown';
+    /** @type {(t: any, level: number) => string | null} */
+    const fromType = (t, level) => {
+      if (level > 8) return 'unknown';
+      if (t.isUnion() || t.isIntersection()) {
+        return strongest(
+          t.types.map((/** @type {any} */ u) => fromType(u, level + 1)),
+        );
+      }
+      const part = checker.getPropertyOfType(t, prop.name);
+      if (!part) return null;
+      if ((part.declarations ?? []).length > 0) {
+        return propOrigin(part, depth + 1);
+      }
+      const mapping = t.declaration;
+      if (!(t.objectFlags & ts.ObjectFlags.Mapped) || !mapping) {
+        // A class or interface inherits it from a base.
+        const target = t.target ?? t;
+        if (target.objectFlags & ts.ObjectFlags.ClassOrInterface) {
+          return (
+            strongest(
+              checker
+                .getBaseTypes(t)
+                .map((/** @type {any} */ base) => fromType(base, level + 1)),
+            ) ?? 'unknown'
+          );
+        }
+        return 'unknown';
+      }
+      // A mapping that renames its keys (`as`) gives the prop another name
+      // than its key: every key it maps answers.
+      const key = mapping.nameType ? null : String(prop.name);
       return strongest(
-        links.containingType.types.map((/** @type {any} */ t) => {
-          const part = checker.getPropertyOfType(t, prop.name);
-          return part && part !== prop ? propOrigin(part, depth + 1) : null;
-        }),
-      );
-    }
-    const mapping = links.mappedType?.declaration;
-    const key = links.keyType?.value;
-    if (!mapping || key === undefined) return 'unknown';
-    return strongest(
-      (sites.get(mapping) ?? []).map(env =>
-        keyOrigin(
-          mapping.typeParameter.constraint,
-          String(key),
-          env,
-          depth + 1,
+        (sites.get(mapping) ?? []).map(env =>
+          mappingOrigin(mapping, env, key, depth + 1),
         ),
-      ),
-    );
+      );
+    };
+    return fromType(container, 0);
   };
   for (const start of starts) {
     if (start && where(start) === 'own') visit(start, new Map(), 0);
   }
-  return prop => propOrigin(prop, 0) ?? 'unknown';
+  return (prop, container) => propOrigin(prop, 0, container) ?? 'unknown';
 }
 
 /**
@@ -1737,24 +1836,60 @@ function hasUnresolvedPart(ts, checker, type, depth, seen) {
  */
 export function comparePropTables(tables, options) {
   const {packageDir, resolveFrom} = options;
-  const compiler = resolveProjectTypeScript(resolveFrom);
-  if (!compiler?.ts) {
+  const empty = {
+    components: 0,
+    typesCompared: 0,
+    findings: [],
+    unchecked: [],
+    typesNotCompared: [],
+  };
+  if (!resolveProjectTypeScript(resolveFrom)) {
+    return {status: 'skipped', reason: TYPESCRIPT_MISSING_REASON, ...empty};
+  }
+  if (tables.length === 0) {
+    return {status: 'checked', typescript: nativeVersion(), ...empty};
+  }
+  /** @type {ReturnType<typeof openTypeScript>} */
+  let session;
+  try {
+    session = openTypeScript({cwd: path.resolve(packageDir)});
+  } catch (error) {
     return {
       status: 'skipped',
-      reason: compiler
-        ? unusableTypeScriptReason(
-            compiler.version,
-            'documented props were not compared with the code',
-          )
-        : TYPESCRIPT_MISSING_REASON,
-      components: 0,
-      typesCompared: 0,
-      findings: [],
-      unchecked: [],
-      typesNotCompared: [],
+      reason: nativeTypeScriptFailedReason(
+        error,
+        'documented props were not compared with the code',
+      ),
+      ...empty,
     };
   }
-  const {ts, version} = compiler;
+  try {
+    return compareWith(tables, packageDir, session);
+  } finally {
+    session.close();
+  }
+}
+
+/**
+ * The version of this CLI's TypeScript 7, or `unknown` when it cannot load.
+ */
+function nativeVersion() {
+  try {
+    return nativeTypeScriptVersion();
+  } catch {
+    return 'unknown';
+  }
+}
+
+/**
+ * @param {PropDriftTable[]} tables
+ * @param {string} packageDir
+ * @param {ReturnType<typeof openTypeScript>} session
+ * @returns {PropDriftReport}
+ */
+function compareWith(tables, packageDir, session) {
+  const ts = session.syntax;
+  const version = session.version;
   let root = path.resolve(packageDir);
   try {
     root = fs.realpathSync(root);
@@ -1766,30 +1901,18 @@ export function comparePropTables(tables, options) {
 
   /** @type {PropDriftUnchecked[]} */
   const unchecked = [];
-  if (tables.length === 0) {
-    return {
-      status: 'checked',
-      typescript: version,
-      components: 0,
-      typesCompared: 0,
-      findings: [],
-      unchecked,
-      typesNotCompared: [],
-    };
-  }
-
-  const project = readPackageTsconfig(
-    ts,
+  const opened = openPackageProject(
+    session,
     packageDir,
     tables.flatMap(table => table.sources),
   );
-  if (project.error) {
+  if (opened.error) {
     // Read without the package's own config, the types would be guesses.
     for (const table of tables) {
       unchecked.push({
         component: table.name,
         doc: table.doc,
-        reason: `the package's TypeScript config has an error, so props were not read (${project.error})`,
+        reason: `the package's TypeScript config has an error, so props were not read (${opened.error})`,
       });
     }
     unchecked.sort((a, b) => a.component.localeCompare(b.component));
@@ -1803,36 +1926,28 @@ export function comparePropTables(tables, options) {
       typesNotCompared: [],
     };
   }
-  // Parsed once per process for these options: every check reads the same
-  // library and package declarations.
-  const host = ts.createCompilerHost(project.options);
-  host.getSourceFile = keepSourceFiles(ts, host, project.options);
-  const program = ts.createProgram({
-    rootNames: [
-      ...new Set([
-        ...tables.flatMap(table => table.sources),
-        ...project.declarations,
-      ]),
-    ],
-    options: project.options,
-    host,
-  });
-  const checker = program.getTypeChecker();
+  const {program, checker} = adaptProject(opened.project, ts);
   const isOwnFile = ownFileTest(root);
+  // The config the package's own options come from, as messages name it.
+  const compilerOptions = {
+    ...program.getCompilerOptions(),
+    configFilePath: opened.configPath ?? undefined,
+  };
   const ambient = unresolvedGlobals(
     ts,
     program,
     checker,
-    project.declarations,
-    project.options,
+    opened.declarations,
+    compilerOptions,
     isOwnFile,
   );
   // Without strict null checks the compiler drops `null` and `undefined`.
-  // Whether they are on by default depends on the TypeScript version.
-  const compilerOptions = program.getCompilerOptions();
-  const nullable = !(typeof ts.getStrictOptionValue === 'function'
-    ? ts.getStrictOptionValue(compilerOptions, 'strictNullChecks')
-    : (compilerOptions.strictNullChecks ?? compilerOptions.strict ?? false));
+  // TypeScript 7 turns `strict` on unless the config turns it off.
+  const nullable = !(
+    compilerOptions.strictNullChecks ??
+    compilerOptions.strict ??
+    true
+  );
   const reading = {
     nullable,
     // An optional prop takes `undefined` only when the project lets it.
@@ -1841,6 +1956,20 @@ export function comparePropTables(tables, options) {
     isDefaultLibrary: (/** @type {any} */ file) =>
       program.isSourceFileDefaultLibrary(file),
   };
+  // Every documented type is parsed in one request, ahead of the judging.
+  ts.prefetchSourceFiles(
+    tables
+      .flatMap(table => table.props)
+      .flatMap(raw =>
+        typeof raw?.type === 'string'
+          ? [raw.type, ...raw.type.split(/\s+\/\s+/)]
+          : [],
+      )
+      .flatMap(text => [
+        {fileName: 'type-text.ts', text: `type T = ${text}\n;`},
+        {fileName: '__documented_type__.ts', text: `type __Documented = ${text};`},
+      ]),
+  );
 
   /** @type {PropDriftFinding[]} */
   const findings = [];
@@ -1850,7 +1979,6 @@ export function comparePropTables(tables, options) {
   let typesCompared = 0;
   /** @type {PropDriftTypesNotCompared[]} */
   const typesNotCompared = [];
-  const typesSkipped = typeTextTooOld(ts);
   for (const table of tables) {
     /** @type {ReturnType<typeof readCodeProps> | null} */
     let read = null;
@@ -1898,7 +2026,6 @@ export function comparePropTables(tables, options) {
         const propName = entry.name;
         if (entry.spread) continue;
         const docType = entry.type;
-        if (typesSkipped) entry.type = undefined;
         documented.add(propName);
         const code = read.props.get(propName);
         const reached =
@@ -1907,7 +2034,6 @@ export function comparePropTables(tables, options) {
             : null;
         if (
           entry.type === undefined &&
-          !typesSkipped &&
           typeof raw.type === 'string' &&
           (code && entry.path.length > 0
             ? reached
@@ -2044,7 +2170,7 @@ export function comparePropTables(tables, options) {
                   checker.typeToString(
                     index.type,
                     index.declaration,
-                    ts.TypeFormatFlags.UseSingleQuotesForStringLiteralType,
+                    TypeFormatFlags.UseSingleQuotesForStringLiteralType,
                   ),
                 ],
               ],
@@ -2055,7 +2181,7 @@ export function comparePropTables(tables, options) {
               const codeType = checker.typeToString(
                 index.type,
                 index.declaration,
-                ts.TypeFormatFlags.UseSingleQuotesForStringLiteralType,
+                TypeFormatFlags.UseSingleQuotesForStringLiteralType,
               );
               findings.push({
                 ...base,
@@ -2231,7 +2357,6 @@ export function comparePropTables(tables, options) {
     findings,
     unchecked,
     typesNotCompared,
-    ...(typesSkipped ? {typesSkipped} : {}),
     ...(propsNotChecked.length > 0 ? {propsNotChecked} : {}),
   };
 }

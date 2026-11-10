@@ -1,0 +1,46 @@
+[
+  {
+    "id": "ts7_integration_check_ts7only",
+    "args": [
+      "integration",
+      "check"
+    ],
+    "fixture": "doctor-ts7",
+    "cwd": "doctor-ts7/ts7only",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "ts7_integration_check_ts7only_strict_json",
+    "args": [
+      "integration",
+      "check",
+      "--strict",
+      "--json"
+    ],
+    "fixture": "doctor-ts7",
+    "cwd": "doctor-ts7/ts7only",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "ts7_integration_check_ts5",
+    "args": [
+      "integration",
+      "check"
+    ],
+    "fixture": "doctor-ts7",
+    "cwd": "doctor-ts7/ts5",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "ts7_integration_check_ts5_strict_json",
+    "args": [
+      "integration",
+      "check",
+      "--strict",
+      "--json"
+    ],
+    "fixture": "doctor-ts7",
+    "cwd": "doctor-ts7/ts5",
+    "timeoutMs": 180000
+  }
+]

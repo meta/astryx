@@ -6,7 +6,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"RowsVirtualizationHookUsage\",\n    \"description\": \"A Table with 1,000 product rows in a fixed-height viewport. Scroll vertically to mount the visible rows. The caller keeps all data and columns; this hook does not virtualize columns.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Table\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {\\n  Table,\\n  useTableRowsVirtualization,\\n  type TableColumn,\\n} from '@astryxdesign/core/Table';\\n\\ninterface Product extends Record<string, unknown> {\\n  id: string;\\n  name: string;\\n}\\n\\nconst products: Product[] = Array.from({length: 1000}, (_, index) => ({\\n  id: `product-${index}`,\\n  name: `Product ${index + 1}`,\\n}));\\nconst columns: TableColumn<Product>[] = [{key: 'name', header: 'Product'}];\\n\\nexport default function RowsVirtualizationHookUsage() {\\n  const virtualization = useTableRowsVirtualization({\\n    rowHeight: 56,\\n    viewportHeight: 320,\\n  });\\n  return (\\n    <Table\\n      data={products}\\n      columns={columns}\\n      idKey=\\\"id\\\"\\n      virtualization={virtualization}\\n    />\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

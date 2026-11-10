@@ -5,7 +5,7 @@
   "CommandPaletteListShowcase"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {\n  CommandPaletteList,\n  CommandPaletteGroup,\n  CommandPaletteItem,\n} from '@astryxdesign/core/CommandPalette';\n\nexport default function CommandPaletteListShowcase() {\n  return (\n    <CommandPaletteList>\n      <CommandPaletteGroup heading=\"Navigation\">\n        <CommandPaletteItem value=\"home\" onSelect={() => {}}>\n          Go Home\n        </CommandPaletteItem>\n        <CommandPaletteItem value=\"settings\" onSelect={() => {}}>\n          Open Settings\n        </CommandPaletteItem>\n        <CommandPaletteItem value=\"profile\" onSelect={() => {}}>\n          View Profile\n        </CommandPaletteItem>\n      </CommandPaletteGroup>\n      <CommandPaletteGroup heading=\"Actions\">\n        <CommandPaletteItem value=\"new-file\" onSelect={() => {}}>\n          New File\n        </CommandPaletteItem>\n        <CommandPaletteItem value=\"search\" isHighlighted onSelect={() => {}}>\n          Search Files\n        </CommandPaletteItem>\n        <CommandPaletteItem value=\"save\" onSelect={() => {}}>\n          Save All\n        </CommandPaletteItem>\n      </CommandPaletteGroup>\n    </CommandPaletteList>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -6,7 +6,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"SkeletonStaggeredList\",\n    \"description\": \"Staggered skeleton lines with varying widths.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Skeleton\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Skeleton} from '@astryxdesign/core/Skeleton';\\nimport {VStack} from '@astryxdesign/core/Layout';\\n\\nexport default function SkeletonStaggeredList() {\\n  return (\\n    <VStack gap={2}>\\n      <Skeleton width={300} height={16} index={0} />\\n      <Skeleton width={280} height={16} index={1} />\\n      <Skeleton width={320} height={16} index={2} />\\n      <Skeleton width={260} height={16} index={3} />\\n      <Skeleton width={290} height={16} index={4} />\\n    </VStack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

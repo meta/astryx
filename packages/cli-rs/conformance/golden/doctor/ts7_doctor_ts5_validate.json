@@ -1,0 +1,14 @@
+{
+ "id": "ts7_doctor_ts5_validate",
+ "args": [
+  "doctor",
+  "integration",
+  "validate"
+ ],
+ "fixture": "doctor-ts7",
+ "fixtureHash": "830ae285d406ab92+4e418a0c2575d9ce",
+ "stdout": "Validating integration: @acme/ts5@1.0.0\n\n[ok] No integration issues found.\n\nnote (component_without_example): [next minor] src/Dial/Dial.doc.mjs: no block template shows \"Dial\" (`exampleFor: 'Dial'` with `isShowcase: true`), so template lists, docs pages and catalog cards have no example of it. The manifest sets no `templates` root; add `templates: './templates'` to it. Fix: add templates/dial-showcase.tsx, a small composition that renders Dial, and beside it templates/dial-showcase.doc.mjs: export default {type: 'block', name: 'dial-showcase', displayName: 'Dial showcase', description: 'A Dial in use.', exampleFor: 'Dial', isShowcase: true, aspectRatio: 16 / 10}; A doc set to `hidden`, `isHiddenFromOverview` or category `Utility` needs no example.\n\nSummary: 0 errors, 0 warnings\n\nChecking 1 doc(s) against the authoring types (TypeScript 7.0.2)\n\nseverity: [warn]\ndoc:      src/Dial/Dial.doc.mjs\nline:     1\nexport:   default\ntype:     ComponentDoc\nfield:    category\nproblem:  wrong_type\nmessage:  Type '\"Knobs\"' is not assignable to type '\"Action\" | \"Chat\" | \"Container\" | \"Content\" | \"Data Input\" | \"Data Vis...'.\nfix:      Change `category` to a value of type \"Action\" | \"Chat\" | \"Container\" | \"Content\" | \"Data Input\" | \"Data Vis....\n\nseverity: [warn]\ndoc:      src/Dial/Dial.doc.mjs\nline:     1\nexport:   default\ntype:     ComponentDoc\nfield:    displayName\nproblem:  missing_field\nmessage:  Property 'displayName' is missing in type '{ type: \"component\"; name: string; category: any; usage: { description...' but required in type 'SingleComponentDoc'.\nfix:      Add `displayName`: SingleComponentDoc requires it.\n\n2 doc field(s) in 1 file(s) do not match the authoring types. These are warnings; `astryx docs authoring` lists every field.\n\n[info] Imports not checked: 1:\n\nfile:      src/Dial/Dial.doc.mjs\nspecifier: @acme/ts5\nreason:    package.json has no \"exports\", and the root module \"main\" names is not read, so the component names were not checked\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

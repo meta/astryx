@@ -6,7 +6,7 @@
   "src/documentation.tsx"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "Rendered src/documentation.tsx\n\ninput:       src/documentation.tsx\noutput:      src/documentation.html\nbytes:       125.4 KB\ncssBytes:    44.5 KB\nclasses:     266\nimages:      0\nfiles:       documentation.tsx\nstylesheets: @astryxdesign/core/reset.css, @astryxdesign/core/astryx.css\n\nGive it back: npx @astryxdesign/cli@0.7.12 experimental render --reverse src/documentation.html\n",
  "stderr": "",
  "exit": 0,

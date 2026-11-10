@@ -5,7 +5,7 @@
   "MultiSelectorColumnVisibilitySelector"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {MultiSelector} from '@astryxdesign/core/MultiSelector';\n\nconst allColumns = [\n  {value: 'name', label: 'Name'},\n  {value: 'email', label: 'Email'},\n  {value: 'role', label: 'Role'},\n  {value: 'status', label: 'Status'},\n  {value: 'created', label: 'Created'},\n  {value: 'updated', label: 'Updated'},\n  {value: 'actions', label: 'Actions'},\n];\n\nexport default function MultiSelectorColumnVisibilitySelector() {\n  const [visible, setVisible] = useState<string[]>([\n    'name',\n    'email',\n    'role',\n    'status',\n  ]);\n  return (\n    <div style={{width: 300}}>\n      <MultiSelector\n        label=\"Columns\"\n        isLabelHidden\n        options={allColumns}\n        value={visible}\n        onChange={setVisible}\n        hasSelectAll\n        hasSearch\n        triggerDisplay=\"count\"\n        placeholder=\"Columns\"\n      />\n    </div>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

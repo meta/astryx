@@ -7,7 +7,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": [\n    {\n      \"name\": \"children\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Content.\"\n    },\n    {\n      \"name\": \"padding\",\n      \"type\": \"0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10\",\n      \"description\": \"Internal padding using the spacing scale. Overrides the default padding from the layout container.\"\n    },\n    {\n      \"name\": \"isScrollable\",\n      \"type\": \"boolean\",\n      \"description\": \"Enable scrollable overflow. With arithmetic contentWidth values, the scrollport spans through every open side while context-aware insets keep children aligned.\",\n      \"default\": \"true\"\n    },\n    {\n      \"name\": \"label\",\n      \"type\": \"string\",\n      \"description\": \"Accessible label for the landmark element. While the region scrolls, it also names the scrolling region, which otherwise takes a translated \\\"Content\\\".\"\n    },\n    {\n      \"name\": \"role\",\n      \"type\": \"AriaRole\",\n      \"description\": \"ARIA landmark role.\"\n    },\n    {\n      \"name\": \"ref\",\n      \"type\": \"React.Ref<HTMLDivElement>\",\n      \"description\": \"Ref forwarded to the content region element.\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

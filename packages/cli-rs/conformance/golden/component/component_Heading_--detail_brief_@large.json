@@ -7,7 +7,7 @@
   "brief"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nHeading(level: 1|2|3|4|5|6, type: display-1|display-2|display-3, weight: normal|medium|semibold|bold, accessibilityLevel: 1|2|3|4|5|6, color: primary|secondary|disabled|placeholder|accent|inherit, display: inline|block, hasTruncateTooltip: boolean|above|below|start|end, wordBreak: break-word|break-all, textWrap: wrap|nowrap|balance|pretty, justify: start|center|end)  <- from '@astryxdesign/core/Heading'\n  Semantic heading component that renders h1-h6 elements with themed styling, t...\n  Targets: astryx-heading preferred attrs: data-level, data-color, data-type, data-weight variants: level, color, type, weight\n  children: ReactNode, maxLines, hasCapsize, hasStrikethrough, id, xstyle, className, style, ref\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

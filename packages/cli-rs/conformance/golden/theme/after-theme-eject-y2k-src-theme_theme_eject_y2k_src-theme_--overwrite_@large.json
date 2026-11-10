@@ -8,7 +8,7 @@
   "--overwrite"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "Ejected theme\n\nslug:        y2k\ndisplayName: Y2K\nmaintained:  false\npackage:     @astryxdesign/cli\noutputDir:   src/theme\nentry:       y2kTheme.ts\nexportName:  y2kTheme\nfiles:       y2kTheme.ts, y2kTheme.doc.mjs, icons.tsx, y2kPalettes.ts, y2kPalettes.generated.ts, y2kPaletteRefs.generated.ts, y2kPalettes.generated.receipt.json, palette.config.json\n\nThis is a local fork. Build it with npx @astryxdesign/cli@0.7.12 theme build src/theme/y2kTheme.ts.\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n",
  "exit": 0,

@@ -7,7 +7,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"What Astryx Guarantees\",\n    \"content\": [\n      {\n        \"type\": \"list\",\n        \"style\": \"do\",\n        \"items\": [\n          \"Components never throw on missing platform APIs. Where a browser lacks the `Popover` API, layers fall back to plain visibility instead of crashing.\",\n          \"Tier 1 and Tier 2 are officially supported and tested.\",\n          \"Non-layered components render correctly down to Tier 2.\"\n        ]\n      },\n      {\n        \"type\": \"list\",\n        \"style\": \"dont\",\n        \"items\": [\n          \"Astryx does not guarantee correct layer positioning below Tier 1 (anchor positioning). Closing that gap for a Tier 2 audience is a consumer choice; see below.\",\n          \"Astryx does not ship a `light-dark()` fallback, so theme colors are not guaranteed below Tier 2.\"\n        ]\n      }\n    ],\n    \"id\": \"what-astryx-guarantees\",\n    \"links\": {\n      \"up\": \"astryx docs browser-support --index\",\n      \"previous\": \"astryx docs browser-support which-components-are-affected\",\n      \"next\": \"astryx docs browser-support the-on-screen-keyboard\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

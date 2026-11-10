@@ -6,7 +6,7 @@
   "explore-the-cli"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Explore the CLI\n\nThe CLI is your reference for components, tokens, templates, and docs. For reliable invocation (especially with AI assistants), add this script to your package.json:\n\npackage.json:\n```json\n\"scripts\": {\n  \"astryx\": \"node node_modules/@astryxdesign/cli/clients/cli/bin/astryx.mjs\"\n}\n```\n\nThen discover what's available:\n\nTerminal:\n```bash\nnpx @astryxdesign/cli@0.7.12 component          # list all components\nnpx @astryxdesign/cli@0.7.12 component Button   # props, usage, theming for Button\nnpx @astryxdesign/cli@0.7.12 docs               # list all doc topics\nnpx @astryxdesign/cli@0.7.12 template --list    # available page templates\nnpx @astryxdesign/cli@0.7.12 docs tokens        # spacing, color, radius reference\n```\n\nUp: npx @astryxdesign/cli@0.7.12 docs getting-started --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs getting-started example-apps\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -5,7 +5,7 @@
   "BannerWithActionButton"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Banner} from '@astryxdesign/core/Banner';\nimport {Button} from '@astryxdesign/core/Button';\nimport {Stack} from '@astryxdesign/core/Layout';\n\nexport default function BannerWithActionButton() {\n  return (\n    <Stack direction=\"vertical\" gap={3}>\n      <Banner\n        status=\"info\"\n        title=\"Your trial expires in 3 days\"\n        description=\"Upgrade now to keep access to all features.\"\n        endContent={<Button label=\"Upgrade\" variant=\"secondary\" size=\"sm\" />}\n      />\n      <Banner\n        status=\"warning\"\n        title=\"API key expires soon\"\n        description=\"Generate a new key before December 1 to avoid service interruption.\"\n        endContent={<Button label=\"Renew key\" variant=\"secondary\" size=\"sm\" />}\n      />\n      <Banner\n        status=\"error\"\n        title=\"Payment failed\"\n        description=\"We could not process your last payment.\"\n        endContent={<Button label=\"Retry\" variant=\"secondary\" size=\"sm\" />}\n      />\n    </Stack>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -9,16 +9,18 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {createRequire} from 'node:module';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
-import {readPackageTsconfig} from './package-tsconfig.mjs';
+import {openPackageProject} from './package-tsconfig.mjs';
+import {openTypeScript, typeScriptSyntax} from './project-typescript.mjs';
+import {adaptProject} from './typescript-checker.mjs';
 import {
   unresolvedGlobals,
   unresolvedReference,
 } from './unresolved-references.mjs';
 
-const require = createRequire(import.meta.url);
-const ts = require('typescript');
+const ts = typeScriptSyntax();
+/** @type {Array<{close: () => void}>} */
+const sessions = [];
 
 /** @type {string} */
 let root;
@@ -30,6 +32,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  for (const session of sessions.splice(0)) session.close();
   fs.rmSync(root, {recursive: true, force: true});
 });
 
@@ -63,12 +66,14 @@ const OPTIONS = {
  * @param {object} [extra] compiler options to add
  */
 function load(packageDir, sources, extra = {}) {
-  const project = readPackageTsconfig(ts, packageDir, sources);
-  const options = {...project.options, ...extra};
-  const program = ts.createProgram({
-    rootNames: [...sources, ...project.declarations],
-    options,
-  });
+  const session = openTypeScript({cwd: packageDir});
+  sessions.push(session);
+  const project = openPackageProject(session, packageDir, sources, extra);
+  const {program, checker} = adaptProject(project.project, session.syntax);
+  const options = {
+    ...program.getCompilerOptions(),
+    configFilePath: project.configPath ?? undefined,
+  };
   /** @type {(file: string) => boolean} */
   const isOwnFile = file => {
     const rel = path.relative(packageDir, fs.realpathSync(file));
@@ -80,7 +85,7 @@ function load(packageDir, sources, extra = {}) {
     project,
     options,
     program,
-    checker: program.getTypeChecker(),
+    checker,
     isOwnFile,
   };
 }
@@ -420,18 +425,8 @@ describe('unresolvedGlobals', () => {
         include: ['src'],
       }),
     ).toMatchObject({name: 'the types `@acme/not-installed-css`'});
-    // With `types` unset TypeScript 5 loads every package in `typeRoots`, as
-    // TypeScript 6 does for `types: ['*']`, so they are walked then too.
-    const ts5 = new Proxy(ts, {
-      get: (target, key) =>
-        key === 'getAutomaticTypeDirectiveNames'
-          ? (/** @type {any} */ options, /** @type {any} */ host) =>
-              target.getAutomaticTypeDirectiveNames(
-                {...options, types: options.types ?? ['*']},
-                host,
-              )
-          : target[key],
-    });
+    // `types: ['*']` loads every package in `typeRoots`, so they are walked
+    // then too.
     write('packages/widgets/tsconfig.json', {
       compilerOptions: {...OPTIONS, typeRoots},
       include: ['src'],
@@ -439,11 +434,11 @@ describe('unresolvedGlobals', () => {
     const five = load(widgets, [source], {types: ['*']});
     expect(
       unresolvedGlobals(
-        ts5,
+        ts,
         five.program,
         five.checker,
         five.project.declarations,
-        {...five.options, types: undefined},
+        five.options,
         five.isOwnFile,
       ),
     ).toMatchObject({name: 'the types `@acme/not-installed-css`'});

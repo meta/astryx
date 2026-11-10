@@ -5,7 +5,7 @@
   "FieldLabelShowcase"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {FieldLabel} from '@astryxdesign/core/Field';\nimport {VStack} from '@astryxdesign/core/Layout';\n\nconst LockIcon = (props: React.SVGProps<SVGSVGElement>) => (\n  <svg\n    viewBox=\"0 0 24 24\"\n    fill=\"none\"\n    stroke=\"currentColor\"\n    strokeWidth={1.5}\n    strokeLinecap=\"round\"\n    strokeLinejoin=\"round\"\n    {...props}>\n    <rect x=\"3\" y=\"11\" width=\"18\" height=\"11\" rx=\"2\" />\n    <path d=\"M7 11V7a5 5 0 0 1 10 0v4\" />\n  </svg>\n);\n\nexport default function FieldLabelShowcase() {\n  return (\n    <VStack gap={4}>\n      <FieldLabel label=\"Email address\" inputID=\"email-input\" isRequired />\n      <FieldLabel\n        label=\"Phone number\"\n        inputID=\"phone-input\"\n        isOptional\n        description=\"Include country code for international numbers\"\n      />\n      <FieldLabel\n        label=\"API key\"\n        inputID=\"api-input\"\n        labelTooltip=\"Your API key can be found in the developer settings\"\n        labelIcon={LockIcon}\n      />\n      <FieldLabel label=\"Disabled field\" inputID=\"disabled-input\" isDisabled />\n    </VStack>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

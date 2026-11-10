@@ -12,7 +12,7 @@
   "--confirm-public"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "Gap report failed\n\nstatus:          failed\npackage:         @astryxdesign/core\nissuesUrl:       https://github.com/meta/astryx/issues\nfiledCount:      0\nroutedOnlyCount: 0\nDeliveries\n\nhandlerType: fallback\nhandler:     github\naudience:    public\nstatus:      failed\nmessage:     GitHub CLI could not create the routed issue. Install and authenticate gh, then retry.\n",
  "stderr": "gap-report: delivery to github failed: GitHub CLI could not create the routed issue. Install and authenticate gh, then retry.\n",
  "exit": 1,

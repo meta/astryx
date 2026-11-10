@@ -6,7 +6,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"OverflowListShowcase\",\n    \"description\": \"A list of buttons that collapses overflowing items into a +N indicator.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"OverflowList\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {OverflowList} from '@astryxdesign/core/OverflowList';\\nimport {Button} from '@astryxdesign/core/Button';\\n\\nexport default function OverflowListShowcase() {\\n  return (\\n    <div style={{maxWidth: 400, border: '1px dashed #ccc', padding: 8}}>\\n      <OverflowList\\n        gap={2}\\n        overflowRenderer={overflowItems => (\\n          <Button\\n            label={`+${overflowItems.length} more`}\\n            variant=\\\"ghost\\\"\\n            size=\\\"sm\\\"\\n          />\\n        )}>\\n        <Button label=\\\"Edit\\\" size=\\\"sm\\\" />\\n        <Button label=\\\"Duplicate\\\" size=\\\"sm\\\" />\\n        <Button label=\\\"Share\\\" size=\\\"sm\\\" />\\n        <Button label=\\\"Archive\\\" size=\\\"sm\\\" />\\n        <Button label=\\\"Delete\\\" size=\\\"sm\\\" />\\n      </OverflowList>\\n    </div>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

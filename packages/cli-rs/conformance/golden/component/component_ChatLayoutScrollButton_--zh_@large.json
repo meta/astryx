@@ -6,7 +6,7 @@
   "--zh"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# ChatLayoutScrollButton\n\n可组合的滚动到底部按钮。可见时淡入，提供标签时展开。\n\n**Import:** `import {ChatLayoutScrollButton} from '@astryxdesign/core/Chat';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `isVisible` | `boolean` | - | 按钮是否可见。 **(required)** |\n| `label` | `string` | - | 可选标签，展开按钮（如\"新消息\"）。 |\n| `onClick` | `() => void` | - | 点击处理器。 **(required)** |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

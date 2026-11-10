@@ -2,15 +2,14 @@
 
 /** @file The type-text normalization the prop type judgment compares by. */
 
-import {createRequire} from 'node:module';
-import {describe, expect, it} from 'vitest';
-import {
-  normalizeTypeText as normalize,
-  typeTextTooOld,
-  UNPARSED,
-} from './type-text.mjs';
+import * as os from 'node:os';
+import {afterAll, describe, expect, it} from 'vitest';
+import {openTypeScript} from './project-typescript.mjs';
+import {normalizeTypeText as normalize, UNPARSED} from './type-text.mjs';
 
-const ts = createRequire(import.meta.url)('typescript');
+const session = openTypeScript({cwd: os.tmpdir()});
+afterAll(() => session.close());
+const ts = session.syntax;
 /** @type {(text: string, options?: {optional?: boolean}) => readonly string[]} */
 const normalizeTypeText = (text, options = {}) =>
   normalize(text, {...options, ts});
@@ -175,12 +174,6 @@ describe('normalizeTypeText', () => {
     expect(normalizeTypeText('Array /* v1.2 */ <string>')).toEqual([
       'string[]',
     ]);
-    expect(typeTextTooOld({version: '4.7.4'})).toBe(
-      'TypeScript 4.7.4 is older than 4.8, the oldest the type comparison reads; install TypeScript 5.0 through 6 (`npm install -D typescript@6`), or on TypeScript 7 add `@typescript/typescript6`, to judge them',
-    );
-    for (const version of ['4.8.4', '5.0.4', '6.0.3', ts.version]) {
-      expect(typeTextTooOld({version})).toBeNull();
-    }
   });
 
   it('keeps a union around a function apart from one in its return, joined as the members are', () => {

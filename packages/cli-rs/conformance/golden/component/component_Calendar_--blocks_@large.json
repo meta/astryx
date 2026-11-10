@@ -6,7 +6,7 @@
   "--blocks"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nShowcase\n\ndisplayName: Calendar\ndescription: An interactive single-date calendar with a selected date. Click any day to change the selection.\n\nExamples\n\nname:        CalendarConstraints\ndescription: Limit which dates can be selected using min/max bounds and custom rules like weekdays only. Use for scheduling UIs where certain dates are unavailable.\n\nname:        CalendarRangeWithValue\ndescription: Pick a start and end date with the range highlighted between them. Use for booking dates, time-off requests, or report filters.\n\nname:        CalendarSingle\ndescription: Pick one date from a month grid. Use for appointment dates, due dates, or any field that needs a single date.\n\nname:        CalendarTwoMonths\ndescription: Two months side by side for selecting ranges that span a month boundary. Use in booking or travel UIs where check-in and check-out often fall in different months.\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

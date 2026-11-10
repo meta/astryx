@@ -7,7 +7,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/lab\",\n  \"data\": [\n    {\n      \"name\": \"totalPages\",\n      \"type\": \"number\",\n      \"description\": \"Number of pages.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"page\",\n      \"type\": \"number\",\n      \"description\": \"Current page number (1-based). Page 1 is the first page.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"onChange\",\n      \"type\": \"(page: number) => void\",\n      \"description\": \"Called with the page, 1-based, that a tap, a click, a scrub, an arrow key, Home, End or an assistive technology asks for; a scrub calls it each time the page under the pointer changes, so a quick sweep can skip a page. Update the paging view and page together.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"label\",\n      \"type\": \"string\",\n      \"description\": \"Names the control for assistive technology. Defaults to \\\"Page indicators\\\", localized.\"\n    },\n    {\n      \"name\": \"hidesForSinglePage\",\n      \"type\": \"boolean\",\n      \"description\": \"Render nothing when there is only one page.\",\n      \"default\": \"false\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

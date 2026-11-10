@@ -1,0 +1,94 @@
+[
+  {
+    "id": "ts7_doctor_ts7only_validate",
+    "args": [
+      "doctor",
+      "integration",
+      "validate"
+    ],
+    "fixture": "doctor-ts7",
+    "cwd": "doctor-ts7/ts7only",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "ts7_doctor_ts7only_validate_json",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-ts7",
+    "cwd": "doctor-ts7/ts7only",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "ts7_doctor_ts7only_components",
+    "args": [
+      "doctor",
+      "integration",
+      "components"
+    ],
+    "fixture": "doctor-ts7",
+    "cwd": "doctor-ts7/ts7only",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "ts7_doctor_ts7only_components_json",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "--json"
+    ],
+    "fixture": "doctor-ts7",
+    "cwd": "doctor-ts7/ts7only",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "ts7_doctor_ts5_validate",
+    "args": [
+      "doctor",
+      "integration",
+      "validate"
+    ],
+    "fixture": "doctor-ts7",
+    "cwd": "doctor-ts7/ts5",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "ts7_doctor_ts5_validate_json",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-ts7",
+    "cwd": "doctor-ts7/ts5",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "ts7_doctor_ts5_components",
+    "args": [
+      "doctor",
+      "integration",
+      "components"
+    ],
+    "fixture": "doctor-ts7",
+    "cwd": "doctor-ts7/ts5",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "ts7_doctor_ts5_components_json",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "--json"
+    ],
+    "fixture": "doctor-ts7",
+    "cwd": "doctor-ts7/ts5",
+    "timeoutMs": 180000
+  }
+]

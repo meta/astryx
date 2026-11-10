@@ -6,7 +6,7 @@
   "usage"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Animate with motion tokens\n\nSet transition durations and easing from the motion tokens, so a theme that retunes motion retunes your animations too. Ease something arriving on `--ease-entrance` and something moving on screen on `--ease-move`, so it follows the theme's `character`, and something leaving on `--ease-exit`, which stays the same at every `character`.\n\nApplying motion tokens:\n```tsx\nimport {durationVars, easeVars} from '@astryxdesign/core/theme/tokens.stylex';\n\nconst styles = stylex.create({\n  fadeIn: {\n    transitionProperty: 'opacity',\n    transitionDuration: durationVars['--duration-fast'],\n    transitionTimingFunction: easeVars['--ease-standard'],\n  },\n  slideUp: {\n    transitionProperty: 'transform, opacity',\n    transitionDuration: durationVars['--duration-medium'],\n    transitionTimingFunction: easeVars['--ease-entrance'],\n  },\n});\n```\n\nUp: npx @astryxdesign/cli@0.7.12 docs motion --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs motion respecting-user-preferences\nNext: npx @astryxdesign/cli@0.7.12 docs motion theme-motion\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

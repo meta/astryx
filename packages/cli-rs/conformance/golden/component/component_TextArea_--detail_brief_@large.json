@@ -7,7 +7,7 @@
   "brief"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nTextArea(changeAction: (value: string, e: ChangeEvent<HTMLTextAreaElement>) => void|Promise<void>, status: { type: warning|error|success; message?: string }, statusVariant: attached|detached|tooltip, size: sm|md|lg, enterKeyHint: enter|done|go|next|previous|search|send, inputMode: none|text|tel|url|email|numeric|decimal|search, autoCapitalize: off|none|on|sentences|words|characters)  <- from '@astryxdesign/core/TextArea'\n  TextArea is a multi-line text input for collecting longer-form content like c...\n  Derived: paddingInline -> --_textarea-inline-padding\n  Targets: astryx-text-area preferred attrs: data-size, data-status, data-disabled, data-readonly variants: size, status states: disabled, readonly | astryx-text-area-control | astryx-text-area-counter\n  value: string, label: string, ref, onChange, isLabelHidden, description, isOptional, isRequired, isDisabled, isReadOnly, disabledMessage, isLoading, placeholder, rows, maxLength, labelTooltip, startIcon, hasSpellCheck, hasAutoFocus, onPaste, htmlName, width, onFocus, onBlur, autoComplete, hasAutoCorrect, containerXstyle, containerClassName, containerStyle, controlXstyle, controlClassName, controlStyle\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

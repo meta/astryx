@@ -508,7 +508,6 @@ pub fn project_typescript(dirs: &[&str]) -> Option<String> {
     None
 }
 
-const TYPESCRIPT_FIX: &str = "On TypeScript 7, add its TypeScript 6 API package (`npm install -D @typescript/typescript6`); otherwise install TypeScript 5.0 through 6 (`npm install -D typescript@6`). Then run this check again.";
 
 fn prop_drift_report(cwd: &str, integration: &Value) -> Value {
     use crate::commands::doctor::ts::prop_compare::{compare_prop_docs, Component};

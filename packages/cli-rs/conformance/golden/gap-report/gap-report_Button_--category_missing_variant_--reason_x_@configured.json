@@ -9,7 +9,7 @@
   "x"
  ],
  "fixture": "configured",
- "fixtureHash": "f772c62f2e9bb22e+4e418a0c2575d9ce",
+ "fixtureHash": "38299ce861e010ef+4e418a0c2575d9ce",
  "stdout": "Gap report route\n\nstatus:          routed_only\npackage:         @astryxdesign/core\nissuesUrl:       https://example.com/issues/new\nfiledCount:      0\nroutedOnlyCount: 1\nDeliveries\n\nhandlerType: fallback\nhandler:     issuesUrl\nstatus:      routed_only\nurl:         https://example.com/issues/new\nmessage:     No automatic handler is available; open the routed URL to file this report.\nDestinations\n\ndefault: true\n\nto:        @astryxdesign/lab\ndefault:   false\nissuesUrl: https://github.com/meta/astryx/issues\n\nto:        @astryxdesign/charts\ndefault:   false\nissuesUrl: https://github.com/meta/astryx/issues\n\nAsk the person where to file this report, then pass their choice with --to <package>. Never pick a package destination yourself; leave --to out to use the default.\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

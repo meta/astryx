@@ -7,7 +7,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": [\n    {\n      \"name\": \"title\",\n      \"type\": \"string\",\n      \"description\": \"Card title.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"description\",\n      \"type\": \"string\",\n      \"description\": \"Description text below the title.\"\n    },\n    {\n      \"name\": \"image\",\n      \"type\": \"string\",\n      \"description\": \"Optional image URL displayed above the body.\"\n    },\n    {\n      \"name\": \"imageAlt\",\n      \"type\": \"string\",\n      \"description\": \"Alt text for the image. When omitted, the image is explicitly decorative (alt=\\\"\\\", role=\\\"presentation\\\", aria-hidden), usually correct since the card already has a visible title. Provide it only when the image conveys information beyond the title and description.\"\n    },\n    {\n      \"name\": \"linkLabel\",\n      \"type\": \"string\",\n      \"description\": \"CTA link text.\"\n    },\n    {\n      \"name\": \"linkHref\",\n      \"type\": \"string\",\n      \"description\": \"CTA link URL.\"\n    },\n    {\n      \"name\": \"children\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Custom content rendered below the standard body.\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

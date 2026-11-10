@@ -6,7 +6,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"IconNonSemanticColors\",\n    \"description\": \"Non-semantic color palette for icons.\",\n    \"type\": \"block\",\n    \"components\": [],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Icon} from '@astryxdesign/core/Icon';\\nimport {HStack, VStack} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nconst colors = [\\n  'blue',\\n  'red',\\n  'green',\\n  'gray',\\n  'cyan',\\n  'teal',\\n  'yellow',\\n  'orange',\\n  'pink',\\n  'purple',\\n] as const;\\n\\nexport default function IconNonSemanticColors() {\\n  return (\\n    <HStack gap={4} wrap=\\\"wrap\\\">\\n      {colors.map(color => (\\n        <VStack key={color} gap={1} hAlign=\\\"center\\\">\\n          <Icon icon=\\\"search\\\" color={color} />\\n          <Text type=\\\"supporting\\\">{color}</Text>\\n        </VStack>\\n      ))}\\n    </HStack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

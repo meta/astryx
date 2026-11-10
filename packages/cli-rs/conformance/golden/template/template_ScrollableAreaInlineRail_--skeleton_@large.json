@@ -6,7 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# ScrollableAreaInlineRail - axis=\"inline\" scrolls the same cards sideways; isFullBleed lets the rail run to the panel edges while the content padding keeps the first card aligned with the heading.\n# Components: Card, ScrollableArea\n\n<Card padding={4} width={460}>\n  <VStack gap={3}>\n    <VStack gap={0.5}>\n      <Heading />\n      <Text />\n    </VStack>\n    <Link />\n    <ScrollableArea role=\"region\" />\n    <HStack gap={2}>\n      <Card padding={3} variant=\"muted\" width={170}>\n        <VStack gap={1}>\n          <Text />\n          <Text />\n        </VStack>\n      </Card>\n    </HStack>\n  </VStack>\n</Card>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

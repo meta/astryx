@@ -6,7 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# DividerVertical - Vertical dividers separating side-by-side metrics. Use between stat cards, toolbar groups, or any horizontal layout where you need a visual boundary between sections.\n# Components: Card, Divider, Section\n\n<Section variant=\"transparent\" width=\"100%\">\n  <Card>\n    <HStack gap={4}>\n      <StackItem />\n      <VStack gap={1}>\n        <Text />\n        <Text />\n        <Text />\n      </VStack>\n      <Divider />\n      <StackItem />\n      <VStack gap={1}>\n        <Text />\n        <Text />\n        <Text />\n      </VStack>\n      <Divider />\n      <StackItem />\n      <VStack gap={1}>\n        <Text />\n        <Text />\n        <Text />\n      </VStack>\n    </HStack>\n  </Card>\n</Section>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

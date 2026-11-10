@@ -6,7 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# VisuallyHiddenShowcase\n# Components: Card, IconButton, VisuallyHidden\n\n<VStack gap={5}>\n  <HStack gap={6}>\n    <Card variant=\"muted\">\n      <VStack gap={4}>\n        <Text />\n        <HStack gap={2}>\n          <IconButton />\n        </HStack>\n      </VStack>\n    </Card>\n    <Card variant=\"muted\">\n      <VStack gap={4}>\n        <HStack gap={2}>\n          <Icon />\n          <Text />\n        </HStack>\n        <VStack gap={2}>\n          <Text />\n        </VStack>\n      </VStack>\n    </Card>\n  </HStack>\n  <VisuallyHidden />\n</VStack>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

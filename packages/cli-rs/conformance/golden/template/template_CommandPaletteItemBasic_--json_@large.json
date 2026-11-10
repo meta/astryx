@@ -6,7 +6,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"CommandPaletteItemBasic\",\n    \"description\": \"Selectable command palette items inside a CommandPaletteList, including highlighted and disabled states. Use when composing a palette manually instead of a search source.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"CommandPalette\",\n      \"CommandPaletteList\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {\\n  CommandPaletteList,\\n  CommandPaletteItem,\\n} from '@astryxdesign/core/CommandPalette';\\n\\nexport default function CommandPaletteItemBasic() {\\n  return (\\n    <CommandPaletteList>\\n      <CommandPaletteItem value=\\\"new-file\\\" onSelect={() => {}}>\\n        New File\\n      </CommandPaletteItem>\\n      <CommandPaletteItem value=\\\"open-recent\\\" isHighlighted onSelect={() => {}}>\\n        Open Recent\\n      </CommandPaletteItem>\\n      <CommandPaletteItem value=\\\"save-all\\\" onSelect={() => {}}>\\n        Save All\\n      </CommandPaletteItem>\\n      <CommandPaletteItem value=\\\"publish\\\" isDisabled>\\n        Publish (disabled)\\n      </CommandPaletteItem>\\n    </CommandPaletteList>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

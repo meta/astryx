@@ -6,7 +6,7 @@
   "rules"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Rules\n\nEight rules that keep app code on-system.\n\n1. Use components for everything they cover\n2. Page layout is frame-first: pick the shell and budget regions before writing content (see `npx @astryxdesign/cli@0.7.12 docs layout`)\n3. Dense data renders as rows (Table, List/Item), edge-to-edge with dividers; Card is for widgets, galleries, and settings groups\n4. StyleX or Tailwind for custom styling; both are first-class (see `npx @astryxdesign/cli@0.7.12 docs styling`)\n5. Semantic tokens, not hardcoded values (see `npx @astryxdesign/cli@0.7.12 docs tokens`)\n6. CSS custom properties for colors, not hex values\n7. Form inputs are controlled (value + onChange)\n8. Use useLinkComponent() for navigation so consumers can plug in their framework router via LinkProvider\n\nUp: npx @astryxdesign/cli@0.7.12 docs principles --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs principles design-philosophy\nNext: npx @astryxdesign/cli@0.7.12 docs principles styling-approach\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

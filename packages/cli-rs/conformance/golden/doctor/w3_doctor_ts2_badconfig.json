@@ -7,7 +7,7 @@
  ],
  "fixture": "doctor-ts2",
  "fixtureHash": "393cf73e5070f1dd+4e418a0c2575d9ce",
- "stdout": "Checking integration components: @acme/badconfig@1.0.0\n\n[ok] No component names conflict with Core.\n\n[info] Props not compared for 1 documented component(s):\n\ncomponent: Pin\ndoc:       src/Pin/Pin.doc.mjs\nreason:    the package's TypeScript config has an error, so props were not read (tsconfig.json: Argument for '--jsx' option must be: 'preserve', 'react-native', 'react-jsx', 'react-jsxdev', 'react'.)\n\n[info] Props compared in 0 component(s) (TypeScript 6.0.3).\n\n[info] Documented prop types judged: 0; not compared: 0. A type is judged when the doc writes it the same as the source (exactly, if it contains `readonly`), or when both are primitives, literals, arrays and unions of those, or names for them.\n",
+ "stdout": "Checking integration components: @acme/badconfig@1.0.0\n\n[ok] No component names conflict with Core.\n\n[info] Props not compared for 1 documented component(s):\n\ncomponent: Pin\ndoc:       src/Pin/Pin.doc.mjs\nreason:    the package's TypeScript config has an error, so props were not read (tsconfig.json: Argument for '--jsx' option must be: 'preserve', 'react-native', 'react-jsx', 'react-jsxdev', 'react'.)\n\n[info] Props compared in 0 component(s) (TypeScript 7.0.2).\n\n[info] Documented prop types judged: 0; not compared: 0. A type is judged when the doc writes it the same as the source (exactly, if it contains `readonly`), or when both are primitives, literals, arrays and unions of those, or names for them.\n",
  "stderr": "",
  "exit": 0,
  "files": []

@@ -6,7 +6,7 @@
   "component-and-library-icons"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Component and Library Icons\n\nA glyph that belongs to one component or library gets a namespaced key (`numberInput:stepperDown`, `richtext:bold`) instead of a new semantic name. It resolves through the same registry and a theme overrides it the same way, but the shared IconName list stays reserved for glyphs the whole system uses, so adding one does not make every downstream icon registry grow a key.\n\nOwning and theming a namespaced icon:\n```tsx\n// The component renders it like any other name, keeping size and color.\n<Icon icon=\"numberInput:stepperDown\" size=\"xsm\" />\n\n// A theme maps it independently of the shared chevron.\nexport const brandTheme = defineTheme({\n  name: 'brand',\n  icons: {\n    chevronDown: <ChevronDownIcon />,\n    'numberInput:stepperDown': <CaretDownFilledIcon />,\n  },\n});\n```\n\nOutside core, pass a fallback to `getExtendedIcon(key, fallback)` so the glyph renders with no theme.\n\nUp: npx @astryxdesign/cli@0.7.12 docs icons --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs icons icon-variants\nNext: npx @astryxdesign/cli@0.7.12 docs icons component-icon-slots\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

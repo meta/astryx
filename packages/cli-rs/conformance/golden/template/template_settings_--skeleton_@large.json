@@ -6,7 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# settings - Preferences as one continuously scrolling form, sections stacked in order with no navigation between them. The simplest settings shape: everything reachable by scrolling.\n# Components: CheckboxInput, Divider, Grid, Layout, List, Tab, TabList, TextInput, Typeahead\n\n<Layout hasDivider height=\"fill\">\n  /* header: */\n  <LayoutHeader hasDivider>\n    <StackItem />\n    <Heading />\n    <Typeahead />\n  </LayoutHeader>\n  /* start: */\n  <LayoutPanel padding={2} hasDivider={false} width={260}>\n    <List density=\"balanced\">\n      <ListItem />\n    </List>\n  </LayoutPanel>\n  /* content: */\n  <LayoutContent padding={4}>\n    <VStack gap={4}>\n      <TabList>\n        <Tab />\n      </TabList>\n    </VStack>\n    <Grid gap={10} columns={{minWidth: 320}}>\n      <VStack gap={1}>\n        <Heading />\n        <Text />\n      </VStack>\n      <VStack gap={4}>\n        <TextInput />\n        <TextInput />\n        <TextInput />\n        <TextInput />\n        <Button variant=\"primary\" />\n      </VStack>\n    </Grid>\n    <Divider />\n    <Grid gap={10} columns={{minWidth: 320}}>\n      ...\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

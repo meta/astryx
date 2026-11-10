@@ -6,7 +6,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"name\": \"TableCell\",\n    \"subComponentOf\": \"Table\",\n    \"displayName\": \"Table Cell\",\n    \"isHiddenFromOverview\": true,\n    \"description\": \"<td> wrapper that reads TableContext to apply density padding, font size, and divider borders when used inside Table.\",\n    \"props\": [\n      {\n        \"name\": \"children\",\n        \"type\": \"ReactNode\",\n        \"description\": \"Cell content.\"\n      }\n    ],\n    \"package\": \"@astryxdesign/core\",\n    \"import\": \"@astryxdesign/core/Table\",\n    \"sourceAvailable\": true\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

@@ -7,7 +7,7 @@
   "compact"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "Shape\nBorder radius tokens for consistent component rounding, from sharp corners to full pills.\n\npackage: @astryxdesign/cli\n\noverview           Overview - The radius scale uses a semantic naming system: inner -> element -> container -> page.\n                   Each level fits a specific context. Themes can multiply the entire scale via a radius multiplier,\n                   with --radius-none and --radius-full as fixed anchors.\nradius-scale       Radius Scale - Seven radius tokens, from 0px to 9999px.\nconcentric-radius  Concentric Radius - Inside a padded, rounded container, give nested elements a radius of outer radius\n                   minus padding so the curves stay concentric. Card does not do this for your content.\nbest-practices     Best Practices - Use --radius-element for interactive controls (buttons, inputs, selectors).\n\nRead one section: npx @astryxdesign/cli@0.7.12 docs shape <section>\nRead everything:  npx @astryxdesign/cli@0.7.12 docs shape --full\nUp: npx @astryxdesign/cli@0.7.12 docs foundations\nPrevious: npx @astryxdesign/cli@0.7.12 docs motion\nNext: npx @astryxdesign/cli@0.7.12 docs spacing\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

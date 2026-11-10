@@ -6,7 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# CollapsibleMultipleAccordion - Several sections open at once, for comparing across them - feature lists, pricing tiers. One Collapsible per Card, so each trigger keeps its own large type: it is the heading of its surface, not a row in a list.\n# Components: Card, Collapsible, Stack\n\n<CollapsibleGroup />\n<Stack gap={2} maxWidth={440} />\n<Card>\n  <Collapsible />\n  <Text />\n</Card>\n<Card>\n  <Collapsible />\n  <Stack gap={2} />\n  <Text />\n  <Text />\n</Card>\n<Card>\n  <Collapsible />\n  <Text />\n</Card>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

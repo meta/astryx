@@ -5,7 +5,7 @@
   "TokenEndContent"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Token} from '@astryxdesign/core/Token';\nimport {Badge} from '@astryxdesign/core/Badge';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\nexport default function TokenEndContent() {\n  return (\n    <Stack direction=\"vertical\" gap={4}>\n      <Text type=\"supporting\" color=\"secondary\">\n        Trailing badges for counts or status\n      </Text>\n      <Stack direction=\"horizontal\" gap={2} wrap=\"wrap\">\n        <Token\n          label=\"Inbox\"\n          color=\"blue\"\n          endContent={<Badge variant=\"info\" label={12} />}\n        />\n        <Token\n          label=\"Reviews\"\n          color=\"purple\"\n          endContent={<Badge variant=\"purple\" label={3} />}\n        />\n        <Token\n          label=\"Resolved\"\n          color=\"green\"\n          endContent={<Badge variant=\"success\" label=\"Done\" />}\n        />\n      </Stack>\n    </Stack>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

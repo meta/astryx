@@ -5,7 +5,7 @@
   "CommandPaletteEmptyBasic"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useMemo} from 'react';\nimport {CommandPalette} from '@astryxdesign/core/CommandPalette';\nimport {Text} from '@astryxdesign/core/Text';\nimport {createStaticSource} from '@astryxdesign/core/Typeahead';\n\nexport default function CommandPaletteEmptyBasic() {\n  const emptySource = useMemo(() => createStaticSource([]), []);\n\n  return (\n    <CommandPalette\n      isOpen\n      isInline\n      onOpenChange={() => {}}\n      searchSource={emptySource}\n      emptyBootstrapText={\n        <Text type=\"supporting\" color=\"secondary\">\n          No commands available\n        </Text>\n      }\n    />\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

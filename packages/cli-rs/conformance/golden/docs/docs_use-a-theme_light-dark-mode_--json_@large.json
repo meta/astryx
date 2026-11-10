@@ -7,7 +7,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"id\": \"light-dark-mode\",\n    \"title\": \"Dark mode\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Use [light, dark] tuples in token values for automatic mode switching. Use mode='system' (default) on Theme to follow OS preference.\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"tsx\",\n        \"code\": \"'--color-accent': ['#0064E0', '#2694FE'],\\n//                   ^light     ^dark\",\n        \"label\": \"Light/dark tuple\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"tsx\",\n        \"code\": \"const [mode, setMode] = useState<'light' | 'dark'>('light');\\n\\n<Theme theme={myTheme} mode={mode}>\\n  <Button\\n    label={mode === 'light' ? 'Switch to Dark' : 'Switch to Light'}\\n    onClick={() => setMode(m => (m === 'light' ? 'dark' : 'light'))}\\n  />\\n</Theme>;\",\n        \"label\": \"Toggle with a button\"\n      },\n      {\n        \"type\": \"prose\",\n        \"text\": \"To create a theme with custom dark mode colors, see `astryx docs author-a-theme`.\"\n      }\n    ],\n    \"links\": {\n      \"up\": \"astryx docs use-a-theme --index\",\n      \"previous\": \"astryx docs use-a-theme integration-themes\",\n      \"next\": \"astryx docs use-a-theme nesting-themes\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

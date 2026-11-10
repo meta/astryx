@@ -6,7 +6,7 @@
   "what-gets-generated"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## What Gets Generated\n\nThe generated context teaches your AI a 3-step workflow before writing any UI code:\n\n1. `npx @astryxdesign/cli@0.7.12 build \"<idea>\"`: get the page template to start from (always one: the closest match, or the app shell), two other templates, and the blocks and components for the parts it lacks\n2. `npx @astryxdesign/cli@0.7.12 template <name> <path>`: scaffold that template into the project, keep its frame and spacing, and replace its content\n3. `npx @astryxdesign/cli@0.7.12 component <Name>`: read props and examples for every component used\n\nIt also includes rules that prevent common mistakes (start every page from a template, no raw divs, no style={{}}, use tokens not magic values), a CLI quick reference, and package-labeled integration guidance when a configured manifest declares `agentDocs`. After setup, you shouldn't need to manually correct your AI on these conventions; the agent docs handle it at the system level.\n\nUp: npx @astryxdesign/cli@0.7.12 docs working-with-ai --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs working-with-ai quick-start\nNext: npx @astryxdesign/cli@0.7.12 docs working-with-ai cursor-setup\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -5,7 +5,7 @@
   "StackItemFill"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {HStack, StackItem} from '@astryxdesign/core/Layout';\nimport {Card} from '@astryxdesign/core/Card';\nimport {Text} from '@astryxdesign/core/Text';\n\nexport default function StackItemFill() {\n  return (\n    <HStack gap={3} vAlign=\"center\" width=\"100%\" style={{maxWidth: 400}}>\n      <StackItem size=\"static\">\n        <Card padding={3}>\n          <Text type=\"supporting\" color=\"secondary\">\n            Static\n          </Text>\n        </Card>\n      </StackItem>\n      <StackItem size=\"fill\">\n        <Card padding={3}>\n          <Text type=\"supporting\" color=\"secondary\">\n            Fills remaining space\n          </Text>\n        </Card>\n      </StackItem>\n    </HStack>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

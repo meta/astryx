@@ -6,7 +6,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"SkeletonCardSkeleton\",\n    \"description\": \"Card skeleton with avatar, name, and content lines.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Card\",\n      \"Skeleton\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Skeleton} from '@astryxdesign/core/Skeleton';\\nimport {Card} from '@astryxdesign/core/Card';\\nimport {HStack, VStack} from '@astryxdesign/core/Layout';\\n\\nexport default function SkeletonCardSkeleton() {\\n  return (\\n    <Card width={320}>\\n      <VStack gap={3}>\\n        <HStack gap={3} vAlign=\\\"center\\\">\\n          <Skeleton width={40} height={40} radius=\\\"rounded\\\" index={0} />\\n          <VStack gap={1}>\\n            <Skeleton width={120} height={14} index={1} />\\n            <Skeleton width={80} height={12} index={2} />\\n          </VStack>\\n        </HStack>\\n        <Skeleton width=\\\"100%\\\" height={14} index={3} />\\n        <Skeleton width=\\\"90%\\\" height={14} index={4} />\\n        <Skeleton width=\\\"75%\\\" height={14} index={5} />\\n      </VStack>\\n    </Card>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

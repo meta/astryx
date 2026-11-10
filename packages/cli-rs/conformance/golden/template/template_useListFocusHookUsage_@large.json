@@ -5,7 +5,7 @@
   "useListFocusHookUsage"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Button} from '@astryxdesign/core/Button';\nimport {Card} from '@astryxdesign/core/Card';\nimport {useListFocus} from '@astryxdesign/core/hooks';\nimport {VStack} from '@astryxdesign/core/Layout';\n\nconst RECENT_FILES = [\n  'Q3 roadmap.pdf',\n  'Budget 2026.xlsx',\n  'Offsite notes.docx',\n  'Launch checklist.md',\n];\n\nexport default function UseListFocusHookUsage() {\n  const {listRef, handleKeyDown, handleFocus} = useListFocus({\n    itemSelector: 'button',\n    orientation: 'vertical',\n    wrap: true,\n    hasHomeEnd: true,\n    hasRovingTabIndex: true,\n  });\n\n  return (\n    <Card width={320} padding={2}>\n      <VStack\n        ref={listRef}\n        role=\"toolbar\"\n        aria-label=\"Recent files\"\n        aria-orientation=\"vertical\"\n        gap={1}\n        onKeyDown={handleKeyDown}\n        onFocus={handleFocus}>\n        {RECENT_FILES.map(name => (\n          <Button key={name} label={name} variant=\"ghost\" />\n        ))}\n      </VStack>\n    </Card>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

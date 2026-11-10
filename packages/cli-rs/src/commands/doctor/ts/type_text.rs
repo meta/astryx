@@ -3,24 +3,11 @@
 //! compare equal.
 
 use super::Ts;
-use boa_engine::JsValue;
+use super::JsValue;
 use std::collections::HashMap;
 
 pub const UNPARSED: &str = "\u{0}";
 
-/// `typeTextTooOld(ts)`.
-pub fn type_text_too_old(version: &str) -> Option<String> {
-    let mut it = version.split('.').map(|x| x.parse::<f64>().unwrap_or(f64::NAN));
-    let major = it.next().unwrap_or(f64::NAN);
-    let minor = it.next().unwrap_or(f64::NAN);
-    if major > 4.0 || (major == 4.0 && minor >= 8.0) {
-        None
-    } else {
-        Some(format!(
-            "TypeScript {version} is older than 4.8, the oldest the type comparison reads; install TypeScript 5.0 through 6 (`npm install -D typescript@6`), or on TypeScript 7 add `@typescript/typescript6`, to judge them"
-        ))
-    }
-}
 
 const FN: u8 = 0;
 const UNION: u8 = 1;
@@ -626,7 +613,7 @@ fn invalid(t: &mut Ts, sf_text: &[u16], node: &JsValue) -> bool {
             name = t.get(node, "qualifier");
         }
         let n = t.items(&args).len();
-        if n == 0 || t.get(&args, "hasTrailingComma").to_boolean() {
+        if n == 0 || trailing_comma(t, sf_text, &args, node) {
             return true;
         }
         if some(&name) {
@@ -690,20 +677,30 @@ fn invalid(t: &mut Ts, sf_text: &[u16], node: &JsValue) -> bool {
 }
 
 /// `normalizeTypeText(text, {ts, optional})`.
+/// TypeScript 7's node lists do not say whether a comma ends them: the text
+/// after the last element, up to the node's end, does.
+fn trailing_comma(t: &mut Ts, sf_text: &[u16], args: &JsValue, node: &JsValue) -> bool {
+    let items = t.items(args);
+    let Some(last) = items.last() else { return false };
+    let a = t.end(last).max(0.0) as usize;
+    let b = t.end(node).max(0.0) as usize;
+    let between = String::from_utf16_lossy(&sf_text[a.min(sf_text.len())..b.min(sf_text.len()).max(a.min(sf_text.len()))]);
+    use crate::commands::doctor::util::JsRe;
+    let cleaned = crate::doctor_re!(r"/\*[\s\S]*?\*/|//[^\n]*", "g").replace_all(&between, "");
+    cleaned.trim_matches(crate::discovery::paths::js_ws).starts_with(',')
+}
+
 pub fn normalize_type_text(t: &mut Ts, text: &str, optional: bool) -> Vec<String> {
     let key = format!("{}{text}", if optional { 1 } else { 0 });
     if let Some(hit) = CACHE.with(|c| c.borrow().get(&key).cloned()) {
         return hit;
     }
     let src = format!("type T = {text}\n;");
-    let latest = t.enum_value("ScriptTarget", "Latest");
-    let tsk = t.enum_value("ScriptKind", "TS");
     let (f, s) = (t.str("type-text.ts"), t.str(&src));
-    let sf = t.f("createSourceFile", &[f, s, JsValue::from(latest), JsValue::from(true), JsValue::from(tsk)]);
+    let sf = t.f("createSourceFile", &[f, s]);
     let stmts = t.get(&sf, "statements");
     let stmts = t.items(&stmts);
-    let diags = t.get(&sf, "parseDiagnostics");
-    let ok = stmts.len() == 1 && t.is("isTypeAliasDeclaration", &stmts[0]) && t.items(&diags).is_empty() && {
+    let ok = stmts.len() == 1 && t.is("isTypeAliasDeclaration", &stmts[0]) && t.parse_diagnostics_count(&sf) == 0 && {
         let ty = t.get(&stmts[0], "type");
         let sf_text: Vec<u16> = src.encode_utf16().collect();
         !invalid(t, &sf_text, &ty)

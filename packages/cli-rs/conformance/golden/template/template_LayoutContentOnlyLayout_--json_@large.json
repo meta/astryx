@@ -6,7 +6,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"LayoutContentOnlyLayout\",\n    \"description\": \"A minimal layout with just a content area inside a card, without header or footer.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Card\",\n      \"Layout\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Layout, LayoutContent, VStack} from '@astryxdesign/core/Layout';\\nimport {Card} from '@astryxdesign/core/Card';\\nimport {Heading, Text} from '@astryxdesign/core/Text';\\n\\nexport default function LayoutContentOnlyLayout() {\\n  return (\\n    <Card width=\\\"100%\\\" style={{maxWidth: 400}}>\\n      <Layout\\n        content={\\n          <LayoutContent>\\n            <VStack gap={3}>\\n              <Heading level={4}>Simple Content</Heading>\\n              <Text type=\\\"body\\\">\\n                A layout can have just content without header or footer. This is\\n                useful for simple cards or content blocks that don&apos;t need\\n                structured sections.\\n              </Text>\\n            </VStack>\\n          </LayoutContent>\\n        }\\n      />\\n    </Card>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

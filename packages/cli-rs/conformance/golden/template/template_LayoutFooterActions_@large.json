@@ -5,7 +5,7 @@
   "LayoutFooterActions"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {\n  Layout,\n  LayoutContent,\n  LayoutFooter,\n  Card,\n  HStack,\n} from '@astryxdesign/core/Layout';\nimport {Center} from '@astryxdesign/core/Center';\nimport {Button} from '@astryxdesign/core/Button';\n\nexport default function LayoutFooterActions() {\n  return (\n    <Center width={400}>\n      <Layout\n        style={{width: '100%'}}\n        height=\"fill\"\n        content={\n          <LayoutContent>\n            <Card variant=\"muted\" />\n          </LayoutContent>\n        }\n        footer={\n          <LayoutFooter hasDivider>\n            <HStack gap={2} hAlign=\"end\">\n              <Button label=\"Cancel\" variant=\"secondary\">\n                Cancel\n              </Button>\n              <Button label=\"Save\" variant=\"primary\">\n                Save\n              </Button>\n            </HStack>\n          </LayoutFooter>\n        }\n      />\n    </Center>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

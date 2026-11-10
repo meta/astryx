@@ -6,7 +6,7 @@
   "--zh"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# ChatMessageBubble\n\n样式化的气泡容器，从父上下文读取发送者信息进行自动样式化。支持 name/metadata 插槽、多气泡分组和透明变体。\n\n**Import:** `import {ChatMessageBubble} from '@astryxdesign/core/Chat';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | 气泡内容：文本、Markdown 或任何 ReactNode。 **(required)** |\n| `variant` | `'filled' \\| 'ghost'` | `'filled'` | 视觉变体。'filled' 渲染发送者颜色背景，'ghost' 渲染透明背景但保持填充对齐。 |\n| `name` | `ReactNode` | - | 气泡上方渲染的发送者名称，与气泡文本内边距对齐。null、undefined、布尔值和空字符串会省略对齐容器；数字 0 仍保持对齐。用于消息中的第一个气泡。 |\n| `metadata` | `ReactNode` | - | 气泡下方渲染的元数据内容，与气泡文本内边距对齐。null、undefined、布尔值和空字符串会省略对齐容器；数字 0 仍保持对齐。用于消息中的最后一个气泡。 |\n| `group` | `'first' \\| 'middle' \\| 'last'` | - | 多气泡组中的位置。控制发送者侧的圆角缩减。 |\n| `width` | `SizeValue` | - | 气泡宽度（数字 = 像素，字符串 = 按原样使用）。设置后替代默认的 max(80%, 280px) 宽度上限；与 ghost 变体组合可让自定义内容占满消息列宽度。 |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

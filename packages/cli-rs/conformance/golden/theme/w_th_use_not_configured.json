@@ -6,7 +6,7 @@
   "butter"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Theme \"butter\" is not added. Run `npx @astryxdesign/cli@0.7.12 theme add butter` first.\n",
  "exit": 1,

@@ -6,7 +6,7 @@
   "customize-with-stylex"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Customize with StyleX\n\nAstryx components support various styling solutions, from plain CSS and `className` to Tailwind and CSS-in-JS. See `npx @astryxdesign/cli@0.7.12 docs styling` for the full guide. Astryx also has a deep integration with [StyleX](https://stylexjs.com/), an atomic CSS-in-JS library: create styles with `stylex.create()` and pass them to components with the `xstyle` prop.\n\nStyle overrides:\n```tsx\nimport * as stylex from '@stylexjs/stylex';\n\nconst overrides = stylex.create({\n  save: { alignSelf: 'flex-end', marginTop: 16 },\n});\n\n<Button label=\"Save\" xstyle={overrides.save} />\n```\n\nUp: npx @astryxdesign/cli@0.7.12 docs getting-started --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs getting-started add-your-first-component\nNext: npx @astryxdesign/cli@0.7.12 docs getting-started example-apps\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

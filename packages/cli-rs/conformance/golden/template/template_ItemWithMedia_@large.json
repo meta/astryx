@@ -5,7 +5,7 @@
   "ItemWithMedia"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Avatar} from '@astryxdesign/core/Avatar';\nimport {Badge} from '@astryxdesign/core/Badge';\nimport {Icon} from '@astryxdesign/core/Icon';\nimport {Item} from '@astryxdesign/core/Item';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\nexport default function ItemWithMedia() {\n  return (\n    <Stack gap={0}>\n      <Item\n        startContent={<Avatar name=\"Ada Lovelace\" size=\"sm\" />}\n        label=\"Ada Lovelace\"\n        description=\"Design systems engineer\"\n        endContent={<Badge label=\"Owner\" variant=\"purple\" />}\n        onClick={() => {}}\n      />\n      <Item\n        startContent={<Avatar name=\"Grace Hopper\" size=\"sm\" />}\n        label=\"Grace Hopper\"\n        description=\"Compiler platform\"\n        endContent={<Text color=\"secondary\">Online</Text>}\n        onClick={() => {}}\n      />\n      <Item\n        startContent={<Icon icon=\"info\" size=\"sm\" color=\"secondary\" />}\n        label=\"Review handoff notes\"\n        description=\"Updated guidance is ready for the team\"\n        endContent={<Badge label=\"New\" variant=\"blue\" />}\n        onClick={() => {}}\n      />\n    </Stack>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

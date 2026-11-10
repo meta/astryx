@@ -6,7 +6,7 @@
   "--dense"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# TopNavItem\n\nNav link for TopNav startContent; renders as anchor w/ hover+selected states.\n\n**Import:** `import {TopNavItem} from '@astryxdesign/core/TopNav';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `label` | `string` | - | Visible text or aria-label when isIconOnly is true. **(required)** |\n| `href` | `string` | - | Navigation URL. |\n| `isSelected` | `boolean` | `false` | Sets aria-current=\"page\"+highlighted styles. |\n| `isDisabled` | `boolean` | `false` | Sets aria-disabled, drops href/target (no navigation), prevents interaction. |\n| `isIconOnly` | `boolean` | `false` | Renders the item as a square icon-only element. When true, label becomes the aria-label and visible text is hidden. Requires icon to be set. |\n| `icon` | `ReactNode` | - | Icon before label. |\n| `children` | `ReactNode` | - | Custom content instead of label text. |\n| `as` | `LinkComponentType` | - | Custom link component. Overrides LinkProvider default. Must accept href, className, style, children. |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

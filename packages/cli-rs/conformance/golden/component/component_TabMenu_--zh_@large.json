@@ -6,7 +6,7 @@
   "--zh"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# TabMenu\n\n溢出菜单触发器，打开包含额外标签选项的下拉菜单，将选中选项的标签显示为触发器文本。宿主属性和 DOM 事件处理器（id、aria-*、data-*、拖放）传递给触发按钮，而不是弹出菜单或选项。按钮保留自己的角色、Tab 停靠点及菜单展开属性。\n\n**Import:** `import {TabMenu} from '@astryxdesign/core/TabList';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `label` | `string` | - | 触发器按钮的标签（无选项选中时显示）以及下拉菜单标题分隔线的文本。 **(required)** |\n| `options` | `TabMenuOption[]` | - | 在下拉菜单中渲染的菜单选项数组。 **(required)** |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

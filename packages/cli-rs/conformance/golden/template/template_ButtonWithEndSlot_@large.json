@@ -5,7 +5,7 @@
   "ButtonWithEndSlot"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Button} from '@astryxdesign/core/Button';\nimport {Badge} from '@astryxdesign/core/Badge';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\nexport default function ButtonWithEndSlot() {\n  return (\n    <Stack direction=\"vertical\" gap={4}>\n      <Text type=\"supporting\" color=\"secondary\">\n        Trailing badges for counts or status\n      </Text>\n      <Stack direction=\"horizontal\" gap={3} vAlign=\"center\">\n        <Button\n          label=\"Messages\"\n          variant=\"primary\"\n          endContent={<Badge variant=\"info\" label={3} />}\n        />\n        <Button\n          label=\"Notifications\"\n          variant=\"secondary\"\n          endContent={<Badge variant=\"warning\" label={12} />}\n        />\n        <Button\n          label=\"Updates\"\n          variant=\"ghost\"\n          endContent={<Badge variant=\"neutral\" label=\"New\" />}\n        />\n      </Stack>\n    </Stack>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

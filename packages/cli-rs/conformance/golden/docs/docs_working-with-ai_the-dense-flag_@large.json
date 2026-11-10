@@ -6,7 +6,7 @@
   "the-dense-flag"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Shorter output: --detail and --dense\n\nFor a shorter read, add `--detail brief` (one line per section) or `--detail compact`. `--dense` swaps in a shorter text where a doc ships one. Use them when pasting CLI output into a web-based AI tool like ChatGPT or Claude.\n\nShort output for pasting into AI conversations:\n```bash\nnpx @astryxdesign/cli@0.7.12 docs styling --full --detail brief\nnpx @astryxdesign/cli@0.7.12 component Dialog --detail compact\nnpx @astryxdesign/cli@0.7.12 docs principles --dense\n```\n\nUp: npx @astryxdesign/cli@0.7.12 docs working-with-ai --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs working-with-ai the-astryx-pattern\nNext: npx @astryxdesign/cli@0.7.12 docs working-with-ai mcp-server\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

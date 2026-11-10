@@ -7,7 +7,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"id\": \"usage\",\n    \"title\": \"Use color tokens in StyleX\",\n    \"category\": \"foundations\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Import the typed color tokens and use them in `stylex.create()`; they resolve to the active theme and color mode.\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"tsx\",\n        \"code\": \"import * as stylex from '@stylexjs/stylex';\\nimport {colorVars} from '@astryxdesign/core/theme/tokens.stylex';\\n\\nconst styles = stylex.create({\\n  container: {\\n    backgroundColor: colorVars['--color-background-surface'],\\n    color: colorVars['--color-text-primary'],\\n    borderColor: colorVars['--color-border'],\\n  },\\n  accent: {\\n    color: colorVars['--color-text-accent'],\\n  },\\n});\",\n        \"label\": \"Applying color tokens\"\n      }\n    ],\n    \"links\": {\n      \"up\": \"astryx docs color --index\",\n      \"previous\": \"astryx docs color surface-colors\",\n      \"next\": \"astryx docs color best-practices\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

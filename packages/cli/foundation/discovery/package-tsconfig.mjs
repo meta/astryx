@@ -1,9 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Read a package's TypeScript project the way `tsc` reads it, so a
- * check that reads the package's types with its own compiler sees what the
- * package compiles against.
+ * @file Open a package's TypeScript project the way `tsc` reads it, so a
+ * check that reads the package's types sees what the package compiles
+ * against.
  *
  * - The config is the nearest `tsconfig.json`: the package's own, or a
  *   monorepo's root config for a local package. An app's config above an
@@ -17,246 +17,380 @@
  * - Without a config, defaults read TSX the way bundlers do. A config with
  *   errors is reported, never read as defaults.
  *
- * @input The project's own `typescript`, the package directory, and the
- *   source files to read.
- * @output Compiler options, the declaration files to add, and the config's
- *   error, if any.
+ * The program is TypeScript 7's: a virtual tsconfig beside the config that
+ * extends it, lists the files to read (and the config's own `files`
+ * entries, so a missing one is reported as `tsc` reports it), and turns off
+ * emit.
+ *
+ * @input A TypeScript 7 session (./project-typescript.mjs), the package
+ *   directory, and the source files to read.
+ * @output The project, its compiler options, the declaration files added,
+ *   and the config's error, if any.
  * @position Foundation discovery, used by the documented-props comparison.
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {fileStamp, recordContentRead} from '../fs/read-record.mjs';
+import {recordContentRead} from '../fs/read-record.mjs';
+import {flattenDiagnostic} from './project-typescript.mjs';
+
+/** Options for a package without a config, as bundlers read TSX. */
+const DEFAULTS = {
+  jsx: 'react-jsx',
+  target: 'es2022',
+  module: 'esnext',
+  moduleResolution: 'bundler',
+  strict: true,
+  allowJs: true,
+  resolveJsonModule: true,
+  allowImportingTsExtensions: true,
+};
+
+/** What every program here sets on top of the package's options. */
+const CHECK_ONLY = {
+  noEmit: true,
+  skipLibCheck: true,
+  incremental: false,
+  composite: false,
+};
 
 /**
- * What `isAmbient` found for each file, per TypeScript, kept while the
- * file's stamp (`fileStamp`) is the same. A process that compares a package
- * more than once reads the same config each time, and reading a file the way
- * TypeScript does costs far more than a stat.
- * @type {WeakMap<object, Map<string, {stamp: string, ambient: boolean}>>}
+ * A tsconfig's JSON, comments and trailing commas allowed, or null when it
+ * is not JSON.
+ * @param {string} text
+ * @returns {any}
  */
-const ambientByFile = new WeakMap();
-
-/**
- * Whether a file the config includes declares types every file sees: a
- * declaration file, a file that declares globals or augments a module, or a
- * script (a `.ts` file that TypeScript reads as no module).
- * @param {any} ts
- * @param {string} file
- */
-function isAmbient(ts, file) {
-  if (/\.d\.[cm]?ts$/.test(file)) return true;
-  // A kept answer still counts as reading the file, so an operation that
-  // keeps its own result while what it read is unchanged sees a change to it.
-  recordContentRead(file);
-  const stamp = fileStamp(file);
-  if (stamp === '-') return false;
-  let known = ambientByFile.get(ts);
-  if (known == null) {
-    known = new Map();
-    ambientByFile.set(ts, known);
+function readJsonc(text) {
+  let out = '';
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"') {
+      let j = i + 1;
+      while (j < text.length && text[j] !== '"') j += text[j] === '\\' ? 2 : 1;
+      out += text.slice(i, j + 1);
+      i = j;
+    } else if (c === '/' && text[i + 1] === '/') {
+      while (i < text.length && text[i] !== '\n') i++;
+      out += '\n';
+    } else if (c === '/' && text[i + 1] === '*') {
+      const end = text.indexOf('*/', i + 2);
+      i = end < 0 ? text.length : end + 1;
+      out += ' ';
+    } else {
+      out += c;
+    }
   }
-  const key = path.resolve(file);
-  const seen = known.get(key);
-  if (seen && seen.stamp === stamp) return seen.ambient;
-  const ambient = readAmbient(ts, file);
-  known.set(key, {stamp, ambient});
-  return ambient;
+  try {
+    return JSON.parse(out.replace(/,(\s*[}\]])/g, '$1'));
+  } catch {
+    return null;
+  }
 }
 
 /**
- * `isAmbient` for a file that is not a declaration file, read afresh.
- * @param {any} ts
+ * Whether a file the config includes may declare types every file sees: a
+ * declaration file, a file that declares globals or augments a module, or a
+ * TypeScript file without the words a module needs (a script). `maybe`: a
+ * TypeScript file with them, which only its syntax tree decides.
  * @param {string} file
+ * @returns {'yes' | 'no' | 'maybe'}
  */
-function readAmbient(ts, file) {
+function ambientCandidate(file) {
+  if (/\.d\.[cm]?ts$/.test(file)) return 'yes';
+  recordContentRead(file);
   let text;
   try {
     text = fs.readFileSync(file, 'utf8');
   } catch {
-    return false;
+    return 'no';
   }
-  if (/\bdeclare\s+(?:global|module)\b/.test(text)) return true;
-  if (!/\.tsx?$/.test(file)) return false;
-  // Without the words, no module; with them, TypeScript decides.
-  return (
-    !/\b(?:import|export)\b/.test(text) ||
-    !ts.isExternalModule(
-      ts.createSourceFile(file, text, ts.ScriptTarget.Latest),
-    )
-  );
+  if (/\bdeclare\s+(?:global|module)\b/.test(text)) return 'yes';
+  if (!/\.tsx?$/.test(file)) return 'no';
+  return /\b(?:import|export)\b/.test(text) ? 'maybe' : 'yes';
 }
 
 /**
- * Read a config's `files` entries as `tsc` does, and report the first it
- * cannot find. TypeScript itself substitutes `${configDir}` (on a version
- * that has it), resolves each entry against the config that writes it, and
- * tries the TypeScript extensions for one written without its own, so this
- * cannot drift from `tsc`. The parsed file names then hold the files found.
- * A file the `include` matched that is gone by the time it is read was
- * another process's, and is not checked here.
- * @param {any} ts
- * @param {any} raw the config's JSON
+ * The `files` a config reads, through its `extends` chain (the nearest that
+ * writes them), each as an entry relative to `dir`, the folder of the
+ * config that uses them. `${configDir}` stays for TypeScript to substitute.
  * @param {string} configPath
- * @param {any} config the parsed config, whose file names are updated
- * @returns {string | null} the message `tsc` gives for the first entry it
- *   cannot find (TS6053, or TS6231 for a folder)
+ * @param {string} dir
+ * @returns {string[]}
  */
-function readFilesEntries(ts, raw, configPath, config) {
-  const literal = ts.parseJsonConfigFileContent(
-    raw,
-    {...ts.sys, readDirectory: () => []},
-    path.dirname(configPath),
-    undefined,
-    configPath,
-  ).fileNames;
-  if (literal.length === 0 || typeof ts.createProgram !== 'function') {
-    return null;
+function filesEntries(configPath, dir) {
+  const seen = new Set();
+  for (let at = configPath; at && !seen.has(at); ) {
+    seen.add(at);
+    let raw;
+    try {
+      raw = readJsonc(fs.readFileSync(at, 'utf8'));
+    } catch {
+      return [];
+    }
+    if (!raw || typeof raw !== 'object') return [];
+    if (Array.isArray(raw.files)) {
+      return raw.files
+        .filter(/** @param {unknown} f */ f => typeof f === 'string')
+        .map(
+          /** @param {string} f */ f =>
+            f.startsWith('${configDir}')
+              ? f
+              : path
+                  .relative(dir, path.resolve(path.dirname(at), f))
+                  .split(path.sep)
+                  .join('/') || '.',
+        );
+    }
+    const base = typeof raw.extends === 'string' ? raw.extends : null;
+    if (!base || !/^\.{1,2}[\\/]/.test(base)) return [];
+    at = path.resolve(path.dirname(at), base);
+    if (!/\.json$/.test(at)) at += '.json';
   }
-  // Only the entries themselves: no library, no types, no imports.
-  const program = ts.createProgram({
-    rootNames: literal,
-    options: {
-      ...config.options,
-      noLib: true,
-      noResolve: true,
-      types: [],
-      noEmit: true,
-    },
-  });
-  const missing = program
-    .getOptionsDiagnostics()
-    .find(/** @param {any} d */ d => d.code === 6053 || d.code === 6231);
-  if (missing) {
-    const text = missing.messageText;
-    return typeof text === 'string' ? text : text.messageText;
-  }
-  const entries = new Set(
-    literal.map(/** @param {string} f */ f => path.resolve(f)),
-  );
-  config.fileNames = [
-    ...config.fileNames.filter(
-      /** @param {string} f */ f => !entries.has(path.resolve(f)),
-    ),
-    ...program.getSourceFiles().map(/** @param {any} sf */ sf => sf.fileName),
-  ];
-  return null;
+  return [];
 }
 
 /**
- * @param {any} ts the project's own `typescript`
+ * The nearest `tsconfig.json` from a folder up, or null.
+ * @param {string} dir
+ */
+function findConfig(dir) {
+  for (let at = path.resolve(dir); ; ) {
+    const file = path.join(at, 'tsconfig.json');
+    if (fs.existsSync(file)) return file;
+    const parent = path.dirname(at);
+    if (parent === at) return null;
+    at = parent;
+  }
+}
+
+/**
+ * Open the package's project with the files to read.
+ * @param {ReturnType<typeof import('./project-typescript.mjs').openTypeScript>} session
  * @param {string} packageDir
  * @param {string[]} sources the files to read
- * @returns {{options: any, declarations: string[], error?: string}}
+ * @param {Record<string, unknown>} [extra] compiler options to add (tsconfig
+ *   JSON form)
+ * @returns {{project: any, options: any, declarations: string[], configPath: string | null, error?: string}}
+ *   `project` is null when a referenced config's error stops the read
  */
-export function readPackageTsconfig(ts, packageDir, sources) {
-  const defaults = {
-    jsx: ts.JsxEmit.ReactJSX,
-    target: ts.ScriptTarget.ES2022,
-    module: ts.ModuleKind.ESNext,
-    moduleResolution: ts.ModuleResolutionKind.Bundler,
-    strict: true,
-    allowJs: true,
-    esModuleInterop: true,
-    resolveJsonModule: true,
-    allowImportingTsExtensions: true,
-  };
-  /** @type {string | undefined} */
-  let error;
-  /** @type {(configPath: string) => any} */
+export function openPackageProject(session, packageDir, sources, extra = {}) {
+  const where = (/** @type {string} */ file) =>
+    path.relative(packageDir, file).split(path.sep).join('/');
+  /** @type {Map<string, {fileNames: string[], options: any, references: string[], unreadable: boolean}>} */
+  const parsed = new Map();
+  /** @type {(configPath: string) => {fileNames: string[], options: any, references: string[], unreadable: boolean}} */
   const parse = configPath => {
-    const read = ts.readConfigFile(configPath, ts.sys.readFile);
-    const config = read.error
-      ? {errors: [read.error], fileNames: [], options: {}}
-      : ts.parseJsonConfigFileContent(
-          read.config,
-          ts.sys,
-          path.dirname(configPath),
-          undefined,
-          configPath,
-        );
-    // "No inputs were found" is how a solution-style config reads.
-    const problem = config.errors.find(
-      /** @param {any} d */ d => d.code !== 18003,
-    );
-    const where = path.relative(packageDir, configPath);
-    if (problem) {
-      config.error = `${where}: ${ts.flattenDiagnosticMessageText(problem.messageText, ' ')}`;
-    } else if (!read.error) {
-      const missing = readFilesEntries(ts, read.config, configPath, config);
-      if (missing) {
-        // Paths read from the package, as the config's other errors are.
-        const dir = path.dirname(configPath).split(path.sep).join('/');
-        const rel = path.relative(packageDir, path.dirname(configPath));
-        config.error = `${where}: ${missing
-          .split(`${dir}/`)
-          .join(rel ? `${rel.split(path.sep).join('/')}/` : '')}`;
+    const known = parsed.get(configPath);
+    if (known) return known;
+    let text = null;
+    try {
+      text = fs.readFileSync(configPath, 'utf8');
+    } catch {
+      // Reported as unreadable.
+    }
+    const raw = text == null ? null : readJsonc(text);
+    let result = {fileNames: [], options: {}, references: [], unreadable: text == null};
+    if (text != null) {
+      try {
+        const config = session.parseConfigFile(configPath);
+        result = {
+          fileNames: config?.fileNames ?? [],
+          options: config?.options ?? {},
+          references: [],
+          unreadable: false,
+        };
+      } catch {
+        // Its error comes from the program.
+      }
+      for (const ref of Array.isArray(raw?.references) ? raw.references : []) {
+        if (typeof ref?.path !== 'string') continue;
+        let next = path.resolve(path.dirname(configPath), ref.path);
+        if (!/\.json$/.test(next)) next = path.join(next, 'tsconfig.json');
+        result.references.push(next);
       }
     }
-    return config;
+    parsed.set(configPath, result);
+    return result;
   };
-  /** @type {any} */
-  let parsed;
-  try {
-    const found = ts.findConfigFile(
-      packageDir,
-      ts.sys.fileExists,
-      'tsconfig.json',
-    );
-    // A config above the package is an app's when the package is installed
-    // below it (`node_modules`), and the package's own otherwise (a
-    // monorepo's root config, as `tsc` reads it).
-    const installed =
-      found &&
-      path
-        .relative(path.dirname(found), packageDir)
-        .split(path.sep)
-        .includes('node_modules');
-    parsed = found && !installed ? parse(found) : null;
-    const own = new Set(sources.map(file => path.resolve(file)));
-    /** @type {(config: any) => boolean} */
-    const includes = config =>
-      config.fileNames.some(
-        /** @param {string} file */ file => own.has(path.resolve(file)),
-      );
-    // Every reference, at any depth, each config once (a cycle ends). One
-    // that is missing or doesn't parse is the project's error when no config
-    // includes the sources, as `tsc` reports it.
-    const visited = new Set(found ? [path.resolve(found)] : []);
-    /** @type {any} */
-    let broken = null;
-    /** @type {(config: any) => any} */
-    const including = config => {
-      if (includes(config)) return config;
-      for (const ref of config.projectReferences ?? []) {
-        const next = path.resolve(ts.resolveProjectReferencePath(ref));
+
+  const found = findConfig(packageDir);
+  // A config above the package is an app's when the package is installed
+  // below it (`node_modules`), and the package's own otherwise (a
+  // monorepo's root config, as `tsc` reads it).
+  const installed =
+    found &&
+    path
+      .relative(path.dirname(found), packageDir)
+      .split(path.sep)
+      .includes('node_modules');
+  let chosen = found && !installed ? found : null;
+  const own = new Set(sources.map(file => path.resolve(file)));
+  /** @type {(configPath: string) => boolean} */
+  const includes = configPath =>
+    parse(configPath).fileNames.some(file => own.has(path.resolve(file)));
+  /** @type {string[]} references visited, in order */
+  const visitedRefs = [];
+  if (chosen) {
+    // Every reference, at any depth, each config once (a cycle ends).
+    const visited = new Set([path.resolve(chosen)]);
+    /** @type {(configPath: string) => string | null} */
+    const including = configPath => {
+      if (includes(configPath)) return configPath;
+      for (const next of parse(configPath).references) {
         if (visited.has(next)) continue;
         visited.add(next);
-        const referenced = parse(next);
-        if (referenced.error) broken ??= referenced;
-        const hit = including(referenced);
+        visitedRefs.push(next);
+        const hit = including(next);
         if (hit) return hit;
       }
       return null;
     };
-    if (parsed) parsed = including(parsed) ?? broken ?? parsed;
-  } catch {
-    parsed = null;
+    const hit = including(chosen);
+    if (hit) {
+      chosen = hit;
+    } else {
+      // A reference that is missing or doesn't parse is the project's
+      // error when no config includes the sources, as `tsc` reports it.
+      for (const ref of visitedRefs) {
+        const problem = configProblem(session, ref, parse(ref).unreadable);
+        if (problem) {
+          return {
+            project: null,
+            options: {},
+            declarations: [],
+            configPath: null,
+            error: `${where(ref)}: ${problem}`,
+          };
+        }
+      }
+    }
   }
-  error = parsed?.error;
-  const options = parsed ? {...parsed.options} : defaults;
-  if (options.jsx == null) options.jsx = defaults.jsx;
+  return openWith(session, packageDir, sources, chosen, undefined, parse, extra);
+}
+
+/**
+ * The first error reading a config, or null.
+ * @param {any} session
+ * @param {string} configPath
+ * @param {boolean} unreadable
+ */
+function configProblem(session, configPath, unreadable) {
+  if (unreadable) return `Cannot read file '${configPath}'.`;
+  const project = session.project(
+    path.dirname(configPath),
+    [],
+    {noLib: true, noResolve: true, types: []},
+    [],
+    {extends: configPath, include: []},
+  );
+  const problem = project.program
+    .getConfigFileParsingDiagnostics()
+    .find((/** @type {any} */ d) => ![18002, 18003].includes(d.code));
+  return problem ? flattenDiagnostic(problem, ' ') : null;
+}
+
+/**
+ * @param {any} session
+ * @param {string} packageDir
+ * @param {string[]} sources
+ * @param {string | null} configPath
+ * @param {string} [error] an error already found
+ * @param {(configPath: string) => {fileNames: string[], options: any}} [parse]
+ * @param {Record<string, unknown>} [extra]
+ */
+function openWith(
+  session,
+  packageDir,
+  sources,
+  configPath,
+  error,
+  parse,
+  extra = {},
+) {
+  const where = (/** @type {string} */ file) =>
+    path.relative(packageDir, file).split(path.sep).join('/');
+  const config = configPath && parse ? parse(configPath) : null;
+  // A `files` entry written without its extension names the file `tsc`
+  // finds with one.
+  const candidates = (config?.fileNames ?? []).map(name => {
+    const file = fs.existsSync(name)
+      ? name
+      : (['.ts', '.tsx', '.d.ts', '.cts', '.d.cts', '.mts', '.d.mts']
+          .map(ext => name + ext)
+          .find(withExt => fs.existsSync(withExt)) ?? name);
+    return {file, ambient: ambientCandidate(file)};
+  });
+  const dir = configPath ? path.dirname(configPath) : path.resolve(packageDir);
+  const entries = configPath ? filesEntries(configPath, dir) : [];
+  const rootNames = [
+    ...new Set([
+      ...entries,
+      ...sources.map(file => path.resolve(file)),
+      ...candidates.filter(c => c.ambient !== 'no').map(c => c.file),
+    ]),
+  ];
+  const compilerOptions =
+    configPath && !error
+      ? {
+          ...CHECK_ONLY,
+          ...(config?.options?.jsx == null ? {jsx: DEFAULTS.jsx} : {}),
+          ...extra,
+        }
+      : {...DEFAULTS, ...CHECK_ONLY, ...extra};
+  const project = session.project(
+    dir,
+    rootNames,
+    compilerOptions,
+    [],
+    configPath && !error ? {extends: configPath, include: []} : {include: []},
+  );
+  if (configPath && !error) {
+    const problem = project.program
+      .getConfigFileParsingDiagnostics()
+      .find((/** @type {any} */ d) => ![18002, 18003].includes(d.code));
+    if (problem) {
+      error = `${where(configPath)}: ${flattenDiagnostic(problem, ' ')}`;
+    } else {
+      // A `files` entry `tsc` can't find (TS6053, or TS6231 for a folder),
+      // with its path read from the package, as the config's other errors
+      // are.
+      const missing = project.program
+        .getProgramDiagnostics()
+        .find((/** @type {any} */ d) => d.code === 6053 || d.code === 6231);
+      if (missing) {
+        const abs = dir.split(path.sep).join('/');
+        const rel = path.relative(packageDir, dir);
+        error = `${where(configPath)}: ${missing.text
+          .split(`${abs}/`)
+          .join(rel ? `${rel.split(path.sep).join('/')}/` : '')}`;
+      }
+    }
+  }
+  const declarations = candidates
+    .filter(
+      c =>
+        c.ambient === 'yes' ||
+        (c.ambient === 'maybe' &&
+          isScript(project.program.getSourceFile(c.file))),
+    )
+    .map(c => c.file);
   return {
-    options: {
-      ...options,
-      noEmit: true,
-      skipLibCheck: true,
-      incremental: false,
-      composite: false,
-    },
+    project,
+    options: project.compilerOptions,
+    declarations,
+    configPath: configPath && !error ? configPath : null,
     ...(error ? {error} : {}),
-    declarations: (parsed?.fileNames ?? []).filter(
-      /** @param {string} file */ file => isAmbient(ts, file),
-    ),
   };
+}
+
+/**
+ * Whether TypeScript reads a source file as no module (a script).
+ * @param {any} sf
+ */
+function isScript(sf) {
+  return (
+    !!sf &&
+    (sf.externalModuleIndicator === undefined ||
+      sf.externalModuleIndicator === null)
+  );
 }

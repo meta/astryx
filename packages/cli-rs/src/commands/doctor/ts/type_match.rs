@@ -3,7 +3,7 @@
 
 use super::type_text::{normalize_type_text, UNPARSED};
 use super::Ts;
-use boa_engine::JsValue;
+use super::JsValue;
 
 const MAX_DEPTH: usize = 6;
 
@@ -332,14 +332,11 @@ fn is_value(t: &mut Ts, node: &JsValue) -> bool {
 /// `parseType(ts, text)`.
 pub fn parse_type(t: &mut Ts, text: &str) -> Option<JsValue> {
     let src = format!("type __Documented = {text};");
-    let latest = t.enum_value("ScriptTarget", "Latest");
-    let tsk = t.enum_value("ScriptKind", "TS");
     let (f, s) = (t.str("__documented_type__.ts"), t.str(&src));
-    let sf = t.f("createSourceFile", &[f, s, JsValue::from(latest), JsValue::from(true), JsValue::from(tsk)]);
+    let sf = t.f("createSourceFile", &[f, s]);
     let stmts = t.get(&sf, "statements");
     let stmts = t.items(&stmts);
-    let diags = t.get(&sf, "parseDiagnostics");
-    if !t.items(&diags).is_empty() || stmts.len() != 1 || !t.is("isTypeAliasDeclaration", &stmts[0]) {
+    if t.parse_diagnostics_count(&sf) > 0 || stmts.len() != 1 || !t.is("isTypeAliasDeclaration", &stmts[0]) {
         return None;
     }
     let ty = t.get(&stmts[0], "type");
@@ -641,13 +638,10 @@ fn resolve_symbol(t: &mut Ts, ctx: &JudgeCtx, name: &str) -> Option<JsValue> {
     let meaning = flag(t, "SymbolFlags", "Type") | flag(t, "SymbolFlags", "Alias") | flag(t, "SymbolFlags", "Namespace");
     let mut parts = name.split('.');
     let head = parts.next().unwrap_or("");
-    let in_scope = t.call(&ctx.checker, "getSymbolsInScope", &[ctx.location.clone(), JsValue::from(meaning as f64)]).ok()?;
+    let hn = t.str(head);
+    let resolved = t.m(&ctx.checker, "resolveName", &[hn, JsValue::from(meaning as f64), ctx.location.clone()]);
     let mut symbol: Option<JsValue> = None;
-    for s in t.items(&in_scope) {
-        let n = t.get(&s, "name");
-        if t.s(&n) != head {
-            continue;
-        }
+    for s in [resolved].into_iter().filter(|v| !v.is_undefined()) {
         let e = t.m(&ctx.checker, "getExportSymbolOfSymbol", &[s]);
         if flags_of(t, &e, "flags") & meaning != 0 {
             symbol = Some(e);

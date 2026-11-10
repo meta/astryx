@@ -6,7 +6,7 @@
   "--zh"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# ChatMessage\n\n发送者上下文包装器，根据发送者角色处理头像、名称、元数据和对齐方式。\n\n**Import:** `import {ChatMessage} from '@astryxdesign/core/Chat';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `sender` | `'user' \\| 'assistant' \\| 'system'` | - | 消息发送者，控制对齐和布局。 **(required)** |\n| `children` | `ReactNode` | - | 自由内容：气泡、资源列表、工具调用、图片。非气泡的自定义子内容默认与消息边缘齐平，可用 ghost 变体的 ChatMessageBubble 包裹使其与气泡文本列对齐。 **(required)** |\n| `avatar` | `ReactNode` | - | 消息旁边渲染的头像元素。通常是 Avatar。`null`、布尔值和空字符串不会创建槽位；其他不渲染任何内容的值会让槽位折叠。 |\n| `name` | `ReactNode` | - | 消息正文上方渲染的发送者名称，并作为消息的标签。`null`、布尔值和空字符串不会创建槽位，其他不渲染任何内容的值会让槽位折叠；两种情况都改用本地化发送者标签。当第一个子元素不是气泡时使用。 |\n| `metadata` | `ReactNode` | - | 消息正文下方渲染的元数据。`null`、布尔值和空字符串不会创建槽位；其他不渲染任何内容的值会让槽位折叠。当最后一个子元素不是气泡时使用。 |\n| `density` | `'compact' \\| 'balanced' \\| 'spacious'` | `'balanced'` | 视觉密度。未设置时从列表上下文继承。 |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

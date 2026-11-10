@@ -5,7 +5,7 @@
   "stat"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: No component named \"stat\"\n\n  StatusDot  (keyword \"status\")\n  Badge  (keyword \"status\")\n  Banner  (keyword \"status\")\n  Toast  (keyword \"status\")\n  CheckboxInput  (keyword \"tristate\")\n",
  "exit": 1,

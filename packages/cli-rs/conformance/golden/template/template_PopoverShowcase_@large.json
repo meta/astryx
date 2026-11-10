@@ -5,7 +5,7 @@
   "PopoverShowcase"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {Popover} from '@astryxdesign/core/Popover';\nimport {Button} from '@astryxdesign/core/Button';\nimport {VStack} from '@astryxdesign/core/Layout';\nimport {Text, Heading} from '@astryxdesign/core/Text';\nimport {Divider} from '@astryxdesign/core/Divider';\n\nexport default function PopoverShowcase() {\n  const [isOpen, setIsOpen] = useState(false);\n\n  return (\n    <Popover\n      isOpen={isOpen}\n      onOpenChange={setIsOpen}\n      hasAutoFocus={false}\n      placement=\"below\"\n      label=\"Settings\"\n      width={280}\n      content={\n        <VStack gap={3}>\n          <Heading level={4} tabIndex={0}>\n            Settings\n          </Heading>\n          <Divider />\n          <Text type=\"body\">\n            Notifications, dark mode, and sound preferences.\n          </Text>\n        </VStack>\n      }>\n      <Button label=\"Settings\">Settings</Button>\n    </Popover>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

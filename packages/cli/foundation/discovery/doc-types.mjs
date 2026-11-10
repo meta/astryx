@@ -42,11 +42,13 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {
+  diagnosticChain,
+  flattenDiagnostic,
+  nativeTypeScriptFailedReason,
+  openTypeScript,
   resolveProjectTypeScript,
   TYPESCRIPT_FIX,
-  unusableTypeScriptReason,
 } from './project-typescript.mjs';
-import {keepSourceFiles} from './source-file-cache.mjs';
 
 /**
  * @typedef {'components' | 'hooks' | 'templates' | 'docs' | 'docs-overlay' | 'themes' | 'icon-sets'} DocRoot
@@ -620,25 +622,6 @@ function shorten(message) {
 }
 
 /**
- * Every message in a diagnostic's chain, outermost first.
- * @param {any} ts
- * @param {any} messageText
- * @returns {string[]}
- */
-function chainOf(ts, messageText) {
-  if (typeof messageText === 'string') return [messageText];
-  /** @type {string[]} */
-  const out = [];
-  /** @param {any} chain */
-  const visit = chain => {
-    out.push(chain.messageText);
-    if (chain.next?.length) visit(chain.next[0]);
-  };
-  visit(messageText);
-  return out;
-}
-
-/**
  * The source range of the property whose name holds `pos`, with the comma
  * after it, or null.
  * @param {any} ts
@@ -804,7 +787,7 @@ function unquote(name) {
  */
 function findingsFor(ts, diagnostic, astPath, where) {
   // The widened member reads as the member itself.
-  const chain = chainOf(ts, diagnostic.messageText).map(message =>
+  const chain = diagnosticChain(diagnostic).map(message =>
     message.replace(/ & Partial<Record<[^']*/g, ''),
   );
   // "Types of property 'x' are incompatible." steps further down the doc.
@@ -930,35 +913,45 @@ export async function checkDocTypes(files, options) {
   if (files.length === 0) {
     return {status: 'checked', docs: 0, findings: [], unchecked: []};
   }
-  const compiler = resolveProjectTypeScript(resolveFrom);
-  if (!compiler?.ts) {
+  if (!resolveProjectTypeScript(resolveFrom)) {
     return {
       status: 'skipped',
-      reason: compiler
-        ? unusableTypeScriptReason(compiler.version, 'docs were not checked')
-        : DOC_TYPES_TYPESCRIPT_MISSING_REASON,
+      reason: DOC_TYPES_TYPESCRIPT_MISSING_REASON,
       docs: 0,
       findings: [],
       unchecked: [],
     };
   }
-  const {ts, version} = compiler;
-  const [major = 0, minor = 0] = String(ts.versionMajorMinor ?? version)
-    .split('.')
-    .map(Number);
-  const hasJs = files.some(file => !/\.ts$/.test(file.path));
-  // Every doc is checked with `satisfies`, which needs TypeScript 4.9; its
-  // JSDoc form, for a JavaScript doc, needs 5.0.
-  const [needMajor, needMinor] = hasJs ? [5, 0] : [4, 9];
-  if (major < needMajor || (major === needMajor && minor < needMinor)) {
+  /** @type {ReturnType<typeof openTypeScript>} */
+  let session;
+  try {
+    session = openTypeScript({cwd: packageDir});
+  } catch (error) {
     return {
       status: 'skipped',
-      reason: `TypeScript ${version} cannot check ${hasJs ? 'a JavaScript doc' : 'a doc'} against its type (that needs TypeScript ${needMajor}.${needMinor} or later), so docs were not checked. ${TYPESCRIPT_FIX}`,
+      reason: nativeTypeScriptFailedReason(error, 'docs were not checked'),
       docs: 0,
       findings: [],
       unchecked: [],
     };
   }
+  try {
+    return check(files, packageDir, core, session);
+  } finally {
+    session.close();
+  }
+}
+
+/**
+ * @param {DocFile[]} files
+ * @param {string} packageDir
+ * @param {boolean} core
+ * @param {ReturnType<typeof openTypeScript>} session
+ * @returns {DocTypesReport}
+ */
+function check(files, packageDir, core, session) {
+  const ts = session.syntax;
+  const version = session.version;
   const rel = (/** @type {string} */ file) =>
     path.relative(packageDir, file).split(path.sep).join('/');
 
@@ -969,7 +962,6 @@ export async function checkDocTypes(files, options) {
    * @property {Target[]} targets
    * @property {boolean} isTs
    * @property {{text: string, toOriginal: (v: number) => number}} virtual
-   * @property {any} virtualSf
    * @property {Array<[number, number]>} removed
    * @property {Array<[number, number]>} casts
    * @property {Set<string>} seen
@@ -978,25 +970,29 @@ export async function checkDocTypes(files, options) {
   const instrumented = new Map();
   /** @type {DocTypesUnchecked[]} */
   const unchecked = [];
+  /** @type {Array<{file: DocFile, text: string}>} */
+  const readable = [];
   for (const file of files) {
-    let text;
     try {
-      text = fs.readFileSync(file.path, 'utf8');
+      readable.push({file, text: fs.readFileSync(file.path, 'utf8')});
     } catch (err) {
       unchecked.push({
         doc: rel(file.path),
         reason: `it cannot be read: ${err instanceof Error ? err.message : String(err)}`,
       });
-      continue;
     }
+  }
+  // The docs as written, parsed alone: each file's syntax tree, nothing
+  // resolved or checked.
+  for (const {file, text} of readable) session.set(path.resolve(file.path), text);
+  const parsed = session.project(
+    packageDir,
+    readable.map(({file}) => path.resolve(file.path)),
+    {noLib: true, noResolve: true, allowJs: true, noEmit: true, types: []},
+  );
+  for (const {file} of readable) {
     const isTs = /\.ts$/.test(file.path);
-    const sf = ts.createSourceFile(
-      file.path,
-      text,
-      ts.ScriptTarget.Latest,
-      true,
-      isTs ? ts.ScriptKind.TS : ts.ScriptKind.JS,
-    );
+    const sf = parsed.program.getSourceFile(path.resolve(file.path));
     const targets = targetsOf(ts, sf, file.root, core);
     if (targets.length === 0) {
       const names = MAIN_EXPORTS[file.root];
@@ -1011,63 +1007,34 @@ export async function checkDocTypes(files, options) {
       });
       continue;
     }
-    const virtual = instrument(ts, sf, targets, isTs);
     instrumented.set(path.resolve(file.path), {
       file,
       sf,
       targets,
       isTs,
-      virtual,
-      virtualSf: virtualSourceFile(ts, file.path, virtual.text, isTs),
+      virtual: instrument(ts, sf, targets, isTs),
       removed: [],
       casts: [],
       seen: new Set(),
     });
   }
 
-  const options_ = {
+  const compilerOptions = {
     allowJs: true,
     checkJs: true,
     noEmit: true,
     skipLibCheck: true,
     strict: true,
     noImplicitAny: false,
-    target: ts.ScriptTarget.ES2022,
-    module: ts.ModuleKind.ESNext,
-    moduleResolution: ts.ModuleResolutionKind.Bundler,
-    jsx: ts.JsxEmit.ReactJSX,
+    target: 'es2022',
+    module: 'esnext',
+    moduleResolution: 'bundler',
+    jsx: 'react-jsx',
     resolveJsonModule: true,
-    esModuleInterop: true,
     allowImportingTsExtensions: true,
     types: [],
     paths: {[AUTHORING]: [AUTHORING_TYPES]},
   };
-  const host = ts.createCompilerHost(options_);
-  // Every other file is parsed once, so a later pass reuses it; and once per
-  // process for these options, so a later check does too.
-  const getSourceFile = keepSourceFiles(ts, host, options_);
-  /** @type {Map<string, any>} */
-  const parsed = new Map();
-  host.getSourceFile = (
-    /** @type {string} */ fileName,
-    /** @type {any} */ languageVersion,
-    /** @type {any} */ onError,
-    /** @type {any} */ shouldCreate,
-  ) => {
-    const entry = instrumented.get(path.resolve(fileName));
-    if (entry) return entry.virtualSf;
-    if (!parsed.has(fileName)) {
-      parsed.set(
-        fileName,
-        getSourceFile(fileName, languageVersion, onError, shouldCreate),
-      );
-    }
-    return parsed.get(fileName);
-  };
-  const readFile = host.readFile.bind(host);
-  host.readFile = (/** @type {string} */ fileName) =>
-    instrumented.get(path.resolve(fileName))?.virtual.text ??
-    readFile(fileName);
 
   /** @type {DocTypeFinding[]} */
   const findings = [];
@@ -1076,7 +1043,8 @@ export async function checkDocTypes(files, options) {
     (sum, entry) => sum + entry.targets.length,
     0,
   );
-  const rootNames = [...instrumented.values()].map(entry => entry.file.path);
+  const rootNames = [...instrumented.keys()];
+  for (const [file, entry] of instrumented) session.set(file, entry.virtual.text);
   // TypeScript stops at an object's first unknown field, and a value outside
   // its type hides the rest of its object, so a doc is checked again with each
   // unknown field blanked and each such value cast to `any`, until nothing new
@@ -1084,7 +1052,7 @@ export async function checkDocTypes(files, options) {
   /** @type {Entry[]} */
   let pending = [...instrumented.values()];
   /** @type {any} */
-  let program;
+  let project;
   for (let pass = 0; pending.length > 0; pass++) {
     if (pass === MAX_PASSES) {
       for (const entry of pending) {
@@ -1095,34 +1063,35 @@ export async function checkDocTypes(files, options) {
       }
       break;
     }
-    program = ts.createProgram({
-      rootNames,
-      options: options_,
-      host,
-      oldProgram: program,
-    });
+    project =
+      pass === 0
+        ? session.project(packageDir, rootNames, compilerOptions, rootNames)
+        : session.update(
+            project,
+            pending.map(entry => path.resolve(entry.file.path)),
+          );
+    const program = project.program;
     /** @type {Entry[]} */
     const again = [];
     for (const entry of pending) {
-      const virtualSf = program.getSourceFile(entry.file.path);
-      if (!virtualSf) continue;
+      const file = path.resolve(entry.file.path);
       const doc = rel(entry.file.path);
       // Text the compiler cannot parse proves nothing about its types.
-      const [syntax] = program.getSyntacticDiagnostics(virtualSf);
+      const [syntax] = program.getSyntacticDiagnostics(file);
       if (syntax) {
         if (pass === 0) checked -= entry.targets.length;
         unchecked.push({
           doc,
-          reason: `TypeScript ${version} cannot parse it with its type check added (${ts.flattenDiagnosticMessageText(syntax.messageText, ' ')}), so ${pass === 0 ? 'it was not checked' : 'not every field was checked'}`,
+          reason: `TypeScript ${version} cannot parse it with its type check added (${flattenDiagnostic(syntax, ' ')}), so ${pass === 0 ? 'it was not checked' : 'not every field was checked'}`,
         });
         continue;
       }
       let changed = false;
-      for (const diagnostic of program.getSemanticDiagnostics(virtualSf)) {
-        if (!RELEVANT.has(diagnostic.code) || diagnostic.start == null) {
+      for (const diagnostic of program.getSemanticDiagnostics(file)) {
+        if (!RELEVANT.has(diagnostic.code) || diagnostic.pos == null) {
           continue;
         }
-        const pos = entry.virtual.toOriginal(diagnostic.start);
+        const pos = entry.virtual.toOriginal(diagnostic.pos);
         const target = entry.targets.find(
           candidate =>
             candidate.node.getStart(entry.sf) <= pos &&
@@ -1200,12 +1169,7 @@ export async function checkDocTypes(files, options) {
           entry.removed,
           entry.casts,
         );
-        entry.virtualSf = virtualSourceFile(
-          ts,
-          entry.file.path,
-          entry.virtual.text,
-          entry.isTs,
-        );
+        session.set(path.resolve(entry.file.path), entry.virtual.text);
         again.push(entry);
       }
     }
@@ -1226,20 +1190,4 @@ export async function checkDocTypes(files, options) {
     findings: findings.filter(f => !stamped.has(f.doc) || f.field === 'type'),
     unchecked,
   };
-}
-
-/**
- * @param {any} ts
- * @param {string} fileName
- * @param {string} text
- * @param {boolean} isTs
- */
-function virtualSourceFile(ts, fileName, text, isTs) {
-  return ts.createSourceFile(
-    fileName,
-    text,
-    ts.ScriptTarget.Latest,
-    true,
-    isTs ? ts.ScriptKind.TS : ts.ScriptKind.JS,
-  );
 }

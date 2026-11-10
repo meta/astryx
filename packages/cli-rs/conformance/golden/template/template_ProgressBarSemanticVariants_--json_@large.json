@@ -6,7 +6,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"ProgressBarSemanticVariants\",\n    \"description\": \"All semantic color variants stacked vertically.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"ProgressBar\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {ProgressBar} from '@astryxdesign/core/ProgressBar';\\nimport {VStack} from '@astryxdesign/core/Layout';\\n\\nexport default function ProgressBarSemanticVariants() {\\n  return (\\n    <VStack gap={4} width=\\\"100%\\\" style={{maxWidth: 300}}>\\n      <ProgressBar value={60} label=\\\"Accent\\\" variant=\\\"accent\\\" hasValueLabel />\\n      <ProgressBar\\n        value={80}\\n        label=\\\"Positive\\\"\\n        variant=\\\"success\\\"\\n        hasValueLabel\\n      />\\n      <ProgressBar value={50} label=\\\"Warning\\\" variant=\\\"warning\\\" hasValueLabel />\\n      <ProgressBar value={92} label=\\\"Negative\\\" variant=\\\"error\\\" hasValueLabel />\\n      <ProgressBar value={35} label=\\\"Neutral\\\" variant=\\\"neutral\\\" hasValueLabel />\\n    </VStack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

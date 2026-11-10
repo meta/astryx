@@ -6,7 +6,7 @@
   "custom-icons"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Custom Icons\n\nFor icons not in the semantic list, pass an SVG component directly. Any ComponentType<SVGProps<SVGSVGElement>> works; Icon applies size and color styling automatically.\n\nUsing custom SVG components:\n```tsx\nimport { PhotoIcon } from '@heroicons/react/24/outline';\nimport { HeartIcon } from 'lucide-react';\n\n<Icon icon={PhotoIcon} size=\"lg\" />\n<Icon icon={HeartIcon} color=\"error\" />\n```\n\nUp: npx @astryxdesign/cli@0.7.12 docs icons --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs icons available-names\nNext: npx @astryxdesign/cli@0.7.12 docs icons theme-overrides\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

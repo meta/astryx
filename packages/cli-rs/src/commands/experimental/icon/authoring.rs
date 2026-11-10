@@ -231,29 +231,6 @@ fn is_built_or_common_js(package_dir: &str, entry: &str) -> bool {
 /// `resolveProjectTypeScript([dir])`: whether a TypeScript with a compiler
 /// API resolves from `dir`. `Some(None)`: installed without the API (its
 /// version); `Some(Some(()))`: usable; `None`: not installed.
-pub fn project_typescript(dir: &str) -> Option<Option<String>> {
-    let found = |name: &str| -> Option<(String, String)> {
-        let pkg_dir = crate::discovery::paths::find_installed_package(dir, name, usize::MAX)?;
-        let pkg = np::read_json(&np::join2(&pkg_dir, "package.json"))?;
-        let v = pkg.get("version").and_then(|v| v.as_str()).filter(|s| !s.is_empty())?.to_string();
-        Some((pkg_dir, v))
-    };
-    let mut unusable = None;
-    if let Some((_, v)) = found("typescript") {
-        let major: u32 = v.split('.').next().and_then(|m| m.parse().ok()).unwrap_or(0);
-        if major < 7 {
-            return Some(None);
-        }
-        unusable = Some(v);
-    }
-    if found("@typescript/typescript6").is_some() {
-        return Some(None);
-    }
-    unusable.map(Some)
-}
-
-pub const TYPESCRIPT_FIX: &str = "On TypeScript 7, add its TypeScript 6 API package (`npm install -D @typescript/typescript6`); otherwise install TypeScript 5.0 through 6 (`npm install -D typescript@6`). Then run this check again.";
-
 pub struct NewSetOptions {
     pub dry_run: bool,
     pub from: Option<String>,
@@ -577,10 +554,8 @@ pub fn add_icon_set(name: &str, o: &NewSetOptions, cwd: &str) -> Result<Value, I
         None => pkg.pkg.clone(),
     };
     let mut notes: Vec<String> = Vec::new();
-    match project_typescript(&package_dir) {
-        Some(None) => {}
-        Some(Some(v)) => notes.push(format!("`integration check --strict` type-checks the set's doc files with this package's TypeScript, {v}, which has no compiler API. {TYPESCRIPT_FIX}")),
-        None => notes.push("`integration check --strict` type-checks the set's doc files with TypeScript, which this package does not have: run `npm install -D typescript@6` (TypeScript 5.0 through 6).".into()),
+    if crate::ts7::session::project_typescript_version(&[package_dir.as_str()]).is_none() {
+        notes.push("`integration check --strict` type-checks the set's doc files when the package uses TypeScript, which this package does not: run `npm install -D typescript`.".into());
     }
     notes.extend(entry_wiring_note(&package_dir, &package_after, &generated));
     notes.extend(peer_note(&package_after));

@@ -5,7 +5,7 @@
   "topnavmenu"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# TopNavMenu\n\nNavigation item that displays a hover-triggered popover menu with rich items containing an icon, title, and optional description.\n\n**Import:** `import {TopNavMenu} from '@astryxdesign/core/TopNav';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `label` | `string` | - | Visible label for the trigger button. **(required)** |\n| `items` | `TopNavMenuItemData[]` | - | Menu items to display in the hover popover. Item href values follow the shared navigation rule described on Link; rejected destinations remain visible without navigation. **(required)** |\n| `delay` | `number` | `150` | Delay in milliseconds before showing the menu on hover. |\n| `hideDelay` | `number` | `200` | Delay in milliseconds before hiding the menu after the mouse leaves. |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

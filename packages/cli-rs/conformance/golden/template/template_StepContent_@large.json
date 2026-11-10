@@ -5,7 +5,7 @@
   "StepContent"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Stepper, Step} from '@astryxdesign/core/Stepper';\nimport {TextInput} from '@astryxdesign/core/TextInput';\nimport {Button} from '@astryxdesign/core/Button';\n\nexport default function StepContent() {\n  // Anything passed as children renders below the description, indented to line\n  // up with the label rather than the indicator. In a full flow you would gate\n  // this on the step being active; here it is a single Step so the slot is\n  // always shown.\n  return (\n    <div style={{width: 400}}>\n      <Stepper activeStep={1} orientation=\"vertical\">\n        <Step\n          step={1}\n          label=\"Billing address\"\n          description=\"Used for invoices and tax calculation\">\n          <div style={{display: 'flex', flexDirection: 'column', gap: 12}}>\n            <TextInput label=\"Street\" placeholder=\"1 Hacker Way\" value=\"\" />\n            <TextInput label=\"City\" placeholder=\"Menlo Park\" value=\"\" />\n            <div>\n              <Button label=\"Save address\" variant=\"primary\" />\n            </div>\n          </div>\n        </Step>\n      </Stepper>\n    </div>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

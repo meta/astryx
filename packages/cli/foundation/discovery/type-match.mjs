@@ -381,7 +381,7 @@ function parseType(ts, text) {
   );
   const [statement, ...rest] = source.statements;
   if (
-    (source.parseDiagnostics?.length ?? 0) > 0 ||
+    ts.parseDiagnosticsOf(source).length > 0 ||
     rest.length > 0 ||
     !statement ||
     !ts.isTypeAliasDeclaration(statement) ||
@@ -638,12 +638,10 @@ function resolveSymbol(ctx, name) {
       : symbol;
   try {
     const [head, ...tail] = name.split('.');
-    // A module's own declarations can come back as local symbols without
-    // flags: take the export symbol, and the first one that names a type or
-    // namespace.
-    let symbol = checker
-      .getSymbolsInScope(ctx.location, meaning)
-      .filter(/** @param {any} s */ s => s.name === head)
+    // A module's own declaration can come back as a local symbol without
+    // flags: take its export symbol, when that names a type or namespace.
+    let symbol = [checker.resolveName(head, meaning, ctx.location)]
+      .filter(Boolean)
       .map(/** @param {any} s */ s => checker.getExportSymbolOfSymbol(s))
       .find(/** @param {any} s */ s => (s.flags & meaning) !== 0);
     for (const part of tail) {

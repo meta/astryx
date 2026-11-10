@@ -1,0 +1,14 @@
+{
+ "id": "ts7_doctor_ts7only_components",
+ "args": [
+  "doctor",
+  "integration",
+  "components"
+ ],
+ "fixture": "doctor-ts7",
+ "fixtureHash": "830ae285d406ab92+4e418a0c2575d9ce",
+ "stdout": "Checking integration components: @acme/ts7only@1.0.0\n\n[ok] No component names conflict with Core.\n\nseverity:     [warn]\ncomponent:    Dial\nprop:         label\nkind:         not_in_doc\nmessage:      Dial declares \"label\", but the doc does not list it.\ndoc:          src/Dial/Dial.doc.mjs\nsource:       src/Dial/Dial.tsx\ncodeType:     string\ncodeRequired: false\n\nseverity:    [warn]\ncomponent:   Dial\nprop:        size\nkind:        default_mismatch\nmessage:     \"size\" is documented with default 'sm', but the code defaults it to 'md'.\ndoc:         src/Dial/Dial.doc.mjs\nsource:      src/Dial/Dial.tsx\ndocDefault:  'sm'\ncodeDefault: 'md'\nfix:         In src/Dial/Dial.doc.mjs, set the \"size\" prop's default to the code's: default: \"'md'\".\n\nseverity:  [warn]\ncomponent: Dial\nprop:      size\nkind:      type_mismatch\nmessage:   \"size\" is documented as 'sm' | 'lg', but the code declares Size ('sm' | 'md').\ndoc:       src/Dial/Dial.doc.mjs\nsource:    src/Dial/Dial.tsx\ndocType:   'sm' | 'lg'\ncodeType:  Size\n\nseverity:  [warn]\ncomponent: Dial\nprop:      value\nkind:      type_mismatch\nmessage:   \"value\" is documented as string, but the code declares number.\ndoc:       src/Dial/Dial.doc.mjs\nsource:    src/Dial/Dial.tsx\ndocType:   string\ncodeType:  number\n\n4 prop(s) differ between the docs and the code in 1 of 1 component(s) compared (TypeScript 7.0.2). These are warnings: update the doc, or the code if the doc is right.\n\n[info] Documented prop types judged: 3; not compared: 0. A type is judged when the doc writes it the same as the source (exactly, if it contains `readonly`), or when both are primitives, literals, arrays and unions of those, or names for them.\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

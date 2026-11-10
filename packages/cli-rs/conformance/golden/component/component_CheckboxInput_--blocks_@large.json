@@ -6,7 +6,7 @@
   "--blocks"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nShowcase\n\ndisplayName: CheckboxInput\ndescription: Interactive checkboxes showing checked, unchecked, and indeterminate states with descriptions.\n\nExamples\n\nname:        CheckboxInputBasic\ndescription: Checkboxes with labels and descriptions in checked, unchecked, and disabled states. Each checkbox controls a single on/off setting. Add a description to explain what the setting does.\n\nname:        CheckboxInputIndeterminateState\ndescription: A \"select all\" checkbox that controls a group of options. When only some options are checked, it shows a dash instead of a checkmark. Clicking it checks or unchecks everything.\n\nname:        CheckboxInputStatusVariations\ndescription: Checkboxes with error, warning, and success validation messages. Use the status prop to show feedback after form validation: errors block submission, warnings inform, and success confirms.\n\nRelated: 3 blocks that use CheckboxInput\n\n- PopoverFilterPanel\n- TableLeadingMarkSelection\n- useTableColumnSettingsStateHookUsage\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

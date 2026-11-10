@@ -20,6 +20,7 @@
  * @position Foundation discovery, used by the documented-props comparison.
  */
 
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 /**
@@ -94,9 +95,7 @@ export function unresolvedReference(ts, program, checker, roots, follow, mine) {
     K.ExpressionWithTypeArguments,
   ]);
   const options = program.getCompilerOptions();
-  const sideEffects =
-    options.noUncheckedSideEffectImports ??
-    Number.parseInt(ts.versionMajorMinor, 10) >= 6;
+  const sideEffects = options.noUncheckedSideEffectImports ?? true;
   let byMine = PROGRAMS.get(program);
   if (!byMine) {
     byMine = new WeakMap();
@@ -124,10 +123,7 @@ export function unresolvedReference(ts, program, checker, roots, follow, mine) {
     names = new Set();
     for (const literal of file.imports ?? []) {
       if (literal.pos < 0 || checker.getSymbolAtLocation(literal)) continue;
-      if (
-        ts.resolveModuleName(literal.text, file.fileName, options, ts.sys)
-          .resolvedModule
-      ) {
+      if (moduleFound(literal.text, file.fileName)) {
         for (const name of boundNames(ts, literal.parent)) names.add(name);
       }
     }
@@ -352,12 +348,7 @@ export function unresolvedReference(ts, program, checker, roots, follow, mine) {
       }
       const module = checker.getSymbolAtLocation(literal);
       if (!module) {
-        const found = ts.resolveModuleName(
-          literal.text,
-          sf.fileName,
-          options,
-          ts.sys,
-        ).resolvedModule;
+        const found = moduleFound(literal.text, sf.fileName);
         if (!found) fail(`\`${literal.text}\``);
         else for (const name of boundNames(ts, parent)) untypedNames.add(name);
         continue;
@@ -389,12 +380,11 @@ export function unresolvedReference(ts, program, checker, roots, follow, mine) {
       }
     }
     for (const ref of sf.typeReferenceDirectives ?? []) {
-      const found = ts.resolveTypeReferenceDirective(
+      const found = typesFound(
         ref.fileName,
-        sf.fileName,
-        options,
-        ts.sys,
-      ).resolvedTypeReferenceDirective?.resolvedFileName;
+        path.dirname(sf.fileName),
+        options.typeRoots,
+      );
       if (!found) fail(`the types \`${ref.fileName}\``);
       else if (program.getSourceFile(found)) {
         next.push(program.getSourceFile(found));
@@ -426,8 +416,7 @@ export function unresolvedReference(ts, program, checker, roots, follow, mine) {
           !!literal &&
           ts.isStringLiteral(literal) &&
           !checker.getSymbolAtLocation(literal) &&
-          !!ts.resolveModuleName(literal.text, sf.fileName, options, ts.sys)
-            .resolvedModule
+          moduleFound(literal.text, sf.fileName)
         );
       }
       let name = ts.isTypeQueryNode(node)
@@ -739,8 +728,7 @@ export function unresolvedGlobals(
   isOwnFile,
 ) {
   const config =
-    options.configFilePath ??
-    path.join(ts.sys.getCurrentDirectory(), 'tsconfig.json');
+    options.configFilePath ?? path.join(process.cwd(), 'tsconfig.json');
   /** @type {(file: string) => boolean} */
   const follow = file =>
     isOwnFile(file) || !/[\\/]node_modules[\\/]/.test(file);
@@ -771,15 +759,10 @@ export function unresolvedGlobals(
     .filter(file => own || isOwnFile(file))
     .map(file => program.getSourceFile(file))
     .filter(global);
-  // With `types` unset TypeScript 5 loads every package in `typeRoots`, and
-  // TypeScript 6 loads none; this asks the project's own which it loads.
-  for (const name of ts.getAutomaticTypeDirectiveNames(options, ts.sys)) {
-    const found = ts.resolveTypeReferenceDirective(
-      name,
-      path.join(path.dirname(config), '__inferred type names__.ts'),
-      options,
-      ts.sys,
-    ).resolvedTypeReferenceDirective?.resolvedFileName;
+  // With `types` unset TypeScript 7 loads no type package; `*` loads every
+  // package in `typeRoots`.
+  for (const name of typeDirectiveNames(options, path.dirname(config))) {
+    const found = typesFound(name, path.dirname(config), options.typeRoots);
     if (!found) {
       return {name: `the types \`${name}\``, file: config, how: 'named'};
     }
@@ -787,4 +770,204 @@ export function unresolvedGlobals(
     if (global(sf)) roots.push(sf);
   }
   return unresolvedReference(ts, program, checker, roots, follow, follow);
+}
+
+/** The extensions a module specifier may leave out, in the order tried. */
+const EXTENSIONS = [
+  '.ts',
+  '.tsx',
+  '.d.ts',
+  '.mts',
+  '.cts',
+  '.d.mts',
+  '.d.cts',
+  '.js',
+  '.jsx',
+  '.mjs',
+  '.cjs',
+  '.json',
+];
+
+/** @param {string} file */
+function isFile(file) {
+  try {
+    return fs.statSync(file).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/** @param {string} dir */
+function isDir(dir) {
+  try {
+    return fs.statSync(dir).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether a path names a module: the file itself, with an extension added,
+ * a JavaScript name for a TypeScript file, or a folder with an index or a
+ * `package.json`.
+ * @param {string} base
+ */
+function moduleAt(base) {
+  if (isFile(base)) return true;
+  if (EXTENSIONS.some(ext => isFile(base + ext))) return true;
+  const js = /\.([cm]?)jsx?$/.exec(base);
+  if (js) {
+    const stem = base.slice(0, -js[0].length);
+    const kinds = js[1]
+      ? [`.${js[1]}ts`, `.d.${js[1]}ts`]
+      : ['.ts', '.tsx', '.d.ts'];
+    if (kinds.some(ext => isFile(stem + ext))) return true;
+  }
+  return (
+    isDir(base) &&
+    (isFile(path.join(base, 'package.json')) ||
+      EXTENSIONS.some(ext => isFile(path.join(base, `index${ext}`))))
+  );
+}
+
+/**
+ * Whether a module specifier finds a module from a file, with or without
+ * types: a relative path, or a package below a `node_modules` folder up from
+ * the file (or its `@types` package). TypeScript 7's API does not expose its
+ * module resolution; a module the checker resolves never reaches this, so it
+ * only tells a module found without types from one not found at all.
+ * @param {string} specifier
+ * @param {string} fromFile
+ */
+export function moduleFound(specifier, fromFile) {
+  if (specifier.startsWith('.') || path.isAbsolute(specifier)) {
+    return moduleAt(path.resolve(path.dirname(fromFile), specifier));
+  }
+  const parts = specifier.split('/');
+  const scoped = specifier.startsWith('@');
+  const name = parts.slice(0, scoped ? 2 : 1).join('/');
+  const sub = parts.slice(scoped ? 2 : 1).join('/');
+  const typesName = scoped ? name.slice(1).replace('/', '__') : name;
+  for (let dir = path.dirname(path.resolve(fromFile)); ; ) {
+    const pkg = path.join(dir, 'node_modules', name);
+    if (isDir(pkg) && (!sub || moduleAt(path.join(pkg, sub)) || hasExport(pkg, sub))) {
+      return true;
+    }
+    if (isDir(path.join(dir, 'node_modules', '@types', typesName))) return true;
+    const parent = path.dirname(dir);
+    if (parent === dir) return false;
+    dir = parent;
+  }
+}
+
+/**
+ * Whether a package's `exports` names a subpath.
+ * @param {string} pkg
+ * @param {string} sub
+ */
+function hasExport(pkg, sub) {
+  try {
+    const {exports} = JSON.parse(
+      fs.readFileSync(path.join(pkg, 'package.json'), 'utf8'),
+    );
+    if (!exports || typeof exports !== 'object') return false;
+    return Object.keys(exports).some(key => {
+      if (!key.startsWith('./')) return false;
+      const pattern = key.slice(2);
+      if (!pattern.includes('*')) return pattern === sub;
+      const [head, tail] = pattern.split('*');
+      return sub.startsWith(head) && sub.endsWith(tail ?? '');
+    });
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The declaration file a type package name finds from a folder, as
+ * `/// <reference types>` and `compilerOptions.types` find it: in each type
+ * root, then its `@types` package, else the package itself, below each
+ * `node_modules` up from the folder; in a package, by its `types` or
+ * `typings` field, else its `index.d.ts`; or null.
+ * @param {string} name
+ * @param {string} fromDir
+ * @param {string[]} [typeRoots] absolute
+ * @returns {string | null}
+ */
+export function typesFound(name, fromDir, typeRoots = []) {
+  const typesName = name.startsWith('@')
+    ? name.slice(1).replace('/', '__')
+    : name;
+  const rooted = (typeRoots ?? []).map(root => path.join(root, typesName));
+  for (let dir = path.resolve(fromDir), first = true; ; first = false) {
+    for (const pkg of [
+      ...(first ? rooted : []),
+      path.join(dir, 'node_modules', '@types', typesName),
+      path.join(dir, 'node_modules', name),
+    ]) {
+      if (!isDir(pkg)) continue;
+      let entry = 'index.d.ts';
+      try {
+        const json = JSON.parse(
+          fs.readFileSync(path.join(pkg, 'package.json'), 'utf8'),
+        );
+        entry = json.types ?? json.typings ?? entry;
+      } catch {
+        // No package.json: its index.
+      }
+      for (const file of [
+        path.join(pkg, entry),
+        path.join(pkg, `${entry}.d.ts`),
+        path.join(pkg, entry, 'index.d.ts'),
+      ]) {
+        if (isFile(file)) return file;
+      }
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+/**
+ * The type packages a program loads by name: `compilerOptions.types`, with
+ * `*` standing for every package in the type roots (each `typeRoots` entry,
+ * else every `node_modules/@types` up from the config).
+ * @param {any} options
+ * @param {string} configDir
+ * @returns {string[]}
+ */
+function typeDirectiveNames(options, configDir) {
+  const types = Array.isArray(options.types) ? options.types : [];
+  if (!types.includes('*')) return types;
+  /** @type {string[]} */
+  const roots = Array.isArray(options.typeRoots) ? [...options.typeRoots] : [];
+  if (roots.length === 0) {
+    for (let dir = configDir; ; ) {
+      roots.push(path.join(dir, 'node_modules', '@types'));
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+  }
+  /** @type {string[]} */
+  const names = types.filter(/** @param {string} t */ t => t !== '*');
+  for (const root of roots) {
+    let entries = [];
+    try {
+      entries = fs.readdirSync(root, {withFileTypes: true});
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+      const name = entry.name.startsWith('@')
+        ? null
+        : entry.name.includes('__')
+          ? `@${entry.name.replace('__', '/')}`
+          : entry.name;
+      if (name && !names.includes(name)) names.push(name);
+    }
+  }
+  return names;
 }

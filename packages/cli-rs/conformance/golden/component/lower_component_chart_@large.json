@@ -5,7 +5,7 @@
   "chart"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: No component named \"chart\"\n\n  Card  (similar name (distance 2))\n  ClickableCard  (keyword \"card\" (distance 2))\n  SelectableCard  (keyword \"card\" (distance 2))\n  Overlay  (keyword \"card\" (distance 2))\n  Icon  (keyword \"caret\" (distance 2))\n",
  "exit": 1,

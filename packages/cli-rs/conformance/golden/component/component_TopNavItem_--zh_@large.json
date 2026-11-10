@@ -6,7 +6,7 @@
   "--zh"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# TopNavItem\n\n用于 TopNav startContent 的导航链接项，渲染为具有悬停和选中状态的锚点。\n\n**Import:** `import {TopNavItem} from '@astryxdesign/core/TopNav';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `label` | `string` | - | 导航项的无障碍标签。用作可见文本，或作为仅图标项的 aria-label。 **(required)** |\n| `href` | `string` | - | 导航目标 URL。 |\n| `isSelected` | `boolean` | `false` | 此导航项是否为当前选中状态。设置 aria-current=\"page\" 并应用高亮样式。 |\n| `isDisabled` | `boolean` | `false` | 导航项是否被禁用。设置 aria-disabled，移除 href/target 使其无法导航，并阻止交互。 |\n| `isIconOnly` | `boolean` | `false` | Renders the item as a square icon-only element. When true, label becomes the aria-label and visible text is hidden. Requires icon to be set. |\n| `icon` | `ReactNode` | - | 在标签前显示的可选图标。如果在没有子元素的情况下提供，项目变为仅图标模式。 |\n| `children` | `ReactNode` | - | 替代标签文本渲染的自定义内容。省略且提供了图标时，项目变为仅图标模式。 |\n| `as` | `LinkComponentType` | - | 替代 <a> 渲染的自定义组件。覆盖 LinkProvider 设置的提供者级别默认值。必须接受 href、className、style 和 children 属性。 |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

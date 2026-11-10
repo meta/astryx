@@ -6,7 +6,7 @@
   "theme-props"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Theme Props\n\n`<Theme>` takes `theme` (required), `mode` (`'system'` by default, or `'light'`/`'dark'`), and `children`. For every prop, run `npx @astryxdesign/cli@0.7.12 component Theme`.\n\nUp: npx @astryxdesign/cli@0.7.12 docs use-a-theme --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs use-a-theme available-themes\nNext: npx @astryxdesign/cli@0.7.12 docs use-a-theme integration-themes\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

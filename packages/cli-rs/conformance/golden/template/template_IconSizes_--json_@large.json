@@ -6,7 +6,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"IconSizes\",\n    \"description\": \"All icon sizes from extra-small to large.\",\n    \"type\": \"block\",\n    \"components\": [],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Icon} from '@astryxdesign/core/Icon';\\nimport {HStack, VStack} from '@astryxdesign/core/Layout';\\nimport {Text} from '@astryxdesign/core/Text';\\n\\nexport default function IconSizes() {\\n  return (\\n    <HStack gap={4}>\\n      <VStack gap={1} hAlign=\\\"center\\\">\\n        <Icon icon=\\\"search\\\" size=\\\"xsm\\\" />\\n        <Text type=\\\"supporting\\\">xsm</Text>\\n      </VStack>\\n      <VStack gap={1} hAlign=\\\"center\\\">\\n        <Icon icon=\\\"search\\\" size=\\\"sm\\\" />\\n        <Text type=\\\"supporting\\\">sm</Text>\\n      </VStack>\\n      <VStack gap={1} hAlign=\\\"center\\\">\\n        <Icon icon=\\\"search\\\" size=\\\"md\\\" />\\n        <Text type=\\\"supporting\\\">md</Text>\\n      </VStack>\\n      <VStack gap={1} hAlign=\\\"center\\\">\\n        <Icon icon=\\\"search\\\" size=\\\"lg\\\" />\\n        <Text type=\\\"supporting\\\">lg</Text>\\n      </VStack>\\n    </HStack>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

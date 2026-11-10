@@ -7,7 +7,7 @@
   "brief"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nMarkdown(display: block|inline, density: default|compact, headingLevelStart: 1|2|3|4|5|6, onLinkClick: (href: string, event: MouseEvent) => void|false, citationStyle: label|number, contentWidth: number|string, contentAlign: start|center)  <- from '@astryxdesign/core/Markdown'\n  Renders a markdown string as Astryx-styled components. Use Markdown for user-...\n  Targets: astryx-markdown preferred attrs: data-density variants: density | astryx-markdown-heading preferred attrs: data-density, data-level variants: density, level | astryx-markdown-paragraph preferred attrs: data-density variants: density | astryx-markdown-list preferred attrs: data-density variants: density | astryx-markdown-codeblock preferred attrs: data-density variants: density | astryx-markdown-blockquote preferred attrs: data-density variants: density | astryx-markdown-table preferred attrs: data-density variants: density | astryx-markdown-hr preferred attrs: data-density variants: density | astryx-markdown-image preferred attrs: data-density variants: density\n  children: string, isStreaming, sources, plugins, inlinePlugins, autolink, codeLanguages, components, xstyle, className, style, data-testid\n  \n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

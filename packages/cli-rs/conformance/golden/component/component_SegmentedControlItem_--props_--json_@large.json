@@ -7,7 +7,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": [\n    {\n      \"name\": \"value\",\n      \"type\": \"string\",\n      \"description\": \"Unique value for this segment, matched against the parent value.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"label\",\n      \"type\": \"string\",\n      \"description\": \"Accessible label for this segment. Rendered as visible text unless isLabelHidden is true.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"isLabelHidden\",\n      \"type\": \"boolean\",\n      \"description\": \"Whether the label is visually hidden. When true, only the icon is displayed and label is used as aria-label.\",\n      \"default\": \"false\"\n    },\n    {\n      \"name\": \"icon\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Icon element displayed before the label.\",\n      \"slotElements\": [\n        {\n          \"__element\": \"Icon\",\n          \"props\": {\n            \"icon\": \"check\",\n            \"size\": \"sm\"\n          }\n        }\n      ]\n    },\n    {\n      \"name\": \"isDisabled\",\n      \"type\": \"boolean\",\n      \"description\": \"Whether this individual item is disabled. A disabled selected item keeps the control's Tab stop.\",\n      \"default\": \"false\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

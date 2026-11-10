@@ -9,7 +9,7 @@
   "block"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "template contribution added\n\n[ok] account-card\n\nDeclare template root ./templates in astryx.integration.mjs.\n\n- templates/account-card.doc.mjs\n- templates/account-card.tsx\n- astryx.integration.mjs\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

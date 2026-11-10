@@ -70,7 +70,6 @@ import {astryxIconDefinitions} from '../../foundation/discovery/icon-definition-
 import {suggestedIcons} from '../../foundation/discovery/icon-set-checks.mjs';
 import {
   resolveProjectTypeScript,
-  TYPESCRIPT_FIX,
 } from '../../foundation/discovery/project-typescript.mjs';
 import {
   KEBAB_NAME_RE,
@@ -506,12 +505,10 @@ export async function addIconSet(name, options) {
     const packageAfter = pkgUpdate ? JSON.parse(pkgUpdate.contents) : pkg;
     result.data.notes = [
       // First, so a long receipt never hides it: the strict check needs it.
-      ...(typescript?.ts
+      ...(typescript
         ? []
         : [
-            typescript
-              ? `\`integration check --strict\` type-checks the set's doc files with this package's TypeScript, ${typescript.version}, which has no compiler API. ${TYPESCRIPT_FIX}`
-              : "`integration check --strict` type-checks the set's doc files with TypeScript, which this package does not have: run `npm install -D typescript@6` (TypeScript 5.0 through 6).",
+            "`integration check --strict` type-checks the set's doc files when the package uses TypeScript, which this package does not: run `npm install -D typescript`.",
           ]),
       // What the package needs that the CLI leaves to its author
       // (architecture:cli-surface INV16), each as the exact change to make.

@@ -5,7 +5,7 @@
   "TooltipHookUsage"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useTooltip} from '@astryxdesign/core/Tooltip';\nimport {Button} from '@astryxdesign/core/Button';\nimport {Center} from '@astryxdesign/core/Center';\n\nexport default function TooltipHookUsage() {\n  const tooltip = useTooltip({\n    placement: 'above',\n    delay: 100,\n  });\n\n  return (\n    <Center>\n      <Button\n        label=\"Using hook directly\"\n        ref={tooltip.ref}\n        aria-describedby={tooltip.describedBy}\n      />\n      {tooltip.renderTooltip('Tooltip via hook')}\n    </Center>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

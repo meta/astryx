@@ -5,7 +5,7 @@
   "TextInputIcon"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {TextInput} from '@astryxdesign/core/TextInput';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {\n  EnvelopeIcon,\n  LockClosedIcon,\n  UserIcon,\n} from '@heroicons/react/24/outline';\n\nexport default function TextInputIcon() {\n  const [name, setName] = useState('');\n  const [email, setEmail] = useState('');\n  const [password, setPassword] = useState('');\n\n  return (\n    <div style={{width: 300}}>\n      <Stack direction=\"vertical\" gap={3}>\n        <TextInput\n          label=\"Full name\"\n          value={name}\n          onChange={setName}\n          placeholder=\"Sarah Chen\"\n          startIcon={UserIcon}\n        />\n        <TextInput\n          type=\"email\"\n          label=\"Email\"\n          value={email}\n          onChange={setEmail}\n          placeholder=\"sarah@company.com\"\n          startIcon={EnvelopeIcon}\n        />\n        <TextInput\n          type=\"password\"\n          label=\"Password\"\n          value={password}\n          onChange={setPassword}\n          placeholder=\"Enter your password\"\n          startIcon={LockClosedIcon}\n        />\n      </Stack>\n    </div>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

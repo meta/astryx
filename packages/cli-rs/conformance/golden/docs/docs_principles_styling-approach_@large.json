@@ -6,7 +6,7 @@
   "styling-approach"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Styling Approach\n\nThe design system supports multiple styling approaches. Every component accepts an `xstyle` prop for StyleX style overrides via `stylex.create()`. For layout and wrapper styling outside of components, use StyleX or Tailwind utilities; both resolve to the same design tokens.\n\nSee `npx @astryxdesign/cli@0.7.12 docs styling` for the complete guide with examples.\n\nUp: npx @astryxdesign/cli@0.7.12 docs principles --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs principles rules\nNext: npx @astryxdesign/cli@0.7.12 docs principles anti-patterns\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

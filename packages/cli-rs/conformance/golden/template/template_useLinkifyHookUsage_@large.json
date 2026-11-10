@@ -5,7 +5,7 @@
   "useLinkifyHookUsage"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useLinkify, type LinkifyPattern} from '@astryxdesign/core/Link';\nimport {VStack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\nconst COMMENTS = [\n  'See https://example.com/spec or email support@example.com.',\n  'Fixed by #123, tracking the regression in #456.',\n  'No links here, just a plain note.',\n];\n\n// Issue references like #123 link into the tracker; the capture group maps\n// onto its URL scheme, showing the patterns option.\nconst ISSUE_PATTERN: LinkifyPattern = {\n  pattern: /#(\\d+)/g,\n  href: match => `https://example.com/issues/${match[1]}`,\n};\n\nfunction Comment({children}: {children: string}) {\n  const nodes = useLinkify(children, {patterns: [ISSUE_PATTERN]});\n  return (\n    <Text type=\"body\" color=\"secondary\">\n      {nodes}\n    </Text>\n  );\n}\n\nexport default function UseLinkifyHookUsage() {\n  return (\n    <VStack gap={3} style={{width: '100%', maxWidth: 360}}>\n      {COMMENTS.map(comment => (\n        <Comment key={comment}>{comment}</Comment>\n      ))}\n    </VStack>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

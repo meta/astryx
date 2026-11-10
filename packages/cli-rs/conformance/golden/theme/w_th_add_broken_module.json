@@ -6,9 +6,9 @@
   "butter"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "",
- "stderr": "Error: Refusing to replace src/astryx-themes.js: it is not an Astryx-generated theme module. Move that file before adding themes.\n",
+ "stderr": "Error: Theme \"butter\" from @astryxdesign/theme-butter has no resolvable built module and stylesheet. Missing module export @astryxdesign/theme-butter/themes/butter, stylesheet export @astryxdesign/theme-butter/themes/butter.css, or the single-theme exports @astryxdesign/theme-butter/built and @astryxdesign/theme-butter/theme.css. The package must build and export them before it can be added.\n",
  "exit": 1,
  "files": [
   {

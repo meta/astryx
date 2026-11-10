@@ -6,7 +6,7 @@
   "palette"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Generate a palette\n\nName a few seed colors and generate every shade a theme needs, light and dark; `npx @astryxdesign/cli@0.7.12 docs authoring/building-blocks/themes/generate-a-palette` explains what a palette holds.\n\nMinimal palette config (palette.config.json):\n```json\n{\"families\": [{\"id\": \"ocean\", \"seed\": \"#0074e2\"}]}\n```\n\nGenerate and preview:\n```bash\n# Print the palette without writing files\nnpx @astryxdesign/cli@0.7.12 theme palette generate palette.config.json\n\n# Write palette + receipt, and open a visual preview\nnpx @astryxdesign/cli@0.7.12 theme palette generate palette.config.json \\\n  --out src/themes/ocean/tokens/ocean.palette.ts \\\n  --preview preview.html\n```\n\nThe command writes a `.ts` file exporting 21 shades (stops 0–100) for both light and dark, plus a `.receipt.json` to regenerate later. Point your theme's tokens at the palette, then run defineTheme (see below).\n\nFor the full palette config fields and CLI flags, run `npx @astryxdesign/cli@0.7.12 docs cli/commands/theme-palette-generate`. For the integration-authoring walkthrough of connecting a palette to theme tokens, run `npx @astryxdesign/cli@0.7.12 docs authoring/building-blocks/themes/generate-a-palette`.\n\nUp: npx @astryxdesign/cli@0.7.12 docs author-a-theme --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs author-a-theme creating-a-custom-theme\nNext: npx @astryxdesign/cli@0.7.12 docs author-a-theme definetheme\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

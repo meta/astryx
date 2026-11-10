@@ -5,7 +5,7 @@
   "HoverCardShowcase"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {HoverCard} from '@astryxdesign/core/HoverCard';\nimport {Button} from '@astryxdesign/core/Button';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {Text, Heading} from '@astryxdesign/core/Text';\nimport {Avatar} from '@astryxdesign/core/Avatar';\n\nexport default function HoverCardShowcase() {\n  return (\n    <HoverCard\n      placement=\"above\"\n      content={\n        <Stack direction=\"vertical\" gap={2} style={{width: 240}}>\n          <Stack direction=\"horizontal\" gap={2} vAlign=\"center\">\n            <Avatar name=\"Jane Doe\" size=\"lg\" />\n            <Stack direction=\"vertical\" gap={0}>\n              <Heading level={5}>Jane Doe</Heading>\n              <Text type=\"supporting\" color=\"secondary\">\n                Software Engineer\n              </Text>\n            </Stack>\n          </Stack>\n          <Text type=\"body\" color=\"secondary\">\n            Building great products with great people.\n          </Text>\n        </Stack>\n      }>\n      <Button label=\"@janedoe\" variant=\"ghost\" />\n    </HoverCard>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

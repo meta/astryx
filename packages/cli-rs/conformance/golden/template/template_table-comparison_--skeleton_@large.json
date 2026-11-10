@@ -6,7 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# table-comparison - Transposed matrix that puts candidates in the columns and criteria in grouped rows, with a pinned label column that survives horizontal scroll, columns you can swap or add, and best-in-row marks you can toggle. Compare, comparison, matrix, spec sheet, feature grid, pricing table, benchmark, frozen column, sticky column, or side-by-side.\n# Components: Card, Layout, ProgressBar, Rectangle, Scatter, ScatterChart, Selector, Switch, Table, Tooltip, VisuallyHidden, XAxis, YAxis, ZAxis\n\n<HStack gap={1} height={CELL_CONTENT_HEIGHT}>\n  <Icon />\n</HStack>\n<HStack gap={1} height={CELL_CONTENT_HEIGHT}>\n  <Text />\n</HStack>\n<Text />\n<HStack gap={1} height={CELL_CONTENT_HEIGHT}>\n  <Text />\n</HStack>\n<HStack gap={2}>\n  <Heading />\n</HStack>\n<Layout padding={4} columns height=\"auto\" width>\n  /* header: */\n  <LayoutHeader padding={4}>\n    <HStack gap={3}>\n      <StackItem />\n      <Heading />\n      <Switch />\n      <Button variant=\"secondary\" />\n    </HStack>\n  </LayoutHeader>\n  /* content: */\n  <LayoutContent padding={4}>\n    <Card padding={5}>\n      <Table>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

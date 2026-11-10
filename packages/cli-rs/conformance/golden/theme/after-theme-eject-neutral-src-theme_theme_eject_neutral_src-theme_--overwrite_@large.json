@@ -8,7 +8,7 @@
   "--overwrite"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "Ejected theme\n\nslug:        neutral\ndisplayName: Neutral\nmaintained:  true\npackage:     @astryxdesign/cli\noutputDir:   src/theme\nentry:       neutralTheme.ts\nexportName:  neutralTheme\nfiles:       neutralTheme.ts, neutralTheme.doc.mjs, icons.tsx, neutralPalettes.ts, neutralPalettes.generated.ts, neutralPaletteRefs.generated.ts, neutralPalettes.generated.receipt.json, palette.config.json\n\nThis is a local fork. Build it with npx @astryxdesign/cli@0.7.12 theme build src/theme/neutralTheme.ts.\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n",
  "exit": 0,

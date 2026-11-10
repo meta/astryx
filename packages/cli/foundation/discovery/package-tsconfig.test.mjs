@@ -10,13 +10,28 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {createRequire} from 'node:module';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {recordReads} from '../fs/read-record.mjs';
-import {readPackageTsconfig} from './package-tsconfig.mjs';
+import {openPackageProject} from './package-tsconfig.mjs';
+import {openTypeScript} from './project-typescript.mjs';
 
-const require = createRequire(import.meta.url);
-const ts = require('typescript');
+/** @type {Array<{close: () => void}>} */
+const sessions = [];
+
+/**
+ * Open the package's project in a session of its own: TypeScript 7 keeps
+ * what it read for the life of its process.
+ * @param {string} packageDir
+ * @param {string[]} sources
+ */
+function readPackageTsconfig(packageDir, sources) {
+  const session = openTypeScript({cwd: packageDir});
+  sessions.push(session);
+  return openPackageProject(session, packageDir, sources);
+}
+
+/** TypeScript 7's `JsxEmit.ReactJSX`. */
+const REACT_JSX = 4;
 
 /** @type {string} */
 let root;
@@ -28,6 +43,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  for (const session of sessions.splice(0)) session.close();
   fs.rmSync(root, {recursive: true, force: true});
 });
 
@@ -50,9 +66,9 @@ const OPTIONS = {strict: true, jsx: 'react-jsx', paths: {'@/*': ['./src/*']}};
 describe('readPackageTsconfig', () => {
   it('reads defaults without a config, and the config the package has, with the declaration files it includes', () => {
     const source = write('src/Button.tsx', 'export {};\n');
-    const defaults = readPackageTsconfig(ts, root, [source]);
+    const defaults = readPackageTsconfig(root, [source]);
     expect(defaults.options).toMatchObject({
-      jsx: ts.JsxEmit.ReactJSX,
+      jsx: REACT_JSX,
       strict: true,
       noEmit: true,
     });
@@ -74,7 +90,7 @@ describe('readPackageTsconfig', () => {
     );
     write('src/module.ts', 'export interface ModuleProps {}\n');
 
-    const own = readPackageTsconfig(ts, root, [source]);
+    const own = readPackageTsconfig(root, [source]);
 
     expect(own.options.paths).toEqual(OPTIONS.paths);
     expect(own.declarations.sort()).toEqual(
@@ -82,49 +98,27 @@ describe('readPackageTsconfig', () => {
     );
   });
 
-  it('reads an included file as TypeScript once while it is unchanged, and again once it changes', () => {
+  it('reads an included module by its syntax, and counts reading it', () => {
     const source = write('src/Button.tsx', 'export {};\n');
     write('tsconfig.json', {
       compilerOptions: OPTIONS,
       include: ['src', 'types'],
     });
-    // A module: only reading it as TypeScript tells that it is not ambient.
+    // A module: only its syntax tells that it is not ambient.
     const file = write('types/maybe.ts', 'export interface Maybe {}\n');
-    let reads = 0;
-    const counted = {
-      ...ts,
-      /** @param {any[]} args */
-      createSourceFile: (...args) => {
-        if (args[0] === file) reads += 1;
-        return ts.createSourceFile(...args);
-      },
-    };
-    expect(readPackageTsconfig(counted, root, [source]).declarations).toEqual(
-      [],
-    );
-    // The kept answer still counts as reading the file, for an operation
-    // that keeps its own result while what it read is unchanged.
     const seen = new Map();
     expect(
-      recordReads(seen, () => readPackageTsconfig(counted, root, [source]))
+      recordReads(seen, () => readPackageTsconfig(root, [source]))
         .declarations,
     ).toEqual([]);
-    expect(reads).toBe(1);
     expect(seen.has(file)).toBe(true);
 
-    // Now a script, a different size: ambient.
+    // Now a script: ambient.
     fs.writeFileSync(file, 'interface Maybe {}\n');
-    expect(readPackageTsconfig(counted, root, [source]).declarations).toEqual([
-      file,
-    ]);
-    // A module again at the same size, seen by its modification time.
-    fs.writeFileSync(file, 'export type X = 1;\n');
-    const later = new Date(Date.now() + 2000);
-    fs.utimesSync(file, later, later);
-    expect(readPackageTsconfig(counted, root, [source]).declarations).toEqual(
-      [],
-    );
-    expect(reads).toBe(2);
+    expect(readPackageTsconfig(root, [source]).declarations).toEqual([file]);
+    // `export` only inside a comment's words: still a module by its syntax.
+    fs.writeFileSync(file, '// export\ninterface Maybe {}\nexport type X = 1;\n');
+    expect(readPackageTsconfig(root, [source]).declarations).toEqual([]);
   });
 
   it("follows a solution-style config's references, at any depth and through a cycle, to the config that includes the sources", () => {
@@ -150,7 +144,7 @@ describe('readPackageTsconfig', () => {
     );
     write('app.json', {compilerOptions: OPTIONS, include: ['src']});
 
-    const project = readPackageTsconfig(ts, root, [source]);
+    const project = readPackageTsconfig(root, [source]);
 
     expect(project.error).toBeUndefined();
     expect(project.options.paths).toEqual(OPTIONS.paths);
@@ -158,12 +152,12 @@ describe('readPackageTsconfig', () => {
     // A reference that is missing or doesn't parse, when no config includes
     // the sources, is the project's error, as `tsc` reports it.
     write('tsconfig.json', {files: [], references: [{path: './gone.json'}]});
-    expect(readPackageTsconfig(ts, root, [source]).error).toMatch(
+    expect(readPackageTsconfig(root, [source]).error).toMatch(
       /^gone\.json: .*gone\.json/,
     );
     write('broken.json', '{"compilerOptions": ');
     write('tsconfig.json', {files: [], references: [{path: './broken.json'}]});
-    expect(readPackageTsconfig(ts, root, [source]).error).toMatch(
+    expect(readPackageTsconfig(root, [source]).error).toMatch(
       /^broken\.json: /,
     );
   });
@@ -178,28 +172,28 @@ describe('readPackageTsconfig', () => {
       'export {};\n',
     );
 
-    expect(readPackageTsconfig(ts, local, [localSource]).options.paths).toEqual(
+    expect(readPackageTsconfig(local, [localSource]).options.paths).toEqual(
       OPTIONS.paths,
     );
     expect(
-      readPackageTsconfig(ts, installed, [installedSource]).options.paths,
+      readPackageTsconfig(installed, [installedSource]).options.paths,
     ).toBeUndefined();
   });
 
   it('reports a config with errors instead of reading defaults', () => {
     const source = write('src/Button.tsx', 'export {};\n');
     write('tsconfig.json', {files: ['src/Button.tsx', 'src/missing.ts']});
-    expect(readPackageTsconfig(ts, root, [source]).error).toMatch(
+    expect(readPackageTsconfig(root, [source]).error).toMatch(
       /^tsconfig\.json: .*src\/missing\.ts.* not found/,
     );
 
     write('tsconfig.json', {extends: './missing-base.json'});
-    expect(readPackageTsconfig(ts, root, [source]).error).toMatch(
+    expect(readPackageTsconfig(root, [source]).error).toMatch(
       /^tsconfig\.json: .*missing-base\.json/,
     );
 
     write('tsconfig.json', '{"compilerOptions": ');
-    expect(readPackageTsconfig(ts, root, [source]).error).toMatch(
+    expect(readPackageTsconfig(root, [source]).error).toMatch(
       /^tsconfig\.json: /,
     );
   });
@@ -212,7 +206,7 @@ describe('readPackageTsconfig', () => {
     /** @type {(config: object) => any} */
     const read = config => {
       write('tsconfig.json', {compilerOptions: OPTIONS, ...config});
-      return readPackageTsconfig(ts, root, [source]);
+      return readPackageTsconfig(root, [source]);
     };
 
     // `${configDir}`, written in the package's config or in a shared base it
@@ -235,22 +229,4 @@ describe('readPackageTsconfig', () => {
     );
   });
 
-  it('reports only a missing `files` entry, not a file the `include` matched that is gone by the time it is read', () => {
-    const source = write('src/Button.tsx', 'export {};\n');
-    write('tsconfig.json', {compilerOptions: OPTIONS, include: ['src']});
-    // A file another process writes and removes while the config is read.
-    const gone = path.join(root, 'src', 'gone.ts');
-    const racing = {
-      ...ts,
-      sys: {
-        ...ts.sys,
-        readDirectory: (/** @type {any[]} */ ...args) => [
-          ...ts.sys.readDirectory(...args),
-          gone,
-        ],
-      },
-    };
-
-    expect(readPackageTsconfig(racing, root, [source]).error).toBeUndefined();
-  });
 });

@@ -6,7 +6,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/charts\",\n  \"data\": {\n    \"template\": \"ChartShowcase\",\n    \"description\": \"A responsive monthly revenue bar chart.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"Chart\",\n      \"ChartAxis\",\n      \"ChartGrid\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {Chart, ChartAxis, ChartGrid, bar} from '@astryxdesign/charts';\\n\\nconst monthlyRevenue = [\\n  {month: 'Jan', revenue: 42},\\n  {month: 'Feb', revenue: 58},\\n  {month: 'Mar', revenue: 51},\\n  {month: 'Apr', revenue: 74},\\n  {month: 'May', revenue: 68},\\n  {month: 'Jun', revenue: 86},\\n];\\n\\nexport default function ChartShowcase() {\\n  return (\\n    <Chart\\n      data={monthlyRevenue}\\n      xKey=\\\"month\\\"\\n      series={[bar('revenue', {label: 'Revenue'})]}\\n      tooltip\\n      grid={<ChartGrid horizontal />}\\n      axes={\\n        <>\\n          <ChartAxis position=\\\"bottom\\\" />\\n          <ChartAxis position=\\\"left\\\" />\\n        </>\\n      }\\n      height={260}\\n    />\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

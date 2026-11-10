@@ -274,7 +274,7 @@ describe('experimental icon new-set --from', () => {
     expect(data.default).toEqual({variant: 'outline'});
     expect(body.data.files).toContain('icon-sets/glyphs/LICENSE');
     // No TypeScript here: the receipt says the strict check needs one.
-    expect(body.data.notes.join(' ')).toContain('npm install -D typescript@6');
+    expect(body.data.notes.join(' ')).toContain('npm install -D typescript`');
     expect(
       fs.readFileSync(
         path.join(pkg, 'icon-sets', 'glyphs', 'LICENSE'),

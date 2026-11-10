@@ -5,7 +5,7 @@
   "BreadcrumbsSupportingVariant"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Breadcrumbs, BreadcrumbItem} from '@astryxdesign/core/Breadcrumbs';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\nexport default function BreadcrumbsSupportingVariant() {\n  return (\n    <Stack direction=\"vertical\" gap={4}>\n      <Stack direction=\"vertical\" gap={1}>\n        <Text type=\"supporting\" color=\"secondary\">\n          Default\n        </Text>\n        <Breadcrumbs>\n          <BreadcrumbItem href=\"/\">Home</BreadcrumbItem>\n          <BreadcrumbItem href=\"/projects\">Projects</BreadcrumbItem>\n          <BreadcrumbItem isCurrent>My Project</BreadcrumbItem>\n        </Breadcrumbs>\n      </Stack>\n      <Stack direction=\"vertical\" gap={1}>\n        <Text type=\"supporting\" color=\"secondary\">\n          Supporting\n        </Text>\n        <Breadcrumbs variant=\"supporting\">\n          <BreadcrumbItem href=\"/\">Home</BreadcrumbItem>\n          <BreadcrumbItem href=\"/projects\">Projects</BreadcrumbItem>\n          <BreadcrumbItem isCurrent>My Project</BreadcrumbItem>\n        </Breadcrumbs>\n      </Stack>\n    </Stack>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

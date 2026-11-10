@@ -6,7 +6,7 @@
   "best-practices"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Best Practices\n\n+ Use semantic tokens (--color-text-primary) instead of raw hex values.\n+ Rely on the surface hierarchy (body → surface → card → popover) for layering.\n+ Use status colors (success, error, warning) only for their semantic meaning.\n\nx Hardcode hex values, since they won't adapt to dark mode or custom themes.\nx Mix accent colors with status colors in the same context.\nx Use --color-on-accent on non-accent backgrounds.\n\nUp: npx @astryxdesign/cli@0.7.12 docs color --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs color usage\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

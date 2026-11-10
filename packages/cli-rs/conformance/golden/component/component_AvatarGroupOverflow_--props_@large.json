@@ -6,7 +6,7 @@
   "--props"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `count` | `number` | - | The number of hidden avatars. Used for the default `+N` label and the accessible label. **(required)** |\n| `children` | `ReactNode` | - | Optional custom count text rendered inside the indicator. Omit to use the default `+N` label. |\n| `onClick` | `() => void` | - | Callback fired when the overflow indicator is clicked. When provided, the indicator renders as a focusable button. |\n| `ref` | `React.Ref<HTMLElement>` | - | Ref forwarded to the overflow indicator element. |\n| `xstyle` | `StyleXStyles` | - | stylex.create() value — not an inline style object. |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

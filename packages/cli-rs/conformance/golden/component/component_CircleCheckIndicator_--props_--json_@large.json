@@ -7,7 +7,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/lab\",\n  \"data\": [\n    {\n      \"name\": \"state\",\n      \"type\": \"'unchecked' | 'checked' | 'indeterminate'\",\n      \"description\": \"Which state to draw. The unchecked circle is an empty ring, not nothing.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"size\",\n      \"type\": \"'sm' | 'md'\",\n      \"description\": \"Control size. The circle draws at UIKit’s diameters, 18px (sm) or 21.8px (md), centred in the host’s 20px or 24px slot.\",\n      \"default\": \"'md'\"\n    },\n    {\n      \"name\": \"isDisabled\",\n      \"type\": \"boolean\",\n      \"description\": \"Draws the disabled look. Purely visual; the owning control keeps the disabled semantics.\",\n      \"default\": \"false\"\n    },\n    {\n      \"name\": \"children\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Content drawn inside the circle instead of the mark, e.g. the loading Spinner CheckboxInput passes while a change is pending.\"\n    },\n    {\n      \"name\": \"xstyle\",\n      \"type\": \"StyleXStyles\",\n      \"description\": \"StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object like style={{}}.\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

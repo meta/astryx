@@ -6,9 +6,9 @@
   "src/canvas-editor.tsx"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "",
- "stderr": "Error: The page imports lucide-react, which is not installed\n\n  npm install lucide-react  (install the package the page imports)\n",
+ "stderr": "Error: The page imports /tmp/astryx-conformance/work/large/node_modules/@astryxdesign/theme-neutral/dist/neutral.js, which does not exist\n",
  "exit": 1,
  "files": [
   {

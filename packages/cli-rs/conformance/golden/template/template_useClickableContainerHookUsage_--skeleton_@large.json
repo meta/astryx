@@ -6,7 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# useClickableContainerHookUsage - A project card that useClickableContainer makes clickable anywhere: a click on the card follows its title link, while the Star button, the owner link and a text selection keep their own behavior, and Ctrl/Cmd+click or middle-click opens the project in a new tab.\n# Components: Card\n\n<VStack gap={3}>\n  <Card padding={4} width={360}>\n    <VStack gap={2}>\n      <HStack gap={2}>\n        <Heading />\n        <Link />\n        <Button variant=\"secondary\" />\n      </HStack>\n      <Text />\n      <Text />\n      <Link />\n    </VStack>\n  </Card>\n  <Text />\n</VStack>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

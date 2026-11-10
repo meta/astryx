@@ -5,7 +5,7 @@
   "CheckboxListWithEndContent"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {CheckboxList, CheckboxListItem} from '@astryxdesign/core/CheckboxList';\nimport {Badge} from '@astryxdesign/core/Badge';\n\nexport default function CheckboxListWithEndContent() {\n  const [value, setValue] = useState<string[]>(['free']);\n  return (\n    <CheckboxList\n      label=\"Add-on packages\"\n      value={value}\n      onChange={setValue}\n      hasDividers>\n      <CheckboxListItem\n        label=\"Free tier\"\n        value=\"free\"\n        description=\"Basic features included\"\n        endContent={<Badge variant=\"success\" label=\"$0/mo\" />}\n      />\n      <CheckboxListItem\n        label=\"Pro tier\"\n        value=\"pro\"\n        description=\"Advanced analytics and integrations\"\n        endContent={<Badge variant=\"info\" label=\"$9/mo\" />}\n      />\n      <CheckboxListItem\n        label=\"Enterprise\"\n        value=\"enterprise\"\n        description=\"Custom solutions and dedicated support\"\n        endContent={<Badge variant=\"purple\" label=\"Custom\" />}\n      />\n    </CheckboxList>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

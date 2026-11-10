@@ -6,7 +6,7 @@
   "where-motion-helps"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Where Motion Helps\n\nSome parts of the interface benefit from animation. Panels, dialogs, and collapsible sections are disorienting when they appear instantly, so animation gives the eye something to follow. Toasts and notifications need just enough entrance to be noticed without startling. State changes like a switch flipping or a selection highlighting feel more intentional with a brief transition.\n\nThe common thread is that these are moments where the user needs to understand what happened.\n\nUp: npx @astryxdesign/cli@0.7.12 docs motion --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs motion easing\nNext: npx @astryxdesign/cli@0.7.12 docs motion where-motion-hurts\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

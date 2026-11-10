@@ -7,7 +7,7 @@
   "brief"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nFileInput(value: File|File[]|null, onChange: (files: File|File[]|null) => void, changeAction: (files: File|File[]|null) => Promise<void>, mode: input|dropzone, status: {type: error|warning|success, message?: string}, statusVariant: attached|detached|tooltip)  <- from '@astryxdesign/core/FileInput'\n  FileInput provides file upload with optional drag-and-drop support. Use it fo...\n  Targets: astryx-file-input preferred attrs: data-mode, data-status variants: mode, status | astryx-file-input-icon preferred attrs: data-mode variants: mode\n  label: string, accept, isMultiple, maxSize, maxFiles, isLabelHidden, description, isOptional, isRequired, isDisabled, disabledMessage, isLoading, placeholder, labelTooltip, width, containerXstyle, containerClassName, containerStyle, controlXstyle, controlClassName, controlStyle\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

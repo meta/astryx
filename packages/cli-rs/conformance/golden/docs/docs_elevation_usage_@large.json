@@ -6,7 +6,7 @@
   "usage"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Usage\n\nWhen building a custom surface, read elevation from the token scale rather than a hand-rolled shadow; the same tokens the elevation prop resolves to.\n\nApplying elevation:\n```tsx\nimport {shadowVars} from '@astryxdesign/core/theme/tokens.stylex';\n\nconst styles = stylex.create({\n  dropdown: {\n    boxShadow: shadowVars['--shadow-med'],\n  },\n  dialog: {\n    boxShadow: shadowVars['--shadow-high'],\n  },\n  inputFocused: {\n    boxShadow: shadowVars['--shadow-inset-selected'],\n  },\n});\n```\n\nUp: npx @astryxdesign/cli@0.7.12 docs elevation --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs elevation the-elevation-prop\nNext: npx @astryxdesign/cli@0.7.12 docs elevation best-practices\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -6,7 +6,7 @@
   "--zh"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# CommandPaletteGroup\n\n带标题标签的视觉分组。放置在 CommandPaletteList 内。\n\n**Import:** `import {CommandPaletteGroup} from '@astryxdesign/core/CommandPalette';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `heading` | `string` | - | 分组标题文本。 **(required)** |\n| `children` | `ReactNode` | - | CommandPaletteItem 子元素。 **(required)** |\n| `xstyle` | `StyleXStyles` | - | StyleX 布局自定义样式。必须是 stylex.create() 的值。 |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

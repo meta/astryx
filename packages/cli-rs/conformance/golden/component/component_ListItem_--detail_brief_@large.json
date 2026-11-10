@@ -7,7 +7,7 @@
   "brief"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nListItem(interactiveRef: RefObject<HTMLElement|null>, align: center|start|first-line, itemKey: string|number, swipeBehavior: reveal|commit)  <- from '@astryxdesign/core/List'\n  List item with label, description, start/end content slots, and interactive p...\n  label: ReactNode, description, startContent, endContent, onClick, href, target, rel, isDisabled, isSelected, swipeActions\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

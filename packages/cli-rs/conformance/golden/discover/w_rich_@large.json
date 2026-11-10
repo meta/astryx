@@ -5,7 +5,7 @@
   "rich"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "Found 7 matches for \"rich\"\n\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/richtext/RichTextEditor  (not installed)\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/richtext/RichTextEditorAutoLinkPlugin  (not installed)\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/richtext/RichTextEditorToolbar  (not installed)\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/richtext/RichTextView  (not installed)\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/richtext/RichTextEditorShowcase  (template, not installed)\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/richtext  (package, not installed)\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/theme-chocolate  (package)\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

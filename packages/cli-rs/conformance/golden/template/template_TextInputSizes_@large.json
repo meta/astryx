@@ -5,7 +5,7 @@
   "TextInputSizes"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {TextInput} from '@astryxdesign/core/TextInput';\nimport {Stack} from '@astryxdesign/core/Layout';\n\nexport default function TextInputSizes() {\n  const [sm, setSm] = useState('');\n  const [md, setMd] = useState('');\n  const [lg, setLg] = useState('');\n\n  return (\n    <div style={{width: 300}}>\n      <Stack direction=\"vertical\" gap={3}>\n        <TextInput\n          label=\"Small\"\n          value={sm}\n          onChange={setSm}\n          placeholder=\"Enter a value\"\n          size=\"sm\"\n        />\n        <TextInput\n          label=\"Medium\"\n          value={md}\n          onChange={setMd}\n          placeholder=\"Enter a value\"\n          size=\"md\"\n        />\n        <TextInput\n          label=\"Large\"\n          value={lg}\n          onChange={setLg}\n          placeholder=\"Enter a value\"\n          size=\"lg\"\n        />\n      </Stack>\n    </div>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

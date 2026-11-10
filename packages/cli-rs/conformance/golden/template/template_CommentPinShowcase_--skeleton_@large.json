@@ -6,7 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/lab\n\n# CommentPinShowcase - Caller-positioned comment pins over media and in a content margin. Every coordinate maps to the pin's logical bottom-start corner. The selected group caps its participants at three circles (two Avatars plus an ellipsis) and ends with its total and an accent unread dot; the unread margin pin shows the dot too. Other pins dim without becoming disabled, activating the selected pin again clears the selection, and no pin dims while nothing is selected.\n# Components: CommentPin\n\n<VStack gap={4}>\n  <VStack gap={1}>\n    <Text />\n    <Text />\n  </VStack>\n  <CommentPin />\n  <CommentPin />\n  <CommentPin />\n</VStack>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

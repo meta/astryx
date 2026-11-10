@@ -17,7 +17,7 @@ import {
   PROPS_NOT_DOCUMENTED,
   TYPESCRIPT_MISSING_REASON,
 } from './prop-drift.mjs';
-import {unusableTypeScriptReason} from './project-typescript.mjs';
+import {nativeTypeScriptVersion} from './project-typescript.mjs';
 
 const require = createRequire(import.meta.url);
 const TYPESCRIPT_DIR = path.dirname(require.resolve('typescript/package.json'));
@@ -58,11 +58,8 @@ function withTypeScript() {
   );
 }
 
-/**
- * TypeScript 7 (no JavaScript compiler API) with the TypeScript 6 API package
- * beside it, which re-exports a real TypeScript.
- */
-function withTypeScript7AndItsTypeScript6Api() {
+/** TypeScript 7 alone: a `typescript` with no JavaScript entry. */
+function withTypeScript7Only() {
   const ts7 = path.join(pkg, 'node_modules', 'typescript');
   fs.mkdirSync(ts7, {recursive: true});
   fs.writeFileSync(
@@ -72,20 +69,6 @@ function withTypeScript7AndItsTypeScript6Api() {
       version: '7.0.2',
       exports: {'./package.json': './package.json'},
     }),
-  );
-  const ts6 = path.join(pkg, 'node_modules', '@typescript', 'typescript6');
-  fs.mkdirSync(ts6, {recursive: true});
-  fs.writeFileSync(
-    path.join(ts6, 'package.json'),
-    JSON.stringify({
-      name: '@typescript/typescript6',
-      version: '6.0.2',
-      main: 'index.js',
-    }),
-  );
-  fs.writeFileSync(
-    path.join(ts6, 'index.js'),
-    `module.exports = require(${JSON.stringify(TYPESCRIPT_DIR)});\n`,
   );
 }
 
@@ -192,24 +175,20 @@ describe('comparePropTables', () => {
     );
   });
 
-  it('judges no prop type, and says why, with a TypeScript older than 4.8', async () => {
+  it("judges prop types with the CLI's own TypeScript 7 whatever TypeScript the project installs", async () => {
     const dir = path.join(pkg, 'node_modules', 'typescript');
     fs.mkdirSync(dir, {recursive: true});
     fs.writeFileSync(path.join(dir, 'package.json'), '{"version": "4.7.4"}');
-    const real = JSON.stringify(TYPESCRIPT_DIR);
-    fs.writeFileSync(
-      path.join(dir, 'index.js'),
-      `module.exports = {...require(${real}), version: '4.7.4'};`,
-    );
     const source = 'export function Badge(p: {size?: string}) { return null; }';
     const doc = {props: [prop('size', 'number')]};
 
-    expect(await compare([component('Badge', source, doc)])).toMatchObject({
-      findings: [],
-      typesCompared: 0,
-      typesSkipped:
-        'TypeScript 4.7.4 is older than 4.8, the oldest the type comparison reads; install TypeScript 5.0 through 6 (`npm install -D typescript@6`), or on TypeScript 7 add `@typescript/typescript6`, to judge them',
+    const report = await compare([component('Badge', source, doc)]);
+    expect(report).toMatchObject({
+      typescript: nativeTypeScriptVersion(),
+      typesCompared: 1,
     });
+    expect(kinds(report)).toEqual(['Badge.size type_mismatch']);
+    expect(report).not.toHaveProperty('typesSkipped');
   });
 
   it("judges a prop a package's mapping rewrites by its type, and keeps the text of one a mapping copies", async () => {
@@ -291,7 +270,7 @@ interface ItemList<Item> { items?: Item[] }`;
     ]);
     // A message shows the type the mapping makes, not the source's text.
     expect(report.findings.map(f => f.codeType)).toEqual([
-      "('sm' | 'md')[]",
+      "('md' | 'sm')[]",
       "'sm' | 'md' | null",
       "'info'",
     ]);
@@ -800,15 +779,12 @@ export const Forwarded = forwardRef(function Forwarded({variant = 'solid'}: {var
     ]);
   });
 
-  it('reads strict null checks as the TypeScript version defaults them', async () => {
+  it('reads strict null checks as TypeScript 7 defaults them: on', async () => {
     withTypeScript();
     fs.writeFileSync(
       path.join(pkg, 'tsconfig.json'),
       JSON.stringify({compilerOptions: {jsx: 'react-jsx'}}),
     );
-    // The TypeScript the test links in: 6 checks strict null by default.
-    const ts = require(TYPESCRIPT_DIR);
-    const strictByDefault = ts.getStrictOptionValue({}, 'strictNullChecks');
     const maybe = component(
       'Maybe',
       'export function Maybe(props: {count?: number | null}) { return null; }\n',
@@ -817,9 +793,7 @@ export const Forwarded = forwardRef(function Forwarded({variant = 'solid'}: {var
 
     const report = await compare([maybe]);
 
-    expect(kinds(report)).toEqual(
-      strictByDefault ? ['Maybe.count type_mismatch'] : [],
-    );
+    expect(kinds(report)).toEqual(['Maybe.count type_mismatch']);
   });
 
   it("lists a name two index signatures take and a field documented with one variant's type, and reads a default for one union member", async () => {
@@ -2276,13 +2250,13 @@ export const Hoc = withName((props: {label?: string}) => null);`;
     ]);
   });
 
-  it("compares with TypeScript 7's TypeScript 6 API package when the project has one", async () => {
+  it('compares when the project installs only TypeScript 7', async () => {
     const badge = component(
       'Badge',
       'export function Badge(props: {label: string}) { return null; }\n',
       {props: [prop('label', 'number')]},
     );
-    withTypeScript7AndItsTypeScript6Api();
+    withTypeScript7Only();
 
     const report = await compare([badge]);
 
@@ -2293,7 +2267,7 @@ export const Hoc = withName((props: {label?: string}) => null);`;
     ).toContain('Badge.label type_mismatch');
   });
 
-  it('skips with a reason, and compares nothing, without a TypeScript it can use', async () => {
+  it('skips with a reason, and compares nothing, when the project has no TypeScript', async () => {
     const badge = component(
       'Badge',
       'export function Badge(props: {label: string}) { return null; }\n',
@@ -2310,28 +2284,6 @@ export const Hoc = withName((props: {label?: string}) => null);`;
     });
 
     expect(await compare([badge])).toEqual(skipped(TYPESCRIPT_MISSING_REASON));
-    expect(TYPESCRIPT_MISSING_REASON).toContain('npm install -D typescript@6');
-    // TypeScript 7 has no JavaScript compiler API to load.
-    const dir = path.join(pkg, 'node_modules', 'typescript');
-    fs.mkdirSync(dir, {recursive: true});
-    fs.writeFileSync(
-      path.join(dir, 'package.json'),
-      JSON.stringify({
-        name: 'typescript',
-        version: '7.0.0',
-        exports: {'./package.json': './package.json'},
-      }),
-    );
-    const report = await compare([badge]);
-    expect(report.reason).toContain('TypeScript 7.0.0');
-    expect(report.reason).toContain('npm install -D @typescript/typescript6');
-    expect(report).toEqual(
-      skipped(
-        unusableTypeScriptReason(
-          '7.0.0',
-          'documented props were not compared with the code',
-        ),
-      ),
-    );
+    expect(TYPESCRIPT_MISSING_REASON).toContain('npm install -D typescript');
   });
 });

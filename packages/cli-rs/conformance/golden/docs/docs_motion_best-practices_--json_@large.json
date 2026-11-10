@@ -7,7 +7,7 @@
   "--json"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"title\": \"Best Practices\",\n    \"category\": \"foundations\",\n    \"content\": [\n      {\n        \"type\": \"list\",\n        \"style\": \"do\",\n        \"items\": [\n          \"Animate transitions that involve spatial change: panels opening, content expanding, elements entering the screen.\",\n          \"Use fast tokens for small, frequent interactions. Use medium tokens for larger transitions that rearrange the layout.\",\n          \"Honor reduced motion preferences at the OS level.\"\n        ]\n      },\n      {\n        \"type\": \"list\",\n        \"style\": \"dont\",\n        \"items\": [\n          \"Let hover states or high-frequency interactions feel like they're lagging behind the user.\",\n          \"Let animation delay when a user can interact with new content. The transition should complete before (or not block) the next action.\",\n          \"Move elements in ways that contradict where they came from or where they're going.\"\n        ]\n      }\n    ],\n    \"id\": \"best-practices\",\n    \"links\": {\n      \"up\": \"astryx docs motion --index\",\n      \"previous\": \"astryx docs motion theme-motion\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

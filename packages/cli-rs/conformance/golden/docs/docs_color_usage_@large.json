@@ -6,7 +6,7 @@
   "usage"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Use color tokens in StyleX\n\nImport the typed color tokens and use them in `stylex.create()`; they resolve to the active theme and color mode.\n\nApplying color tokens:\n```tsx\nimport * as stylex from '@stylexjs/stylex';\nimport {colorVars} from '@astryxdesign/core/theme/tokens.stylex';\n\nconst styles = stylex.create({\n  container: {\n    backgroundColor: colorVars['--color-background-surface'],\n    color: colorVars['--color-text-primary'],\n    borderColor: colorVars['--color-border'],\n  },\n  accent: {\n    color: colorVars['--color-text-accent'],\n  },\n});\n```\n\nUp: npx @astryxdesign/cli@0.7.12 docs color --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs color surface-colors\nNext: npx @astryxdesign/cli@0.7.12 docs color best-practices\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

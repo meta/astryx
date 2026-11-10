@@ -5,7 +5,7 @@
   "CommandPaletteAutoGrouped"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useMemo} from 'react';\nimport {CommandPalette} from '@astryxdesign/core/CommandPalette';\nimport {createStaticSource} from '@astryxdesign/core/Typeahead';\n\nexport default function CommandPaletteAutoGrouped() {\n  const source = useMemo(\n    () =>\n      createStaticSource([\n        {id: 'home', label: 'Home', auxiliaryData: {group: 'Navigation'}},\n        {\n          id: 'settings',\n          label: 'Settings',\n          auxiliaryData: {group: 'Navigation'},\n        },\n        {id: 'new-file', label: 'New File', auxiliaryData: {group: 'Actions'}},\n        {id: 'save', label: 'Save', auxiliaryData: {group: 'Actions'}},\n      ]),\n    [],\n  );\n\n  return (\n    <CommandPalette\n      isOpen\n      isInline\n      onOpenChange={() => {}}\n      searchSource={source}\n    />\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

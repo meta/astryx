@@ -5,7 +5,7 @@ use super::type_match::{aliased, judge_type, union_members, JudgeCtx, Verdict};
 use super::Ts;
 use crate::discovery::nodepath as np;
 use crate::json::{Map, Value};
-use boa_engine::JsValue;
+use super::JsValue;
 use std::cell::RefCell;
 use std::rc::Rc;
 

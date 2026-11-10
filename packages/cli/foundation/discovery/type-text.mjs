@@ -24,30 +24,16 @@
  * written (comments and whitespace aside), so it never reads as another
  * type. Text that does not parse as one type comes back marked with
  * {@link UNPARSED}, which no printed type starts with, so it never matches.
- * {@link typeTextTooOld} says when the project's TypeScript is too old to
- * read type text with.
  *
  * @input Type text as written in a doc or a source file, or printed by the
- *   TypeScript compiler, and the project's own `typescript`.
+ *   TypeScript compiler, and the syntax helpers of a TypeScript 7 session
+ *   (./project-typescript.mjs), which parse it.
  * @output The canonical members of the type's top-level union, sorted.
  * @position Used by the prop type judgment (type-match.mjs).
  */
 
 /** Marks text that does not parse as one type: no printed type has it. */
 export const UNPARSED = '\u0000';
-
-/**
- * Why the project's TypeScript is too old for this module (before 4.8, the
- * oldest every printed form is tested on), or null.
- * @param {{version?: string}} ts
- * @returns {string | null}
- */
-export function typeTextTooOld(ts) {
-  const [major, minor] = String(ts.version).split('.').map(Number);
-  return major > 4 || (major === 4 && minor >= 8)
-    ? null
-    : `TypeScript ${ts.version} is older than 4.8, the oldest the type comparison reads; install TypeScript 5.0 through 6 (\`npm install -D typescript@6\`), or on TypeScript 7 add \`@typescript/typescript6\`, to judge them`;
-}
 
 /** How tightly a printed type binds: a slot needs at least its level. */
 const FN = 0; // a function, constructor or conditional type
@@ -570,8 +556,8 @@ function propertyName(ts, name) {
  * Canonical type text: the members of the type's top-level union, sorted.
  * The result is cached and frozen, so no caller can change it for the next.
  * @param {string} text
- * @param {{ts: any, optional?: boolean}} options `ts` is the project's own
- *   `typescript`; with `optional`, `undefined` is dropped, as an optional
+ * @param {{ts: any, optional?: boolean}} options `ts` is a TypeScript 7
+ *   session's syntax helpers; with `optional`, `undefined` is dropped, as an optional
  *   prop takes it anyway
  * @returns {readonly string[]}
  */
@@ -601,6 +587,16 @@ export function normalizeTypeText(text, options) {
   // initializer, an `in` or `out` type parameter, and an index signature
   // without one plain, typed parameter and a type. A comment before the `<`
   // is not a `.`.
+  // TypeScript 7's node lists do not say whether a comma ends them: the
+  // text after the last element, up to the closing `>`, does.
+  /** @type {(args: any, node: any) => boolean} */
+  const trailingComma = (args, node) =>
+    args.hasTrailingComma === true ||
+    sf.text
+      .slice(args[args.length - 1].end, node.end)
+      .replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')
+      .trim()
+      .startsWith(',');
   /** @type {(node: any) => boolean} */
   const invalid = node => {
     const args = node.typeArguments;
@@ -616,7 +612,7 @@ export function normalizeTypeText(text, options) {
         node.kind <= ts.SyntaxKind.LastJSDocNode) ||
       (!!args &&
         (args.length === 0 ||
-          args.hasTrailingComma ||
+          trailingComma(args, node) ||
           between.includes('.'))) ||
       (ts.isPropertySignature(node) && !!node.initializer) ||
       (ts.isTypeParameterDeclaration(node) &&
@@ -648,7 +644,7 @@ export function normalizeTypeText(text, options) {
   const result = Object.freeze(
     sf.statements.length === 1 &&
       ts.isTypeAliasDeclaration(statement) &&
-      (sf.parseDiagnostics ?? []).length === 0 &&
+      ts.parseDiagnosticsOf(sf).length === 0 &&
       !invalid(statement.type)
       ? unionParts(ts, sf, statement.type, optional).map(display)
       : [`${UNPARSED}${compact(source)}`],

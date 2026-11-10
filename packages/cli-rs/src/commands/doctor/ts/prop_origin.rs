@@ -4,7 +4,7 @@
 use super::prop_drift::{decls, file_of, fl, sf_, sk, some, strongest, text_of};
 use super::type_match::aliased;
 use super::Ts;
-use boa_engine::JsValue;
+use super::JsValue;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -34,6 +34,8 @@ pub struct Origins<'a> {
     is_own: &'a dyn Fn(&str) -> bool,
     sites: Vec<(JsValue, Vec<Env>)>,
     budget: i64,
+    /// Each mapping's answer per (env, key), read once.
+    answers: RefCell<Vec<(JsValue, Env, Option<String>, Option<&'static str>)>>,
 }
 
 impl<'a> Origins<'a> {
@@ -132,7 +134,7 @@ impl<'a> Origins<'a> {
         }
     }
 
-    fn key_origin(&self, t: &mut Ts, node: &JsValue, key: &str, env: &Env, depth: usize) -> Option<&'static str> {
+    fn key_origin(&self, t: &mut Ts, node: &JsValue, key: Option<&str>, env: &Env, depth: usize) -> Option<&'static str> {
         if !some(node) || depth > 40 {
             return Some("unknown");
         }
@@ -143,7 +145,7 @@ impl<'a> Origins<'a> {
         }
         if t.is("isLiteralTypeNode", node) {
             let l = t.get(node, "literal");
-            return if text_of(t, &l) == key { Some(self.where_(t, node)) } else { None };
+            return if key.is_none() || Some(text_of(t, &l).as_str()) == key { Some(self.where_(t, node)) } else { None };
         }
         if t.is("isUnionTypeNode", node) {
             let tys = t.get(node, "types");
@@ -170,10 +172,15 @@ impl<'a> Origins<'a> {
                     Some(b) => b.node.clone(),
                     None => ty.clone(),
                 };
-                let typ = t.m(&self.checker, "getTypeFromTypeNode", &[tn]);
+                let keyed = t.m(&self.checker, "getTypeFromTypeNode", &[tn]);
+                let Some(key) = key else {
+                    let props = t.m(&self.checker, "getPropertiesOfType", &[keyed.clone()]);
+                    let found: Vec<Option<&'static str>> = t.items(&props).iter().map(|p| self.prop_origin(t, p, depth + 1, Some(&keyed))).collect();
+                    return strongest(&found);
+                };
                 let k = t.str(key);
-                let prop = t.m(&self.checker, "getPropertyOfType", &[typ, k]);
-                return if some(&prop) { self.prop_origin(t, &prop, depth + 1) } else { None };
+                let prop = t.m(&self.checker, "getPropertyOfType", &[keyed.clone(), k]);
+                return if some(&prop) { self.prop_origin(t, &prop, depth + 1, Some(&keyed)) } else { None };
             }
         }
         if t.is("isArrayTypeNode", node) {
@@ -237,12 +244,12 @@ impl<'a> Origins<'a> {
         Some("unknown")
     }
 
-    fn value_origin(&self, t: &mut Ts, node: &JsValue, key: &str, depth: usize) -> Option<&'static str> {
+    fn value_origin(&self, t: &mut Ts, node: &JsValue, key: Option<&str>, depth: usize) -> Option<&'static str> {
         if !some(node) || depth > 40 {
             return Some("unknown");
         }
         if t.is("isStringLiteralLike", node) || t.is("isNumericLiteral", node) {
-            return if text_of(t, node) == key { Some(self.where_(t, node)) } else { None };
+            return if key.is_none() || Some(text_of(t, node).as_str()) == key { Some(self.where_(t, node)) } else { None };
         }
         if t.is("isArrayLiteralExpression", node) {
             let els = t.get(node, "elements");
@@ -274,7 +281,24 @@ impl<'a> Origins<'a> {
         Some("unknown")
     }
 
-    fn prop_origin(&self, t: &mut Ts, prop: &JsValue, depth: usize) -> Option<&'static str> {
+    /// `mappingOrigin(mapping, env, key, depth)`.
+    fn mapping_origin(&self, t: &mut Ts, mapping: &JsValue, env: &Env, key: Option<&str>, depth: usize) -> Option<&'static str> {
+        let id = key.map(String::from);
+        if let Some(hit) = self.answers.borrow().iter().find(|(m, e, k, _)| t.same(m, mapping) && Rc::ptr_eq(e, env) && *k == id) {
+            return hit.3;
+        }
+        self.answers.borrow_mut().push((mapping.clone(), env.clone(), id.clone(), None));
+        let tp = t.get(mapping, "typeParameter");
+        let constraint = t.get(&tp, "constraint");
+        let answer = self.key_origin(t, &constraint, key, env, depth);
+        if let Some(slot) = self.answers.borrow_mut().iter_mut().find(|(m, e, k, _)| t.same(m, mapping) && Rc::ptr_eq(e, env) && *k == id) {
+            slot.3 = answer;
+        }
+        answer
+    }
+
+    /// `propOrigin(prop, depth, container)`.
+    fn prop_origin(&self, t: &mut Ts, prop: &JsValue, depth: usize, container: Option<&JsValue>) -> Option<&'static str> {
         if depth > 40 {
             return Some("unknown");
         }
@@ -282,43 +306,49 @@ impl<'a> Origins<'a> {
         if !ds.is_empty() {
             return Some(if ds.iter().any(|d| self.where_(t, d) == "own") { "own" } else { "foreign" });
         }
-        let lk = t.get(prop, "links");
-        let links = if some(&lk) { lk } else { prop.clone() };
-        let so = t.get(&links, "syntheticOrigin");
-        if some(&so) {
-            return self.prop_origin(t, &so, depth + 1);
-        }
-        let ct = t.get(&links, "containingType");
-        if some(&ct) {
-            let pname = super::prop_drift::name_of(t, prop);
-            let tys = t.get(&ct, "types");
-            let mut found = Vec::new();
-            for ty in t.items(&tys) {
-                let pj = t.str(&pname);
-                let part = t.m(&self.checker, "getPropertyOfType", &[ty, pj]);
-                found.push(if some(&part) && !t.same(&part, prop) { self.prop_origin(t, &part, depth + 1) } else { None });
-            }
-            return strongest(&found);
-        }
-        let mt = t.get(&links, "mappedType");
-        let mapping = t.get(&mt, "declaration");
-        let kt = t.get(&links, "keyType");
-        let kv = t.get(&kt, "value");
-        if !some(&mapping) || kv.is_undefined() {
+        let Some(container) = container.filter(|c| some(c)) else { return Some("unknown") };
+        let pname = super::prop_drift::name_of(t, prop);
+        self.from_type(t, &pname, container, 0, depth)
+    }
+
+    fn from_type(&self, t: &mut Ts, pname: &str, ty: &JsValue, level: usize, depth: usize) -> Option<&'static str> {
+        if level > 8 {
             return Some("unknown");
         }
-        let key = t.s(&kv);
+        if super::prop_drift::is_union(t, ty) || super::prop_drift::is_inter(t, ty) {
+            let found: Vec<Option<&'static str>> = super::prop_drift::types_of(t, ty).iter().map(|u| self.from_type(t, pname, u, level + 1, depth)).collect();
+            return strongest(&found);
+        }
+        let pj = t.str(pname);
+        let part = t.m(&self.checker, "getPropertyOfType", &[ty.clone(), pj]);
+        if !some(&part) {
+            return None;
+        }
+        if !decls(t, &part).is_empty() {
+            return self.prop_origin(t, &part, depth + 1, None);
+        }
+        let mapping = t.get(ty, "declaration");
+        if fl(t, ty, "objectFlags") & super::prop_drift::of_(t, "Mapped") == 0 || !some(&mapping) {
+            let tg = t.get(ty, "target");
+            let target = if some(&tg) { tg } else { ty.clone() };
+            if fl(t, &target, "objectFlags") & super::prop_drift::of_(t, "ClassOrInterface") != 0 {
+                let bases = t.m(&self.checker, "getBaseTypes", &[ty.clone()]);
+                let found: Vec<Option<&'static str>> = t.items(&bases).iter().map(|b| self.from_type(t, pname, b, level + 1, depth)).collect();
+                return strongest(&found).or(Some("unknown"));
+            }
+            return Some("unknown");
+        }
+        let name_type = t.get(&mapping, "nameType");
+        let key = if some(&name_type) { None } else { Some(pname.to_string()) };
         let envs: Vec<Env> = self.sites.iter().find(|(k, _)| t.same(k, &mapping)).map(|(_, e)| e.clone()).unwrap_or_default();
-        let tp = t.get(&mapping, "typeParameter");
-        let constraint = t.get(&tp, "constraint");
-        let found: Vec<Option<&'static str>> = envs.iter().map(|e| self.key_origin(t, &constraint, &key, e, depth + 1)).collect();
+        let found: Vec<Option<&'static str>> = envs.iter().map(|e| self.mapping_origin(t, &mapping, e, key.as_deref(), depth + 1)).collect();
         strongest(&found)
     }
 }
 
 /// `mappedPropOrigin(ts, checker, isOwnFile, starts)`: built once, asked per prop.
 pub fn mapped_prop_origin<'a>(t: &mut Ts, checker: &JsValue, is_own: &'a dyn Fn(&str) -> bool, starts: &[JsValue]) -> Origins<'a> {
-    let mut o = Origins { checker: checker.clone(), is_own, sites: Vec::new(), budget: 5000 };
+    let mut o = Origins { checker: checker.clone(), is_own, sites: Vec::new(), budget: 5000, answers: RefCell::new(Vec::new()) };
     for s in starts {
         if some(s) && o.where_(t, s) == "own" {
             let env: Env = Rc::new(RefCell::new(Vec::new()));
@@ -329,7 +359,7 @@ pub fn mapped_prop_origin<'a>(t: &mut Ts, checker: &JsValue, is_own: &'a dyn Fn(
 }
 
 impl Origins<'_> {
-    pub fn origin(&self, t: &mut Ts, prop: &JsValue) -> &'static str {
-        self.prop_origin(t, prop, 0).unwrap_or("unknown")
+    pub fn origin(&self, t: &mut Ts, prop: &JsValue, container: &JsValue) -> &'static str {
+        self.prop_origin(t, prop, 0, Some(container)).unwrap_or("unknown")
     }
 }

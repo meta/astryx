@@ -1,6 +1,6 @@
 //! `comparePropTables` and `comparePropDocs` (`prop-drift.mjs`).
 
-use super::package_tsconfig::read_package_tsconfig;
+use super::package_tsconfig::open_package_project;
 use super::prop_drift::{some, text_of, tff, Lit, PROPS_NOT_DOCUMENTED};
 use super::prop_read::*;
 use super::prop_types::takes_undefined;
@@ -9,7 +9,7 @@ use super::unresolved::unresolved_globals;
 use super::Ts;
 use crate::discovery::nodepath as np;
 use crate::json::{Map, Value};
-use boa_engine::JsValue;
+use super::JsValue;
 
 pub const MISSING_REASON: &str = "TypeScript is not installed in this project, so documented props were not compared with the code.";
 const NOT_EXACT: &str = "not a form the check judges exactly";
@@ -97,11 +97,18 @@ fn lit_eq(a: &Lit, b: &Lit) -> bool {
 
 /// `comparePropTables(tables, {packageDir, resolveFrom})`.
 pub fn compare_prop_tables(tables: &[Table], package_dir: &str, resolve_from: &[&str]) -> Value {
-    let result = super::with_typescript(resolve_from, |t, version| compare_with(t, version, tables, package_dir));
-    match result {
+    if super::project_typescript(resolve_from).is_none() {
+        return empty("skipped", vec![("reason", s(&format!("{MISSING_REASON} {}", super::TYPESCRIPT_FIX)))]);
+    }
+    if tables.is_empty() {
+        return empty("checked", vec![("typescript", s(&crate::ts7::session::native_version()))]);
+    }
+    match super::with_session(&np::resolve1(package_dir), |t| {
+        let version = t.version.clone();
+        compare_with(t, &version, tables, package_dir)
+    }) {
         Ok(v) => v,
-        Err(None) => empty("skipped", vec![("reason", s(&format!("{MISSING_REASON} {}", super::TYPESCRIPT_FIX)))]),
-        Err(Some(v)) => empty("skipped", vec![("reason", s(&super::unusable_reason(&v, "documented props were not compared with the code")))]),
+        Err(e) => empty("skipped", vec![("reason", s(&crate::ts7::session::failed_reason(&e, "documented props were not compared with the code")))]),
     }
 }
 
@@ -136,26 +143,18 @@ fn compare_with(t: &mut Ts, version: &str, tables: &[Table], package_dir: &str) 
         return empty("checked", vec![("typescript", s(version))]);
     }
     let all_sources: Vec<String> = tables.iter().flat_map(|x| x.sources.clone()).collect();
-    let project = read_package_tsconfig(t, package_dir, &all_sources);
-    if let Some(err) = &project.error {
+    let opened = open_package_project(t, package_dir, &all_sources);
+    if let Some(err) = &opened.error {
         for table in tables {
             unchecked.push((table.name.clone(), table.doc.clone(), format!("the package's TypeScript config has an error, so props were not read ({err})")));
         }
         let u = unchecked_json(&mut unchecked);
         return empty("checked", vec![("typescript", s(version)), ("unchecked", u)]);
     }
-    let host = t.f("createCompilerHost", std::slice::from_ref(&project.options));
-    let mut roots: Vec<String> = Vec::new();
-    for f in all_sources.iter().chain(project.declarations.iter()) {
-        if !roots.contains(f) {
-            roots.push(f.clone());
-        }
-    }
-    let roots_js: Vec<JsValue> = roots.iter().map(|r| t.str(r)).collect();
-    let roots_js = t.arr(roots_js);
-    let args = t.obj(vec![("rootNames", roots_js), ("options", project.options.clone()), ("host", host)]);
-    let program = t.f("createProgram", &[args]);
-    let checker = t.m(&program, "getTypeChecker", &[]);
+    let Some(project) = opened.project.clone() else { return empty("checked", vec![("typescript", s(version))]) };
+    t.adapt(project);
+    let program = JsValue::Program;
+    let checker = JsValue::Checker;
     let own_cache: std::cell::RefCell<Vec<(String, bool)>> = std::cell::RefCell::new(Vec::new());
     let is_own = |file: &str| -> bool {
         if let Some((_, v)) = own_cache.borrow().iter().find(|(k, _)| k == file) {
@@ -167,31 +166,53 @@ fn compare_with(t: &mut Ts, version: &str, tables: &[Table], package_dir: &str) 
         own_cache.borrow_mut().push((file.to_string(), v));
         v
     };
-    let ambient = unresolved_globals(t, &program, &checker, &project.declarations, &project.options, &is_own);
-    let co = t.m(&program, "getCompilerOptions", &[]);
-    let ts: JsValue = t.ts.clone().into();
-    let gso = t.get(&ts, "getStrictOptionValue");
-    let strict_null = if gso.as_object().map(|o| o.is_callable()).unwrap_or(false) {
-        let k = t.str("strictNullChecks");
-        t.f("getStrictOptionValue", &[co.clone(), k]).to_boolean()
+    // The config the package's own options come from, as messages name it.
+    let co = super::from_json(&opened.options);
+    let co = if matches!(co, JsValue::Obj(_)) { co } else { t.obj(vec![]) };
+    let cfp = match &opened.config_path {
+        Some(c) => t.str(c),
+        None => JsValue::Undefined,
+    };
+    t.set(&co, "configFilePath", cfp);
+    t.compiler_options = co.clone();
+    let ambient = unresolved_globals(t, &program, &checker, &opened.declarations, &co, &is_own);
+    let sn = t.get(&co, "strictNullChecks");
+    let st = t.get(&co, "strict");
+    let strict_null = if some(&sn) {
+        sn.to_boolean()
+    } else if some(&st) {
+        st.to_boolean()
     } else {
-        let a = t.get(&co, "strictNullChecks");
-        if some(&a) {
-            a.to_boolean()
-        } else {
-            let b = t.get(&co, "strict");
-            b.to_boolean()
-        }
+        true
     };
     let nullable = !strict_null;
     let eopt = t.get(&co, "exactOptionalPropertyTypes");
     let reading = Reading { nullable, exact_optional: !nullable && eopt.as_boolean() == Some(true) };
+    // Every documented type is parsed in one request, ahead of the judging.
+    let mut texts: Vec<(String, String)> = Vec::new();
+    for table in tables {
+        for raw in &table.props {
+            let Some(ty) = raw.get("type").and_then(|v| v.as_str()) else { continue };
+            let mut parts = vec![ty.to_string()];
+            let split = crate::doctor_re!(r"\s+\/\s+", "g");
+            let mut last = 0;
+            for m in split.find_iter(ty) {
+                parts.push(ty[last..m.start()].to_string());
+                last = m.end();
+            }
+            parts.push(ty[last..].to_string());
+            for text in parts {
+                texts.push(("type-text.ts".into(), format!("type T = {text}\n;")));
+                texts.push(("__documented_type__.ts".into(), format!("type __Documented = {text};")));
+            }
+        }
+    }
+    t.prefetch(&texts);
     let mut findings: Vec<(String, String, String, Value)> = Vec::new();
     let mut props_not_checked: Vec<(String, String, String, Vec<String>)> = Vec::new();
     let mut compared = 0usize;
     let mut types_compared = 0usize;
     let mut types_not_compared: Vec<(String, String, String, Vec<String>)> = Vec::new();
-    let types_skipped = super::type_text::type_text_too_old(version);
     let q = tff(t, "UseSingleQuotesForStringLiteralType") as f64;
     for table in tables {
         let mut read: Option<Result<Read, String>> = None;
@@ -242,9 +263,6 @@ fn compare_with(t: &mut Ts, version: &str, tables: &[Table], package_dir: &str) 
                     continue;
                 }
                 let doc_type = entry.type_.clone();
-                if types_skipped.is_some() {
-                    entry.type_ = None;
-                }
                 if !documented.contains(&prop_name) {
                     documented.push(prop_name.clone());
                 }
@@ -254,7 +272,7 @@ fn compare_with(t: &mut Ts, version: &str, tables: &[Table], package_dir: &str) 
                     _ => None,
                 };
                 let raw_type_is_string = raw.get("type").map(|v| v.is_string()).unwrap_or(false);
-                if entry.type_.is_none() && types_skipped.is_none() && raw_type_is_string {
+                if entry.type_.is_none() && raw_type_is_string {
                     let cond = match code {
                         Some(_) if !entry.path.is_empty() => reached.is_some(),
                         Some(_) => true,
@@ -542,9 +560,6 @@ fn compare_with(t: &mut Ts, version: &str, tables: &[Table], package_dir: &str) 
     m.insert("findings".into(), Value::Array(findings.into_iter().map(|f| f.3).collect()));
     m.insert("unchecked".into(), unchecked_json(&mut unchecked));
     m.insert("typesNotCompared".into(), group(&types_not_compared));
-    if let Some(ts) = types_skipped {
-        m.insert("typesSkipped".into(), s(&ts));
-    }
     if !props_not_checked.is_empty() {
         m.insert("propsNotChecked".into(), group(&props_not_checked));
     }

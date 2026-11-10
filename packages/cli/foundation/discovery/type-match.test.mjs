@@ -8,13 +8,20 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {createRequire} from 'node:module';
 import {afterAll, describe, expect, it} from 'vitest';
+import {openTypeScript} from './project-typescript.mjs';
 import {judgeType} from './type-match.mjs';
+import {adaptProject} from './typescript-checker.mjs';
 
-const ts = createRequire(import.meta.url)('typescript');
-const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-type-match-'));
-afterAll(() => fs.rmSync(dir, {recursive: true, force: true}));
+const dir = fs.realpathSync(
+  fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-type-match-')),
+);
+/** @type {Array<{close: () => void}>} */
+const sessions = [];
+afterAll(() => {
+  for (const session of sessions) session.close();
+  fs.rmSync(dir, {recursive: true, force: true});
+});
 // React's types, as a global `React` namespace the way they declare it.
 const reactTypes = path.join(dir, 'node_modules', '@types', 'react');
 fs.mkdirSync(reactTypes, {recursive: true});
@@ -31,13 +38,18 @@ fs.writeFileSync(
 function judgeIn(source) {
   const file = path.join(dir, 'props.ts');
   fs.writeFileSync(file, source);
-  const program = ts.createProgram([file], {
-    strict: true,
-    noEmit: true,
-    typeRoots: [path.join(dir, 'node_modules', '@types')],
-    types: ['react'],
-  });
-  const checker = program.getTypeChecker();
+  const session = openTypeScript({cwd: dir});
+  sessions.push(session);
+  const ts = session.syntax;
+  const {program, checker} = adaptProject(
+    session.project(dir, [file], {
+      strict: true,
+      noEmit: true,
+      typeRoots: [path.join(dir, 'node_modules', '@types')],
+      types: ['react'],
+    }),
+    ts,
+  );
   const props = checker.getTypeAtLocation(
     program
       .getSourceFile(file)

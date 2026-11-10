@@ -6,7 +6,7 @@
   "--zh"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# CommandPaletteFooter\n\n显示键盘导航提示的页脚。未提供子元素时渲染默认方向键/Enter/Escape 提示。\n\n**Import:** `import {CommandPaletteFooter} from '@astryxdesign/core/CommandPalette';`\n\n## Anatomy\n\n| Element | Required | Description |\n|---------|----------|-------------|\n| Footer | Yes | Supporting region that presents default guidance or caller-provided footer content. |\n| Keyboard shortcut | No | Default Kbd badges for navigation, selection, and dismissal. |\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | 自定义页脚内容。省略时通过 Kbd 渲染默认键盘提示。 |\n| `xstyle` | `StyleXStyles` | - | StyleX 布局自定义样式。必须是 stylex.create() 的值。 |\n\n## Theming\n\n| Component class | Preferred data attributes | Props | States |\n|-----------------|---------------------------|-------|--------|\n| `astryx-command-palette-footer` | - | - | - |\n\nOverride in defineTheme:\n```ts\ncomponents: {\n  'command-palette-footer': {\n    base: { /* CSS properties */ },\n  },\n}\n```\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

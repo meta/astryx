@@ -6,7 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# side-gallery - Asymmetric split section: a copy column of headline, supporting text, and links held against a clustered image collage opposite. Deliberately off-balance, unlike the centered hero.\n# Components: AspectRatio, Divider, Grid, Layout\n\n<Layout padding={6} height=\"fill\">\n  /* content: */\n  <LayoutContent padding={6}>\n    <Grid gap={8} columns={{minWidth: 360, repeat: 'fit'}}>\n      <VStack gap={6}>\n        <VStack gap={3}>\n          <Text />\n          <Heading />\n          <Text />\n        </VStack>\n        <HStack gap={3}>\n          <Button variant=\"primary\" />\n        </HStack>\n        <VStack gap={4}>\n          <Divider />\n          <HStack gap={6}>\n            <StatBlock />\n            <StatBlock />\n            <StatBlock />\n          </HStack>\n        </VStack>\n      </VStack>\n      <ImageGrid />\n    </Grid>\n  </LayoutContent>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

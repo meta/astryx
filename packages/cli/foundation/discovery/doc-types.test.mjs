@@ -11,7 +11,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {createRequire} from 'node:module';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
-import {unusableTypeScriptReason} from './project-typescript.mjs';
+import {nativeTypeScriptVersion} from './project-typescript.mjs';
 import {iconDefinitionSource} from './icon-set-writer.mjs';
 import {
   checkDocTypes,
@@ -38,37 +38,6 @@ function withTypeScript() {
     TYPESCRIPT_DIR,
     path.join(pkg, 'node_modules', 'typescript'),
     'dir',
-  );
-}
-
-/**
- * TypeScript 7 (no JavaScript compiler API) with the TypeScript 6 API package
- * beside it, which re-exports a real TypeScript.
- */
-function withTypeScript7AndItsTypeScript6Api() {
-  const ts7 = path.join(pkg, 'node_modules', 'typescript');
-  fs.mkdirSync(ts7, {recursive: true});
-  fs.writeFileSync(
-    path.join(ts7, 'package.json'),
-    JSON.stringify({
-      name: 'typescript',
-      version: '7.0.2',
-      exports: {'./package.json': './package.json'},
-    }),
-  );
-  const ts6 = path.join(pkg, 'node_modules', '@typescript', 'typescript6');
-  fs.mkdirSync(ts6, {recursive: true});
-  fs.writeFileSync(
-    path.join(ts6, 'package.json'),
-    JSON.stringify({
-      name: '@typescript/typescript6',
-      version: '6.0.2',
-      main: 'index.js',
-    }),
-  );
-  fs.writeFileSync(
-    path.join(ts6, 'index.js'),
-    `module.exports = require(${JSON.stringify(TYPESCRIPT_DIR)});\n`,
   );
 }
 
@@ -126,55 +95,36 @@ describe('checkDocTypes', () => {
     });
   });
 
-  it('names an installed TypeScript it cannot use, rather than asking to install one', async () => {
+  it("checks with the CLI's own TypeScript 7 whatever TypeScript the project installs, even one with no compiler API", async () => {
     write(
       'components/Badge.doc.mjs',
       `export default ${JSON.stringify(COMPONENT)};\n`,
     );
-    // TypeScript 7 has no JavaScript compiler API: one entry exports none,
-    // another cannot be loaded at all.
+    // TypeScript 7 publishes no JavaScript entry; an old TypeScript has no
+    // `satisfies`. Either one only says the project uses TypeScript.
     for (const stub of [
-      {main: 'index.js', code: "module.exports = {version: '7.0.0'};\n"},
-      {exports: {'./package.json': './package.json'}},
+      {version: '7.0.0', exports: {'./package.json': './package.json'}},
+      {version: '4.8.4', main: 'index.js'},
     ]) {
       const dir = path.join(pkg, 'node_modules', 'typescript');
       fs.rmSync(dir, {recursive: true, force: true});
       fs.mkdirSync(dir, {recursive: true});
-      const {code, ...fields} = stub;
       fs.writeFileSync(
         path.join(dir, 'package.json'),
-        JSON.stringify({name: 'typescript', version: '7.0.0', ...fields}),
+        JSON.stringify({name: 'typescript', ...stub}),
       );
-      if (code) fs.writeFileSync(path.join(dir, 'index.js'), code);
 
       const report = await check([['components/Badge.doc.mjs', 'components']]);
 
-      // The reason names the version and the fix, so a --strict failure
-      // says what to install.
-      expect(report.reason).toContain('TypeScript 7.0.0');
-      expect(report.reason).toContain('npm install -D @typescript/typescript6');
       expect(report).toEqual({
-        status: 'skipped',
-        reason: unusableTypeScriptReason('7.0.0', 'docs were not checked'),
-        docs: 0,
+        status: 'checked',
+        typescript: nativeTypeScriptVersion(),
+        docs: 1,
         findings: [],
         unchecked: [],
       });
-      expect(report.reason).toContain('TypeScript 7.0.0 is installed');
+      expect(report.typescript).toMatch(/^7\./);
     }
-  });
-
-  it("checks with TypeScript 7's TypeScript 6 API package when the project has one", async () => {
-    write(
-      'components/Badge.doc.mjs',
-      `export default ${JSON.stringify(COMPONENT)};\n`,
-    );
-    withTypeScript7AndItsTypeScript6Api();
-
-    const report = await check([['components/Badge.doc.mjs', 'components']]);
-
-    expect(report.status).toBe('checked');
-    expect(report.docs).toBe(1);
   });
 
   it('says there is nothing to check when the package has no doc files, with or without TypeScript', async () => {
@@ -742,28 +692,6 @@ describe('checkDocTypes', () => {
     expect(new Set(report.findings.map(f => f.type))).toEqual(
       new Set(['IconDefinitionDoc']),
     );
-  });
-
-  it('checks nothing with a TypeScript older than 4.9, even when every doc is TypeScript', async () => {
-    const fake = path.join(pkg, 'node_modules', 'typescript');
-    fs.mkdirSync(fake, {recursive: true});
-    fs.writeFileSync(
-      path.join(fake, 'package.json'),
-      JSON.stringify({name: 'typescript', version: '4.8.4', main: 'index.js'}),
-    );
-    fs.writeFileSync(
-      path.join(fake, 'index.js'),
-      `module.exports = {...require(${JSON.stringify(TYPESCRIPT_DIR)}), version: '4.8.4', versionMajorMinor: '4.8'};\n`,
-    );
-    write(
-      'components/Badge.doc.ts',
-      `export default ${JSON.stringify(COMPONENT)};\n`,
-    );
-
-    const report = await check([['components/Badge.doc.ts', 'components']]);
-
-    expect(report).toMatchObject({status: 'skipped', docs: 0, findings: []});
-    expect(report.reason).toContain('needs TypeScript 4.9 or later');
   });
 
   it('names a doc the compiler cannot parse as not checked, never as a pass', async () => {

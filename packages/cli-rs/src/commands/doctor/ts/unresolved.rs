@@ -4,7 +4,7 @@
 
 use super::Ts;
 use crate::discovery::nodepath as np;
-use boa_engine::JsValue;
+use super::JsValue;
 
 #[derive(Clone, Debug)]
 pub struct Unresolved {
@@ -62,7 +62,6 @@ struct Ctx<'a> {
     program: JsValue,
     checker: JsValue,
     options: JsValue,
-    sys: JsValue,
     side_effects: bool,
     mine: &'a dyn Fn(&str) -> bool,
     typed_tags: Vec<f64>,
@@ -71,10 +70,165 @@ struct Ctx<'a> {
     untyped_names: Vec<(JsValue, Vec<String>)>,
 }
 
-fn resolves(t: &mut Ts, c: &Ctx, spec: &str, from: &str) -> bool {
-    let (s, f) = (t.str(spec), t.str(from));
-    let r = t.f("resolveModuleName", &[s, f, c.options.clone(), c.sys.clone()]);
-    some(&t.get(&r, "resolvedModule"))
+fn resolves(_t: &mut Ts, _c: &Ctx, spec: &str, from: &str) -> bool {
+    module_found(spec, from)
+}
+
+/// The extensions a module specifier may leave out, in the order tried.
+const EXTENSIONS: &[&str] = &[".ts", ".tsx", ".d.ts", ".mts", ".cts", ".d.mts", ".d.cts", ".js", ".jsx", ".mjs", ".cjs", ".json"];
+
+fn is_file(f: &str) -> bool {
+    std::fs::metadata(f).map(|m| m.is_file()).unwrap_or(false)
+}
+
+fn is_dir(f: &str) -> bool {
+    std::fs::metadata(f).map(|m| m.is_dir()).unwrap_or(false)
+}
+
+/// `moduleAt(base)`.
+fn module_at(base: &str) -> bool {
+    if is_file(base) || EXTENSIONS.iter().any(|e| is_file(&format!("{base}{e}"))) {
+        return true;
+    }
+    if let Some(m) = crate::doctor_re!(r"\.([cm]?)jsx?$").find(base) {
+        let stem = &base[..m.start()];
+        let k = m.group(1).map(|r| &base[r]).unwrap_or("");
+        let kinds: Vec<String> = if k.is_empty() { vec![".ts".into(), ".tsx".into(), ".d.ts".into()] } else { vec![format!(".{k}ts"), format!(".d.{k}ts")] };
+        if kinds.iter().any(|e| is_file(&format!("{stem}{e}"))) {
+            return true;
+        }
+    }
+    is_dir(base) && (is_file(&np::join2(base, "package.json")) || EXTENSIONS.iter().any(|e| is_file(&np::join2(base, &format!("index{e}")))))
+}
+
+/// `moduleFound(specifier, fromFile)`.
+pub fn module_found(specifier: &str, from_file: &str) -> bool {
+    if specifier.starts_with('.') || np::is_absolute(specifier) {
+        return module_at(&np::resolve(&[&np::dirname(from_file), specifier]));
+    }
+    let parts: Vec<&str> = specifier.split('/').collect();
+    let scoped = specifier.starts_with('@');
+    let n = if scoped { 2 } else { 1 };
+    let name = parts[..n.min(parts.len())].join("/");
+    let sub = parts[n.min(parts.len())..].join("/");
+    let types_name = if scoped { name[1..].replacen('/', "__", 1) } else { name.clone() };
+    let mut dir = np::dirname(&np::resolve1(from_file));
+    loop {
+        let pkg = np::join(&[&dir, "node_modules", &name]);
+        if is_dir(&pkg) && (sub.is_empty() || module_at(&np::join2(&pkg, &sub)) || has_export(&pkg, &sub)) {
+            return true;
+        }
+        if is_dir(&np::join(&[&dir, "node_modules", "@types", &types_name])) {
+            return true;
+        }
+        let parent = np::dirname(&dir);
+        if parent == dir {
+            return false;
+        }
+        dir = parent;
+    }
+}
+
+fn has_export(pkg: &str, sub: &str) -> bool {
+    let Some(pj) = np::read_json(&np::join2(pkg, "package.json")) else { return false };
+    let Some(exports) = pj.get("exports").and_then(|e| e.as_object()) else { return false };
+    exports.keys().any(|key| {
+        let Some(pattern) = key.strip_prefix("./") else { return false };
+        if !pattern.contains('*') {
+            return pattern == sub;
+        }
+        let mut it = pattern.split('*');
+        let head = it.next().unwrap_or("");
+        let tail = it.next().unwrap_or("");
+        sub.starts_with(head) && sub.ends_with(tail)
+    })
+}
+
+/// `typesFound(name, fromDir, typeRoots)`.
+pub fn types_found(name: &str, from_dir: &str, type_roots: &[String]) -> Option<String> {
+    let types_name = if name.starts_with('@') { name[1..].replacen('/', "__", 1) } else { name.to_string() };
+    let rooted: Vec<String> = type_roots.iter().map(|r| np::join2(r, &types_name)).collect();
+    let mut dir = np::resolve1(from_dir);
+    let mut first = true;
+    loop {
+        let mut pkgs: Vec<String> = if first { rooted.clone() } else { vec![] };
+        pkgs.push(np::join(&[&dir, "node_modules", "@types", &types_name]));
+        pkgs.push(np::join(&[&dir, "node_modules", name]));
+        for pkg in pkgs {
+            if !is_dir(&pkg) {
+                continue;
+            }
+            let mut entry = "index.d.ts".to_string();
+            if let Some(pj) = np::read_json(&np::join2(&pkg, "package.json")) {
+                let pick = |k: &str| pj.get(k).filter(|v| !v.is_null()).map(|v| v.as_str().map(String::from).unwrap_or_else(|| crate::cli::format::js_string(v)));
+                if let Some(e) = pick("types").or_else(|| pick("typings")) {
+                    entry = e;
+                }
+            }
+            for file in [np::join2(&pkg, &entry), np::join2(&pkg, &format!("{entry}.d.ts")), np::join(&[&pkg, &entry, "index.d.ts"])] {
+                if is_file(&file) {
+                    return Some(file);
+                }
+            }
+        }
+        first = false;
+        let parent = np::dirname(&dir);
+        if parent == dir {
+            return None;
+        }
+        dir = parent;
+    }
+}
+
+/// `typeDirectiveNames(options, configDir)`.
+fn type_directive_names(t: &mut Ts, options: &JsValue, config_dir: &str) -> Vec<String> {
+    let tv = t.get(options, "types");
+    let types: Vec<String> = if matches!(tv, JsValue::Arr(_)) { t.items(&tv).iter().map(|x| t.s(x)).collect() } else { vec![] };
+    if !types.iter().any(|x| x == "*") {
+        return types;
+    }
+    let tr = t.get(options, "typeRoots");
+    let mut roots: Vec<String> = if matches!(tr, JsValue::Arr(_)) { t.items(&tr).iter().map(|x| t.s(x)).collect() } else { vec![] };
+    if roots.is_empty() {
+        let mut dir = config_dir.to_string();
+        loop {
+            roots.push(np::join(&[&dir, "node_modules", "@types"]));
+            let parent = np::dirname(&dir);
+            if parent == dir {
+                break;
+            }
+            dir = parent;
+        }
+    }
+    let mut names: Vec<String> = types.into_iter().filter(|x| x != "*").collect();
+    for root in roots {
+        let Some(rd) = np::read_dir(&root) else { continue };
+        for e in rd {
+            let is_dir = e.is_dir;
+            let n = e.name;
+            if !is_dir || n.starts_with('.') {
+                continue;
+            }
+            let name = if n.starts_with('@') {
+                None
+            } else if n.contains("__") {
+                Some(format!("@{}", n.replacen("__", "/", 1)))
+            } else {
+                Some(n)
+            };
+            if let Some(name) = name {
+                if !names.contains(&name) {
+                    names.push(name);
+                }
+            }
+        }
+    }
+    names
+}
+
+fn type_roots(t: &mut Ts, options: &JsValue) -> Vec<String> {
+    let tr = t.get(options, "typeRoots");
+    t.items(&tr).iter().map(|x| t.s(x)).collect()
 }
 
 fn bound_names(t: &mut Ts, parent: &JsValue) -> Vec<String> {
@@ -493,11 +647,8 @@ fn read(t: &mut Ts, c: &mut Ctx, sf: &JsValue) -> FileRead {
     for r in t.items(&trd) {
         let rf = t.get(&r, "fileName");
         let rfs = t.s(&rf);
-        let (a, b) = (t.str(&rfs), t.str(&fname));
-        let res = t.f("resolveTypeReferenceDirective", &[a, b, c.options.clone(), c.sys.clone()]);
-        let rtd = t.get(&res, "resolvedTypeReferenceDirective");
-        let found = t.get(&rtd, "resolvedFileName");
-        match t.opt_s(&found) {
+        let roots = type_roots(t, &c.options);
+        match types_found(&rfs, &np::dirname(&fname), &roots) {
             None => {
                 missing.get_or_insert(Unresolved { name: format!("the types `{rfs}`"), file: fname.clone(), how: "imported" });
             }
@@ -659,20 +810,12 @@ fn reads_indexed_members(t: &mut Ts, c: &mut Ctx, node: &JsValue, untyped: &mut 
 
 /// `unresolvedReference(ts, program, checker, roots, follow, mine)`.
 pub fn unresolved_reference(t: &mut Ts, program: &JsValue, checker: &JsValue, roots: &[JsValue], follow: &dyn Fn(&str) -> bool, mine: &dyn Fn(&str) -> bool) -> Option<Unresolved> {
-    let ts: JsValue = t.ts.clone().into();
-    let k = t.get(&ts, "SyntaxKind");
-    let typed_tags: Vec<f64> = TYPED_JSDOC_TAGS.iter().filter_map(|n| t.get(&k, n).as_number()).collect();
+    let typed_tags: Vec<f64> = TYPED_JSDOC_TAGS.iter().filter_map(|n| crate::ts7::syntax_tables::enum_value("SyntaxKind", n)).collect();
     let starts: Vec<f64> = ["TypeReference", "TypeQuery", "IndexedAccessType", "ImportType", "ExpressionWithTypeArguments"].iter().map(|n| t.enum_value("SyntaxKind", n)).collect();
     let options = t.m(program, "getCompilerOptions", &[]);
     let use_ = t.get(&options, "noUncheckedSideEffectImports");
-    let side_effects = if some(&use_) {
-        use_.to_boolean()
-    } else {
-        let mm = t.get(&ts, "versionMajorMinor");
-        t.s(&mm).split('.').next().and_then(|x| x.parse::<i64>().ok()).unwrap_or(0) >= 6
-    };
-    let sys = t.get(&ts, "sys");
-    let mut c = Ctx { program: program.clone(), checker: checker.clone(), options, sys, side_effects, mine, typed_tags, starts, errors: vec![], untyped_names: vec![] };
+    let side_effects = if some(&use_) { use_.to_boolean() } else { true };
+    let mut c = Ctx { program: program.clone(), checker: checker.clone(), options, side_effects, mine, typed_tags, starts, errors: vec![], untyped_names: vec![] };
     let mut first_untyped: Option<Unresolved> = None;
     let mut seen: Vec<JsValue> = Vec::new();
     let mut queue: std::collections::VecDeque<JsValue> = roots.iter().filter(|r| some(r)).cloned().collect();
@@ -712,14 +855,12 @@ fn imports_names(t: &mut Ts, statement: &JsValue) -> bool {
 
 /// `unresolvedGlobals(ts, program, checker, declarations, options, isOwnFile)`.
 pub fn unresolved_globals(t: &mut Ts, program: &JsValue, checker: &JsValue, declarations: &[String], options: &JsValue, is_own_file: &dyn Fn(&str) -> bool) -> Option<Unresolved> {
-    let ts: JsValue = t.ts.clone().into();
-    let sys = t.get(&ts, "sys");
     let cfp = t.get(options, "configFilePath");
     let config = match t.opt_s(&cfp) {
         Some(s) => s,
         None => {
-            let cwd = t.m(&sys, "getCurrentDirectory", &[]);
-            np::join2(&t.s(&cwd), "tsconfig.json")
+            let cwd = std::env::current_dir().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
+            np::join2(&cwd, "tsconfig.json")
         }
     };
     let follow = |f: &str| is_own_file(f) || crate::doctor_re!(r"[\\/]node_modules[\\/]").find(f).is_none();
@@ -738,7 +879,7 @@ pub fn unresolved_globals(t: &mut Ts, program: &JsValue, checker: &JsValue, decl
         }
         let stmts = t.get(sf, "statements");
         t.items(&stmts).iter().any(|s| {
-            (t.is("isModuleDeclaration", s) && (t.f("isGlobalScopeAugmentation", std::slice::from_ref(s)).to_boolean() || {
+            (t.is("isModuleDeclaration", s) && (t.is("isGlobalScopeAugmentation", s) || {
                 let n = t.get(s, "name");
                 t.is("isStringLiteral", &n)
             })) || t.is("isNamespaceExportDeclaration", s)
@@ -757,14 +898,10 @@ pub fn unresolved_globals(t: &mut Ts, program: &JsValue, checker: &JsValue, decl
             roots.push(sf);
         }
     }
-    let names = t.f("getAutomaticTypeDirectiveNames", &[options.clone(), sys.clone()]);
-    for name in t.items(&names) {
-        let n = t.s(&name);
-        let inferred = t.str(&np::join2(&np::dirname(&config), "__inferred type names__.ts"));
-        let res = t.f("resolveTypeReferenceDirective", &[name.clone(), inferred, options.clone(), sys.clone()]);
-        let rtd = t.get(&res, "resolvedTypeReferenceDirective");
-        let found = t.get(&rtd, "resolvedFileName");
-        let Some(found) = t.opt_s(&found) else {
+    let config_dir = np::dirname(&config);
+    let roots_opt = type_roots(t, options);
+    for n in type_directive_names(t, options, &config_dir) {
+        let Some(found) = types_found(&n, &config_dir, &roots_opt) else {
             return Some(Unresolved { name: format!("the types `{n}`"), file: config, how: "named" });
         };
         if follow(&found) {

@@ -7,7 +7,7 @@
   "brief"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nTable(idKey: (keyof T & string)|((item: T) => string|number), density: compact|balanced|spacious, dividers: rows|columns|grid|none, verticalAlign: middle|top|bottom, textOverflow: wrap|truncate)  <- from '@astryxdesign/core/Table'\n  Table displays structured data in rows and columns with consistent dimensiona...\n  Icon slots: table-sort-indicator {direction: 'ascending' | 'descending' | 'none'}; table-row-expand {expanded: boolean}\n  Targets: astryx-table | astryx-table-scroll-wrapper | astryx-table-header | astryx-table-body | astryx-table-footer | astryx-table-row | astryx-table-cell preferred attrs: data-density variants: density | astryx-table-header-cell preferred attrs: data-density variants: density\n  data, columns, isStriped, hasHover, virtualization, plugins, rowIndexStart, rowCount, children, xstyle\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -5,7 +5,7 @@
   "LinkProviderCustomLink"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport type {AnchorHTMLAttributes} from 'react';\nimport {Link, LinkProvider} from '@astryxdesign/core/Link';\n\n/**\n * A stand-in for a framework router link (e.g. Next.js `Link` or React\n * Router `Link`). Instead of letting the browser do a full-page navigation,\n * it intercepts the click and hands the destination to a custom handler —\n * the same hook real routers use for client-side navigation. Here it just\n * announces the target so the behavior swap is observable in the preview.\n */\nfunction RouterLink({\n  href,\n  onClick,\n  children,\n  ...props\n}: AnchorHTMLAttributes<HTMLAnchorElement>) {\n  return (\n    <a\n      href={href}\n      onClick={e => {\n        e.preventDefault();\n        onClick?.(e);\n        alert(`RouterLink intercepted navigation to: ${href}`);\n      }}\n      {...props}>\n      {children}\n    </a>\n  );\n}\n\nexport default function LinkProviderCustomLink() {\n  return (\n    <LinkProvider component={RouterLink}>\n      <Link href=\"/dashboard\" isStandalone>\n        Go to dashboard\n      </Link>\n    </LinkProvider>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

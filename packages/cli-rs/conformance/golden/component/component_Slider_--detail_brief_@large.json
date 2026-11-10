@@ -7,7 +7,7 @@
   "brief"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nSlider(value: number|[number, number], onChange: (value: number) => void|(value: [number, number]) => void, onChangeEnd: (value: number) => void|(value: [number, number]) => void, orientation: horizontal|vertical, valueDisplay: tooltip|text|none, status: {type: warning|error|success, message?: string})  <- from '@astryxdesign/core/Slider'\n  A draggable control for selecting a numeric value or range within defined bou...\n  Targets: astryx-slider preferred attrs: data-orientation, data-disabled variants: orientation states: disabled | astryx-slider-control preferred attrs: data-orientation, data-disabled variants: orientation states: disabled | astryx-slider-track preferred attrs: data-orientation variants: orientation | astryx-slider-thumb preferred attrs: data-orientation, data-disabled variants: orientation states: disabled\n  label: string, min, max, step, formatValue, marks, minStepsBetweenThumbs, isDisabled, htmlName, disabledMessage, isOptional, isRequired, isLabelHidden, description, labelTooltip, width, containerXstyle, containerClassName, containerStyle, controlXstyle, controlClassName, controlStyle\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

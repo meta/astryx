@@ -6,7 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
- "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
+ "fixtureHash": "8b25aa9fc9d357c6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/lab\n\n# ListInputShowcase - A reorderable tag editor. Each record pairs a color Selector with a label TextInput; drag a grip or use the keyboard to reorder. Validation sits at the narrowest useful level: an empty label after blur is a field error, a disallowed color and label pair is a record error, and fewer than five tags is a list error.\n# Components: ListInput, Selector, TextInput\n\n<VStack width={680} maxWidth=\"100%\">\n  <ListInput />\n</VStack>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,
