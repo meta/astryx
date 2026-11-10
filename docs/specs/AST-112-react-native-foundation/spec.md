@@ -113,9 +113,12 @@ shared icon names under FR17.
   - Each platform package ships its native code as source that the app's
     native build compiles; it registers itself through autolinking and React
     Native's code generation.
-  - `@astryxdesign/native` is the native (Swift) version's package
-    (`spec:AST-082/DEC-7`); the React Native candidate's native code lives in
-    the platform packages of FR1.
+  - `@astryxdesign/native` is the single cross-platform contracts package of
+    `spec:AST-082` (DEC-7). The React Native platform ships as the core and
+    per-capability packages of FR1 because each capability carries its own
+    native code, permissions, and size, so an app installs only what it uses.
+    The React Native packages may consume `@astryxdesign/native`'s generated
+    contracts (OQ2).
 - **FR5 — The public surface is deliberate.** Each package declares its entries
   in its `exports` map, and an import outside the map is unsupported.
   - `.` is the app API.
