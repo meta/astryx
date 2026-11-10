@@ -280,6 +280,15 @@ export function undecidedMessage(plan, truncated) {
   };
 }
 
+/**
+ * The legs job's matrix: one entry per planned leg, or a single leg that only
+ * says it has no share.
+ * @param {number} count
+ */
+export function legsFor(count) {
+  return count > 0 ? Array.from({length: count}, (_, i) => i + 1) : [1];
+}
+
 function main() {
   const argv = process.argv.slice(2);
   const value = name => {
@@ -332,6 +341,10 @@ function main() {
     ran: plan.files,
     deferred: plan.deferred,
     complete: plan.complete,
+    // Why the scope is undecided, so a reader can say "split" or "re-run".
+    ...(plan.everything
+      ? {undecided: truncated ? 'truncated' : 'unreadable'}
+      : {}),
   };
   fs.writeFileSync(out, `${JSON.stringify(record, null, 2)}\n`);
   if (plan.owed.length === 0) {
@@ -360,6 +373,7 @@ function main() {
       process.env.GITHUB_OUTPUT,
       [
         `count=${plan.count}`,
+        `legs=${JSON.stringify(legsFor(plan.count))}`,
         `shares=${JSON.stringify(plan.shares)}`,
         `owed=${JSON.stringify(plan.owed)}`,
         `ran=${JSON.stringify(plan.files)}`,

@@ -45,6 +45,7 @@ import {
   openStory,
   readLongTasks,
   releaseAnimations,
+  requireFrames,
   seekAnimations,
   startScreencast,
   tap,
@@ -450,10 +451,22 @@ test('a busy first frame after the lift still plays the whole release before the
   // When the press controller writes the release, 150 ms of script hold the
   // main thread before the first frame, so the release starts after the
   // block. Every frame after it is read until the attribute goes: the layer
-  // must reach rest on the curve, not vanish while it is still painted.
+  // must reach rest on the curve, not vanish while it is still painted. The
+  // page also records when the release animation starts and ends, and when
+  // the attribute leaves `fading`, all on its clock from the block's end.
   await row.evaluate(el => {
     const frames: [number, number, string | null][] = [];
-    (window as unknown as {__frames: typeof frames}).__frames = frames;
+    const release = {
+      startAt: Number.NaN,
+      endsAt: Number.NaN,
+      leftAt: Number.NaN,
+    };
+    (
+      window as unknown as {__frames: typeof frames; __release: typeof release}
+    ).__frames = frames;
+    (
+      window as unknown as {__frames: typeof frames; __release: typeof release}
+    ).__release = release;
     const observer = new MutationObserver(() => {
       if (el.getAttribute('data-astryx-press') !== 'fading') {
         return;
@@ -463,6 +476,13 @@ test('a busy first frame after the lift still plays the whole release before the
       while (performance.now() < until) {
         // Busy: the main thread is held.
       }
+      const leave = new MutationObserver(() => {
+        if (el.getAttribute('data-astryx-press') !== 'fading') {
+          release.leftAt = performance.now() - until;
+          leave.disconnect();
+        }
+      });
+      leave.observe(el, {attributeFilter: ['data-astryx-press']});
       const sample = (time: number) => {
         const layer = getComputedStyle(el, '::before');
         const strength =
@@ -470,6 +490,21 @@ test('a busy first frame after the lift still plays the whole release before the
             ? 0
             : Number(layer.opacity);
         const press = el.getAttribute('data-astryx-press');
+        if (press === 'fading' && Number.isNaN(release.startAt)) {
+          const animation = el
+            .getAnimations({subtree: true})
+            .find(
+              running =>
+                (running.effect as KeyframeEffect | null)?.pseudoElement ===
+                '::before',
+            );
+          if (animation?.startTime != null) {
+            release.startAt = Number(animation.startTime) - until;
+            release.endsAt =
+              release.startAt +
+              Number(animation.effect?.getComputedTiming().endTime);
+          }
+        }
         if ((document.timeline.currentTime as number) >= until) {
           frames.push([+(time - until).toFixed(1), strength, press]);
         }
@@ -483,30 +518,48 @@ test('a busy first frame after the lift still plays the whole release before the
   });
   await driver.play(tap(center, {holdMs: 300}));
   await expect.poll(async () => pressState(row)).toBeNull();
-  const frames = await page.evaluate(
-    () =>
-      (window as unknown as {__frames: [number, number, string | null][]})
-        .__frames,
-  );
+  const {frames, release} = await page.evaluate(() => {
+    const w = window as unknown as {
+      __frames: [number, number, string | null][];
+      __release: {startAt: number; endsAt: number; leftAt: number};
+    };
+    return {frames: w.__frames, release: w.__release};
+  });
+  const record = JSON.stringify({release, frames});
   const fading = frames.filter(([, , press]) => press === 'fading');
   // WebKit can start the release at the time the busy script began, so its
   // first frame after the block can already be near rest (opacity 0.03
   // measured) and few frames remain. There, only the end and the order of
-  // the frames hold.
+  // the frames hold. A page starved of frames fails by name.
   if (browserName !== 'webkit') {
-    expect(fading.length, JSON.stringify(frames)).toBeGreaterThan(3);
+    requireFrames(
+      frames.map(([t, strength, press]) => ({t, strength, press})),
+      {
+        min: 4,
+        during: 'the release played',
+        where: frame => frame.press === 'fading',
+      },
+    );
   }
-  // The last frame still fading is at rest or within one frame of it: the
-  // attribute goes once the release has played, however late it started.
-  const oneFrameFromRest = strengthAt(exit, exit.ms - 17) + 0.01;
-  expect(fading.at(-1)?.[1], JSON.stringify(frames)).toBeLessThanOrEqual(
-    oneFrameFromRest,
-  );
+  expect(
+    Number.isFinite(release.startAt) && Number.isFinite(release.endsAt),
+    'the release animation was not read',
+  ).toBe(true);
+  // The attribute goes once the release has played, however late it started:
+  // it leaves `fading` at or after the release animation's end. Both times
+  // are on the page's clock, so a frame gap moves neither.
+  expect(release.leftAt, record).toBeGreaterThanOrEqual(release.endsAt - 1);
+  // Each fading frame shows the layer no stronger than the exit curve at that
+  // frame's own time into the release. A late frame shows a later point of
+  // the curve, so a frame gap still reads true.
+  for (const [t, strength] of fading) {
+    expect(strength, record).toBeLessThanOrEqual(
+      strengthAt(exit, t - release.startAt) + 0.01,
+    );
+  }
   // And the release played on the way there, frame by frame.
   for (let i = 1; i < fading.length; i++) {
-    expect(fading[i][1], JSON.stringify(frames)).toBeLessThanOrEqual(
-      fading[i - 1][1] + 0.01,
-    );
+    expect(fading[i][1], record).toBeLessThanOrEqual(fading[i - 1][1] + 0.01);
   }
 });
 
