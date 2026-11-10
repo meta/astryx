@@ -26,8 +26,9 @@ and the guide needs fixing.
 A sentence that passes describes behavior, a boundary, a default, an owner, or a
 piece of evidence. A sentence that fails describes the project: what a change
 proposed, what the team considered, what the owner ruled against, what used to
-be the case. That is narration. It was true the day it was written and it ages
-into noise that a future reader has to step around to find the rule.
+be the case, what is built so far, or what goes first. That is narration. It was
+true the day it was written and it ages into noise that a future reader has to
+step around to find the rule.
 
 ## The rubric
 
@@ -36,14 +37,15 @@ sits in the template. Each item is a question with a yes-or-no answer that a
 reviewer can check by reading the record; a `no` is a pass. Report what the pass
 found, not a tick.
 
-| ID  | Question                                                                                                                                                                                              | When the answer is yes                                                                                                                                                        |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| R1  | Does any sentence describe what a change proposed, decided, replaced, ported, or used to do, rather than what the system does? (Scan for `proposes`, `we decided`, `previously`, `a port of`, `now`.) | Rewrite it in the present tense as a statement about the system, or delete it.                                                                                                |
-| R2  | Does the record contain research: a survey of other systems, an options comparison, a benchmark run, or a test's design and scores?                                                                   | Delete it from the record. Publish it as an artifact linked from the pull request. Keep the conclusion it supports as one or two sentences inside the decision resting on it. |
-| R3  | Does any evidence, basis, or verification cell name a pull request, issue, or commit instead of the fact it established?                                                                              | Replace the reference with the fact: `real-device touch feedback`, `current source`, `WAI-ARIA 1.2 combobox pattern`.                                                         |
-| R4  | Is any rejected alternative longer than one line, or recorded anywhere other than inside the decision that rejects it?                                                                                | Collapse it to one `Rejected:` line in that decision. Keep the line only when naming the alternative prevents the mistake recurring; otherwise delete it.                     |
-| R5  | Searching for `#` followed by digits, `/pull/`, and `/issues/`: does any pull request or issue remain as standing content?                                                                            | Delete it, or replace it with a link to the record that owns the fact. Links to other records are encouraged; they are canonical owners.                                      |
-| R6  | Does any open question whose answer is already recorded still list its options?                                                                                                                       | Collapse the options into the decision. Only an unanswered question keeps its options side by side.                                                                           |
+| ID  | Question                                                                                                                                                                                                        | When the answer is yes                                                                                                                                                                                                                                         |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R1  | Does any sentence describe what a change proposed, decided, replaced, ported, or used to do, rather than what the system does? (Scan for `proposes`, `we decided`, `previously`, `a port of`, `now`.)           | Rewrite it in the present tense as a statement about the system, or delete it.                                                                                                                                                                                 |
+| R2  | Does the record contain research: a survey of other systems, an options comparison, a benchmark run, or a test's design and scores?                                                                             | Delete it from the record. Publish it as an artifact linked from the pull request. Keep the conclusion it supports as one or two sentences inside the decision resting on it.                                                                                  |
+| R3  | Does any evidence, basis, or verification cell name a pull request, issue, or commit instead of the fact it established?                                                                                        | Replace the reference with the fact: `real-device touch feedback`, `current source`, `WAI-ARIA 1.2 combobox pattern`.                                                                                                                                          |
+| R4  | Is any rejected alternative longer than one line, or recorded anywhere other than inside the decision that rejects it?                                                                                          | Collapse it to one `Rejected:` line in that decision. Keep the line only when naming the alternative prevents the mistake recurring; otherwise delete it.                                                                                                      |
+| R5  | Searching for `#` followed by digits, `/pull/`, and `/issues/`: does any pull request or issue remain as standing content?                                                                                      | Delete it, or replace it with a link to the record that owns the fact. Links to other records are encouraged; they are canonical owners.                                                                                                                       |
+| R6  | Does any open question whose answer is already recorded still list its options?                                                                                                                                 | Collapse the options into the decision. Only an unanswered question keeps its options side by side.                                                                                                                                                            |
+| R7  | Does any sentence report project status: what is written, built, or shipped so far, or what goes first? (Scan for `yet`, `not built`, `follow-up`, `first consumer`, `first adopter`, `phase`, `lands before`.) | Delete it, or restate it as a requirement gap: `<FR or INV id> gap: <observable mismatch>`. One line such as `Status: in progress` may say the record is still in progress. Lifecycle fields a template requires (`phase`, `Released default preserved`) stay. |
 
 Report one line per item in the pull request description, under
 `## Writing rubric results`. State what was found and what was done with it:
@@ -55,6 +57,7 @@ R3 evidence: FR4 basis cited a pull request; now "real-device touch feedback".
 R4 rejected alternatives: one, DEC-2, one line.
 R5 change references: none.
 R6 open questions: OQ1 is unanswered and keeps its two options.
+R7 project status: "no module exists yet" restated as "INV1 gap: Selector renders every option when it opens".
 ```
 
 A finding is not a defect in the author. "Two found, moved into DEC-3 as one
@@ -159,6 +162,43 @@ becomes the behavior, and the rejected ones become at most one line inside the
 decision (R4). A ruled question that still carries its options is a record
 describing a debate that is over.
 
+### R7 — No project status
+
+A record states what the system must do, not how far the work has got.
+"No module exists yet", "the hook is not built", "Table adopts it first, then
+Selector", and "phase 1 places the CLI's docs" are true on the day they are
+written and false soon after, and nothing in the sentence tells a later reader
+which day that was. `architecture:knowledge-contracts` INV32 states the rule.
+It applies in every section, a gap or current-state section included.
+
+Three forms stay:
+
+- A requirement gap names what the system does today that a requirement
+  forbids, in the form `<FR or INV id> gap: <observable mismatch>`. It stays
+  true until the system changes, and the fix deletes it. A gap line that says
+  "not built" or "follow-up work" is still build status.
+- One status line, such as `Status: in progress`, may say that the record is
+  still in progress. It does not list which parts are done.
+- Lifecycle fields the templates require (`phase`,
+  `Released default preserved`) state the record's own lifecycle, not build
+  progress, and stay.
+
+An order the system itself follows is behavior, not sequencing: a release rule
+that a deprecation ships before a removal stays. Work order, such as which
+consumer adopts first or which change lands before another, belongs in the
+implementation plan (`plan.md`) or the pull request.
+
+Status:
+
+> Spec only: no module exists yet. Table virtualization is its first consumer,
+> then Selector, then Chat.
+
+The same facts as record sentences:
+
+> Table, Selector, and Chat window long lists through the shared module.
+>
+> INV1 gap: Selector renders every option when it opens.
+
 ## Where the pass happens
 
 The author runs the rubric before requesting review and reports the results in
@@ -181,9 +221,9 @@ results section reaches the reviewer. Neither replaces the other.
 sections, schema and template versions, relationship links, and metadata blocks.
 It does not check any rubric item, by design:
 
-- Whether a sentence is narration (R1), research (R2), or a ruled question (R6)
-  is a judgement about meaning, and a check that guesses at it would be argued
-  with and then ignored.
+- Whether a sentence is narration (R1), research (R2), a ruled question (R6), or
+  project status (R7) is a judgement about meaning, and a check that guesses at
+  it would be argued with and then ignored.
 - A pull request reference (R3, R5) is detectable, but records approved before
   this rule carry references that were permitted when they were written, and
   the file cannot tell which of those a future edit is responsible for. A hard
