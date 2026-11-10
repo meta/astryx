@@ -791,3 +791,15 @@ fn parse_only_probe() {
         eprintln!("compile {:?}", t.elapsed());
     }
 }
+
+#[test]
+fn source_overrides_replace_file_text() {
+    let d = tmp("override");
+    fs::write(d.join("dep.ts"), "export const v: number = 1;\n").unwrap();
+    fs::write(d.join("root.ts"), "import {v} from './dep';\nexport const got = v;\n").unwrap();
+    let jiti = JitiOptions { source_overrides: vec![(d.join("dep.ts"), "export const v: number = 42;\n".into())], ..Default::default() };
+    let ns = import_module_jiti(&d.join("root.ts"), &ImportOptions::default(), &jiti).unwrap();
+    assert_eq!(ns["got"], serde_json::json!(42));
+    let ns = import_module(&d.join("root.ts"), &ImportOptions::default()).unwrap();
+    assert_eq!(ns["got"], serde_json::json!(1));
+}

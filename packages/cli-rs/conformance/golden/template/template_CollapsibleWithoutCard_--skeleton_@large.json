@@ -6,6 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# CollapsibleWithoutCard - A flat list on the page background with hand-placed Dividers, for detail panels and sidebars where cards would add too much weight. Rows, so the triggers step down to body-semibold and a supporting metadata line sits under each answer.\n# Components: Collapsible, Divider, Stack\n\n<Stack gap={3} maxWidth={480} />\n<Collapsible />\n<Text />\n<Stack gap={1} />\n<Text />\n<Text />\n<Divider />\n<Collapsible />\n<Text />\n<Stack gap={1} />\n<Text />\n<Text />\n<Divider />\n<Collapsible />\n<Text />\n<Stack gap={1} />\n<Text />\n<Text />\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

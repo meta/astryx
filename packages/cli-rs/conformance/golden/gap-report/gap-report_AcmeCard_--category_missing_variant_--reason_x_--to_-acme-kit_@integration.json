@@ -11,6 +11,7 @@
   "@acme/kit"
  ],
  "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: No gap-report destination \"@acme/kit\": no loaded integration names an issues URL. Leave out --to for the default.\n",
  "exit": 1,

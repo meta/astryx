@@ -6,6 +6,7 @@
   "src"
  ],
  "fixture": "plain",
+ "fixtureHash": "af8efc657521769c+4e418a0c2575d9ce",
  "stdout": "Copied template to src/page.tsx\n\npackage: @astryxdesign/core\n\nReplaced 1 Astryx demo media reference in src/page.tsx: images now show a neutral placeholder and videos have an empty source. Supply your own media there.\n\nInstall missing dependencies: npm install lucide-react@\"^1.18.0\"\n\nThis template uses StyleX. Your project needs a StyleX compiler plugin - see `npx @astryxdesign/cli@0.7.12 docs styling-overview` for setup steps.\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

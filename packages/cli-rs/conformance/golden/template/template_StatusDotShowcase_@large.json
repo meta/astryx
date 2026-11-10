@@ -5,6 +5,7 @@
   "StatusDotShowcase"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {StatusDot} from '@astryxdesign/core/StatusDot';\nimport {HStack} from '@astryxdesign/core/Layout';\n\nexport default function StatusDotShowcase() {\n  return (\n    <HStack gap={2} vAlign=\"center\">\n      <StatusDot variant=\"success\" label=\"Positive\" />\n      <StatusDot variant=\"warning\" label=\"Warning\" />\n      <StatusDot variant=\"error\" label=\"Negative\" />\n      <StatusDot variant=\"accent\" label=\"Info\" />\n      <StatusDot variant=\"neutral\" label=\"Neutral\" />\n    </HStack>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

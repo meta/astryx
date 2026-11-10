@@ -6,6 +6,7 @@
   "foo"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: \"cli/api\" has no sections. Open one of its children instead.\n\n  cli/api/functions  (Every function: its signature, parameters, returns, and errors.)\n  cli/api/schemas  (Data shapes, field by field.)\n  cli/api/enums  (Every fixed list of values, such as error codes and response types.)\n",
  "exit": 1,

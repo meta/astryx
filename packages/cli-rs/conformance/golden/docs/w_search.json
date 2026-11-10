@@ -5,6 +5,7 @@
   "search"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Unknown topic \"search\"\n\n  cli/commands/search  (Search components, hooks, docs, templates, and themes in one ranked list)\n  cli/api/functions/search  (Unified ranked search across components, hooks, docs, templates, and themes.)\n  cli/experimental/icon-definitions/search  ([built-in] Search or find something. Words: find, lookup, magnifier, magnifying glass.)\n",
  "exit": 1,

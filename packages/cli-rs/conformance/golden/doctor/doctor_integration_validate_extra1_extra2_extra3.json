@@ -9,6 +9,7 @@
   "extra3"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Validating integration: extra1\n\nseverity: [fail]\ncode:     package_not_found\nmessage:  Could not find installed integration package \"extra1\" at /tmp/astryx-conformance/work/app/node_modules/extra1/package.json. Install it first.\n\nSummary: 1 error, 0 warnings\n",
  "stderr": "",
  "exit": 1,

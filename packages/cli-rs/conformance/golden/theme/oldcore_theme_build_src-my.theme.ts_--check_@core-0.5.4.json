@@ -7,6 +7,7 @@
   "--check"
  ],
  "fixture": "core-0.5.4",
+ "fixtureHash": "f83fac28730aff29+4e418a0c2575d9ce",
  "stdout": "\nBuilding theme from src/my.theme.ts...\n",
  "stderr": "\n[fail] 4 theme output(s) are out of date with src/my.theme.ts:\n  missing: src/my-theme.css\n  missing: src/my-theme.js\n  missing: src/my-theme.d.ts\n  missing: src/my-theme.variants.d.ts\n\n  Rebuild with: astryx theme build src/my.theme.ts\n",
  "exit": 1,

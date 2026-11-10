@@ -9,6 +9,7 @@
   "--apply"
  ],
  "fixture": "upgrade-themes",
+ "fixtureHash": "544bb3b7c9285044+4e418a0c2575d9ce",
  "stdout": "\nUpgrade\nFrom version: 0.6.4\nInstalled target: 0.7.12 (@astryxdesign/core)\nScanning /tmp/astryx-conformance/work/upgrade-themes/src for source files...\nFound 7 source files\nApplying v0.6.7 codemods...\n  Give copied app themes their local descriptors\n[ok]     [ok] src/themes/deep-sea/deepSeaTheme.doc.mjs\nApplying v0.7.0 codemods...\nApplying v0.7.2 codemods...\nApplying v0.7.5 codemods...\nApplying v0.7.8 codemods...\n\n[ok] Done! Applied 1 change across 1 file.\nRun your type checker and tests to verify the changes.\n1 codemod to run\nUpgrade complete\n\n",
  "stderr": "No Astryx agent-docs block found - AI agents have no component index. Run `npx @astryxdesign/cli@0.7.12 init --features agents` to install it.\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

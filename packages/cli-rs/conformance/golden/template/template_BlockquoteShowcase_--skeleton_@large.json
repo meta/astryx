@@ -6,6 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# BlockquoteShowcase - Blockquote with and without citation. A quick visual reference for the blockquote component.\n# Components: Blockquote, Stack\n\n<Stack gap={4} />\n<Blockquote />\n<Blockquote />\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

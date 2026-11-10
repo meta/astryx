@@ -5,6 +5,7 @@
   "zorblax"
  ],
  "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
  "stdout": "Results for \"zorblax\" (5)\n\nname:        AcmeCard\ndomain:      component\npackage:     @acme/kit\nimport:      @acme/kit\ndescription: A zorblax card that groups one topic.\ncommand:     npx @astryxdesign/cli@0.7.12 component AcmeCard\n\nname:        AcmeBadge\ndomain:      component\npackage:     @acme/kit\nimport:      @acme/kit\ndescription: A small zorblax status badge.\ncommand:     npx @astryxdesign/cli@0.7.12 component AcmeBadge\n\nname:        acme-guide\ndomain:      doc\npackage:     @acme/kit\ntitle:       Guides › Acme guide\ndescription: How zorblax cards fit together.\ncommand:     npx @astryxdesign/cli@0.7.12 docs acme-guide --index\nparent:      npx @astryxdesign/cli@0.7.12 docs guides\n\nname:        hero\ndomain:      template\npackage:     @acme/kit\ndisplayName: Zorblax hero\nkind:        block\ndescription: A zorblax hero block.\ncommand:     npx @astryxdesign/cli@0.7.12 template hero --type block\n\nname:        ocean\ndomain:      theme\npackage:     @acme/kit\ndisplayName: Ocean\ndescription: A zorblax blue.\ncommand:     npx @astryxdesign/cli@0.7.12 theme add ocean\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover zorblax\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

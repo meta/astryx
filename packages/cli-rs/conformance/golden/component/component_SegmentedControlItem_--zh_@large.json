@@ -6,6 +6,7 @@
   "--zh"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# SegmentedControlItem\n\n单个分段项，在分段控件中渲染为单选按钮。\n\n**Import:** `import {SegmentedControlItem} from '@astryxdesign/core/SegmentedControl';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `value` | `string` | - | 该分段的唯一值，与父组件的 value 匹配。 **(required)** |\n| `label` | `string` | - | 该分段的无障碍标签。除非 isLabelHidden 为 true，否则渲染为可见文本。 **(required)** |\n| `isLabelHidden` | `boolean` | `false` | 是否在视觉上隐藏标签。为 true 时仅显示图标，label 用作 aria-label。 |\n| `icon` | `ReactNode` | - | 显示在标签前的图标元素。 |\n| `isDisabled` | `boolean` | `false` | 是否禁用该单个项。 |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

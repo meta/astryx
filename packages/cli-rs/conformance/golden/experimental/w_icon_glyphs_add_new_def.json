@@ -17,6 +17,7 @@
   "house,home"
  ],
  "fixture": "iconglyphs",
+ "fixtureHash": "b8a471cb57e113e9+4e418a0c2575d9ce",
  "stdout": "[ok] Added HomeIcon as \"house\", map.dwelling = \"house\".\n\n- icon-sets/glyphs/glyphs.generated.js\n- icon-sets/glyphs/glyphs.generated.d.ts\n- icon-sets/glyphs/definitions/dwelling.doc.mjs\n- icon-sets/glyphs/glyphs.icons.json\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

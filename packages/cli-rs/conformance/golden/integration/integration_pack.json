@@ -5,6 +5,7 @@
   "pack"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: `integration pack` is now `integration verify`: run `npx @astryxdesign/cli@0.7.12 integration verify` to check the package the way npm will publish it. To build the tarball, run `npm pack`.\n",
  "exit": 1,

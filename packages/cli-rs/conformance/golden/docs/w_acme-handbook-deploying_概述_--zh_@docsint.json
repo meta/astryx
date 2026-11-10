@@ -7,6 +7,7 @@
   "--zh"
  ],
  "fixture": "docsint",
+ "fixtureHash": "36d5db4ca2dc43ba+4e418a0c2575d9ce",
  "stdout": "package: @acme/docs\n\n## 概述\n\n中文正文\n\n```bash\nnpx astryx docs\n```\n\nUp: npx @astryxdesign/cli@0.7.12 docs acme-handbook/deploying --index\nNext: npx @astryxdesign/cli@0.7.12 docs acme-handbook/deploying rollback\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

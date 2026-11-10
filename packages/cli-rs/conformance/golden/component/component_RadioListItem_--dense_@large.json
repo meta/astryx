@@ -6,6 +6,7 @@
   "--dense"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# RadioListItem\n\nIndividual radio item w/ label, description, content slots.\n\n**Import:** `import {RadioListItem} from '@astryxdesign/core/RadioList';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `label` | `ReactNode` | - | Primary label. String or ReactNode; nested controls keep their behavior. **(required)** |\n| `aria-label` | `string` | - | Plain-text radio name replacing the derived label. Use when visible text is absent; otherwise retain every visible label word. |\n| `value` | `string` | - | Value of this radio item. **(required)** |\n| `description` | `ReactNode` | - | Secondary content below label. String or ReactNode. |\n| `align` | `'center' \\| 'start' \\| 'first-line'` | `'center'` | Start/end content alignment, passed to Item: 'center' (default), 'start', or 'first-line' (centered on the label's first line). |\n| `isDisabled` | `boolean` | `false` | Whether this individual radio item disabled. |\n| `startContent` | `ReactNode` | - | Content rendered before radio circle. |\n| `endContent` | `ReactNode` | - | Content rendered after label. |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

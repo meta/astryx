@@ -9,6 +9,7 @@
   "3"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: An icon query is required\n\n  npx @astryxdesign/cli@0.7.12 experimental icon delete  (find icons by meaning)\n  npx @astryxdesign/cli@0.7.12 experimental icon --list  (list the installed sets)\n",
  "exit": 1,

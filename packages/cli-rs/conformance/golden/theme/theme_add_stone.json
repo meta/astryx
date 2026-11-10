@@ -6,6 +6,7 @@
   "stone"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Theme package \"@astryxdesign/theme-stone\" is not installed. Run `npm install @astryxdesign/theme-stone` (or yarn/pnpm/bun), then run `npx @astryxdesign/cli@0.7.12 theme add stone`.\n",
  "exit": 1,

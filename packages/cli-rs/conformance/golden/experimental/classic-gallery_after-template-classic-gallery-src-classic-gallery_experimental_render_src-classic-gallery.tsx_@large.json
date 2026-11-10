@@ -6,6 +6,7 @@
   "src/classic-gallery.tsx"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "Rendered src/classic-gallery.tsx\n\ninput:       src/classic-gallery.tsx\noutput:      src/classic-gallery.html\nbytes:       62.5 KB\ncssBytes:    30.3 KB\nclasses:     168\nimages:      0\nfiles:       classic-gallery.tsx\nstylesheets: @astryxdesign/core/reset.css, @astryxdesign/core/astryx.css\n\nGive it back: npx @astryxdesign/cli@0.7.12 experimental render --reverse src/classic-gallery.html\n",
  "stderr": "",
  "exit": 0,

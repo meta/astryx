@@ -7,6 +7,7 @@
   "--json"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"help\",\n  \"data\": {\n    \"command\": \"astryx doctor integration\",\n    \"description\": \"Check an integration package while authoring it\",\n    \"usage\": \"astryx doctor integration [options] [command]\",\n    \"options\": [],\n    \"subcommands\": [\n      {\n        \"name\": \"validate\",\n        \"description\": \"Validate an integration manifest and its contributions\"\n      },\n      {\n        \"name\": \"templates\",\n        \"description\": \"Validate integration template replacements and Core id overlaps\"\n      },\n      {\n        \"name\": \"components\",\n        \"description\": \"Check integration component names, replacements, and documented props\"\n      },\n      {\n        \"name\": \"docs\",\n        \"description\": \"Check an integration's docs: the docs tree they add, every link, and overlaps with Core topics\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

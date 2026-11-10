@@ -10,6 +10,7 @@
   "--json"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.doc-conflicts\",\n  \"data\": {\n    \"validated\": true,\n    \"name\": \"extra1\",\n    \"version\": null,\n    \"findings\": [],\n    \"copiedPassages\": [],\n    \"fluff\": [],\n    \"strayPointers\": [],\n    \"issues\": [\n      {\n        \"code\": \"package_not_found\",\n        \"severity\": \"error\",\n        \"message\": \"Could not find installed integration package \\\"extra1\\\" at /tmp/astryx-conformance/work/app/node_modules/extra1/package.json. Install it first.\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 1,

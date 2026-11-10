@@ -5,6 +5,7 @@
   "NumberInputStatuses"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {NumberInput} from '@astryxdesign/core/NumberInput';\nimport {VStack} from '@astryxdesign/core/Stack';\n\nexport default function NumberInputStatuses() {\n  const [error, setError] = useState<number | null>(-5);\n  const [warning, setWarning] = useState<number | null>(150);\n  const [success, setSuccess] = useState<number | null>(25);\n  return (\n    <div style={{width: 300}}>\n      <VStack gap={4}>\n        <NumberInput\n          label=\"Budget\"\n          value={error}\n          onChange={setError}\n          status={{type: 'error', message: 'Must be a positive amount'}}\n        />\n        <NumberInput\n          label=\"Headcount\"\n          value={warning}\n          onChange={setWarning}\n          status={{type: 'warning', message: 'Exceeds typical team size'}}\n        />\n        <NumberInput\n          label=\"Completion\"\n          units=\"%\"\n          value={success}\n          onChange={setSuccess}\n          status={{type: 'success', message: 'On track'}}\n        />\n      </VStack>\n    </div>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -5,6 +5,7 @@
   "useClipboard"
  ],
  "fixture": "core-0.3.0",
+ "fixtureHash": "94e7e2ef7dd216e2+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: No hook named \"useClipboard\"\n",
  "exit": 1,

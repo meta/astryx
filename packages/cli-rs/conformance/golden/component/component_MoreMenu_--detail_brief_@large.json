@@ -7,6 +7,7 @@
   "brief"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nMoreMenu(placement: above|below|start|end, alignment: start|center|end, presentation: popover|bottom-sheet|adaptive)  <- from '@astryxdesign/core/MoreMenu'\n  MoreMenu is a three-dot button that opens a list of actions. Use it for secon...\n  Targets: astryx-more-menu\n  items: DropdownMenuOption[], label, variant, size, icon, isDisabled, onOpenChange, xstyle\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

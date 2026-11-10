@@ -5,6 +5,7 @@
   "template"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "[ok] Wrote theme.template.ts\n\nIt documents every defineTheme field, the token families, and the component override syntax. Copy what you need into your own theme file, then delete it.\n\nnpx @astryxdesign/cli@0.7.12 theme build theme.template.ts\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

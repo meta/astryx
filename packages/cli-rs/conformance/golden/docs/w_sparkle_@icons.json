@@ -5,6 +5,7 @@
   "sparkle"
  ],
  "fixture": "icons",
+ "fixtureHash": "cfe8bdaf4aaef512+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Unknown topic \"sparkle\"\n\n  cli/experimental/icon-definitions/sparkle  (The sparkle icon. (from @acme/glyphs, icon set \"glyphs\"))\n",
  "exit": 1,

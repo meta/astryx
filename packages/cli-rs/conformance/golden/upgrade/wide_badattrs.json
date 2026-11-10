@@ -8,6 +8,7 @@
   "rename-selector-items-to-options"
  ],
  "fixture": "upgrade-badattrs",
+ "fixtureHash": "ba946ec1013b453b+4e418a0c2575d9ce",
  "stdout": "\nUpgrade\nFrom version: 0.0.1\nInstalled target: 0.7.12 (@astryxdesign/core)\nUpgrade failed\n\n",
  "stderr": "Could not read file-protection source .gitattributes: invalid rule on line 1: unterminated quoted pattern\n",
  "exit": 1,

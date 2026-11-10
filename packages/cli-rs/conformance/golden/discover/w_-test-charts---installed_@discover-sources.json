@@ -6,6 +6,7 @@
   "--installed"
  ],
  "fixture": "discover-sources",
+ "fixtureHash": "ec3ff3d81b4e4a63+4e418a0c2575d9ce",
  "stdout": "name:       @test/charts\npackage:    @test/charts\ncategory:   @test/charts\ncomponents: Chart\nversion:    2.0.0\ntemplates:  pages/Report\ninstalled:  false\nlatest:     2.0.0\nsource:     Test catalog\n\nVersions\n2 known, newest first\n\n- 2.0.0  2026-09-20  latest\n\n1 prerelease is not listed. See any version: npx @astryxdesign/cli@0.7.12 discover @test/charts@<version>\n\nAdd it\n\nnpm install @test/charts\n\nAstryx loads an integration on the next command once it is a dependency.\n\nSee one item: npx @astryxdesign/cli@0.7.12 discover @test/charts/<item>\n",
  "stderr": "Warning: @test/kit has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

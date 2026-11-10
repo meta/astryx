@@ -5,6 +5,7 @@
   "@astryxdesign/richtext"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "name:        @astryxdesign/richtext\npackage:     @astryxdesign/richtext\ncategory:    @astryxdesign/richtext\ncomponents:  RichTextEditor, RichTextEditorAutoLinkPlugin, RichTextEditorToolbar, RichTextView\nversion:     0.7.12\ndescription: Astryx rich text - a Lexical-based rich text editor and viewer, styled with Astryx design tokens.\ntemplates:   RichTextEditorShowcase\ninstalled:   false\nlatest:      0.7.12\nsource:      Astryx\n\nVersions\n1 known, newest first\n\n- 0.7.12  date unknown  latest\n\nAdd it\n\nnpm install @astryxdesign/richtext@0.7.12\n\nAstryx loads an integration on the next command once it is a dependency.\n\nSee one item: npx @astryxdesign/cli@0.7.12 discover @astryxdesign/richtext/<item>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

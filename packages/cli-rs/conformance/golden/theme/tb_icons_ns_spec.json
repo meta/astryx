@@ -10,6 +10,7 @@
   "@acme/icons"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "\nBuilding theme from themes/icons/namespace.ts...\n\n[ok] themes/icons/iconic-ns.css\n[ok] themes/icons/iconic-ns.css.d.ts\n  1 token overrides, 0 component overrides\n  1.9 KB\n[ok] themes/icons/iconic-ns.js\n[ok] themes/icons/iconic-ns.d.ts\n\nInstall in your app (paths are relative to a file in src/; adjust if yours lives elsewhere):\n\n  import { Theme } from '@astryxdesign/core/theme';\n  import { iconicNsTheme } from './themes/icons/iconic-ns';\n  import './themes/icons/iconic-ns.css';\n\n  <Theme theme={iconicNsTheme}>\n    <App />\n  </Theme>\n\nOr with a <link> tag:\n\n  import { Theme } from '@astryxdesign/core/theme';\n  import { iconicNsTheme } from './themes/icons/iconic-ns';\n\n  <link rel=\"stylesheet\" href=\"./themes/icons/iconic-ns.css\" />\n  <Theme theme={iconicNsTheme}>\n    <App />\n  </Theme>\n\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

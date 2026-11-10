@@ -7,6 +7,7 @@
   "--json"
  ],
  "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.index\",\n  \"package\": \"@acme/kit\",\n  \"data\": {\n    \"name\": \"acme-guide\",\n    \"title\": \"Acme guide\",\n    \"description\": \"How zorblax cards fit together.\",\n    \"sections\": [\n      {\n        \"id\": \"start\",\n        \"title\": \"Start\",\n        \"package\": \"@acme/kit\",\n        \"summary\": \"Install the kit.\"\n      },\n      {\n        \"id\": \"colors\",\n        \"title\": \"Colors\",\n        \"package\": \"@acme/kit\",\n        \"summary\": \"Cards use the core tokens.\"\n      }\n    ],\n    \"links\": {\n      \"up\": \"astryx docs guides\",\n      \"previous\": \"astryx docs working-with-ai\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

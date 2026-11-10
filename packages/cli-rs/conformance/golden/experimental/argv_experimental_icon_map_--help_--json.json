@@ -8,6 +8,7 @@
   "--json"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"help\",\n  \"data\": {\n    \"command\": \"astryx experimental icon map\",\n    \"description\": \"[experimental] Register which icon of your set draws an icon definition\",\n    \"usage\": \"astryx experimental icon map [options] [definition] [icon]\",\n    \"options\": [\n      {\n        \"flags\": \"--set <name>\",\n        \"description\": \"The set to edit, when the package ships several\"\n      },\n      {\n        \"flags\": \"--remove\",\n        \"description\": \"Remove the definition's entry; takes no icon\"\n      },\n      {\n        \"flags\": \"--pairs <list>\",\n        \"description\": \"Many entries in one write: <definition>=<icon> pairs, comma-separated; checked together, all or none; an existing entry is replaced\"\n      }\n    ],\n    \"subcommands\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

@@ -8,6 +8,7 @@
   "out.html"
  ],
  "fixture": "renderpages",
+ "fixtureHash": "8877e3d4520e7c26+4e418a0c2575d9ce",
  "stdout": "Rendered script.tsx\n\ninput:       script.tsx\noutput:      out.html\nbytes:       19.6 KB\ncssBytes:    18.8 KB\nclasses:     0\nimages:      0\nfiles:       script.tsx\nstylesheets: @astryxdesign/core/reset.css, @astryxdesign/core/astryx.css\n\nWarnings\n\n- https://example.com is loaded from the network, which a sandboxed page cannot reach; save it beside the page and import it instead.\n- The page renders a <script> element. A sandboxed viewer blocks it, and anywhere else it runs when the file is opened; remove it from the page.\n- The page renders a <iframe> that loads https://example.com, which a sandboxed page cannot reach and which loads from the network anywhere else; remove it from the page.\n\nGive it back: npx @astryxdesign/cli@0.7.12 experimental render --reverse out.html\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

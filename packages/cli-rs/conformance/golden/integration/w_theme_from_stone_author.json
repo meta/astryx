@@ -9,6 +9,7 @@
   "stone"
  ],
  "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
  "stdout": "theme contribution added\n\n[ok] sea-glass\n\nDeclare theme root ./themes in astryx.integration.mjs.\n\n- themes/sea-glass/seaGlassTheme.ts\n- themes/sea-glass/icons.tsx\n- themes/sea-glass/seaGlassPalettes.generated.ts\n- themes/sea-glass/seaGlassPaletteRefs.generated.ts\n- themes/sea-glass/seaGlassPalettes.generated.receipt.json\n- themes/sea-glass/palette.config.json\n- themes/sea-glass/seaGlassTheme.doc.mjs\n- package.json\n- astryx.integration.mjs\n",
  "stderr": "",
  "exit": 0,

@@ -7,6 +7,7 @@
   "src/theme/stone/stoneTheme.ts"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.build\",\n  \"data\": {\n    \"name\": \"stone\",\n    \"tokenCount\": 197,\n    \"componentCount\": 22,\n    \"sizeKB\": 32.8,\n    \"outputs\": {\n      \"css\": \"src/theme/stone/stone.css\",\n      \"cssDts\": \"src/theme/stone/stone.css.d.ts\",\n      \"js\": \"src/theme/stone/stone.js\",\n      \"dts\": \"src/theme/stone/stone.d.ts\"\n    },\n    \"warnings\": [],\n    \"notices\": [\n      \"Font \\\"Figtree\\\" is named by this theme but not loaded; add a <link> or @font-face in your app (recipe: astryx docs typography)\",\n      \"Font \\\"Montserrat\\\" is named by this theme but not loaded; add a <link> or @font-face in your app (recipe: astryx docs typography)\",\n      \"Font \\\"JetBrains Mono\\\" is named by this theme but not loaded; add a <link> or @font-face in your app (recipe: astryx docs typography)\"\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

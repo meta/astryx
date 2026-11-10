@@ -8,6 +8,7 @@
   "--dry-run"
  ],
  "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
  "stdout": "component contribution plan\n\n[plan] AcmeWidget\n\nUse component root ./src/components in astryx.integration.mjs.\n\n- src/components/AcmeWidget.doc.mjs\n- src/components/AcmeWidget.tsx\n",
  "stderr": "",
  "exit": 0,

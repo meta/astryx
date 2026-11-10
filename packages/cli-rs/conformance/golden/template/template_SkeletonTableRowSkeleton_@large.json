@@ -5,6 +5,7 @@
   "SkeletonTableRowSkeleton"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Skeleton} from '@astryxdesign/core/Skeleton';\nimport {HStack, VStack} from '@astryxdesign/core/Layout';\n\nexport default function SkeletonTableRowSkeleton() {\n  return (\n    <VStack gap={2}>\n      {[0, 1, 2, 3].map(rowIndex => (\n        <HStack key={rowIndex} gap={4} vAlign=\"center\">\n          <Skeleton width={50} height={16} index={rowIndex * 4} />\n          <Skeleton width={180} height={16} index={rowIndex * 4 + 1} />\n          <Skeleton width={100} height={16} index={rowIndex * 4 + 2} />\n          <Skeleton width={80} height={16} index={rowIndex * 4 + 3} />\n        </HStack>\n      ))}\n    </VStack>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

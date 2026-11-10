@@ -7,6 +7,7 @@
   "@acme/outline/outline"
  ],
  "fixture": "iconapp",
+ "fixtureHash": "16b85bc0821a8935+4e418a0c2575d9ce",
  "stdout": "[ok] experimental.iconSet is now \"@acme/outline/outline\" (@acme/outline/outline) in astryx.config.mjs.\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

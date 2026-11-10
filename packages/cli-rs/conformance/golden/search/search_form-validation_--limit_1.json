@@ -7,6 +7,7 @@
   "1"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Results for \"form validation\" (1 of 161)\n\nname:        TextInput\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/TextInput\ndescription: TextInput collects short-form text like names, emails, or search queries. Use it for single-line values where the expected input is brief. Pair it with validation status to guide users through required or formatted fields.\ncommand:     npx @astryxdesign/cli@0.7.12 component TextInput\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover 'form validation'\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

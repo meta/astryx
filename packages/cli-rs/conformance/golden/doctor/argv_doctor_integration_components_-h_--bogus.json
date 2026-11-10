@@ -8,6 +8,7 @@
   "--bogus"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Usage: astryx doctor integration components [options] [package]\n\nCheck integration component names, replacements, and documented props\n\nArguments:\n  package     Installed integration package name; omit to check the package in the current directory.\n\nOptions:\n  -h, --help  display help for command\n\nExit codes:\n  0  the check completed; component name conflicts, replaces findings for a package without the CLI range, props that differ from the code, and links that name no doc are warnings\n  1  the integration is invalid, Core cannot be resolved, or a package that declares the CLI range has an invalid replaces\n\nExamples:\n  # Check the local integration\n  npx @astryxdesign/cli@0.7.12 doctor integration components\n  # Check an installed integration\n  npx @astryxdesign/cli@0.7.12 doctor integration components @acme/widgets --json\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/doctor-integration-components\n",
  "stderr": "",
  "exit": 0,

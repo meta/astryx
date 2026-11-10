@@ -5,6 +5,7 @@
   "ChatLayoutScrollButton"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Results for \"ChatLayoutScrollButton\" (1)\n\nname:        ChatLayoutScrollButton\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Chat\ndescription: Floating scroll-to-bottom button that appears when the user scrolls away from the latest messages. It fades in as a compact icon button and expands to show a label when new messages arrive. ChatLayout renders this by default: pass a custom element to the scrollButton prop to override, or null to hide it entirely.\ncommand:     npx @astryxdesign/cli@0.7.12 component ChatLayoutScrollButton\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover ChatLayoutScrollButton\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

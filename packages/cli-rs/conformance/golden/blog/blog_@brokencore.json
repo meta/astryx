@@ -4,6 +4,7 @@
   "blog"
  ],
  "fixture": "brokencore",
+ "fixtureHash": "046a184e848d83b6+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Could not reach https://astryx.atmeta.com/rss.xml: fetch failed\n",
  "exit": 1,

@@ -238,60 +238,9 @@ pub fn discover_blocks(cli_root: &Path) -> Vec<Template> {
     out
 }
 
-/// `discoverExternalPackages`: packages with `astryx.docs` in the nearest
-/// `node_modules` (real directories only, as `Dirent#isDirectory`).
-// TEMP: replace with src/discovery paths::discover_external_packages when it lands.
+/// `discoverExternalPackages`: (name, blocks dir).
 pub fn external_packages(cwd: &str) -> Vec<(String, Option<String>)> {
-    let mut dir = cwd.to_string();
-    let mut nm = None;
-    for _ in 0..5 {
-        let c = fsutil::join(&dir, "node_modules");
-        if Path::new(&c).exists() {
-            nm = Some(c);
-            break;
-        }
-        let p = fsutil::dirname(&dir);
-        if p == dir {
-            break;
-        }
-        dir = p;
-    }
-    let mut out = Vec::new();
-    fn scan(d: &str, out: &mut Vec<(String, Option<String>)>) {
-        if !Path::new(d).exists() {
-            return;
-        }
-        for (name, is_dir) in read_dir_sorted(d) {
-            if !is_dir || name.starts_with('.') {
-                continue;
-            }
-            let full = fsutil::join(d, &name);
-            if name.starts_with('@') {
-                scan(&full, out);
-                continue;
-            }
-            let pj = fsutil::join(&full, "package.json");
-            let Ok(text) = std::fs::read_to_string(&pj) else { continue };
-            let Ok(pkg) = serde_json::from_str::<Value>(&text) else { continue };
-            let pname = pkg.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            if pname == CORE_PACKAGE {
-                continue;
-            }
-            let ax = pkg.get("astryx");
-            if ax.and_then(|a| a.get("docs")).map_or(false, truthy) {
-                let blocks = ax
-                    .and_then(|a| a.get("blocks"))
-                    .filter(|v| truthy(v))
-                    .and_then(|v| v.as_str())
-                    .map(|b| fsutil::resolve(&full, b));
-                out.push((pname, blocks));
-            }
-        }
-    }
-    if let Some(nm) = nm {
-        scan(&nm, &mut out);
-    }
-    out
+    crate::discovery::paths::discover_external_packages(cwd).into_iter().map(|p| (p.name, p.blocks_dir)).collect()
 }
 
 pub fn discover_external_blocks(cwd: &str) -> Vec<Template> {

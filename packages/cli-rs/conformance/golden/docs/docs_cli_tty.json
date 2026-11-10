@@ -5,6 +5,7 @@
   "cli"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Astryx CLI\r\nCommands, programmatic APIs, and output contracts. Building an integration is under `npx @astryxdesign/cli@0.7.12 docs\r\nauthoring`.\r\n\r\npackage: @astryxdesign/cli\r\n\r\nUse the CLI in any folder: install it once for your computer, and every project still gets the release that matches its\r\nCore. See `npx @astryxdesign/cli@0.7.12 docs global`.\r\n\r\nGuides\r\n\r\ncomponent-lookups  Look up one or several exact component identities, choose a focused projection, and handle complete\r\n                   batch receipts.\r\nhost-entry         Run the Astryx CLI from your own command-line tool: the inputs `runHostedCli` takes, what it returns,\r\n                   and when the process ends instead.\r\nexperimental       [experimental] Features you can try now that may change or be removed in a patch release.\r\n\r\nReference\r\n\r\ncommands  Every command and subcommand: usage, options, examples, exit codes, and what it does outside a project.\r\napi       The programmatic API: functions, the JSON output envelope, error codes, and response types.\r\n\r\nOpen one: npx @astryxdesign/cli@0.7.12 docs cli/<name>\r\nUp: npx @astryxdesign/cli@0.7.12 docs\r\n\r\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\r\n",
  "stderr": "",
  "exit": 0,

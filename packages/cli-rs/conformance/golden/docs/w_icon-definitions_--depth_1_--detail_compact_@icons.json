@@ -9,6 +9,7 @@
   "compact"
  ],
  "fixture": "icons",
+ "fixtureHash": "cfe8bdaf4aaef512+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Unknown topic \"icon-definitions\"\n\n  cli/experimental/icon-definitions  (Every icon definition: what an icon stands for, and the shared name icon sets map their icons to.)\n",
  "exit": 1,

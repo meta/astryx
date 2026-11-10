@@ -6,6 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# useComboboxHookUsage - An \"Assign to\" TextInput and a list of Item rows, with the field, listbox and option props from useCombobox spread onto them: typing filters a list of teammates, ArrowUp and ArrowDown move the active option while focus stays in the input, Enter picks it and Escape closes the list.\n# Components: Card, Item, TextInput\n\n<Card padding={4} width={320}>\n  <VStack gap={2}>\n    <TextInput />\n    <VStack gap={0}>\n      <Item density=\"compact\" />\n    </VStack>\n    <Text />\n    <Text />\n  </VStack>\n</Card>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

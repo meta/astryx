@@ -646,6 +646,10 @@ fn single(name: &str, opts: &Options, core_dir: &Path) -> Result<Response, ApiEr
     let dir_name = name.strip_prefix("XDS").unwrap_or(name).to_string();
     let (zh, dense, lang) = (opts.zh, opts.dense, opts.lang.as_deref());
     let integrations = deps::load_integrations_safely(cwd);
+    // Owner lookup lists Core's `src` first; Node's `readdirSync` throws
+    // there when the folder is missing.
+    crate::discovery::component_discovery::try_discover_components(core_dir)
+        .map_err(|m| ApiError::new(m, None, "ERR_UNKNOWN"))?;
     let owners = resolve_owners(core_dir, &dir_name, &integrations);
     let list_cmd = crate::cli::env::format_cli_command_at(cwd, "component --list");
     let replacements = || -> ComponentReplacements {

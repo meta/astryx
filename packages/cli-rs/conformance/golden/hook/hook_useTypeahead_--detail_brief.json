@@ -7,6 +7,7 @@
   "brief"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nuseTypeahead(options: UseTypeaheadOptions): { onKeyDown, reset }  <- from '@astryxdesign/core/hooks'\n  Adds APG type-to-focus search to a collection: printable keystrokes are buffe...\n  Related: DropdownMenu, Selector, TreeList\n  options: UseTypeaheadOptions\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for DropdownMenu, Selector, TreeList\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

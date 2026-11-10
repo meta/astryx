@@ -8,6 +8,7 @@
   "--check"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: --check cannot be combined with --watch\n",
  "exit": 1,

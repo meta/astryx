@@ -6,6 +6,7 @@
   "stone"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Refusing to overwrite existing file src/themes/stone/stoneTheme.ts. Re-run with --overwrite (or -f) to replace it.\n",
  "exit": 1,

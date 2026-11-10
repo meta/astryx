@@ -7,6 +7,7 @@
   "@cmd/one"
  ],
  "fixture": "doctor-integrations",
+ "fixtureHash": "70dc92e0b02698cb+4e418a0c2575d9ce",
  "stdout": "Validating integration: @cmd/one@1.0.0\n\n[ok] No integration issues found.\n\nSummary: 0 errors, 0 warnings\n\n[info] No doc files to type-check.\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

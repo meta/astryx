@@ -1,6 +1,6 @@
-//! A small CSS reader with the parts of PostCSS's tree the theme checks walk:
-//! rules with their selectors and declarations, at-rules with their names and
-//! params, and each node's at-rule ancestors.
+//! The parts of PostCSS's tree the theme checks walk: rules with their
+//! selectors and declarations, at-rules with their names and params, and each
+//! node's at-rule ancestors.
 
 #[derive(Debug, Clone)]
 pub struct Decl {
@@ -16,156 +16,33 @@ pub enum Node {
     Decl(Decl),
 }
 
-fn strip_comments(s: &str) -> String {
-    let mut out = String::new();
-    let c: Vec<char> = s.chars().collect();
-    let mut i = 0;
-    let mut quote: Option<char> = None;
-    while i < c.len() {
-        if let Some(q) = quote {
-            out.push(c[i]);
-            if c[i] == '\\' && i + 1 < c.len() {
-                out.push(c[i + 1]);
-                i += 2;
+/// `postcss.parse(css)`: the root's nodes (the experimental render lane's
+/// PostCSS port), without comments. Err = PostCSS's syntax error.
+pub fn parse(css: &str) -> Result<Vec<Node>, String> {
+    use crate::commands::experimental::render::css as pc;
+    let tree = pc::parse(css)?;
+    fn convert(tree: &pc::Tree, ids: &[usize]) -> Vec<Node> {
+        let mut out = Vec::new();
+        for &id in ids {
+            let n = &tree.nodes[id];
+            if n.removed {
                 continue;
             }
-            if c[i] == q {
-                quote = None;
-            }
-            i += 1;
-            continue;
-        }
-        if c[i] == '"' || c[i] == '\'' {
-            quote = Some(c[i]);
-            out.push(c[i]);
-            i += 1;
-            continue;
-        }
-        if c[i] == '/' && c.get(i + 1) == Some(&'*') {
-            let mut j = i + 2;
-            while j + 1 < c.len() && !(c[j] == '*' && c[j + 1] == '/') {
-                j += 1;
-            }
-            i = (j + 2).min(c.len());
-            continue;
-        }
-        out.push(c[i]);
-        i += 1;
-    }
-    out
-}
-
-struct P {
-    c: Vec<char>,
-    i: usize,
-}
-
-impl P {
-    /// Read until one of `stops` at depth 0, outside strings and parens.
-    fn until(&mut self, stops: &[char]) -> (String, Option<char>) {
-        let mut out = String::new();
-        let mut depth = 0i32;
-        let mut quote: Option<char> = None;
-        while self.i < self.c.len() {
-            let ch = self.c[self.i];
-            if let Some(q) = quote {
-                out.push(ch);
-                if ch == '\\' && self.i + 1 < self.c.len() {
-                    out.push(self.c[self.i + 1]);
-                    self.i += 2;
-                    continue;
+            let kids: Vec<usize> = n.nodes.clone().unwrap_or_default();
+            match &n.kind {
+                pc::Kind::Rule { selector, .. } => out.push(Node::Rule { selector: selector.clone(), children: convert(tree, &kids) }),
+                pc::Kind::AtRule { name, params, .. } => out.push(Node::AtRule { name: name.clone(), params: params.clone(), children: convert(tree, &kids) }),
+                pc::Kind::Decl { prop, value, printed } => {
+                    let important = printed.trim_end().len() > prop.len() + n.between.len() + value.len() && printed.contains('!');
+                    out.push(Node::Decl(Decl { prop: prop.clone(), value: value.clone(), important }));
                 }
-                if ch == q {
-                    quote = None;
-                }
-                self.i += 1;
-                continue;
-            }
-            match ch {
-                '"' | '\'' => quote = Some(ch),
-                '(' => depth += 1,
-                ')' => depth -= 1,
                 _ => {}
             }
-            if depth <= 0 && stops.contains(&ch) {
-                self.i += 1;
-                return (out, Some(ch));
-            }
-            out.push(ch);
-            self.i += 1;
         }
-        (out, None)
+        out
     }
-
-    fn block(&mut self) -> Vec<Node> {
-        let mut nodes = Vec::new();
-        loop {
-            while self.i < self.c.len() && self.c[self.i].is_whitespace() {
-                self.i += 1;
-            }
-            if self.i >= self.c.len() {
-                return nodes;
-            }
-            if self.c[self.i] == '}' {
-                self.i += 1;
-                return nodes;
-            }
-            if self.c[self.i] == ';' {
-                self.i += 1;
-                continue;
-            }
-            if self.c[self.i] == '@' {
-                self.i += 1;
-                let start = self.i;
-                while self.i < self.c.len() && (self.c[self.i].is_alphanumeric() || self.c[self.i] == '-' || self.c[self.i] == '_') {
-                    self.i += 1;
-                }
-                let name: String = self.c[start..self.i].iter().collect();
-                let (params, stop) = self.until(&['{', ';', '}']);
-                let params = params.trim().to_string();
-                let children = if stop == Some('{') { self.block() } else { vec![] };
-                if stop == Some('}') {
-                    nodes.push(Node::AtRule { name, params, children });
-                    return nodes;
-                }
-                nodes.push(Node::AtRule { name, params, children });
-                continue;
-            }
-            let (text, stop) = self.until(&['{', ';', '}']);
-            match stop {
-                Some('{') => {
-                    let children = self.block();
-                    nodes.push(Node::Rule { selector: text.trim().to_string(), children });
-                }
-                _ => {
-                    if let Some(colon) = text.find(':') {
-                        let prop = text[..colon].trim().to_string();
-                        let mut value = text[colon + 1..].trim().to_string();
-                        let mut important = false;
-                        let lower = value.to_lowercase();
-                        if let Some(pos) = lower.rfind("!important") {
-                            if lower[pos + 10..].trim().is_empty() {
-                                important = true;
-                                value = value[..pos].trim().to_string();
-                            }
-                        }
-                        if !prop.is_empty() {
-                            nodes.push(Node::Decl(Decl { prop, value, important }));
-                        }
-                    }
-                    if stop == Some('}') {
-                        return nodes;
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// `postcss.parse(css)`: the root's nodes.
-pub fn parse(css: &str) -> Vec<Node> {
-    let mut p = P { c: strip_comments(css).chars().collect(), i: 0 };
-    p.block()
+    let root: Vec<usize> = tree.nodes[0].nodes.clone().unwrap_or_default();
+    Ok(convert(&tree, &root))
 }
 
 /// Every at-rule, depth first, with its own nodes.

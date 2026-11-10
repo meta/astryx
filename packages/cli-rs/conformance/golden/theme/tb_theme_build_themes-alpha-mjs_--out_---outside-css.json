@@ -8,6 +8,7 @@
   "../outside.css"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Output path \"../outside.css\" is outside the working directory (/tmp/astryx-conformance/work/themes). Pass an --out path inside it.\n",
  "exit": 1,

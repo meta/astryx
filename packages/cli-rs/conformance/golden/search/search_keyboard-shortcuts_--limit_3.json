@@ -7,6 +7,7 @@
   "3"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Results for \"keyboard shortcuts\" (3 of 83)\n\nname:        Kbd\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Kbd\ndescription: Renders a keyboard shortcut as styled key badges. Use Kbd in tooltips, menus, and help text to show key combinations.\ncommand:     npx @astryxdesign/cli@0.7.12 component Kbd\n\nname:        useHotkeys\ndomain:      hook\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/hooks\ndescription: Registers global keyboard shortcuts with a single window keydown listener per hook instance. Handlers live in a ref, so re-renders never re-subscribe. Skips events from typing targets (input, textarea, select, contenteditable) unless allowInInputs, skips defaultPrevented events, and calls preventDefault() on match. SSR-safe.\ncommand:     npx @astryxdesign/cli@0.7.12 hook useHotkeys\n\nname:        KbdMenuShortcuts\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Kbd - Menu Shortcuts\nkind:        block\ndescription: Menu-style list pairing action labels with their keyboard shortcuts\ncommand:     npx @astryxdesign/cli@0.7.12 template KbdMenuShortcuts --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover 'keyboard shortcuts'\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

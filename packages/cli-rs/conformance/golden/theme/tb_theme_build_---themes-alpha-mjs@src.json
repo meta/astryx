@@ -6,6 +6,7 @@
   "../themes/alpha.mjs"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "sh: line 1: cd: /tmp/astryx-conformance/work/src: No such file or directory\n",
  "exit": 1,

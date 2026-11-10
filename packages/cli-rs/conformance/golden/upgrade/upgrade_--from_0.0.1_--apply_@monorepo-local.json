@@ -7,6 +7,7 @@
   "--apply"
  ],
  "fixture": "monorepo-local",
+ "fixtureHash": "66a78e1352faa1b5+4e418a0c2575d9ce",
  "stdout": "\nUpgrade\nAborted\n\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nCould not find installed @astryxdesign/core (or legacy @xds/core). This folder is outside a project; upgrade migrates the code of an app project that installs @astryxdesign/core.\n",
  "exit": 1,

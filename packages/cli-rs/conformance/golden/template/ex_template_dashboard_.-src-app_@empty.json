@@ -6,6 +6,7 @@
   "./src/app"
  ],
  "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
  "stdout": "Copied template to src/app/page.tsx\n\npackage: @astryxdesign/core\n\nInstall missing dependencies: npm install recharts@\"^3.9.2\" @heroicons/react@\"^2.2.0\"\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

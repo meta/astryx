@@ -1798,5 +1798,41 @@
       "cli/experimental/icon-definitions/sparkle"
     ],
     "fixture": "icons-unselected"
+  },
+  {
+    "id": "w_acme-big_@docsint",
+    "args": [
+      "docs",
+      "acme-big"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-big_--index_--json_@docsint",
+    "args": [
+      "docs",
+      "acme-big",
+      "--index",
+      "--json"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-big_huge_@docsint",
+    "args": [
+      "docs",
+      "acme-big",
+      "huge"
+    ],
+    "fixture": "docsint"
+  },
+  {
+    "id": "w_acme-big_part-170_@docsint",
+    "args": [
+      "docs",
+      "acme-big",
+      "part-170"
+    ],
+    "fixture": "docsint"
   }
 ]

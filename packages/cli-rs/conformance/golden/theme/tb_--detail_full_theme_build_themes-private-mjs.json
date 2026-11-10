@@ -8,6 +8,7 @@
   "themes/private.mjs"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "\nBuilding theme from themes/private.mjs...\n\n[ok] themes/private.css\n[ok] themes/private.css.d.ts\n  2 token overrides, 1 component overrides\n  2.1 KB\n[ok] themes/private.js\n[ok] themes/private.d.ts\n\nInstall in your app (paths are relative to a file in src/; adjust if yours lives elsewhere):\n\n  import { Theme } from '@astryxdesign/core/theme';\n  import { privateTheme } from './themes/private';\n  import './themes/private.css';\n\n  <Theme theme={privateTheme}>\n    <App />\n  </Theme>\n\nOr with a <link> tag:\n\n  import { Theme } from '@astryxdesign/core/theme';\n  import { privateTheme } from './themes/private';\n\n  <link rel=\"stylesheet\" href=\"./themes/private.css\" />\n  <Theme theme={privateTheme}>\n    <App />\n  </Theme>\n\n",
  "stderr": "  [error] theme tokens sets private var \"--_secret\". Private vars (--_*) are internal; use a public token or standard CSS property instead.\n  [error] Component \"button\" (theme base) sets private var \"--_radius\". Private vars (--_*) are internal; use standard CSS properties (e.g. borderRadius, padding) instead. The pipeline expands them automatically.\n  [error] Component \"button\" (theme base :hover) sets private var \"--_bg\". Private vars (--_*) are internal; use standard CSS properties (e.g. borderRadius, padding) instead. The pipeline expands them automatically.\n\n  3 private var error(s). Use standard CSS properties instead.\n",
  "exit": 1,

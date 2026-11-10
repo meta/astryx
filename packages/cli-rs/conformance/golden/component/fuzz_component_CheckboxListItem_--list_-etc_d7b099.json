@@ -7,6 +7,7 @@
   "/etc"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Component batch\n\ncount: 2\n\nResults\n\nCheckboxListItem\n\nselector: CheckboxListItem\nstatus:   found\n\nResult\n\npackage: @astryxdesign/core\n\nCheckboxListItem(align: center|start|first-line, isChecked: boolean|indeterminate)  <- from '@astryxdesign/core/CheckboxList'\n  Individual checkbox item with label, description, and end content slot. Works...\n  label: ReactNode, aria-label, value, description, endContent, isDisabled, isLoading, onCheck\n  <CheckboxListItem\n\n\n/etc\n\nselector: /etc\nstatus:   not_found\ncode:     ERR_UNKNOWN_COMPONENT\nerror:    No component named \"/etc\"\n\nSuggestions\n\nname:   Text\nreason: similar name (distance 3)\n",
  "stderr": "",
  "exit": 1,

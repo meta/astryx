@@ -6,6 +6,7 @@
   "theme"
  ],
  "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
  "stdout": "[ok] Theme template written -> theme.template.ts\n  Edit the blank template for a new theme, or run `npx @astryxdesign/cli@0.7.12 theme eject <slug>` to start from the source of a built theme (`npx @astryxdesign/cli@0.7.12 theme list` to browse).\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

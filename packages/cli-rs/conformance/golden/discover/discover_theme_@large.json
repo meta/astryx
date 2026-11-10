@@ -5,6 +5,7 @@
   "theme"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "Found 7 matches for \"theme\"\n\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/theme-butter  (package)\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/theme-chocolate  (package)\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/theme-gothic  (package)\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/theme-matcha  (package)\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/theme-neutral  (package)\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/theme-stone  (package)\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/theme-y2k  (package)\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -1,0 +1,35 @@
+{
+ "id": "fuzz_integration_pack_--check@author_pre_a5d1d7",
+ "args": [
+  "integration",
+  "pack",
+  "--check"
+ ],
+ "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
+ "stdout": "Integration package check failed\n\n[fail] @acme/widgets@0.1.0\n\n7 packed files; 6/6 required files present.\n\n- [fail] Theme \"guide\" from @acme/widgets has no resolvable built module and stylesheet. Missing module export @acme/widgets/themes/guide, stylesheet export @acme/widgets/themes/guide.css, or the single-theme exports @acme/widgets/built and @acme/widgets/theme.css. The package must build and export them before it can be added. Run `npx @astryxdesign/cli@0.7.12 theme build themes/guide/guideTheme.ts` before packing.\n- [fail] Component \"WidgetCard\" advertises import \"@acme/widgets\", but a consumer cannot resolve it: No \"exports\" main defined in package.json imported from a consumer project\n",
+ "stderr": "Note: `integration pack --check` is deprecated. Run `npx @astryxdesign/cli@0.7.12 integration verify`: it runs the same check.\n",
+ "exit": 1,
+ "files": [
+  {
+   "path": "author/astryx.integration.mjs",
+   "status": "changed",
+   "text": "export default {\n  components: './src/components',\n  docs: './docs',\n  themes: './themes'\n};\n"
+  },
+  {
+   "path": "author/package.json",
+   "status": "changed",
+   "text": "{\n  \"name\": \"@acme/widgets\",\n  \"version\": \"0.1.0\",\n  \"peerDependencies\": {\n    \"@astryxdesign/core\": \"0.7.12\",\n    \"@astryxdesign/cli\": \">=0.6.4\"\n  },\n  \"exports\": {\n    \"./themes/guide\": \"./themes/guide/guide.js\",\n    \"./themes/guide.css\": \"./themes/guide/guide.css\"\n  },\n  \"peerDependenciesMeta\": {\n    \"@astryxdesign/cli\": {\n      \"optional\": true\n    }\n  }\n}\n"
+  },
+  {
+   "path": "author/themes/guide/guideTheme.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {\n  type: 'theme',\n  name: 'guide',\n  displayName: 'Guide',\n  description: 'Guide theme.',\n  maintained: true,\n};\n"
+  },
+  {
+   "path": "author/themes/guide/guideTheme.ts",
+   "status": "created",
+   "text": "import {defineTheme} from '@astryxdesign/core/theme';\n\nexport const guideTheme = defineTheme({\n  name: 'guide',\n});\n"
+  }
+ ]
+}

@@ -9,6 +9,7 @@
   "--json"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.add\",\n  \"data\": {\n    \"kind\": \"component\",\n    \"name\": \"AcmeWidget\",\n    \"root\": {\n      \"path\": \"./components\",\n      \"created\": true\n    },\n    \"manifest\": \"astryx.integration.mjs\",\n    \"files\": [\n      \"components/AcmeWidget.doc.mjs\",\n      \"components/AcmeWidget.tsx\",\n      \"astryx.integration.mjs\"\n    ],\n    \"written\": false,\n    \"dryRun\": true\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

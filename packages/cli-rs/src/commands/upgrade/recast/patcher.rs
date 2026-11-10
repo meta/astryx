@@ -187,6 +187,14 @@ fn find_child_reprints(ast: &Ast, new_path: &mut Path, old_path: &mut Path, repr
     if new_path.needs_parens(ast, false, None) && !old_path.has_parens(ast) {
         return false;
     }
+    // jscodeshift's traversal fills a Babel RegExpLiteral's missing `value`
+    // with a fresh RegExp, and recast never finds two RegExp objects equal:
+    // every RegExpLiteral of a transformed file is reprinted.
+    if let V::Node(id) = &nv {
+        if ast.nodes[*id].ty == "RegExpLiteral" {
+            return false;
+        }
+    }
     let mut keys = keys_of(ast, &ov);
     for k in keys_of(ast, &nv) {
         if !keys.contains(&k) {

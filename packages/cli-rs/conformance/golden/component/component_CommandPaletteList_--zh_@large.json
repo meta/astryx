@@ -6,6 +6,7 @@
   "--zh"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# CommandPaletteList\n\n可滚动的结果容器。独立使用时，以及在 CommandPalette 中存在可选结果时，作为 listbox 渲染。\n\n**Import:** `import {CommandPaletteList} from '@astryxdesign/core/CommandPalette';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | 条目、分组和空状态。 **(required)** |\n| `label` | `string` | `'Commands'` | listbox 的无障碍标签。 |\n| `xstyle` | `StyleXStyles` | - | StyleX 布局自定义样式。必须是 stylex.create() 的值。 |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

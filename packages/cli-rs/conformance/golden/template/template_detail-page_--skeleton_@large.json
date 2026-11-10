@@ -6,6 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# detail-page - Single-record detail in two columns: a summary header with status and actions, a repeating line-item list, a totals block that sums it, and a chronological activity timeline in the rail. The shape for any record holding children plus a history: a customer order with shipping, an invoice, a transaction, or a job.\n# Components: Avatar, Badge, Card, Collapsible, Dialog, Divider, Layout, List, MetadataList, ProgressBar, Section, Tab, TabList, TabMenu, Thumbnail\n\n<Layout defaultHasDividers height=\"fill\" />\n/* header: */\n<PageHeader />\n/* content: */\n<LayoutContent role=\"main\">\n  <VStack gap={4}>\n    <ItemsCard />\n    <InvoiceCard />\n    <TimelineSection />\n  </VStack>\n</LayoutContent>\n/* end: */\n<Dialog variant=\"fullscreen\">\n  <Layout />\n  /* header: */\n  <DialogHeader />\n  /* content: */\n  <LayoutContent padding={4}>\n    <PanelContent />\n  </LayoutContent>\n</Dialog>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

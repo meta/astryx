@@ -6,6 +6,7 @@
   "src/new-page.tsx"
  ],
  "fixture": "unknownint",
+ "fixtureHash": "b1c6b89b18b853b7+4e418a0c2575d9ce",
  "stdout": "Copied template to src/new-page.tsx\n\npackage: @astryxdesign/core\n",
  "stderr": "Warning: @acme/missing has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

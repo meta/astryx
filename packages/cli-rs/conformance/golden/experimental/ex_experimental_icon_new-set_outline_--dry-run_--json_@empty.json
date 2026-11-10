@@ -9,6 +9,7 @@
   "--json"
  ],
  "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"astryx experimental icon new-set works only in a project. Run it in the integration package.\",\n  \"code\": \"ERR_PROJECT_REQUIRED\"\n}\n",
  "stderr": "",
  "exit": 1,

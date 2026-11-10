@@ -1,0 +1,100 @@
+[
+  {
+    "id": "sweep_cdn_nocore",
+    "args": [
+      "template",
+      "--cdn",
+      "--json"
+    ],
+    "fixture": "nocore"
+  },
+  {
+    "id": "sweep_cdn_brokencore",
+    "args": [
+      "template",
+      "--cdn",
+      "--json"
+    ],
+    "fixture": "brokencore"
+  },
+  {
+    "id": "sweep_cdn_brokencore_text",
+    "args": [
+      "template",
+      "--cdn"
+    ],
+    "fixture": "brokencore"
+  },
+  {
+    "id": "sweep_cdn_plain",
+    "args": [
+      "template",
+      "--cdn",
+      "--json"
+    ],
+    "fixture": "plain"
+  },
+  {
+    "id": "sweep_cdn_author",
+    "args": [
+      "template",
+      "--cdn",
+      "--json"
+    ],
+    "fixture": "author"
+  },
+  {
+    "id": "sweep_cdn_empty_json",
+    "args": [
+      "template",
+      "--cdn",
+      "--json"
+    ],
+    "fixture": "empty"
+  },
+  {
+    "id": "sweep_cdn_core-0.3.0",
+    "args": [
+      "template",
+      "--cdn",
+      "--json"
+    ],
+    "fixture": "core-0.3.0"
+  },
+  {
+    "id": "sweep_cdn_core-0.6.8",
+    "args": [
+      "template",
+      "--cdn",
+      "--json"
+    ],
+    "fixture": "core-0.6.8"
+  },
+  {
+    "id": "sweep_cdn_monorepo",
+    "args": [
+      "template",
+      "--cdn",
+      "--json"
+    ],
+    "fixture": "monorepo"
+  },
+  {
+    "id": "sweep_cdn_monorepo-local",
+    "args": [
+      "template",
+      "--cdn",
+      "--json"
+    ],
+    "fixture": "monorepo-local"
+  },
+  {
+    "id": "sweep_cdn_themes-core-0.5.4",
+    "args": [
+      "template",
+      "--cdn",
+      "--json"
+    ],
+    "fixture": "themes-core-0.5.4"
+  }
+]

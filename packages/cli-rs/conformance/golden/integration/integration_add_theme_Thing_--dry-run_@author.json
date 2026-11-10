@@ -8,6 +8,7 @@
   "--dry-run"
  ],
  "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Invalid theme name \"Thing\": use lowercase kebab-case starting with a letter.\n",
  "exit": 1,

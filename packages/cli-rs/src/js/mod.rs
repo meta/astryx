@@ -90,6 +90,10 @@ pub struct JitiOptions {
     /// first, and a file with an extension jiti does not know loads through
     /// Node's `require`, as JavaScript.
     pub sync: bool,
+    /// File -> source text the graph uses in place of the file's (still
+    /// transformed as that file would be, its imports resolved from the
+    /// file's own place, and recorded under its path).
+    pub source_overrides: Vec<(PathBuf, String)>,
 }
 
 /// A loaded module's namespace: every export, converted to JSON values with
@@ -130,6 +134,8 @@ pub fn take_output() -> Vec<u8> {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod profile_tests;
 
 /// Start (`true`) or stop (`false`) capturing console calls as
 /// `(level, text)` pairs (`log`, `info`, `debug`, `warn`, `error`, `trace`;

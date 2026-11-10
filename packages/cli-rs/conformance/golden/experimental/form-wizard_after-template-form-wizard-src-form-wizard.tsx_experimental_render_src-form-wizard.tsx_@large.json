@@ -6,6 +6,7 @@
   "src/form-wizard.tsx"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "Rendered src/form-wizard.tsx\n\ninput:       src/form-wizard.tsx\noutput:      src/form-wizard.html\nbytes:       122.5 KB\ncssBytes:    52.3 KB\nclasses:     363\nimages:      0\nfiles:       form-wizard.tsx\nstylesheets: @astryxdesign/core/reset.css, @astryxdesign/core/astryx.css\n\nGive it back: npx @astryxdesign/cli@0.7.12 experimental render --reverse src/form-wizard.html\n",
  "stderr": "",
  "exit": 0,

@@ -5,6 +5,7 @@
   "@acme/kit@9.9.9"
  ],
  "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Version \"9.9.9\" of @acme/kit not found\n\n  @acme/kit@1.2.3  (published version)\n",
  "exit": 1,

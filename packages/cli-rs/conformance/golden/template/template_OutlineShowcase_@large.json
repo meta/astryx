@@ -5,6 +5,7 @@
   "OutlineShowcase"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Outline} from '@astryxdesign/core/Outline';\nimport type {OutlineItem} from '@astryxdesign/core/Outline';\n\nconst items: OutlineItem[] = [\n  {id: 'showcase-overview', label: 'Overview', level: 2},\n  {id: 'showcase-installation', label: 'Installation', level: 2},\n  {id: 'showcase-theming', label: 'Theming', level: 2},\n  {id: 'showcase-tokens', label: 'Tokens', level: 3},\n  {id: 'showcase-accessibility', label: 'Accessibility', level: 2},\n];\n\nexport default function OutlineShowcase() {\n  return (\n    <div style={{width: 240}}>\n      <Outline items={items} activeId=\"showcase-theming\" />\n    </div>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

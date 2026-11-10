@@ -8,6 +8,7 @@
   "themes/variants.mjs"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "[ok] themes/variants-theme.css (6 KB, 1 token overrides, 3 component overrides)\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

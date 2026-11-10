@@ -4,10 +4,7 @@
 //!
 //! The CLI's own docs are read from the embedded module data and the docs
 //! lane's tree model, both built from the CLI package.
-//! TEMP: section sizes are not measured yet (they need the doc compiler's
-//! rendered sections); the CLI's own docs all fit, and a contributed doc
-//! larger than one read is not reported. Contributed docs join the tree once
-//! discovery's integration docs reader lands.
+//! The tree and size reports come from the docs lane's readers.
 
 use super::checks::Ctx;
 use super::env::fmt0;
@@ -82,6 +79,8 @@ fn experimental(v: &Value) -> bool {
 fn kilobytes(bytes: usize) -> String {
     format!("{} KB", bytes.div_ceil(1024))
 }
+
+const DOCS_TREE_FIX: &str = "Fix each placement, adoption rule, or link the message names: a placement names a namespace of its own package, one of its slots, and a slot that accepts its kind; exactly one namespace adopts each doc; every route belongs to one doc; every link names a doc that exists, as `[<provider>:]<kind>:<name>`.";
 
 fn join_problems(p: &[String]) -> String {
     if p.len() == 1 {
@@ -208,63 +207,17 @@ fn check_cli_docs() -> Check {
     )
 }
 
-struct TreeCounts {
-    docs: usize,
-    sections: usize,
-    roots: usize,
-    topics: usize,
-}
-
-fn tree_counts() -> TreeCounts {
-    let model = crate::commands::docs::api::Docs::load("npm");
-    let nodes = &model.tree.nodes;
-    let experimental_node = |n: &crate::commands::docs::api::Node| {
-        let mut cur = Some(n);
-        while let Some(c) = cur {
-            if c.experimental() {
-                return true;
-            }
-            cur = c.parent().and_then(|p| model.tree.get(p));
-        }
-        false
-    };
-    let counted: Vec<&crate::commands::docs::api::Node> = nodes.iter().filter(|n| !experimental_node(n)).collect();
-    let sections = counted.iter().filter(|n| n.kind() == "namespace").count();
-    let placed = nodes.iter().filter(|n| n.kind() == "generic" && n.flat_topic().is_none());
-    let guides = placed.filter(|n| !experimental_node(n)).count();
-    TreeCounts { docs: counted.len() - sections, sections, roots: model.tree.roots().len(), topics: model.topics.len() + guides }
-}
-
-/// What the project's integrations add to the docs tree and catalog.
-/// TEMP: counted from discovery's integration docs reader until the docs
-/// tree takes contributed docs (a topic that extends or replaces another
-/// adds nothing).
-fn contributed(ctx: &Ctx, counts: &mut TreeCounts) {
-    for i in ctx.p.integrations.as_deref().unwrap_or(&[]) {
-        let Some(r) = i.as_object() else { continue };
-        if !super::util::nullish(r.get("__loadError")) || !super::util::nullish(r.get("__providerConflict")) {
-            continue;
-        }
-        if r.get("docs").and_then(|v| v.as_str()).is_none() {
-            continue;
-        }
-        let d = crate::discovery::docs_discovery::discover_integration_docs(r);
-        let new_topics = d.records.iter().filter(|t| t.replaces.is_none() && t.extends_topic.is_none()).count();
-        counts.docs += new_topics + d.guides.len();
-        counts.sections += d.namespaces.len();
-        counts.topics += new_topics + d.guides.len();
-    }
-}
-
 pub fn run(ctx: &Ctx) -> Vec<Check> {
-    let mut counts = tree_counts();
-    contributed(ctx, &mut counts);
-    let tree = Check::new(
-        "docs-tree",
-        "Docs tree",
-        Status::Pass,
-        format!("The docs tree has {} docs in {} sections ({} at the top), each at one route.", counts.docs, counts.sections, counts.roots),
-    );
+    let tree = match crate::commands::docs::runtime::doctor_tree_report(&ctx.cwd) {
+        Ok((problems, _)) if !problems.is_empty() => Check::new("docs-tree", "Docs tree", Status::Warn, join_problems(&problems)).fix(DOCS_TREE_FIX),
+        Ok((_, (docs, sections, roots))) => Check::new(
+            "docs-tree",
+            "Docs tree",
+            Status::Pass,
+            format!("The docs tree has {docs} docs in {sections} sections ({roots} at the top), each at one route."),
+        ),
+        Err(e) => Check::new("docs-tree", "Docs tree", Status::Warn, format!("The docs tree could not be built: {e}")).fix("Reinstall @astryxdesign/cli."),
+    };
     let mut problems: Vec<String> = Vec::new();
     if let Some(e) = &ctx.p.docs_catalog_error {
         problems.push(format!("The docs catalog could not be built: {e}"));
@@ -277,12 +230,19 @@ pub fn run(ctx: &Ctx) -> Vec<Check> {
         ));
     }
     let budget = kilobytes(32 * 1024);
+    let topics = match crate::commands::docs::runtime::doctor_disclosure_report(&ctx.cwd) {
+        Ok((topics, found)) => {
+            problems.extend(found);
+            topics
+        }
+        Err(_) => 0,
+    };
     let progressive = if problems.is_empty() {
         Check::new(
             "docs-progressive-disclosure",
             "Documentation navigation and size",
             Status::Pass,
-            format!("{} topics: every section index and section fits in one {budget} read.", counts.topics),
+            format!("{topics} topics: every section index and section fits in one {budget} read."),
         )
     } else {
         Check::new("docs-progressive-disclosure", "Documentation navigation and size", Status::Warn, join_problems(&problems))

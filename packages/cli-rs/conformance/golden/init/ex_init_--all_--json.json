@@ -6,6 +6,7 @@
   "--json"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"init.run\",\n  \"data\": {\n    \"mode\": \"features\",\n    \"features\": [\n      \"agents\",\n      \"theme\",\n      \"template\"\n    ],\n    \"docsWritten\": [\n      \"AGENTS.md\",\n      \"GEMINI.md\"\n    ],\n    \"docsError\": null,\n    \"theme\": true,\n    \"themeTemplate\": \"created\",\n    \"themeTemplatePath\": \"theme.template.ts\",\n    \"template\": \"workflow\",\n    \"templatePath\": null,\n    \"nextSteps\": false\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

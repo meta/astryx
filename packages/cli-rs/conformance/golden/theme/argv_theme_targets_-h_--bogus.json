@@ -7,6 +7,7 @@
   "--bogus"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Usage: astryx theme targets [options] [filter]\n\nList the component theming targets a theme can override\n\nOptions:\n  -h, --help  display help for command\n\nExit codes:\n  0  success\n  1  a filter matches no target, or core cannot be resolved\n\nExamples:\n  # The whole themeable surface\n  npx @astryxdesign/cli@0.7.12 theme targets\n  # One component's targets\n  npx @astryxdesign/cli@0.7.12 theme targets Switch\n  # Search keys\n  npx @astryxdesign/cli@0.7.12 theme targets thumb\n  # For a lint or an audit script\n  npx @astryxdesign/cli@0.7.12 --json theme targets\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/theme-targets\n",
  "stderr": "",
  "exit": 0,

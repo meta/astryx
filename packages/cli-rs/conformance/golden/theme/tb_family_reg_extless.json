@@ -10,6 +10,7 @@
   "fam-extless"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "\nBuilding theme from reg/extless.mjs...\n\nBuilding theme from reg/extless-child.mjs...\n",
  "stderr": "Error: Cannot resolve registry import \"./extless-icons\" from /tmp/astryx-conformance/work/themes/reg/fam-extless.js.\n",
  "exit": 1,

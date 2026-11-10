@@ -10,6 +10,7 @@
   "fam-thin"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "\nBuilding theme from reg/thin.mjs...\n\nBuilding theme from reg/thin-child.mjs...\n",
  "stderr": "Error: Family registry /tmp/astryx-conformance/work/themes/node_modules/@acme/thin-icons/index.mjs does not export \"icons\".\n",
  "exit": 1,

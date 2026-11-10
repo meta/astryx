@@ -5,6 +5,7 @@
   "TreeListInteractiveSettings"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {TreeList} from '@astryxdesign/core/TreeList';\nimport {Icon} from '@astryxdesign/core/Icon';\nimport {Cog6ToothIcon, ChevronRightIcon} from '@heroicons/react/24/outline';\n\nexport default function TreeListInteractiveSettings() {\n  return (\n    <TreeList\n      items={[\n        {\n          id: 'settings',\n          label: 'Settings',\n          isExpanded: true,\n          startContent: <Icon icon={Cog6ToothIcon} size=\"sm\" />,\n          children: [\n            {\n              id: 'general',\n              label: 'General',\n              onClick: () => {},\n            },\n            {\n              id: 'advanced',\n              label: 'Advanced',\n              onClick: () => {},\n            },\n          ],\n        },\n        {\n          id: 'docs',\n          label: 'Documentation',\n          href: '#',\n          endContent: <Icon icon={ChevronRightIcon} size=\"sm\" />,\n        },\n      ]}\n    />\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -8,6 +8,7 @@
   "page.html"
  ],
  "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
  "stdout": "Rendered /tmp/astryx-conformance/work/inputs/page.tsx\n\ninput:       /tmp/astryx-conformance/work/inputs/page.tsx\noutput:      page.html\nbytes:       33.5 KB\ncssBytes:    31.6 KB\nclasses:     104\nimages:      0\nfiles:       page.tsx\nstylesheets: @astryxdesign/core/reset.css, @astryxdesign/core/astryx.css\n\nGive it back: npx @astryxdesign/cli@0.7.12 experimental render --reverse page.html\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

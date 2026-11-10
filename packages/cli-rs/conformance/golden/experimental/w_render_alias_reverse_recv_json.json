@@ -10,6 +10,7 @@
   "recv/new/page.tsx"
  ],
  "fixture": "renderpages",
+ "fixtureHash": "8877e3d4520e7c26+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"render.reverse\",\n  \"data\": {\n    \"input\": \"aliased.html\",\n    \"mode\": \"embedded\",\n    \"output\": \"recv/new/page.tsx\",\n    \"files\": [\n      \"recv/new/page.tsx\",\n      \"recv/new/src/components/Card.tsx\",\n      \"recv/new/src/data/info.json\",\n      \"recv/new/local.tsx\"\n    ],\n    \"exact\": true\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

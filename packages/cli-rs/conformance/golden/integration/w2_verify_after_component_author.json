@@ -1,0 +1,24 @@
+{
+ "id": "w2_verify_after_component_author",
+ "args": [
+  "integration",
+  "verify"
+ ],
+ "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
+ "stdout": "Integration package check failed\n\n[fail] @acme/widgets@0.1.0\n\n7 packed files; 6/6 required files present.\n\n- [fail] Component \"Fancy\" advertises import \"@acme/widgets/src/components/Fancy\", but that packed module does not export \"Fancy\". Add or correct the package export before publishing.\n- [fail] Component \"WidgetCard\" advertises import \"@acme/widgets\", but a consumer cannot resolve it: Cannot find package 'index.js' imported from a consumer project\n",
+ "stderr": "",
+ "exit": 1,
+ "files": [
+  {
+   "path": "author/src/components/Fancy.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */\nexport default {\n  type: 'component',\n  name: 'Fancy',\n  displayName: 'Fancy',\n  import: \"@acme/widgets/src/components/Fancy\",\n  usage: {description: 'Fancy component.'},\n  props: [],\n};\n"
+  },
+  {
+   "path": "author/src/components/Fancy.tsx",
+   "status": "created",
+   "text": "export function Fancy() {\n  return <div>Fancy</div>;\n}\n"
+  }
+ ]
+}

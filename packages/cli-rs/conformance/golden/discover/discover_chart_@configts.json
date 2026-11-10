@@ -5,6 +5,7 @@
   "chart"
  ],
  "fixture": "configts",
+ "fixtureHash": "75313d97913c18da+4e418a0c2575d9ce",
  "stdout": "Found 12 matches for \"chart\"\n\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/lab/ChartArea\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/lab/ChartBar\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/lab/ChartCandlestick\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/lab/ChartDot\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/lab/ChartDotGL\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/lab/ChartDotGLInteractive\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/lab/ChartHeatmapGL\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/lab/ChartLine\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/lab/ChartStreamGL\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/lab/RadialChart\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/lab/SankeyChart\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/lab/ThreeDChart\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

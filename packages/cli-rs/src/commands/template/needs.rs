@@ -62,27 +62,8 @@ fn deps_of(pkg: &Value) -> Vec<String> {
     v
 }
 
-/// `findWorkspaceRoot`.
-// TEMP: replace with src/discovery paths::find_workspace_root when it lands.
 fn workspace_root(start: &str) -> String {
-    let mut nearest: Option<String> = None;
-    let mut dir = fsutil::normalize(start);
-    loop {
-        if Path::new(&fsutil::join(&dir, "pnpm-workspace.yaml")).exists()
-            || read_json(&fsutil::join(&dir, "package.json")).map_or(false, |p| p.get("workspaces").map_or(false, |w| !w.is_null()))
-        {
-            return dir;
-        }
-        if nearest.is_none() && Path::new(&fsutil::join(&dir, "package.json")).exists() {
-            nearest = Some(dir.clone());
-        }
-        let p = fsutil::dirname(&dir);
-        if p == dir {
-            break;
-        }
-        dir = p;
-    }
-    nearest.unwrap_or_else(|| fsutil::normalize(start))
+    crate::discovery::paths::find_workspace_root(start)
 }
 
 /// `decidePackageManagerIn(dir)`: (pm, or None when the lockfiles tie and

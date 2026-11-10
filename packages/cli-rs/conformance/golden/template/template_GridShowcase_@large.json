@@ -5,6 +5,7 @@
   "GridShowcase"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Card} from '@astryxdesign/core/Card';\nimport {Grid} from '@astryxdesign/core/Grid';\n\nexport default function GridShowcase() {\n  return (\n    <Grid columns={3} gap={2} width={400}>\n      {Array.from({length: 12}, (_, i) => (\n        <Card key={i}>Item {i + 1}</Card>\n      ))}\n    </Grid>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

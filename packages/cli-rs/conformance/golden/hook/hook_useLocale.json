@@ -5,6 +5,7 @@
   "useLocale"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# useLocale\n\nReads the authoritative Astryx locale. Use it to thread the provider locale into pure formatting helpers and sibling-package APIs; do not derive a second locale from navigator.language or a hardcoded literal.\n\n## Best Practices\n\n- **Do:** Pass the returned locale to pure Astryx helpers or package APIs that require an explicit locale.\n- **Don't:** Use navigator.language or a hardcoded display locale as a fallback; InternationalizationProvider is the locale source.\n\n## Returns\n\n| Field | Type | Description |\n|-------|------|-------------|\n| `locale` | `Locale` | The active InternationalizationProvider BCP 47 locale. Falls back to 'en' when no provider is present. |\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for InternationalizationProvider\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

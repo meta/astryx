@@ -7,6 +7,7 @@
   "-h"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: render reads a page module (.tsx, .jsx, .ts, .js, .mjs); -h is not one\n",
  "exit": 1,

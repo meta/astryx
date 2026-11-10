@@ -9,6 +9,7 @@
   "@acme/glyphs"
  ],
  "fixture": "icons",
+ "fixtureHash": "cfe8bdaf4aaef512+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: --all adds one variant for every icon: pass --variant with the variant, such as solid.\n",
  "exit": 1,

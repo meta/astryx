@@ -4,6 +4,7 @@
   "--version"
  ],
  "fixture": "core-0.5.4",
+ "fixtureHash": "f83fac28730aff29+4e418a0c2575d9ce",
  "stdout": "0.7.12\n",
  "stderr": "",
  "exit": 0,

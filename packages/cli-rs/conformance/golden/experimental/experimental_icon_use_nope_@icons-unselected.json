@@ -7,6 +7,7 @@
   "nope"
  ],
  "fixture": "icons-unselected",
+ "fixtureHash": "6fa91d9258575e5f+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: No installed icon set named \"nope\"\n\n  glyphs  (installed icon set)\n  @acme/glyphs/glyphs  (installed icon set)\n",
  "exit": 1,

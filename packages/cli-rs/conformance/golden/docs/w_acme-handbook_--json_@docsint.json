@@ -6,6 +6,7 @@
   "--json"
  ],
  "fixture": "docsint",
+ "fixtureHash": "36d5db4ca2dc43ba+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.node\",\n  \"package\": \"@acme/docs\",\n  \"data\": {\n    \"id\": \"astryx:artifact:v1/%40acme%2Fdocs/namespace/acme-handbook\",\n    \"route\": \"acme-handbook\",\n    \"kind\": \"namespace\",\n    \"package\": \"@acme/docs\",\n    \"title\": \"Acme handbook\",\n    \"summary\": \"Everything about Acme. See {@link generic:theme}.\",\n    \"breadcrumb\": [],\n    \"slots\": [\n      {\n        \"name\": \"guides\",\n        \"title\": \"Guides\",\n        \"children\": [\n          {\n            \"route\": \"acme-handbook/deploying\",\n            \"name\": \"deploying\",\n            \"package\": \"@acme/docs\",\n            \"kind\": \"generic\",\n            \"title\": \"Deploying\",\n            \"summary\": \"Ship it with `npm install -D @acme/docs`.\"\n          }\n        ]\n      }\n    ],\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Start with `astryx docs acme-handbook` or `astryx docs spacing`.\"\n      }\n    ],\n    \"links\": {\n      \"up\": \"astryx docs\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

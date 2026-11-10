@@ -6,6 +6,7 @@
   "selector"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Theming targets\n9 across 1 component\n(key - component - props - states - className)\n\nselector                  Selector - variant, size, status - disabled, readonly - astryx-selector\nselector-check            Selector - astryx-selector-check\nselector-empty-state      Selector - astryx-selector-empty-state\nselector-indicator-icon   Selector - state - astryx-selector-indicator-icon\nselector-option           Selector - astryx-selector-option\nselector-option-row       Selector - size - selected, disabled - astryx-selector-option-row\nselector-popup            Selector - astryx-selector-popup\nselector-search           Selector - astryx-selector-search\nselector-section-heading  Selector - astryx-selector-section-heading\n\nEach key goes under `components` in defineTheme; it paints `.astryx-<key>`.\nProps take a value (`variant:secondary`); states are written bare (`checked`).\nOne component in full: npx @astryxdesign/cli@0.7.12 component <Name>\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

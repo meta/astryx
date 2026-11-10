@@ -7,6 +7,7 @@
   "--json"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.app\",\n  \"package\": \"@astryxdesign/theme-gothic\",\n  \"data\": {\n    \"themes\": [\n      {\n        \"slug\": \"gothic\",\n        \"owner\": \"@astryxdesign/theme-gothic\",\n        \"module\": \"@astryxdesign/theme-gothic/built\",\n        \"stylesheet\": \"@astryxdesign/theme-gothic/theme.css\",\n        \"fontStylesheet\": \"@astryxdesign/theme-gothic/fonts.css\",\n        \"source\": \"bundled\"\n      }\n    ],\n    \"default\": \"gothic\",\n    \"modulePath\": \"src/astryx-themes.js\",\n    \"change\": {\n      \"action\": \"add\",\n      \"slug\": \"gothic\",\n      \"changed\": true,\n      \"firstAdd\": true\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

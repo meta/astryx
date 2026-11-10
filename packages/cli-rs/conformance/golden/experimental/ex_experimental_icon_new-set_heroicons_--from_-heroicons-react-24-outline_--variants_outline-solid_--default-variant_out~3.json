@@ -13,6 +13,7 @@
   "outline"
  ],
  "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: \"@heroicons/react/24/outline\" does not resolve from golden-consumer. Install it as a dependency, or check the specifier.\n",
  "exit": 1,

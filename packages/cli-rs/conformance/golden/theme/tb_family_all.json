@@ -12,6 +12,7 @@
   "ocean-family"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "\nBuilding theme from fam/themes/ocean.mjs...\n\nBuilding theme from fam/themes/.hidden/ocean-calm.mjs...\n\nBuilding theme from fam/themes/.hidden/ocean-calm-deep.mjs...\n\nBuilding theme from fam/themes/ocean-midnight.mjs...\n[ok] fam/themes/ocean-family.css\n[ok] fam/themes/ocean-family.css.d.ts\n[ok] fam/themes/ocean-family.js\n[ok] fam/themes/ocean-family.d.ts\n\nLoad the family CSS once, then select any member by theme identity:\n  import { oceanTheme, oceanCalmTheme, oceanCalmDeepTheme, oceanMidnightTheme } from './fam/themes/ocean-family';\n  import './fam/themes/ocean-family.css';\nOr load the same stylesheet natively:\n  <link rel=\"stylesheet\" href=\"./fam/themes/ocean-family.css\" />\n\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

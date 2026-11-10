@@ -6,6 +6,7 @@
   "--json"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail\",\n  \"package\": \"@astryxdesign/lab\",\n  \"data\": {\n    \"name\": \"SankeyChart\",\n    \"displayName\": \"Sankey Chart\",\n    \"group\": \"Sankey\",\n    \"category\": \"Data Visualization\",\n    \"usage\": {\n      \"description\": \"\"\n    },\n    \"props\": [],\n    \"package\": \"@astryxdesign/lab\",\n    \"import\": \"@astryxdesign/lab\",\n    \"sourceAvailable\": true\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

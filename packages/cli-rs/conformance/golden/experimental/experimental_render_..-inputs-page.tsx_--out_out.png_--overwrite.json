@@ -9,6 +9,7 @@
   "--overwrite"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: --overwrite applies only to --reverse; rendering replaces an existing HTML file only when a render wrote it\n",
  "exit": 1,

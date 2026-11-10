@@ -5,6 +5,7 @@
   "--all"
  ],
  "fixture": "pm-yarnberry",
+ "fixtureHash": "8b2e15f6f2c5fb80+4e418a0c2575d9ce",
  "stdout": "[ok] AI agent docs installed -> AGENTS.md, GEMINI.md\n[ok] Theme template written -> theme.template.ts\n  Edit the blank template for a new theme, or run `yarn dlx @astryxdesign/cli@0.7.12 theme add <slug>` to import an installed built theme (`yarn dlx @astryxdesign/cli@0.7.12 theme list` to browse). Extend an imported theme for ordinary customization; use `yarn dlx @astryxdesign/cli@0.7.12 theme eject <slug>` only to fork source.\n[ok] To build UI, use these commands:\n\n    yarn dlx @astryxdesign/cli@0.7.12 build \"<what you're building>\"   build a page - kit: closest template + blocks + components\n    yarn dlx @astryxdesign/cli@0.7.12 build                            the how-to-build workflow (read this first)\n    yarn dlx @astryxdesign/cli@0.7.12 search <query>                   find anything - components, docs, templates, blocks\n\n",
  "stderr": "",
  "exit": 0,

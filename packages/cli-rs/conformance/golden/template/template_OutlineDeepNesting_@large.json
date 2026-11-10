@@ -5,6 +5,7 @@
   "OutlineDeepNesting"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Outline} from '@astryxdesign/core/Outline';\nimport type {OutlineItem} from '@astryxdesign/core/Outline';\n\nconst items: OutlineItem[] = [\n  {id: 'deep-introduction', label: 'Introduction', level: 1},\n  {id: 'deep-concepts', label: 'Core concepts', level: 2},\n  {id: 'deep-tokens', label: 'Tokens', level: 3},\n  {id: 'deep-color', label: 'Color', level: 4},\n  {id: 'deep-spacing', label: 'Spacing', level: 4},\n  {id: 'deep-components', label: 'Components', level: 2},\n  {id: 'deep-primitives', label: 'Primitives', level: 3},\n  {id: 'deep-patterns', label: 'Patterns', level: 3},\n  {id: 'deep-resources', label: 'Resources', level: 1},\n];\n\nexport default function OutlineDeepNesting() {\n  return (\n    <div style={{width: 240}}>\n      <Outline items={items} activeId=\"deep-color\" />\n    </div>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

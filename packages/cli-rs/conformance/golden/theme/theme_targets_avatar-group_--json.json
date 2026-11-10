@@ -7,6 +7,7 @@
   "--json"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"avatar-group\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"avatar-group\",\n        \"className\": \"astryx-avatar-group\",\n        \"component\": \"AvatarGroup\",\n        \"props\": [\n          \"size\",\n          \"shape\"\n        ],\n        \"states\": []\n      },\n      {\n        \"key\": \"avatar-group-overflow\",\n        \"className\": \"astryx-avatar-group-overflow\",\n        \"component\": \"AvatarGroup\",\n        \"props\": [\n          \"size\",\n          \"shape\"\n        ],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

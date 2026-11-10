@@ -7,6 +7,7 @@
   "Always run the acme verification suite and the full lint pass before you hand any change back for review."
  ],
  "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
  "stdout": "agent-doc contribution added\n\n[ok] Always run the acme verification suite and the full lint pass before you hand any change back for review.\n\nUpdate astryx.integration.mjs.\n\n- astryx.integration.mjs\n",
  "stderr": "",
  "exit": 0,

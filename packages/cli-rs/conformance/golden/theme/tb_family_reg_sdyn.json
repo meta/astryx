@@ -10,6 +10,7 @@
   "fam-sdyn"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "\nBuilding theme from reg/sdyn.mjs...\n\nBuilding theme from reg/sdyn-child.mjs...\n[ok] reg/fam-sdyn.css\n[ok] reg/fam-sdyn.css.d.ts\n[ok] reg/fam-sdyn.js\n[ok] reg/fam-sdyn.d.ts\n\nLoad the family CSS once, then select any member by theme identity:\n  import { rSdynTheme, cSdynTheme } from './reg/fam-sdyn';\n  import './reg/fam-sdyn.css';\nOr load the same stylesheet natively:\n  <link rel=\"stylesheet\" href=\"./reg/fam-sdyn.css\" />\n\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

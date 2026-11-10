@@ -6,6 +6,7 @@
   "--json"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"hook.detail\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"name\": \"useImperativeAlertDialog\",\n    \"subComponentOf\": \"AlertDialog\",\n    \"displayName\": \"useImperativeAlertDialog\",\n    \"description\": \"Hook for showing an alert dialog without managing open state. Call alert.show(options) to open and alert.hide() to close. Render alert.element in your JSX tree.\",\n    \"props\": [\n      {\n        \"name\": \"show\",\n        \"type\": \"(options: AlertDialogOptions) => void\",\n        \"description\": \"Show the alert dialog with the given options. Options are the same as AlertDialog props minus isOpen/onOpenChange.\"\n      },\n      {\n        \"name\": \"hide\",\n        \"type\": \"() => void\",\n        \"description\": \"Hide the alert dialog.\"\n      },\n      {\n        \"name\": \"isOpen\",\n        \"type\": \"boolean\",\n        \"description\": \"Whether the dialog is currently open.\"\n      },\n      {\n        \"name\": \"element\",\n        \"type\": \"ReactNode\",\n        \"description\": \"The dialog element: render this in your JSX tree.\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

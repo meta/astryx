@@ -7,6 +7,7 @@
   "--check"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "\nBuilding theme from themes/icons/basic.ts...\n\n[ok] Theme outputs are up to date with themes/icons/basic.ts.\n",
  "stderr": "",
  "exit": 0,

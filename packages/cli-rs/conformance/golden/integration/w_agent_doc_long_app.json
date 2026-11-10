@@ -7,6 +7,7 @@
   "Always run the acme verification suite and the full lint pass before you hand any change back for review."
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "agent-doc contribution added\n\n[ok] Always run the acme verification suite and the full lint pass before you hand any change back for review.\n\nUpdate astryx.integration.mjs.\n\n- astryx.integration.mjs\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

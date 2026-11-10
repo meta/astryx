@@ -11,6 +11,7 @@
   "--all"
  ],
  "fixture": "iconlooks2",
+ "fixtureHash": "9ff556c9ef737e21+4e418a0c2575d9ce",
  "stdout": "[ok] solid: 25 icons gained it, read from ./lib/looks.js.\n\n- icon-sets/hero/hero.generated.js\n- icon-sets/hero/hero.generated.d.ts\n- icon-sets/hero/hero.icons.json\n\n2 icons have no solid export in ./lib/looks.js and keep none: home, trash\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

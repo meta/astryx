@@ -7,6 +7,7 @@
   "logs.tsx"
  ],
  "fixture": "renderpages",
+ "fixtureHash": "8877e3d4520e7c26+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"render.page\",\n  \"data\": {\n    \"input\": \"logs.tsx\",\n    \"output\": \"logs.html\",\n    \"bytes\": 20028,\n    \"files\": [\n      \"logs.tsx\"\n    ],\n    \"stylesheets\": [\n      \"@astryxdesign/core/reset.css\",\n      \"@astryxdesign/core/astryx.css\"\n    ],\n    \"classes\": 0,\n    \"cssBytes\": 19249,\n    \"images\": 0,\n    \"warnings\": [\n      {\n        \"code\": \"page-output\",\n        \"message\": \"The page printed while rendering (log): rendering { a: 1 }\"\n      },\n      {\n        \"code\": \"page-output\",\n        \"message\": \"The page printed while rendering (warn): careful\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

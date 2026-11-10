@@ -10,6 +10,7 @@
   "-f"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "[ok] Wrote palette/out/b.ts\n\n[ok] Wrote palette/out/b.receipt.json\n\nReview and edit the candidate before adopting it as theme-owned palette data.\n",
  "stderr": "",
  "exit": 0,

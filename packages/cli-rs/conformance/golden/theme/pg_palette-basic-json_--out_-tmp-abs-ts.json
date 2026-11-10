@@ -9,6 +9,7 @@
   "/tmp/abs.ts"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Invalid palette output path \"/tmp/abs.ts\": absolute paths are not allowed. Use a path relative to the project root.\n",
  "exit": 1,

@@ -9,6 +9,7 @@
   "palette/out/b.ts"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "[skip] One or more requested palette outputs already exist - left as is.\n\nPass --overwrite to replace both generated candidate files.\n",
  "stderr": "",
  "exit": 0,

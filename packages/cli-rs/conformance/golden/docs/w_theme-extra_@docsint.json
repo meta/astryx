@@ -5,6 +5,7 @@
   "theme-extra"
  ],
  "fixture": "docsint",
+ "fixtureHash": "36d5db4ca2dc43ba+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Unknown topic \"theme-extra\"\n\n  theme  (available topic)\n  author-a-theme  (available topic)\n  use-a-theme  (available topic)\n",
  "exit": 1,

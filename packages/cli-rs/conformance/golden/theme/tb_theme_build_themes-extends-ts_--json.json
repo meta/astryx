@@ -7,6 +7,7 @@
   "--json"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.build\",\n  \"data\": {\n    \"name\": \"reef\",\n    \"tokenCount\": 3,\n    \"componentCount\": 2,\n    \"sizeKB\": 2.8,\n    \"outputs\": {\n      \"css\": \"themes/reef.css\",\n      \"cssDts\": \"themes/reef.css.d.ts\",\n      \"js\": \"themes/reef.js\",\n      \"dts\": \"themes/reef.d.ts\"\n    },\n    \"warnings\": [\n      \"Unknown prop \\\"tone\\\" on component \\\"button\\\". Known props/states: size, variant, elevation\",\n      \"Unknown component \\\"buton\\\". Did you mean: button?\"\n    ],\n    \"notices\": [\n      \"Font \\\"Playfair Display\\\" is named by this theme but not loaded; add a <link> or @font-face in your app (recipe: astryx docs typography)\",\n      \"Font \\\"Inter\\\" is named by this theme but not loaded; add a <link> or @font-face in your app (recipe: astryx docs typography)\"\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

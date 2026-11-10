@@ -8,6 +8,7 @@
   "--default-variant=outline"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: --default-variant names one of the set's variants, so it needs --variants.\n\n  --variants outline,<other>  (declare the variants)\n",
  "exit": 1,

@@ -1,5 +1,5 @@
 //! V8's `JSON.parse` error messages (Node 22), for text that does not parse.
-//! TEMP: replace with the shared JSON reader once one owns this wording.
+//! A full port, unit-tested against Node's messages.
 
 struct P<'a> {
     s: &'a [u16],

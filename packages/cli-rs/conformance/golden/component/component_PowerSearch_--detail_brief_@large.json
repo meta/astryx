@@ -7,6 +7,7 @@
   "brief"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nPowerSearch(onChange: (filters: ReadonlyArray<PowerSearchFilter>, changeType: add|edit|remove, index: number) => void, status: {type: warning|error|success, message?: string}, statusVariant: attached|detached, resultCount: number|string, size: sm|md|lg, tokenOverflowBehavior: none|unfocusedInline|unfocusedLayer, presentation: popover|bottom-sheet|adaptive)  <- from '@astryxdesign/core/PowerSearch'\n  PowerSearch is a structured filter bar where each token represents a field, o...\n  Targets: astryx-power-search\n  filters: ReadonlyArray<PowerSearchFilter>, config: PowerSearchConfig, label, isLabelHidden, placeholder, hasAutoFocus, hasClear, isReadOnly, isDisabled, disabledMessage, startIcon, maxTokenLength, maxOperatorMenuItems, maxSearchResults, menuWidth, popoverSaveButtonLabel, timezoneID, handleRef, endContent, menuWidth, maxOperatorMenuItems, onFocus, onBlur, xstyle\n  const [filters, setFilters] = useState([]);\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

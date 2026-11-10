@@ -6,6 +6,7 @@
   "--list"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Icon sets\n\nstatus: none\nreason: No icon set is installed.\n\nFind one: npx @astryxdesign/cli@0.7.12 experimental icon <words>\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

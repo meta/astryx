@@ -6,6 +6,7 @@
   "--dense"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# AvatarStatusDot\n\nsize-aware status dot, reads avatar size from context + scales proportionally; variants pair colour with shape (filled/ring/minus) per WCAG 1.4.1\n\n**Import:** `import {AvatarStatusDot} from '@astryxdesign/core/Avatar';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `variant` | `'success' \\| 'neutral' \\| 'error'` | `'success'` | colour + shape variant: success filled, neutral ring, error minus |\n| `label` | `string` | - | accessible status label; composed into the Avatar accessible name (\"Jane Doe, Online\"); standalone dots expose role=\"img\" with it directly |\n| `icon` | `ReactNode` | - | icon centered in dot (hidden at tiny sizes); replaces the built-in shape glyph, so differ it per status |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

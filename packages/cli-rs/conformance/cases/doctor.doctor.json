@@ -1698,5 +1698,358 @@
         "neutral"
       ]
     ]
+  },
+  {
+    "id": "w3_doctor_ts2_clean",
+    "args": [
+      "doctor",
+      "integration",
+      "components"
+    ],
+    "fixture": "doctor-ts2",
+    "cwd": "doctor-ts2/clean",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "w3_doctor_ts2_clean_json",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "--json"
+    ],
+    "fixture": "doctor-ts2",
+    "cwd": "doctor-ts2/clean",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "w3_doctor_ts2_unresolved",
+    "args": [
+      "doctor",
+      "integration",
+      "components"
+    ],
+    "fixture": "doctor-ts2",
+    "cwd": "doctor-ts2/unresolved",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "w3_doctor_ts2_unresolved_json",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "--json"
+    ],
+    "fixture": "doctor-ts2",
+    "cwd": "doctor-ts2/unresolved",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "w3_doctor_ts2_defaults",
+    "args": [
+      "doctor",
+      "integration",
+      "components"
+    ],
+    "fixture": "doctor-ts2",
+    "cwd": "doctor-ts2/defaults",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "w3_doctor_ts2_defaults_json",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "--json"
+    ],
+    "fixture": "doctor-ts2",
+    "cwd": "doctor-ts2/defaults",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "w3_doctor_ts2_shapes",
+    "args": [
+      "doctor",
+      "integration",
+      "components"
+    ],
+    "fixture": "doctor-ts2",
+    "cwd": "doctor-ts2/shapes",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "w3_doctor_ts2_shapes_json",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "--json"
+    ],
+    "fixture": "doctor-ts2",
+    "cwd": "doctor-ts2/shapes",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "w3_doctor_ts2_badconfig",
+    "args": [
+      "doctor",
+      "integration",
+      "components"
+    ],
+    "fixture": "doctor-ts2",
+    "cwd": "doctor-ts2/badconfig",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "w3_doctor_ts2_badconfig_json",
+    "args": [
+      "doctor",
+      "integration",
+      "components",
+      "--json"
+    ],
+    "fixture": "doctor-ts2",
+    "cwd": "doctor-ts2/badconfig",
+    "timeoutMs": 180000
+  },
+  {
+    "id": "w3_doctor_pack_ignored",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-pack",
+    "cwd": "doctor-pack/ignored"
+  },
+  {
+    "id": "w3_doctor_pack_nested",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-pack",
+    "cwd": "doctor-pack/nested"
+  },
+  {
+    "id": "w3_doctor_pack_gitignored",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-pack",
+    "cwd": "doctor-pack/gitignored"
+  },
+  {
+    "id": "w3_doctor_pack_negated",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-pack",
+    "cwd": "doctor-pack/negated"
+  },
+  {
+    "id": "w3_doctor_pack_kept",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-pack",
+    "cwd": "doctor-pack/kept"
+  },
+  {
+    "id": "w3_doctor_pack_filesglob",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-pack",
+    "cwd": "doctor-pack/filesglob"
+  },
+  {
+    "id": "w3_doctor_pack_filesneg",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-pack",
+    "cwd": "doctor-pack/filesneg"
+  },
+  {
+    "id": "w3_doctor_pack_filesok",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-pack",
+    "cwd": "doctor-pack/filesok"
+  },
+  {
+    "id": "w3_doctor_pack_folder",
+    "args": [
+      "doctor",
+      "integration",
+      "validate",
+      "--json"
+    ],
+    "fixture": "doctor-pack",
+    "cwd": "doctor-pack/folder"
+  },
+  {
+    "id": "w3_doctor_theme_butter",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "butter"
+      ]
+    ]
+  },
+  {
+    "id": "w3_doctor_theme_butter_stone_json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "butter"
+      ],
+      [
+        "theme",
+        "add",
+        "stone"
+      ]
+    ]
+  },
+  {
+    "id": "w3_doctor_theme_removed",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "add",
+        "butter"
+      ],
+      [
+        "theme",
+        "add",
+        "stone"
+      ],
+      [
+        "theme",
+        "remove",
+        "butter"
+      ]
+    ]
+  },
+  {
+    "id": "w3_doctor_theme_eject",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "theme",
+        "eject",
+        "stone"
+      ]
+    ]
+  },
+  {
+    "id": "w3_doctor_theme_eject_add",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "theme",
+        "eject",
+        "stone"
+      ],
+      [
+        "theme",
+        "add",
+        "stone"
+      ]
+    ]
+  },
+  {
+    "id": "w3_doctor_theme_eject_add_json",
+    "args": [
+      "doctor",
+      "--json"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "theme",
+        "eject",
+        "stone"
+      ],
+      [
+        "theme",
+        "add",
+        "stone"
+      ]
+    ]
+  },
+  {
+    "id": "w3_doctor_theme_broken_module",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "large",
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/astryx-themes.js"
+      ]
+    ]
+  },
+  {
+    "id": "w3_doctor_theme_template_ts",
+    "args": [
+      "doctor"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "theme",
+        "template",
+        "src/my.theme.ts"
+      ]
+    ]
   }
 ]

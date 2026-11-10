@@ -7,6 +7,7 @@
   "themes/axes.mjs"
  ],
  "fixture": "themes-core-0.3.0",
+ "fixtureHash": "2f7527239e99a151+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.build\",\n  \"data\": {\n    \"name\": \"tk\",\n    \"tokenCount\": 93,\n    \"componentCount\": 2,\n    \"sizeKB\": 10,\n    \"outputs\": {\n      \"css\": \"themes/tk.css\",\n      \"cssDts\": \"themes/tk.css.d.ts\",\n      \"js\": \"themes/tk.js\",\n      \"dts\": \"themes/tk.d.ts\"\n    },\n    \"warnings\": [],\n    \"notices\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.3.0\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

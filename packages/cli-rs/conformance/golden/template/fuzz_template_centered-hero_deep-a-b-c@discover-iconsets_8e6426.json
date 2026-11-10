@@ -6,6 +6,7 @@
   "deep/a/b/c"
  ],
  "fixture": "discover-iconsets",
+ "fixtureHash": "214fcf2cdc8216c2+4e418a0c2575d9ce",
  "stdout": "Copied template to deep/a/b/c/page.tsx\n\npackage: @astryxdesign/core\n\nReplaced 1 Astryx demo media reference in deep/a/b/c/page.tsx: images now show a neutral placeholder and videos have an empty source. Supply your own media there.\n\nInstall missing dependencies: npm install @heroicons/react@\"^2.2.0\"\n\nicons: kept ArrowRightIcon (@heroicons/react/20/solid): @acme/glyphs/glyphs maps no icon to the icon definition \"arrowRight\"\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

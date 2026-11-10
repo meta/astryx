@@ -2,8 +2,6 @@
 //! `exports-subpaths.mjs`): whether what an integration package tells apps
 //! to import is importable, read from source with oxc where the JS uses
 //! `@babel/parser`.
-//! TEMP: template public imports need template discovery (template lane);
-//! until it lands, a package's templates are not judged here.
 
 use crate::discovery::component_discovery as cd;
 use crate::discovery::nodepath as np;

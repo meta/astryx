@@ -6,6 +6,7 @@
   "components"
  ],
  "fixture": "doctor-author",
+ "fixtureHash": "f667b3d840f6152c+4e418a0c2575d9ce",
  "stdout": "Checking integration components: @acme/exp@1.0.0\n\n[ok] No component names conflict with Core.\n\n[skip] Props not compared: TypeScript is not installed in this project, so documented props were not compared with the code. On TypeScript 7, add its TypeScript 6 API package (`npm install -D @typescript/typescript6`); otherwise install TypeScript 5.0 through 6 (`npm install -D typescript@6`). Then run this check again.\n",
  "stderr": "",
  "exit": 0,

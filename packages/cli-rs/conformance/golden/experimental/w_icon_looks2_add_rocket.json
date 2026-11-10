@@ -9,6 +9,7 @@
   "./lib/looks.js"
  ],
  "fixture": "iconlooks2",
+ "fixtureHash": "9ff556c9ef737e21+4e418a0c2575d9ce",
  "stdout": "Icon definitions for RocketOutlineIcon (1)\n\nname:        rocket\nsource:      astryx\nscore:       90\nreason:      id \"rocket\"\ndescription: Launch or get started.\ncommand:     npx @astryxdesign/cli@0.7.12 experimental icon add RocketOutlineIcon --from ./lib/looks.js --set hero --definition rocket\n\nAll icon definitions: npx @astryxdesign/cli@0.7.12 docs cli/experimental/icon-definitions\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

@@ -7,6 +7,7 @@
   "hook"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Build kit for \"data table with filters\"\n\nThis kit is narrowed by --type, so it names no template.\n\nCOMPONENTS\nFor what the template and blocks do not cover (top 3 of 6; --verbose for all). Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        useTableSortableState\npackage:     @astryxdesign/core\ndescription: Owns a Table's sort state and sorts the rows locally, as a convenience layer over useTableSortable.\n\nname:        useCalendarDays\npackage:     @astryxdesign/core\ndescription: Builds the day grid for one month: every date to show, including the previous and next months' days that fill the first and last weeks, grouped into weeks, plus localized weekday header names that start on weekStartsOn.\n\nname:        useCollator\npackage:     @astryxdesign/core\ndescription: Returns the sanctioned locale-aware comparator for custom sorting.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

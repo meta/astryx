@@ -6,6 +6,7 @@
   "discover-integrations"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Discover integrations\n\nIntegration packages extend Astryx with extra components, templates, themes, docs, and codemods. They are published as regular npm packages.\n\nSearch for what you need:\n\n```bash\nnpx @astryxdesign/cli@0.7.12 search carousel\nnpx @astryxdesign/cli@0.7.12 discover\n```\n\n`search` looks across everything the CLI knows (components, docs, templates, themes, and hooks), so a word like \"carousel\" finds it whether it is a component, a template, or a doc page. `discover` lists every integration the project has, and, with a discover source, packages it could add.\n\nUp: npx @astryxdesign/cli@0.7.12 docs use-integrations --index\nNext: npx @astryxdesign/cli@0.7.12 docs use-integrations install-an-integration\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -7,6 +7,7 @@
   "styled.tsx"
  ],
  "fixture": "renderpages",
+ "fixtureHash": "8877e3d4520e7c26+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"render.page\",\n  \"data\": {\n    \"input\": \"styled.tsx\",\n    \"output\": \"styled.html\",\n    \"bytes\": 20854,\n    \"files\": [\n      \"styled.tsx\",\n      \"styles.css\",\n      \"logo.png\"\n    ],\n    \"stylesheets\": [\n      \"@astryxdesign/core/reset.css\",\n      \"@astryxdesign/core/astryx.css\"\n    ],\n    \"classes\": 2,\n    \"cssBytes\": 19471,\n    \"images\": 1,\n    \"warnings\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

@@ -7,6 +7,7 @@
   "--json"
  ],
  "fixture": "core-0.7.11",
+ "fixtureHash": "a77beea787bca06f+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.build\",\n  \"data\": {\n    \"name\": \"my-theme\",\n    \"tokenCount\": 88,\n    \"componentCount\": 4,\n    \"sizeKB\": 12.4,\n    \"outputs\": {\n      \"css\": \"src/my-theme.css\",\n      \"cssDts\": \"src/my-theme.css.d.ts\",\n      \"js\": \"src/my-theme.js\",\n      \"dts\": \"src/my-theme.d.ts\",\n      \"variantsDts\": \"src/my-theme.variants.d.ts\"\n    },\n    \"warnings\": [],\n    \"notices\": [\n      \"Font \\\"Inter\\\" is named by this theme but not loaded; add a <link> or @font-face in your app (recipe: astryx docs typography)\",\n      \"Font \\\"Geist Mono\\\" is named by this theme but not loaded; add a <link> or @font-face in your app (recipe: astryx docs typography)\"\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.11\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

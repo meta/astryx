@@ -5,6 +5,7 @@
   "verify"
  ],
  "fixture": "brokencore",
+ "fixtureHash": "046a184e848d83b6+4e418a0c2575d9ce",
  "stdout": "Integration package check failed\n\n[fail] brokencore\n\n- [fail] No astryx.integration.{ts,mjs,js} found next to package.json.\n",
  "stderr": "",
  "exit": 1,

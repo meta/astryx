@@ -8,6 +8,7 @@
   "-h"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Usage: astryx experimental icon use [options] <set>\n\n[experimental] Choose the project's icon set\n\nOptions:\n  -h, --help  display help for command\n\nExit codes:\n  0  experimental.iconSet is written, or already names the set\n  1  the set is not installed, two packages ship it, the config cannot be updated (not a static object literal, or it spreads another object, which you then edit by hand), or the config is protected (a symbolic link, or marked generated, vendored, or ignored: `ERR_CODEMOD_PROTECTED`, naming the declaration)\n\nExamples:\n  # Use a set\n  npx @astryxdesign/cli@0.7.12 experimental icon use outline\n  # Name its package\n  npx @astryxdesign/cli@0.7.12 experimental icon use @acme/icons/outline\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/experimental-icon-use\n",
  "stderr": "",
  "exit": 0,

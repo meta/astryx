@@ -11,6 +11,7 @@
   "--all"
  ],
  "fixture": "iconlooks",
+ "fixtureHash": "586de4e6f916f930+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: \"outline\" is the look each icon's own export in \"hero\" already draws (its default variant), so a variant of it would export the same artwork twice.\n",
  "exit": 1,

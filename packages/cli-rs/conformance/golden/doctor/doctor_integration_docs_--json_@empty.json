@@ -7,6 +7,7 @@
   "--json"
  ],
  "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.doc-conflicts\",\n  \"data\": {\n    \"validated\": false,\n    \"name\": null,\n    \"version\": null,\n    \"findings\": [],\n    \"copiedPassages\": [],\n    \"fluff\": [],\n    \"strayPointers\": [],\n    \"issues\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

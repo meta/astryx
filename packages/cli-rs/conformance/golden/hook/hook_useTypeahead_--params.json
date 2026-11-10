@@ -6,6 +6,7 @@
   "--params"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `options` | `UseTypeaheadOptions` | - | Configuration object. **(required)** |\n| `options.getItemLabels` | `() => ReadonlyArray<string \\| null \\| undefined>` | - | Returns the item labels in DOM order. A null or empty entry marks a non-matchable slot and keeps indices aligned with the caller's items. **(required)** |\n| `options.onMatch` | `(index: number) => void` | - | Called with the index of the matched item so the caller can focus or select it; typically useListFocus's focusItem. **(required)** |\n| `options.getCurrentIndex` | `() => number` | `() => -1` | The index to search from, usually the focused item, so repeated presses of one letter cycle through matches. A negative value means nothing is current. |\n| `options.resetMs` | `number` | `750` | Milliseconds of inactivity after which the typed buffer resets. |\n| `options.isDisabled` | `(index: number) => boolean` | - | Whether an index should be skipped, e.g. disabled items. |\n\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

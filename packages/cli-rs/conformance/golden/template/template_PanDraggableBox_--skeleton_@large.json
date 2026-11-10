@@ -6,6 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# PanDraggableBox - The smallest pan example, in two forms side by side: the usePanGesture hook and the createPanGesture factory. The factory takes any element, React or not. Each card names its API, follows a drag from a finger, a mouse or a pen, and springs back, with the same StyleX styles. A starting point for a draggable tile, a swipe or any drag-and-release gesture.\n# Components: Card, Center\n\n<HStack gap={6}>\n  <WithHook />\n  <WithFactory />\n</HStack>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

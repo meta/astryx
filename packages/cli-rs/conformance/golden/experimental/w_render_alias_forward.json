@@ -8,6 +8,7 @@
   "out.html"
  ],
  "fixture": "renderpages",
+ "fixtureHash": "8877e3d4520e7c26+4e418a0c2575d9ce",
  "stdout": "Rendered alias/page.tsx\n\ninput:       alias/page.tsx\noutput:      out.html\nbytes:       20.9 KB\ncssBytes:    19.2 KB\nclasses:     7\nimages:      0\nfiles:       page.tsx, src/components/Card.tsx, src/data/info.json, local.tsx\nstylesheets: @astryxdesign/core/reset.css, @astryxdesign/core/astryx.css\n\nGive it back: npx @astryxdesign/cli@0.7.12 experimental render --reverse out.html\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

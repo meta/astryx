@@ -7,6 +7,7 @@
   "--json"
  ],
  "fixture": "doctor-author",
+ "fixtureHash": "f667b3d840f6152c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.validate\",\n  \"data\": {\n    \"validated\": true,\n    \"name\": \"@acme/two\",\n    \"version\": \"1.0.0\",\n    \"issues\": [\n      {\n        \"code\": \"multiple_manifests\",\n        \"severity\": \"error\",\n        \"message\": \"Multiple root manifests present (astryx.integration.mjs, astryx.integration.js). Keep exactly one.\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 1,

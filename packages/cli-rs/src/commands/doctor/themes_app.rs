@@ -197,8 +197,8 @@ fn named_theme_fonts(files: &[String]) -> Vec<String> {
     names.into_iter().map(|(_, n)| n).collect()
 }
 
-fn font_stylesheet_evidence(css_text: &str) -> (Vec<String>, bool) {
-    let nodes = css::parse(css_text);
+fn font_stylesheet_evidence(css_text: &str) -> Result<(Vec<String>, bool), String> {
+    let nodes = css::parse(css_text)?;
     let mut ats = Vec::new();
     css::walk_at_rules(&nodes, &mut ats);
     let mut loaded = Vec::new();
@@ -224,11 +224,11 @@ fn font_stylesheet_evidence(css_text: &str) -> (Vec<String>, bool) {
             }
         }
     }
-    (loaded, external)
+    Ok((loaded, external))
 }
 
-fn global_rules(css_text: &str, slug: &str) -> Vec<(String, String)> {
-    let nodes = css::parse(css_text);
+fn global_rules(css_text: &str, slug: &str) -> Result<Vec<(String, String)>, String> {
+    let nodes = css::parse(css_text)?;
     let mut rules = Vec::new();
     css::walk_rules(&nodes, &mut Vec::new(), &mut rules);
     let needles = [format!("[data-astryx-theme=\"{slug}\"]"), format!("[data-astryx-theme='{slug}']")];
@@ -251,7 +251,7 @@ fn global_rules(css_text: &str, slug: &str) -> Vec<(String, String)> {
             None => out.push((key, v)),
         }
     }
-    out
+    Ok(out)
 }
 
 fn chk(id: &str, label: &str, status: Status, message: impl Into<String>) -> Check {
@@ -543,9 +543,8 @@ pub fn managed_checks(state: &crate::commands::theme::state::ThemeState) -> Vec<
             font_failures.push((th.clone(), format!("{} (font stylesheet is not imported)", names.join(", "))));
             continue;
         }
-        match read(th.font_stylesheet_file.as_deref().unwrap_or("")) {
-            Some(cssx) => {
-                let (loaded, ext) = font_stylesheet_evidence(&cssx);
+        match read(th.font_stylesheet_file.as_deref().unwrap_or("")).ok_or(String::new()).and_then(|c| font_stylesheet_evidence(&c)) {
+            Ok((loaded, ext)) => {
                 let missing: Vec<String> = names.iter().filter(|n| !loaded.contains(&n.to_lowercase())).cloned().collect();
                 if missing.is_empty() {
                     continue;
@@ -556,7 +555,7 @@ pub fn managed_checks(state: &crate::commands::theme::state::ThemeState) -> Vec<
                     font_failures.push((th.clone(), missing.join(", ")));
                 }
             }
-            None => font_failures.push((th.clone(), "font stylesheet could not be parsed".into())),
+            Err(_) => font_failures.push((th.clone(), "font stylesheet could not be parsed".into())),
         }
     }
     let mut warn_messages = Vec::new();
@@ -601,9 +600,9 @@ pub fn managed_checks(state: &crate::commands::theme::state::ThemeState) -> Vec<
     let mut by_selector: Vec<(String, Entry, String)> = Vec::new();
     let mut gproblems: Vec<(String, Vec<Entry>)> = Vec::new();
     for th in &resolved {
-        match read(th.stylesheet_file.as_deref().unwrap_or("")) {
-            Some(cssx) => {
-                for (selector, decls) in global_rules(&cssx, &th.slug) {
+        match read(th.stylesheet_file.as_deref().unwrap_or("")).ok_or(String::new()).and_then(|c| global_rules(&c, &th.slug)) {
+            Ok(rules) => {
+                for (selector, decls) in rules {
                     match by_selector.iter().find(|(s, _, _)| *s == selector) {
                         Some((_, pt, pd)) if *pd != decls => gproblems.push((format!("{selector}: {}, {}", pt.slug, th.slug), vec![pt.clone(), th.clone()])),
                         Some(_) => {}
@@ -611,7 +610,7 @@ pub fn managed_checks(state: &crate::commands::theme::state::ThemeState) -> Vec<
                     }
                 }
             }
-            None => gproblems.push((format!("{}: stylesheet could not be parsed", th.slug), vec![th.clone()])),
+            Err(_) => gproblems.push((format!("{}: stylesheet could not be parsed", th.slug), vec![th.clone()])),
         }
     }
     let mut repair: Vec<Entry> = Vec::new();
@@ -688,8 +687,8 @@ pub fn unmigrated_copy_check(project_dir: &str) -> Option<Check> {
 }
 
 /// `themeImportWiring(cwd)`: themes the app wires by importing their built
-/// module or stylesheet. TEMP: a `theme` value passed to Core's `Theme` is
-/// not traced yet (needs discovery's elementPropOrigins).
+/// module or stylesheet, or whose module a `theme` value passed to Core's
+/// `Theme` traces to.
 pub fn theme_import_wiring(cwd: &str) -> super::themes::Wiring {
     let none = super::themes::Wiring::default();
     let Ok(state) = crate::commands::theme::state::read(cwd) else { return none };
@@ -791,27 +790,24 @@ pub fn theme_import_wiring(cwd: &str) -> super::themes::Wiring {
     }
 }
 
-/// `cssImports(css)`: the `@import` targets a stylesheet names.
-/// TEMP: replace with the render lane's embedded-imports reader.
+/// `cssImports(css)` (`foundation/render/embedded-imports.mjs`).
 fn css_imports(css_text: &str) -> Vec<String> {
-    let nodes = css::parse(css_text);
+    let Ok(nodes) = css::parse(css_text) else { return vec![] };
     let mut ats = Vec::new();
     css::walk_at_rules(&nodes, &mut ats);
+    let re = crate::doctor_re!(r#"^\s*(?:url\(\s*(['"]?)([\s\S]*?)\1\s*\)|(['"])([\s\S]*?)\3)"#);
     let mut out = Vec::new();
     for a in ats {
         if let css::Node::AtRule { name, params, .. } = a {
             if !name.eq_ignore_ascii_case("import") {
                 continue;
             }
-            let p = params.trim();
-            let target = if let Some(m) = crate::doctor_re!(r#"^url\(\s*['"]?([^'")]+)['"]?\s*\)"#).find(p) {
-                p[m.group(1).unwrap()].to_string()
-            } else if let Some(m) = crate::doctor_re!(r#"^['"]([^'"]+)['"]"#).find(p) {
-                p[m.group(1).unwrap()].to_string()
-            } else {
-                continue;
-            };
-            out.push(target);
+            if let Some(m) = re.find(params) {
+                let url = m.group(2).or(m.group(4)).map(|r| params[r].to_string()).unwrap_or_default();
+                if !url.is_empty() {
+                    out.push(url);
+                }
+            }
         }
     }
     out

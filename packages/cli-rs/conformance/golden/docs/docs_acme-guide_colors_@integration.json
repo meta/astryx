@@ -6,6 +6,7 @@
   "colors"
  ],
  "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
  "stdout": "package: @acme/kit\n\n## Colors\n\nCards use the core tokens.\n\n[token-ref: unknown topic \"no-such-topic\"]\n\nUp: npx @astryxdesign/cli@0.7.12 docs acme-guide --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs acme-guide start\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -1,0 +1,34 @@
+{
+ "id": "w2_verify_after_template_app",
+ "args": [
+  "integration",
+  "verify"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "Integration package check failed\n\n[fail] app@1.0.0\n\n5 packed files; 3/3 required files present.\n\n- [fail] Template \"my-page\" public import \"app/templates/my-page\" does not have a default export.\n",
+ "stderr": "",
+ "exit": 1,
+ "files": [
+  {
+   "path": "app/astryx.integration.mjs",
+   "status": "created",
+   "text": "export default {\n  templates: './templates'\n};\n"
+  },
+  {
+   "path": "app/templates/my-page.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').IntegrationTemplateDoc} */\nexport default {\n  type: 'page',\n  name: 'my-page',\n  displayName: 'My Page',\n  description: 'My Page template.',\n};\n"
+  },
+  {
+   "path": "app/templates/my-page.tsx",
+   "status": "created",
+   "text": "export default function MyPage() {\n  return <div>My Page</div>;\n}\n"
+  },
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

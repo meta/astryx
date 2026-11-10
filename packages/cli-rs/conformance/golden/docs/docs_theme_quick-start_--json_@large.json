@@ -7,6 +7,7 @@
   "--json"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@astryxdesign/cli\",\n  \"data\": {\n    \"id\": \"quick-start\",\n    \"title\": \"Wrap your app in a theme\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Install a theme, import it with the CLI, and wire the generated module once. For the full guide — available themes, integration themes, dark mode, nested themes, and production builds — see `astryx docs use-a-theme`.\"\n      },\n      {\n        \"type\": \"code\",\n        \"lang\": \"tsx\",\n        \"code\": \"import {Theme} from '@astryxdesign/core/theme';\\nimport {themes, defaultThemeSlug} from './astryx-themes';\\n\\nfunction App() {\\n  return (\\n    <Theme theme={themes[defaultThemeSlug]}>\\n      <YourApp />\\n    </Theme>\\n  );\\n}\",\n        \"label\": \"Wire the generated module once\"\n      }\n    ],\n    \"links\": {\n      \"up\": \"astryx docs theme --index\",\n      \"next\": \"astryx docs theme creating-a-custom-theme\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

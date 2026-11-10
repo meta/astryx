@@ -6,6 +6,7 @@
   "themes/notheme.mjs"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Failed to load theme from /tmp/astryx-conformance/work/themes/themes/notheme.mjs: Could not find a defineTheme() result in /tmp/astryx-conformance/work/themes/themes/notheme.mjs.\nExpected an export like: export const myTheme = defineTheme({ name: '...', tokens: {...} })\nMake sure all imports in the theme file are resolvable.\n",
  "exit": 1,

@@ -6,6 +6,7 @@
   "matcha"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Theme \"matcha\" is the default. Run `npx @astryxdesign/cli@0.7.12 theme use <other-slug>` before removing it.\n",
  "exit": 1,

@@ -8,6 +8,7 @@
   "validate"
  ],
  "fixture": "doctor-built",
+ "fixtureHash": "4195e9eca65ae26e+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: `--built` checks a finished build and goes with `doctor` alone, not with a `doctor integration` check\n",
  "exit": 1,

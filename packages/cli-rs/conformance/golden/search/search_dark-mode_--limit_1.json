@@ -7,6 +7,7 @@
   "1"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Results for \"dark mode\" (1 of 228)\n\nname:        theme\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Guides › Theming\ndescription: How to use and create themes: see Use a theme for applying themes, and Author a theme for creating and customizing them.\ncommand:     npx @astryxdesign/cli@0.7.12 docs theme --index\nparent:      npx @astryxdesign/cli@0.7.12 docs guides\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover 'dark mode'\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

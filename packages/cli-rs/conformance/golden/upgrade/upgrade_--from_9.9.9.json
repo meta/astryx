@@ -6,6 +6,7 @@
   "9.9.9"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "\nUpgrade\nFrom version: 9.9.9\nInstalled target: 0.7.12 (@astryxdesign/core)\n[ok] Already up to date - no codemods to run.\nUse --force to run codemods anyway.\nDone\n\n",
  "stderr": "No Astryx agent-docs block found - AI agents have no component index. Run `npx @astryxdesign/cli@0.7.12 init --features agents` to install it.\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

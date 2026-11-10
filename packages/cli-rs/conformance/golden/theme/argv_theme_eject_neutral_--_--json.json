@@ -8,6 +8,7 @@
   "--json"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Ejected theme\n\nslug:        neutral\ndisplayName: Neutral\nmaintained:  true\npackage:     @astryxdesign/cli\noutputDir:   --json\nentry:       neutralTheme.ts\nexportName:  neutralTheme\nfiles:       neutralTheme.ts, neutralTheme.doc.mjs, icons.tsx, neutralPalettes.ts, neutralPalettes.generated.ts, neutralPaletteRefs.generated.ts, neutralPalettes.generated.receipt.json, palette.config.json\n\nThis is a local fork. Build it with npx @astryxdesign/cli@0.7.12 theme build --json/neutralTheme.ts.\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

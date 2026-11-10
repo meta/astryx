@@ -7,6 +7,7 @@
   "--json"
  ],
  "fixture": "docsint",
+ "fixtureHash": "36d5db4ca2dc43ba+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.index\",\n  \"package\": \"@acme/docs\",\n  \"data\": {\n    \"name\": \"acme-handbook/deploying\",\n    \"title\": \"Deploying\",\n    \"description\": \"Ship it with `npm install -D @acme/docs`.\",\n    \"sections\": [\n      {\n        \"id\": \"overview\",\n        \"title\": \"Overview\",\n        \"package\": \"@acme/docs\",\n        \"summary\": \"Run `astryx docs theme` first; see {@link generic:spacing} and {@link command:docs}.\"\n      },\n      {\n        \"id\": \"rollback\",\n        \"title\": \"Rolling back\",\n        \"package\": \"@acme/docs\",\n        \"summary\": \"one {@link generic:nope}\"\n      },\n      {\n        \"id\": \"cross-links\",\n        \"title\": \"Cross links\",\n        \"package\": \"@acme/docs\",\n        \"summary\": \"See `astryx docs theme`, `astryx docs cli/commands/docs`, `astryx docs authoring component-doc`, `astryx docs acme-handbook`, `astryx component Button`, `astryx template dashboard --type page` and `{@link generic:theme}`.\"\n      }\n    ],\n    \"links\": {\n      \"up\": \"astryx docs acme-handbook\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

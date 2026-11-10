@@ -5,6 +5,7 @@
   "@acme/kit"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: Package \"@acme/kit\" not found\n\n  @astryxdesign/lab  (available package)\n  @astryxdesign/charts  (available package)\n",
  "exit": 1,

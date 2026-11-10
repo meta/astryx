@@ -7,6 +7,7 @@
   "themes/icons/aliased.ts"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.build\",\n  \"data\": {\n    \"name\": \"iconic-alias\",\n    \"tokenCount\": 1,\n    \"componentCount\": 0,\n    \"sizeKB\": 2,\n    \"outputs\": {\n      \"css\": \"themes/icons/iconic-alias.css\",\n      \"cssDts\": \"themes/icons/iconic-alias.css.d.ts\",\n      \"js\": \"themes/icons/iconic-alias.js\",\n      \"dts\": \"themes/icons/iconic-alias.d.ts\"\n    },\n    \"warnings\": [],\n    \"notices\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

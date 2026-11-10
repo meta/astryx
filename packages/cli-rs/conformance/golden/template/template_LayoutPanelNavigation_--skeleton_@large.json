@@ -6,6 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# LayoutPanelNavigation - A fixed-width side panel holding a navigation list next to the main content. Use LayoutPanel in the start or end slot of Layout for sidebars.\n# Components: Card, Center, Layout, List\n\n<Center width={400}>\n  <Layout hasDivider role=\"navigation\" height=\"fill\" width={140}>\n    /* start: */\n    <LayoutPanel hasDivider role=\"navigation\" width={140}>\n      <List>\n        <ListItem />\n        <ListItem />\n        <ListItem />\n      </List>\n    </LayoutPanel>\n    /* content: */\n    <LayoutContent>\n      <Card variant=\"muted\" />\n    </LayoutContent>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

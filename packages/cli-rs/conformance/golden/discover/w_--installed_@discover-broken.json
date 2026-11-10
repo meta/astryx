@@ -5,6 +5,7 @@
   "--installed"
  ],
  "fixture": "discover-broken",
+ "fixtureHash": "3d6dfdb3e66a4a9b+4e418a0c2575d9ce",
  "stdout": "Installed\n\nNo external components found in configured integrations.\n\nTo add a package, run its install command.\n",
  "stderr": "Warning: @test/broken has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -6,6 +6,7 @@
   "--zh"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# AvatarStatusDot\n\n尺寸感知的状态指示点，从上下文中读取头像尺寸并等比缩放。每个变体将颜色与独特形状（实心、圆环、横杠）配对，确保状态不仅靠颜色传达（WCAG 1.4.1）。\n\n**Import:** `import {AvatarStatusDot} from '@astryxdesign/core/Avatar';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `variant` | `'success' \\| 'neutral' \\| 'error'` | `'success'` | 语义变体，颜色与形状配对：success = 绿色实心点，neutral = 灰色圆环，error = 带横杠的红色点。 |\n| `label` | `string` | - | 描述状态的无障碍标签。在 Avatar 内会被合成进头像自身的无障碍名称（如 \"Jane Doe, Online\"）——Avatar 根元素为 role=\"img\"，会裁剪子元素语义，因此合成名称是辅助技术获知状态的途径。独立使用时状态点直接以 role=\"img\" 暴露该标签。 |\n| `icon` | `ReactNode` | - | 居中显示在状态点内的图标（tiny 尺寸时隐藏）。渲染的图标会替换内置形状标记，请为每个状态使用不同的图标。 |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

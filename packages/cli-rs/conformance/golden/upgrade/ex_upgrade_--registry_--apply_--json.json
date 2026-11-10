@@ -7,6 +7,7 @@
   "--json"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"upgrade.registry\",\n  \"data\": {\n    \"applied\": true,\n    \"ok\": true,\n    \"found\": 0,\n    \"current\": 0,\n    \"wouldUpdate\": 0,\n    \"updated\": 0,\n    \"wouldMerge\": 0,\n    \"merged\": 0,\n    \"wouldRefreshReceipt\": 0,\n    \"receiptsRefreshed\": 0,\n    \"conflicts\": 0,\n    \"missing\": 0,\n    \"invalid\": 0,\n    \"failed\": 0,\n    \"items\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

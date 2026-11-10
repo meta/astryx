@@ -550,6 +550,8 @@ pub struct Built {
     pub reads: HashMap<String, Value>,
     pub issues: Vec<(String, String)>,
     pub data: LinkData,
+    /// Topic reads that could not be built, by read key, with the reason.
+    pub errors: HashMap<String, String>,
 }
 
 fn tree_input_namespace(m: &Map<String, Value>) -> NamespaceInput {
@@ -720,6 +722,7 @@ pub fn build(variant: &Variant, catalog: DocsCatalog, cwd: &str) -> Built {
 
     let units = units_of(&catalog, &tree);
     let mut reads = HashMap::new();
+    let mut errors: HashMap<String, String> = HashMap::new();
     let finder = Finder { tree: &tree, topics: &finder_topics, data: &data };
     for u in &units {
         let links = if u.is_guide {
@@ -735,8 +738,12 @@ pub fn build(variant: &Variant, catalog: DocsCatalog, cwd: &str) -> Built {
             packages.push((normalize_provider_id(pid).unwrap_or_else(|| pid.clone()), pkg.clone()));
         }
         for lang in ["en", "dense", "zh"] {
-            let (doc, overlay) = load(&u.path, lang);
-            let Some(doc) = doc else { continue };
+            let f = crate::discovery::doc_read::load_topic_file(&u.path, if lang == "en" { None } else { Some(lang) });
+            let (doc, overlay) = (plain_doc(f.doc), plain_doc(f.overlay));
+            let Some(doc) = doc else {
+                errors.insert(format!("{}:{lang}", u.key), f.error.unwrap_or_else(|| format!("{} exports no doc.", f.file)));
+                continue;
+            };
             let base = TopicSource { provider_id: u.provider_id.clone(), doc, overlay };
             let exts: Vec<TopicSource> = u
                 .extensions
@@ -746,7 +753,13 @@ pub fn build(variant: &Variant, catalog: DocsCatalog, cwd: &str) -> Built {
                     d.map(|d| TopicSource { provider_id: pid.clone(), doc: d, overlay: o })
                 })
                 .collect();
-            let Ok(lowered) = lower_topic(&u.name, &base, &exts) else { continue };
+            let lowered = match lower_topic(&u.name, &base, &exts) {
+                Ok(l) => l,
+                Err(e) => {
+                    errors.insert(format!("{}:{lang}", u.key), e);
+                    continue;
+                }
+            };
             let package_of = |id: &str| -> String {
                 let p = lowered.section_providers.get(id).and_then(|x| x.as_str()).and_then(normalize_provider_id);
                 p.and_then(|p| packages.iter().rev().find(|(k, _)| *k == p).map(|(_, v)| v.clone())).unwrap_or_else(|| u.package.clone())
@@ -756,7 +769,7 @@ pub fn build(variant: &Variant, catalog: DocsCatalog, cwd: &str) -> Built {
         }
     }
     drop(finder);
-    Built { tree, nodes, topics, reads, issues: catalog.issues.clone(), data }
+    Built { tree, nodes, topics, reads, issues: catalog.issues.clone(), data, errors }
 }
 
 fn topic_read(finder: &Finder, variant: &Variant, lowered: &Lowered, u: &Unit, package_of: &dyn Fn(&str) -> String, links: Value, lang: &str) -> Value {
@@ -863,6 +876,7 @@ fn topic_read(finder: &Finder, variant: &Variant, lowered: &Lowered, u: &Unit, p
         .collect();
     let mut read = Map::new();
     read.insert("package".into(), Value::from(u.package.as_str()));
+    read.insert("docName".into(), lowered.doc.get("name").cloned().unwrap_or(Value::Null));
     read.insert("detail".into(), Value::Object(detail));
     read.insert("index".into(), Value::Object(index));
     read.insert("reader".into(), Value::Array(reader));
@@ -1401,6 +1415,10 @@ mod package_tests {
         std::env::set_current_dir(&dir).unwrap();
         let (problems, (docs, sections, roots)) = super::doctor_tree_report(&dir).unwrap();
         println!("TREEJSON {}", serde_json::json!({"problems": problems, "counts": [docs, sections, roots]}));
+        match super::doctor_disclosure_report(&dir) {
+            Ok((topics, problems)) => println!("DISCJSON {}", serde_json::json!({"topics": topics, "problems": problems})),
+            Err(e) => println!("DISCJSON {}", serde_json::json!({"error": e})),
+        }
     }
 
     #[test]
@@ -1443,4 +1461,76 @@ pub fn doctor_tree_report(cwd: &str) -> Result<(Vec<String>, (usize, usize, usiz
     let nodes: Vec<_> = built.tree.nodes.iter().filter(|n| !built.tree.is_experimental(n)).collect();
     let namespaces = nodes.iter().filter(|n| n.kind == "namespace").count();
     Ok((problems, (nodes.len() - namespaces, namespaces, built.tree.roots().len())))
+}
+
+/// What doctor's `docs-progressive-disclosure` check reads
+/// (`checkDocsProgressiveDisclosure`): the topics counted, and each problem
+/// in its order. A project that does not load is read as the CLI's own
+/// docs, as doctor reads it; Err is kept for a catalog that cannot be built.
+pub fn doctor_disclosure_report(cwd: &str) -> Result<(usize, Vec<String>), String> {
+    const BUDGET: usize = 32 * 1024;
+    let kb = |b: usize| format!("{} KB", b.div_ceil(1024));
+    // As doctor: the CLI's own catalog when the project does not load.
+    let catalog = match crate::discovery::project::Project::load(cwd) {
+        Ok(project) => project_docs(&project),
+        Err(_) => DocsCatalog::from_builtins(),
+    };
+    let pm = crate::discovery::package_manager::doc_package_manager(Some(cwd));
+    crate::discovery::doc_compiler::links::set_doc_pm(&pm);
+    let variant = Variant::get(&pm);
+    let built = build(&variant, catalog.clone(), cwd);
+    let cli_tree_dir = crate::cli::env::cli_root().join("assets").join("docs").join("tree");
+    let budget = kb(BUDGET);
+    // (name, read key prefix, files whose overlays count)
+    let mut entries: Vec<(String, String, Vec<String>, bool)> = Vec::new();
+    for e in catalog.entries() {
+        let mut files = vec![e.path.clone()];
+        files.extend(e.extensions.iter().map(|x| x.path.clone()));
+        entries.push((e.name.clone(), format!("topic:{}", e.name), files, true));
+    }
+    for n in built.tree.nodes.iter().filter(|n| n.kind == "generic" && n.flat_topic.is_none()) {
+        let Some(file) = &n.topic_file else { continue };
+        let base = if n.provider == CLI && !file.contains('/') { cli_tree_dir.join(file).to_string_lossy().to_string() } else { file.clone() };
+        let overlay = n.guide_overlay.clone().unwrap_or_default();
+        let mut files = vec![overlay.replacement.as_ref().map(|r| s(r, "path")).unwrap_or(base)];
+        files.extend(overlay.extensions.iter().map(|x| s(x, "path")));
+        entries.push((n.route.clone(), format!("guide:{}", n.route), files, !built.tree.is_experimental(n)));
+    }
+    let mut topics = 0;
+    let mut problems = Vec::new();
+    for (name, key, files, counted) in entries {
+        let refs: Vec<&str> = files.iter().map(|f| f.as_str()).collect();
+        let langs: Vec<&str> = std::iter::once("en").chain(crate::discovery::doc_read::overlay_languages(&refs)).collect();
+        for lang in langs {
+            let where_ = if lang == "en" { name.clone() } else { format!("{name} [{lang}]") };
+            let read_key = format!("{key}:{lang}");
+            let read = built.reads.get(&read_key).cloned().or_else(|| variant.read(&read_key));
+            let Some(read) = read else {
+                let why = built.errors.get(&read_key).cloned().unwrap_or_else(|| format!("{name} cannot be read."));
+                problems.push(format!("{where_}: {why}"));
+                continue;
+            };
+            if lang == "en" && counted {
+                topics += 1;
+            }
+            let sections = read["childSections"].clone();
+            let mut doc = Map::new();
+            doc.insert("name".into(), read["docName"].clone());
+            doc.insert("title".into(), read["detail"]["title"].clone());
+            doc.insert("description".into(), read["detail"]["description"].clone());
+            doc.insert("sections".into(), sections.clone());
+            let index = index_view(&Value::Object(doc));
+            let index_bytes = crate::json::stringify(&serde_json::json!({"type": "docs.index", "data": index}), 2).len();
+            if index_bytes > BUDGET {
+                problems.push(format!("{where_}: its section index is {}, over the {budget} one read may return", kb(index_bytes)));
+            }
+            for sec in sections.as_array().cloned().unwrap_or_default() {
+                let bytes = crate::json::stringify(&serde_json::json!({"type": "docs.detail.section", "data": sec}), 2).len();
+                if bytes > BUDGET {
+                    problems.push(format!("{where_} {}: {}, over the {budget} one read may return", s(&sec, "id"), kb(bytes)));
+                }
+            }
+        }
+    }
+    Ok((topics, problems))
 }

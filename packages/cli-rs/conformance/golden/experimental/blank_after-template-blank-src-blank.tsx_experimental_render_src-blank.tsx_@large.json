@@ -6,6 +6,7 @@
   "src/blank.tsx"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "Rendered src/blank.tsx\n\ninput:       src/blank.tsx\noutput:      src/blank.html\nbytes:       23.9 KB\ncssBytes:    22.2 KB\nclasses:     46\nimages:      0\nfiles:       blank.tsx\nstylesheets: @astryxdesign/core/reset.css, @astryxdesign/core/astryx.css\n\nGive it back: npx @astryxdesign/cli@0.7.12 experimental render --reverse src/blank.html\n",
  "stderr": "",
  "exit": 0,

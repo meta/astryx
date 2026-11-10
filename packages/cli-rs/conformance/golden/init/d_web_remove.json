@@ -5,6 +5,7 @@
   "--remove-agents"
  ],
  "fixture": "initdone",
+ "fixtureHash": "00b23c13e90f8a54+4e418a0c2575d9ce",
  "stdout": "[ok] Removed empty ../../AGENTS.md\n[ok] Removed design system section from ../../CLAUDE.md\n[ok] Removed design system section from ../../.cursorrules\n[ok] Removed design system section from ../../HERMES.md\n[ok] AI agent docs removed.\n",
  "stderr": "",
  "exit": 0,

@@ -5,6 +5,7 @@
   "icon-definitions/sparkle"
  ],
  "fixture": "icons",
+ "fixtureHash": "cfe8bdaf4aaef512+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Unknown topic \"icon-definitions/sparkle\"\n\n  icons  (available topic)\n",
  "exit": 1,

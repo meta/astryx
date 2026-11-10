@@ -5,6 +5,7 @@
   "icon"
  ],
  "fixture": "icons",
+ "fixtureHash": "cfe8bdaf4aaef512+4e418a0c2575d9ce",
  "stdout": "Found 2 matches for \"icon\"\n\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/theme-chocolate  (package, not installed)\n- npx @astryxdesign/cli@0.7.12 discover @astryxdesign/theme-chocolate/chocolate  (theme, not installed)\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

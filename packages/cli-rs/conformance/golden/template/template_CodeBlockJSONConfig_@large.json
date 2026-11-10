@@ -5,6 +5,7 @@
   "CodeBlockJSONConfig"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {CodeBlock} from '@astryxdesign/core/CodeBlock';\n\nconst code = `{\n  \"name\": \"@astryxdesign/core\",\n  \"version\": \"0.0.5\",\n  \"dependencies\": {\n    \"@astryxdesign/theme-neutral\": \"^0.1.0\",\n    \"react\": \"^19.0.0\"\n  },\n  \"scripts\": {\n    \"build\": \"tsup\",\n    \"test\": \"vitest\"\n  }\n}`;\n\nexport default function CodeBlockJSONConfig() {\n  return (\n    <CodeBlock\n      code={code}\n      language=\"json\"\n      title=\"package.json\"\n      hasLineNumbers\n    />\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

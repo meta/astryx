@@ -4,6 +4,7 @@
   "gap-report"
  ],
  "fixture": "nocore",
+ "fixtureHash": "25d22c63d358ba36+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: component is required.\n",
  "exit": 1,

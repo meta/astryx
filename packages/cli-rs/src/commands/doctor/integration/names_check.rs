@@ -2,8 +2,8 @@
 //! (`validate-contributions.mjs`), with the module-export reads they use
 //! (`moduleExportNames`, `moduleExportVerdict` from `module-exports.mjs`),
 //! parsed with oxc where the JS uses `@babel/parser`.
-//! TEMP: replace the module-export reads with discovery's module_exports
-//! once it exports them.
+//! The verdict is discovery's; `moduleExportNames` is ported here in full
+//! (no shared reader exports it).
 
 use crate::discovery::component_discovery as cd;
 use crate::discovery::nodepath as np;
@@ -162,8 +162,12 @@ pub enum Verdict {
 
 /// `moduleExportVerdict(file, exportName)`.
 pub fn module_export_verdict(file: &str, export_name_: &str) -> Verdict {
-    let mut seen = HashSet::new();
-    verdict(file, export_name_, &mut seen)
+    use crate::discovery::module_origins as mo;
+    match mo::module_export_verdict(file, export_name_) {
+        mo::Verdict::Exports(_) => Verdict::Exports,
+        mo::Verdict::Lacks => Verdict::Lacks,
+        mo::Verdict::Unknown(r) => Verdict::Unknown(r),
+    }
 }
 
 fn verdict(file: &str, name: &str, seen: &mut HashSet<String>) -> Verdict {

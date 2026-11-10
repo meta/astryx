@@ -5,6 +5,7 @@
   "kit/Button"
  ],
  "fixture": "compkit",
+ "fixtureHash": "447712d27e146684+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Warning: @comp/kit has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: External package \"kit\" not found\n",
  "exit": 1,

@@ -5,6 +5,7 @@
   "--bogus"
  ],
  "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: unknown option '--bogus'\n",
  "exit": 1,

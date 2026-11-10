@@ -7,6 +7,7 @@
   "--json"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.build\",\n  \"data\": {\n    \"name\": \"ordered\",\n    \"tokenCount\": 1,\n    \"componentCount\": 0,\n    \"sizeKB\": 2.9,\n    \"outputs\": {\n      \"css\": \"themes/ordered.css\",\n      \"cssDts\": \"themes/ordered.css.d.ts\",\n      \"js\": \"themes/ordered.js\",\n      \"dts\": \"themes/ordered.d.ts\"\n    },\n    \"warnings\": [],\n    \"notices\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

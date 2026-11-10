@@ -7,6 +7,7 @@
   "brief"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nuseLongPress(options: UseLongPressOptions): { handlers }  <- from '@astryxdesign/core/hooks'\n  Detects a single-finger press-and-hold and reports where it happened, so touc...\n  Related: ContextMenu\n  options: UseLongPressOptions\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for ContextMenu\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

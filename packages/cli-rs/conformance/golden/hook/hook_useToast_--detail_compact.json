@@ -7,6 +7,7 @@
   "compact"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# useToast\n\nHook for showing toast notifications from anywhere in your component tree. Returns a function that accepts toast options and shows the notification. Works automatically with LayerProvider or self-mounts a fallback viewport.\n\n## Import\n\n```tsx\nimport { useToast } from '@astryxdesign/core/Toast';\n```\n\n## Best Practices\n\n- **Do:** Use for transient success/error feedback that does not require user action.\n- **Do:** Set uniqueID to deduplicate toasts from rapid user actions.\n- **Don't:** Use for critical errors that require acknowledgment; use AlertDialog instead.\n- **Don't:** Call useToast in the same component that renders LayerProvider; it must be called from a child component inside the provider.\n\n## Returns\n\n| Field | Type | Description |\n|-------|------|-------------|\n| `showToast` | `(options: ToastOptions) => () => void` | Show a toast notification. Returns a dismiss function. Options include body (ReactNode), type (\"info\" \\| \"error\"), isAutoHide, autoHideDuration, endContent, uniqueID, and collisionBehavior. |\n\n## Related\n\nComponents: Toast, Banner, AlertDialog\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for Toast, Banner, AlertDialog\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

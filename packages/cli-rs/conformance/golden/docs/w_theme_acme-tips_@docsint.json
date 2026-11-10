@@ -6,6 +6,7 @@
   "acme-tips"
  ],
  "fixture": "docsint",
+ "fixtureHash": "36d5db4ca2dc43ba+4e418a0c2575d9ce",
  "stdout": "package: @acme/docs\n\n## Acme tips\n\nTip.\n\nUp: npx @astryxdesign/cli@0.7.12 docs theme --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs theme quick-start\nNext: npx @astryxdesign/cli@0.7.12 docs theme creating-a-custom-theme\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

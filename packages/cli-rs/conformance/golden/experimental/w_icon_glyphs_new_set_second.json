@@ -7,6 +7,7 @@
   "second"
  ],
  "fixture": "iconglyphs",
+ "fixtureHash": "b8a471cb57e113e9+4e418a0c2575d9ce",
  "stdout": "New icon set added\n\n[ok] second\n\nThe experimental.iconSets root ./icon-sets in astryx.integration.mjs is unchanged.\n\n- icon-sets/second/second.doc.mjs\n- icon-sets/second/second.icons.json\n- icon-sets/second/second.generated.js\n- icon-sets/second/second.generated.d.ts\n\n[next] `integration check --strict` type-checks the set's doc files with TypeScript, which this package does not have: run `npm install -D typescript@6` (TypeScript 5.0 through 6).\n\n[next] Declare the peers your set needs; add to package.json \"peerDependencies\": `{\"react\": \">=18\", \"@types/react\": \">=18\", \"@astryxdesign/cli\": \">=0.7.12\"}` and to \"peerDependenciesMeta\": `{\"@types/react\": {\"optional\": true}, \"@astryxdesign/cli\": {\"optional\": true}}`.\n\n[next] Run `integration check --strict` in your build; add to package.json \"scripts\": `\"typecheck\": \"astryx integration check --strict\"`.\n\n[next] The set's description is a placeholder (\"Second icons.\"): apps and discover show it. Pass --description when you create a set, or edit icon-sets/second/second.doc.mjs.\n\n[next] Run `astryx integration check` to see the icon definitions still to map.\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

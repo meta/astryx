@@ -6,6 +6,7 @@
   "--params"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `src` | `string \\| null \\| undefined` | - | Image source URL to analyze. When null/undefined, returns the fallback value. **(required)** |\n| `options` | `UseImageModeOptions` | - | Optional configuration for image analysis. |\n| `options.region` | `ImageSampleRegion` | - | Region to sample within the image using normalized 0-1 coordinates ({ x, y, width, height }). Defaults to the full image. |\n| `options.threshold` | `number` | `0.5` | Luminance threshold for the dark/light split. Below = dark, above = light. |\n| `options.fallback` | `'dark' \\| 'light' \\| null` | `null` | Fallback value while loading or on error. |\n\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

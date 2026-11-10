@@ -903,5 +903,28 @@
       "--apply"
     ],
     "fixture": "upgrade-format"
+  },
+  {
+    "id": "wide_edge_apply",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.1",
+      "--apply"
+    ],
+    "fixture": "upgrade-edge"
+  },
+  {
+    "id": "wide_edge_tokens",
+    "args": [
+      "upgrade",
+      "--from",
+      "0.0.7",
+      "--codemod",
+      "migrate-token-renames",
+      "--apply",
+      "--json"
+    ],
+    "fixture": "upgrade-edge"
   }
 ]

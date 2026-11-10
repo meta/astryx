@@ -7,6 +7,7 @@
   "brief"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nRadioList(orientation: vertical|horizontal, status: {type: warning|error|success, message?: string}, size: sm|md)  <- from '@astryxdesign/core/RadioList'\n  A group of options where only one can be selected at a time. All options are ...\n  Targets: astryx-radio-list preferred attrs: data-orientation, data-size variants: orientation, size | astryx-radio-list-item preferred attrs: data-size, data-selected, data-disabled variants: size states: selected, disabled | astryx-radio-indicator preferred attrs: data-size, data-checked, data-disabled variants: size states: checked, disabled | astryx-radio-indicator-dot preferred attrs: data-size variants: size\n  children: ReactNode, onChange: (value: string) => void, value: string, label: string, isLabelHidden, description, isDisabled, htmlName, disabledMessage, isRequired, isOptional, labelTooltip, width, containerXstyle, containerClassName, containerStyle, controlXstyle, controlClassName, controlStyle\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

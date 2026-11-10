@@ -7,6 +7,7 @@
   "--import"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/theme-gothic\nApp themes\n1 added\n\nslug:           gothic\nowner:          @astryxdesign/theme-gothic\nmodule:         @astryxdesign/theme-gothic/built\nstylesheet:     @astryxdesign/theme-gothic/theme.css\nfontStylesheet: @astryxdesign/theme-gothic/fonts.css\nsource:         bundled\n\ndefault:    gothic\nmodulePath: src/astryx-themes.js\naction:     add\nslug:       gothic\nchanged:    true\nfirstAdd:   true\nWire the generated module once in the app root:\n\nimport {Theme} from '@astryxdesign/core/theme';\nimport {themes, defaultThemeSlug} from './astryx-themes';\n\n<Theme theme={themes[defaultThemeSlug]}>\n  <App />\n</Theme>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

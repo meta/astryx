@@ -9,6 +9,7 @@
   "palette/basic.json"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Palette inputs and outputs must refer to distinct files.\n",
  "exit": 1,

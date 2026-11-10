@@ -6,6 +6,7 @@
   "--params"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `itemCount` | `number` | - | Total number of items to measure for overflow. **(required)** |\n| `options` | `UseOverflowOptions` | - | Configuration object for overflow behavior. |\n| `options.gap` | `number` | `0` | Gap between items in pixels. Used in width calculations. |\n| `options.minVisibleItems` | `number` | `0` | Minimum number of items to always show, even if they don't fit. |\n| `options.collapseFrom` | `'start' \\| 'end'` | `'end'` | which end to collapse items from. |\n| `options.behavior` | `'observeParent' \\| 'observeSelf'` | `'observeSelf'` | Which element to observe for overflow calculations. 'observeParent' uses the container's parent element width, allowing the visible container to remain content-sized. |\n\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

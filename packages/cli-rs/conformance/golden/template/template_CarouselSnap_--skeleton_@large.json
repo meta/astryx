@@ -6,6 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# CarouselSnap - Scroll-snap carousel with navigation buttons and team member cards. Each card snaps to the start edge on scroll. Use when items should be viewed one at a time rather than as a continuous strip.\n# Components: Avatar, Badge, Card, Carousel, Stack\n\n<Stack gap={3} />\n<Text />\n<Carousel gap={2} />\n<Card width={180}>\n  <Stack gap={3} />\n  <Avatar />\n  <Stack gap={1} />\n  <Text />\n  <Badge variant={person.color} />\n</Card>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

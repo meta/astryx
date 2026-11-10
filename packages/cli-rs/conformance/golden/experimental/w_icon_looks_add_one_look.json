@@ -9,6 +9,7 @@
   "./lib/looks.js"
  ],
  "fixture": "iconlooks",
+ "fixtureHash": "586de4e6f916f930+4e418a0c2575d9ce",
  "stdout": "Icon definitions for StarSolidIcon (1)\n\nname:        star\nsource:      astryx\nscore:       90\nreason:      id \"star\"\ndescription: Favorite or rate something.\ncommand:     npx @astryxdesign/cli@0.7.12 experimental icon add StarSolidIcon --from ./lib/looks.js --set hero --definition star\n\nAll icon definitions: npx @astryxdesign/cli@0.7.12 docs cli/experimental/icon-definitions\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

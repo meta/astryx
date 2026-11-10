@@ -7,6 +7,7 @@
   "useClipboard"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\nLayout:\n\n- useAppShellMobile\n- useOverflow\n- useResizable\n- useScrollLock\n- useScrollOverflow\n- useScrollableArea\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

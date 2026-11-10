@@ -6,6 +6,7 @@
   "start"
  ],
  "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
  "stdout": "package: @acme/kit\n\n## Start\n\nInstall the kit.\n\nUp: npx @astryxdesign/cli@0.7.12 docs acme-guide --index\nNext: npx @astryxdesign/cli@0.7.12 docs acme-guide colors\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -7,6 +7,7 @@
   "src/theme/chocolate/chocolateTheme.ts"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.build\",\n  \"data\": {\n    \"name\": \"chocolate\",\n    \"tokenCount\": 196,\n    \"componentCount\": 8,\n    \"sizeKB\": 24.7,\n    \"outputs\": {\n      \"css\": \"src/theme/chocolate/chocolate.css\",\n      \"cssDts\": \"src/theme/chocolate/chocolate.css.d.ts\",\n      \"js\": \"src/theme/chocolate/chocolate.js\",\n      \"dts\": \"src/theme/chocolate/chocolate.d.ts\"\n    },\n    \"warnings\": [],\n    \"notices\": [\n      \"Font \\\"Albert Sans\\\" is named by this theme but not loaded; add a <link> or @font-face in your app (recipe: astryx docs typography)\",\n      \"Font \\\"Fraunces\\\" is named by this theme but not loaded; add a <link> or @font-face in your app (recipe: astryx docs typography)\",\n      \"Font \\\"JetBrains Mono\\\" is named by this theme but not loaded; add a <link> or @font-face in your app (recipe: astryx docs typography)\"\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

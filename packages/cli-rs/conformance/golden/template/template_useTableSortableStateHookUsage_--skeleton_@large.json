@@ -6,6 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# useTableSortableStateHookUsage - Orders with no sort code of their own: useTableSortableState owns the sort state, returns the sorted orders, and hands useTableSortable a ready config. Click Customer, then Shift-click Total, to sort by customer and then by total within each customer. A line above the orders reads the current sort state from the hook.\n# Components: Table\n\n<VStack gap={3}>\n  <Text />\n  <Table columns={columns} />\n</VStack>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

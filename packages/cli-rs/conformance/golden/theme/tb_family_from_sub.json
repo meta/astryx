@@ -10,6 +10,7 @@
   "sub-fam"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "\nBuilding theme from ocean.mjs...\n\nBuilding theme from ocean-midnight.mjs...\n[ok] sub-fam.css\n[ok] sub-fam.css.d.ts\n[ok] sub-fam.js\n[ok] sub-fam.d.ts\n\nLoad the family CSS once, then select any member by theme identity:\n  import { oceanTheme, oceanMidnightTheme } from './sub-fam';\n  import './sub-fam.css';\nOr load the same stylesheet natively:\n  <link rel=\"stylesheet\" href=\"./sub-fam.css\" />\n\n",
  "stderr": "",
  "exit": 0,

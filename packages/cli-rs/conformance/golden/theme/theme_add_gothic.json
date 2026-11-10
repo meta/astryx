@@ -6,6 +6,7 @@
   "gothic"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Theme package \"@astryxdesign/theme-gothic\" is not installed. Run `npm install @astryxdesign/theme-gothic` (or yarn/pnpm/bun), then run `npx @astryxdesign/cli@0.7.12 theme add gothic`.\n",
  "exit": 1,

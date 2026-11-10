@@ -5,6 +5,7 @@
   "--json"
  ],
  "fixture": "core-0.5.4",
+ "fixtureHash": "f83fac28730aff29+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"error\": \"Missing required --from. Install the target version first, then run `npx @astryxdesign/cli@0.7.12 upgrade --from <old-version>`.\",\n  \"code\": \"ERR_INVALID_ARGUMENT\"\n}\n",
  "stderr": "",
  "exit": 1,

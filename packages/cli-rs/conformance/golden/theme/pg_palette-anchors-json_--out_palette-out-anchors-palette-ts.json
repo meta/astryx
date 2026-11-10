@@ -9,6 +9,7 @@
   "palette/out/anchors.palette.ts"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "[ok] Wrote palette/out/anchors.palette.ts\n\n[ok] Wrote palette/out/anchors.palette.receipt.json\n\nReview and edit the candidate before adopting it as theme-owned palette data.\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

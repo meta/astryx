@@ -6,6 +6,7 @@
   "package.json/x.tsx"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Could not write package.json/x.tsx: EEXIST. Nothing was written.\n",
  "exit": 1,

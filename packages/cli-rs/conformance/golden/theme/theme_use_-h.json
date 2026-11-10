@@ -6,6 +6,7 @@
   "-h"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Usage: astryx theme use [options] <slug>\n\nChoose the app default from its added themes\n\nOptions:\n  -h, --help  display help for command\n\nExit codes:\n  0  the module is regenerated with the selected default\n  1  the theme is not added or state is invalid\n\nExamples:\n  # Choose the default theme\n  npx @astryxdesign/cli@0.7.12 theme use ocean\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/theme-use\n",
  "stderr": "",
  "exit": 0,

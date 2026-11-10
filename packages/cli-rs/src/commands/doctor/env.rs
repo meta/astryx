@@ -1,7 +1,6 @@
 //! What doctor reads from its surroundings, kept apart so the checks stay pure
 //! (port of the readers in `api/doctor/_adapter.mjs` and the foundation
-//! pieces they call). Pieces another lane owns are marked TEMP with the
-//! owner's path; swap each when it lands.
+//! pieces they call); shared pieces come from their owners.
 
 use crate::discovery::{nodepath as np, package_manager as pm, paths, release};
 use crate::json::Value;
@@ -129,7 +128,7 @@ pub fn invocation(cwd: &str) -> String {
     pm::get_cli_invocation(Some(cwd))
 }
 
-/* ── release notices (TEMP: replace with src/cli release notices, shell) ── */
+/* ── release notices (full port of foundation/release/notices.mjs readers; no shared version) ── */
 
 pub fn user_config_dir() -> String {
     release::user_config_dir()
@@ -364,7 +363,7 @@ pub fn available_line(current: &str, newest: &str) -> String {
     format!("A new release of Astryx is available: {current} \u{2192} {newest}")
 }
 
-/* ── the search path (TEMP: replace with src/discovery env search-path) ── */
+/* ── the search path (discovery's search-path reader) ── */
 
 pub struct SearchPathCommand {
     pub file: String,
@@ -376,155 +375,86 @@ pub struct SearchPathCommand {
     pub runner: bool,
 }
 
-fn cli_version_at(dir: &str) -> Option<String> {
-    let pkg = read_json(&np::join2(dir, "package.json"))?;
-    if pkg.get("name").and_then(|v| v.as_str()) == Some("@astryxdesign/cli") {
-        Some(match pkg.get("version") {
-            None | Some(Value::Null) => String::new(),
-            Some(v) => crate::cli::format::js_string(v),
-        })
-    } else {
-        None
-    }
-}
-
-fn astryx_cli_root_of(file: &str) -> Option<String> {
-    let real = np::realpath(file)?;
-    let mut dir = np::dirname(&real);
-    loop {
-        if cli_version_at(&dir).is_some() {
-            return Some(dir);
-        }
-        let parent = np::dirname(&dir);
-        if parent == dir {
-            break;
-        }
-        dir = parent;
-    }
-    let md = std::fs::metadata(&real).ok()?;
-    if md.len() > 64 * 1024 {
-        return None;
-    }
-    let text = std::fs::read_to_string(&real).ok()?;
-    let base = np::dirname(file);
-    let target_re = crate::doctor_re!(r"^\s*(?:#|@?rem|::)\s*cmd-shim-target=(.+?)\s*$", "imu");
-    if let Some(m) = target_re.find(&text) {
-        let target = &text[m.group(1).unwrap()];
-        if np::is_absolute(target) {
-            let mut dir = np::dirname(target);
-            loop {
-                if cli_version_at(&dir).is_some() {
-                    return Some(dir);
-                }
-                let parent = np::dirname(&dir);
-                if parent == dir {
-                    break;
-                }
-                dir = parent;
-            }
-        }
-    }
-    let pkg_re = crate::doctor_re!(
-        r#"((?:\$basedir(?:_abs|_win)?|%~dp0|%dp0%|\$PSScriptRoot)?[^"'\s:;$%]*node_modules[\\/]@astryxdesign[\\/]cli)(?=[\\/"'])"#,
-        "gu"
-    );
-    let base_re = crate::doctor_re!(r"^(?:\$basedir(?:_abs|_win)?|%~dp0|%dp0%|\$PSScriptRoot)[\\/]?", "u");
-    for m in pkg_re.find_iter(&text) {
-        let named = &text[m.group(1).unwrap()];
-        let named = match base_re.find(named) {
-            Some(b) => format!("{base}/{}", &named[b.end()..]),
-            None => named.to_string(),
-        }
-        .replace('\\', "/");
-        let dir = np::resolve(&[&base, &named]);
-        if cli_version_at(&dir).is_some() {
-            return Some(dir);
-        }
-    }
-    None
-}
-
-fn names_cli_package(file: &str) -> bool {
-    let Some(real) = np::realpath(file) else { return false };
-    let Ok(md) = std::fs::metadata(&real) else { return false };
-    if md.len() > 64 * 1024 {
-        return false;
-    }
-    let Ok(bytes) = std::fs::read(&real) else { return false };
-    let text = String::from_utf8_lossy(&bytes);
-    crate::doctor_re!(r"node_modules[\\/]@astryxdesign[\\/]cli[\\/]", "u").find(&text).is_some()
-}
-
 /// `astryxCommandsOnSearchPath()` with each row's upgrade command and runner flag.
 pub fn search_path_commands() -> Vec<SearchPathCommand> {
-    use std::os::unix::fs::PermissionsExt;
-    let path = std::env::var("PATH").unwrap_or_default();
-    let mut rows = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-    for dir in path.split(':') {
-        if dir.is_empty() {
-            continue;
-        }
-        let file = np::join2(dir, "astryx");
-        let Ok(md) = std::fs::metadata(&file) else { continue };
-        if !md.is_file() || md.permissions().mode() & 0o111 == 0 {
-            continue;
-        }
-        let key = np::realpath(&file).unwrap_or_else(|| file.clone());
-        if !seen.insert(key) {
-            continue;
-        }
-        let cli_root = astryx_cli_root_of(&file);
-        let astryx = cli_root.is_some() || names_cli_package(&file);
-        let version = cli_root.as_deref().and_then(cli_version_at);
-        let hands_off = cli_root.as_deref().map(|r| np::exists(&np::join(&[r, "foundation", "release", "choose.mjs"])));
-        let upgrade = cli_root.as_deref().map(global_upgrade_command);
-        let runner = cli_root.as_deref().map(is_runner_place).unwrap_or(false);
-        rows.push(SearchPathCommand { file, astryx, cli_root, version, hands_off, upgrade, runner });
-    }
-    rows
+    crate::discovery::search_path::astryx_commands_on_search_path()
+        .into_iter()
+        .map(|r| SearchPathCommand {
+            upgrade: r.cli_root.as_deref().map(global_upgrade_command),
+            runner: r.cli_root.as_deref().map(is_runner_place).unwrap_or(false),
+            file: r.file,
+            astryx: r.astryx,
+            cli_root: r.cli_root,
+            version: r.version,
+            hands_off: r.hands_off,
+        })
+        .collect()
 }
 
 fn is_runner_place(root: &str) -> bool {
     crate::doctor_re!(r"[\\/]_npx[\\/]|[\\/]dlx[-\\/]|[\\/]\.bun[\\/]install[\\/]cache[\\/]|[\\/]bunx-|[\\/]xfs-", "i").find(root).is_some()
 }
 
-/// `globalUpgradeCommand(cliRoot)`. TEMP: the pnpm/yarn/bun settings and
-/// npm prefix detection of `foundation/release/notices.mjs` (shell).
+/// `globalUpgradeCommand(cliRoot)` (`foundation/release/notices.mjs`).
 pub fn global_upgrade_command(cli_root: &str) -> String {
     let at = np::realpath(cli_root).unwrap_or_else(|| cli_root.to_string());
     let latest = "@astryxdesign/cli@latest";
     if crate::doctor_re!(r"[\\/]\.volta[\\/]", "iu").find(&at).is_some() {
         return format!("volta install {latest}");
     }
-    if crate::doctor_re!(r"[\\/]pnpm[\\/]|[\\/]global[\\/]v?\d+[\\/]", "iu").find(&at).is_some() {
+    let global = pm::global_folder_of(&at);
+    match global.as_ref().map(|g| g.0) {
+        Some("bun") => return format!("bun add -g {latest}"),
+        Some("yarn") => return format!("yarn global add {latest}"),
+        _ => {}
+    }
+    if global.as_ref().map(|g| g.0) == Some("pnpm") || crate::doctor_re!(r"[\\/]pnpm[\\/]|[\\/]global[\\/]v?\d+[\\/]", "iu").find(&at).is_some() {
         return format!("pnpm add -g {latest}");
     }
-    format!("npm i -g {latest}")
+    match npm_own_prefix(&at) {
+        Some(prefix) => format!("npm i -g --prefix {prefix} {latest}"),
+        None => format!("npm i -g {latest}"),
+    }
 }
 
-/* ── agent docs (TEMP: replace with src/commands/init agent-docs, init) ── */
+/// `npmOwnPrefix(at)` on macOS and Linux: the npm prefix holding the CLI,
+/// as a person types it, when it is not one npm uses by default (Node's own
+/// prefix, `/usr/local`, `/usr`).
+fn npm_own_prefix(at: &str) -> Option<String> {
+    let parts: Vec<&str> = at.split(['/', '\\']).collect();
+    let n = parts.len();
+    if n < 4 || parts[n - 1] != "cli" || parts[n - 2] != "@astryxdesign" || parts[n - 3] != "node_modules" || parts[n - 4] != "lib" {
+        return None;
+    }
+    let joined = parts[..n - 4].join("/");
+    let prefix = if joined.is_empty() { "/".to_string() } else { joined };
+    // Node's own prefix: the folder above the `bin` that holds `node`.
+    let node_prefix = crate::discovery::search_path::executables_on_search_path(&["node"], &std::env::var("PATH").unwrap_or_default())
+        .first()
+        .map(|f| np::dirname(&np::dirname(&np::realpath(f).unwrap_or_else(|| f.clone()))));
+    let defaults: Vec<String> = node_prefix.into_iter().chain(["/usr/local".to_string(), "/usr".to_string()]).collect();
+    if defaults.iter().any(|d| np::resolve1(d) == np::resolve1(&prefix)) {
+        return None;
+    }
+    let home = np::homedir();
+    let rel = np::relative(&home, &prefix);
+    if rel.is_empty() {
+        return Some("~".into());
+    }
+    if !rel.starts_with("..") && !np::is_absolute(&rel) {
+        return Some(format!("~/{rel}"));
+    }
+    Some(if prefix.chars().any(char::is_whitespace) { crate::json::stringify(&Value::String(prefix), 0) } else { prefix })
+}
 
-pub const AGENT_DOC_PATHS: &[&str] = &["AGENTS.md", "CLAUDE.md", ".claude/CLAUDE.md", "GEMINI.md", ".cursorrules", ".hermes.md", "HERMES.md"];
+
+/* ── agent docs (init's readers; the refusal is doctor's own wording) ── */
+
+pub use crate::commands::init::agent_docs::AGENT_DOC_PATHS;
 
 /// `holdsAstryxBlock(content)`.
 pub fn holds_astryx_block(content: &str) -> bool {
-    for marker in ["<!-- ASTRYX:START -->", "<!-- XDS:START -->"] {
-        let mut at = content.find(marker);
-        while let Some(a) = at {
-            let from = a + marker.len();
-            let inner = match content[from..].find("<!--") {
-                Some(e) => &content[from..from + e],
-                None => &content[from..],
-            };
-            let inner = inner.trim_matches(crate::discovery::paths::js_ws);
-            if crate::doctor_re!(r"^@\S+$").find(inner).is_none() {
-                return true;
-            }
-            at = content[from..].find(marker).map(|p| from + p);
-        }
-    }
-    false
+    crate::commands::init::agent_docs::holds_astryx_block(content)
 }
 
 fn real_dir(p: &str) -> String {
@@ -582,45 +512,14 @@ pub fn agent_docs_refusal(cwd: &str) -> Option<String> {
 
 /// `resolveAgentDocsRoot(cwd)`.
 pub fn resolve_agent_docs_root(cwd: &str) -> Option<String> {
-    let mut dir = np::resolve1(cwd);
-    let mut nearest: Option<String> = None;
-    let mut i = 0;
-    while i < 50 && !is_home_folder(&dir) {
-        let file = np::join2(&dir, "package.json");
-        if np::exists(&file) {
-            let manifest = np::read_json(&file).filter(|v| v.is_object() || v.is_array());
-            let declares = manifest
-                .map(|m| {
-                    ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"].iter().any(|f| {
-                        m.get(*f).and_then(|d| d.as_object()).map(|d| d.keys().any(|k| k.starts_with("@astryxdesign/"))).unwrap_or(false)
-                    })
-                })
-                .unwrap_or(false);
-            if declares {
-                return Some(dir);
-            }
-            if nearest.is_none() {
-                nearest = Some(dir.clone());
-            }
-        }
-        if [".git", ".hg", ".sl"].iter().any(|m| np::exists(&np::join2(&dir, m))) {
-            break;
-        }
-        let parent = np::dirname(&dir);
-        if parent == dir {
-            break;
-        }
-        dir = parent;
-        i += 1;
-    }
-    nearest
+    crate::commands::init::agent_docs::resolve_agent_docs_root(cwd)
 }
 
 pub fn agent_docs_target_dir(cwd: &str) -> String {
-    resolve_agent_docs_root(cwd).unwrap_or_else(|| cwd.to_string())
+    crate::commands::init::agent_docs::agent_docs_target_dir(cwd)
 }
 
-/* ── computer-level agent text (TEMP: replace with init's computer-agent-text) ── */
+/* ── computer-level agent text (init renders it; the read-only state is a full port) ── */
 
 pub const COMPUTER_COMMAND: &str = "astryx";
 pub const COMPUTER_INSTALL_STEP: &str = "npm i -g @astryxdesign/cli";
@@ -652,34 +551,7 @@ fn skill_file() -> String {
 }
 
 fn render_agent_text(command: &str, install: &str) -> String {
-    let mut lines: Vec<String> = vec![
-        "---".into(),
-        "name: astryx".into(),
-        format!("description: {}", crate::json::stringify(&Value::String(SKILL_DESCRIPTION.into()), 0)),
-        "---".into(),
-        String::new(),
-        "<!-- ASTRYX:START -->".into(),
-        "Astryx, a design system and UI library, is available on this computer.".into(),
-        "Use it when you build or change UI, pick components, or style or theme an app.".into(),
-        format!("Its docs, components, templates, and themes are all reachable through `{command}`. Start with `{command} search '<what you need>'`."),
-        format!("Then read `{command} component <Name>` or `{command} docs <topic>`, not the package's files."),
-        "In a project, the project's version of Astryx answers automatically.".into(),
-        format!("To build UI, work in a project folder (create one if there is none). Add `@astryxdesign/core` and `@astryxdesign/cli` to a new project or one without `@astryxdesign/core`; to a project that already has `@astryxdesign/core`, add `@astryxdesign/cli` at the same version. Run `{command} init` there and follow the agent docs it writes."),
-        WORKFLOW_TITLE.into(),
-    ];
-    for s in WORKFLOW_STEPS {
-        lines.push(s.replace("`astryx ", &format!("`{command} ")));
-    }
-    lines.push(format!("Before you deliver, re-read each file; {SELF_CHECK_CSS}. Then build the project and deliver that build, not a description of it."));
-    if command == COMPUTER_COMMAND {
-        lines.push(format!("If `{COMPUTER_COMMAND}` is not found, run `{install}` first."));
-    }
-    lines.push("<!-- ASTRYX:END -->".into());
-    lines.push(String::new());
-    let text = lines.join("\n");
-    let at = text.find("<!-- ASTRYX:START -->").unwrap();
-    let cut = text[at..].find('\n').map(|p| at + p + 1).unwrap_or(text.len());
-    format!("{}<!-- astryx-managed sha256:{} -->\n{}", &text[..cut], sha_hex(&text), &text[cut..])
+    crate::commands::init::user::render(command, install)
 }
 
 fn sha_hex(s: &str) -> String {
@@ -843,13 +715,7 @@ pub fn computer_agent_text_state() -> AgentTextState {
 
 /// `displayHomePath(file)`.
 pub fn display_home_path(file: &str) -> String {
-    let home = np::homedir();
-    let rel = np::relative(&home, file);
-    if !rel.is_empty() && !rel.starts_with("..") && !np::is_absolute(&rel) {
-        format!("~/{rel}")
-    } else {
-        file.to_string()
-    }
+    crate::commands::init::user::display_home_path(file, &crate::commands::init::user::homedir())
 }
 
 /* ── computer integrations ── */

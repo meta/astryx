@@ -13,6 +13,7 @@
   "--check"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "\nBuilding theme from fam/themes/ocean.mjs...\n\nBuilding theme from fam/themes/.hidden/ocean-calm.mjs...\n\nBuilding theme from fam/themes/.hidden/ocean-calm-deep.mjs...\n\nBuilding theme from fam/themes/ocean-midnight.mjs...\n\n[ok] Theme family outputs are up to date with fam/themes/ocean.mjs, fam/themes/.hidden/ocean-calm.mjs, fam/themes/.hidden/ocean-calm-deep.mjs, fam/themes/ocean-midnight.mjs.\n",
  "stderr": "",
  "exit": 0,

@@ -6,6 +6,7 @@
   "add"
  ],
  "fixture": "nocore",
+ "fixtureHash": "25d22c63d358ba36+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Name the icon's export, such as TrashIcon; received \"undefined\".\n",
  "exit": 1,

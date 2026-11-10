@@ -186,7 +186,7 @@ fn list_response(level: &str, comps: Map<String, Value>) -> Response {
 /// `componentList(coreDir, {cwd, category, detail, zh, dense, lang})`.
 pub fn component_list(core_dir: &Path, opts: &Options) -> Result<Response, ApiError> {
     let components = crate::discovery::component_discovery::try_discover_components(core_dir)
-        .map_err(|m| ApiError::new(m, None, "ENOENT"))?;
+        .map_err(|m| ApiError::new(m, None, "ERR_UNKNOWN"))?;
     let cwd = &opts.cwd;
     let integrations = deps::load_integrations_safely(cwd);
     let list_cmd = crate::cli::env::format_cli_command_at(cwd, "component --list");

@@ -104,6 +104,7 @@ async function topicRead(catalog, entry, lang) {
   // depth reads use detailView's sections without the package key.
   return plain({
     package: entry.package,
+    docName: view.name ?? null,
     detail,
     index,
     reader,

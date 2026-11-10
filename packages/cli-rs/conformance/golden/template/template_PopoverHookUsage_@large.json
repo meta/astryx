@@ -5,6 +5,7 @@
   "PopoverHookUsage"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {usePopover} from '@astryxdesign/core/Popover';\nimport {Button} from '@astryxdesign/core/Button';\nimport {Card} from '@astryxdesign/core/Card';\nimport {Center} from '@astryxdesign/core/Center';\nimport {VStack} from '@astryxdesign/core/Layout';\nimport {Text} from '@astryxdesign/core/Text';\n\nexport default function PopoverHookUsage() {\n  const popover = usePopover({dialogLabel: 'Quick actions'});\n\n  return (\n    <Center height={240}>\n      <Button\n        label=\"Open actions\"\n        ref={popover.triggerRef}\n        onClick={popover.toggle}\n        {...popover.triggerProps}\n      />\n      {popover.render(\n        <Card width={220} padding={3} variant=\"transparent\">\n          <VStack gap={2}>\n            <Text type=\"body\" weight=\"bold\">\n              Quick actions\n            </Text>\n            <Button label=\"Create task\" size=\"sm\" />\n            <Button label=\"Share report\" variant=\"secondary\" size=\"sm\" />\n          </VStack>\n        </Card>,\n        {placement: 'below', alignment: 'center'},\n      )}\n    </Center>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

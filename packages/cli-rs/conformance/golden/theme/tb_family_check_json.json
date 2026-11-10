@@ -14,6 +14,7 @@
   "--check"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.build.check\",\n  \"data\": {\n    \"name\": \"ocean\",\n    \"upToDate\": true,\n    \"stale\": [],\n    \"checked\": [\n      \"fam/themes/ocean-family.css\",\n      \"fam/themes/ocean-family.css.d.ts\",\n      \"fam/themes/ocean-family.js\",\n      \"fam/themes/ocean-family.d.ts\"\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

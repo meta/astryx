@@ -5,6 +5,7 @@
   "Linked"
  ],
  "fixture": "compkit",
+ "fixtureHash": "447712d27e146684+4e418a0c2575d9ce",
  "stdout": "package: @comp/kit\n\n# Linked\n\nRead `astryx docs kit-guide` first, then `astryx docs theme` and {@link command:component}. Broken: {@link nope:thing} and {@link generic:missing-topic}. Code stays: `{@link generic:kit-guide}`.\n\n**Import:** `import {Linked} from '@comp/kit';`\n\n## Best Practices\n\n- **Do:** Follow `astryx docs kit-guide`.\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `tone` | `string` | - | See `astryx docs kit-guide`. |\n\n",
  "stderr": "Warning: @comp/kit has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

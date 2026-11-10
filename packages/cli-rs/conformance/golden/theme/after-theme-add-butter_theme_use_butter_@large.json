@@ -6,6 +6,7 @@
   "butter"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "App themes\n1 added\n\nslug:           butter\nowner:          @astryxdesign/theme-butter\nmodule:         @astryxdesign/theme-butter/built\nstylesheet:     @astryxdesign/theme-butter/theme.css\nfontStylesheet: @astryxdesign/theme-butter/fonts.css\nsource:         bundled\n\ndefault:    butter\nmodulePath: src/astryx-themes.js\naction:     use\nslug:       butter\nchanged:    false\nfirstAdd:   false\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n",
  "exit": 0,

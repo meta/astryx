@@ -6,6 +6,7 @@
   "src/my.theme.ts"
  ],
  "fixture": "core-0.3.0",
+ "fixtureHash": "94e7e2ef7dd216e2+4e418a0c2575d9ce",
  "stdout": "[ok] src/my-theme.css (10 KB, 78 token overrides, 4 component overrides)\n[note] Fonts named but not loaded: \"Inter\", \"Geist Mono\". Load them in your app (recipe: npx @astryxdesign/cli@0.7.12 docs typography).\nRun with --detail full for the install example and font recipe.\n",
  "stderr": "",
  "exit": 0,

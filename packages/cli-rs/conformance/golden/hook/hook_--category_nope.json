@@ -6,6 +6,7 @@
   "nope"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Unknown category \"nope\"\n\n  Accessibility  (valid category)\n  Focus  (valid category)\n  Interaction  (valid category)\n  Layout  (valid category)\n  Link  (valid category)\n  Media  (valid category)\n  Motion & gestures  (valid category)\n  Navigation  (valid category)\n  Streaming  (valid category)\n  Utilities  (valid category)\n  Utility  (valid category)\n  Other  (valid category)\n",
  "exit": 1,

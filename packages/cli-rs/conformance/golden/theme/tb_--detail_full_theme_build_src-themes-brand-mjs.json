@@ -8,6 +8,7 @@
   "src/themes/brand.mjs"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "\nBuilding theme from src/themes/brand.mjs...\n\n[ok] src/themes/brand.css\n[ok] src/themes/brand.css.d.ts\n  1 token overrides, 0 component overrides\n  1.9 KB\n[ok] src/themes/brand.js\n[ok] src/themes/brand.d.ts\n\nInstall in your app (paths are relative to a file in src/; adjust if yours lives elsewhere):\n\n  import { Theme } from '@astryxdesign/core/theme';\n  import { brandTheme } from './themes/brand';\n  import './themes/brand.css';\n\n  <Theme theme={brandTheme}>\n    <App />\n  </Theme>\n\nOr with a <link> tag:\n\n  import { Theme } from '@astryxdesign/core/theme';\n  import { brandTheme } from './themes/brand';\n\n  <link rel=\"stylesheet\" href=\"./themes/brand.css\" />\n  <Theme theme={brandTheme}>\n    <App />\n  </Theme>\n\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

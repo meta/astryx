@@ -7,6 +7,7 @@
   "--json"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.app\",\n  \"package\": \"@astryxdesign/theme-y2k\",\n  \"data\": {\n    \"themes\": [\n      {\n        \"slug\": \"y2k\",\n        \"owner\": \"@astryxdesign/theme-y2k\",\n        \"module\": \"@astryxdesign/theme-y2k/built\",\n        \"stylesheet\": \"@astryxdesign/theme-y2k/theme.css\",\n        \"fontStylesheet\": \"@astryxdesign/theme-y2k/fonts.css\",\n        \"source\": \"bundled\"\n      }\n    ],\n    \"default\": \"y2k\",\n    \"modulePath\": \"src/astryx-themes.js\",\n    \"change\": {\n      \"action\": \"add\",\n      \"slug\": \"y2k\",\n      \"changed\": true,\n      \"firstAdd\": true\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

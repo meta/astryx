@@ -5,6 +5,7 @@
   "Dialgo"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: No component named \"Dialgo\"\n\n  Dialog  (similar name (distance 2))\n  ComplexSelector  (keyword \"dialog\" (distance 2))\n  AlertDialog  (keyword \"dialog\" (distance 2))\n  Drawer  (keyword \"dialog\" (distance 2))\n  CommandPalette  (keyword \"dialog\" (distance 2))\n",
  "exit": 1,

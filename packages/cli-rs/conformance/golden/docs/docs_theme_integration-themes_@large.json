@@ -6,6 +6,7 @@
   "integration-themes"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Integration themes\n\nInstall an integration and Astryx discovers its themes automatically. Import one with `npx @astryxdesign/cli@0.7.12 theme add <name> --package <integration>`. Use `theme eject` only for an independent source fork. For the full walkthrough, see `npx @astryxdesign/cli@0.7.12 docs use-a-theme`.\n\nUp: npx @astryxdesign/cli@0.7.12 docs theme --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs theme light-dark-mode\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -7,6 +7,7 @@
   "brief"
  ],
  "fixture": "core-0.3.0",
+ "fixtureHash": "94e7e2ef7dd216e2+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nTable(idKey: (keyof T & string)|((item: T) => string|number), density: compact|balanced|spacious, dividers: rows|columns|grid|none, verticalAlign: middle|top|bottom, textOverflow: wrap|truncate)  <- from '@astryxdesign/core/Table'\n  Table displays structured data in rows and columns with consistent dimensiona...\n  Targets: astryx-base-table | astryx-table | astryx-table-scroll-wrapper | astryx-table-header | astryx-table-body | astryx-table-footer | astryx-table-row | astryx-table-cell preferred attrs: data-density variants: density | astryx-table-header-cell preferred attrs: data-density variants: density\n  data, columns, isStriped, hasHover, plugins, rowIndexStart, rowCount, children, xstyle\n\n",
  "stderr": "\nNext step: run `npm install @astryxdesign/cli@0.3.0`, then `npx astryx init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

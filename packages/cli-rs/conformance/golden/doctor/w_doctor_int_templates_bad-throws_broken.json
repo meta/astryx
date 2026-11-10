@@ -7,6 +7,7 @@
   "@bad/throws"
  ],
  "fixture": "doctor-integrations",
+ "fixtureHash": "70dc92e0b02698cb+4e418a0c2575d9ce",
  "stdout": "Checking integration templates: @bad/throws@1.0.0\n\nIntegration issues\n\nseverity: [fail]\ncode:     invalid_manifest\nmessage:  manifest exploded\n",
  "stderr": "",
  "exit": 1,

@@ -6,6 +6,7 @@
   "latest"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "\nUpgrade\nAborted\n\n",
  "stderr": "Invalid --from value: \"latest\". Expected a semver string like 0.0.5.\n",
  "exit": 1,

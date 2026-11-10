@@ -5,6 +5,7 @@
   "blckquote — with attribution"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Results for \"blckquote - with attribution\" (2)\n\nname:        authoring/field-reference\nsection:     template-doc\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Authoring › Field reference › TemplateDoc\ndescription: The doc-type for template metadata. A discriminated union of PageTemplateDoc (type: 'page') for full page templates and BlockTemplateDoc (type: 'block') for editable compositions. A block can stand alone or use `exampleFor` to attach to...\ncommand:     npx @astryxdesign/cli@0.7.12 docs authoring/field-reference template-doc\nparent:      npx @astryxdesign/cli@0.7.12 docs authoring/field-reference --index\n\nname:        BlockquoteWithCite\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: Blockquote - With Attribution\nkind:        block\ndescription: A plain quote and a quote with a cite attribution. Use cite to credit the original author or source.\ncommand:     npx @astryxdesign/cli@0.7.12 template BlockquoteWithCite --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover 'blckquote - with attribution'\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

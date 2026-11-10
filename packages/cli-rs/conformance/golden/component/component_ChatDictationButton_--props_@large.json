@@ -6,6 +6,7 @@
   "--props"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `dictation` | `UseSpeechRecognitionReturn` | - | The return value from useChatDictation or useSpeechRecognition. Controls all button state: listening, volume, bands, and toggle. **(required)** |\n| `size` | `'sm' \\| 'md'` | `'md'` | Button size. Matches ChatComposer density. |\n| `isHiddenWhenUnsupported` | `boolean` | `true` | When true, renders nothing if the browser does not support SpeechRecognition. When false, keeps the button visible but disabled. |\n| `label` | `string` | - | Accessible label override. Defaults to \"Start dictation\" or \"Stop dictation\" based on state. |\n| `xstyle` | `StyleXStyles` | - | StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object like style={{}}. |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

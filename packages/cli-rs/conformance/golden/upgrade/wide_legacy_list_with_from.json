@@ -7,6 +7,7 @@
   "0.1.0"
  ],
  "fixture": "upgrade-legacy",
+ "fixtureHash": "debba99afb710213+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "`--list` cannot be combined with --from: it lists available codemods and does not run a migration.\n",
  "exit": 1,

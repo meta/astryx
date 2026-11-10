@@ -6,6 +6,7 @@
   "--remove-agents"
  ],
  "fixture": "initdone",
+ "fixtureHash": "00b23c13e90f8a54+4e418a0c2575d9ce",
  "stdout": "[ok] Removed ~/.agents/skills/astryx/SKILL.md\n[ok] Removed ~/.claude/skills/astryx\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, for this computer\n",
  "exit": 0,

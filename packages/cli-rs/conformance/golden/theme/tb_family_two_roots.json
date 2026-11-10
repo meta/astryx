@@ -10,6 +10,7 @@
   "fam"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "\nBuilding theme from fam/themes/ocean.mjs...\n\nBuilding theme from fam/themes/lone.mjs...\n",
  "stderr": "Error: Theme \"lone\" exact family ancestry could not be observed during CLI loading.\n",
  "exit": 1,

@@ -6,6 +6,7 @@
   "--zh"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# TopNavMegaMenuFeaturedCard\n\n超级菜单 featured 插槽的标准特色卡片。提供带可选图片、标题、描述和 CTA 链接的一致卡片。\n\n**Import:** `import {TopNavMegaMenuFeaturedCard} from '@astryxdesign/core/TopNav';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `title` | `string` | - | 卡片标题。 **(required)** |\n| `description` | `string` | - | 标题下方的描述文本。 |\n| `image` | `string` | - | 正文上方显示的可选图片 URL。 |\n| `imageAlt` | `string` | - | 图片的替代文本。省略时图片会被显式标记为装饰性（alt=\"\"、role=\"presentation\"、aria-hidden）——由于卡片已有可见标题，这通常是正确的。仅当图片传达标题和描述之外的信息时才提供。 |\n| `linkLabel` | `string` | - | CTA 链接文本。 |\n| `linkHref` | `string` | - | CTA 链接 URL。 |\n| `children` | `ReactNode` | - | 标准正文下方渲染的自定义内容。 |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

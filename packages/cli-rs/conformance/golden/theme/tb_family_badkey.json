@@ -10,6 +10,7 @@
   "Bad_Key"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Family key must be an exact lower-kebab filename stem (for example, ocean-family).\n",
  "exit": 1,

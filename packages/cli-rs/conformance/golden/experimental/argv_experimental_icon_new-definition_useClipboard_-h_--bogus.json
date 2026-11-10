@@ -9,6 +9,7 @@
   "--bogus"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Usage: astryx experimental icon new-definition [options] <name>\n\n[experimental] Add your icon set's own icon definition\n\nArguments:\n  name                  The definition name, in camelCase (rocketLaunch) or kebab-case (rocket-launch)\n\nOptions:\n  --dry-run             Validate and show planned writes without changing files\n  --set <name>          The icon set to add it to, when the package ships several\n  --description <text>  One sentence on what an icon with this definition is for\n  --words <list>        Comma-separated words people search for\n  --icon <id>           Also map it to this icon of the set (its `map` entry)\n  -h, --help            display help for command\n\nExit codes:\n  0  the definition is written or the dry run succeeds\n  1  the name is invalid or taken, the description or words are missing, or the set or icon is not found\n\nExamples:\n  # Add a set's own icon definition\n  npx @astryxdesign/cli@0.7.12 experimental icon new-definition random --description 'Pick something at random.' --words dice,shuffle,chance --icon dice-5\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/experimental-icon-new-definition\n",
  "stderr": "",
  "exit": 0,

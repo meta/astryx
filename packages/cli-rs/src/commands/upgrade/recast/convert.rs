@@ -65,9 +65,16 @@ pub fn parse(ast: &mut Ast, source: &str, mode: Mode) -> Result<Parsed, ParseErr
         Mode::Babel => oxc_span::SourceType::tsx(),
         Mode::Estree => oxc_span::SourceType::jsx().with_module(true),
     };
-    let ret = oxc_parser::Parser::new(&alloc, &normalized, st)
-        .with_options(oxc_parser::ParseOptions { allow_return_outside_function: true, ..Default::default() })
-        .parse();
+    let run = |st: oxc_span::SourceType| oxc_parser::Parser::new(&alloc, &normalized, st).with_options(oxc_parser::ParseOptions { allow_return_outside_function: true, ..Default::default() }).parse();
+    let mut ret = run(st);
+    if ret.diagnostics.has_errors() && mode == Mode::Babel {
+        // Babel's TSX parser falls back to a generic arrow (`<T>(x: T) => x`)
+        // when JSX parsing fails; oxc does not, so retry as plain TypeScript.
+        let retry = run(oxc_span::SourceType::ts());
+        if !retry.diagnostics.has_errors() {
+            ret = retry;
+        }
+    }
     if ret.diagnostics.has_errors() {
         let e = ret.diagnostics.errors().next();
         let (msg, off) = match e {

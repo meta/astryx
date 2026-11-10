@@ -6,6 +6,7 @@
   "./src/themes/*.ts"
  ],
  "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: File not found: /tmp/astryx-conformance/work/empty/src/themes/*.ts\n\n  npx @astryxdesign/cli@0.7.12 theme build ./src/themes/*.ts  (globs are expanded by your shell; pass the pattern unquoted, or list the files)\n",
  "exit": 1,

@@ -7,6 +7,7 @@
   "themes/built.mjs"
  ],
  "fixture": "themes-core-0.3.0",
+ "fixtureHash": "2f7527239e99a151+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.build\",\n  \"data\": {\n    \"name\": \"built\",\n    \"tokenCount\": 1,\n    \"componentCount\": 0,\n    \"sizeKB\": 1.9,\n    \"outputs\": {\n      \"css\": \"themes/built.css\",\n      \"cssDts\": \"themes/built.css.d.ts\",\n      \"js\": \"themes/built.js\",\n      \"dts\": \"themes/built.d.ts\"\n    },\n    \"warnings\": [],\n    \"notices\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.3.0\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

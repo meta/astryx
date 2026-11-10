@@ -6,6 +6,7 @@
   "--json"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"init.user\",\n  \"data\": {\n    \"files\": [\n      {\n        \"path\": \"/tmp/astryx-conformance/work/home/.agents/skills/astryx/SKILL.md\",\n        \"action\": \"written\"\n      },\n      {\n        \"path\": \"/tmp/astryx-conformance/work/home/.claude/skills/astryx\",\n        \"action\": \"linked\"\n      }\n    ],\n    \"command\": \"astryx\",\n    \"warnings\": [\n      \"No `astryx` command on this computer runs the Astryx CLI, so agents cannot run the commands this text names. Install the CLI for the computer: npm i -g @astryxdesign/cli\"\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

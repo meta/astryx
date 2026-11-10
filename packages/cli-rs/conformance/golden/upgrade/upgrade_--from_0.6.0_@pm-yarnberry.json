@@ -6,6 +6,7 @@
   "0.6.0"
  ],
  "fixture": "pm-yarnberry",
+ "fixtureHash": "8b2e15f6f2c5fb80+4e418a0c2575d9ce",
  "stdout": "\nUpgrade\nFrom version: 0.6.0\nInstalled target: 0.7.12 (@astryxdesign/core)\nScanning /tmp/astryx-conformance/work/pm-yarnberry/src for source files...\nFound 1 source file\nApplying v0.6.4 codemods...\n  Give each integration theme a typed descriptor instead of the manifest.json catalog\n  Migrate nativePicker to presentation\nApplying v0.6.7 codemods...\n  Give copied app themes their local descriptors\nApplying v0.7.0 codemods...\n  Migrate removed component theme aliases and selectors\n  Validate data-token ownership\n  Migrate input root styling to container/control parts\n  Preserve BottomSheet content padding\n  Rename emptySearchResultsText to emptySearchText\nApplying v0.7.2 codemods...\n  Migrate List edgeCompensation to edge\nApplying v0.7.5 codemods...\n  Migrate CodeBlock tokenizer to a custom language\nApplying v0.7.8 codemods...\n  Move Tokenizer's removed experimental presentation to presentation\n\n[ok] No changes needed - your code is already up to date!\n11 codemods to run (dry run)\nDry run complete\n\n",
  "stderr": "No Astryx agent-docs block found - AI agents have no component index. Run `yarn dlx @astryxdesign/cli@0.7.12 init --features agents` to install it.\n\nNext step: run `yarn dlx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

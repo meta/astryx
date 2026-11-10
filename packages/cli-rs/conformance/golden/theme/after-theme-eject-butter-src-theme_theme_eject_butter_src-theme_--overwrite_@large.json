@@ -8,6 +8,7 @@
   "--overwrite"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "Ejected theme\n\nslug:        butter\ndisplayName: Butter\nmaintained:  false\npackage:     @astryxdesign/cli\noutputDir:   src/theme\nentry:       butterTheme.ts\nexportName:  butterTheme\nfiles:       butterTheme.ts, butterTheme.doc.mjs, icons.tsx, butterPalettes.generated.ts, butterPaletteRefs.generated.ts, butterPalettes.generated.receipt.json, palette.config.json\n\nThis is a local fork. Build it with npx @astryxdesign/cli@0.7.12 theme build src/theme/butterTheme.ts.\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n",
  "exit": 0,

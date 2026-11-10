@@ -6,6 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# BreadcrumbsSupportingVariant - Compare the default and supporting variants side by side. Use the supporting variant in dense UIs like admin panels where the breadcrumb should be subtle.\n# Components: Breadcrumb, Breadcrumbs, Stack\n\n<Stack gap={4} />\n<Stack gap={1} />\n<Text />\n<Breadcrumbs />\n<BreadcrumbItem />\n<BreadcrumbItem />\n<BreadcrumbItem />\n<Stack gap={1} />\n<Text />\n<Breadcrumbs variant=\"supporting\" />\n<BreadcrumbItem />\n<BreadcrumbItem />\n<BreadcrumbItem />\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

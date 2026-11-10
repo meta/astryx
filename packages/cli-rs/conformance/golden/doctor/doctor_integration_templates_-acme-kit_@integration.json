@@ -7,6 +7,7 @@
   "@acme/kit"
  ],
  "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
  "stdout": "Checking integration templates: @acme/kit@1.2.3\n\n[ok] No template ids conflict with Core.\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

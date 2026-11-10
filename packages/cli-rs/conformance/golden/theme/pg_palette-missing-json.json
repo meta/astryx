@@ -7,6 +7,7 @@
   "palette/missing.json"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Palette config not found: palette/missing.json\n",
  "exit": 1,

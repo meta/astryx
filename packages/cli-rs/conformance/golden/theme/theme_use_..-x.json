@@ -6,6 +6,7 @@
   "../x"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Theme \"../x\" is not added. Run `npx @astryxdesign/cli@0.7.12 theme add ../x` first.\n",
  "exit": 1,

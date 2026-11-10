@@ -470,7 +470,7 @@ pub fn generate_compressed_index(version: &str, o: &IndexOptions) -> Result<Stri
 /// `getXdsVersion(coreDir)`: an unreadable package.json throws (Err).
 pub fn get_xds_version(core_dir: Option<&str>, cli_root: &str) -> Result<String, String> {
     let ver = |f: &str| -> Result<String, String> {
-        let v: serde_json::Value = serde_json::from_str(&read(f).unwrap_or_default()).map_err(|e| e.to_string())?;
+        let v = crate::js::jsonparse::parse(&read(f).unwrap_or_default())?;
         Ok(v.get("version").map(crate::cli::format::js_string).unwrap_or_else(|| "undefined".into()))
     };
     if let Some(cd) = core_dir {

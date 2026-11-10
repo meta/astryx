@@ -8,6 +8,7 @@
   "claude"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "[ok] AI agent docs installed -> .claude/CLAUDE.md\n",
  "stderr": "",
  "exit": 0,

@@ -5,6 +5,7 @@
   "Broken"
  ],
  "fixture": "compkit",
+ "fixtureHash": "447712d27e146684+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Warning: @comp/kit has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: Cannot load component metadata: /tmp/astryx-conformance/work/compkit/node_modules/@comp/kit/components/Broken.doc.mjs is invalid: (root): Invalid input\n",
  "exit": 1,

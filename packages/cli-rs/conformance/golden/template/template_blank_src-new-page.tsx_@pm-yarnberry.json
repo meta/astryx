@@ -6,6 +6,7 @@
   "src/new-page.tsx"
  ],
  "fixture": "pm-yarnberry",
+ "fixtureHash": "8b2e15f6f2c5fb80+4e418a0c2575d9ce",
  "stdout": "Copied template to src/new-page.tsx\n\npackage: @astryxdesign/core\n",
  "stderr": "\nNext step: run `yarn dlx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -6,6 +6,7 @@
   "--zh"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# LayoutContent\n\n可滚动的主内容区域。\n\n**Import:** `import {LayoutContent} from '@astryxdesign/core/Layout';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | 内容。 |\n| `padding` | `0 \\| 0.5 \\| 1 \\| 1.5 \\| 2 \\| 3 \\| 4 \\| 5 \\| 6 \\| 8 \\| 10` | - | 使用间距比例的内边距。覆盖布局容器的默认内边距。 |\n| `isScrollable` | `boolean` | `true` | 启用可滚动溢出。设置可参与算术计算的 contentWidth 时，滚动区域会延伸到所有未被面板占用的边缘，同时根据上下文调整内边距以保持子内容对齐。 |\n| `label` | `string` | - | 地标元素的无障碍标签。区域滚动时，它也为滚动区域命名；未提供时使用已翻译的“Content”（内容）。 |\n| `role` | `AriaRole` | - | ARIA 地标角色。 |\n| `ref` | `React.Ref<HTMLDivElement>` | - | 转发到内容区域元素的 ref。 |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

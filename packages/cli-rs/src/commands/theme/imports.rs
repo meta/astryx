@@ -118,7 +118,7 @@ pub fn resolve(theme: &Theme, cwd: &str, owner_count: usize) -> Result<Entry, St
         return resolve_local(theme, cwd);
     }
     let import_package = theme.import_package().to_string();
-    let Some(dir) = crate::discovery::paths::find_installed_package(cwd, &import_package, 6) else {
+    let Some(dir) = theme.package_dir.clone().or_else(|| crate::discovery::paths::find_installed_package(cwd, &import_package, 6)) else {
         return Err(format!(
             "Theme package \"{import_package}\" is not installed. Run `npm install {import_package}` (or yarn/pnpm/bun), then run `{}`.",
             fmt_cmd_at(&format!("theme add {}", theme.slug), cwd)

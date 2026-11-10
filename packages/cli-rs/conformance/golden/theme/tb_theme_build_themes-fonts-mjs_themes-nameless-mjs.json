@@ -7,6 +7,7 @@
   "themes/nameless.mjs"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "[ok] themes/fonts.css (2.2 KB, 3 token overrides, 1 component overrides)\n[note] Fonts named but not loaded: \"Fira Sans\", \"JetBrains Mono\", \"Comic Neue\". Load them in your app (recipe: npx @astryxdesign/cli@0.7.12 docs typography).\n",
  "stderr": "Error: themes/nameless.mjs: Theme must have a name property.\n",
  "exit": 1,

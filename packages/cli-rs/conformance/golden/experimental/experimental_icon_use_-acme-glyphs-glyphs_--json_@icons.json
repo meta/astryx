@@ -8,6 +8,7 @@
   "--json"
  ],
  "fixture": "icons",
+ "fixtureHash": "cfe8bdaf4aaef512+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"icon.use\",\n  \"data\": {\n    \"iconSet\": \"@acme/glyphs/glyphs\",\n    \"set\": \"@acme/glyphs/glyphs\",\n    \"config\": \"astryx.config.mjs\",\n    \"created\": false,\n    \"previous\": \"glyphs\",\n    \"changed\": true\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

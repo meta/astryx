@@ -7,6 +7,7 @@
   "brief"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/lab\n\nCommentPin(size: sm|md|lg)  <- from '@astryxdesign/lab'\n  Use CommentPin as the interactive anchor for comments attached to images, doc...\n  Targets: astryx-comment-pin preferred attrs: data-size, data-grouped, data-unread, data-selected, data-dimmed, data-resolved, data-disabled variants: size, grouped, unread, selected, dimmed, resolved, disabled\n  participants: readonly [CommentPinParticipant, ...CommentPinParticipant[]], label: string, threadCount, unreadCount, isSelected, isDimmed, isResolved, isDisabled, onClick, xstyle\n  <CommentPin\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -7,6 +7,7 @@
   "--json"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": [\n    {\n      \"name\": \"count\",\n      \"type\": \"number\",\n      \"description\": \"The number of hidden avatars. Used for the default `+N` label and the accessible label.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"children\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Optional custom count text rendered inside the indicator. Omit to use the default `+N` label.\"\n    },\n    {\n      \"name\": \"onClick\",\n      \"type\": \"() => void\",\n      \"description\": \"Callback fired when the overflow indicator is clicked. When provided, the indicator renders as a focusable button.\"\n    },\n    {\n      \"name\": \"ref\",\n      \"type\": \"React.Ref<HTMLElement>\",\n      \"description\": \"Ref forwarded to the overflow indicator element.\"\n    },\n    {\n      \"name\": \"xstyle\",\n      \"type\": \"StyleXStyles\",\n      \"description\": \"stylex.create() value — not an inline style object.\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

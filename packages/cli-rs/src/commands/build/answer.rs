@@ -1,5 +1,4 @@
-//! The build.kit response (`api/build/kit/answer.mjs`), and a TEMP
-//! `firstSentence` (replace with src/text/ when the component lane lands it).
+//! The build.kit response (`api/build/kit/answer.mjs`).
 
 use super::js::{self, re};
 use super::signals::KitSignals;
@@ -14,19 +13,7 @@ pub const FOUNDATION: &[&str] = &[
     "VStack", "HStack", "Grid", "StackItem", "Card", "Section", "Text", "Heading", "Button", "Icon", "Badge", "Divider",
 ];
 
-/// TEMP: replace with src/text/ `first_sentence` (foundation/text/string-utils.mjs).
-pub fn first_sentence(text: &str) -> String {
-    let collapsed = re(r"\s+", "").replace_all(text, " ");
-    let flat = super::words::js_trim(&collapsed);
-    let ends = re(r"[.!?](?=\s|$)", "");
-    let eg = re(r"\b(e\.g|i\.e)$", "i");
-    for m in ends.find_iter(&flat) {
-        if !js::test(&flat[..m.start()], eg) {
-            return flat[..m.start() + 1].to_string();
-        }
-    }
-    flat
-}
+pub use crate::text::string_utils::first_sentence;
 
 /// One listed block, and whether it is one of build's own entries (JS
 /// compares object identity with `own.includes(b)`).

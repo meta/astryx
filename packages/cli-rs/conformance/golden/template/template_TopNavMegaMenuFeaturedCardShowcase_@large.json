@@ -5,6 +5,7 @@
   "TopNavMegaMenuFeaturedCardShowcase"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {TopNavMegaMenuFeaturedCard} from '@astryxdesign/core/TopNav';\n\nexport default function TopNavMegaMenuFeaturedCardShowcase() {\n  return (\n    <TopNavMegaMenuFeaturedCard\n      title=\"Introducing v2.0\"\n      description=\"Our biggest release yet with new components, faster builds, and a refreshed design language.\"\n      linkLabel=\"Explore the release\"\n      linkHref=\"#release\"\n    />\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

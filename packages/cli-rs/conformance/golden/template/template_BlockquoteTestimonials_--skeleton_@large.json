@@ -6,6 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# BlockquoteTestimonials - Multiple quotes arranged in a card grid for a testimonials section. Combine with Card and Grid to create social-proof layouts.\n# Components: Blockquote, Card, Grid, GridSpan\n\n<Grid gap={3} columns={2}>\n  <Card padding={4}>\n    <Blockquote />\n  </Card>\n  <Card padding={4}>\n    <Blockquote />\n  </Card>\n  <GridSpan columns={2}>\n    <Card padding={4}>\n      <Blockquote />\n    </Card>\n  </GridSpan>\n</Grid>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

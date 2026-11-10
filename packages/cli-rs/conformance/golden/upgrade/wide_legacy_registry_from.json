@@ -8,6 +8,7 @@
   "--force"
  ],
  "fixture": "upgrade-legacy",
+ "fixtureHash": "debba99afb710213+4e418a0c2575d9ce",
  "stdout": "\nUpgrade\nAborted\n\n",
  "stderr": "`--registry` cannot be combined with --from, --force.\n",
  "exit": 1,

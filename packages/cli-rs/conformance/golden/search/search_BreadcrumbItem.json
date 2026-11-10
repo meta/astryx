@@ -5,6 +5,7 @@
   "BreadcrumbItem"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Results for \"BreadcrumbItem\" (3)\n\nname:        BreadcrumbItem\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Breadcrumbs\ndescription: BreadcrumbItem represents one destination, action, current location, or sibling-menu trigger inside a Breadcrumbs trail.\ncommand:     npx @astryxdesign/cli@0.7.12 component BreadcrumbItem\n\nname:        BreadcrumbItemBasic\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: BreadcrumbItem - Basic\nkind:        block\ndescription: Breadcrumb links inside a Breadcrumbs trail. Ancestor pages get an href; mark the last item with isCurrent to render it as plain text for the current page.\ncommand:     npx @astryxdesign/cli@0.7.12 template BreadcrumbItemBasic --type block\n\nname:        BreadcrumbItemShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: BreadcrumbItem\nkind:        block\ndescription: BreadcrumbItem represents a single step in a breadcrumb trail, supporting links, icons, current-page markers, and custom link components.\ncommand:     npx @astryxdesign/cli@0.7.12 template BreadcrumbItemShowcase --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover BreadcrumbItem\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

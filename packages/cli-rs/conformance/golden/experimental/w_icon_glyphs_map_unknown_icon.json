@@ -8,6 +8,7 @@
   "nothere"
  ],
  "fixture": "iconglyphs",
+ "fixtureHash": "b8a471cb57e113e9+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: Icon set \"glyphs\" has no icon \"nothere\". Name an icon by its id, its export name, or another name its library exports it as; a word it carries is not its name.\n",
  "exit": 1,

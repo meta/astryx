@@ -8,6 +8,7 @@
   "--json"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.list\",\n  \"data\": {\n    \"detail\": \"names\",\n    \"components\": {\n      \"AspectRatio\": [\n        {\n          \"name\": \"AspectRatio\",\n          \"package\": \"@astryxdesign/core\"\n        }\n      ]\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

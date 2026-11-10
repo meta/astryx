@@ -5,6 +5,7 @@
   "MetadataListItemShowcase"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {MetadataList, MetadataListItem} from '@astryxdesign/core/MetadataList';\nimport {Badge} from '@astryxdesign/core/Badge';\nimport {Link} from '@astryxdesign/core/Link';\n\nexport default function MetadataListItemShowcase() {\n  return (\n    <MetadataList title=\"Project Details\">\n      <MetadataListItem label=\"Name\">Design System v2</MetadataListItem>\n      <MetadataListItem label=\"Status\">\n        <Badge label=\"Active\" variant=\"green\" />\n      </MetadataListItem>\n      <MetadataListItem label=\"Owner\">\n        <Link href=\"#\">Alice Johnson</Link>\n      </MetadataListItem>\n      <MetadataListItem label=\"Created\">January 15, 2025</MetadataListItem>\n      <MetadataListItem label=\"Priority\">\n        <Badge label=\"High\" variant=\"red\" />\n      </MetadataListItem>\n      <MetadataListItem label=\"Repository\">\n        <Link href=\"#\">github.com/org/design-system</Link>\n      </MetadataListItem>\n    </MetadataList>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

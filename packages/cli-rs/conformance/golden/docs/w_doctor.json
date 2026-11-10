@@ -5,6 +5,7 @@
   "doctor"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Unknown topic \"doctor\"\n\n  cli/commands/doctor  (Diagnose Astryx projects and integration packages)\n  cli/api/functions/doctor  (Check a project's Astryx setup and get a pass/warn/fail report per check. Use it as a CI gate or before debugging a broken install.)\n",
  "exit": 1,

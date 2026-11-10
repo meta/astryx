@@ -5,6 +5,7 @@
   "BadgeShowcase"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Badge} from '@astryxdesign/core/Badge';\nimport {Stack} from '@astryxdesign/core/Layout';\n\nexport default function BadgeShowcase() {\n  return (\n    <Stack direction=\"vertical\" gap={4} hAlign=\"center\">\n      <Stack direction=\"horizontal\" gap={2}>\n        <Badge label=\"Neutral\" variant=\"neutral\" />\n        <Badge label=\"Info\" variant=\"info\" />\n        <Badge label=\"Success\" variant=\"success\" />\n        <Badge label=\"Warning\" variant=\"warning\" />\n        <Badge label=\"Error\" variant=\"error\" />\n      </Stack>\n      <Stack direction=\"horizontal\" gap={2}>\n        <Badge label=\"Blue\" variant=\"blue\" />\n        <Badge label=\"Purple\" variant=\"purple\" />\n        <Badge label=\"Pink\" variant=\"pink\" />\n        <Badge label=\"Teal\" variant=\"teal\" />\n        <Badge label=\"Orange\" variant=\"orange\" />\n      </Stack>\n    </Stack>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -6,6 +6,7 @@
   "chocolate"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/theme-chocolate\nApp themes\n1 added\n\nslug:           chocolate\nowner:          @astryxdesign/theme-chocolate\nmodule:         @astryxdesign/theme-chocolate/built\nstylesheet:     @astryxdesign/theme-chocolate/theme.css\nfontStylesheet: @astryxdesign/theme-chocolate/fonts.css\nsource:         bundled\n\ndefault:    chocolate\nmodulePath: src/astryx-themes.js\naction:     add\nslug:       chocolate\nchanged:    false\nfirstAdd:   false\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n",
  "exit": 0,

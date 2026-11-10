@@ -7,6 +7,7 @@
   "component"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Build kit for \"dashboard\"\n\nThis kit is narrowed by --type, so it names no template.\n\nCOMPONENTS\nFor what the template and blocks do not cover (top 3 of 6; --verbose for all). Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        ChatToolCalls\npackage:     @astryxdesign/core\ndescription: ChatToolCalls displays tool or function call invocations from an LLM response.\n\nname:        DateRangeInput\npackage:     @astryxdesign/core\ndescription: DateRangeInput lets users select a start and end date from a dual-month calendar popover.\n\nname:        SegmentedControl\npackage:     @astryxdesign/core\ndescription: A segmented button group that allows users to make a single selection from a small set of mutually exclusive options.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

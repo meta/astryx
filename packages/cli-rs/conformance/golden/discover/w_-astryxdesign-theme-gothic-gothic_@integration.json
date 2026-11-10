@@ -5,6 +5,7 @@
   "@astryxdesign/theme-gothic/gothic"
  ],
  "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
  "stdout": "package:   @astryxdesign/theme-gothic\nversion:   0.7.12\nkind:      theme\nname:      gothic\ntitle:     Gothic\nsummary:   Deep blue-grays and a signature display serif. Dramatic and editorial, for surfaces that want to be remembered.\ninstalled: false\nsource:    Astryx\n\nAdd it\n\nnpm install @astryxdesign/theme-gothic@0.7.12\n\nThen use its theme:\n\nnpx @astryxdesign/cli@0.7.12 theme add gothic\n\nIts package: npx @astryxdesign/cli@0.7.12 discover @astryxdesign/theme-gothic\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

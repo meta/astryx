@@ -7,6 +7,7 @@
   "brief"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nuseLayer(mode: 'context' | 'fixed', onShow?: () => void, onHide?: () => void, lightDismiss?: boolean, lazyMount?: boolean): { ref, anchorId, show, hide, isOpen, id, render }  <- from '@astryxdesign/core/Layer'\n  Core positioning hook for rendering overlay content using CSS Anchor Position...\n  Related: LayerProvider, Popover, HoverCard, Tooltip\n  mode: 'context', onShow, onHide, lightDismiss, lazyMount\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for LayerProvider, Popover, HoverCard, Tooltip\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

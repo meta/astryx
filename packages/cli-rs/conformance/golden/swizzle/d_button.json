@@ -5,6 +5,7 @@
   "Button"
  ],
  "fixture": "initdone",
+ "fixtureHash": "00b23c13e90f8a54+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Refusing to overwrite 1 existing file(s) in components/astryx/Button/. Re-run with --overwrite (or -f) to replace them.\n",
  "exit": 1,

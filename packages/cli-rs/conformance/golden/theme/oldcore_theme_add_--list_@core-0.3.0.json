@@ -6,6 +6,7 @@
   "--list"
  ],
  "fixture": "core-0.3.0",
+ "fixtureHash": "94e7e2ef7dd216e2+4e418a0c2575d9ce",
  "stdout": "Themes\n\n- butter (example, @astryxdesign/cli)\n  Warm, creamy yellows with a friendly blue accent. Playful enough for consumer surfaces, soft enough to stay readable.\n\n- chocolate (example, @astryxdesign/cli)\n  Warm chocolate theme for Astryx - rich brown palette with Fraunces headings, Albert Sans body, and Lucide icons\n\n- gothic (example, @astryxdesign/cli)\n  Deep blue-grays and a signature display serif. Dramatic and editorial, for surfaces that want to be remembered.\n\n- matcha (example, @astryxdesign/cli)\n  Earthy greens with a calm, organic feel. Naturalistic and grounded, great for wellness or content-first apps.\n\n- neutral (maintained, @astryxdesign/cli)\n  Restrained warm grays. Minimal and quiet, so the content stays the focus.\n\n- stone (example, @astryxdesign/cli)\n  Warm stone and slate, earthy and understated, with just enough character to feel handcrafted.\n\n- y2k (example, @astryxdesign/cli)\n  Hot pinks, lime greens, and Poppins. Bubbly, playful, and unmistakably retro.\n\nImport one: npx @astryxdesign/cli@0.7.12 theme add <slug> [--package <package>]\nFork source: npx @astryxdesign/cli@0.7.12 theme eject <slug> [target-path]\n\nMore themes in packages you could add: npx @astryxdesign/cli@0.7.12 discover theme\n",
  "stderr": "\nNext step: run `npm install @astryxdesign/cli@0.3.0`, then `npx astryx init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

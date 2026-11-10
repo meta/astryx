@@ -9,6 +9,7 @@
   "1.2.0"
  ],
  "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
  "stdout": "codemod contribution added\n\n[ok] rename-widget\n\nDeclare codemod root ./codemods in astryx.integration.mjs.\n\n- codemods/1.2.0/rename-widget.mjs\n- astryx.integration.mjs\n",
  "stderr": "",
  "exit": 0,

@@ -5,6 +5,7 @@
   "DropdownMenuItemBasic"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {DropdownMenu, DropdownMenuItem} from '@astryxdesign/core/DropdownMenu';\n\nexport default function DropdownMenuItemBasic() {\n  return (\n    <DropdownMenu button={{label: 'Actions'}}>\n      <DropdownMenuItem\n        label=\"Edit\"\n        description=\"Modify this item\"\n        onClick={() => {}}\n      />\n      <DropdownMenuItem\n        label=\"Duplicate\"\n        description=\"Create a copy\"\n        onClick={() => {}}\n      />\n      <DropdownMenuItem\n        label=\"Delete\"\n        description=\"This action cannot be undone\"\n        onClick={() => {}}\n      />\n    </DropdownMenu>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

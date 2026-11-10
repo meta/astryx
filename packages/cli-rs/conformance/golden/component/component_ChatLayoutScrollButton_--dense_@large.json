@@ -6,6 +6,7 @@
   "--dense"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# ChatLayoutScrollButton\n\nfloating scroll-to-bottom btn; fades in when scrolled up, expands w/ label for new msgs. Default in ChatLayout; override via scrollButton prop.\n\n**Import:** `import {ChatLayoutScrollButton} from '@astryxdesign/core/Chat';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `isVisible` | `boolean` | - | btn visibility: bind to scroll-position check **(required)** |\n| `label` | `string` | - | optional label; expands btn (e.g. \"New messages\") |\n| `onClick` | `() => void` | - | click handler **(required)** |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

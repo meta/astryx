@@ -6,6 +6,7 @@
   "themes/scheme.mjs"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "[ok] themes/scheme.css (2.1 KB, 1 token overrides, 0 component overrides)\nRun with --detail full for the install example and font recipe.\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

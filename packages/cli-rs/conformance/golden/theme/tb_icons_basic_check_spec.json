@@ -9,6 +9,7 @@
   "./icons.mjs"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "\nBuilding theme from themes/icons/basic.ts...\n",
  "stderr": "\n[fail] 1 theme output(s) are out of date with themes/icons/basic.ts:\n  stale: themes/icons/iconic.js\n\n  Rebuild with: astryx theme build themes/icons/basic.ts\n",
  "exit": 1,

@@ -6,6 +6,7 @@
   "--zh"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# SideNavHeading\n\n产品/套件/账户头部，具有智能交互边界逻辑，支持链接和菜单弹出框。\n\n**Import:** `import {SideNavHeading} from '@astryxdesign/core/SideNav';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `heading` | `string` | - | 产品/应用名称。 **(required)** |\n| `icon` | `ReactNode` | - | 产品/应用图标。 |\n| `headingHref` | `string` | - | 标题的链接。 |\n| `superheading` | `string` | - | 标题上方的文本。 |\n| `superheadingHref` | `string` | - | 上方标题的链接。 |\n| `subheading` | `string` | - | 标题下方的文本。 |\n| `subheadingHref` | `string` | - | 下方标题的链接。 |\n| `menu` | `ReactNode` | - | 在弹出框内渲染的菜单内容。 |\n| `headerEndContent` | `ReactNode` | - | 在标题行尾部渲染的内容，位于文本和箭头之间。适用于徽章、状态指示器或紧凑操作按钮。折叠时隐藏。 |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

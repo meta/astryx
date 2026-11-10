@@ -7,6 +7,7 @@
   "palette/custom-neutral.json"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "Palette candidate\n1 families, 3 stops, light, dark\n\n{\n  \"schemaVersion\": 1,\n  \"status\": \"candidate\",\n  \"recipe\": \"astryx-oklch-v1\",\n  \"black\": \"#000000\",\n  \"white\": \"#ffffff\",\n  \"stops\": [\n    0,\n    50,\n    100\n  ],\n  \"palette\": {\n    \"n\": {\n      \"name\": \"n\",\n      \"light\": {\n        \"0\": \"#000000\",\n        \"50\": \"#68798b\",\n        \"100\": \"#ffffff\"\n      },\n      \"dark\": {\n        \"0\": \"#000000\",\n        \"50\": \"#6a7988\",\n        \"100\": \"#ffffff\"\n      }\n    }\n  }\n}\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

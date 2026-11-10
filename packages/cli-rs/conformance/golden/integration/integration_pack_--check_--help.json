@@ -7,6 +7,7 @@
   "--help"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Usage: astryx integration pack [options]\n\nDeprecated: the old name of `integration verify`\n\nOptions:\n  --check     Run the check. Required, as before.\n  -h, --help  display help for command\n\nExit codes:\n  0  the packed package exposes the same valid contributions\n  1  --check is omitted or the tarball is incomplete or invalid\n\nExamples:\n  # The old spelling\n  npx @astryxdesign/cli@0.7.12 integration pack --check\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/integration-pack\n",
  "stderr": "",
  "exit": 0,

@@ -6,6 +6,7 @@
   "src/my.theme.ts"
  ],
  "fixture": "core-0.6.8",
+ "fixtureHash": "f2584fdfc38cb7d4+4e418a0c2575d9ce",
  "stdout": "[ok] Wrote src/my.theme.ts\n\nIt documents every defineTheme field, the token families, and the component override syntax. Copy what you need into your own theme file, then delete it.\n\nnpx @astryxdesign/cli@0.7.12 theme build src/my.theme.ts\n",
  "stderr": "\nNext step: run `npm install @astryxdesign/cli@0.6.8`, then `npx astryx init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

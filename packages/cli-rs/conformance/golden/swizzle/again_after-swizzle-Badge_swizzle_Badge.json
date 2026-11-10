@@ -5,6 +5,7 @@
   "Badge"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Refusing to overwrite 2 existing file(s) in components/astryx/Badge/. Re-run with --overwrite (or -f) to replace them.\n",
  "exit": 1,

@@ -5,6 +5,7 @@
   "DateTimeInputShowcase"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {DateTimeInput} from '@astryxdesign/core/DateTimeInput';\nimport type {ISODateTimeString} from '@astryxdesign/core/DateTimeInput';\nimport {Stack} from '@astryxdesign/core/Layout';\n\nexport default function DateTimeInputShowcase() {\n  const [dateTime, setDateTime] = useState<ISODateTimeString | undefined>(\n    undefined,\n  );\n\n  return (\n    <Stack\n      direction=\"vertical\"\n      width=\"100%\"\n      style={{minWidth: 240, maxWidth: 400}}>\n      <DateTimeInput\n        label=\"Meeting time\"\n        placeholder=\"Select a date\"\n        value={dateTime}\n        onChange={setDateTime}\n        hasClear\n      />\n    </Stack>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

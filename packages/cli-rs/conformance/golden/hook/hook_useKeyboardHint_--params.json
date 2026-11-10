@@ -6,6 +6,7 @@
   "--params"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `options` | `UseKeyboardHintOptions` | - | Configuration object for the keyboard hint. |\n| `options.orientation` | `'horizontal' \\| 'vertical' \\| 'both'` | `'horizontal'` | Which arrow-key axis the composite navigates, controlling which arrow icons the hint shows (← → for horizontal, ↑ ↓ for vertical, all four for both). |\n| `options.dismissAfterMs` | `number` | `3000` | Milliseconds before the hint auto-dismisses after appearing. |\n| `options.isEnabled` | `boolean` | `true` | Whether the hint is enabled. Set to false to suppress it for a specific instance (e.g. a disabled or read-only widget). |\n\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

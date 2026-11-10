@@ -504,7 +504,7 @@
     "id": "argv_integration_-",
     "args": [
       "integration",
-      "ü中文"
+      "\u00fc\u4e2d\u6587"
     ],
     "fixture": "app",
     "gen": true
@@ -2538,7 +2538,7 @@
     "args": [
       "integration",
       "add",
-      "ü中文"
+      "\u00fc\u4e2d\u6587"
     ],
     "fixture": "app",
     "gen": true
@@ -2550,7 +2550,7 @@
       "add",
       "component",
       "useClipboard",
-      "ü中文"
+      "\u00fc\u4e2d\u6587"
     ],
     "fixture": "app",
     "gen": true
@@ -3610,7 +3610,7 @@
     "args": [
       "integration",
       "check",
-      "ü中文"
+      "\u00fc\u4e2d\u6587"
     ],
     "fixture": "app",
     "gen": true
@@ -4180,7 +4180,7 @@
     "args": [
       "integration",
       "pack",
-      "ü中文"
+      "\u00fc\u4e2d\u6587"
     ],
     "fixture": "app",
     "gen": true
@@ -4611,7 +4611,7 @@
     "args": [
       "integration",
       "verify",
-      "ü中文"
+      "\u00fc\u4e2d\u6587"
     ],
     "fixture": "app",
     "gen": true

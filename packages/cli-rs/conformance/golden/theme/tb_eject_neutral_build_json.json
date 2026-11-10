@@ -7,6 +7,7 @@
   "src/theme/neutral/neutralTheme.ts"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.build\",\n  \"data\": {\n    \"name\": \"neutral\",\n    \"tokenCount\": 197,\n    \"componentCount\": 14,\n    \"sizeKB\": 27.1,\n    \"outputs\": {\n      \"css\": \"src/theme/neutral/neutral.css\",\n      \"cssDts\": \"src/theme/neutral/neutral.css.d.ts\",\n      \"js\": \"src/theme/neutral/neutral.js\",\n      \"dts\": \"src/theme/neutral/neutral.d.ts\",\n      \"variantsDts\": \"src/theme/neutral/neutral.variants.d.ts\"\n    },\n    \"warnings\": [],\n    \"notices\": [\n      \"Font \\\"Figtree\\\" is named by this theme but not loaded; add a <link> or @font-face in your app (recipe: astryx docs typography)\"\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

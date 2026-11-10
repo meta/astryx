@@ -6,6 +6,7 @@
   "checking-your-setup"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Checking Your Setup\n\nPaste this into your AI before writing any component code. If your AI can't answer these questions, it'll know to install the agent docs first.\n\nPaste this into your AI:\n```text\nBefore writing any Astryx code, check your knowledge:\n\n1. What is the correct import path for Button?\n2. How do you make a Dialog non-dismissible?\n3. What prop does Selector use for its items?\n\nIf you don't know all three, run `npx @astryxdesign/cli@0.7.12 init --features agents` to generate agent docs, then read the generated file.\n```\n\nUp: npx @astryxdesign/cli@0.7.12 docs working-with-ai --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs working-with-ai cursor-setup\nNext: npx @astryxdesign/cli@0.7.12 docs working-with-ai the-astryx-pattern\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

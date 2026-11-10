@@ -10,6 +10,7 @@
   "fam-good"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "\nBuilding theme from reg/good.mjs...\n\nBuilding theme from reg/good-child.mjs...\n[ok] reg/fam-good.css\n[ok] reg/fam-good.css.d.ts\n[ok] reg/fam-good.js\n[ok] reg/fam-good.d.ts\n\nLoad the family CSS once, then select any member by theme identity:\n  import { rGoodTheme, cGoodTheme } from './reg/fam-good';\n  import './reg/fam-good.css';\nOr load the same stylesheet natively:\n  <link rel=\"stylesheet\" href=\"./reg/fam-good.css\" />\n\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

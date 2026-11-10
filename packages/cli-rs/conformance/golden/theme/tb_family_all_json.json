@@ -13,6 +13,7 @@
   "ocean-family"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.build\",\n  \"data\": {\n    \"name\": \"ocean\",\n    \"tokenCount\": 24,\n    \"componentCount\": 12,\n    \"sizeKB\": 14.9,\n    \"outputs\": {\n      \"css\": \"fam/themes/ocean-family.css\",\n      \"cssDts\": \"fam/themes/ocean-family.css.d.ts\",\n      \"js\": \"fam/themes/ocean-family.js\",\n      \"dts\": \"fam/themes/ocean-family.d.ts\"\n    },\n    \"warnings\": [],\n    \"notices\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

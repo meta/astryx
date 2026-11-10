@@ -4,6 +4,7 @@
   "search"
  ],
  "fixture": "nocore",
+ "fixtureHash": "25d22c63d358ba36+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: missing required argument 'query'\n",
  "exit": 1,

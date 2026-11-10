@@ -7,6 +7,7 @@
   "--overwrite"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "[ok] Wrote src/my.theme.ts\n\nIt documents every defineTheme field, the token families, and the component override syntax. Copy what you need into your own theme file, then delete it.\n\nnpx @astryxdesign/cli@0.7.12 theme build src/my.theme.ts\n",
  "stderr": "",
  "exit": 0,

@@ -9,6 +9,7 @@
   "../escape.ts"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Invalid palette output path \"../escape.ts\": resolves outside the project root (/tmp/astryx-conformance/work/themes). Path traversal is not allowed.\n",
  "exit": 1,

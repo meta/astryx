@@ -1,5 +1,6 @@
 //! Small JS-semantics helpers doctor needs.
-//! TEMP: replace with src/text (component lane) when a shared version lands.
+//! (Regex and JS-value helpers with no shared equivalent; collation is
+//! discovery's.)
 
 
 pub use crate::discovery::jsort::locale_compare;

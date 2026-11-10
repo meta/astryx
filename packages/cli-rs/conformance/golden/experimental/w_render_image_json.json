@@ -7,6 +7,7 @@
   "image.tsx"
  ],
  "fixture": "renderpages",
+ "fixtureHash": "8877e3d4520e7c26+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"render.page\",\n  \"data\": {\n    \"input\": \"image.tsx\",\n    \"output\": \"image.html\",\n    \"bytes\": 20695,\n    \"files\": [\n      \"image.tsx\",\n      \"logo.png\"\n    ],\n    \"stylesheets\": [\n      \"@astryxdesign/core/reset.css\",\n      \"@astryxdesign/core/astryx.css\"\n    ],\n    \"classes\": 0,\n    \"cssBytes\": 19249,\n    \"images\": 1,\n    \"warnings\": [\n      {\n        \"code\": \"remote-asset\",\n        \"message\": \"https://example.com/x.png is loaded from the network, which a sandboxed page cannot reach; save it beside the page and import it instead.\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

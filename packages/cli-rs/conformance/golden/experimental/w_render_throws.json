@@ -8,6 +8,7 @@
   "out.html"
  ],
  "fixture": "renderpages",
+ "fixtureHash": "8877e3d4520e7c26+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: The page threw while rendering: boom here\n",
  "exit": 1,

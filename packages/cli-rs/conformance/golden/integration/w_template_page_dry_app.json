@@ -8,6 +8,7 @@
   "--dry-run"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "template contribution plan\n\n[plan] acme-dashboard\n\nDeclare template root ./templates in astryx.integration.mjs.\n\n- templates/acme-dashboard.doc.mjs\n- templates/acme-dashboard.tsx\n- astryx.integration.mjs\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -5,6 +5,7 @@
   "--cdn"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "[ok] Wrote cdn.template.html\n\nOpen it in a browser - no bundler, no install, no build step. Every CDN URL is pinned to 0.7.12, and the annotations mark the parts that are load-bearing.\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

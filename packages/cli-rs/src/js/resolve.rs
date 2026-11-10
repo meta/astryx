@@ -176,6 +176,8 @@ pub struct Profile {
     /// jiti's synchronous `jiti(file)` path: package `exports` match the
     /// require conditions first, then the import conditions.
     pub sync: bool,
+    /// Real path -> source text used in place of the file's.
+    pub overrides: Vec<(PathBuf, String)>,
 }
 
 thread_local! {

@@ -7,6 +7,7 @@
   "--json"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.build\",\n  \"data\": {\n    \"name\": \"fonts\",\n    \"tokenCount\": 3,\n    \"componentCount\": 1,\n    \"sizeKB\": 2.2,\n    \"outputs\": {\n      \"css\": \"themes/fonts.css\",\n      \"cssDts\": \"themes/fonts.css.d.ts\",\n      \"js\": \"themes/fonts.js\",\n      \"dts\": \"themes/fonts.d.ts\"\n    },\n    \"warnings\": [],\n    \"notices\": [\n      \"Font \\\"Fira Sans\\\" is named by this theme but not loaded; add a <link> or @font-face in your app (recipe: astryx docs typography)\",\n      \"Font \\\"JetBrains Mono\\\" is named by this theme but not loaded; add a <link> or @font-face in your app (recipe: astryx docs typography)\",\n      \"Font \\\"Comic Neue\\\" is named by this theme but not loaded; add a <link> or @font-face in your app (recipe: astryx docs typography)\"\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

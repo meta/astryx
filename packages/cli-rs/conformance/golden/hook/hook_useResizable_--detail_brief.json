@@ -7,6 +7,7 @@
   "brief"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nuseResizable(defaultSize?: SizeValue | ResizableSize, minSize?: ResizableSize, maxSize?: ResizableSize, containerRef?: RefObject<HTMLElement | null>, direction?: 'horizontal' | 'vertical', collapsible?: boolean, snaps?: number[], autoSaveId?: string, defaultIsCollapsed?: boolean, isCollapsed?: boolean, onCollapseChange?: (isCollapsed: boolean) => void): { size, isCollapsed, collapse, expand, resize, props }  <- from '@astryxdesign/core/Resizable'\n  Hook for adding drag-to-resize behavior to layout regions. Supports single-re...\n  Related: Resizable, AppShell, Layout, SideNav\n  defaultSize, minSize, maxSize, containerRef, direction, collapsible, snaps, autoSaveId, defaultIsCollapsed, isCollapsed, onCollapseChange\n\n\nBlock templates: npx @astryxdesign/cli@0.7.12 component <name> --blocks for Resizable, AppShell, Layout, SideNav\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

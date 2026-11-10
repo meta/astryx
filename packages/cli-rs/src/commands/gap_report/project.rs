@@ -1,5 +1,5 @@
 //! The project view, handler runner and env facts gap-report reads.
-//! TEMP: `invocation_source` until the shell ports the debug env capture.
+//! `invocation_source` is a full port of `detectInvocationSource` (foundation/debug/event.mjs); no shared copy exists in src/cli.
 
 use super::api::{GapError, GapProject, Handler, HandlerRunner, HandlerSource, Integration, RunOutcome};
 use crate::json::Value;

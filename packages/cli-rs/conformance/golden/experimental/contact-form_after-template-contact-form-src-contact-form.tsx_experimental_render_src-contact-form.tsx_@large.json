@@ -6,6 +6,7 @@
   "src/contact-form.tsx"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: The page imports @heroicons/react, which is not installed\n\n  npm install @heroicons/react  (install the package the page imports)\n",
  "exit": 1,

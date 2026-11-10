@@ -6,6 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# GridResponsiveAutoFit - Responsive grid where cards stretch to fill remaining space\n# Components: Card, Grid, Layout, ResizeHandle\n\n<Card padding={0} variant=\"muted\" height={400} width=\"100%\">\n  <Layout height=\"fill\">\n    /* start: */\n    <LayoutPanel hasDivider={false} width={gridPanel.size}>\n      <Grid gap={4} columns={{minWidth: 180, repeat: 'fit'}} width=\"100%\">\n        <Card>\n          <VStack gap={1}>\n            <Text />\n            <Text />\n          </VStack>\n        </Card>\n      </Grid>\n    </LayoutPanel>\n    <ResizeHandle hasDivider />\n    /* content: */\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

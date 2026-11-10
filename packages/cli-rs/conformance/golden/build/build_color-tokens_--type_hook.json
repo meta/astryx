@@ -7,6 +7,7 @@
   "hook"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Build kit for \"color tokens\"\n\nThis kit is narrowed by --type, so it names no template.\n\nCOMPONENTS\nFor what the template and blocks do not cover. Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        useTheme\npackage:     @astryxdesign/core\ndescription: Programmatic access to theme tokens for non-CSS consumers like SVG, canvas, Vega, D3, maps, or chart libraries that need values in JavaScript instead of CSS custom property references.\n\nname:        useImageMode\npackage:     @astryxdesign/core\ndescription: Detects whether an image is predominantly dark or light by sampling pixels via OffscreenCanvas.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n\nFEW MATCHES\nFew matches. This is keyword search, not semantic - try other wordings.\nBrowse instead:\nnpx @astryxdesign/cli@0.7.12 component --list\nnpx @astryxdesign/cli@0.7.12 template --list\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

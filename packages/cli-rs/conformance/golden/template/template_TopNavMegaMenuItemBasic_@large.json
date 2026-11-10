@@ -5,6 +5,7 @@
   "TopNavMegaMenuItemBasic"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {TopNavMegaMenuItem} from '@astryxdesign/core/TopNav';\nimport {Grid} from '@astryxdesign/core/Grid';\nimport {BoltIcon, CircleStackIcon} from '@heroicons/react/24/outline';\n\nexport default function TopNavMegaMenuItemBasic() {\n  return (\n    <Grid columns={2} gap={2}>\n      <TopNavMegaMenuItem\n        title=\"Edge Functions\"\n        description=\"Run serverless code at the network edge\"\n        icon={<BoltIcon width={20} height={20} />}\n        href=\"#edge\"\n      />\n      <TopNavMegaMenuItem\n        title=\"Storage\"\n        description=\"Object and file storage for your application\"\n        icon={<CircleStackIcon width={20} height={20} />}\n        href=\"#storage\"\n      />\n    </Grid>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

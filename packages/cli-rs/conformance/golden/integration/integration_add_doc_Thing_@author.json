@@ -7,6 +7,7 @@
   "Thing"
  ],
  "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
  "stdout": "doc contribution added\n\n[ok] Thing\n\nUse doc root ./docs in astryx.integration.mjs.\n\n- docs/Thing.doc.mjs\n",
  "stderr": "",
  "exit": 0,

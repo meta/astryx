@@ -5,6 +5,7 @@
   "cli/experimental/icon-definitions/arrow-left"
  ],
  "fixture": "icons",
+ "fixtureHash": "cfe8bdaf4aaef512+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## arrowLeft\n\nGo back to the previous page.\n\nField | Value             \n----- | ------------------\nWords | `back`, `previous`\n\nAn icon set registers the icon that draws this definition in its data file: `\"map\": {\"arrowLeft\": \"<icon id>\"}`. Find it in each installed set: `npx @astryxdesign/cli@0.7.12 experimental icon arrowLeft`.\n\nIcon definitions are experimental: they may change or be removed in a patch release.\n\nUp: npx @astryxdesign/cli@0.7.12 docs cli/experimental/icon-definitions\nPrevious: npx @astryxdesign/cli@0.7.12 docs cli/experimental/icon-definitions/arrow-down\nNext: npx @astryxdesign/cli@0.7.12 docs cli/experimental/icon-definitions/arrow-right\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -9,6 +9,7 @@
   "themes/ocean/tokens/ocean.palette.ts"
  ],
  "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Palette config not found: themes/ocean/palette.config.json\n",
  "exit": 1,

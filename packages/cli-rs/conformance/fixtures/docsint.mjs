@@ -103,6 +103,21 @@ DOCS['responsive-acme.doc.mjs'] = `export default {
 };
 `;
 
+// A topic over the one-read budget: one section too large, and so many
+// sections that its index is too large too.
+DOCS['acme-big.doc.mjs'] = `const many = Array.from({length: 170}, (_, i) => ({
+  title: 'Part ' + (i + 1),
+  content: [{type: 'prose', text: 'Part ' + (i + 1) + ': ' + 'a long summary that fills the index line. '.repeat(6)}],
+}));
+export default {
+  type: 'generic',
+  name: 'acme-big',
+  title: 'Acme big',
+  description: 'Too much to read at once.',
+  sections: [{id: 'huge', title: 'Huge', content: [{type: 'prose', text: 'word '.repeat(9000)}]}, ...many],
+};
+`;
+
 export async function makeDocsApp(dir, h, docs) {
   await h.makeApp(dir);
   await h.writeJson(path.join(dir, 'package.json'), {

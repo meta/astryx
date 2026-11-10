@@ -8,6 +8,7 @@
   "--help"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Usage: astryx experimental icon map [options] [definition] [icon]\n\n[experimental] Register which icon of your set draws an icon definition\n\nOptions:\n  --set <name>    The set to edit, when the package ships several\n  --remove        Remove the definition's entry; takes no icon\n  --pairs <list>  Many entries in one write: <definition>=<icon> pairs, comma-separated; checked together, all or none; an existing entry is replaced\n  -h, --help      display help for command\n\nExit codes:\n  0  the entry is written, removed, or already as asked\n  1  the definition is unknown, the set has no such icon, or no set is found\n\nExamples:\n  # Map a definition\n  npx @astryxdesign/cli@0.7.12 experimental icon map delete trash\n  # Map many at once\n  npx @astryxdesign/cli@0.7.12 experimental icon map --pairs close=x-mark,error=x-circle,search=magnifying-glass\n  # Remove an entry\n  npx @astryxdesign/cli@0.7.12 experimental icon map delete --remove\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/experimental-icon-map\n",
  "stderr": "",
  "exit": 0,

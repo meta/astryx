@@ -6,6 +6,7 @@
   "the-astryx-pattern"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## The astryx Pattern\n\nAI agents frequently invoke the CLI with incorrect paths (e.g. node_modules/@astryxdesign/cli/bin/docs.mjs instead of astryx.mjs), leading to silent failures. Adding an npm script alias with the correct path eliminates this entirely.\n\npackage.json:\n```json\n\"scripts\": {\n  \"astryx\": \"node node_modules/@astryxdesign/cli/clients/cli/bin/astryx.mjs\"\n}\n```\n\nWith this alias, agents run `npm run astryx -- component --list` instead of guessing the binary path. The `--` separator is standard npm convention for passing flags to scripts.\n\nReliable CLI invocation:\n```bash\nnpm run astryx -- component --list\nnpm run astryx -- component Dialog --dense\nnpm run astryx -- docs styling --full --detail brief\nnpm run astryx -- docs tokens --dense\n```\n\nUp: npx @astryxdesign/cli@0.7.12 docs working-with-ai --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs working-with-ai checking-your-setup\nNext: npx @astryxdesign/cli@0.7.12 docs working-with-ai the-dense-flag\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -6,6 +6,7 @@
   "--json"
  ],
  "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail\",\n  \"package\": \"@acme/kit\",\n  \"data\": {\n    \"type\": \"component\",\n    \"name\": \"AcmeBadge\",\n    \"category\": \"Data Display\",\n    \"usage\": {\n      \"description\": \"A small zorblax status badge.\"\n    },\n    \"props\": [\n      {\n        \"name\": \"count\",\n        \"type\": \"number\",\n        \"description\": \"How many.\"\n      }\n    ],\n    \"package\": \"@acme/kit\",\n    \"import\": \"@acme/kit\",\n    \"sourceAvailable\": true\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

@@ -11,6 +11,7 @@
   "@acme/nope"
  ],
  "fixture": "gapreport",
+ "fixtureHash": "8ac8fa7f5cb78280+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: No gap-report destination \"@acme/nope\". Choose one of: @acme/hooks, @acme/broken; or leave out --to for the default.\n\n  @acme/hooks  (https://example.com/hooks/issues)\n  @acme/broken  (https://github.com/acme/broken/issues)\n",
  "exit": 1,

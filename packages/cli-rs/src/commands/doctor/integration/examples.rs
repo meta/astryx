@@ -1,7 +1,7 @@
 //! `componentExamplesCheck` (`validate-contributions.mjs`): the notes a
 //! package's examples need to work everywhere they are shown.
-//! TEMP: what `npm pack --dry-run` packs is not asked (the clone runs no JS
-//! program); an asset whose packing depends on it is listed as not checked.
+//! What `npm pack --dry-run` packs is read with npm-packlist's rules
+//! (packlist.rs), since the clone runs no JS program.
 
 use crate::commands::template::discovery::Template;
 use crate::discovery::component_discovery as cd;
@@ -159,6 +159,173 @@ fn read_module(source: &str, builtins: &[&str]) -> (Vec<String>, Vec<String>) {
     (v.found, v.assets)
 }
 
+fn expand_braces(pattern: &str) -> Vec<String> {
+    let c: Vec<char> = pattern.chars().collect();
+    let mut depth = 0;
+    let mut open = 0usize;
+    let mut i = 0;
+    while i < c.len() {
+        let ch = c[i];
+        if ch == '\\' {
+            i += 1;
+        } else if ch == '{' {
+            if depth == 0 {
+                open = i;
+            }
+            depth += 1;
+        } else if ch == '}' && depth > 0 {
+            depth -= 1;
+            if depth == 0 {
+                let body: Vec<char> = c[open + 1..i].to_vec();
+                let mut parts: Vec<String> = Vec::new();
+                let mut level = 0;
+                let mut from = 0;
+                for (j, b) in body.iter().enumerate() {
+                    if *b == '{' {
+                        level += 1;
+                    } else if *b == '}' {
+                        level -= 1;
+                    } else if *b == ',' && level == 0 {
+                        parts.push(body[from..j].iter().collect());
+                        from = j + 1;
+                    }
+                }
+                parts.push(body[from..].iter().collect());
+                if parts.len() < 2 {
+                    i += 1;
+                    continue;
+                }
+                let head: String = c[..open].iter().collect();
+                let tail: String = c[i + 1..].iter().collect();
+                return parts.iter().flat_map(|p| expand_braces(&format!("{head}{p}{tail}"))).collect();
+            }
+        }
+        i += 1;
+    }
+    vec![pattern.to_string()]
+}
+
+fn glob_source(pattern: &str) -> String {
+    let c: Vec<char> = pattern.chars().collect();
+    let esc = |ch: char, set: &str| if set.contains(ch) { format!("\\{ch}") } else { ch.to_string() };
+    let mut out = String::new();
+    let mut i = 0;
+    while i < c.len() {
+        let ch = c[i];
+        if ch == '*' {
+            if c.get(i + 1) == Some(&'*') {
+                let slash_after = c.get(i + 2) == Some(&'/');
+                let at_start = i == 0 || c[i - 1] == '/';
+                if at_start && slash_after {
+                    out.push_str("(?:.*/)?");
+                    i += 2;
+                } else if at_start && i + 2 == c.len() {
+                    if out.ends_with('/') {
+                        out.pop();
+                    }
+                    out.push_str("(?:/.*)?");
+                    i += 1;
+                } else {
+                    out.push_str(".*");
+                    i += 1;
+                }
+            } else {
+                out.push_str("[^/]*");
+            }
+        } else if ch == '?' {
+            out.push_str("[^/]");
+        } else if ch == '[' {
+            let close = c.iter().skip(i + 2).position(|x| *x == ']').map(|p| p + i + 2);
+            match close {
+                None => out.push_str("\\["),
+                Some(close) => {
+                    let mut body: String = c[i + 1..close].iter().collect();
+                    let negated = body.starts_with('!') || body.starts_with('^');
+                    if negated {
+                        body.remove(0);
+                    }
+                    let body: String = body.chars().map(|b| esc(b, "\\]")).collect();
+                    out.push_str(&format!("[{}{body}]", if negated { "^" } else { "" }));
+                    i = close;
+                }
+            }
+        } else if ch == '\\' && i + 1 < c.len() {
+            i += 1;
+            out.push_str(&esc(c[i], ".+^${}()|[]\\*?/"));
+        } else {
+            out.push_str(&esc(ch, ".+^${}()|[]\\"));
+        }
+        i += 1;
+    }
+    out
+}
+
+fn entry_hits(rel: &str, spelling_src: &str, by_path: bool) -> bool {
+    let parts: Vec<&str> = rel.split('/').collect();
+    let Ok(re) = regress::Regex::with_flags(&format!("^{}$", glob_source(spelling_src)), "iu") else { return false };
+    if by_path {
+        (0..parts.len()).any(|i| re.find(&parts[..=i].join("/")).is_some())
+    } else {
+        parts.iter().any(|n| re.find(n).is_some())
+    }
+}
+
+fn trim_entry(e: &str) -> String {
+    let e = e.strip_prefix("./").or_else(|| e.strip_prefix('/')).unwrap_or(e);
+    let e = e.trim_end_matches('/');
+    match e.strip_suffix("/*") {
+        Some(b) => format!("{b}/**"),
+        None => e.to_string(),
+    }
+}
+
+/// `outsideFiles(rel, files)`.
+fn outside_files(rel: &str, files: Option<&[String]>) -> bool {
+    let Some(files) = files else { return false };
+    !files.iter().any(|entry| {
+        if entry.starts_with('!') {
+            return false;
+        }
+        let trimmed = trim_entry(entry);
+        let slashed = entry.starts_with("./") || entry.starts_with('/');
+        expand_braces(&trimmed).iter().any(|sp| entry_hits(rel, sp, sp.contains('/') || slashed))
+    })
+}
+
+/// `negatedFilesEntry(rel, files)`.
+fn negated_files_entry(rel: &str, files: Option<&[String]>) -> Option<String> {
+    let files = files?;
+    for entry in files {
+        let Some(body) = entry.strip_prefix('!') else { continue };
+        let trimmed = trim_entry(body);
+        let slashed = body.starts_with("./") || body.starts_with('/');
+        if expand_braces(&trimmed).iter().any(|sp| entry_hits(rel, sp, sp.contains('/') || slashed)) {
+            return Some(entry.clone());
+        }
+    }
+    None
+}
+
+/// `ignoreFix(base, template, asset, nestedOnly)`.
+fn ignore_fix(base: &str, template: &str, asset: &str, nested_only: bool) -> String {
+    let files: Vec<String> = ignore_files_for(base, asset).into_iter().filter(|f| !nested_only || f.contains('/')).collect();
+    for file in files.iter().rev() {
+        let folder = np::dirname(file);
+        let within = if folder == "." { asset.to_string() } else { asset[folder.len() + 1..].to_string() };
+        let Ok(text) = std::fs::read(np::join2(base, file)) else { continue };
+        let text = String::from_utf8_lossy(&text).into_owned();
+        let line = text.split('\n').map(|l| l.strip_suffix('\r').unwrap_or(l)).find(|e| {
+            let t = e.trim();
+            !t.is_empty() && !t.starts_with('#') && !t.starts_with('!') && !outside_files(&within, Some(&[t.to_string()]))
+        });
+        if let Some(line) = line {
+            return format!("{template}: loads {asset}, which npm leaves out of the package because {file} drops it, so the template breaks once installed. Fix: remove or narrow the line `{}` in {file}, and confirm with `npm pack --dry-run`.", line.trim());
+        }
+    }
+    let file = files.last().cloned().unwrap_or_else(|| ".npmignore".into());
+    format!("{template}: loads {asset}, which npm leaves out of the package because an ignore file drops it, so the template breaks once installed. Fix: remove the line in {file} (or another ignore file on its path) that matches {asset}, and confirm with `npm pack --dry-run`.")
+}
+
 fn ignore_files_for(base: &str, rel: &str) -> Vec<String> {
     let folders: Vec<&str> = rel.split('/').collect();
     let folders = &folders[..folders.len().saturating_sub(1)];
@@ -276,27 +443,35 @@ pub fn component_examples_check(integration: &Value) -> ExampleReport {
                 if !matches!(packed_files, Some(Value::Array(_))) && ignore_files_for(&base, &asset_rel).is_empty() {
                     continue;
                 }
-                // TEMP: npm's packed list is not asked.
-                unchecked.push({
-                    let mut m = Map::new();
-                    m.insert("file".into(), Value::String(rel(&t.file_path)));
-                    m.insert("asset".into(), Value::String(asset_rel.clone()));
-                    m.insert(
-                        "reason".into(),
-                        Value::String(if matches!(packed_files, Some(Value::Array(_))) {
-                            "npm was not found, and a `files` entry may reach it".into()
-                        } else {
-                            format!("npm was not found, and {} may drop it", ignore_files_for(&base, &asset_rel).last().cloned().unwrap_or_else(|| ".npmignore".into()))
-                        }),
-                    );
-                    Value::Object(m)
-                });
-                continue;
+                let files: Option<Vec<String>> = match &packed_files {
+                    Some(Value::Array(a)) => Some(a.iter().map(crate::cli::format::js_string).collect()),
+                    _ => None,
+                };
+                let is_folder = np::is_dir(&asset);
+                if super::packlist::npm_packs(&base, &asset_rel, is_folder, files.as_deref()) {
+                    continue;
+                }
             }
-            notes.push(note(
-                "template_asset_not_packed",
-                format!("{}: loads {asset_rel}, which does not exist. Fix: add the file, or point `new URL()` at one that does.", rel(&t.file_path)),
-            ));
+            let files_arr: Option<Vec<String>> = match &packed_files {
+                Some(Value::Array(a)) => Some(a.iter().filter_map(|v| v.as_str().map(String::from)).collect()),
+                _ => None,
+            };
+            let has_files = matches!(packed_files, Some(Value::Array(_)));
+            let folder = if np::dirname(&asset_rel) == "." { asset_rel.clone() } else { np::dirname(&asset_rel) };
+            let negated = negated_files_entry(&asset_rel, files_arr.as_deref());
+            let outside = outside_files(&asset_rel, files_arr.as_deref());
+            let tf = rel(&t.file_path);
+            let message = if !exists {
+                format!("{tf}: loads {asset_rel}, which does not exist. Fix: add the file, or point `new URL()` at one that does.")
+            } else if negated.is_some() && !outside {
+                let n = negated.unwrap();
+                format!("{tf}: loads {asset_rel}, which the `files` entry \"{n}\" leaves out of the package, so the template breaks once installed. Fix: drop or narrow \"{n}\" so it no longer matches {asset_rel}, and confirm with `npm pack --dry-run`.")
+            } else if has_files && (outside || !ignore_files_for(&base, &asset_rel).iter().any(|f| f.contains('/'))) {
+                format!("{tf}: loads {asset_rel}, which npm leaves out of the package by its `files` field, so the template breaks once installed. Fix: add \"{folder}\" to `files`, drop any `!` entry that excludes it, and confirm with `npm pack --dry-run`.")
+            } else {
+                ignore_fix(&base, &tf, &asset_rel, has_files)
+            };
+            notes.push(note("template_asset_not_packed", message));
         }
     }
     let Some(components) = s("components") else { return ExampleReport { notes, unchecked } };

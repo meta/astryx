@@ -6,6 +6,7 @@
   "themes/dropped.mjs"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "[ok] themes/dropped.css (2 KB, 1 token overrides, 1 component overrides)\nRun with --detail full for the install example and font recipe.\n",
  "stderr": "  [warn] themes/dropped.mjs: Declaration dropped \"color\" in components.button[\"base\"]: an unquoted \";\" would end the declaration (value: \"red; background: blue\"). The generated CSS omits it; fix the value in the theme source.\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

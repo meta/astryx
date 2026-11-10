@@ -1,7 +1,7 @@
 //! `integrationPackCheck` (`api/integration/pack-check.mjs`): check the
 //! package the way npm will publish it.
 
-use super::add_helpers::normalize;
+use super::add_helpers::{normalize, relative};
 use super::jsjson;
 use crate::json::{Map, Value};
 use std::path::Path;
@@ -304,13 +304,174 @@ fn full_check(dir: &Path, pkg: &Value, name: String, mut issues: Vec<Value>, loa
                 issues.push(issue(&code, &sev, message));
             }
             let pm = Value::Object(packed_loaded.clone());
+            issues.extend(packed_theme_exports(loaded, packed_loaded, &scratch));
             issues.extend(packed_component_exports(&extract, &pm, &name, &scratch));
+            issues.extend(packed_template_exports(packed_loaded, &name, &scratch));
             packed_ids = Some(packed.to_json());
         }
     }
     package_relative(&mut issues[issues_before..], &extract, &scratch);
     let _ = std::fs::remove_dir_all(&scratch);
     build_receipt(name, version, &manifest_rel, &roots, &all_files, Some(&pack), Some(&local.to_json()), packed_ids.as_ref(), issues)
+}
+
+/// `import.meta.resolve(specifier)` from the scratch consumer, as Node 22
+/// answers it: a file target is not checked for existence (only a legacy
+/// `main`, or a package that is missing, fails).
+fn consumer_resolve(spec: &str, scratch: &Path) -> Result<std::path::PathBuf, String> {
+    let from = scratch.join(".astryx-resolve-imports.mjs");
+    match crate::js::resolve::resolve(spec, &from, crate::js::resolve::Mode::Esm) {
+        Ok(crate::js::resolve::Resolved::File(p)) => Ok(p),
+        Ok(_) => Err(format!("Cannot resolve {spec}")),
+        Err(e) => {
+            for prefix in ["Cannot find module '", "Directory import '"] {
+                if let Some(rest) = e.message.strip_prefix(prefix) {
+                    if let Some(end) = rest.find('\'') {
+                        return Ok(std::path::PathBuf::from(&rest[..end]));
+                    }
+                }
+            }
+            Err(e.message)
+        }
+    }
+}
+
+fn ts_extension_issues(entries: &[(String, String)]) -> Vec<Value> {
+    entries
+        .iter()
+        .filter(|(_, s)| s.ends_with(".ts") || s.ends_with(".tsx"))
+        .map(|(label, s)| {
+            issue(
+                "typescript_extension_in_specifier",
+                "error",
+                format!("{label} advertises import \"{s}\", which ends in a TypeScript extension. A consumer with default moduleResolution will reject it (TS5097). Use an extensionless specifier mapped through the package exports."),
+            )
+        })
+        .collect()
+}
+
+fn fmt_cmd(cmd: &str, dir: &str) -> String {
+    crate::cli::env::format_cli_command_at(Path::new(dir), cmd)
+}
+
+/// `validatePackedThemeExports`. TEMP: the comparison with a fresh rebuild
+/// (stale built output) needs theme build's write-root option and is not
+/// done; every other finding is.
+fn packed_theme_exports(local_int: &crate::discovery::integrations::Record, packed_int: &crate::discovery::integrations::Record, scratch: &Path) -> Vec<Value> {
+    use crate::commands::theme::{discovery as td, imports};
+    let mut issues = Vec::new();
+    let local_themes = match td::discover_integration_themes(local_int) {
+        Ok(t) => t,
+        Err(e) => return vec![issue("theme_discovery_failed", "error", format!("Local themes could not be validated: {e}"))],
+    };
+    let packed_themes = match td::discover_integration_themes(packed_int) {
+        Ok(t) => t,
+        Err(e) => return vec![issue("packed_theme_discovery_failed", "error", format!("Packed themes could not be validated: {e}"))],
+    };
+    let pkg_dir = local_int.get("__packageDir").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let read_pkg = |r: &crate::discovery::integrations::Record| -> Value {
+        let d = r.get("__packageDir").and_then(|v| v.as_str()).unwrap_or("");
+        std::fs::read_to_string(Path::new(d).join("package.json")).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_else(|| serde_json::json!({"name": r.get("name").cloned().unwrap_or(Value::Null)}))
+    };
+    let local_pkg = read_pkg(local_int);
+    let packed_pkg = read_pkg(packed_int);
+    let packed_dir = packed_int.get("__packageDir").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    for lt in &local_themes {
+        let Some(pt) = packed_themes.iter().find(|t| t.slug == lt.slug) else { continue };
+        let source = Path::new(&lt.source_dir).join(&lt.entry);
+        let packed_source = Path::new(&pt.source_dir).join(&pt.entry);
+        let src_rel = relative(Path::new(&pkg_dir), &source);
+        if std::fs::read(&source).ok() != std::fs::read(&packed_source).ok() {
+            issues.push(issue("packed_theme_source_changed", "error", format!("Theme \"{}\" source changed during packing. Keep {src_rel} unchanged in the tarball.", lt.slug)));
+        }
+        // declaredThemeBuildOutputs
+        let declared: Vec<(&str, String, imports::ExportInfo)> = if local_pkg.get("exports").is_none() {
+            Vec::new()
+        } else {
+            let mut groups = vec![vec![
+                ("module", format!("./themes/{}", lt.slug)),
+                ("stylesheet", format!("./themes/{}.css", lt.slug)),
+                ("font stylesheet", format!("./themes/{}.fonts.css", lt.slug)),
+            ]];
+            if local_themes.len() == 1 {
+                groups.push(vec![("module", "./built".into()), ("stylesheet", "./theme.css".into()), ("font stylesheet", "./fonts.css".into())]);
+            }
+            let declared_groups: Vec<Vec<(&str, String, imports::ExportInfo)>> = groups
+                .into_iter()
+                .map(|g| g.into_iter().map(|(k, sp)| { let i = imports::inspect_export(&local_pkg, &pkg_dir, &sp); (k, sp, i) }).filter(|(_, _, i)| i.exported).collect())
+                .collect();
+            let complete = declared_groups.iter().position(|g| g.iter().any(|o| o.0 == "module") && g.iter().any(|o| o.0 == "stylesheet"));
+            let pick = complete.or_else(|| declared_groups.iter().position(|g| !g.is_empty()));
+            match pick {
+                Some(i) => declared_groups.into_iter().nth(i).unwrap(),
+                None => Vec::new(),
+            }
+        };
+        if declared.is_empty() {
+            issues.push(issue(
+                "theme_exports_missing",
+                "warning",
+                format!(
+                    "Theme \"{s}\" has no declared built exports. The package remains source-compatible. To make it importable, run `{}` and export \"./themes/{s}\" plus \"./themes/{s}.css\" from package.json; `{}` creates those exports for a new theme.",
+                    fmt_cmd(&format!("theme build {src_rel}"), &pkg_dir),
+                    fmt_cmd(&format!("integration add theme {}", lt.slug), &pkg_dir),
+                    s = lt.slug
+                ),
+            ));
+            continue;
+        }
+        if !declared.iter().any(|o| o.0 == "module") || !declared.iter().any(|o| o.0 == "stylesheet") {
+            issues.push(issue(
+                "theme_exports_incomplete",
+                "warning",
+                format!(
+                    "Theme \"{}\" exports {} without a complete built module and stylesheet pair. Missing partner exports alone do not block packing; add the matching export when the theme should be importable. Every declared export must resolve. Staleness is a warning until the complete importable pair is declared.",
+                    lt.slug,
+                    declared.iter().map(|o| o.2.specifier.clone()).collect::<Vec<_>>().join(", ")
+                ),
+            ));
+            for (kind, sp, info) in &declared {
+                let packed = imports::inspect_export(&packed_pkg, &packed_dir, sp);
+                if info.target.is_none() || !packed.exported || packed.target.is_none() {
+                    issues.push(issue(
+                        "theme_import_unresolvable",
+                        "error",
+                        format!("Theme \"{}\" declares {}, but that {kind} does not resolve from both the source package and packed tarball.", lt.slug, info.specifier),
+                    ));
+                }
+            }
+            continue;
+        }
+        let local_imports = imports::resolve(lt, &pkg_dir, local_themes.len());
+        let packed_imports = local_imports.as_ref().ok().map(|_| imports::resolve(pt, &scratch.to_string_lossy(), packed_themes.len()));
+        let (li, pi) = match (local_imports, packed_imports) {
+            (Err(e), _) | (Ok(_), Some(Err(e))) => {
+                issues.push(issue("theme_import_unresolvable", "error", format!("{e} Run `{}` before packing.", fmt_cmd(&format!("theme build {src_rel}"), &pkg_dir))));
+                continue;
+            }
+            (Ok(l), Some(Ok(p))) => (l, p),
+            _ => continue,
+        };
+        for (kind, l, p, code) in [
+            ("module", li.module_file.clone(), pi.module_file.clone(), "packed_theme_module_changed"),
+            ("stylesheet", li.stylesheet_file.clone(), pi.stylesheet_file.clone(), "packed_theme_stylesheet_changed"),
+        ] {
+            let lb = l.and_then(|f| std::fs::read(f).ok());
+            let pb = p.and_then(|f| std::fs::read(f).ok());
+            if lb != pb {
+                issues.push(issue(code, "error", format!("Theme \"{}\" {kind} changed during packing. Keep the built output unchanged in the tarball.", lt.slug)));
+            }
+        }
+        let fonts_differ = li.font_stylesheet != pi.font_stylesheet
+            || match (&li.font_stylesheet_file, &pi.font_stylesheet_file) {
+                (Some(a), Some(b)) => std::fs::read(a).ok() != std::fs::read(b).ok(),
+                _ => false,
+            };
+        if fonts_differ {
+            issues.push(issue("packed_theme_font_stylesheet_changed", "error", format!("Theme \"{}\" font stylesheet changed during packing. Keep its export and bytes unchanged in the tarball.", lt.slug)));
+        }
+    }
+    issues
 }
 
 /// `validatePackedComponentExports`: each packed component's advertised
@@ -321,7 +482,7 @@ fn packed_component_exports(pkg_dir: &Path, manifest: &Value, name: &str, scratc
     let root = super::add_helpers::resolve(pkg_dir, r);
     let mut docs = Vec::new();
     walk(&root, &|n| doc_ext(n).is_some(), &mut docs);
-    let from = scratch.join(".astryx-resolve-imports.mjs");
+    let mut components: Vec<(String, String)> = Vec::new();
     for d in docs {
         let Some(v) = super::manifest_load::load_default(&d) else { continue };
         let Some(cname) = v.get("name").and_then(|t| t.as_str()) else { continue };
@@ -332,13 +493,56 @@ fn packed_component_exports(pkg_dir: &Path, manifest: &Value, name: &str, scratc
             package_name: name.to_string(),
         };
         let spec = crate::discovery::component_discovery::resolve_integration_import_path(&owner, cname, v.get("import").and_then(|i| i.as_str()));
-        match crate::js::resolve::resolve(&spec, &from, crate::js::resolve::Mode::Esm) {
+        components.push((cname.to_string(), spec));
+    }
+    issues.extend(ts_extension_issues(&components.iter().map(|(n, s)| (format!("Component \"{n}\""), s.clone())).collect::<Vec<_>>()));
+    for (cname, spec) in &components {
+        match consumer_resolve(spec, scratch) {
             Err(e) => issues.push(issue(
                 "component_import_unresolvable",
                 "error",
-                format!("Component \"{cname}\" advertises import \"{spec}\", but a consumer cannot resolve it: {}", e.message),
+                format!("Component \"{cname}\" advertises import \"{spec}\", but a consumer cannot resolve it: {e}"),
             )),
-            Ok(_) => {}
+            Ok(target) => {
+                if !crate::discovery::module_exports::module_exports_name(&target, cname) {
+                    issues.push(issue(
+                        "component_export_missing",
+                        "error",
+                        format!("Component \"{cname}\" advertises import \"{spec}\", but that packed module does not export \"{cname}\". Add or correct the package export before publishing."),
+                    ));
+                }
+            }
+        }
+    }
+    issues
+}
+
+/// `validatePackedTemplateExports`: each packed template's public import
+/// must resolve and have a default export.
+fn packed_template_exports(loaded: &crate::discovery::integrations::Record, name: &str, scratch: &Path) -> Vec<Value> {
+    let pkg_dir = loaded.get("__packageDir").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let (templates, _) = crate::commands::template::integration::for_one(loaded);
+    let entries: Vec<(String, String)> = templates
+        .iter()
+        .map(|t| {
+            let rel = relative(Path::new(&pkg_dir), Path::new(&t.file_path));
+            let ext = rel.strip_suffix(".tsx").or_else(|| rel.strip_suffix(".ts")).unwrap_or(&rel).to_string();
+            (t.dir_name.clone(), format!("{name}/{ext}"))
+        })
+        .collect();
+    let mut issues = ts_extension_issues(&entries.iter().map(|(id, s)| (format!("Template \"{id}\""), s.clone())).collect::<Vec<_>>());
+    for (id, spec) in &entries {
+        match consumer_resolve(spec, scratch) {
+            Err(e) => issues.push(issue(
+                "template_import_unresolvable",
+                "error",
+                format!("Template \"{id}\" source is packed but its public import \"{spec}\" cannot be resolved: {e}"),
+            )),
+            Ok(target) => {
+                if !crate::discovery::module_exports::module_exports_name(&target, "default") {
+                    issues.push(issue("template_export_missing", "error", format!("Template \"{id}\" public import \"{spec}\" does not have a default export.")));
+                }
+            }
         }
     }
     issues

@@ -7,6 +7,7 @@
   "hook"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Unknown --type \"hook\"\n\n  component  (item kind)\n  template  (item kind)\n  doc  (item kind)\n  theme  (item kind)\n  codemod  (item kind)\n  agent-doc  (item kind)\n",
  "exit": 1,

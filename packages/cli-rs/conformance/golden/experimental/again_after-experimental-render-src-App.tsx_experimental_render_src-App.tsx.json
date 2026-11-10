@@ -6,6 +6,7 @@
   "src/App.tsx"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Rendered src/App.tsx\n\ninput:       src/App.tsx\noutput:      src/App.html\nbytes:       33.5 KB\ncssBytes:    31.6 KB\nclasses:     104\nimages:      0\nfiles:       App.tsx\nstylesheets: @astryxdesign/core/reset.css, @astryxdesign/core/astryx.css\n\nGive it back: npx @astryxdesign/cli@0.7.12 experimental render --reverse src/App.html\n",
  "stderr": "",
  "exit": 0,

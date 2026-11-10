@@ -10,6 +10,7 @@
   "fam-star"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "\nBuilding theme from reg/star.mjs...\n\nBuilding theme from reg/star-child.mjs...\n[ok] reg/fam-star.css\n[ok] reg/fam-star.css.d.ts\n[ok] reg/fam-star.js\n[ok] reg/fam-star.d.ts\n\nLoad the family CSS once, then select any member by theme identity:\n  import { rStarTheme, cStarTheme } from './reg/fam-star';\n  import './reg/fam-star.css';\nOr load the same stylesheet natively:\n  <link rel=\"stylesheet\" href=\"./reg/fam-star.css\" />\n\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

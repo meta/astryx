@@ -41,15 +41,18 @@ fn s(v: &str) -> Value {
 fn empty(status: &str, extra: Vec<(&str, Value)>) -> Value {
     let mut m = Map::new();
     m.insert("status".into(), s(status));
+    let mut unchecked = Value::Array(vec![]);
     for (k, v) in extra {
-        m.insert(k.into(), v);
+        if k == "unchecked" {
+            unchecked = v;
+        } else {
+            m.insert(k.into(), v);
+        }
     }
     m.insert("components".into(), Value::from(0));
     m.insert("typesCompared".into(), Value::from(0));
     m.insert("findings".into(), Value::Array(vec![]));
-    if !m.contains_key("unchecked") {
-        m.insert("unchecked".into(), Value::Array(vec![]));
-    }
+    m.insert("unchecked".into(), unchecked);
     m.insert("typesNotCompared".into(), Value::Array(vec![]));
     Value::Object(m)
 }

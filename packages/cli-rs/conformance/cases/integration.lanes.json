@@ -1,0 +1,638 @@
+[
+  {
+    "id": "w2_verify_after_component_author",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "author",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "component",
+        "Fancy"
+      ]
+    ]
+  },
+  {
+    "id": "w2_verify_after_template_author",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "author",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "template",
+        "my-page"
+      ]
+    ]
+  },
+  {
+    "id": "w2_verify_after_block_author",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "author",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "template",
+        "my-card",
+        "--type",
+        "block"
+      ]
+    ]
+  },
+  {
+    "id": "w2_verify_after_doc_author",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "author",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "doc",
+        "guide"
+      ]
+    ]
+  },
+  {
+    "id": "w2_verify_after_parent_doc_author",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "author",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "doc",
+        "releasing",
+        "--parent",
+        "acme"
+      ]
+    ]
+  },
+  {
+    "id": "w2_verify_after_codemod_author",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "author",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "codemod",
+        "rename-widget",
+        "--to",
+        "1.0.0"
+      ]
+    ]
+  },
+  {
+    "id": "w2_verify_after_agentdoc_author",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "author",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "agent-doc",
+        "Run acme verify."
+      ]
+    ]
+  },
+  {
+    "id": "w2_verify_after_theme_author_json",
+    "args": [
+      "integration",
+      "verify",
+      "--json"
+    ],
+    "fixture": "author",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "theme",
+        "ocean"
+      ]
+    ]
+  },
+  {
+    "id": "w2_verify_after_theme_fork_author",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "author",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "theme",
+        "ocean",
+        "--from",
+        "neutral"
+      ]
+    ]
+  },
+  {
+    "id": "w2_check_after_component_author",
+    "args": [
+      "integration",
+      "check"
+    ],
+    "fixture": "author",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "component",
+        "Fancy"
+      ]
+    ]
+  },
+  {
+    "id": "w2_check_after_template_author_json",
+    "args": [
+      "integration",
+      "check",
+      "--json"
+    ],
+    "fixture": "author",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "template",
+        "my-page"
+      ]
+    ]
+  },
+  {
+    "id": "w2_check_after_doc_author_strict",
+    "args": [
+      "integration",
+      "check",
+      "--strict"
+    ],
+    "fixture": "author",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "doc",
+        "guide"
+      ]
+    ]
+  },
+  {
+    "id": "w2_add_twice_component_author",
+    "args": [
+      "integration",
+      "add",
+      "component",
+      "Fancy"
+    ],
+    "fixture": "author",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "component",
+        "Fancy"
+      ]
+    ]
+  },
+  {
+    "id": "w2_add_agentdoc_twice_author",
+    "args": [
+      "integration",
+      "add",
+      "agent-doc",
+      "Run acme verify.",
+      "--json"
+    ],
+    "fixture": "author",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "agent-doc",
+        "Run acme verify."
+      ]
+    ]
+  },
+  {
+    "id": "w2_add_agentdoc_two_author",
+    "args": [
+      "integration",
+      "add",
+      "agent-doc",
+      "Second line."
+    ],
+    "fixture": "author",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "agent-doc",
+        "First line."
+      ]
+    ]
+  },
+  {
+    "id": "w2_add_doc_then_parent_author",
+    "args": [
+      "integration",
+      "add",
+      "doc",
+      "deploying",
+      "--parent",
+      "acme",
+      "--json"
+    ],
+    "fixture": "author",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "doc",
+        "releasing",
+        "--parent",
+        "acme"
+      ]
+    ]
+  },
+  {
+    "id": "w2_add_theme_twice_author",
+    "args": [
+      "integration",
+      "add",
+      "theme",
+      "ocean"
+    ],
+    "fixture": "author",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "theme",
+        "ocean"
+      ]
+    ]
+  },
+  {
+    "id": "w2_add_template_after_component_author",
+    "args": [
+      "integration",
+      "add",
+      "template",
+      "fancy-page",
+      "--json"
+    ],
+    "fixture": "author",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "component",
+        "Fancy"
+      ]
+    ]
+  },
+  {
+    "id": "w2_verify_after_component_app",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "component",
+        "Fancy"
+      ]
+    ]
+  },
+  {
+    "id": "w2_verify_after_template_app",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "template",
+        "my-page"
+      ]
+    ]
+  },
+  {
+    "id": "w2_verify_after_block_app",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "template",
+        "my-card",
+        "--type",
+        "block"
+      ]
+    ]
+  },
+  {
+    "id": "w2_verify_after_doc_app",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "doc",
+        "guide"
+      ]
+    ]
+  },
+  {
+    "id": "w2_verify_after_parent_doc_app",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "doc",
+        "releasing",
+        "--parent",
+        "acme"
+      ]
+    ]
+  },
+  {
+    "id": "w2_verify_after_codemod_app",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "codemod",
+        "rename-widget",
+        "--to",
+        "1.0.0"
+      ]
+    ]
+  },
+  {
+    "id": "w2_verify_after_agentdoc_app",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "agent-doc",
+        "Run acme verify."
+      ]
+    ]
+  },
+  {
+    "id": "w2_verify_after_theme_app_json",
+    "args": [
+      "integration",
+      "verify",
+      "--json"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "theme",
+        "ocean"
+      ]
+    ]
+  },
+  {
+    "id": "w2_verify_after_theme_fork_app",
+    "args": [
+      "integration",
+      "verify"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "theme",
+        "ocean",
+        "--from",
+        "neutral"
+      ]
+    ]
+  },
+  {
+    "id": "w2_check_after_component_app",
+    "args": [
+      "integration",
+      "check"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "component",
+        "Fancy"
+      ]
+    ]
+  },
+  {
+    "id": "w2_check_after_template_app_json",
+    "args": [
+      "integration",
+      "check",
+      "--json"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "template",
+        "my-page"
+      ]
+    ]
+  },
+  {
+    "id": "w2_check_after_doc_app_strict",
+    "args": [
+      "integration",
+      "check",
+      "--strict"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "doc",
+        "guide"
+      ]
+    ]
+  },
+  {
+    "id": "w2_add_twice_component_app",
+    "args": [
+      "integration",
+      "add",
+      "component",
+      "Fancy"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "component",
+        "Fancy"
+      ]
+    ]
+  },
+  {
+    "id": "w2_add_agentdoc_twice_app",
+    "args": [
+      "integration",
+      "add",
+      "agent-doc",
+      "Run acme verify.",
+      "--json"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "agent-doc",
+        "Run acme verify."
+      ]
+    ]
+  },
+  {
+    "id": "w2_add_agentdoc_two_app",
+    "args": [
+      "integration",
+      "add",
+      "agent-doc",
+      "Second line."
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "agent-doc",
+        "First line."
+      ]
+    ]
+  },
+  {
+    "id": "w2_add_doc_then_parent_app",
+    "args": [
+      "integration",
+      "add",
+      "doc",
+      "deploying",
+      "--parent",
+      "acme",
+      "--json"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "doc",
+        "releasing",
+        "--parent",
+        "acme"
+      ]
+    ]
+  },
+  {
+    "id": "w2_add_theme_twice_app",
+    "args": [
+      "integration",
+      "add",
+      "theme",
+      "ocean"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "theme",
+        "ocean"
+      ]
+    ]
+  },
+  {
+    "id": "w2_add_template_after_component_app",
+    "args": [
+      "integration",
+      "add",
+      "template",
+      "fancy-page",
+      "--json"
+    ],
+    "fixture": "app",
+    "pre": [
+      [
+        "integration",
+        "add",
+        "component",
+        "Fancy"
+      ]
+    ]
+  }
+]

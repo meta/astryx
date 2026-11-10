@@ -6,6 +6,7 @@
   "themes/axes.mjs"
  ],
  "fixture": "themes-core-0.6.8",
+ "fixtureHash": "d1fcda65c75a9577+4e418a0c2575d9ce",
  "stdout": "[ok] themes/tk.css (11.6 KB, 93 token overrides, 2 component overrides)\nRun with --detail full for the install example and font recipe.\n",
  "stderr": "\nNext step: run `npm install @astryxdesign/cli@0.6.8`, then `npx astryx init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

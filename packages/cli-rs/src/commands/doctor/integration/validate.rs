@@ -1,8 +1,5 @@
 //! `validateIntegration` and the authoring checks' entry points
 //! (`api/integration/validate-integration.mjs`, `authoring-checks.mjs`).
-//! TEMP: once a manifest is found, the contribution validators, doc checks
-//! and conflict discovery need discovery's integration readers; until they
-//! land, a found package reports what loading its manifest says.
 
 use super::error;
 use crate::discovery::nodepath as np;
@@ -46,7 +43,7 @@ fn find_nearest_package_json(cwd: &str) -> Option<String> {
 }
 
 fn json_parse_error(file: &str) -> String {
-    // TEMP: Node's JSON.parse message wording; the shared JSON reader owns it.
+    // V8's JSON.parse wording (jsonerr.rs, unit-tested against Node's messages).
     crate::discovery::nodepath::read_text(file)
         .map(|t| js_json_error(&t))
         .unwrap_or_else(|| "Unexpected end of JSON input".into())
@@ -493,8 +490,6 @@ fn unreachable_issues(package_dir: &str, loaded: &Map<String, Value>, reported: 
 
 /// TypeScript as `resolveProjectTypeScript([cwd, packageDir])` finds it:
 /// None when it is not installed, Some(version) when it is.
-/// TEMP: running a project's TypeScript compiler needs the JS engine; until
-/// then an installed compiler is reported by version only.
 pub fn project_typescript(dirs: &[&str]) -> Option<String> {
     for d in dirs {
         let mut dir = np::resolve1(d);
@@ -941,7 +936,10 @@ pub fn component_conflicts(pkg: Option<&str>, cwd: &str) -> Value {
         return envelope("integration.component-conflicts", d);
     };
     let prop_drift = prop_drift_report(cwd, &Value::Object(integ.clone()));
-    // TEMP: packageComponentLinkProblems (docs lane's graph reader).
+    let own_docs = if crate::discovery::paths::js_truthy(integ.get("docs")) { crate::discovery::docs_discovery::discover_integration_docs(integ) } else { Default::default() };
+    for (severity, message) in crate::commands::docs::runtime::package_component_link_problems(integ, &own_docs) {
+        issues.push(super::issue("invalid_doc_graph", severity, message));
+    }
     let Some(core_dir) = crate::discovery::paths::find_project_core_dir(cwd) else {
         issues.push(error("core_not_found", "Could not resolve @astryxdesign/core, so component names could not be checked. Install Core and run this check again."));
         d.insert("conflicts".into(), Value::Array(vec![]));

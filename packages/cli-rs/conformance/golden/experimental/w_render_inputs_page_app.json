@@ -8,6 +8,7 @@
   "page.html"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Rendered /tmp/astryx-conformance/work/inputs/page.tsx\n\ninput:       /tmp/astryx-conformance/work/inputs/page.tsx\noutput:      page.html\nbytes:       33.5 KB\ncssBytes:    31.6 KB\nclasses:     104\nimages:      0\nfiles:       page.tsx\nstylesheets: @astryxdesign/core/reset.css, @astryxdesign/core/astryx.css\n\nGive it back: npx @astryxdesign/cli@0.7.12 experimental render --reverse page.html\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -5,6 +5,7 @@
   "--built"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: option '--built <path>' argument missing\n",
  "exit": 1,

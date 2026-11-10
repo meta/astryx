@@ -6,6 +6,7 @@
   "date-range-input"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Theming targets\n4 across 1 component\n(key - component - props - states - className)\n\ndate-range-input              DateRangeInput - size, status - disabled - astryx-date-range-input\ndate-range-input-preset       DateRangeInput - selected, disabled - astryx-date-range-input-preset\ndate-range-input-presets      DateRangeInput - astryx-date-range-input-presets\ndate-range-input-toggle-icon  DateRangeInput - state - astryx-date-range-input-toggle-icon\n\nEach key goes under `components` in defineTheme; it paints `.astryx-<key>`.\nProps take a value (`variant:secondary`); states are written bare (`checked`).\nOne component in full: npx @astryxdesign/cli@0.7.12 component <Name>\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

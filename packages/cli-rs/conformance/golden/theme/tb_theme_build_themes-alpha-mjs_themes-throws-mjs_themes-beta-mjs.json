@@ -8,6 +8,7 @@
   "themes/beta.mjs"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "[ok] themes/alpha.css (1.9 KB, 1 token overrides, 0 component overrides)\n",
  "stderr": "Error: themes/throws.mjs: Failed to load theme from /tmp/astryx-conformance/work/themes/themes/throws.mjs: theme module exploded\nMake sure all imports in the theme file are resolvable.\n",
  "exit": 1,

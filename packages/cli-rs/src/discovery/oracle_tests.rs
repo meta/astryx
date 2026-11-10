@@ -21,6 +21,29 @@ fn use_js_cli_root() {
     std::env::set_var("ASTRYX_RS_CLI_ROOT", root);
 }
 
+/// `v` with every path in the checkout that holds the CLI root `root`
+/// written `<repo>`, so a test compares the same files whichever checkout's
+/// CLI root the process cached.
+fn norm_cli(v: &Value, root: &str) -> Value {
+    let repo = np::dirname(&np::dirname(root.trim_end_matches('/')));
+    let root = repo.as_str();
+    match v {
+        Value::String(s) if s == root => Value::String("<repo>".into()),
+        Value::String(s) => Value::String(s.replace(&format!("{root}/"), "<repo>/")),
+        Value::Array(a) => Value::Array(a.iter().map(|x| norm_repo(x, root)).collect()),
+        Value::Object(m) => Value::Object(m.iter().map(|(k, x)| (k.clone(), norm_repo(x, root))).collect()),
+        other => other.clone(),
+    }
+}
+
+fn norm_repo(v: &Value, repo: &str) -> Value {
+    norm_cli(v, &format!("{repo}/packages/cli"))
+}
+
+fn js_cli_root() -> String {
+    format!("{}/rustcli/astryx/packages/cli", np::homedir())
+}
+
 fn opt(v: Option<String>) -> Value {
     v.map(Value::String).unwrap_or(Value::Null)
 }
@@ -33,9 +56,12 @@ fn matches_js_paths_and_package_manager() {
     let mut failures = Vec::new();
     for c in o["cases"].as_array().unwrap() {
         let dir = c["dir"].as_str().unwrap();
+        let js_root = o["cliRoot"].as_str().unwrap();
         let mut check = |name: &str, got: Value| {
-            if got != c[name] {
-                failures.push(format!("{dir} {name}: rust {got} js {}", c[name]));
+            let got = norm_cli(&norm_cli(&got, paths::cli_root()), js_root);
+            let want = norm_cli(&norm_cli(&c[name], js_root), paths::cli_root());
+            if got != want {
+                failures.push(format!("{dir} {name}: rust {got} js {want}"));
             }
         };
         check("findCoreDir", opt(paths::find_core_dir(dir)));
@@ -250,8 +276,11 @@ fn matches_js_docs_catalog() {
         let dir = c["dir"].as_str().unwrap();
         let p = super::project::Project::load(dir).unwrap();
         let cat = p.docs();
-        let entries = Value::Array(cat.entries().iter().map(|e| entry_json(&cat, e)).collect());
-        let mut want = c["entries"].clone();
+        let ours = paths::cli_root();
+        let theirs = js_cli_root();
+        let both = |v: &Value| norm_cli(&norm_cli(v, ours), &theirs);
+        let entries = both(&Value::Array(cat.entries().iter().map(|e| entry_json(&cat, e)).collect()));
+        let mut want = both(&c["entries"]);
         // JSON drops undefined fields on the JS side.
         if let Value::Array(a) = &mut want { for e in a.iter_mut() { if let Value::Object(m) = e { m.retain(|_, v| !v.is_null() || true); } } }
         if entries != want {
@@ -259,11 +288,13 @@ fn matches_js_docs_catalog() {
         }
         let mut tree = Value::Array(cat.tree_inputs.iter().map(|t| serde_json::json!({"namespaces": t.namespaces, "guides": t.guides})).collect());
         super::docs_section_key::strip_marks(&mut tree);
-        if tree != c["tree"] {
-            failures.push(format!("{dir} tree:\n rust {tree}\n js   {}", c["tree"]));
+        let tree = both(&tree);
+        let want_tree = both(&c["tree"]);
+        if tree != want_tree {
+            failures.push(format!("{dir} tree:\n rust {tree}\n js   {want_tree}"));
         }
-        let issues = Value::Array(cat.issues.iter().map(|(p, m)| serde_json::json!({"package": p, "message": m})).collect());
-        if issues != c["issues"] {
+        let issues = both(&Value::Array(cat.issues.iter().map(|(p, m)| serde_json::json!({"package": p, "message": m})).collect()));
+        if issues != both(&c["issues"]) {
             failures.push(format!("{dir} issues: rust {issues} js {}", c["issues"]));
         }
     }
@@ -690,4 +721,28 @@ fn matches_js_element_prop_origins() {
     assert_eq!(a, o["unwrapped"], "\n rust {a}\n js   {}", o["unwrapped"]);
     let b = ser(mo::element_prop_origins(f, &sources, "Theme", "theme", None));
     assert_eq!(b, o["plain"], "\n rust {b}\n js   {}", o["plain"]);
+}
+
+#[test]
+fn matches_js_global_folder_of() {
+    use super::package_manager as pm;
+    let file = std::env::var("GLOBAL_ORACLE").unwrap_or_else(|_| "/tmp/global-oracle.json".into());
+    let Some(o) = np::read_json(&file) else { return };
+    let home = o["home"].as_str().unwrap();
+    let mut failures = Vec::new();
+    for c in o["cases"].as_array().unwrap() {
+        let root = c["root"].as_str().unwrap();
+        let vars = c["envVars"].clone();
+        let env = |k: &str| vars.get(k).and_then(|v| v.as_str()).map(String::from);
+        let place = pm::install_place_of(root);
+        let p = serde_json::json!({"runner": place.runner, "owner": place.owner, "knownGlobal": place.known_global});
+        if p != c["place"] {
+            failures.push(format!("{root} place: rust {p} js {}", c["place"]));
+        }
+        let g = pm::global_folder_of_in(root, home, &env).map(|(m, f)| serde_json::json!([m, f])).unwrap_or(Value::Null);
+        if g != c["global"] {
+            failures.push(format!("{} {root}: rust {g} js {}", c["env"], c["global"]));
+        }
+    }
+    assert!(failures.is_empty(), "{} failures\n{}", failures.len(), failures.join("\n"));
 }

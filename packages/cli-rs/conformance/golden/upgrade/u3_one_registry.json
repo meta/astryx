@@ -5,6 +5,7 @@
   "--registry"
  ],
  "fixture": "upgrade-registry-one",
+ "fixtureHash": "076ab81574d3aee7+4e418a0c2575d9ce",
  "stdout": "\nUpgrade\n1 ShadCN composition receipt checked.\nRegistry upgrade finished with unresolved items\n\n",
  "stderr": "0 conflict(s), 0 missing file(s), 0 invalid receipt(s), 1 failed item(s).\n  example-button-basic: Could not fetch https://astryx.atmeta.com/shadcn/examples/button/basic.json: fetch failed\n",
  "exit": 1,

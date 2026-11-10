@@ -5,6 +5,7 @@
   "BannerDismissable"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Banner} from '@astryxdesign/core/Banner';\nimport {Stack} from '@astryxdesign/core/Layout';\n\nexport default function BannerDismissable() {\n  return (\n    <Stack direction=\"vertical\" gap={3}>\n      <Banner\n        status=\"success\"\n        title=\"Deployment complete\"\n        description=\"Version 3.2.0 is now live in production.\"\n        isDismissable\n      />\n      <Banner\n        status=\"warning\"\n        title=\"Scheduled maintenance tonight\"\n        description=\"The system will be briefly unavailable from 2:00–3:00 AM.\"\n        isDismissable\n      />\n      <Banner\n        status=\"info\"\n        title=\"New feature available\"\n        description=\"Try the new dashboard layout in Settings.\"\n        isDismissable\n      />\n    </Stack>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

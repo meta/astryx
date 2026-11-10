@@ -7,6 +7,7 @@
   "--json"
  ],
  "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail.section\",\n  \"package\": \"@acme/kit\",\n  \"data\": {\n    \"title\": \"Start\",\n    \"content\": [\n      {\n        \"type\": \"prose\",\n        \"text\": \"Install the kit.\"\n      }\n    ],\n    \"id\": \"start\",\n    \"links\": {\n      \"up\": \"astryx docs acme-guide --index\",\n      \"next\": \"astryx docs acme-guide colors\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

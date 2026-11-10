@@ -9,6 +9,7 @@
   "fam"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "\nBuilding theme from fam/themes/ocean.mjs...\n",
  "stderr": "Error: A theme family requires at least two selected theme files.\n",
  "exit": 1,

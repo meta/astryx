@@ -6,6 +6,7 @@
   "--all"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: `--remove-agents` cannot be combined with --all: it removes the managed block and ignores install options.\n",
  "exit": 1,

@@ -4,6 +4,7 @@
   "integration"
  ],
  "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
  "stdout": "Usage: astryx integration [options] [command]\n\nAuthor and verify an Astryx integration package\n\nOptions:\n  -h, --help                   display help for command\n\nCommands:\n  add [options] <kind> <name>  Add one working contribution to an integration package\n  check [options]              The CI check for an integration package's own build: every source check, run in continuous integration or a typecheck script, against the package in the current folder\n  verify                       Check the package the way npm will publish it, before you publish\n  pack [options]               Deprecated: the old name of `integration verify`\n\nExit codes:\n  0  help is shown or a subcommand succeeds\n  1  an unknown subcommand is provided\n\nExamples:\n  # Add a component\n  npx @astryxdesign/cli@0.7.12 integration add component AcmeWidget\n  # Check the package in CI, as part of its build\n  npx @astryxdesign/cli@0.7.12 integration check --strict\n  # Check the package before publishing\n  npx @astryxdesign/cli@0.7.12 integration verify\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/integration\n",
  "stderr": "",
  "exit": 0,

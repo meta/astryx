@@ -5,6 +5,7 @@
   "@test/kit@3.2.0/Dial"
  ],
  "fixture": "discover-sources",
+ "fixtureHash": "ec3ff3d81b4e4a63+4e418a0c2575d9ce",
  "stdout": "package:   @test/kit\nversion:   3.2.0\nkind:      component\nname:      Dial\ninstalled: true\nsource:    Test catalog\n\nIts package: npx @astryxdesign/cli@0.7.12 discover @test/kit\n",
  "stderr": "Warning: @test/kit has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

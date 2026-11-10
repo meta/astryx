@@ -5,6 +5,7 @@
   "@comp/kit@1.0.0/Button"
  ],
  "fixture": "compkit",
+ "fixtureHash": "447712d27e146684+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Warning: @comp/kit has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: Package \"@comp/kit@1.0.0\" is not installed\n\n  npx @astryxdesign/cli@0.7.12 discover @comp/kit@1.0.0  (look up this package version)\n",
  "exit": 1,

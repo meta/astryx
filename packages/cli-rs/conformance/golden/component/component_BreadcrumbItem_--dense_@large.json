@@ -6,6 +6,7 @@
   "--dense"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# BreadcrumbItem\n\nindividual breadcrumb; link w/ href, plain text for current page\n\n**Import:** `import {BreadcrumbItem} from '@astryxdesign/core/Breadcrumbs';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | label content **(required)** |\n| `href` | `string` | - | link URL; omit for non-navigable items |\n| `onClick` | `(e: MouseEvent) => void` | - | click handler |\n| `isCurrent` | `boolean` | - | marks current page w/ aria-current=\"page\"; omitted auto-detects the last item; false opts out |\n| `startIcon` | `ReactNode` | - | icon before label |\n| `menu` | `DropdownMenuOption[] \\| ReactNode` | - | DropdownMenuOption[] \\| children; opens a menu trigger (aria-haspopup=\"menu\"); reuses the DropdownMenu item API |\n| `menuSize` | `'sm' \\| 'md' \\| 'lg'` | - | menu item size; defaults from variant (supporting→sm, else md) |\n| `as` | `LinkComponentType` | - | custom link component; overrides LinkProvider default |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -4,6 +4,7 @@
   "init"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "\n  Tip: `npx @astryxdesign/cli@0.7.12 init --all` also points you to the theme and page-building workflows.\n\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nNote: Agent docs are not written into the home folder, or into a settings folder in it outside a project (/tmp/astryx-conformance/work/home): agents read the files there in every project. Run init inside a project folder.\n",
  "exit": 0,

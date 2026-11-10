@@ -6,6 +6,7 @@
   "--zh"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# ChatMessageList\n\n消息展示容器，支持密度上下文和无限滚动。自动滚动由 ChatLayout 管理。\n\n**Import:** `import {ChatMessageList} from '@astryxdesign/core/Chat';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | 消息元素，通常是 ChatMessage 或 ChatSystemMessage。 **(required)** |\n| `emptyState` | `ReactNode` | - | 列表无消息时显示的内容。 |\n| `scrollToTopAction` | `() => Promise<void>` | - | 用户滚动到顶部时触发的异步操作。用于加载更早的消息。 |\n| `density` | `'compact' \\| 'balanced' \\| 'spacious'` | `'balanced'` | 视觉密度，通过上下文传递给子消息。 |\n| `gap` | `0 \\| 0.5 \\| 1 \\| 1.5 \\| 2 \\| 3 \\| 4 \\| 5 \\| 6 \\| 8 \\| 10` | - | 顶层消息行之间的间距。默认跟随密度；当 LLM 事件流等独立行需要不同间距时可覆盖。 |\n| `align` | `'top' \\| 'bottom'` | `'bottom'` | 列表内容不足一屏时的垂直对齐方式。'bottom' 用占位块填满剩余空间，让简短对话贴近输入框；'top' 省略占位块，让消息从顶部开始。仅影响未填满的列表，溢出后两种模式滚动一致，保持自动滚动到底部。 |\n| `isStreaming` | `boolean` | `false` | 是否有助手消息正在流式输出。标记日志为 aria-busy，让屏幕阅读器等待并在完成后一次性播报，而不是每个 token 都重复播报。 |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

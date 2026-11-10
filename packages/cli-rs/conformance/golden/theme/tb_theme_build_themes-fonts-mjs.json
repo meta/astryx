@@ -6,6 +6,7 @@
   "themes/fonts.mjs"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "[ok] themes/fonts.css (2.2 KB, 3 token overrides, 1 component overrides)\n[note] Fonts named but not loaded: \"Fira Sans\", \"JetBrains Mono\", \"Comic Neue\". Load them in your app (recipe: npx @astryxdesign/cli@0.7.12 docs typography).\nRun with --detail full for the install example and font recipe.\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

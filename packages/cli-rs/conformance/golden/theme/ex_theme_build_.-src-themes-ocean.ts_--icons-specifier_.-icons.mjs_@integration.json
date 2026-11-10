@@ -8,6 +8,7 @@
   "./icons.mjs"
  ],
  "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: File not found: /tmp/astryx-conformance/work/integration/src/themes/ocean.ts\n",
  "exit": 1,

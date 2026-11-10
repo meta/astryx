@@ -5,6 +5,7 @@
   "--user"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "[ok] Wrote ~/.agents/skills/astryx/SKILL.md\n[ok] Linked ~/.claude/skills/astryx\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, for this computer\n[warn] No `astryx` command on this computer runs the Astryx CLI, so agents cannot run the commands this text names. Install the CLI for the computer: npm i -g @astryxdesign/cli\n",
  "exit": 0,

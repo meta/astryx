@@ -8,6 +8,7 @@
   "close=x,star=star"
  ],
  "fixture": "iconlooks",
+ "fixtureHash": "586de4e6f916f930+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: Icon set \"hero\" has no icon \"x\" (for close). Name an icon by its id, its export name, or another name its library exports it as; a word it carries is not its name. Nothing was written.\n",
  "exit": 1,

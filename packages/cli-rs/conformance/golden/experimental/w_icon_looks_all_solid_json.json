@@ -12,6 +12,7 @@
   "--all"
  ],
  "fixture": "iconlooks",
+ "fixtureHash": "586de4e6f916f930+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"icon.addVariants\",\n  \"data\": {\n    \"set\": \"hero\",\n    \"package\": \"@acme/looks\",\n    \"variant\": \"solid\",\n    \"from\": \"./lib/looks.js\",\n    \"added\": 27,\n    \"already\": 0,\n    \"missing\": [],\n    \"files\": [\n      \"icon-sets/hero/hero.generated.js\",\n      \"icon-sets/hero/hero.generated.d.ts\",\n      \"icon-sets/hero/hero.icons.json\"\n    ],\n    \"changed\": true\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

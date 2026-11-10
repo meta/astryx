@@ -11,6 +11,7 @@
   "@acme/widgets"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: No gap-report destination \"@acme/widgets\". Choose one of: @astryxdesign/lab, @astryxdesign/charts; or leave out --to for the default.\n\n  @astryxdesign/lab  (https://github.com/meta/astryx/issues)\n  @astryxdesign/charts  (https://github.com/meta/astryx/issues)\n",
  "exit": 1,

@@ -6,6 +6,7 @@
   "--zh"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# DropdownMenuRadioItem\n\nDropdownMenuRadioGroup 中的单个选项（role=\"menuitemradio\"）。必须在 DropdownMenuRadioGroup 内使用。\n\n**Import:** `import {DropdownMenuRadioItem} from '@astryxdesign/core/DropdownMenu';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `value` | `string` | - | 该项在组内代表的值。组的 value 与之匹配以确定勾选状态。 **(required)** |\n| `label` | `ReactNode` | - | 标识该选项的主标签文本。 **(required)** |\n| `description` | `ReactNode` | - | 显示在标签下方的次要描述文本。 |\n| `icon` | `IconType` | - | 显示在标签前的图标。 |\n| `isDisabled` | `boolean` | `false` | 该单选项是否禁用。 |\n| `endContent` | `ReactNode` | - | 在标签和描述之后渲染的内容。 |\n| `ref` | `React.Ref<HTMLElement>` | - | 转发到行根元素（带 role=\"menuitemradio\" 的元素）的 ref。 |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

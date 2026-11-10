@@ -4,6 +4,7 @@
 //! calls these for `integration check`.
 
 pub mod examples;
+pub mod packlist;
 pub mod names_check;
 pub mod public_imports;
 pub mod validate;

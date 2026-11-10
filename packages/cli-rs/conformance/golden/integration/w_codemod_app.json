@@ -9,6 +9,7 @@
   "1.2.0-beta.1"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "codemod contribution added\n\n[ok] rename-widget\n\nDeclare codemod root ./codemods in astryx.integration.mjs.\n\n- codemods/1.2.0-beta.1/rename-widget.mjs\n- astryx.integration.mjs\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

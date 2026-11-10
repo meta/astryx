@@ -8,6 +8,7 @@
   "rename-isShown-to-isOpen"
  ],
  "fixture": "upgrade-broken",
+ "fixtureHash": "31eddb4b9a9b997c+4e418a0c2575d9ce",
  "stdout": "\nUpgrade\nFrom version: 0.0.1\nInstalled target: 0.7.12 (@astryxdesign/core)\nScanning /tmp/astryx-conformance/work/upgrade-broken/src for source files...\nFound 4 source files\nApplying v0.0.2 codemods...\n  Rename isShown -> isOpen\n!!     !! src/broken.tsx - Unterminated JSX contents. (2:44)\nApplying v0.0.6 codemods...\nApplying v0.0.7 codemods...\nApplying v0.0.8 codemods...\nApplying v0.0.10 codemods...\nApplying v0.0.12 codemods...\nApplying v0.0.13 codemods...\nApplying v0.0.14 codemods...\nApplying v0.0.15 codemods...\nApplying v0.1.0 codemods...\nApplying v0.1.2 codemods...\nApplying v0.1.3 codemods...\nApplying v0.1.5 codemods...\nApplying v0.1.7 codemods...\nApplying v0.1.8 codemods...\nApplying v0.2.0 codemods...\nApplying v0.2.1 codemods...\nApplying v0.3.0 codemods...\nApplying v0.4.0 codemods...\nApplying v0.5.0 codemods...\nApplying v0.6.0 codemods...\nApplying v0.6.4 codemods...\nApplying v0.6.7 codemods...\nApplying v0.7.0 codemods...\nApplying v0.7.2 codemods...\nApplying v0.7.5 codemods...\nApplying v0.7.8 codemods...\n\n!! 1 error during codemods:\n!!   core:rename-isShown-to-isOpen -> src/broken.tsx: Unterminated JSX contents. (2:44)\n! Found 0 changes across 0 files.\nRun with --apply to write changes to disk.\n1 codemod to run (dry run)\nUpgrade failed\n\n",
  "stderr": "",
  "exit": 1,

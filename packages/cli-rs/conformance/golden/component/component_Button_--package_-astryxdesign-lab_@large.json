@@ -7,6 +7,7 @@
   "@astryxdesign/lab"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\nError: No component \"Button\" in package \"@astryxdesign/lab\"\n",
  "exit": 1,

@@ -5,6 +5,7 @@
   "working-with-ai"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Results for \"working-with-ai\" (2)\n\nname:        working-with-ai\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Guides › Working with AI\ndescription: How to set up AI coding tools to generate correct component code.\ncommand:     npx @astryxdesign/cli@0.7.12 docs working-with-ai --index\nparent:      npx @astryxdesign/cli@0.7.12 docs guides\n\nname:        migration/migration-setup\nsection:     cli-workflow\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Migration › Setup › CLI Workflow\ndescription: Use the CLI as the migration checklist. Read the docs for the pattern you are about to touch, inspect a matching template skeleton, then read the exact component docs before editing.\ncommand:     npx @astryxdesign/cli@0.7.12 docs migration/migration-setup cli-workflow\nparent:      npx @astryxdesign/cli@0.7.12 docs migration/migration-setup --index\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover working-with-ai\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

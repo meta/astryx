@@ -6,6 +6,7 @@
   "--json"
  ],
  "fixture": "discover-sources",
+ "fixtureHash": "ec3ff3d81b4e4a63+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"discover.item\",\n  \"package\": \"@test/charts\",\n  \"data\": {\n    \"package\": \"@test/charts\",\n    \"version\": \"2.0.0\",\n    \"kind\": \"component\",\n    \"name\": \"Chart\",\n    \"installed\": false,\n    \"install\": \"npm install @test/charts\",\n    \"source\": \"Test catalog\"\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

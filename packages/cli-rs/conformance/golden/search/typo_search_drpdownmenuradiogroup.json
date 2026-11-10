@@ -5,6 +5,7 @@
   "drpdownmenuradiogroup"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Results for \"drpdownmenuradiogroup\" (2)\n\nname:        DropdownMenuRadioGroup\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/DropdownMenu\ndescription: Use DropdownMenuRadioGroup inside compound-mode DropdownMenu when several commands represent one mutually exclusive choice. Keep value in caller state, provide a concise accessible label, and render each choice as DropdownMenuRadioItem.\ncommand:     npx @astryxdesign/cli@0.7.12 component DropdownMenuRadioGroup\n\nname:        DropdownMenuGroupWithSelectable\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: DropdownMenuGroup - Selectable rows\nkind:        block\ndescription: Titled groups around a radio group and checkbox rows - the rows the data API cannot express, which is why the heading lives in compound mode.\ncommand:     npx @astryxdesign/cli@0.7.12 template DropdownMenuGroupWithSelectable --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover drpdownmenuradiogroup\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

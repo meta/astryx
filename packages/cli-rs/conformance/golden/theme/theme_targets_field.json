@@ -6,6 +6,7 @@
   "field"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Theming targets\n6 across 1 component\n(key - component - props - states - className)\n\nfield               Field - layout - astryx-field\nfield-label         Field - astryx-field-label\nfield-status        Field - type, variant - astryx-field-status\ninput-clear-button  Field - astryx-input-clear-button\ninput-clear-icon    Field - astryx-input-clear-icon\ninput-status-icon   Field - size, status - astryx-input-status-icon\n\nEach key goes under `components` in defineTheme; it paints `.astryx-<key>`.\nProps take a value (`variant:secondary`); states are written bare (`checked`).\nOne component in full: npx @astryxdesign/cli@0.7.12 component <Name>\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -6,6 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# CardElevations - The four elevation levels side by side. Cards are flat by default; raise a card with `elevation` only when it needs to float above surrounding content.\n# Components: Card, Grid, Stack\n\n<Grid gap={4} columns={2} width={520}>\n  <Card>\n    <Stack gap={1} />\n    <Heading />\n    <Text />\n  </Card>\n</Grid>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

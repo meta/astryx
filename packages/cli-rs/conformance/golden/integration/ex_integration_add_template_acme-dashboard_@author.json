@@ -7,6 +7,7 @@
   "acme-dashboard"
  ],
  "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
  "stdout": "template contribution added\n\n[ok] acme-dashboard\n\nDeclare template root ./templates in astryx.integration.mjs.\n\n- templates/acme-dashboard.doc.mjs\n- templates/acme-dashboard.tsx\n- astryx.integration.mjs\n",
  "stderr": "",
  "exit": 0,

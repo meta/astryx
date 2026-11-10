@@ -8,6 +8,7 @@
   "themes/system.mjs"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "\nBuilding theme from themes/system.mjs...\n\n[ok] themes/system.css\n[ok] themes/system.css.d.ts\n  1 token overrides, 0 component overrides\n  2.1 KB\n[ok] themes/system.js\n[ok] themes/system.d.ts\n\nInstall in your app (paths are relative to a file in src/; adjust if yours lives elsewhere):\n\n  import { Theme } from '@astryxdesign/core/theme';\n  import { systemTheme } from './themes/system';\n  import './themes/system.css';\n\n  <Theme theme={systemTheme}>\n    <App />\n  </Theme>\n\nOr with a <link> tag:\n\n  import { Theme } from '@astryxdesign/core/theme';\n  import { systemTheme } from './themes/system';\n\n  <link rel=\"stylesheet\" href=\"./themes/system.css\" />\n  <Theme theme={systemTheme}>\n    <App />\n  </Theme>\n\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

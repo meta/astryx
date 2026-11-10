@@ -7,6 +7,7 @@
   "3"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Results for \"how do I make a landing page\" (3 of 127)\n\nname:        ai-chat-landing\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: AI Chat Landing\nkind:        page\ndescription: Zero-state entry surface centered on a single composer with suggestion chips instead of history, sized for the moment before any content exists. The empty counterpart to a transcript.\ncommand:     npx @astryxdesign/cli@0.7.12 template ai-chat-landing --type page\n\nname:        Banner\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Banner\ndescription: Banner shows a persistent message at the top of a page or section. Use it for form errors, system updates, maintenance notices, or success confirmations that the user needs to see until they act on it.\ncommand:     npx @astryxdesign/cli@0.7.12 component Banner\n\nname:        AppShellWithBanner\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: AppShell - With Banner\nkind:        block\ndescription: Full layout with TopNav, SideNav, and a dismissable info banner between the nav and content.\ncommand:     npx @astryxdesign/cli@0.7.12 template AppShellWithBanner --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover 'how do I make a landing page'\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

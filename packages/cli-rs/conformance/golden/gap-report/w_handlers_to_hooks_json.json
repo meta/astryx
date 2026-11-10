@@ -12,6 +12,7 @@
   "--json"
  ],
  "fixture": "gapreport",
+ "fixtureHash": "8ac8fa7f5cb78280+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"gap-report.file\",\n  \"data\": {\n    \"status\": \"routed_only\",\n    \"package\": \"@astryxdesign/core\",\n    \"issuesUrl\": \"https://example.com/hooks/issues\",\n    \"deliveries\": [\n      {\n        \"handlerType\": \"fallback\",\n        \"handler\": \"issuesUrl\",\n        \"audience\": null,\n        \"status\": \"routed_only\",\n        \"url\": \"https://example.com/hooks/issues\",\n        \"message\": \"No automatic handler is available; open the routed URL to file this report.\"\n      }\n    ],\n    \"filedCount\": 0,\n    \"routedOnlyCount\": 1\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

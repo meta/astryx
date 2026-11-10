@@ -7,6 +7,7 @@
   "--help"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Usage: astryx search [options] <query...>\n\nSearch components, hooks, docs, templates, and themes in one ranked list\n\nOptions:\n  --type <domain>  Filter to one domain (component|hook|doc|template|theme)\n  --limit <n>      Max number of results, a positive integer (default 20)\n  --verbose        Also print each result's score and match reason\n  -h, --help       display help for command\n\nExit codes:\n  0  success (including zero matches)\n  1  invalid --type, a --limit that is not a positive integer, or --type component, hook, or template where @astryxdesign/core cannot be found\n\nExamples:\n  # Ranked results\n  npx @astryxdesign/cli@0.7.12 search button\n  # Several words, no quotes\n  npx @astryxdesign/cli@0.7.12 search dark mode --type doc\n  # Filter + JSON\n  npx @astryxdesign/cli@0.7.12 search \"data table\" --type template --json\n  # Themes you can add\n  npx @astryxdesign/cli@0.7.12 search warm --type theme\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/search\n",
  "stderr": "",
  "exit": 0,

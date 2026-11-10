@@ -8,6 +8,7 @@
   "brief"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "[ok] src/my-theme.css (14.2 KB, 88 token overrides, 4 component overrides)\n[note] Fonts named but not loaded: \"Inter\", \"Geist Mono\". Load them in your app (recipe: npx @astryxdesign/cli@0.7.12 docs typography).\n",
  "stderr": "",
  "exit": 0,

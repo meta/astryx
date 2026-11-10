@@ -6,6 +6,7 @@
   "templates"
  ],
  "fixture": "doctor-author",
+ "fixtureHash": "f667b3d840f6152c+4e418a0c2575d9ce",
  "stdout": "Checking integration templates: (local package)\n\n[ok] No template ids conflict with Core.\n",
  "stderr": "",
  "exit": 0,

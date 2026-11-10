@@ -6,6 +6,7 @@
   "date-time-input"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Theming targets\n7 across 1 component\n(key - component - props - states - className)\n\ndate-time-input               DateTimeInput - size, status - disabled - astryx-date-time-input\ndate-time-input-clock-icon    DateTimeInput - astryx-date-time-input-clock-icon\ndate-time-input-date-segment  DateTimeInput - size, status - astryx-date-time-input-date-segment\ndate-time-input-time-listbox  DateTimeInput - astryx-date-time-input-time-listbox\ndate-time-input-time-option   DateTimeInput - astryx-date-time-input-time-option\ndate-time-input-time-segment  DateTimeInput - size, status - astryx-date-time-input-time-segment\ndate-time-input-toggle-icon   DateTimeInput - state - astryx-date-time-input-toggle-icon\n\nEach key goes under `components` in defineTheme; it paints `.astryx-<key>`.\nProps take a value (`variant:secondary`); states are written bare (`checked`).\nOne component in full: npx @astryxdesign/cli@0.7.12 component <Name>\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

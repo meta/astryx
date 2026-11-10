@@ -9,6 +9,7 @@
   "@acme/glyph-library"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: \"@acme/glyph-library\" does not resolve from large-app. Install it as a dependency, or check the specifier.\n",
  "exit": 1,

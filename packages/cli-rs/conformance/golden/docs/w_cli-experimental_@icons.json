@@ -5,6 +5,7 @@
   "cli/experimental"
  ],
  "fixture": "icons",
+ "fixtureHash": "cfe8bdaf4aaef512+4e418a0c2575d9ce",
  "stdout": "Experimental features\nFeatures you can try now that may change or be removed in a patch release.\n\npackage: @astryxdesign/cli\n\nEverything here is experimental: its commands (under `npx @astryxdesign/cli@0.7.12 experimental`), configuration (under\n`experimental` in astryx.config and in an integration manifest), output, and docs may change or be removed in any patch\nrelease, with no deprecation period. Nothing here changes what the rest of Astryx does unless you use it. A feature\nleaves this section when it becomes stable.\n\nicon-sets         [experimental] Ship an icon set: register each icon against an icon definition, so apps find icons by\n                  meaning and templates use your icons.\nicon-set-files    [experimental] Every field of the files an icon set is made of: the descriptor, the data file, and an\n                  icon definition.\nicon-definitions  [experimental] Every icon definition: what an icon stands for, and the shared name icon sets map their\n                  icons to.\nrender-pages      Experimental. Render a page to one self-contained HTML file for sharing or embedding, and get the page\n                  back from it.\n\nOpen one: npx @astryxdesign/cli@0.7.12 docs cli/experimental/<name>\nUp: npx @astryxdesign/cli@0.7.12 docs cli\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -9,6 +9,7 @@
   "Two-look test icons."
  ],
  "fixture": "iconlooks",
+ "fixtureHash": "586de4e6f916f930+4e418a0c2575d9ce",
  "stdout": "Icon set updated\n\n[ok] hero\n\nThe experimental.iconSets root ./icon-sets in astryx.integration.mjs is unchanged.\n\n- icon-sets/hero/hero.doc.mjs\n\n[next] Updated icon set \"hero\" in place; its icons, map and generated module are unchanged.\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

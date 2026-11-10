@@ -6,6 +6,7 @@
   "matcha"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "App themes\n1 added\n\nslug:           matcha\nowner:          @astryxdesign/theme-matcha\nmodule:         @astryxdesign/theme-matcha/built\nstylesheet:     @astryxdesign/theme-matcha/theme.css\nfontStylesheet: @astryxdesign/theme-matcha/fonts.css\nsource:         bundled\n\ndefault:    matcha\nmodulePath: src/astryx-themes.js\naction:     use\nslug:       matcha\nchanged:    false\nfirstAdd:   false\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n",
  "exit": 0,

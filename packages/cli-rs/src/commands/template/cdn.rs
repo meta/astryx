@@ -8,10 +8,12 @@ pub struct CdnResult {
     pub written: bool,
 }
 
-/// The installed Core's version, else this CLI's.
-// TEMP: replace with src/discovery find_core_dir + getXdsVersion when it lands.
-pub fn xds_version(cwd: &std::path::Path) -> String {
-    crate::cli::release::core_and_copy(cwd).0.unwrap_or_else(crate::cli::env::cli_version)
+/// `getXdsVersion(findCoreDir(cwd))`: the found Core's version, else this CLI's.
+pub fn xds_version(cwd: &std::path::Path) -> Result<String, ApiError> {
+    let core = crate::discovery::paths::find_core_dir(&fsutil::path_str(cwd));
+    let root = crate::cli::env::cli_root();
+    crate::commands::init::agent_docs::get_xds_version(core.as_deref(), &root.to_string_lossy())
+        .map_err(|m| ApiError::new(&m, "ERR_UNKNOWN"))
 }
 
 /// `templateCdn`.
@@ -23,7 +25,7 @@ pub fn write(cli_root: &std::path::Path, cwd: &std::path::Path, target: Option<&
         let r = fsutil::relative(&cwd_s, &resolved);
         if r.is_empty() { target.to_string() } else { r }
     };
-    let version = xds_version(cwd);
+    let version = xds_version(cwd)?;
     if std::path::Path::new(&resolved).exists() && !overwrite {
         return Ok(CdnResult { path: rel, version, written: false });
     }

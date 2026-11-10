@@ -7,6 +7,7 @@
   "--json"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.app\",\n  \"package\": \"@astryxdesign/theme-chocolate\",\n  \"data\": {\n    \"themes\": [\n      {\n        \"slug\": \"chocolate\",\n        \"owner\": \"@astryxdesign/theme-chocolate\",\n        \"module\": \"@astryxdesign/theme-chocolate/built\",\n        \"stylesheet\": \"@astryxdesign/theme-chocolate/theme.css\",\n        \"fontStylesheet\": \"@astryxdesign/theme-chocolate/fonts.css\",\n        \"source\": \"bundled\"\n      }\n    ],\n    \"default\": \"chocolate\",\n    \"modulePath\": \"src/astryx-themes.js\",\n    \"change\": {\n      \"action\": \"add\",\n      \"slug\": \"chocolate\",\n      \"changed\": true,\n      \"firstAdd\": true\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

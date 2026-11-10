@@ -321,7 +321,7 @@ fn split_words(needle: &str) -> Vec<String> {
 
 /// `firstSentence(text)`.
 pub fn first_sentence(text: &str) -> String {
-    let flat = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let flat = text.split(crate::discovery::paths::js_ws).filter(|w| !w.is_empty()).collect::<Vec<_>>().join(" ");
     let b = flat.as_bytes();
     for (i, &c) in b.iter().enumerate() {
         if (c == b'.' || c == b'!' || c == b'?') && (i + 1 == b.len() || b[i + 1] == b' ') {
@@ -342,6 +342,12 @@ pub fn first_sentence(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn first_sentence_uses_js_whitespace() {
+        assert_eq!(first_sentence("A\u{85}b. c"), "A\u{85}b.");
+        assert_eq!(first_sentence("x\u{feff}\u{feff}y. z"), "x y.");
+        assert_eq!(first_sentence("Use E.G. this. Next"), "Use E.G. this.");
+    }
     #[test]
     fn words() {
         assert_eq!(split_words("DataTableRow"), vec!["data", "table", "row"]);

@@ -6,6 +6,7 @@
   "-h"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Usage: astryx integration verify [options]\n\nCheck the package the way npm will publish it, before you publish\n\nOptions:\n  -h, --help  display help for command\n\nExit codes:\n  0  the packed package exposes the same valid contributions\n  1  the tarball is incomplete or invalid\n\nExamples:\n  # Check before publishing\n  npx @astryxdesign/cli@0.7.12 integration verify\n  # Machine-readable result\n  npx @astryxdesign/cli@0.7.12 integration verify --json\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/integration-verify\n",
  "stderr": "",
  "exit": 0,

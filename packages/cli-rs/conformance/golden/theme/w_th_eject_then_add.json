@@ -6,6 +6,7 @@
   "stone"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Local theme \"stone\" is not built. Run `npx @astryxdesign/cli@0.7.12 theme build src/themes/stone/stoneTheme.ts` and try again. Missing: src/themes/stone/stone.js, src/themes/stone/stone.css.\n",
  "exit": 1,

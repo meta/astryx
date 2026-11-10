@@ -7,6 +7,7 @@
   "hook"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Build kit for \"modal dialog\"\n\nThis kit is narrowed by --type, so it names no template.\n\nCOMPONENTS\nFor what the template and blocks do not cover (top 3 of 4; --verbose for all). Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        useFocusTrap\npackage:     @astryxdesign/core\ndescription: Traps focus within a container element following the WAI-ARIA dialog focus trap pattern.\n\nname:        useScrollLock\npackage:     @astryxdesign/core\ndescription: Locks page scroll while active and keeps the page where it is.\n\nname:        useLightbox\npackage:     @astryxdesign/core\ndescription: State management and accessible trigger wiring for Lightbox.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

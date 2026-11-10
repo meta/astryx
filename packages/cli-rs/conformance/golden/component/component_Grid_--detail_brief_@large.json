@@ -7,6 +7,7 @@
   "brief"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nGrid(columns: number|{minWidth: number, max?: number, repeat?: fill|fit}, align: start|center|end|stretch, justify: start|center|end|stretch)  <- from '@astryxdesign/core/Grid'\n  A CSS grid layout container for arranging children in rows and columns. Use G...\n  Targets: astryx-grid preferred attrs: data-align, data-columns, data-gap, data-justify variants: align, columns, gap, justify | astryx-grid-span\n  width, height, maxWidth, minHeight, gap, rowGap, columnGap, rowHeight, children, xstyle\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

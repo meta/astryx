@@ -5,6 +5,7 @@
   "HStak"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: No component named \"HStak\"\n\n  HStack  (similar name (distance 1))\n  Stack  (keyword \"hstack\" (distance 1))\n",
  "exit": 1,

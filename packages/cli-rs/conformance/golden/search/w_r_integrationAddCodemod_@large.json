@@ -6,6 +6,7 @@
   "--json"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"search\",\n  \"data\": {\n    \"query\": \"integrationAddCodemod\",\n    \"matchCount\": 1,\n    \"results\": [\n      {\n        \"domain\": \"doc\",\n        \"name\": \"cli/api/functions/integration-add-codemod\",\n        \"package\": \"@astryxdesign/cli\",\n        \"score\": 100,\n        \"reason\": \"exact name\",\n        \"description\": \"Add a safe identity codemod at an exact target version.\",\n        \"title\": \"Astryx CLI › API › Functions › integrationAddCodemod()\",\n        \"command\": \"astryx docs cli/api/functions/integration-add-codemod\",\n        \"parent\": \"astryx docs cli/api/functions\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

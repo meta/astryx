@@ -6,6 +6,7 @@
   "nope"
  ],
  "fixture": "docsint",
+ "fixtureHash": "36d5db4ca2dc43ba+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Section \"nope\" is not in any guide under \"acme-handbook\". Open one of its guides instead.\n\n  acme-handbook/deploying  (Ship it with `npm install -D @acme/docs`.)\n",
  "exit": 1,

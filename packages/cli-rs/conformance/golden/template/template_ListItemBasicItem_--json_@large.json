@@ -6,6 +6,7 @@
   "--json"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"ListItemBasicItem\",\n    \"description\": \"Basic list items with labels and descriptions. Use this structure for settings, navigation summaries, and other simple collections.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"List\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {List, ListItem} from '@astryxdesign/core/List';\\n\\nexport default function ListItemBasicItem() {\\n  return (\\n    <List header=\\\"Account settings\\\" hasDividers>\\n      <ListItem label=\\\"Profile\\\" description=\\\"Name, avatar, and bio\\\" />\\n      <ListItem label=\\\"Notifications\\\" description=\\\"Email and push alerts\\\" />\\n      <ListItem label=\\\"Security\\\" description=\\\"Password and two-factor auth\\\" />\\n    </List>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

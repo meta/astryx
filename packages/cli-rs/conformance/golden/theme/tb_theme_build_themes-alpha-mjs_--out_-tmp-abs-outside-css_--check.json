@@ -9,6 +9,7 @@
   "--check"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "\nBuilding theme from themes/alpha.mjs...\n",
  "stderr": "\n[fail] 3 theme output(s) are out of date with themes/alpha.mjs:\n  missing: ../../../abs-outside.css\n  missing: ../../../alpha.js\n  missing: ../../../alpha.d.ts\n\n  These outputs are outside the working directory, so a build here refuses them, and each output records the directory it was built from. Build and check them from a directory that contains them:\n    cd /tmp\n    npx @astryxdesign/cli@0.7.12 theme build astryx-conformance/work/themes/themes/alpha.mjs --out abs-outside.css\n    npx @astryxdesign/cli@0.7.12 theme build astryx-conformance/work/themes/themes/alpha.mjs --out abs-outside.css --check\n",
  "exit": 1,

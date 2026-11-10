@@ -35,6 +35,8 @@ thread_local! {
     static LOADED: RefCell<Option<Vec<PathBuf>>> = const { RefCell::new(None) };
     static VIRTUAL_IDS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
     static GENERATIONS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    /// Source text to use in place of a file's, for the load in progress.
+    static OVERRIDES: RefCell<Vec<(PathBuf, String)>> = const { RefCell::new(Vec::new()) };
     /// Whether the timer globals were installed (nothing to wait on before).
     static TIMERS_LOADED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     /// Resolution failure message -> the specifier that failed.
@@ -905,6 +907,10 @@ fn unknown_extension(ext: &str, path: &Path, context: &mut Context) -> boa_engin
 }
 
 fn read_source(path: &Path, context: &mut Context) -> JsResult<String> {
+    if let Some(text) = OVERRIDES.with(|o| o.borrow().iter().find(|(p, _)| p == path).map(|(_, t)| t.clone())) {
+        if std::env::var_os("ASTRYX_JS_TRACE").is_some() { eprintln!("[js] override {}", path.display()); }
+        return Ok(text);
+    }
     std::fs::read_to_string(path).map_err(|e| {
         coded_error("Error", "ENOENT", &format!("{e}: {}", path.display()), context)
     })
@@ -1222,6 +1228,9 @@ impl Engine {
         // literals need a deep value stack.
         ctx.runtime_limits_mut().set_stack_size_limit(1 << 24);
         ctx.runtime_limits_mut().set_recursion_limit(10_000);
+        // Boa's AST optimizer (constant folding) changes no result and
+        // costs parse time on large files.
+        ctx.set_optimizer_options(boa_engine::optimizer::OptimizerOptions::empty());
         mark("context");
         install_host(&mut ctx);
         mark("host");
@@ -1271,6 +1280,7 @@ impl Engine {
             extensions: jiti.extensions.clone(),
             virtuals: jiti.virtual_modules.clone(),
             sync: mode == Mode::Jiti && (jiti.sync || !jiti.virtual_modules.is_empty()),
+            overrides: jiti.source_overrides.iter().map(|(p, t)| (resolve::real(p), t.clone())).collect(),
         });
         let jsx = (opts.jsx || jiti.jsx_automatic) && mode == Mode::Jiti;
         Flavor { mode, jsx, profile, jsx_auto: jsx && jiti.jsx_automatic, gen: 0 }
@@ -1290,6 +1300,21 @@ impl Engine {
         };
         let abs = resolve::normalize(&abs);
         let mut flavor = self.flavor_for(&abs, opts, jiti);
+        let overrides: Vec<(PathBuf, String)> =
+            jiti.source_overrides.iter().map(|(p, t)| (resolve::real(p), t.clone())).collect();
+        let previous = OVERRIDES.with(|o| std::mem::replace(&mut *o.borrow_mut(), overrides));
+        let result = self.load_flavored(&abs, opts, &mut flavor);
+        OVERRIDES.with(|o| *o.borrow_mut() = previous);
+        result
+    }
+
+    fn load_flavored(
+        &mut self,
+        abs: &Path,
+        opts: &ImportOptions,
+        flavor: &mut Flavor,
+    ) -> Result<(Module, Flavor, PathBuf), JsError> {
+        let abs = abs.to_path_buf();
         let mode = flavor.mode;
         if opts.fresh && mode == Mode::Jiti {
             flavor.gen = GENERATIONS.with(|g| {
@@ -1314,11 +1339,11 @@ impl Engine {
         let real = resolve::real(&abs);
         let module = self
             .loader
-            .load_file(&real, flavor, false, !opts.fresh || flavor.gen != 0, &mut self.ctx)
+            .load_file(&real, *flavor, false, !opts.fresh || flavor.gen != 0, &mut self.ctx)
             .map_err(|e| self.to_js_error(e, &abs))?;
         let promise = module.load_link_evaluate(&mut self.ctx);
         match self.settle(&promise, None) {
-            Settled::Fulfilled(_) => Ok((module, flavor, real)),
+            Settled::Fulfilled(_) => Ok((module, *flavor, real)),
             Settled::Rejected(err) => Err(self.to_js_error(boa_engine::JsError::from_opaque(err), &abs)),
             Settled::Timeout | Settled::Unsettled => Err(fail(
                 "Error",

@@ -5,6 +5,7 @@
   "check"
  ],
  "fixture": "monorepo-local",
+ "fixtureHash": "66a78e1352faa1b5+4e418a0c2575d9ce",
  "stdout": "Nothing was checked: no astryx.integration.* found next to package.json. Run this command in an integration package's folder.\nIntegration check: (local package)\n\ncheck:    validate\nfailed:   false\nerrors:   0\nwarnings: 0\nskipped:  No astryx.integration.* found next to package.json, so nothing was checked.\n\ncheck:    components\nfailed:   false\nerrors:   0\nwarnings: 0\nskipped:  No astryx.integration.* found next to package.json, so nothing was checked.\n\ncheck:    templates\nfailed:   false\nerrors:   0\nwarnings: 0\nskipped:  No astryx.integration.* found next to package.json, so nothing was checked.\n\ncheck:    docs\nfailed:   false\nerrors:   0\nwarnings: 0\nskipped:  No astryx.integration.* found next to package.json, so nothing was checked.\n\n[ok] 0 errors, 0 warnings, 1 skipped. No check failed; review the warnings and skipped work above (--strict fails on them).\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

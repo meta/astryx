@@ -5,6 +5,7 @@
   "cli/experimental/icon-definitions/sparkle"
  ],
  "fixture": "icons",
+ "fixtureHash": "cfe8bdaf4aaef512+4e418a0c2575d9ce",
  "stdout": "package: @acme/glyphs\n\n## sparkle\n\nThe sparkle icon.\n\nField | Value         \n----- | --------------\nWords | `magic`, `new`\n\nAn icon set registers the icon that draws this definition in its data file: `\"map\": {\"sparkle\": \"<icon id>\"}`. Find it in each installed set: `npx @astryxdesign/cli@0.7.12 experimental icon sparkle`.\n\nIcon definitions are experimental: they may change or be removed in a patch release.\n\nUp: npx @astryxdesign/cli@0.7.12 docs cli/experimental/icon-definitions\nPrevious: npx @astryxdesign/cli@0.7.12 docs cli/experimental/icon-definitions/shopping-bag\nNext: npx @astryxdesign/cli@0.7.12 docs cli/experimental/icon-definitions/sparkles\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

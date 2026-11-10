@@ -9,6 +9,7 @@
   "@acme/icons"
  ],
  "fixture": "doctor-author",
+ "fixtureHash": "f667b3d840f6152c+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Integration manifest has no default export (it exports `notDefault`). Fix: export the manifest object as the default export: `export default {components: './components'}`, naming the roots the package has.\n",
  "exit": 1,

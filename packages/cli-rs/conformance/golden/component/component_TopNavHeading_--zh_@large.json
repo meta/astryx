@@ -6,6 +6,7 @@
   "--zh"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# TopNavHeading\n\nTopNav 标题插槽的产品/套件/账户标题组件。支持智能交互边界逻辑：标志、标题文本、独立链接的上标题/下标题，以及带自动箭头指示器的可选菜单弹出层。\n\n**Import:** `import {TopNavHeading} from '@astryxdesign/core/TopNav';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `logo` | `ReactNode` | - | 在标题文本前显示的标志元素。可以是图片、NavIcon 或任何 ReactNode。 |\n| `heading` | `string` | - | 作为主标题文本显示的产品/应用名称。 |\n| `headingHref` | `string` | - | 标题文本的链接（如产品首页）。当没有菜单且这是唯一的 href 时，整个标题变为一个可点击链接。 |\n| `superheading` | `string` | - | 标题上方的文本（如套件名称）。以较小的次要样式渲染。 |\n| `superheadingHref` | `string` | - | 上标题文本的链接（如套件首页）。与菜单一起提供时，渲染为独立的内联链接。 |\n| `subheading` | `string` | - | 标题下方的文本（如账户上下文）。以较小的次要样式渲染。 |\n| `subheadingHref` | `string` | - | 下标题文本的链接。与菜单一起提供时，渲染为独立的内联链接。 |\n| `headerEndContent` | `ReactNode` | - | 在标题行尾部渲染的内容（如徽章或状态指示器）。 |\n| `menu` | `ReactNode` | - | 在弹出层下拉菜单中显示的菜单内容。提供时自动显示箭头指示器。交互边界由 href 的存在决定：没有 href 时整个标题为触发器；有 href 时链接独立，箭头区域为触发器。 |\n| `as` | `LinkComponentType` | - | 用于替代 <a> 的自定义链接组件。覆盖 LinkProvider 设置的默认组件。必须接受 href、className、style 和 children 属性。 |\n| `xstyle` | `StyleXStyles` | - | 用于布局自定义的 StyleX 样式。必须是 stylex.create() 的值。 |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

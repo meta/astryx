@@ -7,6 +7,7 @@
   "brief"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nLink(download: string|boolean, weight: normal|medium|semibold|bold, color: primary|secondary|disabled|placeholder|accent|inherit, display: inline|block)  <- from '@astryxdesign/core/Link'\n  Styled anchor link with variants, external link support, and polymorphic rend...\n  Targets: astryx-link preferred attrs: data-color variants: color\n  children: ReactNode, as, label, href, hasUnderline, isDisabled, isExternalLink, newTabLabel, target, rel, referrerPolicy, onClick, tooltip, isStandalone, size, maxLines\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

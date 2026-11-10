@@ -5,6 +5,7 @@
   "ContextMenuShowcase"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n'use client';\n\nimport {ContextMenu} from '@astryxdesign/core/ContextMenu';\n\nexport default function ContextMenuShowcase() {\n  return (\n    <ContextMenu\n      presentation=\"adaptive\"\n      items={[\n        {label: 'Cut', onClick: () => {}},\n        {label: 'Copy', onClick: () => {}},\n        {label: 'Paste', onClick: () => {}},\n      ]}>\n      <div\n        style={{\n          padding: '48px',\n          borderWidth: '2px',\n          borderStyle: 'dashed',\n          borderColor: '#d1d5db',\n          borderRadius: '8px',\n          textAlign: 'center',\n          color: '#6b7280',\n          userSelect: 'none',\n        }}>\n        Long-press or right-click this area\n      </div>\n    </ContextMenu>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -6,6 +6,7 @@
   "--installed"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Installed\n\nNone yet.\n\nThis project loads no integration and has no discover source of its own, so discover lists everything instead of answering \"date picker\".\n\nTo add a package, run its install command.\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

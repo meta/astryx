@@ -13,6 +13,7 @@
   "home"
  ],
  "fixture": "iconglyphs",
+ "fixtureHash": "b8a471cb57e113e9+4e418a0c2575d9ce",
  "stdout": "New icon definition added\n\n[ok] rocketLaunch\n\nThe experimental.iconSets root ./icon-sets in astryx.integration.mjs is unchanged.\n\n- icon-sets/glyphs/definitions/rocketLaunch.doc.mjs\n- icon-sets/glyphs/glyphs.icons.json\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

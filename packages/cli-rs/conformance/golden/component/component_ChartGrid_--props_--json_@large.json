@@ -7,6 +7,7 @@
   "--json"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/charts\",\n  \"data\": [\n    {\n      \"name\": \"horizontal\",\n      \"type\": \"boolean\",\n      \"description\": \"Whether to draw horizontal guides at continuous y ticks other than zero.\",\n      \"default\": \"true\"\n    },\n    {\n      \"name\": \"vertical\",\n      \"type\": \"boolean\",\n      \"description\": \"Whether to draw vertical guides at continuous x ticks or categorical band centers.\",\n      \"default\": \"false\"\n    },\n    {\n      \"name\": \"tickCount\",\n      \"type\": \"number\",\n      \"description\": \"Approximate guide count requested from continuous scales. It does not thin categorical band centers.\",\n      \"default\": \"5\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

@@ -4,6 +4,7 @@
   "init"
  ],
  "fixture": "unknownint",
+ "fixtureHash": "b1c6b89b18b853b7+4e418a0c2575d9ce",
  "stdout": "\n  Tip: `npx @astryxdesign/cli@0.7.12 init --all` also points you to the theme and page-building workflows.\n\n  Next steps:\n    1. Ensure the @stylexjs/stylex peer dependency is met\n       (run `npx @astryxdesign/cli@0.7.12 doctor` to verify)\n    2. Import base styles: import '@astryxdesign/core/reset.css'\n       and import '@astryxdesign/core/astryx.css'\n    3. Import components: import { Button } from '@astryxdesign/core/Button'\n    4. Add and wire a theme:\n       npm install @astryxdesign/theme-neutral\n       npx @astryxdesign/cli@0.7.12 theme add neutral\n       import { Theme } from '@astryxdesign/core/theme'\n       import { themes, defaultThemeSlug } from './astryx-themes'\n       <Theme theme={themes[defaultThemeSlug]}>...</Theme>\n       Extend an imported theme to customize it. Run `npx @astryxdesign/cli@0.7.12 theme eject <slug>` only to fork source.\n    5. npx @astryxdesign/cli@0.7.12 --help for all commands\n\n",
  "stderr": "Could not install agent docs. Try again with `npx @astryxdesign/cli@0.7.12 init --features agents`.\n",
  "exit": 0,

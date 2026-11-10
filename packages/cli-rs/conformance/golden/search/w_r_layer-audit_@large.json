@@ -5,6 +5,7 @@
   "layer-audit"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "Results for \"layer-audit\" (2)\n\nname:        migration/migration-setup\nsection:     layer-audit\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Migration › Setup › Cascade layer audit\ndescription: Audit the layers around the design system with this checklist before building screens.\ncommand:     npx @astryxdesign/cli@0.7.12 docs migration/migration-setup layer-audit\nparent:      npx @astryxdesign/cli@0.7.12 docs migration/migration-setup --index\n\nname:        migration/migration-setup\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Migration › Setup\ndescription: Install the theme, wire CSS layers, audit resets, and run the foundation smoke test before migrating any surface.\ncommand:     npx @astryxdesign/cli@0.7.12 docs migration/migration-setup --index\nparent:      npx @astryxdesign/cli@0.7.12 docs migration\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover layer-audit\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -6,6 +6,7 @@
   "reg/css.mjs"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Failed to load theme from /tmp/astryx-conformance/work/themes/reg/css.mjs: Unknown file extension \".css\" for /tmp/astryx-conformance/work/themes/reg/x.css\nMake sure all imports in the theme file are resolvable.\n",
  "exit": 1,

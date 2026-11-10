@@ -5,6 +5,7 @@
   "--remove-agents"
  ],
  "fixture": "initdone",
+ "fixtureHash": "00b23c13e90f8a54+4e418a0c2575d9ce",
  "stdout": "[ok] Removed design system section from ../CLAUDE.md\n[ok] Removed empty ../.claude/CLAUDE.md\n[ok] Removed design system section from ../HERMES.md\n",
  "stderr": "Error: Malformed agent-docs block: multiple \"<!-- ASTRYX:START -->\" markers found. Remove the duplicate/broken block manually, then re-run.\n",
  "exit": 1,

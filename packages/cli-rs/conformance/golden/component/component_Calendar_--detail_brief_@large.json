@@ -7,6 +7,7 @@
   "brief"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nCalendar(mode: single|range, value: ISODateString|DateRange|null, defaultValue: ISODateString|DateRange, numberOfMonths: 1|2)  <- from '@astryxdesign/core/Calendar'\n  Calendar lets the user pick a date or date range from a month grid. Use it in...\n  Targets: astryx-calendar preferred attrs: data-mode variants: mode | astryx-calendar-nav preferred attrs: data-nav, data-disabled variants: nav states: disabled | astryx-calendar-day preferred attrs: data-selected, data-today, data-disabled, data-in-range, data-marker states: selected, today, disabled, in-range, marker\n  onChange, min, max, dateConstraints, maxRangeSpan, minRangeSpan, focusDate, onFocusDateChange, handleRef, hasOutsideDays, hasWeekNumbers, hasVariableRowCount, weekStartsOn, calendar\n  import {Button} from '@astryxdesign/core/Button';\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

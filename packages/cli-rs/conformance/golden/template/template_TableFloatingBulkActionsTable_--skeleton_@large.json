@@ -6,6 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# TableFloatingBulkActionsTable - The reusable TableSelectionToolbar inside a capped, self-contained scroll region for a long non-sticky table below metric cards. The caller-owned sticky placement keeps actions 16px from the example scrollport without moving the table when selection changes.\n# Components: ScrollableArea, Table, TableSelectionToolbar\n\n<ScrollableArea />\n<TableSelectionToolbar variant=\"ghost\" />\n<Button variant=\"ghost\" />\n<Table columns={columns} />\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

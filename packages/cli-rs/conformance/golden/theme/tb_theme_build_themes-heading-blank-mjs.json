@@ -6,6 +6,7 @@
   "themes/heading-blank.mjs"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Custom Heading type \"hero\" needs a non-empty standalone components.heading[\"type:hero\"], onDark.components.heading[\"type:hero\"], or onLight.components.heading[\"type:hero\"] rule.\n",
  "exit": 1,

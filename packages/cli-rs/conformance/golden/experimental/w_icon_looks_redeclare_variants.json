@@ -9,6 +9,7 @@
   "outline,solid,bold"
  ],
  "fixture": "iconlooks",
+ "fixtureHash": "586de4e6f916f930+4e418a0c2575d9ce",
  "stdout": "Icon set updated\n\n[ok] hero\n\nThe experimental.iconSets root ./icon-sets in astryx.integration.mjs is unchanged.\n\n- icon-sets/hero/hero.icons.json\n\n[next] Updated icon set \"hero\" in place; its icons, map and generated module are unchanged.\n\n[next] Give each icon its bold look: `astryx experimental icon add --variant bold --from <module> --all --set hero`, or one icon with `astryx experimental icon add <Export> --from <module> --id <icon> --variant <name> --set hero`.\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

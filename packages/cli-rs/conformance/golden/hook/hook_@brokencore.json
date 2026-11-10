@@ -4,6 +4,7 @@
   "hook"
  ],
  "fixture": "brokencore",
+ "fixtureHash": "046a184e848d83b6+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\nUsage: npx @astryxdesign/cli@0.7.12 hook <name>\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

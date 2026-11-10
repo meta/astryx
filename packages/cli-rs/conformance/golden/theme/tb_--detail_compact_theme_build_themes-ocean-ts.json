@@ -8,6 +8,7 @@
   "themes/ocean.ts"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "[ok] themes/ocean.css (3 KB, 3 token overrides, 2 component overrides)\n[note] Fonts named but not loaded: \"Playfair Display\", \"Inter\". Load them in your app (recipe: npx @astryxdesign/cli@0.7.12 docs typography).\n",
  "stderr": "  [warn] themes/ocean.ts: Unknown prop \"tone\" on component \"button\". Known props/states: size, variant, elevation\n  [warn] themes/ocean.ts: Unknown component \"buton\". Did you mean: button?\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

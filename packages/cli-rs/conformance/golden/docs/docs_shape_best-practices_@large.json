@@ -6,6 +6,7 @@
   "best-practices"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Best Practices\n\n+ Use --radius-element for interactive controls (buttons, inputs, selectors).\n+ Use --radius-container for content containers (cards, panels, dialogs).\n+ Use --radius-full for pill shapes (badges, tags, avatar status dots).\n\nx Use --radius-page for small elements; it's meant for page-level containers.\nx Hardcode radius values; they won't scale with theme radius multipliers.\n\nUp: npx @astryxdesign/cli@0.7.12 docs shape --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs shape concentric-radius\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

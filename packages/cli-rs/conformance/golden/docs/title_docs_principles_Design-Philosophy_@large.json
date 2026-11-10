@@ -6,6 +6,7 @@
   "Design Philosophy"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Design Philosophy\n\nA design system that prioritizes consistency, adaptability, and developer experience. Every decision flows from a few core ideas:\n\n- Components over primitives: use components for everything they cover before reaching for raw HTML\n- Semantic tokens over hardcoded values: colors, spacing, and radii are named by purpose, not appearance\n- Theme-agnostic code: your app code never references specific colors or measurements, so themes and dark mode work automatically\n- Open internals: every primitive is exported and composable, so you can build on top of it without fighting it\n\nUp: npx @astryxdesign/cli@0.7.12 docs principles --index\nNext: npx @astryxdesign/cli@0.7.12 docs principles rules\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

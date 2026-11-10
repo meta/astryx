@@ -1,7 +1,6 @@
 //! The loaded project doctor reads (`Project.load(cwd, {core: 'project'})`
 //! and the provider ledger), plus small readers of `config` and
 //! `integrations/autolink`.
-//! TEMP: replace `load` with src/discovery Project.load when it lands.
 
 use crate::discovery::nodepath as np;
 use crate::json::Value;

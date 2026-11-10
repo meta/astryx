@@ -6,6 +6,7 @@
   "--json"
  ],
  "fixture": "discover-sources",
+ "fixtureHash": "ec3ff3d81b4e4a63+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"discover.detail\",\n  \"package\": \"@test/kit\",\n  \"data\": {\n    \"name\": \"@test/kit\",\n    \"package\": \"@test/kit\",\n    \"category\": \"@test/kit\",\n    \"components\": [\n      \"Dial\"\n    ],\n    \"version\": \"3.1.4\",\n    \"installed\": true,\n    \"latest\": \"3.2.0\",\n    \"source\": \"Test catalog\",\n    \"versions\": [\n      {\n        \"version\": \"3.2.0\",\n        \"publishedAt\": \"2026-09-29T00:00:00.000Z\",\n        \"prerelease\": false,\n        \"status\": \"ok\"\n      },\n      {\n        \"version\": \"3.1.4\",\n        \"publishedAt\": \"2026-09-01T00:00:00.000Z\",\n        \"prerelease\": false,\n        \"status\": \"ok\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

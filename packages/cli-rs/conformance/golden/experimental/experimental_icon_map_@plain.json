@@ -6,6 +6,7 @@
   "map"
  ],
  "fixture": "plain",
+ "fixtureHash": "af8efc657521769c+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: Name the icon definition to map\n\n  npx @astryxdesign/cli@0.7.12 docs cli/experimental/icon-definitions  (every icon definition)\n",
  "exit": 1,

@@ -7,6 +7,7 @@
   "1"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Results for \"table\" (1 of 552)\n\nname:        Table\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Table\ndescription: Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.\ncommand:     npx @astryxdesign/cli@0.7.12 component Table\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover table\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

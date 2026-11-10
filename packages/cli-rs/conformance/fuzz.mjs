@@ -318,7 +318,12 @@ const PRE = {
   doctor: [() => ['init'], () => ['init', '--all'], () => ['theme', 'add', pick(themes)]],
   upgrade: [() => ['init'], () => ['theme', 'add', pick(themes)]],
   experimental: [() => ['experimental', 'icon', 'use', 'glyphs'], () => ['experimental', 'icon', 'new-set', 'acme']],
-  component: [() => ['swizzle', pick(components)]],
+  component: [() => ['swizzle', pick(components)], () => ['init', '--all']],
+  search: [() => ['init']],
+  build: [() => ['init', '--all'], () => ['theme', 'add', pick(themes)]],
+  docs: [() => ['init']],
+  integration: [() => ['integration', 'add', pick(['component', 'template', 'theme', 'doc']), pick(['Fancy', 'my-page', 'guide'])]],
+  'gap-report': [() => ['init']],
   discover: [() => ['theme', 'add', pick(themes)]],
 };
 
@@ -374,7 +379,7 @@ function generate() {
   if (chance(0.06)) pos.push(pick([...WORDS, ...WEIRD]));
   const groups = [];
   const opts = shuffle([...(cmd.options ?? [])]);
-  const k = Math.min(opts.length, pick([0, 0, 1, 1, 1, 2, 2, 3, 4]));
+  const k = Math.min(opts.length, pick([0, 0, 1, 1, 1, 2, 2, 3, 4, 5, 7]));
   for (const o of opts.slice(0, k)) {
     const t = optionTokens(o, p);
     if (t) groups.push(t);
@@ -385,7 +390,7 @@ function generate() {
   const gk = pick([0, 0, 0, 1, 1, 2]);
   for (const o of shuffle([...gopts]).slice(0, gk)) globals.push(optionTokens(o, p));
   if (chance(0.25)) groups.push(['--json']);
-  if (chance(0.04)) groups.push([pick(['--bogus', '-x', '--jsn', '--help', '-h', '--verbose', '-V', '--version'])]);
+  if (chance(0.08)) groups.push([pick(['--bogus', '-x', '--jsn', '--help', '-h', '--verbose', '-V', '--version', '-hV', '-Vh', '--HELP', '-j', '--json=true', '--json=false', '--no-json', '--detail', '--lang', '--zh=1', '-', '---json'])]);
   // Interleave option groups among positionals; globals go before the command (sometimes) or among the rest.
   const tail = [...pos.map(x => [x]), ...groups];
   let ordered;
@@ -398,7 +403,8 @@ function generate() {
   }
   let args = [...front.flat(), ...p, ...ordered.flat()];
   if (chance(0.08)) args.splice(int(p.length, args.length), 0, '--');
-  if (chance(0.02)) args = ['help', ...p];
+  if (chance(0.03)) args = ['help', ...p, ...(chance(0.3) ? [pick([...WORDS, ...WEIRD])] : [])];
+  if (chance(0.02)) args = [...p.slice(0, -1), mutate(p[p.length - 1]), ...args.slice(p.length)];
   if (chance(0.02)) args[0] = mutate(args[0]);
   const pref = PREFERRED[p[0]]?.filter(f => fixtures.some(x => (x.cwd ?? x.fixture) === f)) ?? [];
   let fx;

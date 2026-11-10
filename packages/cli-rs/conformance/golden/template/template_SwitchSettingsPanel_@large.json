@@ -5,6 +5,7 @@
   "SwitchSettingsPanel"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {Switch} from '@astryxdesign/core/Switch';\nimport {Card} from '@astryxdesign/core/Card';\nimport {VStack} from '@astryxdesign/core/Layout';\n\nexport default function SwitchSettingsPanel() {\n  const [notifications, setNotifications] = useState(false);\n  const [darkMode, setDarkMode] = useState(true);\n  const [autoSave, setAutoSave] = useState(false);\n\n  return (\n    <Card width=\"100%\" style={{maxWidth: 300}}>\n      <VStack gap={4}>\n        <Switch\n          label=\"Enable notifications\"\n          value={notifications}\n          onChange={setNotifications}\n          labelPosition=\"start\"\n          labelSpacing=\"spread\"\n        />\n        <Switch\n          label=\"Dark mode\"\n          value={darkMode}\n          onChange={setDarkMode}\n          labelPosition=\"start\"\n          labelSpacing=\"spread\"\n        />\n        <Switch\n          label=\"Auto-save\"\n          value={autoSave}\n          onChange={setAutoSave}\n          labelPosition=\"start\"\n          labelSpacing=\"spread\"\n        />\n      </VStack>\n    </Card>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

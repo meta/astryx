@@ -10,6 +10,7 @@
   "--json"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.add\",\n  \"data\": {\n    \"kind\": \"theme\",\n    \"name\": \"retro\",\n    \"root\": {\n      \"path\": \"./themes\",\n      \"created\": true\n    },\n    \"manifest\": \"astryx.integration.mjs\",\n    \"files\": [\n      \"themes/retro/retroTheme.ts\",\n      \"themes/retro/icons.tsx\",\n      \"themes/retro/retroPalettes.ts\",\n      \"themes/retro/retroPalettes.generated.ts\",\n      \"themes/retro/retroPaletteRefs.generated.ts\",\n      \"themes/retro/retroPalettes.generated.receipt.json\",\n      \"themes/retro/palette.config.json\",\n      \"themes/retro/retroTheme.doc.mjs\",\n      \"package.json\",\n      \"astryx.integration.mjs\"\n    ],\n    \"written\": true,\n    \"dryRun\": false,\n    \"from\": \"y2k\"\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

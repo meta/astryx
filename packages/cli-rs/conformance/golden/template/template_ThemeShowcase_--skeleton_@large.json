@@ -6,6 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# ThemeShowcase - Two visually distinct theme providers wrapping identical content to show how Theme changes the visual treatment of child components.\n# Components: Badge, Card, Grid, Section, Stack\n\n<Section padding={4} variant=\"muted\" maxWidth={600}>\n  <Grid gap={3} columns={{minWidth: 240, repeat: 'fit'}} width=\"100%\">\n    <Theme />\n    <ThemeCard />\n    <Theme />\n    <ThemeCard />\n  </Grid>\n</Section>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

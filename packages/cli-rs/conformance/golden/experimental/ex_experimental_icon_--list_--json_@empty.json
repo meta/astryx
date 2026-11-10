@@ -7,6 +7,7 @@
   "--json"
  ],
  "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"icon.list\",\n  \"data\": {\n    \"status\": \"none\",\n    \"projectSet\": null,\n    \"reason\": \"No icon set is installed.\",\n    \"sets\": [],\n    \"withdrawn\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

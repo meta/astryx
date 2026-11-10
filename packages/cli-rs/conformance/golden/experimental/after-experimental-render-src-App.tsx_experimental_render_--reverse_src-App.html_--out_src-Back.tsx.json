@@ -9,6 +9,7 @@
   "src/Back.tsx"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Restored src/Back.tsx\n\ninput:  src/App.html\nmode:   embedded\nexact:  true\noutput: src/Back.tsx\nfiles:  src/Back.tsx\n",
  "stderr": "",
  "exit": 0,

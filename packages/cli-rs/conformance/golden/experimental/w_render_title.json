@@ -10,6 +10,7 @@
   "t.html"
  ],
  "fixture": "renderpages",
+ "fixtureHash": "8877e3d4520e7c26+4e418a0c2575d9ce",
  "stdout": "Rendered heading.tsx\n\ninput:       heading.tsx\noutput:      t.html\nbytes:       34.3 KB\ncssBytes:    32.0 KB\nclasses:     110\nimages:      0\nfiles:       heading.tsx\nstylesheets: @astryxdesign/core/reset.css, @astryxdesign/core/astryx.css\n\nGive it back: npx @astryxdesign/cli@0.7.12 experimental render --reverse t.html\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

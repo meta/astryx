@@ -8,6 +8,7 @@
   "--json"
  ],
  "fixture": "doctor-integrations",
+ "fixtureHash": "70dc92e0b02698cb+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.validate\",\n  \"data\": {\n    \"validated\": true,\n    \"name\": \"@real/kit\",\n    \"version\": \"1.0.0\",\n    \"issues\": [\n      {\n        \"code\": \"missing_root\",\n        \"severity\": \"error\",\n        \"message\": \"Declared themes root does not exist on disk: /tmp/astryx-conformance/work/doctor-integrations/alias/node_modules/kit-alias/gone\"\n      }\n    ],\n    \"docTypes\": {\n      \"status\": \"checked\",\n      \"docs\": 0,\n      \"findings\": [],\n      \"unchecked\": []\n    },\n    \"docNames\": {\n      \"status\": \"checked\",\n      \"findings\": [],\n      \"unchecked\": []\n    },\n    \"blockComponents\": {\n      \"status\": \"checked\",\n      \"findings\": [],\n      \"unchecked\": []\n    },\n    \"publicImports\": {\n      \"status\": \"checked\",\n      \"findings\": [],\n      \"unchecked\": []\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 1,

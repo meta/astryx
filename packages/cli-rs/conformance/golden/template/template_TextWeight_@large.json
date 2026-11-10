@@ -5,6 +5,7 @@
   "TextWeight"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Text} from '@astryxdesign/core/Text';\nimport {Stack} from '@astryxdesign/core/Stack';\n\nconst WEIGHTS = [\n  {weight: 'normal' as const, label: 'Normal'},\n  {weight: 'medium' as const, label: 'Medium'},\n  {weight: 'semibold' as const, label: 'Semibold'},\n  {weight: 'bold' as const, label: 'Bold'},\n];\n\nexport default function TextWeight() {\n  return (\n    <Stack direction=\"vertical\" gap={3}>\n      {WEIGHTS.map(({weight, label}) => (\n        <Text key={weight} type=\"body\" weight={weight} display=\"block\">\n          {label}\n        </Text>\n      ))}\n    </Stack>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -4,6 +4,7 @@
   "upgrade"
  ],
  "fixture": "brokencore",
+ "fixtureHash": "046a184e848d83b6+4e418a0c2575d9ce",
  "stdout": "\nUpgrade\nAborted\n\n",
  "stderr": "Missing required --from. Install the target version first, then run `npx @astryxdesign/cli@0.7.12 upgrade --from <old-version>`.\n",
  "exit": 1,

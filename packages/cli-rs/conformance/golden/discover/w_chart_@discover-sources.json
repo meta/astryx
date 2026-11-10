@@ -5,6 +5,7 @@
   "chart"
  ],
  "fixture": "discover-sources",
+ "fixtureHash": "ec3ff3d81b4e4a63+4e418a0c2575d9ce",
  "stdout": "Found 2 matches for \"chart\"\n\n- npx @astryxdesign/cli@0.7.12 discover @test/charts/Chart  (not installed)\n- npx @astryxdesign/cli@0.7.12 discover @test/charts  (package, not installed)\n",
  "stderr": "Warning: @test/kit has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

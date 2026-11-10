@@ -5,6 +5,7 @@
   "AppShellContentOnly"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {AppShell} from '@astryxdesign/core/AppShell';\nimport {VStack} from '@astryxdesign/core/Stack';\nimport {Heading, Text} from '@astryxdesign/core/Text';\n\nexport default function AppShellContentOnly() {\n  return (\n    <AppShell contentPadding={6} style={{height: '100%', minHeight: 0}}>\n      <VStack gap={4}>\n        <Heading level={3}>Page Content</Heading>\n        <Text type=\"body\">\n          Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do\n          eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad\n          minim veniam, quis nostrud exercitation ullamco laboris.\n        </Text>\n      </VStack>\n    </AppShell>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -7,6 +7,7 @@
   "--watch"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "\nWatching themes/nameless.mjs for changes - press Ctrl-C to stop.\n",
  "stderr": "Error: Theme must have a name property.\n",
  "exit": "timeout",

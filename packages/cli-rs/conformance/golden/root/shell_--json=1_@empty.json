@@ -4,6 +4,7 @@
   "--json=1"
  ],
  "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: unknown option '--json=1'\n(Did you mean --json?)\n",
  "exit": 1,

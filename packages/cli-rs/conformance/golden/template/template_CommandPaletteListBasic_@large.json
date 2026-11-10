@@ -5,6 +5,7 @@
   "CommandPaletteListBasic"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {\n  CommandPaletteList,\n  CommandPaletteItem,\n} from '@astryxdesign/core/CommandPalette';\n\nexport default function CommandPaletteListBasic() {\n  return (\n    <CommandPaletteList>\n      <CommandPaletteItem value=\"home\" onSelect={() => {}}>\n        Go Home\n      </CommandPaletteItem>\n      <CommandPaletteItem value=\"settings\" isHighlighted onSelect={() => {}}>\n        Open Settings\n      </CommandPaletteItem>\n      <CommandPaletteItem value=\"profile\" isSelected onSelect={() => {}}>\n        View Profile\n      </CommandPaletteItem>\n      <CommandPaletteItem value=\"help\" isDisabled onSelect={() => {}}>\n        Help (unavailable)\n      </CommandPaletteItem>\n    </CommandPaletteList>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

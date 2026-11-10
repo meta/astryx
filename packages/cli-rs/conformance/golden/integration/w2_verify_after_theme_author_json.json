@@ -1,0 +1,35 @@
+{
+ "id": "w2_verify_after_theme_author_json",
+ "args": [
+  "integration",
+  "verify",
+  "--json"
+ ],
+ "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.pack-check\",\n  \"data\": {\n    \"name\": \"@acme/widgets\",\n    \"version\": \"0.1.0\",\n    \"packable\": false,\n    \"tarball\": {\n      \"filename\": \"acme-widgets-0.1.0.tgz\",\n      \"fileCount\": 7,\n      \"size\": 776,\n      \"unpackedSize\": 1109\n    },\n    \"inventory\": {\n      \"manifest\": \"astryx.integration.mjs\",\n      \"roots\": [\n        {\n          \"kind\": \"themes\",\n          \"path\": \"themes\",\n          \"expectedFiles\": 2,\n          \"missingFiles\": [],\n          \"complete\": true\n        },\n        {\n          \"kind\": \"components\",\n          \"path\": \"src/components\",\n          \"expectedFiles\": 2,\n          \"missingFiles\": [],\n          \"complete\": true\n        },\n        {\n          \"kind\": \"docs\",\n          \"path\": \"docs\",\n          \"expectedFiles\": 1,\n          \"missingFiles\": [],\n          \"complete\": true\n        }\n      ],\n      \"expectedFiles\": 6,\n      \"packedFiles\": 6\n    },\n    \"contributions\": {\n      \"local\": {\n        \"themes\": [\n          {\n            \"slug\": \"ocean\",\n            \"exportName\": \"oceanTheme\"\n          }\n        ],\n        \"components\": [\n          \"WidgetCard\"\n        ],\n        \"templates\": [],\n        \"codemods\": [],\n        \"docs\": [\n          \"widgets\"\n        ],\n        \"agentDocsAppend\": []\n      },\n      \"packed\": {\n        \"themes\": [\n          {\n            \"slug\": \"ocean\",\n            \"exportName\": \"oceanTheme\"\n          }\n        ],\n        \"components\": [\n          \"WidgetCard\"\n        ],\n        \"templates\": [],\n        \"codemods\": [],\n        \"docs\": [\n          \"widgets\"\n        ],\n        \"agentDocsAppend\": []\n      }\n    },\n    \"issues\": [\n      {\n        \"code\": \"theme_import_unresolvable\",\n        \"severity\": \"error\",\n        \"message\": \"Theme \\\"ocean\\\" from @acme/widgets has no resolvable built module and stylesheet. Missing module export @acme/widgets/themes/ocean, stylesheet export @acme/widgets/themes/ocean.css, or the single-theme exports @acme/widgets/built and @acme/widgets/theme.css. The package must build and export them before it can be added. Run `npx @astryxdesign/cli@0.7.12 theme build themes/ocean/oceanTheme.ts` before packing.\"\n      },\n      {\n        \"code\": \"component_import_unresolvable\",\n        \"severity\": \"error\",\n        \"message\": \"Component \\\"WidgetCard\\\" advertises import \\\"@acme/widgets\\\", but a consumer cannot resolve it: No \\\"exports\\\" main defined in package.json imported from a consumer project\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": [
+  {
+   "path": "author/astryx.integration.mjs",
+   "status": "changed",
+   "text": "export default {\n  components: './src/components',\n  docs: './docs',\n  themes: './themes'\n};\n"
+  },
+  {
+   "path": "author/package.json",
+   "status": "changed",
+   "text": "{\n  \"name\": \"@acme/widgets\",\n  \"version\": \"0.1.0\",\n  \"peerDependencies\": {\n    \"@astryxdesign/core\": \"0.7.12\",\n    \"@astryxdesign/cli\": \">=0.6.4\"\n  },\n  \"exports\": {\n    \"./themes/ocean\": \"./themes/ocean/ocean.js\",\n    \"./themes/ocean.css\": \"./themes/ocean/ocean.css\"\n  },\n  \"peerDependenciesMeta\": {\n    \"@astryxdesign/cli\": {\n      \"optional\": true\n    }\n  }\n}\n"
+  },
+  {
+   "path": "author/themes/ocean/oceanTheme.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {\n  type: 'theme',\n  name: 'ocean',\n  displayName: 'Ocean',\n  description: 'Ocean theme.',\n  maintained: true,\n};\n"
+  },
+  {
+   "path": "author/themes/ocean/oceanTheme.ts",
+   "status": "created",
+   "text": "import {defineTheme} from '@astryxdesign/core/theme';\n\nexport const oceanTheme = defineTheme({\n  name: 'ocean',\n});\n"
+  }
+ ]
+}

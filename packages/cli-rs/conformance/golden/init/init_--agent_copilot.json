@@ -6,6 +6,7 @@
   "copilot"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Unknown agent \"copilot\". Valid agents: claude, cursor, codex, hermes, muse, all\n",
  "exit": 1,

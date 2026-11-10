@@ -9,6 +9,7 @@
   "--json"
  ],
  "fixture": "discover-sources",
+ "fixtureHash": "ec3ff3d81b4e4a63+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"discover.search\",\n  \"data\": {\n    \"query\": \"pages\",\n    \"matches\": [\n      {\n        \"package\": \"@test/boards\",\n        \"component\": \"pages/DialBoard\",\n        \"kind\": \"template\",\n        \"installed\": false\n      },\n      {\n        \"package\": \"@test/charts\",\n        \"component\": \"pages/Report\",\n        \"kind\": \"template\",\n        \"installed\": false\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

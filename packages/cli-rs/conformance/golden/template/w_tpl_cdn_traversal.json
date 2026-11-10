@@ -6,6 +6,7 @@
   "../x.html"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Invalid cdn template path \"../x.html\": resolves outside the project root (/tmp/astryx-conformance/work/app). Path traversal is not allowed.\n",
  "exit": 1,

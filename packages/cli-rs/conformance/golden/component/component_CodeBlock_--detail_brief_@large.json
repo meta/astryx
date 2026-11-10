@@ -7,6 +7,7 @@
   "brief"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nCodeBlock(language: string|CodeLanguage, maxHeight: number|string, size: sm|md, container: card|section, highlightMode: auto|ranges|spans)  <- from '@astryxdesign/core/CodeBlock'\n  CodeBlock renders syntax-highlighted code with line numbers, a copy button, a...\n  Icon slots: code-block-copy {copied: boolean}\n  Targets: astryx-code-block preferred attrs: data-size, data-language, data-container variants: size, language, container | astryx-code-block-header preferred attrs: data-size, data-language, data-container variants: size, language, container | astryx-code-block-title preferred attrs: data-size, data-language variants: size, language | astryx-code-block-copy-button\n  code: string, title, hasLanguageLabel, hasLineNumbers, startLineNumber, highlightLines, isDiff, hasCopyButton, onCopy, onCopyError, endContent, isWrapped, width, tokenizer, syntaxTheme, isCollapsible, collapsibleThreshold, ref, xstyle, className, style, data-testid\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

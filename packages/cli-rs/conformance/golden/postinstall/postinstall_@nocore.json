@@ -4,6 +4,7 @@
   "postinstall"
  ],
  "fixture": "nocore",
+ "fixtureHash": "25d22c63d358ba36+4e418a0c2575d9ce",
  "stdout": "\n  ╭───────────────────────────────────────────────────╮\n  │                                                  │\n  │   Design system installed!                       │\n  │                                                  │\n  │   Get started:                                   │\n  │     npx @astryxdesign/cli@0.7.12 init          Setup + AI agent docs│\n  │     npx @astryxdesign/cli@0.7.12 --help        See all commands│\n  │                                                  │\n  │   Or run directly:                               │\n  │     npx @astryxdesign/cli@0.7.12 init           Setup + AI agent docs│\n  │     npx @astryxdesign/cli@0.7.12 component     Browse component docs│\n  │     npx @astryxdesign/cli@0.7.12 hook          Browse hook docs│\n  │     npx @astryxdesign/cli@0.7.12 docs          Design system reference│\n  │     npx @astryxdesign/cli@0.7.12 swizzle       Customize a component│\n  │     npx @astryxdesign/cli@0.7.12 template      Add a page template│\n  │                                                  │\n  ╰───────────────────────────────────────────────────╯\n\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

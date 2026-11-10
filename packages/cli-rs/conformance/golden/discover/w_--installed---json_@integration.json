@@ -6,6 +6,7 @@
   "--json"
  ],
  "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"discover.list\",\n  \"data\": [\n    {\n      \"name\": \"@acme/kit\",\n      \"package\": \"@acme/kit\",\n      \"category\": \"@acme/kit\",\n      \"components\": [\n        \"AcmeCard\"\n      ],\n      \"version\": \"1.2.3\",\n      \"templates\": [\n        \"hero\"\n      ],\n      \"docs\": [\n        \"acme-guide\"\n      ],\n      \"themes\": [\n        \"ocean\"\n      ]\n    }\n  ],\n  \"meta\": {\n    \"available\": [],\n    \"sources\": [\n      {\n        \"name\": \"Astryx\",\n        \"from\": \"@astryxdesign/cli\",\n        \"status\": \"fresh\",\n        \"complete\": true\n      }\n    ],\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

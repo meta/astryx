@@ -5,6 +5,7 @@
   "icon-definitions/random"
  ],
  "fixture": "icons",
+ "fixtureHash": "cfe8bdaf4aaef512+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Unknown topic \"icon-definitions/random\"\n\n  icons  (available topic)\n",
  "exit": 1,

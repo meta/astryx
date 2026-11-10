@@ -6,6 +6,7 @@
   "docs"
  ],
  "fixture": "nocore",
+ "fixtureHash": "25d22c63d358ba36+4e418a0c2575d9ce",
  "stdout": "Nothing was checked: no astryx.integration.* found next to package.json. To check an installed integration: npx @astryxdesign/cli@0.7.12 doctor integration docs <package>\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

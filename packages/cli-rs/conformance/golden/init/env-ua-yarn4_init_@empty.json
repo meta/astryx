@@ -4,6 +4,7 @@
   "init"
  ],
  "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
  "stdout": "[ok] AI agent docs installed -> AGENTS.md, GEMINI.md\n\n  Tip: `yarn dlx @astryxdesign/cli@0.7.12 init --all` also points you to the theme and page-building workflows.\n\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

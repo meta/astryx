@@ -7,6 +7,7 @@
   "--json"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": [\n    {\n      \"name\": \"size\",\n      \"type\": \"'sm' | 'md' | 'lg' | 'xl'\",\n      \"description\": \"Spinner size: ring diameter (10px, 14px, 18px, 28px).\",\n      \"default\": \"'md'\"\n    },\n    {\n      \"name\": \"shade\",\n      \"type\": \"'default' | 'onMedia' | 'subtle' | 'inherit'\",\n      \"description\": \"Color shade for light or dark backgrounds.\",\n      \"default\": \"'default'\"\n    },\n    {\n      \"name\": \"label\",\n      \"type\": \"ReactNode\",\n      \"description\": \"Visible content below the spinner. A string label names the indicator through aria-labelledby.\"\n    },\n    {\n      \"name\": \"aria-label\",\n      \"type\": \"string\",\n      \"description\": \"Accessible name for screen readers. Defaults to label (if string) or a translated \\\"Loading\\\" from the i18n catalog.\",\n      \"default\": \"'Loading'\"\n    },\n    {\n      \"name\": \"xstyle\",\n      \"type\": \"StyleXStyles\",\n      \"description\": \"StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object like style={{}}.\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

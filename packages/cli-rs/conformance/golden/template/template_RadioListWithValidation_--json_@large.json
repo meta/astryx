@@ -6,6 +6,7 @@
   "--json"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"template.show\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": {\n    \"template\": \"RadioListWithValidation\",\n    \"description\": \"Required radio list with an error message when nothing is selected.\",\n    \"type\": \"block\",\n    \"components\": [\n      \"RadioList\"\n    ],\n    \"source\": \"// Copyright (c) Meta Platforms, Inc. and affiliates.\\n\\n'use client';\\n\\nimport {useState} from 'react';\\nimport {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';\\n\\nexport default function RadioListWithValidation() {\\n  const [value, setValue] = useState('');\\n\\n  return (\\n    <RadioList\\n      label=\\\"Notification preference\\\"\\n      isRequired\\n      status={\\n        value === ''\\n          ? {type: 'error', message: 'Please select a notification method'}\\n          : undefined\\n      }\\n      value={value}\\n      onChange={setValue}>\\n      <RadioListItem label=\\\"Email\\\" value=\\\"email\\\" />\\n      <RadioListItem label=\\\"SMS\\\" value=\\\"sms\\\" />\\n      <RadioListItem label=\\\"Push notification\\\" value=\\\"push\\\" />\\n    </RadioList>\\n  );\\n}\\n\",\n    \"demoMediaReplaced\": 0,\n    \"demoContentReplaced\": 0\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

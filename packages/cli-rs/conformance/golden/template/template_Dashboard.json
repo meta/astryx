@@ -5,6 +5,7 @@
   "Dashboard"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Unknown template \"Dashboard\"\n\n  dashboard  (page template)\n  dashboard-comparison  (page template)\n  dashboard-scorecard  (page template)\n  dashboard-composition  (page template)\n  dashboard-progress  (page template)\n  dashboard-cohort-funnel  (page template)\n  dashboard-alert-rail  (page template)\n  GridDashboardLayout  (block template)\n  TopNavEnterpriseDashboard  (block template)\n",
  "exit": 1,

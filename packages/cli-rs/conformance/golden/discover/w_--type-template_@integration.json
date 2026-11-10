@@ -6,6 +6,7 @@
   "template"
  ],
  "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
  "stdout": "Installed\n\nname:       @acme/kit\npackage:    @acme/kit\ncategory:   @acme/kit\ncomponents: AcmeCard\nversion:    1.2.3\ntemplates:  hero\ndocs:       acme-guide\nthemes:     ocean\n\nAvailable\nfrom Astryx\n\nname:        @astryxdesign/richtext\npackage:     @astryxdesign/richtext\ncomponents:  RichTextEditor, RichTextEditorAutoLinkPlugin, RichTextEditorToolbar, RichTextView\nversion:     0.7.12\ndescription: Astryx rich text - a Lexical-based rich text editor and viewer, styled with Astryx design tokens.\ntemplates:   RichTextEditorShowcase\nsource:      Astryx\ninstall:     npm install @astryxdesign/richtext@0.7.12\n\nUsage:\n  npx @astryxdesign/cli@0.7.12 discover <package>            Browse a package and its versions\n  npx @astryxdesign/cli@0.7.12 discover <package>/<item>     View one item\n  npx @astryxdesign/cli@0.7.12 discover <search>             Search every item and package\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

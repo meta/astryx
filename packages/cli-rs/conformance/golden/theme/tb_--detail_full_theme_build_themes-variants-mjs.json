@@ -8,6 +8,7 @@
   "themes/variants.mjs"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "\nBuilding theme from themes/variants.mjs...\n\n[ok] themes/variants-theme.css\n[ok] themes/variants-theme.css.d.ts\n  1 token overrides, 3 component overrides\n  6.0 KB\n[ok] themes/variants-theme.js\n[ok] themes/variants-theme.d.ts\n[ok] themes/variants-theme.variants.d.ts (4 type augmentations)\n\nInstall in your app (paths are relative to a file in src/; adjust if yours lives elsewhere):\n\n  import { Theme } from '@astryxdesign/core/theme';\n  import { variantsThemeTheme } from './themes/variants-theme';\n  import './themes/variants-theme.css';\n\n  <Theme theme={variantsThemeTheme}>\n    <App />\n  </Theme>\n\nOr with a <link> tag:\n\n  import { Theme } from '@astryxdesign/core/theme';\n  import { variantsThemeTheme } from './themes/variants-theme';\n\n  <link rel=\"stylesheet\" href=\"./themes/variants-theme.css\" />\n  <Theme theme={variantsThemeTheme}>\n    <App />\n  </Theme>\n\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

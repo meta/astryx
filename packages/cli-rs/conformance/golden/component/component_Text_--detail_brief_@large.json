@@ -7,6 +7,7 @@
   "brief"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nText(color: primary|secondary|disabled|placeholder|accent|inherit, weight: normal|medium|semibold|bold, display: inline|block, as: span|p|div|label, hasTruncateTooltip: boolean|above|below|start|end, wordBreak: break-word|break-all, textWrap: wrap|nowrap|balance|pretty, justify: start|center|end)  <- from '@astryxdesign/core/Text'\n  Text renders styled body text and headings from the theme. Use Text with a se...\n  Targets: astryx-heading preferred attrs: data-level, data-color, data-type, data-weight variants: level, color, type, weight | astryx-text preferred attrs: data-type, data-size, data-color variants: type, size, color\n  children: ReactNode, type, size, maxLines, hasCapsize, hasStrikethrough, hasTabularNumbers, id, xstyle\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

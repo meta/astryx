@@ -5,6 +5,7 @@
   "SegmentedControlFillLayout"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {\n  SegmentedControl,\n  SegmentedControlItem,\n} from '@astryxdesign/core/SegmentedControl';\n\nexport default function SegmentedControlFillLayout() {\n  const [value, setValue] = useState('weekly');\n  return (\n    <div style={{width: 400}}>\n      <SegmentedControl\n        value={value}\n        onChange={setValue}\n        label=\"Time range\"\n        layout=\"fill\">\n        <SegmentedControlItem value=\"daily\" label=\"Daily\" />\n        <SegmentedControlItem value=\"weekly\" label=\"Weekly\" />\n        <SegmentedControlItem value=\"monthly\" label=\"Monthly\" />\n      </SegmentedControl>\n    </div>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

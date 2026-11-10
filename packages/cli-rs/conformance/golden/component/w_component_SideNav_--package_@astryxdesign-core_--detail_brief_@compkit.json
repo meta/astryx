@@ -9,6 +9,7 @@
   "brief"
  ],
  "fixture": "compkit",
+ "fixtureHash": "447712d27e146684+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nSideNav(collapsible: boolean|{ defaultIsCollapsed?: boolean; isCollapsed?: boolean; onCollapsedChange?: (isCollapsed: boolean) => void; hasButton?: boolean; buttonLabel?: string }, resizable: boolean|{ defaultWidth?: number; minWidth?: number; maxWidth?: number; autoSaveId?: string; onWidthChange?: (width: number) => void; defaultIsCollapsed?: boolean; isCollapsed?: boolean; onCollapseChange?: (isCollapsed: boolean) => void }|ResizableRegion)  <- from '@astryxdesign/core/SideNav'\n  A sidebar navigation component for organizing application pages with sections...\n  Targets: astryx-side-nav preferred attrs: data-mode variants: mode | astryx-side-nav-heading | astryx-side-nav-item preferred attrs: data-size, data-selected, data-disabled variants: size states: selected, disabled | astryx-side-nav-section\n  header, topContent, children, footer, footerIcons, handleRef, xstyle\n\n",
  "stderr": "Warning: @comp/kit has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

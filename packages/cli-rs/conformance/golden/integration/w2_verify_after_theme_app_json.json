@@ -1,0 +1,40 @@
+{
+ "id": "w2_verify_after_theme_app_json",
+ "args": [
+  "integration",
+  "verify",
+  "--json"
+ ],
+ "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.pack-check\",\n  \"data\": {\n    \"name\": \"app\",\n    \"version\": \"1.0.0\",\n    \"packable\": false,\n    \"tarball\": {\n      \"filename\": \"app-1.0.0.tgz\",\n      \"fileCount\": 5,\n      \"size\": 633,\n      \"unpackedSize\": 941\n    },\n    \"inventory\": {\n      \"manifest\": \"astryx.integration.mjs\",\n      \"roots\": [\n        {\n          \"kind\": \"themes\",\n          \"path\": \"themes\",\n          \"expectedFiles\": 2,\n          \"missingFiles\": [],\n          \"complete\": true\n        }\n      ],\n      \"expectedFiles\": 3,\n      \"packedFiles\": 3\n    },\n    \"contributions\": {\n      \"local\": {\n        \"themes\": [\n          {\n            \"slug\": \"ocean\",\n            \"exportName\": \"oceanTheme\"\n          }\n        ],\n        \"components\": [],\n        \"templates\": [],\n        \"codemods\": [],\n        \"docs\": [],\n        \"agentDocsAppend\": []\n      },\n      \"packed\": {\n        \"themes\": [\n          {\n            \"slug\": \"ocean\",\n            \"exportName\": \"oceanTheme\"\n          }\n        ],\n        \"components\": [],\n        \"templates\": [],\n        \"codemods\": [],\n        \"docs\": [],\n        \"agentDocsAppend\": []\n      }\n    },\n    \"issues\": [\n      {\n        \"code\": \"theme_import_unresolvable\",\n        \"severity\": \"error\",\n        \"message\": \"Theme \\\"ocean\\\" from app has no resolvable built module and stylesheet. Missing module export app/themes/ocean, stylesheet export app/themes/ocean.css, or the single-theme exports app/built and app/theme.css. The package must build and export them before it can be added. Run `npx @astryxdesign/cli@0.7.12 theme build themes/ocean/oceanTheme.ts` before packing.\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 1,
+ "files": [
+  {
+   "path": "app/astryx.integration.mjs",
+   "status": "created",
+   "text": "export default {\n  themes: './themes'\n};\n"
+  },
+  {
+   "path": "app/package.json",
+   "status": "changed",
+   "text": "{\n  \"name\": \"app\",\n  \"version\": \"1.0.0\",\n  \"private\": true,\n  \"dependencies\": {\n    \"@astryxdesign/core\": \"0.7.12\",\n    \"react\": \"^19.0.0\",\n    \"react-dom\": \"^19.0.0\",\n    \"@stylexjs/stylex\": \"^0.19.0\"\n  },\n  \"exports\": {\n    \"./themes/ocean\": \"./themes/ocean/ocean.js\",\n    \"./themes/ocean.css\": \"./themes/ocean/ocean.css\"\n  },\n  \"peerDependencies\": {\n    \"@astryxdesign/cli\": \">=0.6.4\"\n  },\n  \"peerDependenciesMeta\": {\n    \"@astryxdesign/cli\": {\n      \"optional\": true\n    }\n  }\n}\n"
+  },
+  {
+   "path": "app/themes/ocean/oceanTheme.doc.mjs",
+   "status": "created",
+   "text": "/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {\n  type: 'theme',\n  name: 'ocean',\n  displayName: 'Ocean',\n  description: 'Ocean theme.',\n  maintained: true,\n};\n"
+  },
+  {
+   "path": "app/themes/ocean/oceanTheme.ts",
+   "status": "created",
+   "text": "import {defineTheme} from '@astryxdesign/core/theme';\n\nexport const oceanTheme = defineTheme({\n  name: 'ocean',\n});\n"
+  },
+  {
+   "path": "home/.config/astryx/state.json",
+   "status": "created",
+   "text": "{\n  \"notifiedAt\": {\n    \"setup:/tmp/astryx-conformance/work/app\": 1794268800000\n  }\n}\n"
+  }
+ ]
+}

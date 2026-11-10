@@ -6,6 +6,7 @@
   "--zh"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# LayoutFooter\n\n用于操作栏、分页和状态栏的底部栏。\n\n**Import:** `import {LayoutFooter} from '@astryxdesign/core/Layout';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `children` | `ReactNode` | - | 页脚内容。 |\n| `hasDivider` | `boolean` | `false` | 顶部边缘的边框。未设置时，由父级 Layout 的 defaultHasDividers 决定。 |\n| `height` | `SizeValue` | - | 页脚高度。数字类型会被解释为像素值，字符串类型按原样使用。 |\n| `label` | `string` | - | 地标元素的无障碍标签。 |\n| `padding` | `0 \\| 0.5 \\| 1 \\| 1.5 \\| 2 \\| 3 \\| 4 \\| 5 \\| 6 \\| 8 \\| 10` | - | 所有边的内边距，使用间距刻度。替换布局提供的内边距；0 表示全出血。 |\n| `role` | `AriaRole` | - | ARIA 地标角色。 |\n| `ref` | `React.Ref<HTMLDivElement>` | - | 转发到页脚元素的 ref。 |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

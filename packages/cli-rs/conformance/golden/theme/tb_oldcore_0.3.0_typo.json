@@ -6,6 +6,7 @@
   "themes/typo.mjs"
  ],
  "fixture": "themes-core-0.3.0",
+ "fixtureHash": "2f7527239e99a151+4e418a0c2575d9ce",
  "stdout": "[ok] themes/typo.css (2.7 KB, 10 token overrides, 0 component overrides)\n[note] Fonts named but not loaded: \"Inter\". Load them in your app (recipe: npx @astryxdesign/cli@0.7.12 docs typography).\nRun with --detail full for the install example and font recipe.\n",
  "stderr": "\nNext step: run `npm install @astryxdesign/cli@0.3.0`, then `npx astryx init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -5,6 +5,7 @@
   "styling-overview"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Results for \"styling-overview\" (1)\n\nname:        styling-overview\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Guides › Styling overview\ndescription: How to set up CSS - exact imports for three paths: plain, Tailwind, and StyleX for your own code - plus the stylesheet each Astryx package ships.\ncommand:     npx @astryxdesign/cli@0.7.12 docs styling-overview --index\nparent:      npx @astryxdesign/cli@0.7.12 docs guides\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover styling-overview\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -6,6 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# ThemeSwitcher - Use state to switch the theme object passed to Theme and preview a different visual treatment.\n# Components: Card, Section, Selector, Stack\n\n<Section padding={4} variant=\"muted\" maxWidth={420}>\n  <Stack gap={3} />\n  <Selector />\n  <Theme />\n  <Card padding={4} width=\"100%\">\n    <Stack gap={3} />\n    <Heading />\n    <Text />\n    <Button />\n  </Card>\n</Section>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

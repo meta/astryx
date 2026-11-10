@@ -6,6 +6,7 @@
   "--params"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `options` | `UseInputContainerOptions` | - | Configuration object for the input container. **(required)** |\n| `options.containerRef` | `RefObject<HTMLElement \\| null>` | - | Ref to the outer container/wrapper element. **(required)** |\n| `options.inputRef` | `RefObject<HTMLInputElement \\| HTMLTextAreaElement \\| HTMLElement \\| null>` | - | Ref to the inner input or textarea element. **(required)** |\n| `options.disabled` | `boolean` | `false` | Whether the input is disabled. |\n\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

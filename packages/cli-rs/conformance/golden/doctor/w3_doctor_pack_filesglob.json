@@ -1,0 +1,15 @@
+{
+ "id": "w3_doctor_pack_filesglob",
+ "args": [
+  "doctor",
+  "integration",
+  "validate",
+  "--json"
+ ],
+ "fixture": "doctor-pack",
+ "fixtureHash": "b16c08c337f0e742+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.validate\",\n  \"data\": {\n    \"validated\": true,\n    \"name\": \"@acme/filesglob\",\n    \"version\": \"1.0.0\",\n    \"issues\": [],\n    \"notes\": [\n      {\n        \"code\": \"template_asset_not_packed\",\n        \"message\": \"templates/promo.tsx: loads templates/logo.svg, which npm leaves out of the package by its `files` field, so the template breaks once installed. Fix: add \\\"templates\\\" to `files`, drop any `!` entry that excludes it, and confirm with `npm pack --dry-run`.\",\n        \"next\": true\n      }\n    ],\n    \"docTypes\": {\n      \"status\": \"skipped\",\n      \"reason\": \"TypeScript is not installed in this project, so docs were not checked against the authoring types. On TypeScript 7, add its TypeScript 6 API package (`npm install -D @typescript/typescript6`); otherwise install TypeScript 5.0 through 6 (`npm install -D typescript@6`). Then run this check again.\",\n      \"docs\": 0,\n      \"findings\": [],\n      \"unchecked\": []\n    },\n    \"docNames\": {\n      \"status\": \"checked\",\n      \"findings\": [],\n      \"unchecked\": []\n    },\n    \"blockComponents\": {\n      \"status\": \"checked\",\n      \"findings\": [],\n      \"unchecked\": []\n    },\n    \"publicImports\": {\n      \"status\": \"checked\",\n      \"findings\": [],\n      \"unchecked\": []\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": []
+}

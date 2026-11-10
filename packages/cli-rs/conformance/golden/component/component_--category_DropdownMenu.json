@@ -6,6 +6,7 @@
   "DropdownMenu"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "DropdownMenu\n\nname:   DropdownMenu\nimport: @astryxdesign/core/DropdownMenu\n\nname:   DropdownMenuCheckboxItem\nimport: @astryxdesign/core/DropdownMenu\n\nname:   DropdownMenuDivider\nimport: @astryxdesign/core/DropdownMenu\n\nname:   DropdownMenuGroup\nimport: @astryxdesign/core/DropdownMenu\n\nname:   DropdownMenuItem\nimport: @astryxdesign/core/DropdownMenu\n\nname:   DropdownMenuRadioGroup\nimport: @astryxdesign/core/DropdownMenu\n\nname:   DropdownMenuRadioItem\nimport: @astryxdesign/core/DropdownMenu\n\nname:   DropdownMenuSubMenu\nimport: @astryxdesign/core/DropdownMenu\n\nImport from the path shown (e.g. import {Button} from '@astryxdesign/core/Button')\nUsage: npx @astryxdesign/cli@0.7.12 component <name> [name...]\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

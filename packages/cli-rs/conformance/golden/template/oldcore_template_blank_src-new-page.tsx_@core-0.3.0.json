@@ -6,6 +6,7 @@
   "src/new-page.tsx"
  ],
  "fixture": "core-0.3.0",
+ "fixtureHash": "94e7e2ef7dd216e2+4e418a0c2575d9ce",
  "stdout": "Copied template to src/new-page.tsx\n\npackage: @astryxdesign/core\n",
  "stderr": "\nNext step: run `npm install @astryxdesign/cli@0.3.0`, then `npx astryx init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

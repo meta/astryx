@@ -7,6 +7,7 @@
   "1"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Results for \"date picker\" (1 of 69)\n\nname:        Calendar\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/Calendar\ndescription: Calendar lets the user pick a date or date range from a month grid. Use it in booking flows, scheduling UIs, date filters, or anywhere the user needs to see surrounding dates for context.\ncommand:     npx @astryxdesign/cli@0.7.12 component Calendar\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover 'date picker'\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

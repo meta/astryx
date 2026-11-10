@@ -7,6 +7,7 @@
   "--json"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.app\",\n  \"data\": {\n    \"themes\": [\n      {\n        \"slug\": \"butter\",\n        \"owner\": \"@astryxdesign/theme-butter\",\n        \"module\": \"@astryxdesign/theme-butter/built\",\n        \"stylesheet\": \"@astryxdesign/theme-butter/theme.css\",\n        \"fontStylesheet\": \"@astryxdesign/theme-butter/fonts.css\",\n        \"source\": \"bundled\"\n      },\n      {\n        \"slug\": \"stone\",\n        \"owner\": \"@astryxdesign/theme-stone\",\n        \"module\": \"@astryxdesign/theme-stone/built\",\n        \"stylesheet\": \"@astryxdesign/theme-stone/theme.css\",\n        \"fontStylesheet\": \"@astryxdesign/theme-stone/fonts.css\",\n        \"source\": \"bundled\"\n      }\n    ],\n    \"default\": \"stone\",\n    \"modulePath\": \"src/astryx-themes.js\",\n    \"change\": {\n      \"action\": \"use\",\n      \"slug\": \"stone\",\n      \"changed\": true,\n      \"firstAdd\": false\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

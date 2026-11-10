@@ -7,6 +7,7 @@
   "acme-dash"
  ],
  "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
  "stdout": "template contribution added\n\n[ok] acme-dash\n\nDeclare template root ./templates in astryx.integration.mjs.\n\n- templates/acme-dash.doc.mjs\n- templates/acme-dash.tsx\n- astryx.integration.mjs\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

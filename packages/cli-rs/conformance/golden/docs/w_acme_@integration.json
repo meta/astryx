@@ -5,6 +5,7 @@
   "acme"
  ],
  "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Unknown topic \"acme\"\n\n  acme-guide  (available topic)\n",
  "exit": 1,

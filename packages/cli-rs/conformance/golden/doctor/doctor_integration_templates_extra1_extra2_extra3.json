@@ -9,6 +9,7 @@
   "extra3"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Checking integration templates: extra1\n\nIntegration issues\n\nseverity: [fail]\ncode:     package_not_found\nmessage:  Could not find installed integration package \"extra1\" at /tmp/astryx-conformance/work/app/node_modules/extra1/package.json. Install it first.\n",
  "stderr": "",
  "exit": 1,

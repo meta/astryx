@@ -8,6 +8,7 @@
   "Layout"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Layout\n\nname:   Center\nimport: @astryxdesign/core/Center\n\nname:   FormLayout\nimport: @astryxdesign/core/FormLayout\n\nname:   Grid\nimport: @astryxdesign/core/Grid\n\nname:   GridSpan\nimport: @astryxdesign/core/Grid\n\nname:   HStack\nimport: @astryxdesign/core/HStack\n\nname:   Layout\nimport: @astryxdesign/core/Layout\n\nname:   LayoutContent\nimport: @astryxdesign/core/Layout\n\nname:   LayoutFooter\nimport: @astryxdesign/core/Layout\n\nname:   LayoutHeader\nimport: @astryxdesign/core/Layout\n\nname:   LayoutPanel\nimport: @astryxdesign/core/Layout\n\nname:   Section\nimport: @astryxdesign/core/Section\n\nname:   Stack\nimport: @astryxdesign/core/Stack\n\nname:   VStack\nimport: @astryxdesign/core/VStack\n\nImport from the path shown (e.g. import {Button} from '@astryxdesign/core/Button')\nUsage: npx @astryxdesign/cli@0.7.12 component <name> [name...]\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

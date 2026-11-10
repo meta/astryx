@@ -6,6 +6,7 @@
   "alias/broken.tsx"
  ],
  "fixture": "renderpages",
+ "fixtureHash": "8877e3d4520e7c26+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: The page imports @/components/Nope through a path alias that does not lead to a file. Check `compilerOptions.paths` in the project's tsconfig.json, or import it by a relative path.\n",
  "exit": 1,

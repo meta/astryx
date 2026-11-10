@@ -7,6 +7,7 @@
   "--json"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.targets\",\n  \"data\": {\n    \"filter\": \"banner-frame\",\n    \"componentCount\": 1,\n    \"targets\": [\n      {\n        \"key\": \"banner-frame\",\n        \"className\": \"astryx-banner-frame\",\n        \"component\": \"Banner\",\n        \"props\": [\n          \"container\",\n          \"elevation\"\n        ],\n        \"states\": []\n      }\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

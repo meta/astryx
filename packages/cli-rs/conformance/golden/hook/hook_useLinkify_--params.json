@@ -6,6 +6,7 @@
   "--params"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n## Parameters\n\n| Param | Type | Default | Description |\n|-------|------|---------|-------------|\n| `text` | `string` | - | The plain text to scan. Empty text returns a single-element array of itself. **(required)** |\n| `options` | `UseLinkifyOptions` | - | Configuration object. |\n| `options.patterns` | `LinkifyPattern[]` | - | Custom patterns to detect, in addition to (or, with hasBuiltins false, replacing) the built-in URL and email detection. Each pattern is a global-flag regex plus an href builder (capture groups available) and an optional label builder and isExternal flag. When matches overlap, the earliest one wins; at the same start, custom patterns win over the built-in ones. |\n| `options.hasBuiltins` | `boolean` | `true` | Include the built-in http(s) URL and email detection. Default true; set false when patterns should fully define what links. |\n\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

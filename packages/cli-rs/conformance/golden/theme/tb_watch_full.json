@@ -9,6 +9,7 @@
   "--watch"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "\nBuilding theme from themes/alpha.mjs...\n\n[ok] themes/alpha.css\n[ok] themes/alpha.css.d.ts\n  1 token overrides, 0 component overrides\n  1.9 KB\n[ok] themes/alpha.js\n[ok] themes/alpha.d.ts\n\nInstall in your app (paths are relative to a file in src/; adjust if yours lives elsewhere):\n\n  import { Theme } from '@astryxdesign/core/theme';\n  import { alphaTheme } from './themes/alpha';\n  import './themes/alpha.css';\n\n  <Theme theme={alphaTheme}>\n    <App />\n  </Theme>\n\nOr with a <link> tag:\n\n  import { Theme } from '@astryxdesign/core/theme';\n  import { alphaTheme } from './themes/alpha';\n\n  <link rel=\"stylesheet\" href=\"./themes/alpha.css\" />\n  <Theme theme={alphaTheme}>\n    <App />\n  </Theme>\n\n\nWatching themes/alpha.mjs for changes - press Ctrl-C to stop.\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": "timeout",

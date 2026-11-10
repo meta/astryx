@@ -6,6 +6,7 @@
   "-h"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Results for \"-h\" (1)\n\nname:        cli/host-entry\nsection:     process-ends\ndomain:      doc\npackage:     @astryxdesign/cli\ntitle:       Astryx CLI › Host entry › When the process ends instead\ndescription: Like the CLI's own command, a run ends the process with its exit status, and the call never resolves, when it:\ncommand:     npx @astryxdesign/cli@0.7.12 docs cli/host-entry process-ends\nparent:      npx @astryxdesign/cli@0.7.12 docs cli/host-entry --index\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover -h\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -5,6 +5,7 @@
   "foundations"
  ],
  "fixture": "docsint",
+ "fixtureHash": "36d5db4ca2dc43ba+4e418a0c2575d9ce",
  "stdout": "Foundations\nColor, elevation, icons, illustrations, motion, shape, and spacing: the visual foundations every component builds on.\nEach topic keeps its own name; open one by it.\n\npackage: @astryxdesign/cli\n\nTopics\n\nacme-colors (@acme/docs)  Our palette.\nelevation                 Shadow tokens for visual elevation and inset state rings.\nicons                     Semantic icon names available in the design system. These adapt to the active theme's icon\n                          registry.\nillustrations             Illustration guidelines for empty states, onboarding flows, and feature highlights.\nmotion                    Duration and easing tokens for animations and transitions.\nshape                     Border radius tokens for consistent component rounding, from sharp corners to full pills.\nspacing                   Spacing scale tokens for padding, gap, and margin: the rhythmic foundation of design system\n                          layouts.\n\nOpen one: npx @astryxdesign/cli@0.7.12 docs <name>\nUp: npx @astryxdesign/cli@0.7.12 docs\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

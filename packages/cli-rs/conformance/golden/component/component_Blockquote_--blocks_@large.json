@@ -6,6 +6,7 @@
   "--blocks"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nShowcase\n\ndisplayName: Blockquote - Showcase\ndescription: Blockquote with and without citation. A quick visual reference for the blockquote component.\n\nExamples\n\nname:        BlockquoteTestimonials\ndescription: Multiple quotes arranged in a card grid for a testimonials section. Combine with Card and Grid to create social-proof layouts.\n\nname:        BlockquoteWithCite\ndescription: A plain quote and a quote with a cite attribution. Use cite to credit the original author or source.\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

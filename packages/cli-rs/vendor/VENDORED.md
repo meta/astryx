@@ -57,3 +57,23 @@ Patches (all marked by a reference to `crate::v8_messages` or `v8_names`):
   (BigInt from a fraction, radix, repeat count, URI malformed,
   setPrototypeOf, class constructor call, weak keys, private members,
   defineProperty).
+
+## boa_ast 0.22.0
+
+Source: the `boa_ast` 0.22.0 crate as published (Unlicense OR MIT). Patch:
+
+- `src/scope.rs`: each scope keeps a name → position index of its bindings
+  (`Inner::names`, kept in step with the append-only binding list), so
+  binding lookups no longer scan the scope. Large single-scope programs
+  (typescript.js) compiled 3.6x faster; results are unchanged.
+
+## boa_parser 0.22.0
+
+Source: the `boa_parser` 0.22.0 crate as published (Unlicense OR MIT).
+Patches (speed only; results unchanged):
+
+- `src/lexer/identifier.rs`: ASCII fast path for identifier characters (the
+  Unicode set lookup ran for every character).
+- `src/parser/expression/primary/mod.rs`: a parenthesized expression moves
+  its inner expression instead of cloning it (deep clones of large function
+  bodies in `(function () { … })` dominated parse time).

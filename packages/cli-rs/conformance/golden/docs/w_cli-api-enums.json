@@ -5,6 +5,7 @@
   "cli/api/enums"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Enums\nEvery fixed list of values, such as error codes and response types.\n\npackage: @astryxdesign/cli\n\nerror-codes     Error Codes: Stable, append-only machine-readable error codes on the --json error envelope\n                (envelope.code). Codes never change or get removed; branch on these, not on prose.\nresponse-types  Response Types: The `type` discriminant present on every --json success envelope. Consumers switch on it\n                to narrow `data`.\n\nOpen one: npx @astryxdesign/cli@0.7.12 docs cli/api/enums/<name>\nUp: npx @astryxdesign/cli@0.7.12 docs cli/api\nPrevious: npx @astryxdesign/cli@0.7.12 docs cli/api/schemas\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

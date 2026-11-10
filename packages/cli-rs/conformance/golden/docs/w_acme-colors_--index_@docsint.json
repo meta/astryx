@@ -6,6 +6,7 @@
   "--index"
  ],
  "fixture": "docsint",
+ "fixtureHash": "36d5db4ca2dc43ba+4e418a0c2575d9ce",
  "stdout": "Acme colors\nOur palette.\n\npackage: @acme/docs\n\nreplaces @astryxdesign/cli's color\n\npalette  Palette\n\nRead one section: npx @astryxdesign/cli@0.7.12 docs acme-colors <section>\nRead everything:  npx @astryxdesign/cli@0.7.12 docs acme-colors --full\nUp: npx @astryxdesign/cli@0.7.12 docs foundations\nNext: npx @astryxdesign/cli@0.7.12 docs elevation\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

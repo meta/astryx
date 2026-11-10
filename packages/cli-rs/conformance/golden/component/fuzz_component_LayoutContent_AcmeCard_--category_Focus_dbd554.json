@@ -8,6 +8,7 @@
   "Focus"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Component batch\n\ncount: 2\n\nResults\n\nLayoutContent\n\nselector: LayoutContent\nstatus:   found\n\nResult\n\npackage: @astryxdesign/core\n\nLayoutContent  <- from '@astryxdesign/core/Layout'\n  Scrollable main content area.\n  children, padding, isScrollable, label, role, ref\n\n\nAcmeCard\n\nselector: AcmeCard\nstatus:   not_found\ncode:     ERR_UNKNOWN_COMPONENT\nerror:    No component named \"AcmeCard\"\n\nSuggestions\n\nname:   Card\nreason: keyword \"card\"\n\nname:   ClickableCard\nreason: keyword \"card\"\n\nname:   SelectableCard\nreason: keyword \"card\"\n\nname:   Overlay\nreason: keyword \"card\"\n",
  "stderr": "",
  "exit": 1,

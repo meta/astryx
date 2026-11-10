@@ -8,6 +8,7 @@
   "--bogus"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Usage: astryx doctor integration templates [options] [package]\n\nValidate integration template replacements and Core id overlaps\n\nArguments:\n  package     Installed integration package name; omit to check the package in the current directory.\n\nOptions:\n  -h, --help  display help for command\n\nExit codes:\n  0  replacement declarations are valid; undeclared id conflicts are warnings\n  1  the integration, a template, or a replacement declaration is invalid\n\nExamples:\n  # Check the local integration\n  npx @astryxdesign/cli@0.7.12 doctor integration templates\n  # Check an installed integration\n  npx @astryxdesign/cli@0.7.12 doctor integration templates @acme/widgets --json\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/doctor-integration-templates\n",
  "stderr": "",
  "exit": 0,

@@ -7,6 +7,7 @@
   "src/theme/butter/butterTheme.ts"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"theme.build\",\n  \"data\": {\n    \"name\": \"butter\",\n    \"tokenCount\": 199,\n    \"componentCount\": 22,\n    \"sizeKB\": 35.9,\n    \"outputs\": {\n      \"css\": \"src/theme/butter/butter.css\",\n      \"cssDts\": \"src/theme/butter/butter.css.d.ts\",\n      \"js\": \"src/theme/butter/butter.js\",\n      \"dts\": \"src/theme/butter/butter.d.ts\",\n      \"variantsDts\": \"src/theme/butter/butter.variants.d.ts\"\n    },\n    \"warnings\": [],\n    \"notices\": [\n      \"Font \\\"Outfit\\\" is named by this theme but not loaded; add a <link> or @font-face in your app (recipe: astryx docs typography)\",\n      \"Font \\\"JetBrains Mono\\\" is named by this theme but not loaded; add a <link> or @font-face in your app (recipe: astryx docs typography)\",\n      \"Font \\\"Sarina\\\" is named by this theme but not loaded; add a <link> or @font-face in your app (recipe: astryx docs typography)\"\n    ]\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

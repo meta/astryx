@@ -4,6 +4,7 @@
   "temlpate"
  ],
  "fixture": "empty",
+ "fixtureHash": "e3b0c44298fc1c14+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: unknown command 'temlpate'\n\n  template  (did you mean this?)\n",
  "exit": 1,

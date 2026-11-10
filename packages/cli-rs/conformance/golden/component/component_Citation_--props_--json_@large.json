@@ -7,6 +7,7 @@
   "--json"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"component.detail.props\",\n  \"package\": \"@astryxdesign/core\",\n  \"data\": [\n    {\n      \"name\": \"source\",\n      \"type\": \"CitationSource\",\n      \"description\": \"The citation source object containing title, url, an optional image src, and an optional icon node. The url follows the shared navigation rule described on the Link `href` prop; rejected destinations leave the citation visible without navigation. Image src uses separate resource handling.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"number\",\n      \"type\": \"number\",\n      \"description\": \"The display index for this citation.\",\n      \"required\": true\n    },\n    {\n      \"name\": \"variant\",\n      \"type\": \"'label' | 'number'\",\n      \"description\": \"Display style: a label chip showing the source title or a compact numbered badge.\",\n      \"default\": \"'label'\"\n    }\n  ],\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

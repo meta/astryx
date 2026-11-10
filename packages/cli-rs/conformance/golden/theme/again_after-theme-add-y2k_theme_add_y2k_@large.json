@@ -6,6 +6,7 @@
   "y2k"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/theme-y2k\nApp themes\n1 added\n\nslug:           y2k\nowner:          @astryxdesign/theme-y2k\nmodule:         @astryxdesign/theme-y2k/built\nstylesheet:     @astryxdesign/theme-y2k/theme.css\nfontStylesheet: @astryxdesign/theme-y2k/fonts.css\nsource:         bundled\n\ndefault:    y2k\nmodulePath: src/astryx-themes.js\naction:     add\nslug:       y2k\nchanged:    false\nfirstAdd:   false\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n",
  "exit": 0,

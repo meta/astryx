@@ -1,0 +1,34 @@
+{
+ "id": "wide_edge_tokens",
+ "args": [
+  "upgrade",
+  "--from",
+  "0.0.7",
+  "--codemod",
+  "migrate-token-renames",
+  "--apply",
+  "--json"
+ ],
+ "fixture": "upgrade-edge",
+ "fixtureHash": "92fe742b12705447+4e418a0c2575d9ce",
+ "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"upgrade.run\",\n  \"data\": {\n    \"from\": \"0.0.7\",\n    \"to\": \"0.7.12\",\n    \"codemods\": 1,\n    \"integrations\": [],\n    \"agentDocsRefreshed\": false,\n    \"agentDocs\": {\n      \"status\": \"missing\",\n      \"installedVersion\": \"0.7.12\",\n      \"fromVersions\": [],\n      \"files\": [],\n      \"refreshed\": false,\n      \"action\": \"nudge-init\"\n    },\n    \"sourcePathFound\": true,\n    \"filesChanged\": 3,\n    \"transformsApplied\": 3,\n    \"modifiedFiles\": [\n      \"src/mock.test.ts\",\n      \"src/plain.js\",\n      \"src/slug.tsx\"\n    ],\n    \"protectedFiles\": [],\n    \"declinedCandidates\": [],\n    \"regenerate\": [],\n    \"complete\": true,\n    \"errors\": []\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
+ "stderr": "",
+ "exit": 0,
+ "files": [
+  {
+   "path": "upgrade-edge/src/mock.test.ts",
+   "status": "changed",
+   "text": "const mock = {\n  create: <T>(styles: T) => styles,\n  defineConsts: <T,>(constants: T) => constants,\n};\nexport const token = \"var(--color-background-surface)\";\nexport default mock;\n"
+  },
+  {
+   "path": "upgrade-edge/src/plain.js",
+   "status": "changed",
+   "text": "export const re = () => (\n  /a'b/g\n);\nexport const bg = \"var(--color-background-surface)\";\n"
+  },
+  {
+   "path": "upgrade-edge/src/slug.tsx",
+   "status": "changed",
+   "text": "export function slug(value: string): string {\n  return (value\n    .trim()\n    .replace(/['\\u201C\\u201D\"]/g, '')\n    .replace(/^-+|-+$/g, '') || 'section');\n}\n\nexport const style = {background: \"var(--color-background-surface, #fff)\"};\n"
+  }
+ ]
+}

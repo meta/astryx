@@ -5,6 +5,7 @@
   "@astryxdesign/theme-butter/butter"
  ],
  "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
  "stdout": "package:   @astryxdesign/theme-butter\nversion:   0.7.12\nkind:      theme\nname:      butter\ntitle:     Butter\nsummary:   Warm, creamy yellows with a friendly blue accent. Playful enough for consumer surfaces, soft enough to stay readable.\ninstalled: false\nsource:    Astryx\n\nAdd it\n\nnpm install @astryxdesign/theme-butter@0.7.12\n\nThen use its theme:\n\nnpx @astryxdesign/cli@0.7.12 theme add butter\n\nIts package: npx @astryxdesign/cli@0.7.12 discover @astryxdesign/theme-butter\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

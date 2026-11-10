@@ -7,6 +7,7 @@
   "themes/private.mjs"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "[ok] themes/alpha.css (1.9 KB, 1 token overrides, 0 component overrides)\n[ok] themes/private.css (2.1 KB, 2 token overrides, 1 component overrides)\nRun with --detail full for the install example and font recipe.\n\n[ok] Built 2 themes.\n",
  "stderr": "  [error] themes/private.mjs: theme tokens sets private var \"--_secret\". Private vars (--_*) are internal; use a public token or standard CSS property instead.\n  [error] themes/private.mjs: Component \"button\" (theme base) sets private var \"--_radius\". Private vars (--_*) are internal; use standard CSS properties (e.g. borderRadius, padding) instead. The pipeline expands them automatically.\n  [error] themes/private.mjs: Component \"button\" (theme base :hover) sets private var \"--_bg\". Private vars (--_*) are internal; use standard CSS properties (e.g. borderRadius, padding) instead. The pipeline expands them automatically.\n\n  themes/private.mjs: 3 private var error(s). Use standard CSS properties instead.\n",
  "exit": 1,

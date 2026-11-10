@@ -6,6 +6,7 @@
   "--json"
  ],
  "fixture": "discover-iconsets",
+ "fixtureHash": "214fcf2cdc8216c2+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"discover.item\",\n  \"package\": \"@acme/glyphs\",\n  \"data\": {\n    \"package\": \"@acme/glyphs\",\n    \"version\": \"1.0.0\",\n    \"kind\": \"icon-set\",\n    \"name\": \"glyphs\",\n    \"title\": \"Acme glyphs\",\n    \"summary\": \"Hand-drawn test icons.\",\n    \"license\": \"MIT\",\n    \"iconCount\": 4,\n    \"default\": {\n      \"variant\": \"outline\"\n    },\n    \"definitions\": [\n      \"close\",\n      \"search\"\n    ],\n    \"command\": \"astryx experimental icon <words> --set @acme/glyphs/glyphs\",\n    \"installed\": true\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

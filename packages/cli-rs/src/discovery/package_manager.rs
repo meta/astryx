@@ -371,6 +371,76 @@ pub fn guess_cli_invocation(target: Option<&str>) -> String {
 }
 
 /// `isGlobalCopy(cliRoot)` (choose.mjs), for Linux and macOS.
+/// `installPlaceOf(root)`: whether a CLI root is a runner's temporary copy,
+/// and the folder whose `node_modules` holds it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct InstallPlace {
+    pub runner: bool,
+    pub owner: Option<String>,
+    pub known_global: bool,
+}
+
+/// `installPlaceOf(root)`.
+pub fn install_place_of(root: &str) -> InstallPlace {
+    if first_match(r"[\\/]_npx[\\/]|[\\/]dlx[-\\/]|[\\/]\.bun[\\/]install[\\/]cache[\\/]|[\\/]bunx-|[\\/]xfs-", root, "i").is_some() {
+        return InstallPlace { runner: true, owner: None, known_global: false };
+    }
+    let sep = if first_match(r"^[A-Za-z]:\\|^\\\\", root, "").is_some() { "\\" } else { "/" };
+    let parts: Vec<&str> = root.split(['\\', '/']).collect();
+    let Some(at) = parts.iter().rposition(|p| *p == "node_modules").filter(|at| *at >= 1) else {
+        return InstallPlace { runner: false, owner: None, known_global: false };
+    };
+    let or_sep = |v: String| if v.is_empty() { sep.to_string() } else { v };
+    let mut owner = or_sep(parts[..at].join(sep));
+    if let Some(pnpm_at) = parts.iter().rposition(|p| *p == ".pnpm") {
+        if pnpm_at > 0 && pnpm_at < at {
+            let end = if parts[pnpm_at - 1] == "node_modules" { pnpm_at - 1 } else { pnpm_at };
+            owner = or_sep(parts[..end].join(sep));
+        }
+    }
+    let known_global = [r"[\\/]global[\\/]v?\d+(?:[\\/][^\\/]+)?$", r"(?i)[\\/]yarn[\\/](?:data[\\/])?global$", r"(?i)[\\/]install[\\/]global$"]
+        .iter()
+        .any(|re| {
+            let (re, flags) = match re.strip_prefix("(?i)") {
+                Some(r) => (r, "i"),
+                None => (*re, ""),
+            };
+            first_match(re, &owner, flags).is_some()
+        });
+    InstallPlace { runner: false, owner: Some(owner), known_global }
+}
+
+/// `globalFolderOf(root)`: the package manager whose global folder holds
+/// this CLI root, and that folder.
+pub fn global_folder_of(root: &str) -> Option<(&'static str, String)> {
+    global_folder_in(root, configured_global_folders())
+}
+
+/// `globalFolderOf(root, {home, env})`.
+pub fn global_folder_of_in(root: &str, home: &str, env: &dyn Fn(&str) -> Option<String>) -> Option<(&'static str, String)> {
+    global_folder_in(root, configured_global_folders_in(home, env))
+}
+
+fn global_folder_in(root: &str, folders: Vec<(&'static str, String)>) -> Option<(&'static str, String)> {
+    let place = install_place_of(root);
+    if place.runner {
+        return None;
+    }
+    let owner = place.owner?;
+    for (manager, folder) in folders {
+        let folder = np::real_or_resolve(&folder);
+        if manager == "pnpm" {
+            let rel = np::relative(&np::normalize(&folder), &np::normalize(&owner));
+            if !(rel.is_empty() || rel.starts_with("..") || np::is_absolute(&rel)) && first_match(r"^v?\d+(?:[\\/][^\\/]+)?$", &rel, "u").is_some() {
+                return Some(("pnpm", owner));
+            }
+        } else if np::normalize(&folder) == np::normalize(&owner) {
+            return Some((manager, owner));
+        }
+    }
+    None
+}
+
 pub fn is_global_copy(cli_root: &str) -> bool {
     let root = np::real_or_resolve(cli_root);
     let runner = first_match(
@@ -462,7 +532,12 @@ fn setting_in(file: &str, key: &str) -> Option<String> {
 }
 
 fn configured_global_folders() -> Vec<(&'static str, String)> {
-    let home = np::homedir();
+    configured_global_folders_in(&np::homedir(), &|k| std::env::var(k).ok())
+}
+
+/// `configuredGlobalFolders({home, env})`.
+pub fn configured_global_folders_in(home: &str, env: &dyn Fn(&str) -> Option<String>) -> Vec<(&'static str, String)> {
+    let home = home.to_string();
     let abs = |v: Option<String>| -> Option<String> {
         let v = v.filter(|s| !s.is_empty())?;
         let e = if let Some(rest) = v.strip_prefix('~') { np::join2(&home, rest) } else { v };
@@ -472,7 +547,6 @@ fn configured_global_folders() -> Vec<(&'static str, String)> {
             None
         }
     };
-    let env = |k: &str| std::env::var(k).ok();
     let xdg_config = abs(env("XDG_CONFIG_HOME")).unwrap_or_else(|| np::join2(&home, ".config"));
     let xdg_data = abs(env("XDG_DATA_HOME"));
     let mut out = Vec::new();

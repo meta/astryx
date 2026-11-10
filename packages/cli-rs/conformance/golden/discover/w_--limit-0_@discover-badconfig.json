@@ -6,6 +6,7 @@
   "0"
  ],
  "fixture": "discover-badconfig",
+ "fixtureHash": "dd284ede60f6160e+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: --limit must be a positive integer, not \"0\"\n",
  "exit": 1,

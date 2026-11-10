@@ -11,6 +11,7 @@
   "fly"
  ],
  "fixture": "iconfresh",
+ "fixtureHash": "322dba8308a7044c+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\nError: Astryx already has the icon definition \"rocket\"; map to it instead of adding your own.\n\n  --definition rocket  (use Astryx's definition)\n",
  "exit": 1,

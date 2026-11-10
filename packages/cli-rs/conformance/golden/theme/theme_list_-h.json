@@ -6,6 +6,7 @@
   "-h"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Usage: astryx theme list [options]\n\nList themes available to add\n\nOptions:\n  --package <package>  Show only themes owned by this package\n  -h, --help           display help for command\n\nExit codes:\n  0  success\n  1  a bundled or installed theme descriptor cannot be read\n\nExamples:\n  # List available themes\n  npx @astryxdesign/cli@0.7.12 theme list --json\n  # List one integration package\n  npx @astryxdesign/cli@0.7.12 theme list --package @acme/themes\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/theme-list\n",
  "stderr": "",
  "exit": 0,

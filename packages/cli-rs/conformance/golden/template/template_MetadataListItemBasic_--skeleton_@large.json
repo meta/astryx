@@ -6,6 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# MetadataListItemBasic - A titled section of label and value rows for one record, here a deployment's environment, health status badge, version, and last deploy date. Values take plain text or a component such as a Badge.\n# Components: Badge, MetadataList\n\n<MetadataList />\n<MetadataListItem />\n<MetadataListItem />\n<Badge variant=\"green\" />\n<MetadataListItem />\n<MetadataListItem />\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

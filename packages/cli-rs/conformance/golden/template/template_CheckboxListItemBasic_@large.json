@@ -5,6 +5,7 @@
   "CheckboxListItemBasic"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {CheckboxList, CheckboxListItem} from '@astryxdesign/core/CheckboxList';\n\nexport default function CheckboxListItemBasic() {\n  const [value, setValue] = useState<string[]>(['updates']);\n\n  return (\n    <CheckboxList label=\"Email preferences\" value={value} onChange={setValue}>\n      <CheckboxListItem\n        label=\"Product updates\"\n        value=\"updates\"\n        description=\"New features and improvements\"\n      />\n      <CheckboxListItem\n        label=\"Security alerts\"\n        value=\"security\"\n        description=\"Important account security notifications\"\n      />\n      <CheckboxListItem\n        label=\"Marketing\"\n        value=\"marketing\"\n        description=\"Tips, offers, and promotions\"\n      />\n    </CheckboxList>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

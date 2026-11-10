@@ -6,6 +6,7 @@
   "--skeleton"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# CollapsibleControlledAccordion - Manage the open section from parent state, so something other than a click can move it: a URL parameter, a form jumping to the step that failed validation, or the Previous/Next controls shown here. onChange hands back the whole open value.\n# Components: Card, Collapsible, Stack\n\n<Stack gap={3} maxWidth={440} />\n<Stack gap={2} />\n<Button variant=\"secondary\" />\n<Button variant=\"secondary\" />\n<Text />\n<CollapsibleGroup />\n<Stack gap={2} />\n<Card>\n  <Collapsible />\n  <Text />\n</Card>\n<Card>\n  <Collapsible />\n  <Text />\n</Card>\n<Card>\n  <Collapsible />\n  <Text />\n</Card>\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

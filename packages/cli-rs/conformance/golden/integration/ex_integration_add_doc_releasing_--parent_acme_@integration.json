@@ -9,6 +9,7 @@
   "acme"
  ],
  "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
  "stdout": "doc contribution added\n\n[ok] releasing\n\nDeclare doc root ./docs in astryx.integration.mjs.\n\n- docs/releasing.doc.mjs\n- docs/acme.doc.mjs\n- package.json\n- astryx.integration.mjs\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

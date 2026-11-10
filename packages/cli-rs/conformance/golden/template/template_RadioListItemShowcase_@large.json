@@ -5,6 +5,7 @@
   "RadioListItemShowcase"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {useState} from 'react';\nimport {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';\n\nexport default function RadioListItemShowcase() {\n  const [value, setValue] = useState('standard');\n\n  return (\n    <RadioList label=\"Shipping method\" value={value} onChange={setValue}>\n      <RadioListItem\n        label=\"Standard\"\n        value=\"standard\"\n        description=\"5–7 business days\"\n      />\n      <RadioListItem\n        label=\"Express\"\n        value=\"express\"\n        description=\"2–3 business days\"\n      />\n      <RadioListItem\n        label=\"Overnight\"\n        value=\"overnight\"\n        description=\"Next business day\"\n      />\n      <RadioListItem\n        label=\"Same day\"\n        value=\"sameday\"\n        description=\"Not available in your area\"\n        isDisabled\n      />\n    </RadioList>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -7,6 +7,7 @@
   "component"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Build kit for \"button\"\n\nThis kit is narrowed by --type, so it names no template.\n\nCOMPONENTS\nFor what the template and blocks do not cover (top 3 of 6; --verbose for all). Read one: npx @astryxdesign/cli@0.7.12 component <name>\n\nname:        IconButton\npackage:     @astryxdesign/core\ndescription: A button that shows only an icon with no visible text.\n\nname:        ButtonGroup\npackage:     @astryxdesign/core\ndescription: ButtonGroup joins related actions into a single connected control.\n\nname:        NavIcon\npackage:     @astryxdesign/core\ndescription: NavIcon is a circular icon container with an accent-colored background.\n\nframe:      AppShell, TopNav, SideNav, Layout\nfoundation: VStack, HStack, Grid, StackItem, Card, Section, Text, Heading, Button, Icon, Badge, Divider\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

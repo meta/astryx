@@ -8,6 +8,7 @@
   "../.."
  ],
  "fixture": "upgrade-legacy",
+ "fixtureHash": "debba99afb710213+4e418a0c2575d9ce",
  "stdout": "\nUpgrade\nAborted\n\n",
  "stderr": "Invalid source directory \"../..\": resolves outside the project root (/tmp/astryx-conformance/work/upgrade-legacy). Path traversal is not allowed.\n",
  "exit": 1,

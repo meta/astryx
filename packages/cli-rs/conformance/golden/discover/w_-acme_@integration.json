@@ -5,6 +5,7 @@
   "@acme"
  ],
  "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Package \"@acme\" not found\n\n  @acme/kit  (available package)\n",
  "exit": 1,

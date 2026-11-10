@@ -5,6 +5,7 @@
   "widget"
  ],
  "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
  "stdout": "Found 3 matches for \"widget\"\n\n- npx @astryxdesign/cli@0.7.12 discover @acme/widgets/WidgetCard\n- npx @astryxdesign/cli@0.7.12 discover @acme/widgets/widgets  (doc)\n- npx @astryxdesign/cli@0.7.12 discover @acme/widgets  (package)\n",
  "stderr": "",
  "exit": 0,

@@ -6,6 +6,7 @@
   "ocean"
  ],
  "fixture": "integration",
+ "fixtureHash": "3faa5ab10e3a890b+4e418a0c2575d9ce",
  "stdout": "Ejected theme\n\nslug:        ocean\ndisplayName: Ocean\nmaintained:  true\npackage:     @acme/kit\noutputDir:   src/themes/ocean\nentry:       oceanTheme.ts\nexportName:  oceanTheme\nfiles:       oceanTheme.ts, oceanTheme.doc.mjs\n\nThis is a local fork. Build it with npx @astryxdesign/cli@0.7.12 theme build src/themes/ocean/oceanTheme.ts.\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

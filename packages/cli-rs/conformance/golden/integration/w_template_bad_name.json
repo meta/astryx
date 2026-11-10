@@ -7,6 +7,7 @@
   "Acme_Dash"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Invalid template name \"Acme_Dash\": use lowercase kebab-case starting with a letter.\n",
  "exit": 1,

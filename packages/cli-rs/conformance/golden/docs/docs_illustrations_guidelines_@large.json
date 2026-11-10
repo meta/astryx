@@ -6,6 +6,7 @@
   "guidelines"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Guidelines\n\n+ Keep illustrations consistent in style across the product.\n+ Use simple, flat illustrations that work in both light and dark mode.\n+ Size illustrations proportionally to the container, typically 120–240px.\n+ Place illustrations centered with supporting text below.\n\nx Mix illustration styles from different sources.\nx Use illustrations as decoration without purpose.\n\nUp: npx @astryxdesign/cli@0.7.12 docs illustrations --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs illustrations when-to-use\nNext: npx @astryxdesign/cli@0.7.12 docs illustrations placement\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

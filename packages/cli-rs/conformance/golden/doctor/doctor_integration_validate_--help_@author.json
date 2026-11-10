@@ -7,6 +7,7 @@
   "--help"
  ],
  "fixture": "author",
+ "fixtureHash": "dfa5fa4ed3546511+4e418a0c2575d9ce",
  "stdout": "Usage: astryx doctor integration validate [options] [package]\n\nValidate an integration manifest and its contributions\n\nArguments:\n  package     Installed integration package name; omit to validate the package in the current directory.\n\nOptions:\n  -h, --help  display help for command\n\nExit codes:\n  0  no error-severity issues (warnings, including doc type findings, are allowed)\n  1  one or more error-severity issues\n\nExamples:\n  # Validate the local package\n  npx @astryxdesign/cli@0.7.12 doctor integration validate\n  # Validate an installed package\n  npx @astryxdesign/cli@0.7.12 doctor integration validate @acme/widgets --json\n\nMore: npx @astryxdesign/cli@0.7.12 docs cli/commands/doctor-integration-validate\n",
  "stderr": "",
  "exit": 0,

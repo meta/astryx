@@ -10,6 +10,7 @@
   "nope"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Name the icon definition to map\n\n  npx @astryxdesign/cli@0.7.12 docs cli/experimental/icon-definitions  (every icon definition)\n",
  "exit": 1,

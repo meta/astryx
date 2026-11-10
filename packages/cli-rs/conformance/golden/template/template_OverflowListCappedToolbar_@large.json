@@ -5,6 +5,7 @@
   "OverflowListCappedToolbar"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {OverflowList} from '@astryxdesign/core/OverflowList';\nimport {Button} from '@astryxdesign/core/Button';\nimport {DropdownMenu} from '@astryxdesign/core/DropdownMenu';\nimport {Card} from '@astryxdesign/core/Card';\nimport {Center} from '@astryxdesign/core/Center';\n\nconst actions = ['Save', 'Edit', 'Duplicate', 'Share', 'Archive', 'Delete'];\n\nexport default function OverflowListCappedToolbar() {\n  return (\n    <Center width={420}>\n      <Card padding={2}>\n        <OverflowList\n          gap={2}\n          maxVisibleItems={3}\n          overflowRenderer={overflowItems => (\n            <DropdownMenu\n              button={{\n                label: `+${overflowItems.length}`,\n                variant: 'ghost',\n                size: 'sm',\n              }}\n              items={overflowItems.map(({index}) => ({\n                label: actions[index],\n              }))}\n            />\n          )}>\n          {actions.map(action => (\n            <Button key={action} label={action} size=\"sm\" />\n          ))}\n        </OverflowList>\n      </Card>\n    </Center>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

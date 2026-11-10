@@ -9,6 +9,7 @@
   "brief"
  ],
  "fixture": "compkit",
+ "fixtureHash": "447712d27e146684+4e418a0c2575d9ce",
  "stdout": "Component batch\n\ncount: 3\n\nResults\n\nButton\n\nselector: Button\nstatus:   ambiguous\ncode:     ERR_AMBIGUOUS_COMPONENT\nerror:    Component \"Button\" is provided by multiple packages. Re-run with --package <pkg> to choose one.\n\nCandidates\n\npackage:   @astryxdesign/core\ncomponent: Button\nkind:      component\ninstalled: true\n\npackage:   @comp/kit\ncomponent: Button\nkind:      component\ninstalled: true\n\nBroken\n\nselector: Broken\nstatus:   error\ncode:     ERR_INVALID_DOC\nerror:    Cannot load component metadata: /tmp/astryx-conformance/work/compkit/node_modules/@comp/kit/components/Broken.doc.mjs is invalid: (root): Invalid input\n\nNope\n\nselector: Nope\nstatus:   not_found\ncode:     ERR_UNKNOWN_COMPONENT\nerror:    No component named \"Nope\"\n\nSuggestions\n\nname:   Code\nreason: similar name (distance 2)\n\nname:   CodeBlock\nreason: keyword \"code\" (distance 2)\n\nname:   Skeleton\nreason: keyword \"bone\" (distance 2)\n\nname:   OverflowList\nreason: keyword \"more\" (distance 2)\n",
  "stderr": "Warning: @comp/kit has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n",
  "exit": 1,

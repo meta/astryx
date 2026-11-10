@@ -9,6 +9,7 @@
   "rename-selector-items-to-options"
  ],
  "fixture": "upgrade-legacy",
+ "fixtureHash": "debba99afb710213+4e418a0c2575d9ce",
  "stdout": "\nUpgrade\nFrom version: 9.9.9\nInstalled target: 0.7.12 (@astryxdesign/core)\nScanning /tmp/astryx-conformance/work/upgrade-legacy/src for source files...\nFound 5 source files\n\n[ok] No changes needed - your code is already up to date!\n[ok] No codemods available for this version range.\nDone\n\n",
  "stderr": "No Astryx agent-docs block found - AI agents have no component index. Run `npx @astryxdesign/cli@0.7.12 init --features agents` to install it.\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

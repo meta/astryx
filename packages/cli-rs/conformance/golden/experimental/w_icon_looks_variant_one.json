@@ -13,6 +13,7 @@
   "solid"
  ],
  "fixture": "iconlooks",
+ "fixtureHash": "586de4e6f916f930+4e418a0c2575d9ce",
  "stdout": "[ok] Added HomeSolidIcon as \"home\" (variant solid).\n\n- icon-sets/hero/hero.generated.js\n- icon-sets/hero/hero.generated.d.ts\n- icon-sets/hero/hero.icons.json\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

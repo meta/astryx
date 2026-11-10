@@ -5,6 +5,7 @@
   "CardElevations"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n'use client';\n\nimport {Card} from '@astryxdesign/core/Card';\nimport {Stack} from '@astryxdesign/core/Layout';\nimport {Grid} from '@astryxdesign/core/Grid';\nimport {Text, Heading} from '@astryxdesign/core/Text';\n\nconst LEVELS = [\n  {elevation: 'none' as const, caption: 'Flat — sits on the page (default)'},\n  {elevation: 'low' as const, caption: 'Low — lifts off slightly'},\n  {elevation: 'med' as const, caption: 'Med — clearly raised'},\n  {elevation: 'high' as const, caption: 'High — floats well above'},\n];\n\nexport default function CardElevations() {\n  return (\n    <Grid columns={2} gap={4} width={520}>\n      {LEVELS.map(({elevation, caption}) => (\n        <Card key={elevation} elevation={elevation}>\n          <Stack direction=\"vertical\" gap={1}>\n            <Heading level={4}>elevation=&quot;{elevation}&quot;</Heading>\n            <Text type=\"supporting\" color=\"secondary\">\n              {caption}\n            </Text>\n          </Stack>\n        </Card>\n      ))}\n    </Grid>\n  );\n}\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\npackage: @astryxdesign/core\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

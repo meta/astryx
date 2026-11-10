@@ -6,6 +6,7 @@
   "themes/built.mjs"
  ],
  "fixture": "themes-core-0.6.8",
+ "fixtureHash": "d1fcda65c75a9577+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: defineTheme(\"built\").extends.__adaptations.widthBreakpoints must be an object.\n",
  "exit": 1,

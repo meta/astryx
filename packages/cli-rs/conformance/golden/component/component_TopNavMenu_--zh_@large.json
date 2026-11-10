@@ -6,6 +6,7 @@
   "--zh"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\n# TopNavMenu\n\n导航项，在悬停时显示弹出菜单，包含带图标、标题和可选描述的丰富菜单项。\n\n**Import:** `import {TopNavMenu} from '@astryxdesign/core/TopNav';`\n\n## Props\n\n| Prop | Type | Default | Description |\n|------|------|---------|-------------|\n| `label` | `string` | - | 触发按钮的可见标签。 **(required)** |\n| `items` | `TopNavMenuItemData[]` | - | 在悬停弹出框中显示的菜单项。 **(required)** |\n| `delay` | `number` | `150` | 悬停时显示菜单前的延迟（毫秒）。 |\n| `hideDelay` | `number` | `200` | 鼠标离开后隐藏菜单的延迟（毫秒）。 |\n\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -6,6 +6,7 @@
   "button"
  ],
  "fixture": "core-0.4.7",
+ "fixtureHash": "8198fefbb18714e1+4e418a0c2575d9ce",
  "stdout": "Theming targets\n1 across 1 component\n(key - component - props - states - className)\n\nbutton  Button - size, variant - astryx-button\n\nEach key goes under `components` in defineTheme; it paints `.astryx-<key>`.\nProps take a value (`variant:secondary`); states are written bare (`checked`).\nOne component in full: npx @astryxdesign/cli@0.7.12 component <Name>\n",
  "stderr": "\nNext step: run `npm install @astryxdesign/cli@0.4.7`, then `npx astryx init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

@@ -6,6 +6,7 @@
   "neutral"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/theme-neutral\nApp themes\n1 added\n\nslug:           neutral\nowner:          @astryxdesign/theme-neutral\nmodule:         @astryxdesign/theme-neutral/built\nstylesheet:     @astryxdesign/theme-neutral/theme.css\nfontStylesheet: @astryxdesign/theme-neutral/fonts.css\nsource:         bundled\n\ndefault:    neutral\nmodulePath: src/astryx-themes.js\naction:     add\nslug:       neutral\nchanged:    false\nfirstAdd:   false\n",
  "stderr": "Warning: @astryxdesign/lab has 1 integration issue(s). Run: npx @astryxdesign/cli@0.7.12 doctor\n",
  "exit": 0,

@@ -6,6 +6,7 @@
   "butter"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: Refusing to replace src/astryx-themes.js: it is not an Astryx-generated theme module. Move that file before adding themes.\n",
  "exit": 1,

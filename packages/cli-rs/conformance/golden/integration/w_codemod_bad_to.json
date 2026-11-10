@@ -9,6 +9,7 @@
   "1.2"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: --to is required and must be an exact semver version (e.g. 1.0.0). Received: \"1.2\"\n",
  "exit": 1,

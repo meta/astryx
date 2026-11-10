@@ -14,6 +14,7 @@
   "check"
  ],
  "fixture": "iconglyphs",
+ "fixtureHash": "b8a471cb57e113e9+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"icon.add\",\n  \"data\": {\n    \"set\": \"glyphs\",\n    \"package\": \"@acme/glyphs\",\n    \"icon\": {\n      \"id\": \"house\",\n      \"export\": \"HomeIcon\",\n      \"module\": \"@acme/glyphs\"\n    },\n    \"definition\": \"check\",\n    \"files\": [\n      \"icon-sets/glyphs/glyphs.generated.js\",\n      \"icon-sets/glyphs/glyphs.generated.d.ts\",\n      \"icon-sets/glyphs/glyphs.icons.json\"\n    ],\n    \"changed\": true\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"carried\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

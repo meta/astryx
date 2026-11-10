@@ -8,6 +8,7 @@
   "themes/gamma.mjs"
  ],
  "fixture": "themes",
+ "fixtureHash": "b627344d635ada0d+4e418a0c2575d9ce",
  "stdout": "[ok] themes/alpha.css (1.9 KB, 1 token overrides, 0 component overrides)\n[ok] themes/beta.css (1.9 KB, 1 token overrides, 0 component overrides)\n[ok] themes/gamma.css (1.9 KB, 1 token overrides, 0 component overrides)\nRun with --detail full for the install example and font recipe.\n\n[ok] Built 3 themes.\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

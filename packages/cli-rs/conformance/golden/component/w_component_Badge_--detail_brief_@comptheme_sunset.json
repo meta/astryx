@@ -7,6 +7,7 @@
   "brief"
  ],
  "fixture": "comptheme",
+ "fixtureHash": "1057dbe769538f20+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/core\n\nBadge  <- from '@astryxdesign/core/Badge'\n  Badge highlights a status or category at a glance. Use it sparingly: only whe...\n  Targets: astryx-badge preferred attrs: data-variant variants: variant theme: soft*\n  label: ReactNode, variant, icon\n\n",
  "stderr": "\nNext step: run `cd /tmp/astryx-conformance/work/comptheme`, then `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

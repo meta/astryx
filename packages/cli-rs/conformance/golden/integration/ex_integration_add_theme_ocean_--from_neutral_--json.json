@@ -10,6 +10,7 @@
   "--json"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"integration.add\",\n  \"data\": {\n    \"kind\": \"theme\",\n    \"name\": \"ocean\",\n    \"root\": {\n      \"path\": \"./themes\",\n      \"created\": true\n    },\n    \"manifest\": \"astryx.integration.mjs\",\n    \"files\": [\n      \"themes/ocean/oceanTheme.ts\",\n      \"themes/ocean/icons.tsx\",\n      \"themes/ocean/oceanPalettes.ts\",\n      \"themes/ocean/oceanPalettes.generated.ts\",\n      \"themes/ocean/oceanPaletteRefs.generated.ts\",\n      \"themes/ocean/oceanPalettes.generated.receipt.json\",\n      \"themes/ocean/palette.config.json\",\n      \"themes/ocean/oceanTheme.doc.mjs\",\n      \"package.json\",\n      \"astryx.integration.mjs\"\n    ],\n    \"written\": true,\n    \"dryRun\": false,\n    \"from\": \"neutral\"\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

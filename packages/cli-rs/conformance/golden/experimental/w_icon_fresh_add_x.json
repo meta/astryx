@@ -11,6 +11,7 @@
   "close"
  ],
  "fixture": "iconfresh",
+ "fixtureHash": "322dba8308a7044c+4e418a0c2575d9ce",
  "stdout": "[ok] Added XMarkIcon as \"x-mark\", map.close = \"x-mark\".\n\n- icon-sets/outline/outline.generated.js\n- icon-sets/outline/outline.generated.d.ts\n- icon-sets/outline/outline.icons.json\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

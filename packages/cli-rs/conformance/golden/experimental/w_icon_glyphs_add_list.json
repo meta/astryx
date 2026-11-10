@@ -9,6 +9,7 @@
   "./icons/home.js"
  ],
  "fixture": "iconglyphs",
+ "fixtureHash": "b8a471cb57e113e9+4e418a0c2575d9ce",
  "stdout": "Icon definitions for HomeIcon (1)\n\nname:        home\nsource:      astryx\nscore:       90\nreason:      id \"home\"\ndescription: Go to the home page.\ncommand:     npx @astryxdesign/cli@0.7.12 experimental icon add HomeIcon --from ./icons/home.js --set glyphs --definition home\n\nAll icon definitions: npx @astryxdesign/cli@0.7.12 docs cli/experimental/icon-definitions\n",
  "stderr": "astryx: answered by CLI 0.7.12 with Core 0.7.12, outside a project\n",
  "exit": 0,

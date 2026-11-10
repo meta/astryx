@@ -5,6 +5,7 @@
   "fildstatus"
  ],
  "fixture": "app",
+ "fixtureHash": "756ab4b6d17a1feb+4e418a0c2575d9ce",
  "stdout": "Results for \"fildstatus\" (3)\n\nname:        FieldStatus\ndomain:      component\npackage:     @astryxdesign/core\nimport:      @astryxdesign/core/FieldStatus\ndescription: FieldStatus renders validation feedback for fields and field-like controls. Use it directly for custom controls that need the same error, warning, or success presentation as Field.\ncommand:     npx @astryxdesign/cli@0.7.12 component FieldStatus\n\nname:        FieldStatusBasic\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: FieldStatus - Basic\nkind:        block\ndescription: Detached error and success messages for validation feedback. Use below checkboxes, switches, or custom controls where an attached status would overlap.\ncommand:     npx @astryxdesign/cli@0.7.12 template FieldStatusBasic --type block\n\nname:        FieldStatusShowcase\ndomain:      template\npackage:     @astryxdesign/core\ndisplayName: FieldStatus\nkind:        block\ndescription: Field status messages in error, warning, and success states with attached and detached variants.\ncommand:     npx @astryxdesign/cli@0.7.12 template FieldStatusShowcase --type block\n\nMore in packages you could add: npx @astryxdesign/cli@0.7.12 discover fildstatus\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,

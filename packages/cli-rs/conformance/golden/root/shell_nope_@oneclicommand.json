@@ -4,6 +4,7 @@
   "nope"
  ],
  "fixture": "doctor-integrations",
+ "fixtureHash": "70dc92e0b02698cb+4e418a0c2575d9ce",
  "stdout": "",
  "stderr": "Error: unknown command 'nope'\n\n  docs  (did you mean this?)\n  hook  (did you mean this?)\n",
  "exit": 1,

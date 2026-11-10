@@ -6,6 +6,7 @@
   "--json"
  ],
  "fixture": "docsint",
+ "fixtureHash": "36d5db4ca2dc43ba+4e418a0c2575d9ce",
  "stdout": "{\n  \"apiVersion\": 1,\n  \"type\": \"docs.detail\",\n  \"package\": \"@acme/docs\",\n  \"data\": {\n    \"name\": \"acme-colors\",\n    \"description\": \"Our palette.\",\n    \"category\": \"foundations\",\n    \"type\": \"generic\",\n    \"title\": \"Acme colors\",\n    \"sections\": [\n      {\n        \"id\": \"palette\",\n        \"title\": \"Palette\",\n        \"package\": \"@acme/docs\",\n        \"content\": [\n          {\n            \"type\": \"prose\",\n            \"text\": \"The design system uses a 4px base-unit spacing scale, written in rem so gaps and padding grow with the reader's browser font size the way text does: each step is 0.25rem, which is 4px at the default 16px root. Component gap props accept step values that map to these tokens. The scale provides fine-grained control at the small end (2px, 4px, 6px) and consistent rhythm at larger sizes (multiples of 4px).\"\n          }\n        ]\n      }\n    ],\n    \"replaces\": \"color\",\n    \"replacedPackage\": \"@astryxdesign/cli\",\n    \"links\": {\n      \"up\": \"astryx docs foundations\",\n      \"next\": \"astryx docs elevation\"\n    }\n  },\n  \"meta\": {\n    \"answeredBy\": {\n      \"cli\": \"0.7.12\",\n      \"core\": \"0.7.12\",\n      \"copy\": \"starting\"\n    }\n  }\n}\n",
  "stderr": "",
  "exit": 0,

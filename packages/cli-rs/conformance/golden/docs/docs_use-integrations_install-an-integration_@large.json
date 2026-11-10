@@ -6,6 +6,7 @@
   "install-an-integration"
  ],
  "fixture": "large",
+ "fixtureHash": "6ab5d347479c043c+4e418a0c2575d9ce",
  "stdout": "package: @astryxdesign/cli\n\n## Install an integration\n\nInstall the package with your package manager. Integrations autolink: the CLI finds them among your dependencies, so installing is all it takes:\n\n```bash\nnpm install @acme/brand-integration\n```\n\nRun `npx @astryxdesign/cli@0.7.12 doctor` to confirm everything is wired up. If you need to load a package that is not a direct dependency, add it explicitly to `astryx.config.mjs`:\n\nOptional: explicit config entry:\n```js\nexport default {\n  integrations: ['@acme/brand-integration'],\n};\n```\n\nUp: npx @astryxdesign/cli@0.7.12 docs use-integrations --index\nPrevious: npx @astryxdesign/cli@0.7.12 docs use-integrations discover-integrations\nNext: npx @astryxdesign/cli@0.7.12 docs use-integrations use-what-it-adds\n",
  "stderr": "\nNext step: run `npx @astryxdesign/cli@0.7.12 init` to finish setup and install the Astryx agent prompt.\n",
  "exit": 0,
