@@ -426,11 +426,13 @@ new data attribute only when a current record names it and states why; an
 internal-only concern uses a private `data-astryx-*` attribute under INV23 or no
 attribute at all.
 
-For a per-instance dynamic style, the first choice is a private CSS variable
-set on that instance: a StyleX dynamic style (`stylex.create` with a function),
-which compiles to a hashed variable set inline, so no theme can target it and it
-adds no public surface. The owner said, on Avatar's initials: "We should make
-this the agent's first choice for these types of dynamic styles."
+For a per-instance dynamic style, the first choice is a StyleX dynamic style
+(`stylex.create` with a function): it sets a generated custom property inline
+on that instance (`--x-<property>`, or a hashed name under a pseudo-element or
+condition). That property is private by this rule: no theme value, record, or
+document names it, and it may change in any release. The owner said, on
+Avatar's initials: "We should make this the agent's first choice for these
+types of dynamic styles."
 
 Rejected: adding a data attribute for an internal concern without a record
 that names it.
@@ -464,6 +466,10 @@ that names it.
 
 Known verification gaps:
 
+- INV23 gap: nothing checks data attributes outside `data-astryx-*` yet; the
+  lint and its verification row see only `data-astryx-*` names, and existing
+  attributes outside that namespace, such as ToastViewport's `data-toast-id`,
+  have no inventory.
 - INV2, INV3: shipped props that predate the behavior-prop rule keep their
   names until a minor renames them under INV9. This list is a partial
   inventory; known deviations include Tooltip and HoverCard `focusTrigger`,
