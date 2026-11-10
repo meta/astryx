@@ -4,7 +4,8 @@
  * @file TableCellContextMenu.loadFailure.test.tsx
  * @output Tests that a failed load of the table context menu keeps the table
  *   mounted, drops the held invocation and any early long press, returns the
- *   browser's own menu, and lets a later render or invocation load it again
+ *   browser's own menu, and lets a later render or invocation load it again,
+ *   including a first invocation after another cell loaded it
  * @position Validates TableCellContextMenu's load-failure path. Each test
  *   starts from a fresh module registry and a fresh mock of the menu module.
  */
@@ -98,6 +99,30 @@ describe('TableCellContextMenu menu load failure', () => {
       ).toBeTruthy();
     });
   });
+  it('opens the menu on the first right-click after another cell loaded it', async () => {
+    loader.failures = 1;
+    await renderTable('Alice');
+    await settle();
+    expect(loader.calls).toBe(1);
+
+    // A second table loads the menu module after Alice's load failed.
+    await renderTable('Bob');
+    const {loadTableContextMenu} = await import('./TableCellContextMenu');
+    await act(async () => {
+      await loadTableContextMenu();
+    });
+    await settle();
+    expect(loader.calls).toBe(2);
+
+    // Alice's first right-click since then is held and opens her menu.
+    expect(fireEvent.contextMenu(screen.getByText('Alice'))).toBe(false);
+    await waitFor(() => {
+      expect(
+        screen.getByRole('menuitem', {name: 'Copy', hidden: true}),
+      ).toBeTruthy();
+    });
+  });
+
   it('ends an early long press when the menu fails to load before its deadline', async () => {
     loader.failures = 1;
     await renderTable('Alice');

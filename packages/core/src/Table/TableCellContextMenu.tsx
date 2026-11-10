@@ -259,7 +259,11 @@ function CellTrigger({
           }
           if (isMenuUnavailable) {
             retryMenu();
-            return;
+            // Another cell may have loaded the menu since this cell's load
+            // failed. Then this invocation waits for this cell's menu.
+            if (tableContextMenu.loaded() == null) {
+              return;
+            }
           }
           // Hold the invocation until the menu loads. Then the browser's own
           // menu does not open.
@@ -280,7 +284,9 @@ function CellTrigger({
           }
           if (isMenuUnavailable) {
             retryMenu();
-            return;
+            if (tableContextMenu.loaded() == null) {
+              return;
+            }
           }
           earlyPressRef.current = true;
           earlyLongPress.onTouchStart(event);
