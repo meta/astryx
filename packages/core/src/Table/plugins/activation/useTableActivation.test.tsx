@@ -2281,4 +2281,67 @@ describe('review follow-ups, round five', () => {
       warn.mockRestore();
     }
   });
+
+  it('keeps a late zero tab stop declared in the same commit as a row re-render', () => {
+    const onActivate = vi.fn();
+    function lateZeroPlugin({zero}: {zero: boolean}): TablePlugin<Member> {
+      return {
+        rowModel: 'flat',
+        transformBodyRow: props => ({
+          ...props,
+          htmlProps: {
+            ...props.htmlProps,
+            ...(zero ? {tabIndex: 0, 'aria-keyshortcuts': 'Alt+Z'} : null),
+          },
+        }),
+      };
+    }
+    function Harness({
+      zeroLate,
+      allowAll,
+    }: {
+      zeroLate: boolean;
+      allowAll: boolean;
+    }) {
+      const plugin = useTableActivation<Member>({
+        activeKey: null,
+        onActivate,
+        getIsItemActivatable: item => allowAll || item.id !== '1',
+      });
+      // A new plugins identity re-renders every row, so flipping `zeroLate`
+      // commits the late declaration in the same commit as the ref handoff.
+      const plugins = useMemo(
+        () => ({
+          activation: plugin,
+          lateZero: lateZeroPlugin({zero: zeroLate}),
+        }),
+        [plugin, zeroLate],
+      );
+      return (
+        <Table
+          data={members}
+          columns={memberColumns}
+          idKey="id"
+          plugins={plugins}
+        />
+      );
+    }
+    const {rerender} = render(<Harness zeroLate={false} allowAll={true} />);
+    const rows = bodyRows();
+    // Activation default while no other plugin declares a tab stop.
+    expect(rows[0].getAttribute('tabindex')).toBe('0');
+    // The late plugin starts declaring zero in a commit that re-renders the
+    // row: the declaration is adopted, not mistaken for the default.
+    rerender(<Harness zeroLate={true} allowAll={true} />);
+    expect(rows[0].getAttribute('tabindex')).toBe('0');
+    expect(rows[0].getAttribute('aria-keyshortcuts')).toContain('Alt+Z');
+    expect(rows[0].getAttribute('aria-keyshortcuts')).toContain('Enter');
+    // Excluded after a flip: the late owner's zero comes back rather than
+    // being removed as if it were this module's default.
+    rerender(<Harness zeroLate={true} allowAll={false} />);
+    expect(rows[0].getAttribute('tabindex')).toBe('0');
+    expect(rows[0].getAttribute('aria-keyshortcuts')).toBe('Alt+Z');
+    fireEvent.click(rows[0]);
+    expect(onActivate).not.toHaveBeenCalled();
+  });
 });

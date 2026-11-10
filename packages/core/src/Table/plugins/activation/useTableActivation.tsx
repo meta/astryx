@@ -19,6 +19,10 @@ import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../../../theme/tokens.stylex';
 import {focusOutlineStyles} from '../../../utils/focusOutline.stylex';
 import {mergeRefs} from '../../../utils/mergeRefs';
+import {
+  flushMutations,
+  observeMutations,
+} from '../../../utils/sharedMutationObserver';
 import {warnOnce} from '../../../utils/devWarning';
 import {isRtlElement} from '../../../hooks/isRtlElement';
 import {shouldSuppressRowPress} from '../../rowPressGuard';
@@ -185,6 +189,41 @@ const ACTIVE_HOVER_ROW: string = '[data-active="true"]:hover';
 
 /** Width of the leading-edge active bar, the non-colour active cue. */
 const ACTIVE_BAR_WIDTH_PX = 3;
+
+/**
+ * What another plugin declared on a mounted row: the owned tab stop and key
+ * announcements to restore on exclusion, plus this module's outstanding
+ * writes, which tell self writes apart at snapshot time.
+ */
+interface RowOwnershipBaseline {
+  rowKey: string | number | undefined;
+  ownedTabIndex: string | null;
+  ownedShortcuts: string | null;
+  writtenTabIndex: string | null | undefined;
+  writtenShortcuts: string | null | undefined;
+}
+
+/**
+ * A baseline and its live registration, handed from an old ref cleanup to
+ * the next attach in the same commit. Claiming them preserves ownership
+ * across the handoff, so a tab-stop write committed with the new props is
+ * adopted instead of missed. An entry no attach claims belongs to a real
+ * unmount and is retired and pruned by a microtask.
+ */
+interface OwnershipHandoff {
+  baseline: RowOwnershipBaseline;
+  unsubscribe: () => void;
+}
+
+/**
+ * Ownership-watch options, shared by every mounted row. One observer serves
+ * all registrations with these options, so mounted rows share it instead of
+ * each creating one.
+ */
+const OWNERSHIP_OBSERVER_OPTIONS: MutationObserverInit = {
+  attributes: true,
+  attributeFilter: ['tabindex', 'aria-keyshortcuts'],
+};
 
 /** Whether a row already exposes current state this module must not overwrite. */
 function hasCompetingCurrentOwner(row: Element | null): boolean {
@@ -482,17 +521,17 @@ export function useTableActivation<T extends Record<string, unknown>>(
   // can hold this module's own writes; the record lets a re-attach tell
   // those apart from another plugin's values.
   const rowBaselines = useMemo(
-    () =>
-      new WeakMap<
-        HTMLTableRowElement,
-        {
-          rowKey: string | number | undefined;
-          ownedTabIndex: string | null;
-          ownedShortcuts: string | null;
-          writtenTabIndex: string | null | undefined;
-          writtenShortcuts: string | null | undefined;
-        }
-      >(),
+    () => new WeakMap<HTMLTableRowElement, RowOwnershipBaseline>(),
+    [],
+  );
+
+  // Baselines handed from an old ref cleanup to the next attach in the same
+  // commit. The next attach claims its row's entry, so ownership survives
+  // the handoff even when the new props commit a tab-stop write in between;
+  // an entry no attach claims belongs to a real unmount and is pruned by a
+  // microtask.
+  const pendingHandoffs = useMemo(
+    () => new WeakMap<HTMLTableRowElement, OwnershipHandoff>(),
     [],
   );
 
@@ -574,6 +613,10 @@ export function useTableActivation<T extends Record<string, unknown>>(
         // row has none; an earlier plugin's explicit tabIndex (including -1
         // for roving focus) stays authoritative.
         const tabIndex = props.htmlProps.tabIndex ?? 0;
+        // An earlier plugin's declared tab stop, read here because the
+        // transform runs in plugin order: it seeds ownership at attach even
+        // when it equals the default below.
+        const declaredTabIndex = props.htmlProps.tabIndex;
 
         // Imperative active-state reflection, subscribed to the store: a
         // controlled-key change reaches mounted rows without re-rendering
@@ -594,67 +637,86 @@ export function useTableActivation<T extends Record<string, unknown>>(
           // restoring it later never strands or steals another plugin's focus
           // ownership, whichever side of activation declared it.
           //
-          // Ownership follows observed writes, not values. The observer below
-          // adopts every write this module did not make, so a plugin that
-          // starts declaring `tabIndex={0}` after this module wrote its
-          // default is recorded as the owner even though the live value
-          // equals the last write. The equality check that follows only
-          // covers writes that predate observation; any other live value
-          // belongs to another owner.
+          // Ownership follows observed writes, not values. The shared
+          // observer below adopts every write it delivers, and the cleanup
+          // hands the baseline to the next attach in the same commit, so a
+          // plugin that starts declaring `tabIndex={0}` after this module
+          // wrote its default is recorded as the owner even though the live
+          // value equals the last write. An explicit declaration read in the
+          // transform seeds ownership too, so equality with the default
+          // never implies ownership by itself.
           //
-          // The ref re-attaches whenever the transform re-renders the row, so
-          // a later snapshot can hold this module's own writes. A row the
-          // record does not know (or one recycled for another key) snapshots
-          // fresh. `data-activation-eligible` is exempt: it is namespaced to
-          // this module, so no other plugin writes it.
+          // The ref re-attaches whenever the transform re-renders the row. A
+          // re-attach in the same commit claims the handed-off baseline, so
+          // no new snapshot is taken; a row the record does not know (or one
+          // recycled for another key) snapshots fresh.
+          // `data-activation-eligible` is exempt: it is namespaced to this
+          // module, so no other plugin writes it.
           const liveTabIndex = row.getAttribute('tabindex');
           const liveShortcuts = row.getAttribute('aria-keyshortcuts');
-          const previousBaseline = rowBaselines.get(row);
-          let ownedTabIndex: string | null;
-          let ownedShortcuts: string | null;
-          let writtenTabIndex: string | null | undefined;
-          let writtenShortcuts: string | null | undefined;
-          if (previousBaseline != null && previousBaseline.rowKey === key) {
-            if (liveTabIndex === previousBaseline.writtenTabIndex) {
-              ownedTabIndex = previousBaseline.ownedTabIndex;
-              writtenTabIndex = previousBaseline.writtenTabIndex;
+          const handoff = pendingHandoffs.get(row);
+          let baseline: RowOwnershipBaseline;
+          if (handoff != null && handoff.baseline.rowKey === key) {
+            // Same-commit re-attach: the cleanup already drained pending
+            // writes into this baseline, so it is current; claiming it also
+            // cancels its prune.
+            pendingHandoffs.delete(row);
+            baseline = handoff.baseline;
+            rowBaselines.set(row, baseline);
+          } else {
+            const previousBaseline = rowBaselines.get(row);
+            let ownedTabIndex: string | null;
+            let ownedShortcuts: string | null;
+            let writtenTabIndex: string | null | undefined;
+            let writtenShortcuts: string | null | undefined;
+            if (previousBaseline != null && previousBaseline.rowKey === key) {
+              if (liveTabIndex === previousBaseline.writtenTabIndex) {
+                ownedTabIndex = previousBaseline.ownedTabIndex;
+                writtenTabIndex = previousBaseline.writtenTabIndex;
+              } else {
+                ownedTabIndex = liveTabIndex;
+                writtenTabIndex = undefined;
+              }
+              if (liveShortcuts === previousBaseline.writtenShortcuts) {
+                ownedShortcuts = previousBaseline.ownedShortcuts;
+                writtenShortcuts = previousBaseline.writtenShortcuts;
+              } else {
+                ownedShortcuts = liveShortcuts;
+                writtenShortcuts = undefined;
+              }
             } else {
-              ownedTabIndex = liveTabIndex;
-              writtenTabIndex = undefined;
-            }
-            if (liveShortcuts === previousBaseline.writtenShortcuts) {
-              ownedShortcuts = previousBaseline.ownedShortcuts;
-              writtenShortcuts = previousBaseline.writtenShortcuts;
-            } else {
+              // The live row is ground truth: it carries every plugin's
+              // committed values. The transform's declaration only fills a
+              // gap the commit has not reached.
+              ownedTabIndex =
+                liveTabIndex ??
+                (declaredTabIndex != null ? String(declaredTabIndex) : null);
               ownedShortcuts = liveShortcuts;
+              writtenTabIndex = undefined;
               writtenShortcuts = undefined;
             }
-          } else {
-            ownedTabIndex = liveTabIndex;
-            ownedShortcuts = liveShortcuts;
-            writtenTabIndex = undefined;
-            writtenShortcuts = undefined;
+            baseline = {
+              rowKey: key,
+              ownedTabIndex,
+              ownedShortcuts,
+              writtenTabIndex,
+              writtenShortcuts,
+            };
+            rowBaselines.set(row, baseline);
           }
-          const baseline = {
-            rowKey: key as string | number | undefined,
-            ownedTabIndex,
-            ownedShortcuts,
-            writtenTabIndex,
-            writtenShortcuts,
-          };
-          rowBaselines.set(row, baseline);
           // Last applied reflection for this row: a store broadcast over
           // an unchanged row stays a DOM no-op, so key-only updates keep
           // the at-most-two-rows bound even with an inline `onActivate`.
           let lastInteractive: boolean | null = null;
           let lastActive = false;
-          // The observer adopts every tabindex and key-announcement write
-          // this module did not make. Self writes drain synchronously after
-          // every batch below, so an observed record is always external.
-          // Every apply syncs first, so adoption never waits on task timing;
-          // the callback only re-resolves rows whose baseline just changed.
-          const syncOwnership = (): boolean => {
-            const records = observer.takeRecords();
+          // The observer adopts tab-stop writes made while it is connected.
+          // Self writes are purged synchronously after every batch below,
+          // so a delivered record is always external. Every apply syncs
+          // first, so adoption never waits on task timing; the callback only
+          // re-resolves rows whose baseline just changed.
+          const adoptOwnershipRecords = (
+            records: ReadonlyArray<MutationRecord>,
+          ): boolean => {
             let changed = false;
             for (const record of records) {
               if (record.attributeName === 'tabindex') {
@@ -671,16 +733,50 @@ export function useTableActivation<T extends Record<string, unknown>>(
             }
             return changed;
           };
-          const observer = new MutationObserver(() => {
-            if (syncOwnership()) {
+          // While set, the registration callback drops delivered records: the
+          // apply below just wrote them, so adopting them would mistake this
+          // module's own writes for another owner's.
+          let purgingSelfWrites = false;
+          const handleOwnershipMutations = (
+            records: ReadonlyArray<MutationRecord>,
+          ): void => {
+            if (purgingSelfWrites) {
+              return;
+            }
+            if (adoptOwnershipRecords(records)) {
               lastInteractive = null;
               applyStyle(isEligibleNow());
             }
-          });
-          observer.observe(row, {
-            attributes: true,
-            attributeFilter: ['tabindex', 'aria-keyshortcuts'],
-          });
+          };
+          // One shared registration, not one observer per row. The old
+          // registration is retired after the new one subscribes below, so
+          // the shared observer never empties (and disconnects) inside the
+          // commit window; records accumulate on it and route at delivery
+          // time, so the first apply below still sees writes committed with
+          // the new props.
+          const unsubscribeOwnership = observeMutations(
+            row,
+            OWNERSHIP_OBSERVER_OPTIONS,
+            handleOwnershipMutations,
+          );
+          if (handoff != null) {
+            // Retire the previous attach's registration now that the new one
+            // exists. Never the reverse order: unsubscribing first could
+            // empty the shared observer, which disconnects and drops the
+            // records committed with these props.
+            handoff.unsubscribe();
+          }
+          const syncOwnership = (): void => {
+            flushMutations(OWNERSHIP_OBSERVER_OPTIONS);
+          };
+          const purgeSelfWrites = (): void => {
+            purgingSelfWrites = true;
+            try {
+              flushMutations(OWNERSHIP_OBSERVER_OPTIONS);
+            } finally {
+              purgingSelfWrites = false;
+            }
+          };
           const applyStyle = (eligibleNow: boolean) => {
             // External writes land here before any decision, so the exclusion
             // path below restores the current owner, not a stale snapshot.
@@ -756,9 +852,9 @@ export function useTableActivation<T extends Record<string, unknown>>(
               }
               baseline.writtenShortcuts = undefined;
             }
-            // Self writes never reach the observer: its records are always
-            // external, so adoption above needs no write-origin check.
-            observer.takeRecords();
+            // Self writes never reach adoption: the purge drops the records
+            // this apply just wrote, so a delivered record is always external.
+            purgeSelfWrites();
           };
           // The first apply reuses the render-time eligibility above, so the
           // caller predicate runs once per row on mount; later notifies
@@ -766,7 +862,7 @@ export function useTableActivation<T extends Record<string, unknown>>(
           applyStyle(eligible);
           const unsubscribe = store.subscribe(key, () => {
             if (!row.isConnected) {
-              observer.disconnect();
+              unsubscribeOwnership();
               clearRowActivationStyle(row);
               unsubscribe();
               return;
@@ -774,10 +870,28 @@ export function useTableActivation<T extends Record<string, unknown>>(
             applyStyle(isEligibleNow());
           });
           return () => {
-            // Drain first: disconnect drops queued records, which may hold
-            // another plugin's declaration committed with this same render.
+            // Drain first, so a declaration committed with an earlier render
+            // is adopted into the baseline before it is handed off below.
             syncOwnership();
-            observer.disconnect();
+            // Hand the baseline and the live registration to the next attach
+            // in this commit instead of dropping them: the attach subscribes
+            // first and retires this registration after, so the shared
+            // observer stays connected across the handoff and the attach
+            // claims the baseline, which preserves ownership. No attach
+            // claims a real unmount, so a microtask retires the registration
+            // and prunes the entry then.
+            pendingHandoffs.get(row)?.unsubscribe();
+            const handoff: OwnershipHandoff = {
+              baseline,
+              unsubscribe: unsubscribeOwnership,
+            };
+            pendingHandoffs.set(row, handoff);
+            queueMicrotask(() => {
+              if (pendingHandoffs.get(row) === handoff) {
+                pendingHandoffs.delete(row);
+                handoff.unsubscribe();
+              }
+            });
             clearRowActivationStyle(row);
             unsubscribe();
           };
@@ -877,6 +991,6 @@ export function useTableActivation<T extends Record<string, unknown>>(
         };
       },
     }),
-    [store, rowBaselines],
+    [store, rowBaselines, pendingHandoffs],
   );
 }
