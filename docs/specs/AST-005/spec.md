@@ -82,8 +82,8 @@ itself establish implementation or exact-head verification.
   destination beginning with `javascript:`, `vbscript:`, or `data:text/html`
   MUST NOT become executable navigation. The check applies before query, hash,
   target, modifier-key, or pointer-button differences can select another sink.
-  Markdown's parsed and rendered links and images also block every `data:` URL,
-  of any media type (DEC-3).
+  Markdown's parser also blocks every `data:` URL, of any media type, in links
+  and images, and `<Markdown>` renders only the nodes it parsed (DEC-3).
 - **FR4 — Ordinary destinations keep working.** Relative paths, same-document
   fragments, protocol-relative URLs, and ordinary schemes such as `http:`,
   `https:`, `mailto:`, `tel:`, and safe custom schemes MUST retain their existing
@@ -223,19 +223,23 @@ That hides material differences between navigating a document and embedding or
 fetching a resource, and would accidentally broaden or narrow unrelated public
 behavior.
 
-### DEC-3 — Markdown blocks every data: URL in links and images
+### DEC-3 — Markdown's parser owns its URL safety and blocks every data: URL
 
 **Reference:** `spec:AST-005/DEC-3`
 **Decider:** `cixzhang`, `2026-11-10`
 
-Markdown's parser and renderer block every `data:` URL, of any media type, in a
-link or an image, in addition to the shared navigation rule. The parser's
-public tree then carries no `data:` URL for a custom renderer, and `<Markdown>`
-renders none. For Markdown links this is stricter than the shared navigation
-matrix that DEC-2 names; the shared rule for every other member is unchanged.
+Markdown's parser owns Markdown's URL safety. It blocks every `data:` URL, of
+any media type, in a link or an image, in addition to the shared navigation
+rule, and `<Markdown>` renders only the nodes it parsed, with no second scheme
+check. The parser's public tree then carries no `data:` URL for a custom
+renderer. For Markdown links this is stricter than the shared navigation matrix
+that DEC-2 names; the shared rule for every other member is unchanged. A
+navigation URL that does not come from parsed source, such as a plugin's base
+URL, is checked where it enters.
 
 Rejected: blocking `data:` only in Markdown images, which leaves a `data:` link
-in the parser's public tree.
+in the parser's public tree. Rejected: a second scheme check in the renderer,
+which repeats the parser's rule for nodes only the parser produces.
 
 ## Open questions
 
