@@ -484,6 +484,34 @@ describe('LayoutPanel', () => {
     ).toHaveTextContent('Details');
   });
 
+  it('exposes no role or name without a caller role while it does not overflow', () => {
+    const {container} = render(<LayoutPanel>P</LayoutPanel>);
+    const panel = container.querySelector('.astryx-layout-panel');
+    expect(panel).not.toHaveAttribute('role');
+    expect(panel).not.toHaveAttribute('aria-label');
+  });
+
+  it('passes style, DOM, data, ARIA, and event props to the root', () => {
+    const onClick = vi.fn();
+    render(
+      <LayoutPanel
+        style={{color: 'red'}}
+        id="side-panel"
+        data-testid="panel"
+        aria-describedby="hint"
+        onClick={onClick}>
+        P
+      </LayoutPanel>,
+    );
+    const panel = screen.getByTestId('panel');
+    expect(panel).toHaveClass('astryx-layout-panel');
+    expect(panel.style.color).toBe('red');
+    expect(panel).toHaveAttribute('id', 'side-panel');
+    expect(panel).toHaveAttribute('aria-describedby', 'hint');
+    fireEvent.click(screen.getByText('P'));
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
   it('merges a caller className', () => {
     const {container} = render(
       <LayoutPanel className="panel-custom">P</LayoutPanel>,

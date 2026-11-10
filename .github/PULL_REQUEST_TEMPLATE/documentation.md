@@ -18,6 +18,8 @@
 
 ## Scope
 
+Components: <!-- the components and modules this PR changes, comma-separated -->
+
 - [ ] This PR changes documentation only, or names every necessary generated artifact.
 - [ ] Runtime, API, visual, and policy changes were removed or split.
 - [ ] Public text and artifacts contain no internal Meta context.
