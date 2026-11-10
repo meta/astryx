@@ -347,8 +347,9 @@ export const isProofPage = file =>
  * every spec in the component folders the change touches and in the folders
  * that render them through value imports. A story maps to no component, so a
  * changed story runs the whole suite. A unit test, doc, record or
- * accessibility spec in a component folder touches no component; it selects
- * only the specs that import it. It fails closed: an unknown change, a
+ * accessibility spec in a component folder touches no component unless a
+ * spec loads it; then it touches its component like any change there. It
+ * fails closed: an unknown change, a
  * missing import graph or proof import map, a full-suite classification, a
  * shared path, a listed shared primitive, or a changed path that maps to no
  * one component runs the whole suite.
@@ -400,9 +401,9 @@ export function chromiumSelection({
       // and no map says which proofs open which story.
       if (loaders.some(loader => !isInteractionSpec(loader)))
         return full(`${file} is loaded by a story or Storybook's preview`);
-      // A spec that loads it makes it a change to its component.
-      if (loaders.length > 0) touched.add(componentFolderOf(file));
-      continue;
+      // A spec that loads it makes it a change to its component, which the
+      // shared-code checks below decide like any other change there.
+      if (loaders.length === 0) continue;
     }
     if (selection.shared.some(prefix => file.startsWith(prefix)))
       return full(`${file} is shared code`);

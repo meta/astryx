@@ -1333,8 +1333,9 @@ describe('what a Chromium run covers for a pull request', () => {
     'packages/core/src/Card/Card.tsx':
       "import type {Tooltip} from '../Tooltip/Tooltip';\nexport function Card() {}\n",
     'packages/core/src/Card/__tests__/Card.interaction.browser.spec.ts':
-      "import {press} from '../../Menu/__tests__/fixtures/press';\nimport {ease} from './ease.test';\n",
+      "import {press} from '../../Menu/__tests__/fixtures/press';\nimport {ease} from './ease.test';\nimport {hold} from '../../Button/__tests__/hold.test';\n",
     'packages/core/src/Card/__tests__/ease.test.ts': '',
+    'packages/core/src/Button/__tests__/hold.test.ts': '',
     'packages/core/src/Menu/__tests__/fixtures/press.ts': '',
     'packages/core/src/Button/Button.tsx': 'export function Button() {}\n',
     'packages/core/src/Button/__tests__/Button.interaction.browser.spec.ts': '',
@@ -1434,6 +1435,16 @@ describe('what a Chromium run covers for a pull request', () => {
     expect(
       select(['packages/core/src/Menu/__tests__/fixtures/press.ts']).specs,
     ).toContain(spec('Card'));
+  });
+
+  it('runs the full suite for a spec-loaded test helper in a shared primitive', () => {
+    expect(
+      select(['packages/core/src/Button/__tests__/hold.test.ts']),
+    ).toMatchObject({
+      full: true,
+      reason:
+        'packages/core/src/Button/__tests__/hold.test.ts is in the shared primitive core/Button',
+    });
   });
 
   it('runs the full suite for a doc a story loads, since any proof may open the story', () => {
