@@ -95,7 +95,7 @@ describe('private Table shared-geometry controller', () => {
           useTableWindow({
             capability: useTableRowsVirtualization({
               rowHeight: 20,
-              viewportHeight: 100,
+              initialViewportHeight: 100,
             }),
             data: items,
             keys: rowKeys,
@@ -138,7 +138,7 @@ describe('private Table shared-geometry controller', () => {
     const {result, rerender, unmount} = renderHook(() => {
       const capability = useTableRowsVirtualization({
         rowHeight: 20,
-        viewportHeight: 100,
+        initialViewportHeight: 100,
       });
       return useTableWindow({
         capability,
@@ -199,7 +199,7 @@ describe('private Table shared-geometry controller', () => {
       useTableWindow({
         capability: useTableRowsVirtualization({
           rowHeight: 20,
-          viewportHeight: 100,
+          initialViewportHeight: 100,
         }),
         data,
         keys,
@@ -237,7 +237,7 @@ describe('private Table shared-geometry controller', () => {
         useTableWindow({
           capability: useTableRowsVirtualization({
             rowHeight: 20,
-            viewportHeight: 100,
+            initialViewportHeight: 100,
           }),
           data: items,
           keys: rowKeys,
@@ -292,7 +292,7 @@ describe('private Table shared-geometry controller', () => {
           useTableWindow({
             capability: useTableRowsVirtualization({
               rowHeight: 20,
-              viewportHeight: 100,
+              initialViewportHeight: 100,
             }),
             data: items,
             keys: rowKeys,
@@ -365,7 +365,7 @@ describe('private Table shared-geometry controller', () => {
         useTableWindow({
           capability: useTableRowsVirtualization({
             rowHeight,
-            viewportHeight: 100,
+            initialViewportHeight: 100,
           }),
           data: items,
           keys: rowKeys,
@@ -438,7 +438,7 @@ describe('private Table shared-geometry controller', () => {
         useTableWindow({
           capability: useTableRowsVirtualization({
             rowHeight: 20,
-            viewportHeight: 100,
+            initialViewportHeight: 100,
           }),
           data: items,
           keys: rowKeys,
@@ -484,7 +484,7 @@ describe('private Table shared-geometry controller', () => {
         return useTableWindow({
           capability: useTableRowsVirtualization({
             rowHeight: 56,
-            viewportHeight: 400,
+            initialViewportHeight: 400,
           }),
           data: items,
           keys,
@@ -515,7 +515,7 @@ describe('private Table shared-geometry controller', () => {
       useTableWindow({
         capability: useTableRowsVirtualization({
           rowHeight: 0,
-          viewportHeight: 100,
+          initialViewportHeight: 100,
         }),
         data,
         keys,
@@ -562,7 +562,7 @@ describe('private Table shared-geometry controller', () => {
         useTableWindow({
           capability: useTableRowsVirtualization({
             rowHeight: 20,
-            viewportHeight: 100,
+            initialViewportHeight: 100,
           }),
           data: items,
           keys: rowKeys,
@@ -617,7 +617,7 @@ describe('private Table shared-geometry controller', () => {
         useTableWindow({
           capability: useTableRowsVirtualization({
             rowHeight: 20,
-            viewportHeight: 100,
+            initialViewportHeight: 100,
           }),
           data: items,
           keys: rowKeys,
@@ -685,7 +685,7 @@ describe('private Table shared-geometry controller', () => {
         useTableWindow({
           capability: useTableRowsVirtualization({
             rowHeight: 20,
-            viewportHeight: 100,
+            initialViewportHeight: 100,
           }),
           data: items,
           keys: rowKeys,
@@ -739,7 +739,7 @@ describe('private Table shared-geometry controller', () => {
       useTableWindow({
         capability: useTableRowsVirtualization({
           rowHeight: 20,
-          viewportHeight: 100,
+          initialViewportHeight: 100,
         }),
         data,
         keys,
@@ -826,7 +826,7 @@ describe('private Table shared-geometry controller', () => {
       useTableWindow({
         capability: useTableRowsVirtualization({
           rowHeight: 20,
-          viewportHeight: 100,
+          initialViewportHeight: 100,
         }),
         data,
         keys,
@@ -911,7 +911,7 @@ describe('private Table shared-geometry controller', () => {
       useTableWindow({
         capability: useTableRowsVirtualization({
           rowHeight: 20,
-          viewportHeight: 100,
+          initialViewportHeight: 100,
         }),
         data,
         keys,
@@ -940,7 +940,7 @@ describe('private Table shared-geometry controller', () => {
         useTableWindow({
           capability: useTableRowsVirtualization({
             rowHeight: 20,
-            viewportHeight: 100,
+            initialViewportHeight: 100,
           }),
           data,
           keys,

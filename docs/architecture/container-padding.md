@@ -104,8 +104,9 @@ The protocol has four layers:
    explicit region-padding paths couple those variables to their padding.
    Layout also carries an outer/inner split through
    `--layout-padding-outer-*` and `--layout-padding-inner-*`; automatic region
-   placement applies that split, but not every current path republishes the
-   resulting edge exactly (see the conformance gap below).
+   placement applies that split, and each region republishes the edge it
+   applies, except LayoutContent's content-width gutter, which is applied but
+   not published (`component:LayoutContent` FR2).
 4. **Boundary reset.** An overlay leaves its ancestor's visual box while
    remaining a DOM descendant. `overlayPaddingReset` zeroes values descendants
    subtract or take as a corner and invalidates values descendants add, so readers fall through to
@@ -116,14 +117,14 @@ The protocol has four layers:
 
 ### Current and admitted publishers and consumers
 
-| Role                       | Participants                                                   | Contract responsibility                                                                                                                                                  |
-| -------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Container publisher        | Card, Section, Dialog, BottomSheet, ScrollableArea             | Resolve component padding or publish explicit content-box padding as logical-edge and Layout inset variables                                                             |
-| Region publisher           | LayoutHeader, LayoutContent, LayoutFooter, LayoutPanel         | Publish baseline or explicit-padding geometry; LayoutPanel's automatic-edge publication has the conformance gap below                                                    |
-| Bleed consumer             | Section, ScrollableArea, Layout, Divider, Table, TabList, List | Subtract inherited inset on the edges each component is designed to escape; ScrollableArea does so only with `isFullBleed`, TabList and List only with `edge="bleed"`    |
-| Edge-compensation consumer | List/ListItem rows with `edge="outset"`                        | Move visible content toward the container content line while retaining component-owned interaction padding; exact alignment depends on each component's bounded geometry |
-| Alignment consumer         | Toolbar and edge-compensating child components                 | Read the current inline inset to align visible content rather than stacked touch-target padding                                                                          |
-| Boundary owner             | Layer surfaces and dialog-based overlay roots; AppShell's root | Apply `overlayPaddingReset`, or at AppShell's root Layout's `layoutReset`, before descendants read inherited page geometry                                               |
+| Role                       | Participants                                                   | Contract responsibility                                                                                                                                                                                |
+| -------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Container publisher        | Card, Section, Dialog, BottomSheet, ScrollableArea             | Resolve component padding or publish explicit content-box padding as logical-edge and Layout inset variables                                                                                           |
+| Region publisher           | LayoutHeader, LayoutContent, LayoutFooter, LayoutPanel         | Publish the padding each region applies, on every edge, on the automatic and explicit-padding paths; LayoutContent's content-width gutter is applied but not published (`component:LayoutContent` FR2) |
+| Bleed consumer             | Section, ScrollableArea, Layout, Divider, Table, TabList, List | Subtract inherited inset on the edges each component is designed to escape; ScrollableArea does so only with `isFullBleed`, TabList and List only with `edge="bleed"`                                  |
+| Edge-compensation consumer | List/ListItem rows with `edge="outset"`                        | Move visible content toward the container content line while retaining component-owned interaction padding; exact alignment depends on each component's bounded geometry                               |
+| Alignment consumer         | Toolbar and edge-compensating child components                 | Read the current inline inset to align visible content rather than stacked touch-target padding                                                                                                        |
+| Boundary owner             | Layer surfaces and dialog-based overlay roots; AppShell's root | Apply `overlayPaddingReset`, or at AppShell's root Layout's `layoutReset`, before descendants read inherited page geometry                                                                             |
 
 The participant list is the shared container system, not a Layout-owned family:
 Section and ScrollableArea publish content inset, Section and opt-in full-bleed
@@ -304,8 +305,9 @@ without dropping the active theme's Section default.
 - **INV2 — Coupled publication paths stay coupled.** Where current source
   publishes geometry alongside a padding declaration—container lowering,
   Section's logical-edge overrides, explicit Layout-region padding, and
-  full-bleed reset—the matching variable changes with that declaration. This
-  invariant does not claim parity for every automatic Layout-region edge.
+  full-bleed reset—the matching variable changes with that declaration. An
+  automatic Layout-region edge publishes the padding it applies, except
+  LayoutContent's content-width gutter (`component:LayoutContent` FR2).
 - **INV3 — Bleed is opt-in and edge-specific.** A descendant escapes padding
   only when its component contract opts into bleed, and only on the edges that
   contract covers. The presence of an inherited variable does not make every
@@ -313,8 +315,7 @@ without dropping the active theme's Section default.
 - **INV4 — Layout distinguishes outer and inner edges.** Named Layout regions
   apply outer inset where they touch the shell and inner inset where they meet
   another region. Slot presence and each region's explicit padding select the
-  applied edge styles. Exact descendant-variable parity for automatic outer
-  edges is not guaranteed by this invariant.
+  applied edge styles, and each region republishes the edge it applies (INV2).
 - **INV5 — Section propagation has narrower authority than theme defaults.** An
   ancestor Section's explicit padding may propagate to nested Sections, but it
   does not replace the public theme property and does not cross an overlay
@@ -364,20 +365,6 @@ without dropping the active theme's Section default.
   reader that is its first or last child at that block edge, and none while a
   reader sits deeper inside it. A reader takes a corner only where its bleed
   reaches that edge. Every other element publishes no corner.
-
-### Known conformance gap
-
-LayoutPanel does not currently publish the padding it applies on every
-automatic edge: it changes padding on shell-facing inline and block edges while
-its baseline geometry variables remain on the inner values. LayoutContent
-publishes the padding it applies on every edge (`component:LayoutContent` FR2).
-
-A full-bleed descendant of such a panel can therefore compensate against a value
-that differs from the region's applied padding. Explicit region padding and
-`padding={0}` do update/reset the geometry variables. No current browser matrix
-covers every slot and descendant-bleed combination, so this record does not claim
-exact region parity. Correcting the mismatch is runtime work with compatibility
-evidence.
 
 ## Current-state impact
 
@@ -457,18 +444,18 @@ evidence.
 
 ## Verification
 
-| Invariant        | Evidence                                                                                                         | Failure signal                                                                                                                                                                                                                                            |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| INV2, INV5       | `Section.test.tsx` per-edge and nested-propagation tests                                                         | A per-edge prop leaves a stale geometry variable, or nested Sections lose the shipped propagation order                                                                                                                                                   |
-| INV2, INV3, INV8 | `ScrollableArea.test.tsx` padding and full-bleed tests                                                           | The content box publishes inset different from its applied padding, or the viewport escapes inherited padding without explicit full bleed                                                                                                                 |
-| INV4             | Layout source review plus `Layout.test.tsx` and `LayoutSlots.test.tsx`                                           | Slot presence stops selecting the shipped applied outer/inner edge styles; exact republished geometry remains limited by the named conformance gap                                                                                                        |
-| INV2             | `BottomSheetPanel.test.tsx` padding tests                                                                        | The Content area publishes an inset that differs from its applied padding on any edge but the block start, its block start publishes more than the padding past the grab bar's band, or the `padding` prop or theme `padding` does not reach it           |
-| INV6             | `overlayPaddingReset.test.tsx`                                                                                   | An overlay inherits page inset, loses its theme's Section padding, or lets ancestor Section propagation cross the boundary                                                                                                                                |
-| INV5, INV6       | `AppShellLayoutRoot.interaction.browser.spec.ts` and the `AppShell.test.tsx` "AppShell layout root (FR18)" suite | AppShell's regions inside a padded Card, Section, or Layout differ from its page-root render, or a reset value or context leaks into the shell                                                                                                            |
-| INV3, INV7       | `Layout/__tests__/edgeCompensation.test.tsx` plus component tests                                                | An unmarked child is compensated, or marked edge content loses direct-child discoverability                                                                                                                                                               |
-| INV9, INV10      | `List.test.tsx` plus real-browser geometry evidence                                                              | The header moves; a row reads the wrong logical edge, diverges from themed/density padding, applies the wrong bounded movement, or loses paint inset                                                                                                      |
-| INV10, INV11     | `TabList.test.tsx` plus real-browser overflow, divider, and indicator evidence                                   | Full host-inset consumption, bounded content movement, divider span, interaction, focus, overflow, scroll controls, or indicator geometry regresses                                                                                                       |
-| INV3, INV12      | `ContainerCorners.a11y.chromium.spec.ts`                                                                         | A Table or bleeding List row that is a Card's or Dialog's first or last child stays square, or its ring is cut at the corner; or a reader between other content, inside a wrapper, past the container's padding, or below a BottomSheet's grab bar rounds |
+| Invariant        | Evidence                                                                                                                                                                                                                              | Failure signal                                                                                                                                                                                                                                            |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| INV2, INV5       | `Section.test.tsx` per-edge and nested-propagation tests                                                                                                                                                                              | A per-edge prop leaves a stale geometry variable, or nested Sections lose the shipped propagation order                                                                                                                                                   |
+| INV2, INV3, INV8 | `ScrollableArea.test.tsx` padding and full-bleed tests                                                                                                                                                                                | The content box publishes inset different from its applied padding, or the viewport escapes inherited padding without explicit full bleed                                                                                                                 |
+| INV4             | Layout source review plus `Layout.test.tsx` and `LayoutSlots.test.tsx`; `nestedPadding.test.tsx` and the region audit specs (`LayoutPanelAudit`, `LayoutContentAudit`, `LayoutHeaderAudit`, `LayoutFooterAudit`) for published values | Slot presence stops selecting the shipped applied outer/inner edge styles, or a region republishes an edge that differs from the padding it applies                                                                                                       |
+| INV2             | `BottomSheetPanel.test.tsx` padding tests                                                                                                                                                                                             | The Content area publishes an inset that differs from its applied padding on any edge but the block start, its block start publishes more than the padding past the grab bar's band, or the `padding` prop or theme `padding` does not reach it           |
+| INV6             | `overlayPaddingReset.test.tsx`                                                                                                                                                                                                        | An overlay inherits page inset, loses its theme's Section padding, or lets ancestor Section propagation cross the boundary                                                                                                                                |
+| INV5, INV6       | `AppShellLayoutRoot.interaction.browser.spec.ts` and the `AppShell.test.tsx` "AppShell layout root (FR18)" suite                                                                                                                      | AppShell's regions inside a padded Card, Section, or Layout differ from its page-root render, or a reset value or context leaks into the shell                                                                                                            |
+| INV3, INV7       | `Layout/__tests__/edgeCompensation.test.tsx` plus component tests                                                                                                                                                                     | An unmarked child is compensated, or marked edge content loses direct-child discoverability                                                                                                                                                               |
+| INV9, INV10      | `List.test.tsx` plus real-browser geometry evidence                                                                                                                                                                                   | The header moves; a row reads the wrong logical edge, diverges from themed/density padding, applies the wrong bounded movement, or loses paint inset                                                                                                      |
+| INV10, INV11     | `TabList.test.tsx` plus real-browser overflow, divider, and indicator evidence                                                                                                                                                        | Full host-inset consumption, bounded content movement, divider span, interaction, focus, overflow, scroll controls, or indicator geometry regresses                                                                                                       |
+| INV3, INV12      | `ContainerCorners.a11y.chromium.spec.ts`                                                                                                                                                                                              | A Table or bleeding List row that is a Card's or Dialog's first or last child stays square, or its ring is cut at the corner; or a reader between other content, inside a wrapper, past the container's padding, or below a BottomSheet's grab bar rounds |
 
 The List evidence must cover each `edge` value in its neutral root and in each
 bounded host List admits (Card, Section, Dialog, BottomSheet), with the optional
